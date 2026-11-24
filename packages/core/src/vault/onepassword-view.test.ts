@@ -35,6 +35,7 @@ describe('what the person sees', () => {
     outcome: 'ok',
     problem: null,
     nextTryAt: null,
+    failing: false,
     readOnly: false,
     syncing: false,
     notInVault: [{ itemId: 'fmx3tsd5v5bew74o3v2z2a7wf4', title: 'Bank card', reason: 'other_kind' }],
@@ -50,6 +51,7 @@ describe('what the person sees', () => {
     expect(onePasswordSkipText('vault_full')).toBe('Your Vault is full');
     expect(onePasswordSkipText('ssh_key')).toBe('SSH keys stay in 1Password');
     expect(onePasswordSkipText('unreachable')).toBe('Whombat may not reach this address');
+    expect(onePasswordSkipText('unreadable')).toBe('Whombat couldn’t read this item');
     expect(ONEPASSWORD_WORDS.readOnly).toBe(
       'This token can only read. Make one that can read and write the vault.',
     );
@@ -113,10 +115,11 @@ describe('what the person sees', () => {
   });
 
   it('watches the guard and an unreachable 1Password from the start, and the limit only when asked', () => {
-    expect(ONEPASSWORD_WATCH_CHECKS.map((c) => [c.check, c.name, c.startsOn])).toEqual([
-      ['onepassword.paused', '1Password sync needs you', true],
-      ['onepassword.unreachable', 'Whombat can’t reach 1Password', true],
-      ['onepassword.limit', 'Waiting for 1Password’s limit', false],
+    expect(ONEPASSWORD_WATCH_CHECKS.map((c) => [c.check, c.nature, c.startsOn])).toEqual([
+      ['onepassword.paused', 'you', true],
+      // Only the person can mend it: the assistant doesn't use this connection.
+      ['onepassword.unreachable', 'you', true],
+      ['onepassword.limit', 'fyi', false],
     ]);
   });
 });

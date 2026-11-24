@@ -1,11 +1,11 @@
 /**
- * The 1Password sync's own words on the server (docs/decisions/onepassword-sync.md OPW-50): why a pass couldn't finish,
+ * The 1Password sync's own words on the server (docs/decisions/onepassword-sync.md): why a pass couldn't finish,
  * the title its card and the page's head take for each kind of failure, and why a new token is refused. Core's
  * `ONEPASSWORD_WORDS` holds the words the apps share.
  */
 import { ONEPASSWORD_WORDS } from '@whombat/core';
 
-/** The words of a pass that couldn't finish, by what went wrong (the page's failing line, OPW-50). */
+/** The words of a pass that couldn't finish, by what went wrong (the page's failing line). */
 export const ONEPASSWORD_PASS_WORDS = {
   token: '1Password didn’t accept the token. Make a new one and paste it in this connection.',
   vault:
@@ -17,17 +17,30 @@ export const ONEPASSWORD_PASS_WORDS = {
   stopsFitting: 'No longer kept in step: 1Password has no place for this sign-in.',
   unreachableAddress: 'Whombat may not reach this address',
   writeFailed: '1Password didn’t take this change. Whombat tries again when it changes here or in 1Password.',
+  unreadableItem: 'Whombat couldn’t read 1Password’s item. It tries again when the item changes.',
 } as const;
 
 /** What went wrong, as the card and the head name it. */
-export type OnePasswordFailingKind = 'unreachable' | 'token' | 'vault' | 'partial';
+export type OnePasswordFailingKind =
+  | 'unreachable'
+  | 'token'
+  | 'vault'
+  | 'readVault'
+  | 'noVault'
+  | 'partial'
+  | 'answer'
+  | 'stopped';
 
-/** The red card's and the head's title for each kind of failure. */
+/** The red card's and the head's title for each kind of failure: each says what its words say. */
 export const ONEPASSWORD_FAILING_TITLES: Record<OnePasswordFailingKind, string> = {
   unreachable: 'Whombat can’t reach 1Password',
   token: '1Password didn’t accept the token',
   vault: 'Whombat can’t find the 1Password vault',
+  readVault: 'The 1Password token can’t read the vault',
+  noVault: '1Password has no vault to keep in step',
   partial: 'Whombat couldn’t read everything in 1Password',
+  answer: 'Whombat couldn’t read 1Password’s answer',
+  stopped: '1Password sync stopped unexpectedly',
 };
 
 /** The kind of a failing pass, from its stored words (anything else is “can’t reach”). */
@@ -36,11 +49,17 @@ export function onePasswordFailingKind(problem: string | null): OnePasswordFaili
     case ONEPASSWORD_PASS_WORDS.token:
       return 'token';
     case ONEPASSWORD_PASS_WORDS.vault:
-    case ONEPASSWORD_PASS_WORDS.readVault:
-    case ONEPASSWORD_PASS_WORDS.noVault:
       return 'vault';
+    case ONEPASSWORD_PASS_WORDS.readVault:
+      return 'readVault';
+    case ONEPASSWORD_PASS_WORDS.noVault:
+      return 'noVault';
     case ONEPASSWORD_PASS_WORDS.partial:
       return 'partial';
+    case ONEPASSWORD_PASS_WORDS.answer:
+      return 'answer';
+    case ONEPASSWORD_WORDS.stopped:
+      return 'stopped';
     default:
       return 'unreachable';
   }
@@ -66,3 +85,6 @@ export function onePasswordTokenMissesVault(vaultTitle: string | null): string {
     ? `This token can’t see the vault “${name.slice(0, 100)}”. Make one that can read and write it.`
     : 'This token can’t see the vault Whombat keeps in step. Make one that can read and write it.';
 }
+
+/** Said when someone tries to change the vault of a linked 1Password connection: its pairs belong to that vault. */
+export const ONEPASSWORD_VAULT_FIXED = 'To use another vault, remove 1Password and link it again.';

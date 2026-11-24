@@ -117,12 +117,14 @@ export function onePasswordPage(
   timeZone: string,
 ): OnePasswordPage {
   const paused = view.outcome === 'paused' && view.removals ? view.removals : null;
-  // The paused line is the removals' own title, with their names and the two answers under it: not here again. A
-  // failing pass has stopped keeping them in step (`bad`); waiting for the limit and a read-only token need a look.
+  // The paused line is the removals' own title, with their names and the two answers under it: not here again. A sync
+  // failing now (the second pass in a row that couldn't finish) has stopped keeping them in step (`bad`), as the head
+  // says; one failed pass, waiting for the limit and a read-only token need a look.
   const status = onePasswordStatusLines({ ...view, removals: null }, timeZone).map(
     (text): ToneLine => ({
       text,
-      tone: text !== ONEPASSWORD_WORDS.readOnly && view.outcome === 'failing' ? 'bad' : 'warn',
+      tone:
+        text !== ONEPASSWORD_WORDS.readOnly && view.outcome === 'failing' && view.failing ? 'bad' : 'warn',
     }),
   );
   return {

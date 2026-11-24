@@ -63,7 +63,7 @@ import {
   onePasswordVaultId,
 } from '../vault/onepassword/store';
 import { onePasswordSyncFor } from '../vault/onepassword/sync';
-import { onePasswordTokenMissesVault } from '../vault/onepassword/words';
+import { ONEPASSWORD_VAULT_FIXED, onePasswordTokenMissesVault } from '../vault/onepassword/words';
 import {
   type CheckCredential,
   type CheckOutcome,
@@ -724,14 +724,18 @@ export async function requireNoOtherVaultSync(
     throw connectionError('limit_reached', { max: 1 }, ONEPASSWORD_CONNECTION_EXISTS);
 }
 
-/** A new 1Password token that can't see the connection's vault is refused, naming the vault. */
+/**
+ * A new 1Password token that can't see the connection's vault is refused, naming the vault. Looked up in every vault the
+ * check listed, not only the choices a form would offer.
+ */
 async function requireTokenSeesVault(
   services: Services,
   row: CatalogConnectionRow,
   outcome: CheckOutcome,
 ): Promise<void> {
   const vaultId = onePasswordVaultId(row);
-  if (!vaultId || serviceChoices(outcome.json).some((o) => o.value === vaultId)) return;
+  const seen = Array.isArray(outcome.json) ? (outcome.json as { id?: unknown }[]) : [];
+  if (!vaultId || seen.some((v) => v?.id === vaultId)) return;
   const state = await onePasswordState(services.db, row.id);
   throw connectionError('check_failed', {}, onePasswordTokenMissesVault(state?.vaultTitle ?? null));
 }
@@ -1289,6 +1293,9 @@ export async function updateConnection(
         { catalogId: entry.id },
         'Connect it again to use another address.',
       );
+    // A 1Password connection's pairs belong to its vault: another vault is linking again.
+    if (isVaultSyncConnection(entry) && onePasswordVaultId({ fields: next }) !== onePasswordVaultId(row))
+      throw connectionError('not_supported', { catalogId: entry.id }, ONEPASSWORD_VAULT_FIXED);
     if (!sameFields(next, current)) {
       // An MCP sign-in's tokens are for one server (its `resource`); an app's have no fields to change.
       if (kind === 'mcp_oauth' || kind === 'app_oauth')

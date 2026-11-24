@@ -25,6 +25,7 @@ import {
 import { isoOrNull } from '../../lib/time';
 import type { Services } from '../../services';
 import type { VaultEntryRow } from '../store';
+import { ONEPASSWORD_FAILING_AFTER } from './words';
 
 export type OnePasswordLinkRow = typeof vaultOnePasswordLinks.$inferSelect;
 export type OnePasswordStateRow = typeof vaultOnePasswordState.$inferSelect;
@@ -88,6 +89,15 @@ export async function onePasswordLinks(db: Db | Tx, connectionId: string): Promi
   return db.select().from(vaultOnePasswordLinks).where(eq(vaultOnePasswordLinks.connectionId, connectionId));
 }
 
+/** The entry a link pairs now: null for none, undefined when the link is gone. */
+export async function onePasswordLinkEntry(db: Db | Tx, linkId: string): Promise<string | null | undefined> {
+  const [row] = await db
+    .select({ entryId: vaultOnePasswordLinks.entryId })
+    .from(vaultOnePasswordLinks)
+    .where(eq(vaultOnePasswordLinks.id, linkId));
+  return row ? row.entryId : undefined;
+}
+
 /** Whether an entry row syncs by its kind and sign-in (a website login, an API token with bearer or basic). */
 export function entryEligible(row: Pick<VaultEntryRow, 'kind' | 'auth'>): boolean {
   return onePasswordEntryEligible({ kind: row.kind, auth: row.auth as VaultAuth | null });
@@ -95,9 +105,16 @@ export function entryEligible(row: Pick<VaultEntryRow, 'kind' | 'auth'>): boolea
 
 /* The connection page's part ----------------------------------------------------------------------- */
 
-/** “Not in your Vault” as the page shows it: without the time each item was read at. */
-function notInVaultView(rows: readonly OnePasswordNotInVaultRow[]): OnePasswordSyncView['notInVault'] {
+/**
+ * “Not in your Vault” as the page shows it: without the time each item was read at, and without an item that didn't read
+ * only once (usually a blip) or whose entry is in the Vault (its entry's page says so).
+ */
+function notInVaultView(
+  rows: readonly OnePasswordNotInVaultRow[],
+  pairedItems: ReadonlySet<string>,
+): OnePasswordSyncView['notInVault'] {
   return rows
+    .filter((r) => !pairedItems.has(r.itemId) && (r.reason !== 'unreadable' || (r.failedReads ?? 0) >= 2))
     .slice(0, ONEPASSWORD_NOT_IN_VAULT_MAX)
     .map((r) => ({ itemId: r.itemId, title: r.title.slice(0, 200), reason: r.reason }));
 }
@@ -124,15 +141,20 @@ export async function onePasswordSyncView(
     connectionId: connection.id,
     vaultTitle: state?.vaultTitle ?? null,
     kept: withEntry.filter((l) => l.state === 'synced').length,
-    pending: withEntry.filter((l) => l.state === 'creating').length + unlinked,
+    // A new entry 1Password refused doesn't wait: it goes again when it changes.
+    pending: withEntry.filter((l) => l.state === 'creating' && l.refused === null).length + unlinked,
     localOnly: withEntry.filter((l) => l.state === 'local_only').length,
     checkedAt: isoOrNull(state?.checkedAt ?? null),
     outcome,
     problem: outcome === 'failing' ? (state?.problem ?? ONEPASSWORD_WORDS.unreachable) : null,
     nextTryAt: outcome === 'waiting' ? isoOrNull(state?.nextTryAt ?? null) : null,
+    failing: outcome === 'failing' && (state?.failures ?? 0) >= ONEPASSWORD_FAILING_AFTER,
     readOnly: state?.readOnly ?? false,
     syncing,
-    notInVault: notInVaultView(state?.notInVault ?? []),
+    notInVault: notInVaultView(
+      state?.notInVault ?? [],
+      new Set(withEntry.flatMap((l) => (l.itemId ? [l.itemId] : []))),
+    ),
     removals: state?.removals ?? null,
   };
 }

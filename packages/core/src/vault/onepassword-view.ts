@@ -73,6 +73,11 @@ export const OnePasswordSyncView = z.object({
   problem: z.string().max(300).nullable(),
   /** `waiting`: when the next pass tries. */
   nextTryAt: Timestamp.nullable(),
+  /**
+   * The sync is failing now: the second pass in a row (or more) couldn't finish. One alone is usually a blip, so only
+   * this turns its line red.
+   */
+  failing: z.boolean(),
   /** A push found that the token can only read; pulling goes on. */
   readOnly: z.boolean(),
   /** A pass is running or asked for. */
@@ -123,7 +128,8 @@ export interface OnePasswordWatchCheck {
 
 /**
  * The sync's checks. The guard's pause and an unreachable 1Password start on: the Vault stops following, and the
- * person can act. The limit starts off: it ends by itself.
+ * person can act (only they can: the assistant doesn't use this connection, so there is nothing to ask it). The limit
+ * starts off: it ends by itself.
  */
 export const ONEPASSWORD_WATCH_CHECKS = [
   {
@@ -136,7 +142,7 @@ export const ONEPASSWORD_WATCH_CHECKS = [
   {
     check: 'onepassword.unreachable',
     name: 'Whombat can’t reach 1Password',
-    nature: 'problem',
+    nature: 'you',
     perItem: false,
     startsOn: true,
   },

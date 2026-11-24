@@ -30,9 +30,10 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ApplyContext, defineCommand } from '../../commit/types';
 import type { CatalogConnectionRow } from '../../connections/types';
+import type { Tx } from '../../db/client';
 import { vaultEntries, vaultOnePasswordLinks, vaultOnePasswordState } from '../../db/schema/index';
 import { publishHomeChanged } from '../../home/notify';
-import { ApiError, notFound } from '../../lib/errors';
+import { ApiError, badRequest, notFound } from '../../lib/errors';
 import {
   emitEntryEvent,
   forgetHeldSecretsAfter,
@@ -48,9 +49,13 @@ import { replaceTotp } from '../totp';
 import { onePasswordDigests } from './digests';
 import { entryEligible, type OnePasswordLinkRow, onePasswordConnectionOf, onePasswordVaultId } from './store';
 import { onePasswordSyncFor } from './sync';
+import { ONEPASSWORD_VAULT_FIXED } from './words';
 
-/** What every event a pass signs carries in its payload (OPW-61). */
+/** What every event a pass signs carries in its payload: how the sync tells its own changes from the person's. */
 export const ONEPASSWORD_SOURCE = 'onepassword';
+
+/** At most this many items kept out are remembered (the page shows the first 200). */
+export const ONEPASSWORD_REMEMBERED_MAX = 10_000;
 
 /** The same context, with every signed event's payload carrying the source `onepassword`. */
 export function fromOnePassword(ctx: ApplyContext): ApplyContext {
@@ -96,13 +101,16 @@ const Problem = z.string().min(1).max(300).nullable();
  * - `pull`: 1Password's fields into the entry, all of them (OPW-23), and the link's new base; only into the pair the
  *   pass read (still kept in step, with the same item);
  * - `add`: a new entry from an item, switched on for the assistant (OPW-25), with its link;
- * - `relink`: an existing entry without a link paired with an item that names it, with no base (1Password wins next);
+ * - `relink`: an existing entry without a link paired with an item that is already its own (it names the entry, holds
+ *   what it holds, or signs in as it does), with the item as just read as its base: the pass decides the pair at once,
+ *   and where the two differ Whombat's values go to 1Password, which keeps the old ones in the item's history;
  * - `mark`: the link's bookkeeping only (the base renewed, an item's new version, a problem or none);
  * - `creating`: a link written before an item is made for the entry, so a retry finds the item by its marker (OPW-22);
  * - `created`: that link with its item;
  * - `local`: the entry kept only in Whombat from now on (OPW-27 with a problem, the guard's “Keep them here” without);
  * - `remove`: the entry removed, its item gone from the vault (OPW-24);
- * - `drop`: the link goes (its item archived, or nothing left of it).
+ * - `drop`: the link goes (its item archived, or nothing left of it); with `entryId`, only while the link still has the
+ *   entry the pass saw (an entry brought back from a backup meanwhile keeps its pair).
  */
 export const OnePasswordOp = z.discriminatedUnion('op', [
   z.object({
@@ -125,10 +133,15 @@ export const OnePasswordOp = z.discriminatedUnion('op', [
   }),
   z.object({
     op: z.literal('relink'),
+    /** Chosen by the pass, so it can decide the new pair in the same pass. */
+    linkId: LinkId,
     entryId: VaultEntryId,
     vaultId: z.string().min(1).max(64),
     item: ItemMark,
+    /** The item's digests as the pass read it (the entry's when the item doesn't fit as it is). */
+    base: Digests,
     nameShortened: z.boolean(),
+    totpFieldId: TotpFieldId,
   }),
   z.object({
     op: z.literal('mark'),
@@ -158,7 +171,12 @@ export const OnePasswordOp = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('local'), linkId: LinkId, readAt: ReadAt.nullable(), problem: Problem }),
   z.object({ op: z.literal('remove'), linkId: LinkId, entryId: VaultEntryId, readAt: ReadAt.nullable() }),
-  z.object({ op: z.literal('drop'), linkId: LinkId }),
+  z.object({
+    op: z.literal('drop'),
+    linkId: LinkId,
+    /** The entry the pass saw on the link (null: none); absent: drop it whatever it has now. */
+    entryId: VaultEntryId.nullable().optional(),
+  }),
 ]);
 export type OnePasswordOp = z.infer<typeof OnePasswordOp>;
 
@@ -167,7 +185,24 @@ export type OnePasswordOpResult =
   | { status: 'done'; linkId?: string; entryId?: string }
   | { status: 'moved' | 'full' | 'gone' };
 
-const newLinkId = () => `opl_${randomBytes(9).toString('base64url')}`;
+/** A new link's id. */
+export const newLinkId = () => `opl_${randomBytes(9).toString('base64url')}`;
+
+/** Whether another link of the connection pairs this item already (one link per item). */
+async function itemTaken(
+  ctx: ApplyContext,
+  connectionId: string,
+  itemId: string,
+  linkId: string | null,
+): Promise<boolean> {
+  const [taken] = await ctx.tx
+    .select({ id: vaultOnePasswordLinks.id })
+    .from(vaultOnePasswordLinks)
+    .where(
+      and(eq(vaultOnePasswordLinks.connectionId, connectionId), eq(vaultOnePasswordLinks.itemId, itemId)),
+    );
+  return taken !== undefined && taken.id !== linkId;
+}
 
 async function lockedEntry(ctx: ApplyContext, entryId: string): Promise<VaultEntryRow | null> {
   const [row] = await ctx.tx
@@ -303,16 +338,7 @@ async function applyOp(
     }
     case 'add': {
       if ((await entryCount(tx, ctx.burrow.id, ctx.actor.id)) >= VAULT_ENTRIES_MAX) return { status: 'full' };
-      const [taken] = await tx
-        .select({ id: vaultOnePasswordLinks.id })
-        .from(vaultOnePasswordLinks)
-        .where(
-          and(
-            eq(vaultOnePasswordLinks.connectionId, connectionId),
-            eq(vaultOnePasswordLinks.itemId, op.item.itemId),
-          ),
-        );
-      if (taken) return { status: 'gone' };
+      if (await itemTaken(ctx, connectionId, op.item.itemId, null)) return { status: 'gone' };
       const p = op.projection;
       const input = CreateVaultEntryBody.parse({
         kind: p.kind,
@@ -351,31 +377,33 @@ async function applyOp(
     case 'relink': {
       const row = await lockedEntry(ctx, op.entryId);
       if (!row) return { status: 'gone' };
+      // One link per entry and one per item: a pair made meanwhile answers `gone`, never a duplicate key that would
+      // roll the whole batch back.
       const [taken] = await tx
         .select({ id: vaultOnePasswordLinks.id })
         .from(vaultOnePasswordLinks)
         .where(eq(vaultOnePasswordLinks.entryId, row.id));
-      if (taken) return { status: 'gone' };
-      const linkId = newLinkId();
+      if (taken || (await itemTaken(ctx, connectionId, op.item.itemId, null))) return { status: 'gone' };
       await tx.insert(vaultOnePasswordLinks).values({
-        id: linkId,
+        id: op.linkId,
         burrowId: ctx.burrow.id,
         connectionId,
         entryId: row.id,
         vaultId: op.vaultId,
         itemId: op.item.itemId,
         state: 'synced',
-        // Seen at an older version, so the next pass reads it and decides with no base: 1Password's version wins.
-        itemVersion: null,
-        itemUpdatedAt: null,
-        base: null,
+        itemVersion: op.item.version,
+        itemUpdatedAt: op.item.updatedAt,
+        base: op.base,
         nameShortened: op.nameShortened,
+        totpFieldId: op.totpFieldId ?? null,
         problem: null,
-        syncedAt: null,
+        syncedAt: now,
         createdAt: now,
         updatedAt: now,
       });
-      return { status: 'done', linkId, entryId: row.id };
+      publishVaultUpdated(ctx, ctx.actor.id, row.id);
+      return { status: 'done', linkId: op.linkId, entryId: row.id };
     }
     case 'mark': {
       const link = await linkOf(ctx, connectionId, op.linkId);
@@ -424,7 +452,7 @@ async function applyOp(
     }
     case 'created': {
       const link = await linkOf(ctx, connectionId, op.linkId);
-      if (!link) return { status: 'gone' };
+      if (!link || (await itemTaken(ctx, connectionId, op.item.itemId, link.id))) return { status: 'gone' };
       await tx
         .update(vaultOnePasswordLinks)
         .set({
@@ -470,6 +498,11 @@ async function applyOp(
       return { status: 'done' };
     }
     case 'drop': {
+      if (op.entryId !== undefined) {
+        const link = await linkOf(ctx, connectionId, op.linkId);
+        // Taken back by an entry restored meanwhile: its pair stays.
+        if (link && link.entryId !== op.entryId) return { status: 'moved' };
+      }
       await tx
         .delete(vaultOnePasswordLinks)
         .where(
@@ -496,6 +529,8 @@ export const applyOnePasswordOps = defineCommand({
   name: 'vault.onePasswordApply',
   schema: z.object({
     connectionId: ConnectionId,
+    /** The connection's token as the pass read it (its `credentialVersion`). */
+    credentialVersion: z.number().int().nonnegative(),
     ops: z
       .array(OnePasswordOp)
       .min(1)
@@ -509,29 +544,40 @@ export const applyOnePasswordOps = defineCommand({
     requirePerson(ctx);
     const connection = await onePasswordConnectionOf(tx, ctx.burrow.id);
     if (!connection || connection.id !== input.connectionId) throw notFound('Connection');
+    // A pass that read with a token replaced since writes nothing: what it found was the old token's.
+    if (connection.credentialVersion !== input.credentialVersion)
+      return { results: input.ops.map((): OnePasswordOpResult => ({ status: 'gone' })), stale: true };
     const sourced = fromOnePassword(ctx);
     const results: OnePasswordOpResult[] = [];
     for (const op of input.ops) results.push(await applyOp(sourced, connection.id, op));
-    return { results };
+    return { results, stale: false };
   },
 });
 
 /* The pass's state ----------------------------------------------------------------------------------- */
 
-const NotInVaultRow = OnePasswordNotInVault.extend({ updatedAt: z.string().max(64) });
+const NotInVaultRow = OnePasswordNotInVault.extend({
+  updatedAt: z.string().max(64),
+  failedReads: z.number().int().positive().optional(),
+});
 
 /** What a pass ends with (no signed event: a fact 1Password told, like a connection's check). */
 export const recordOnePasswordPass = defineCommand({
   name: 'vault.onePasswordRecord',
   schema: z.object({
     connectionId: ConnectionId,
+    /** The connection's token as the pass read it (its `credentialVersion`). */
+    credentialVersion: z.number().int().nonnegative(),
+    /** The token of the held removals when the pass read the state (null: none). */
+    removalsSeen: z.string().max(100).nullable().optional(),
     state: z.object({
       vaultTitle: z.string().max(200).nullable().optional(),
       contentVersion: z.number().int().nonnegative().nullable().optional(),
       outcome: OnePasswordPassOutcome,
       problem: z.string().max(300).nullable(),
       readOnly: z.boolean().optional(),
-      notInVault: z.array(NotInVaultRow).max(200).optional(),
+      // Every item kept out, not only the 200 the page shows: an item remembered isn't read again until it changes.
+      notInVault: z.array(NotInVaultRow).max(ONEPASSWORD_REMEMBERED_MAX).optional(),
       removals: OnePasswordRemovals.nullable().optional(),
       limitHits: z.number().int().nonnegative(),
       nextTryAt: z.string().nullable(),
@@ -541,25 +587,37 @@ export const recordOnePasswordPass = defineCommand({
     requirePerson(ctx);
     const connection = await onePasswordConnectionOf(tx, ctx.burrow.id);
     if (!connection || connection.id !== input.connectionId) throw notFound('Connection');
+    // A pass that read with a token replaced since records nothing: no old wait, state or finding comes back.
+    if (connection.credentialVersion !== input.credentialVersion) return { ok: false as const };
     const s = input.state;
     const [before] = await tx
       .select()
       .from(vaultOnePasswordState)
       .where(eq(vaultOnePasswordState.connectionId, connection.id))
       .for('update');
+    const removals = await heldRemovals(
+      tx,
+      connection.id,
+      before?.removals ?? null,
+      input.removalsSeen,
+      s.removals,
+    );
+    // A pause with nothing held (answered while the pass ran) isn't one.
+    const outcome =
+      s.outcome === 'paused' && (removals === undefined ? !before?.removals : !removals) ? 'ok' : s.outcome;
     const set = {
       ...(s.vaultTitle !== undefined ? { vaultTitle: s.vaultTitle } : {}),
       ...(s.contentVersion !== undefined ? { contentVersion: s.contentVersion } : {}),
       ...(s.readOnly !== undefined ? { readOnly: s.readOnly } : {}),
       ...(s.notInVault !== undefined ? { notInVault: s.notInVault } : {}),
-      ...(s.removals !== undefined ? { removals: s.removals } : {}),
+      ...(removals !== undefined ? { removals } : {}),
       checkedAt: ctx.now,
-      outcome: s.outcome,
+      outcome,
       problem: s.problem,
       limitHits: s.limitHits,
       nextTryAt: s.nextTryAt ? new Date(s.nextTryAt) : null,
       // Passes in a row that couldn't finish: the red card waits for the second (a single one is usually a blip).
-      failures: s.outcome === 'failing' ? (before?.failures ?? 0) + 1 : 0,
+      failures: outcome === 'failing' ? (before?.failures ?? 0) + 1 : 0,
       updatedAt: ctx.now,
     };
     if (before)
@@ -574,17 +632,49 @@ export const recordOnePasswordPass = defineCommand({
     // The page and the Vault read it again; Home and its Inbox when how it stands changed.
     publishVaultUpdated(ctx, ctx.actor.id, null);
     const removalsBefore = before?.removals?.token ?? null;
-    const removalsAfter = s.removals === undefined ? removalsBefore : (s.removals?.token ?? null);
+    const removalsAfter = removals === undefined ? removalsBefore : (removals?.token ?? null);
     if (
-      before?.outcome !== s.outcome ||
+      before?.outcome !== outcome ||
       removalsBefore !== removalsAfter ||
       before?.problem !== s.problem ||
-      (s.outcome === 'failing' && (before?.failures ?? 0) < 2)
+      (outcome === 'failing' && (before?.failures ?? 0) < 2)
     )
       publishHomeChanged(ctx, [ctx.actor.id], ['needsYou', 'things', 'watch']);
     return { ok: true as const };
   },
 });
+
+/**
+ * The removals a pass may store (undefined: leave them as they are). Only while the set the pass read is still the one
+ * stored (an answer given while it ran is never undone), and only while every entry of its new set is still paired (one
+ * removed or kept here meanwhile would make a card about an entry that is gone): otherwise none, and the next pass
+ * looks again.
+ */
+async function heldRemovals(
+  tx: Tx,
+  connectionId: string,
+  stored: OnePasswordRemovals | null,
+  seen: string | null | undefined,
+  next: OnePasswordRemovals | null | undefined,
+): Promise<OnePasswordRemovals | null | undefined> {
+  if (next === undefined) return undefined;
+  if (seen !== undefined && (stored?.token ?? null) !== seen) return undefined;
+  if (next === null) return null;
+  const paired = await tx
+    .select({ entryId: vaultOnePasswordLinks.entryId })
+    .from(vaultOnePasswordLinks)
+    .where(
+      and(
+        eq(vaultOnePasswordLinks.connectionId, connectionId),
+        eq(vaultOnePasswordLinks.state, 'synced'),
+        inArray(
+          vaultOnePasswordLinks.entryId,
+          next.entries.map((e) => e.entryId),
+        ),
+      ),
+    );
+  return paired.length === next.entries.length ? next : null;
+}
 
 /* The guard's answer ------------------------------------------------------------------------------------- */
 
@@ -676,53 +766,25 @@ export async function linkOnePassword(
 }
 
 /**
- * A 1Password connection's token or vault changed, in the commit that changes it. A new token starts clean: the old one's
+ * A 1Password connection's token changed, in the commit that changes it: the new token starts clean, so the old one's
  * read-only finding, the limit's wait and a failing pass are forgotten (the next pass finds them again if they hold).
- * Another vault (OPW-S11): the pairs of the old one go (their entries are put in the new vault as unpaired entries) and
- * so does what the old vault's last pass saw; entries kept only in Whombat stay so, now beside the new vault.
+ * Its vault never changes: pairs can't span two vaults, so another vault means linking again.
  */
 export async function onePasswordConnectionChanged(
   ctx: ApplyContext,
   before: Pick<CatalogConnectionRow, 'fields' | 'secretEnc'>,
   after: Pick<CatalogConnectionRow, 'id' | 'fields' | 'secretEnc'>,
 ): Promise<void> {
-  const vaultId = onePasswordVaultId(after);
-  const vaultChanged = vaultId !== null && vaultId !== onePasswordVaultId(before);
-  const tokenChanged = after.secretEnc !== before.secretEnc;
-  if (!vaultChanged && !tokenChanged) return;
+  if (onePasswordVaultId(after) !== onePasswordVaultId(before)) throw badRequest(ONEPASSWORD_VAULT_FIXED);
+  if (after.secretEnc === before.secretEnc) return;
   const tx = ctx.tx;
-  if (vaultChanged) {
-    await tx
-      .delete(vaultOnePasswordLinks)
-      .where(
-        and(
-          eq(vaultOnePasswordLinks.connectionId, after.id),
-          inArray(vaultOnePasswordLinks.state, ['synced', 'creating']),
-        ),
-      );
-    await tx
-      .update(vaultOnePasswordLinks)
-      .set({
-        vaultId,
-        itemId: null,
-        itemVersion: null,
-        itemUpdatedAt: null,
-        base: null,
-        totpFieldId: null,
-        refused: null,
-        updatedAt: ctx.now,
-      })
-      .where(
-        and(eq(vaultOnePasswordLinks.connectionId, after.id), eq(vaultOnePasswordLinks.state, 'local_only')),
-      );
-  }
   const [state] = await tx
     .select()
     .from(vaultOnePasswordState)
     .where(eq(vaultOnePasswordState.connectionId, after.id))
     .for('update');
   if (state) {
-    const stale = vaultChanged || state.outcome === 'failing' || state.outcome === 'waiting';
+    const stale = state.outcome === 'failing' || state.outcome === 'waiting';
     await tx
       .update(vaultOnePasswordState)
       .set({
@@ -731,7 +793,6 @@ export async function onePasswordConnectionChanged(
         nextTryAt: null,
         failures: 0,
         ...(stale ? { outcome: null, problem: null } : {}),
-        ...(vaultChanged ? { vaultTitle: null, contentVersion: null, notInVault: [], removals: null } : {}),
         updatedAt: ctx.now,
       })
       .where(eq(vaultOnePasswordState.connectionId, after.id));
@@ -772,18 +833,16 @@ export async function keepEntriesLocal(
 }
 
 /**
- * Disconnecting with “Remove them too” (OPW-50, OPW-K14): the entries kept in step with it go, through the Vault's own
- * removal; those kept only in Whombat stay. 1Password is never changed by it.
+ * Disconnecting with “Remove them too”: the entries kept in step with it go, through the Vault's own removal. Those kept
+ * only in Whombat stay, and so does an entry whose item 1Password hasn't been given yet: it is in no other place. 1Password
+ * is never changed by it.
  */
 export async function removeSyncedEntries(ctx: ApplyContext, connectionId: string): Promise<number> {
   const links = await ctx.tx
     .select()
     .from(vaultOnePasswordLinks)
     .where(
-      and(
-        eq(vaultOnePasswordLinks.connectionId, connectionId),
-        inArray(vaultOnePasswordLinks.state, ['synced', 'creating']),
-      ),
+      and(eq(vaultOnePasswordLinks.connectionId, connectionId), eq(vaultOnePasswordLinks.state, 'synced')),
     );
   const sourced = fromOnePassword(ctx);
   let removed = 0;

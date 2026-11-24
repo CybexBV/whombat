@@ -20,9 +20,10 @@ import type { Logger } from '../../services';
 import { useTestServer } from '../../test/harness';
 import { useVaultWorld } from '../testing/world';
 import { recordVaultUse } from '../uses';
+import { applyOnePasswordOps } from './commands';
 import { onePasswordNeedsYou } from './inbox';
 import { ONEPASSWORD_PASS_WORDS, runOnePasswordPass } from './pass';
-import { forgetOnePasswordBases, relinkOnePassword } from './restore';
+import { forgetOnePasswordBase, forgetOnePasswordBases, relinkOnePassword } from './restore';
 import { onePasswordSyncFor, useOnePasswordForTests } from './sync';
 import { FakeOnePassword } from './testing/fake';
 
@@ -262,8 +263,19 @@ describe('linking (OPW-01, OPW-02)', () => {
     expect(fake.calls.length).toBe(before);
   });
 
-  it('linking the vault again pairs what is already there instead of making it twice', async () => {
+  it('linking the vault again pairs what is already there instead of making it twice, and Whombat wins', async () => {
+    const bank = (await entryByName('Bank'))?.id as string;
+    const mailItem = fake.items(vaultId).find((i) => i.title === 'Mail')?.id as string;
+    // While unlinked: Bank's password changed here, Mail's in 1Password.
+    await w.call(api.vault.setSecret, { entryId: bank }, { value: 'bank-changed-here' });
+    setPassword(mailItem, 'mail-changed-in-1password');
+    // One pass pairs Mail with its item (it signs in as the entry does) and decides the pair at once: Whombat's values
+    // go to 1Password, which keeps the old ones in the item's history. Bank, kept only here before, is put in.
     await connect('put');
+    const bankItem = fake.items(vaultId).find((i) => i.title === 'Bank')?.id as string;
+    expect(fake.field(bankItem, 'password')).toBe('bank-changed-here');
+    expect(fake.field(mailItem, 'password')).toBe('mail-pass-1');
+    expect(await passwordOf(bank)).toBe('bank-changed-here');
     await sync();
     expect(fake.items(vaultId).filter((i) => i.title === 'Mail')).toHaveLength(1);
     expect(fake.items(vaultId).filter((i) => i.title === 'Bank')).toHaveLength(1);
@@ -597,9 +609,12 @@ describe('when things go wrong', () => {
     fake.failNext.set('overview', ['network']);
     await sync();
     expect((await page(connectionId)).problem).toBe(ONEPASSWORD_WORDS.unreachable);
-    // One alone is usually a blip: no red head, no card yet.
+    // One alone is usually a blip: no red head, no card yet, and the tab's line isn't red either. But the head never
+    // says the vault is kept in step after a pass that failed.
+    expect((await page(connectionId)).failing).toBe(false);
     const calm = await w.call(api.things.page, { thing: `connection:${connectionId}` });
     expect((calm.body as { status: string }).status).not.toBe('bad');
+    expect((calm.body as { badge?: string }).badge).not.toBe('Kept in step');
     const first = await onePasswordNeedsYou({
       db: t.services.db,
       burrowId: BURROW,
@@ -628,8 +643,14 @@ describe('when things go wrong', () => {
       now: new Date(),
     });
     expect(items.map((i) => i.title)).toContain('Whombat can’t reach 1Password');
+    expect((await page(connectionId)).failing).toBe(true);
+    // The person's to mend: it opens 1Password and asks the assistant nothing.
+    const failing = items.find((i) => i.id.endsWith(':failing'));
+    expect(failing?.nature).toBe('you');
+    expect(failing?.actions.map((a) => a.kind)).toEqual(['open']);
     await sync();
     expect((await page(connectionId)).outcome).toBe('ok');
+    expect((await page(connectionId)).failing).toBe(false);
   });
 
   it('an item that stops fitting leaves its entry as it was, with the reason', async () => {
@@ -699,6 +720,13 @@ describe('when things go wrong', () => {
       state: 'problem',
       problem: ONEPASSWORD_WORDS.readOnly,
     });
+    // While it can only read, a change here asks 1Password nothing; the regular pass still tries once.
+    await w.call(api.vault.setSecret, { entryId: later }, { value: 'later-pass-2' });
+    fake.calls = [];
+    await onePasswordSyncFor(t.services).runNow('change');
+    expect(fake.calls).toEqual([]);
+    await sync();
+    expect(fake.count('create')).toBe(1);
     await t.services.db
       .update(catalogConnections)
       .set({ secretEnc: t.services.custody.seal(`catalog_connection:${connectionId}:secret`, TOKEN) })
@@ -754,8 +782,14 @@ describe('backups (OPW-42)', () => {
         updatedAt: new Date(),
       })
       .where(eq(vaultEntries.id, bank));
+    // A change 1Password refused before the backup isn't what is waiting now.
+    await t.services.db
+      .update(vaultOnePasswordLinks)
+      .set({ refused: (await linkOf(bank))?.base ?? null })
+      .where(eq(vaultOnePasswordLinks.entryId, bank));
     await relinkOnePassword(t.services.db, BURROW, bank, itemId);
     expect((await linkOf(bank))?.base).toBeNull();
+    expect((await linkOf(bank))?.refused).toBeNull();
     await sync();
     const row = await entry(bank);
     expect(t.services.custody.open(`vault:${bank}:secret`, row?.sealed as string)).toBe('newer-in-1password');
@@ -770,11 +804,41 @@ describe('backups (OPW-42)', () => {
       .update(vaultEntries)
       .set({ sealed: t.services.custody.seal(`vault:${bank}:secret`, 'older-restored') })
       .where(eq(vaultEntries.id, bank));
+    // The backup held a question for the person: it isn't one any more.
+    await t.services.db
+      .update(vaultOnePasswordState)
+      .set({
+        outcome: 'paused',
+        removals: {
+          token: 'old-set',
+          since: new Date().toISOString(),
+          entries: [{ entryId: bank, name: 'Bank' }],
+        },
+      })
+      .where(eq(vaultOnePasswordState.connectionId, connectionId));
     await forgetOnePasswordBases(t.services);
+    expect(await state(connectionId)).toMatchObject({ removals: null, outcome: null });
     await sync();
     const row = await entry(bank);
     expect(t.services.custody.open(`vault:${bank}:secret`, row?.sealed as string)).toBe('newer-in-1password');
     expect(fake.field(itemId, 'password')).toBe('newer-in-1password');
+  });
+
+  it('a file restored over a paired entry gives 1Password’s value back at the next pass', async () => {
+    const itemId = await itemOf(bank);
+    setPassword(itemId, 'newest-in-1password');
+    // The file's older password replaces the entry's, and the file named no item.
+    await t.services.db
+      .update(vaultEntries)
+      .set({
+        sealed: t.services.custody.seal(`vault:${bank}:secret`, 'from-the-file'),
+        updatedAt: new Date(),
+      })
+      .where(eq(vaultEntries.id, bank));
+    await forgetOnePasswordBase(t.services.db, bank);
+    await sync();
+    expect(await passwordOf(bank)).toBe('newest-in-1password');
+    expect(fake.field(itemId, 'password')).toBe('newest-in-1password');
   });
 
   it('a restored pair whose item is gone becomes a Whombat entry like any other', async () => {
@@ -790,11 +854,17 @@ describe('backups (OPW-42)', () => {
   });
 
   it('disconnecting with “Remove them too” removes the entries kept in step', async () => {
+    // One whose item 1Password hasn't been given yet is in no other place: it stays.
+    const waiting = await addLogin('Waiting', 'mara', 'waiting-pass-1');
+    fake.failNext.set('create', ['network']);
+    await sync();
+    expect((await linkOf(waiting))?.state).toBe('creating');
     const res = await w.call(api.connections.disconnect, { connectionId }, undefined, 'mara', {
       vaultEntries: 'remove',
     });
     expect(res.status, res.raw).toBe(200);
     expect(await entry(bank)).toBeUndefined();
+    expect(await entry(waiting)).toBeDefined();
     expect(fake.items(vaultId).length).toBeGreaterThan(0);
   });
 });
@@ -964,11 +1034,33 @@ describe('what starts a pass (F5, F6)', () => {
     });
     await sync();
     expect((await page(connectionId)).notInVault.map((n) => n.reason)).toContain('unreachable');
-    // Held for an address Whombat may not reach: not settled, so the version isn't kept.
-    expect((await state(connectionId))?.contentVersion).toBeNull();
+    // Held for an address Whombat may not reach: the version is still kept (a change of the home networks reads it
+    // again), so the regular pass reads nothing more.
+    expect((await state(connectionId))?.contentVersion).not.toBeNull();
     fake.calls = [];
+    await sync();
+    expect(fake.calls).toEqual(['overview']);
+    const nas = fake.items(vaultId).find((i) => i.title === 'NAS')?.id as string;
+    fake.gets = [];
     await onePasswordSyncFor(t.services).runNow('network');
-    expect(fake.calls).toContain('get');
+    expect(fake.gets).toContain(nas);
+  });
+
+  it('a pair waiting for an address Whombat may not reach is read again when the home networks change', async () => {
+    const router = await addLogin('Router', 'mara', 'router-pass-1', 'https://public.example/router');
+    fake.loseCreates = 1;
+    await sync();
+    const made = fake.items(vaultId).find((i) => i.title === 'Router')?.id as string;
+    fake.edit(made, (i) => {
+      i.websites = [
+        { url: 'https://nas.home.test/router', label: 'website', autofillBehavior: 'AnywhereOnWebsite' },
+      ];
+    });
+    await sync();
+    expect((await linkOf(router))?.problem).toBe(ONEPASSWORD_PASS_WORDS.unreachableAddress);
+    fake.gets = [];
+    await onePasswordSyncFor(t.services).runNow('network');
+    expect(fake.gets).toContain(made);
   });
 });
 
@@ -982,7 +1074,7 @@ describe('a read that misses items (F7)', () => {
   });
 
   it('makes nothing in 1Password, says it couldn’t read everything, and keeps what it listed', async () => {
-    fake.addOther(vaultId, 'Passport', 'Document');
+    fake.addLogin(vaultId, { title: 'Passport', url: null, username: 'mara', password: 'passport-1' });
     await sync();
     const passport = fake.items(vaultId).find((i) => i.title === 'Passport')?.id as string;
     // Changed, then unreadable this time; a new entry waits to go.
@@ -1052,22 +1144,30 @@ describe('writing into 1Password (F9, F10, F16, F17)', () => {
     expect((await secretOf(bank)).source).toMatchObject({ state: 'problem' });
     fake.calls = [];
     await sync();
-    await onePasswordSyncFor(t.services).runNow('now');
     expect(fake.count('put')).toBe(0);
+    // Sync now tries it once more, and 1Password takes it this time.
+    await onePasswordSyncFor(t.services).runNow('now');
+    expect(fake.count('put')).toBe(1);
+    expect(fake.field(itemId, 'password')).toBe('refused-once');
     await w.call(api.vault.setSecret, { entryId: bank }, { value: 'taken-now' });
     await sync();
     expect(fake.field(itemId, 'password')).toBe('taken-now');
     expect(await linkOf(bank)).toMatchObject({ problem: null, refused: null });
   });
 
-  it('a new entry 1Password refused isn’t sent again until it changes', async () => {
+  it('a new entry 1Password refused isn’t sent again until it changes, or Sync now', async () => {
     const odd = await addLogin('Odd', 'mara', 'odd-pass-1');
     fake.failNext.set('create', ['invalid']);
     await sync();
     expect((await linkOf(odd))?.problem).toBe(ONEPASSWORD_PASS_WORDS.writeFailed);
+    // Not waiting either: it goes again when it changes.
+    expect((await page(connectionId)).pending).toBe(0);
     fake.calls = [];
-    await onePasswordSyncFor(t.services).runNow('now');
+    await sync();
     expect(fake.count('create')).toBe(0);
+    fake.failNext.set('create', ['invalid']);
+    await onePasswordSyncFor(t.services).runNow('now');
+    expect(fake.count('create')).toBe(1);
     await w.call(api.vault.setSecret, { entryId: odd }, { value: 'odd-pass-2' });
     await sync();
     expect((await linkOf(odd))?.state).toBe('synced');
@@ -1152,10 +1252,19 @@ describe('the guard’s answer while a pass reads (F14)', () => {
     await running;
     expect(await passwordOf(entryId)).toBe(before);
     expect((await linkOf(entryId))?.state).toBe('local_only');
+    // The answer stands: the pass that read before it brings no card back.
+    expect(await state(connectionId)).toMatchObject({ removals: null, outcome: 'ok' });
+    const items = await onePasswordNeedsYou({
+      db: t.services.db,
+      burrowId: BURROW,
+      personId: IDS.mara,
+      now: new Date(),
+    });
+    expect(items.some((i) => i.id.endsWith(':removals'))).toBe(false);
   });
 });
 
-describe('another vault, another token (F11, F18, F22)', () => {
+describe('another vault, another token', () => {
   const BOTH = 'ops_both-vaults-token-0123456789abcdefABCD';
   let connectionId = '';
   let kept = '';
@@ -1200,26 +1309,31 @@ describe('another vault, another token (F11, F18, F22)', () => {
     expect(res.raw).toContain('“Whombat”');
   });
 
-  it('another vault drops the pairs and keeps the entries kept only here so', async () => {
+  it('refuses another vault in plain words: linking again is the way', async () => {
     await w.call(api.connections.setSecret, { connectionId }, { secret: BOTH });
-    expect((await linkOf(kept))?.state).toBe('local_only');
+    const before = await links(connectionId);
     const res = await w.call(api.connections.update, { connectionId }, { fields: { vault: otherVaultId } });
-    expect(res.status, res.raw).toBeLessThan(300);
-    const left = await links(connectionId);
-    expect(left.filter((l) => l.state !== 'local_only')).toEqual([]);
-    expect((await linkOf(kept))?.vaultId).toBe(otherVaultId);
-    expect(await state(connectionId)).toMatchObject({ contentVersion: null, notInVault: [] });
-    await sync();
-    // The entry kept only here stays so; the other is put in the new vault.
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.raw).toContain('remove 1Password and link it again');
+    expect(await links(connectionId)).toEqual(before);
     expect((await linkOf(kept))?.state).toBe('local_only');
-    expect(fake.items(otherVaultId).map((i) => i.title)).toEqual(['Bank']);
+    await sync();
+    expect(fake.items(otherVaultId)).toEqual([]);
+  });
+
+  it('looks for the vault among every vault the new token sees, not only the first hundred', async () => {
+    const many = 'ops_many-vaults-token-0123456789abcdefABCD';
+    const others = Array.from({ length: 120 }, (_, i) => fake.addVault(`Team ${String(i).padStart(3, '0')}`));
+    fake.addToken(many, [...others, vaultId]);
+    const res = await w.call(api.connections.setSecret, { connectionId }, { secret: many });
+    expect(res.status, res.raw).toBeLessThan(300);
   });
 });
 
-describe('linking again pairs by who signs in (F19, F23)', () => {
+describe('linking again pairs by who signs in', () => {
   beforeAll(reset);
 
-  it('pairs an unpaired item and entry signing in as the same, and 1Password’s password wins', async () => {
+  it('pairs an unpaired item and entry signing in as the same, and Whombat’s values win in that pass', async () => {
     const bank = await addLogin('Bank', 'mara', 'old-in-whombat');
     fake.addLogin(vaultId, {
       title: 'My bank',
@@ -1237,17 +1351,250 @@ describe('linking again pairs by who signs in (F19, F23)', () => {
         password: `${title}-pass`,
       });
     await connect('put');
+    // Nothing made twice on either side, and in that one pass Whombat's values went to the item: 1Password keeps the
+    // replaced ones in its history.
+    const item = await itemOf(bank);
+    expect(fake.items(vaultId).filter((i) => i.title === 'My bank')).toHaveLength(0);
+    expect(fake.item(item)?.title).toBe('Bank');
+    expect(fake.field(item, 'password')).toBe('old-in-whombat');
+    expect((await entry(bank))?.name).toBe('Bank');
+    expect(await passwordOf(bank)).toBe('old-in-whombat');
     await sync();
-    // Nothing made twice on either side: the entry is the item's now, with its title and password.
-    expect(fake.items(vaultId).filter((i) => i.title === 'Bank')).toHaveLength(0);
-    expect((await entry(bank))?.name).toBe('My bank');
     expect(
       (await t.services.db.select().from(vaultEntries).where(eq(vaultEntries.burrowId, BURROW))).length,
     ).toBe(4);
-    expect(await passwordOf(bank)).toBe('new-in-1password');
     expect((await entryByName('Shop one'))?.id).toBeTruthy();
     expect(fake.items(vaultId).filter((i) => i.title === 'Shop')).toHaveLength(1);
     // Paired with an item now: removing it would archive that item.
     expect((await secretOf(bank)).source).toMatchObject({ state: 'synced', paired: true });
+  });
+});
+
+describe('a token replaced while a pass reads', () => {
+  let connectionId = '';
+
+  beforeAll(async () => {
+    await reset();
+    await addLogin('Bank', 'mara', 'hunter2-bank');
+    connectionId = await connect('put');
+  });
+
+  it('the pass that read with the old token writes nothing: no entry, state or wait comes back', async () => {
+    const fresh = 'ops_fresh-token-0123456789abcdefABCDEFGH';
+    fake.addToken(fresh, [vaultId]);
+    fake.addLogin(vaultId, {
+      title: 'Mail',
+      url: 'https://public.example/mail',
+      username: 'mara',
+      password: 'mail-pass-1',
+    });
+    const before = await state(connectionId);
+    const held = fake.pause('list');
+    const running = onePasswordSyncFor(t.services).runNow('now');
+    await held.reached;
+    const res = await w.call(api.connections.setSecret, { connectionId }, { secret: fresh });
+    expect(res.status, res.raw).toBeLessThan(300);
+    held.release();
+    await running;
+    expect(await entryByName('Mail')).toBeUndefined();
+    expect((await state(connectionId))?.checkedAt).toEqual(before?.checkedAt);
+    // The next pass, with the new token, takes it.
+    await sync();
+    expect(await entryByName('Mail')).toBeDefined();
+  });
+});
+
+describe('pairing and removing after the list', () => {
+  let connectionId = '';
+
+  beforeAll(async () => {
+    await reset();
+    for (const n of ['A', 'B', 'C', 'D', 'E', 'F']) await addLogin(`Login ${n}`, 'mara', `pass-${n}-123`);
+    connectionId = await connect('put');
+  });
+
+  it('an item listed but not found when read is not gone: the next list decides', async () => {
+    const [first] = fake.items(vaultId);
+    const entryId = (await links(connectionId)).find((l) => l.itemId === first?.id)?.entryId as string;
+    fake.edit(first?.id as string, () => {});
+    fake.readMissing.add(first?.id as string);
+    await sync();
+    expect(await entry(entryId)).toBeDefined();
+    const view = await page(connectionId);
+    expect(view.removals).toBeNull();
+    expect(view.outcome).toBe('failing');
+    fake.readMissing.clear();
+    await sync();
+    expect(await entry(entryId)).toBeDefined();
+    expect((await page(connectionId)).outcome).toBe('ok');
+  });
+
+  it('a pair made twice answers gone, never a duplicate that undoes the rest of its batch', async () => {
+    const [paired] = (await links(connectionId)).filter((l) => l.itemId && l.base);
+    const twin = await addLogin('Twin', 'mara', 'twin-pass-1');
+    const [conn] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, connectionId));
+    const res = await t.services.pipeline.commit(
+      applyOnePasswordOps,
+      {
+        connectionId,
+        credentialVersion: conn?.credentialVersion ?? 0,
+        ops: [
+          {
+            op: 'relink',
+            linkId: 'opl_twintwintwin',
+            entryId: twin,
+            vaultId,
+            item: { itemId: paired?.itemId as string, version: 1, updatedAt: '2026-11-24T08:00:00.000Z' },
+            base: paired?.base as NonNullable<typeof paired>['base'] & object,
+            nameShortened: false,
+          },
+        ],
+      },
+      { burrowId: BURROW, actorId: IDS.mara },
+    );
+    expect(res.status).toBe('ok');
+    expect(res.status === 'ok' && res.result.results).toEqual([{ status: 'gone' }]);
+    expect(await linkOf(twin)).toBeUndefined();
+  });
+});
+
+describe('markers first', () => {
+  beforeAll(reset);
+
+  it('an item naming an entry is that entry’s, even when another entry holds exactly what it holds', async () => {
+    const same = await addLogin('Shop', 'mara', 'same-pass', 'https://public.example/shop');
+    const named = await addLogin('Shop old', 'mara', 'named-pass', 'https://public.example/shop-old');
+    const marked = fake.addLogin(vaultId, {
+      title: 'Shop',
+      url: 'https://public.example/shop',
+      username: 'mara',
+      password: 'same-pass',
+      extra: [
+        { id: 'whombatentry', title: 'Whombat entry', sectionId: null, fieldType: 'Text', value: named },
+      ],
+    });
+    await connect('put');
+    expect((await linkOf(named))?.itemId).toBe(marked.id);
+    expect((await linkOf(same))?.itemId).not.toBe(marked.id);
+    // The entry it names wins its values at once; the other has an item of its own.
+    expect(fake.field(marked.id, 'password')).toBe('named-pass');
+    expect(fake.field((await linkOf(same))?.itemId as string, 'password')).toBe('same-pass');
+  });
+});
+
+describe('an archive and a restore at once', () => {
+  beforeAll(async () => {
+    await reset();
+    await addLogin('Bank', 'mara', 'hunter2-bank');
+    await connect('put');
+  });
+
+  it('an entry brought back while a pass reads keeps its item', async () => {
+    const mail = await addLogin('Mail', 'mara', 'mail-pass-1');
+    await sync();
+    const mailItem = await itemOf(mail);
+    await w.call(api.vault.remove, { entryId: mail });
+    const held = fake.pause('list');
+    const running = sync();
+    await held.reached;
+    // Brought back from a backup while the pass reads: it takes the pair whose item waits to be archived.
+    const back = await addLogin('Mail', 'mara', 'mail-pass-1');
+    await relinkOnePassword(t.services.db, BURROW, back, mailItem);
+    held.release();
+    await running;
+    expect(fake.isArchived(mailItem)).toBe(false);
+    expect((await linkOf(back))?.itemId).toBe(mailItem);
+  });
+});
+
+describe('a create sent again', () => {
+  beforeAll(async () => {
+    await reset();
+    await connect('put');
+  });
+
+  it('carries the entry as it is then as its base, so a lost answer is read against what was sent', async () => {
+    const shop = await addLogin('Shop', 'mara', 'shop-v1');
+    fake.failNext.set('create', ['network']);
+    await sync();
+    expect((await linkOf(shop))?.state).toBe('creating');
+    await w.call(api.vault.setSecret, { entryId: shop }, { value: 'shop-v2' });
+    fake.loseCreates = 1;
+    await sync();
+    const made = fake.items(vaultId).find((i) => i.title === 'Shop')?.id as string;
+    expect(fake.field(made, 'password')).toBe('shop-v2');
+    // Changed in 1Password before the pass found it: 1Password's change, not a clash.
+    setPassword(made, 'shop-v3-in-1password');
+    await sync();
+    expect(await passwordOf(shop)).toBe('shop-v3-in-1password');
+  });
+});
+
+describe('fewer reads', () => {
+  let connectionId = '';
+
+  beforeAll(async () => {
+    await reset();
+    connectionId = await connect('put');
+  });
+
+  it('knows items of other kinds from the list alone', async () => {
+    const doc = fake.addOther(vaultId, 'Passport', 'Document');
+    const key = fake.addOther(vaultId, 'Server key', 'SshKey');
+    fake.gets = [];
+    await sync();
+    expect(fake.gets).not.toContain(doc.id);
+    expect(fake.gets).not.toContain(key.id);
+    const reasons = (await page(connectionId)).notInVault.map((n) => n.reason);
+    expect(reasons).toEqual(expect.arrayContaining(['other_kind', 'ssh_key']));
+  });
+
+  it('an item that won’t read stays out by itself after the second try, and is read again when it changes', async () => {
+    const stubborn = fake.addLogin(vaultId, {
+      title: 'Stubborn',
+      url: 'https://public.example/stubborn',
+      username: 'mara',
+      password: 'stubborn-1',
+    });
+    fake.unreadable.add(stubborn.id);
+    await sync();
+    expect((await page(connectionId)).outcome).toBe('failing');
+    await sync();
+    const view = await page(connectionId);
+    expect(view.outcome).toBe('ok');
+    expect(view.notInVault).toContainEqual(
+      expect.objectContaining({ itemId: stubborn.id, reason: 'unreadable' }),
+    );
+    fake.gets = [];
+    await onePasswordSyncFor(t.services).runNow('now');
+    expect(fake.gets).not.toContain(stubborn.id);
+    fake.unreadable.clear();
+    fake.edit(stubborn.id, () => {});
+    await sync();
+    expect(await entryByName('Stubborn')).toBeDefined();
+  });
+
+  it('remembers every item kept out, beyond the 200 the page shows', async () => {
+    for (let i = 0; i < 205; i++)
+      fake.addLogin(vaultId, {
+        title: `No site ${i}`,
+        url: null,
+        username: 'mara',
+        password: `site-pass-${i}`,
+      });
+    await sync();
+    expect((await page(connectionId)).notInVault).toHaveLength(200);
+    const fresh = fake.addLogin(vaultId, {
+      title: 'Fresh',
+      url: 'https://public.example/fresh',
+      username: 'mara',
+      password: 'fresh-1',
+    });
+    fake.gets = [];
+    await sync();
+    expect(fake.gets).toEqual([fresh.id]);
   });
 });

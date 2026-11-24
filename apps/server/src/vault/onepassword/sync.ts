@@ -1,19 +1,22 @@
 /**
- * When the 1Password sync runs (docs/decisions/onepassword-sync.md OPW-20): one pass at a time, when the server starts
- * read-write, every 10 minutes, 10 seconds after a change to a Vault entry (a few changes make one pass), and on Sync
- * now; reasons that come together make one pass. A change to an entry asks 1Password nothing unless something waits in
- * Whombat (a use of an entry is a change too). Never in read-only mode, during a maintenance pause, drain or quarantine:
- * the next reason after it ends runs one. A disconnect and a drain wait for a write to 1Password going on, and no pass
- * writes after them. Home's health and the connection page read the stored state and never wait for a pass.
+ * When the 1Password sync runs (docs/decisions/onepassword-sync.md): one pass at a time, when the server starts
+ * read-write, every 10 minutes, 10 seconds after an entry is added, changed or removed (a few changes make one pass),
+ * and on Sync now; reasons that come together make one pass. Only a change someone else made counts: the pass's own
+ * changes carry the source `onepassword` in their signed events, and a use of an entry is no change. Even then the pass
+ * asks 1Password nothing unless something waits in Whombat. Never in read-only mode, during a maintenance pause, drain
+ * or quarantine: the next reason after it ends runs one. A disconnect and a drain wait for a write to 1Password going
+ * on, and no pass writes after them. Home's health and the connection page read the stored state and never wait for a
+ * pass.
  */
 import { join } from 'node:path';
 import { defaultWhombatHome } from '@whombat/agent-runtime/host';
-import { ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_PASS_EVERY_MS } from '@whombat/core';
+import { ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_PASS_EVERY_MS, type RealtimeEvent } from '@whombat/core';
 import { outsideCommandScope } from '../../commit/scope';
 import { onConnectionLifecycle } from '../../connections/lifecycle';
 import { connectionRow } from '../../connections/store';
 import type { Services } from '../../services';
 import { onVaultReachChanged } from '../reach-changed';
+import { ONEPASSWORD_SOURCE } from './commands';
 import { type OnePasswordPassReason, type OnePasswordWriteGate, runOnePasswordPass } from './pass';
 import { type OnePasswordApi, OnePasswordPool } from './pool';
 import { ONEPASSWORD_CATALOG_ID, onePasswordConnections } from './store';
@@ -29,6 +32,25 @@ export function useOnePasswordForTests(services: Services, api: OnePasswordApi):
 
 const errName = (err: unknown) => (err instanceof Error ? err.name : 'error');
 
+/** The signed events of an entry added, changed (its name, address, sign-in or key), given a new secret, or removed. */
+const ENTRY_CHANGES = new Set([
+  'vault.entry.added',
+  'vault.entry.changed',
+  'vault.entry.secret_replaced',
+  'vault.entry.saved',
+  'vault.entry.removed',
+]);
+
+/**
+ * Whether a realtime frame is a change that asks for a pass: an entry added, changed or removed by anyone but the sync
+ * itself (its own changes carry the source `onepassword`). A use of an entry, a refusal and every other event don't.
+ */
+export function changeStartsPass(frame: RealtimeEvent): boolean {
+  if (frame.type !== 'audit.appended') return false;
+  const event = frame.event;
+  return ENTRY_CHANGES.has(event.type) && event.payload.source !== ONEPASSWORD_SOURCE;
+}
+
 export class OnePasswordSync implements OnePasswordWriteGate {
   readonly #services: Services;
   #pool: OnePasswordPool | null = null;
@@ -40,8 +62,6 @@ export class OnePasswordSync implements OnePasswordWriteGate {
   #again: number | null = null;
   /** Why the next pass runs. */
   #asked = new Set<OnePasswordPassReason>();
-  /** Entries changed while a pass ran: those the pass didn't change itself ask for another. */
-  #seen = new Set<string>();
   /** Writes to 1Password going on now, and those waiting for them to end (a disconnect, a drain's question). */
   #writes = 0;
   #holds = 0;
@@ -140,10 +160,8 @@ export class OnePasswordSync implements OnePasswordWriteGate {
     );
     this.#stops.push(
       services.bus.onFrame((frame) => {
-        if (frame.event.type !== 'vault.updated' || !frame.event.entryId) return;
-        if (this.#running) this.#seen.add(frame.event.entryId);
-        // A use, a refusal or an edit: the pass looks at what waits here first and asks 1Password only then.
-        else this.request(ONEPASSWORD_CHANGE_DELAY_MS, 'change');
+        // A change while a pass runs gets a pass after it.
+        if (changeStartsPass(frame.event)) this.request(ONEPASSWORD_CHANGE_DELAY_MS, 'change');
       }),
     );
     // A new token or vault of the 1Password connection: a pass soon, reading in full. Other connections' don't matter.
@@ -196,10 +214,7 @@ export class OnePasswordSync implements OnePasswordWriteGate {
     }
     if (this.#running) await this.#running;
     this.#asked.add(reason);
-    this.#running = this.#runAll(this.#take()).finally(() => {
-      this.#running = null;
-    });
-    await this.#running;
+    await this.#start();
   }
 
   /** Stops the reasons and the worker; a pass running finishes. */
@@ -219,12 +234,19 @@ export class OnePasswordSync implements OnePasswordWriteGate {
       this.#again = 0;
       return;
     }
-    this.#running = this.#runAll(this.#take()).finally(() => {
+    void this.#start();
+  }
+
+  /** Runs the passes for the reasons asked; one asked for meanwhile follows it. */
+  #start(): Promise<void> {
+    const running = this.#runAll(this.#take()).finally(() => {
       this.#running = null;
       const again = this.#again;
       this.#again = null;
       if (again !== null) this.#schedule(again);
     });
+    this.#running = running;
+    return running;
   }
 
   /** The passes for these reasons. Never rejects: a failure is logged by its name, and the next reason tries again. */
@@ -234,33 +256,20 @@ export class OnePasswordSync implements OnePasswordWriteGate {
       // A maintenance pause, a drain or a quarantine: no pass; the next reason after it runs one.
       if (services.schemaAccess === 'read-only' || services.maintenance.paused || services.maintenance.held)
         return;
-      this.#seen.clear();
-      const touched = new Set<string>();
-      try {
-        for (const connection of await onePasswordConnections(services.db)) {
-          try {
-            const outcome = await runOnePasswordPass(services, connection.id, {
-              api: this.api,
-              touched,
-              reasons,
-              gate: this,
-            });
-            if (outcome.ran && outcome.outcome === 'failing')
-              services.log.info({ connectionId: connection.id }, '1Password sync: the pass couldn’t finish');
-          } catch (err) {
-            services.log.warn(
-              { connectionId: connection.id, err: errName(err) },
-              '1Password sync: the pass failed',
-            );
-          }
-        }
-      } finally {
-        // Entries the person changed while the pass ran (not the pass's own changes) get a pass of their own.
-        const theirs = [...this.#seen].some((id) => !touched.has(id));
-        this.#seen.clear();
-        if (theirs) {
-          this.#asked.add('change');
-          this.#again = Math.min(this.#again ?? ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_CHANGE_DELAY_MS);
+      for (const connection of await onePasswordConnections(services.db)) {
+        try {
+          const outcome = await runOnePasswordPass(services, connection.id, {
+            api: this.api,
+            reasons,
+            gate: this,
+          });
+          if (outcome.ran && outcome.outcome === 'failing')
+            services.log.info({ connectionId: connection.id }, '1Password sync: the pass couldn’t finish');
+        } catch (err) {
+          services.log.warn(
+            { connectionId: connection.id, err: errName(err) },
+            '1Password sync: the pass failed',
+          );
         }
       }
     } catch (err) {

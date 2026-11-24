@@ -1,9 +1,10 @@
 /**
- * The 1Password sync in the Inbox (docs/decisions/onepassword-sync.md OPW-24, OPW-51, OPW-K13): “1Password says 4 items
- * are gone” with “Remove them here too” and “Keep them here” while the guard holds removals, a card titled by what went
- * wrong (“Whombat can’t reach 1Password”, …) from the second pass in a row that can't finish, a token that can only
- * read, and (off unless the person turns it on) the limit's wait. Each is read from the stored state, follows What Whombat watches for the connection (its checks), and
- * goes by itself when the state moves on.
+ * The 1Password sync in the Inbox (docs/decisions/onepassword-sync.md): “1Password says 4 items are gone” with “Remove
+ * them here too” and “Keep them here” while the guard holds removals, a card titled by what went wrong (“Whombat can’t
+ * reach 1Password”, …) from the second pass in a row that can't finish, a token that can only read, and (off unless the
+ * person turns it on) the limit's wait. Each is read from the stored state, follows What Whombat watches for the
+ * connection (its checks), and goes by itself when the state moves on. All are the person's: the assistant doesn't use
+ * this connection, so none asks it to look.
  */
 import {
   type NeedsYouItem,
@@ -85,14 +86,15 @@ export function onePasswordItems(
       watch: { thing, check: 'onepassword.paused', name: connection.label.slice(0, 220) },
     });
   }
-  // A single pass that couldn't finish is usually a blip: the card waits for the second in a row.
+  // A single pass that couldn't finish is usually a blip: the card waits for the second in a row. Only the person can
+  // mend it (a token, a vault, the network), so it opens 1Password and asks the assistant nothing.
   if (state.outcome === 'failing' && state.failures >= ONEPASSWORD_FAILING_AFTER)
     items.push({
       id: `onepassword:${connection.id}:failing`,
       ref,
       kind: 'connection',
       severity: 'bad',
-      nature: 'problem',
+      nature: 'you',
       title: onePasswordFailingTitle(state.problem),
       body: clip(onePasswordProblemText(state.problem), 600),
       at,

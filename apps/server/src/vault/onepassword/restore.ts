@@ -1,5 +1,5 @@
 /**
- * Backups and the 1Password sync (docs/decisions/onepassword-sync.md OPW-42): a restored Vault is older than
+ * Backups and the 1Password sync (docs/decisions/onepassword-sync.md): a restored Vault is older than
  * 1Password, so it must never write old passwords over newer ones. A restored entry that was kept in step is paired with
  * its item again without a base, and a whole-box restore forgets every base: the next pass reads the items and
  * 1Password's version wins (where both already agree, only the base is renewed). An item that isn't in the vault any
@@ -39,6 +39,7 @@ export async function relinkOnePassword(
           base: null,
           itemVersion: null,
           itemUpdatedAt: null,
+          refused: null,
           problem: null,
           updatedAt: now,
         })
@@ -90,11 +91,23 @@ export async function relinkOnePassword(
 }
 
 /**
+ * A restored file replaced what an entry signs in with: when it is paired, the pair forgets its base, so the next pass
+ * reads the item and 1Password's version wins (the file is the older side), whether or not the file named the item.
+ */
+export async function forgetOnePasswordBase(tx: Db | Tx, entryId: string): Promise<void> {
+  await tx
+    .update(vaultOnePasswordLinks)
+    .set({ base: null, itemVersion: null, itemUpdatedAt: null, refused: null, updatedAt: new Date() })
+    .where(and(eq(vaultOnePasswordLinks.entryId, entryId), eq(vaultOnePasswordLinks.state, 'synced')));
+}
+
+/**
  * After a whole-box restore (the database is the backup's): every link forgets its base and every state its vault's
  * version, so the next pass reads every item and 1Password's version wins. The backup's unfinished work goes too: an
- * item waiting to be archived for an entry removed before the backup was taken stays in 1Password, and an item being
- * made is looked for by its marker again (its entry is unpaired now). Run while the box is still quarantined, so no
- * pass runs before it; doing it again changes nothing.
+ * item waiting to be archived for an entry removed before the backup was taken stays in 1Password, an item being made
+ * is looked for by its marker again (its entry is unpaired now), and removals the guard held then are no question now
+ * (the next pass asks again if they still hold). Run while the box is still quarantined, so no pass runs before it;
+ * doing it again changes nothing.
  */
 export async function forgetOnePasswordBases(services: Pick<Services, 'pipeline'>): Promise<void> {
   await services.pipeline.transactAccount(async (tx) => {
@@ -104,6 +117,10 @@ export async function forgetOnePasswordBases(services: Pick<Services, 'pipeline'
     await tx
       .update(vaultOnePasswordLinks)
       .set({ base: null, itemVersion: null, itemUpdatedAt: null, refused: null });
-    await tx.update(vaultOnePasswordState).set({ contentVersion: null });
+    await tx.update(vaultOnePasswordState).set({ contentVersion: null, removals: null });
+    await tx
+      .update(vaultOnePasswordState)
+      .set({ outcome: null })
+      .where(eq(vaultOnePasswordState.outcome, 'paused'));
   });
 }

@@ -1,5 +1,5 @@
 /**
- * A 1Password connection's page (docs/decisions/onepassword-sync.md OPW-50, OPW-51): its first tab is 1Password, which
+ * A 1Password connection's page (docs/decisions/onepassword-sync.md): its first tab is 1Password, which
  * the apps draw from the connection's own read (`connections.onePassword`: the counts, Sync now, “Not in your Vault”,
  * the guard's question); its head says which vault and how many entries are kept in step; Worth a look has the sync's
  * lines with their checks. Everything comes from what the last pass stored: the page never calls 1Password, and the
@@ -15,13 +15,9 @@ import {
   onePasswordWaitingLine,
 } from '@whombat/core';
 import { registerOnePasswordSource } from '../../vault/onepassword/inbox';
-import { onePasswordState, onePasswordSyncView } from '../../vault/onepassword/store';
+import { onePasswordSyncView } from '../../vault/onepassword/store';
 import { onePasswordSyncFor } from '../../vault/onepassword/sync';
-import {
-  ONEPASSWORD_FAILING_AFTER,
-  onePasswordFailingTitle,
-  onePasswordProblemText,
-} from '../../vault/onepassword/words';
+import { onePasswordFailingTitle, onePasswordProblemText } from '../../vault/onepassword/words';
 import type { KindCheck, KindNotice } from '../quiet/types';
 import { line } from '../words';
 import type { KindModule } from './registry';
@@ -31,19 +27,11 @@ export const ONEPASSWORD_CHECKS: readonly KindCheck[] = ONEPASSWORD_WATCH_CHECKS
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
-/** Whether passes have failed often enough in a row to say so in red (one alone is usually a blip). */
-const failingNow = (view: Pick<OnePasswordSyncView, 'outcome'>, failures: number) =>
-  view.outcome === 'failing' && failures >= ONEPASSWORD_FAILING_AFTER;
-
 /**
- * Worth a look: the guard's pause, passes that can't finish (from the second in a row, `failures`), the limit's wait, a
- * token that can only read.
+ * Worth a look: the guard's pause, passes that can't finish (from the second in a row: one alone is usually a blip), the
+ * limit's wait, a token that can only read.
  */
-export function onePasswordNotices(
-  view: OnePasswordSyncView,
-  timeZone: string,
-  failures = ONEPASSWORD_FAILING_AFTER,
-): KindNotice[] {
+export function onePasswordNotices(view: OnePasswordSyncView, timeZone: string): KindNotice[] {
   const out: KindNotice[] = [];
   if (view.outcome === 'paused' && view.removals)
     out.push({
@@ -57,14 +45,15 @@ export function onePasswordNotices(
       ignore: { lifts: 'fixed', words: 'Until you choose.' },
       episode: view.removals.token,
     });
-  if (failingNow(view, failures))
+  if (view.failing)
     out.push({
       id: 'onepassword-failing',
       tone: 'bad',
       icon: 'network',
       title: clip(onePasswordFailingTitle(view.problem), 120),
       detail: clip(onePasswordProblemText(view.problem), 300),
-      nature: 'problem',
+      // Only the person can mend it: the assistant doesn't use this connection.
+      nature: 'you',
       check: 'onepassword.unreachable',
       ignore: { lifts: 'fixed', words: 'Until it syncs again.' },
     });
@@ -96,15 +85,16 @@ export function onePasswordNotices(
 
 /**
  * The head's state from how the last pass ended: failing a problem with its words, paused (or a token that can only
- * read) needs the person, the limit's wait fine with the waiting line, else fine. Worth a look's lines decide it when
- * Whombat watches their checks; this is what the head says when it doesn't, and for an app that reads only the state.
+ * read) needs the person, the limit's wait fine with the waiting line, else fine. A pass that couldn't finish once
+ * needs a look with its title, as the tab's line says it: never “Kept in step” after a failed pass. Worth a look's lines
+ * decide it when Whombat watches their checks; this is what the head says when it doesn't, and for an app that reads
+ * only the state.
  */
 export function onePasswordHeadStatus(
   view: OnePasswordSyncView,
   timeZone: string,
-  failures = ONEPASSWORD_FAILING_AFTER,
 ): Pick<KindView, 'status' | 'problem'> {
-  if (failingNow(view, failures))
+  if (view.failing)
     return {
       status: { status: 'bad', badge: clip(onePasswordFailingTitle(view.problem), 60) },
       problem: clip(onePasswordProblemText(view.problem), 200),
@@ -116,20 +106,18 @@ export function onePasswordHeadStatus(
   if (view.readOnly) return { status: { status: 'warn', badge: 'This token can only read' } };
   if (view.outcome === 'waiting' && view.nextTryAt)
     return { status: { status: 'ok', badge: clip(onePasswordWaitingLine(view.nextTryAt, timeZone), 60) } };
+  if (view.outcome === 'failing')
+    return { status: { status: 'warn', badge: clip(onePasswordFailingTitle(view.problem), 60) } };
   return view.checkedAt ? { status: { status: 'ok', badge: 'Kept in step' } } : {};
 }
 
 /** The page: the 1Password tab first (the apps draw it), the vault's name and the count in the head, its lines. */
-export function onePasswordKindView(
-  view: OnePasswordSyncView,
-  timeZone: string,
-  failures = ONEPASSWORD_FAILING_AFTER,
-): KindView {
+export function onePasswordKindView(view: OnePasswordSyncView, timeZone: string): KindView {
   return {
-    ...onePasswordHeadStatus(view, timeZone, failures),
+    ...onePasswordHeadStatus(view, timeZone),
     // No response time: nothing is sent to its address.
     charts: [],
-    notices: onePasswordNotices(view, timeZone, failures),
+    notices: onePasswordNotices(view, timeZone),
     panels: [],
     lead: ONEPASSWORD_TAB,
     tabs: [{ key: ONEPASSWORD_TAB, label: '1Password', panels: [] }],
@@ -149,11 +137,9 @@ registerOnePasswordSource();
 
 export const ONEPASSWORD_KIND: KindModule = {
   checks: ONEPASSWORD_CHECKS,
-  page: async ({ services, row, timeZone }) => {
-    const [view, state] = await Promise.all([
-      onePasswordSyncView(services.db, row, onePasswordSyncFor(services).syncing),
-      onePasswordState(services.db, row.id),
-    ]);
-    return onePasswordKindView(view, timeZone, state?.failures ?? 0);
-  },
+  page: async ({ services, row, timeZone }) =>
+    onePasswordKindView(
+      await onePasswordSyncView(services.db, row, onePasswordSyncFor(services).syncing),
+      timeZone,
+    ),
 };

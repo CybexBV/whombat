@@ -16,6 +16,7 @@ import {
   type OnePasswordProjection,
   onePasswordAddress,
   onePasswordCanonical,
+  onePasswordCategorySkip,
   onePasswordChangedFields,
   onePasswordEntryAuth,
   onePasswordEntryEligible,
@@ -154,6 +155,11 @@ describe('reading an item', () => {
     expect(reason(login({ category: 'SshKey' }))).toBe('ssh_key');
     expect(reason(login({ category: 'SecureNote' }))).toBe('other_kind');
     expect(reason(login({ category: 'Password' }))).toBe('other_kind');
+    // Read from the list's overview alone, so such an item is never fetched.
+    expect(onePasswordCategorySkip('SshKey')).toBe('ssh_key');
+    expect(onePasswordCategorySkip('Document')).toBe('other_kind');
+    expect(onePasswordCategorySkip('Login')).toBeNull();
+    expect(onePasswordCategorySkip('ApiCredentials')).toBeNull();
     expect(reason(login({ websites: [] }))).toBe('no_website');
     expect(reason(login({ websites: [{ url: ' ', label: 'website', autofillBehavior: 'Never' }] }))).toBe(
       'no_website',

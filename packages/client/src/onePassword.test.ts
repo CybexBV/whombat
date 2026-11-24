@@ -38,6 +38,7 @@ const VIEW: OnePasswordSyncView = {
   outcome: 'ok',
   problem: null,
   nextTryAt: null,
+  failing: false,
   readOnly: false,
   syncing: false,
   notInVault: [],
@@ -137,17 +138,21 @@ describe('the connection’s page part', () => {
     });
   });
 
-  it('says why it is waiting or failing, a failing pass in the Not working colour', () => {
+  it('says why it is waiting or failing, a sync failing now in the Not working colour', () => {
     const nextTryAt = '2026-11-24T13:20:00.000Z';
     expect(onePasswordPage({ ...VIEW, outcome: 'waiting', nextTryAt }, NOW, TZ).status).toEqual([
       { text: onePasswordWaitingLine(nextTryAt, TZ), tone: 'warn' },
     ]);
+    // One pass that couldn't finish is usually a blip: a look, not red, as the head says.
     expect(onePasswordPage({ ...VIEW, outcome: 'failing' }, NOW, TZ).status).toEqual([
+      { text: ONEPASSWORD_WORDS.unreachable, tone: 'warn' },
+    ]);
+    expect(onePasswordPage({ ...VIEW, outcome: 'failing', failing: true }, NOW, TZ).status).toEqual([
       { text: ONEPASSWORD_WORDS.unreachable, tone: 'bad' },
     ]);
     expect(
       onePasswordPage(
-        { ...VIEW, outcome: 'failing', problem: ONEPASSWORD_WORDS.stopped, readOnly: true },
+        { ...VIEW, outcome: 'failing', failing: true, problem: ONEPASSWORD_WORDS.stopped, readOnly: true },
         NOW,
         TZ,
       ).status,

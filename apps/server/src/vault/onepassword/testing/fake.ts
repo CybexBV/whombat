@@ -2,7 +2,7 @@
  * An in-memory 1Password for tests (docs/decisions/onepassword-sync.md): vaults with a `contentVersion` that grows with
  * every change, items with versions and times, archiving, a `put` refused for a stale version, “too many requests”,
  * refused tokens, a read-only token, a create that is made but whose answer is lost, items a `get` can't read this
- * time, and a call held until the test lets it go. It speaks `OnePasswordApi`, as the worker's pool does, and records
+ * time or no longer finds although the list showed them, and a call held until the test lets it go. It speaks `OnePasswordApi`, as the worker's pool does, and records
  * every call (never a value).
  */
 import type {
@@ -66,6 +66,10 @@ export class FakeOnePassword implements OnePasswordApi {
   loseCreates = 0;
   /** Items a `get` answers as `failed` (1Password couldn't read them this time), as the SDK's batch does. */
   readonly unreadable = new Set<string>();
+  /** Items the list still shows but a `get` answers as not found (gone between the two reads). */
+  readonly readMissing = new Set<string>();
+  /** Every item id a `get` asked for, in order. */
+  gets: string[] = [];
   readonly #pauses = new Map<string, { reached: () => void; gate: Promise<void> }>();
   #clock: number;
 
@@ -290,10 +294,11 @@ export class FakeOnePassword implements OnePasswordApi {
     const items: OnePasswordItem[] = [];
     const missing: string[] = [];
     const failed: string[] = [];
+    this.gets.push(...itemIds);
     for (const id of itemIds) {
       const item = v.items.get(id);
       if (this.unreadable.has(id)) failed.push(id);
-      else if (item) items.push(clone(item));
+      else if (item && !this.readMissing.has(id)) items.push(clone(item));
       else missing.push(id);
     }
     return { items, missing, failed };

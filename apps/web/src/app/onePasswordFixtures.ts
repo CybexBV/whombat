@@ -164,6 +164,8 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
       outcome,
       problem: null,
       nextTryAt: outcome === 'waiting' ? NEXT_TRY : null,
+      // The fixture's failing pass is the second in a row: failing now.
+      failing: outcome === 'failing',
       readOnly: kind === 'failing',
       syncing,
       notInVault: NOT_IN_VAULT,
@@ -209,7 +211,7 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
   };
 
   /**
-   * Its page as the server sends it (Whombat onepassword-sync.md OPW-S14): its own 1Password tab first, without panels
+   * Its page as the server sends it (Whombat onepassword-sync.md): its own 1Password tab first, without panels
    * (the apps draw it from the part), then the Summary with Worth a look's lines; the head names the vault and the count,
    * and its state follows the last pass.
    */
@@ -221,7 +223,7 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
       v.outcome === 'failing'
         ? {
             status: 'bad',
-            badge: 'Can’t reach 1Password',
+            badge: 'Whombat can’t reach 1Password',
             problem: v.problem ?? ONEPASSWORD_WORDS.unreachable,
           }
         : v.outcome === 'paused' && v.removals
@@ -251,8 +253,9 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
               id: 'onepassword-failing',
               tone: 'bad' as const,
               icon: 'network' as const,
-              title: v.problem ?? ONEPASSWORD_WORDS.unreachable,
-              nature: 'problem' as const,
+              title: 'Whombat can’t reach 1Password',
+              detail: v.problem ?? ONEPASSWORD_WORDS.unreachable,
+              nature: 'you' as const,
               check: 'onepassword.unreachable',
             },
           ]

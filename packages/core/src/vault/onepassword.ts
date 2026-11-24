@@ -258,7 +258,8 @@ export function onePasswordChangedFields(
 
 /**
  * Why an item stays only in 1Password, shown under “Not in your Vault”. Most are read from the item here; `unreachable`
- * (the address's DNS, checked by the server before the commit) and `vault_full` (50 entries) are the server's.
+ * (the address's DNS, checked by the server before the commit), `vault_full` (50 entries) and `unreadable` (1Password
+ * answered twice in a row that it couldn't give the item) are the server's.
  */
 export const ONEPASSWORD_SKIP_REASONS = [
   'no_website',
@@ -274,6 +275,7 @@ export const ONEPASSWORD_SKIP_REASONS = [
   'vault_full',
   'ssh_key',
   'other_kind',
+  'unreadable',
 ] as const;
 export const OnePasswordSkipReason = z.enum(ONEPASSWORD_SKIP_REASONS);
 export type OnePasswordSkipReason = z.infer<typeof OnePasswordSkipReason>;
@@ -292,6 +294,7 @@ export const ONEPASSWORD_SKIP_TEXT: Record<OnePasswordSkipReason, string> = {
   vault_full: 'Your Vault is full',
   ssh_key: 'SSH keys stay in 1Password',
   other_kind: 'Only logins and API credentials come in',
+  unreadable: 'Whombat couldn’t read this item',
 };
 
 /* Reading an item ------------------------------------------------------------------------------------ */
@@ -383,6 +386,17 @@ function secretProblem(secret: string, auth: VaultAuth['type']): OnePasswordSkip
 }
 
 /**
+ * Why an item of this category stays in 1Password, or null for a Login and an API Credential: read from the list's
+ * overview, so such an item is never fetched.
+ */
+export function onePasswordCategorySkip(category: string): OnePasswordSkipReason | null {
+  if (category === ONEPASSWORD_CATEGORIES.sshKey) return 'ssh_key';
+  if (category === ONEPASSWORD_CATEGORIES.login || category === ONEPASSWORD_CATEGORIES.apiCredentials)
+    return null;
+  return 'other_kind';
+}
+
+/**
  * An item as an entry would hold it, or why it can't be one. A Login needs a website, a username and a password; an API
  * Credential a hostname and a credential (a username makes it basic, none bearer). An SSH key and every other category
  * stay in 1Password. A title too long for the Vault is shortened; an empty one takes the address's host.
@@ -393,9 +407,9 @@ export function onePasswordItemProjection(
   totpFieldId: string | null = null,
 ): OnePasswordItemReading {
   const fail = (reason: OnePasswordSkipReason): OnePasswordItemReading => ({ ok: false, reason });
-  if (item.category === ONEPASSWORD_CATEGORIES.sshKey) return fail('ssh_key');
+  const outside = onePasswordCategorySkip(item.category);
+  if (outside) return fail(outside);
   const login = item.category === ONEPASSWORD_CATEGORIES.login;
-  if (!login && item.category !== ONEPASSWORD_CATEGORIES.apiCredentials) return fail('other_kind');
   const address = login
     ? readAddress(item.websites.find((w) => w.url.trim() !== '')?.url, 'no_website')
     : readAddress(builtInField(item.fields, ONEPASSWORD_FIELD_IDS.hostname)?.value, 'no_hostname');

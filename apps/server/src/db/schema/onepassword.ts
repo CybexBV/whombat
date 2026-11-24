@@ -72,8 +72,11 @@ export const vaultOnePasswordLinks = pgTable(
   ],
 );
 
-/** An item under “Not in your Vault”, with the `updatedAt` it was read at (not shown: a pass reads it again on change). */
-export type OnePasswordNotInVaultRow = OnePasswordNotInVault & { updatedAt: string };
+/**
+ * An item under “Not in your Vault”, with the `updatedAt` it was read at (not shown: a pass reads it again on change) and
+ * how many reads in a row 1Password couldn't give it (absent: none; the line shows from the second).
+ */
+export type OnePasswordNotInVaultRow = OnePasswordNotInVault & { updatedAt: string; failedReads?: number };
 
 /** One row per 1Password connection: what the last pass saw and how it ended. */
 export const vaultOnePasswordState = pgTable('vault_onepassword_state', {
