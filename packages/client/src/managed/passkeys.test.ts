@@ -10,7 +10,13 @@ import {
 } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { fakePeerId } from '../session/fake';
-import type { ApplianceSession } from '../session/types';
+import {
+  type ApplianceSession,
+  DeadlineExceededError,
+  NotDeliveredError,
+  OutcomeUnknownError,
+  SessionClosedError,
+} from '../session/types';
 import type { ApplianceSummary, ControlSession } from './control';
 import { ControlError, controlErrorCodeOf, createHttpControl, storageTokenStore } from './control';
 import { deliverBackupKey, heldBackupKey } from './passkey-backup-key';
@@ -609,6 +615,15 @@ describe('errors and the nudge', () => {
     expect(passkeyErrorOf(new ControlError('unavailable', 'x'))).toBe('unreachable');
     expect(passkeyErrorOf(new ControlError('passkey_invalid', 'x', {}, 'passkey_unknown'))).toBe('gone');
     expect(passkeyErrorText(new PasskeyError('limit'))).toBe(PASSKEY_COPY.errors.limit);
+  });
+
+  it('says to check the connection when it went on the way, not when someone ended the session', () => {
+    expect(passkeyErrorOf(new NotDeliveredError('end_1', 'req_1'))).toBe('unreachable');
+    expect(passkeyErrorOf(new DeadlineExceededError('end_1', 'req_1'))).toBe('unreachable');
+    expect(passkeyErrorOf(new OutcomeUnknownError('end_1', 'req_1'))).toBe('unreachable');
+    expect(passkeyErrorOf(new SessionClosedError('offline'))).toBe('unreachable');
+    expect(passkeyErrorOf(new SessionClosedError('lost'))).toBe('unreachable');
+    expect(passkeyErrorOf(new SessionClosedError('ticket_denied'))).toBe('failed');
   });
 
   it('is offered once per device key and Whombat, and Not now is remembered', () => {
