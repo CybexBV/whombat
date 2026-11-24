@@ -35,7 +35,7 @@ import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard } from '../../ui/assistant';
 import { ClockField } from '../../ui/ClockField';
-import { FormField } from '../../ui/formField';
+import { FormField, FormMessage } from '../../ui/formField';
 import { BellOff, ChevronRight } from '../../ui/icons';
 import { OneSheet } from '../../ui/oneSheet';
 import { Chip, SkeletonRows } from '../../ui/primitives';
@@ -71,7 +71,6 @@ function KeepQuietBody({
   actions: KeepQuietActions;
   onClose: () => void;
 }) {
-  const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const now = useNow();
   // The choices as they were when the sheet opened: the minute ticking doesn't move a choice under the finger.
@@ -83,8 +82,9 @@ function KeepQuietBody({
   const [note, setNote] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const keep = () => {
+    // The app's clock (a demo world runs on its own), as the choices were worked out with.
     const asked = keepQuietBody(choice, {
-      now: Date.now(),
+      now: now.getTime(),
       timeZone,
       picked: pickedValue(pick.day, pick.clock),
       note,
@@ -108,7 +108,6 @@ function KeepQuietBody({
         { id: 'keep', label: KEEP_QUIET_WORDS.button, variant: 'primary', onPress: keep },
         { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
       ]}
-      note={problem}
     >
       <View style={{ gap: 14, marginTop: 16 }}>
         <RadioCards<KeepQuietChoice>
@@ -125,11 +124,9 @@ function KeepQuietBody({
           }))}
         />
         {choice === 'pick' ? (
-          <View style={{ gap: 10 }}>
-            <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-              {MONITORING_COPY.day.toUpperCase()}
-            </Text>
+          <View style={{ gap: 12 }}>
             <ScrollView
+              accessibilityLabel={MONITORING_COPY.day}
               horizontal
               showsHorizontalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -158,6 +155,8 @@ function KeepQuietBody({
             />
           </View>
         ) : null}
+        {/* Why it can't keep quiet then, where the time was chosen (the sheet's own note sits under its buttons). */}
+        <FormMessage text={problem} />
         <FormField
           label={KEEP_QUIET_WORDS.note}
           value={note}

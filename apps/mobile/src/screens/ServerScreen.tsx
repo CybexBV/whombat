@@ -832,8 +832,8 @@ function ServerHead({
             </Text>
           </View>
           {week ? (
-            <Text size={12} color={theme.colors.mut} numberOfLines={1}>
-              {week}
+            <Text size={12} mono color={theme.colors.mut} numberOfLines={2} style={{ flexShrink: 1 }}>
+              {`· ${week}`}
             </Text>
           ) : null}
         </View>

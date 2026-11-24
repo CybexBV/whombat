@@ -316,6 +316,11 @@ export function ThingPageScreen({
   // Keep quiet… in the ⋯ (MON-04): for who may manage it; a page kept quiet already offers End now under its head.
   const canKeepQuiet = !!page && keepsQuiet && (!!watch.data?.mayChange || !!page.keptQuiet?.canEnd);
   const hold = page && keepsQuiet ? holdView(page) : null;
+  // What it is down because of, opened from beside its state (“Open media ›”).
+  const causeLink =
+    hold?.kind === 'cause' && hold.link
+      ? { label: hold.link.label, onPress: () => void openHref(hold.link?.href ?? '') }
+      : null;
   return (
     <Screen>
       <BackBar
@@ -406,6 +411,7 @@ export function ThingPageScreen({
                 problem={problemLine(page, now, timeZone)}
                 onAsk={subject ? askAbout : null}
                 wide={widePage.wide}
+                cause={causeLink}
               />
             ) : (
               <>
@@ -415,6 +421,7 @@ export function ThingPageScreen({
                   onAsk={null}
                   wide={false}
                   withButtons={false}
+                  cause={causeLink}
                 />
                 <Actions page={page} onConfirm={setConfirm} buttons={buttons} />
               </>
@@ -427,16 +434,9 @@ export function ThingPageScreen({
                 busy={keep.busy}
                 onEnd={() => void keep.end()}
               />
-            ) : hold ? (
-              <View style={{ gap: 4 }}>
-                {/* Down because of something else says so as its state; quiet with its server says so here. */}
-                {page.badge !== hold.words ? (
-                  <KeptQuietLine words={hold.words} who={null} endNow={false} busy={false} onEnd={() => {}} />
-                ) : null}
-                {hold.link ? (
-                  <CauseLink label={hold.link.label} onPress={() => void openHref(hold.link?.href ?? '')} />
-                ) : null}
-              </View>
+            ) : hold && page.badge !== hold.words ? (
+              // Down because of something else says so as its state; quiet with its server says so here.
+              <KeptQuietLine words={hold.words} who={null} endNow={false} busy={false} onEnd={() => {}} />
             ) : null}
             {query.error ? (
               // A failed refresh keeps the saved page, Needs a look and its problems with it; its controls may have changed.
@@ -647,6 +647,7 @@ function ServiceHead({
   onAsk,
   wide,
   withButtons = true,
+  cause = null,
 }: {
   page: ThingPage;
   problem: string | null;
@@ -654,6 +655,8 @@ function ServiceHead({
   wide: boolean;
   /** Ask and Open under the head (a service's); a page without them keeps its own actions under it. */
   withButtons?: boolean;
+  /** The way to what it is down because of, beside its state (monitoring.md MON-07). */
+  cause?: { label: string; onPress: () => void } | null;
 }) {
   const theme = useTheme();
   const agent = useAgentWords();
@@ -662,7 +665,8 @@ function ServiceHead({
   const open = withButtons ? page.open : undefined;
   const verdict = page.verdict?.trim() || null;
   const runsOn = page.runsOn;
-  const level = thingStatusLevel(page.status);
+  // Down because of something else is grey, not fine (MON-68): the hollow ring and grey words of a thing not known yet.
+  const level = page.causedBy && page.causedBy.kind !== 'quiet' ? 'learning' : thingStatusLevel(page.status);
   // The week's line (MON-09) sits by when it was checked; the server also sends it among the facts for older apps.
   const { checked, detail } = headFacts(factsWithoutUptime(page.facts, page.uptime));
   const week = page.uptime?.text ?? null;
@@ -717,6 +721,7 @@ function ServiceHead({
         style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 6 }}
       >
         <LevelPill level={level} word={page.badge} />
+        {cause ? <CauseLink label={cause.label} onPress={cause.onPress} /> : null}
         {verdict ? (
           <Text size={15} lh={1.4} color={theme.colors.ink2} style={{ flexShrink: 1, minWidth: 160 }}>
             {verdict}

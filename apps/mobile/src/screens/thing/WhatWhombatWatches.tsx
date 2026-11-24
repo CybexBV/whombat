@@ -27,6 +27,7 @@ import { useTheme } from '../../theme/theme';
 import { ErrorState, SkeletonRows } from '../../ui/primitives';
 import { switchColors } from '../../ui/switchColors';
 import { Touchable } from '../../ui/Touchable';
+import { hitSlopFor } from '../../ui/touchTarget';
 
 /** Where the rows' hairlines go: on top (a OneCard's rows) or under them (a settings section's). */
 type Divider = 'top' | 'bottom';
@@ -279,12 +280,15 @@ function LimitLines({
   );
 }
 
-/** One limit's words in mono and Change on the right (44pt). */
+/**
+ * One limit's words in mono under the check's name, as “Off since …” is, and Change at the switch's edge: 32 tall with
+ * slop to 44, so the lines sit close to the check they belong to.
+ */
 function LimitLine({ text, spoken, onPress }: { text: string; spoken: string; onPress: () => void }) {
   const theme = useTheme();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
-      <Text size={12.5} mono color={theme.colors.ink2} style={{ flex: 1, minWidth: 0 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32, marginTop: -6 }}>
+      <Text size={12} mono color={theme.colors.mut} style={{ flex: 1, minWidth: 0 }}>
         {text}
       </Text>
       <Touchable
@@ -294,7 +298,14 @@ function LimitLine({ text, spoken, onPress }: { text: string; spoken: string; on
         accessibilityRole="button"
         accessibilityLabel={MONITORING_COPY.changeLimit}
         accessibilityHint={spoken}
-        style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
+        hitSlop={hitSlopFor(32)}
+        style={{
+          minHeight: 32,
+          minWidth: 44,
+          paddingLeft: 10,
+          justifyContent: 'center',
+          alignItems: 'flex-end',
+        }}
       >
         <Text size={13} weight={600} color={theme.colors.brand}>
           {QUIET_COPY.change}

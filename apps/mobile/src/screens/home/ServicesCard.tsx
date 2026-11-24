@@ -297,7 +297,15 @@ export function ConnectionTile({
         </View>
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {tile.row.level === 'connected' ? (
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.ok }} />
+            // Down because of something else is grey, not fine (monitoring.md MON-07).
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: tile.held === 'cause' ? theme.colors.mut : theme.colors.ok,
+              }}
+            />
           ) : (
             <StatusMark level={tile.row.level} />
           )}
