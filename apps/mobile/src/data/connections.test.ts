@@ -136,6 +136,19 @@ describe('CONNECTED (CX-70)', () => {
     const [row] = connectedRows([connection({ detail: null })], [], 'hq');
     expect(row?.meta).toBe('home.lan:8123');
   });
+
+  it('opens 1Password’s page, where its sync is, and every other connection’s screen', () => {
+    const [onePassword, ha] = connectedRows(
+      [
+        connection({ id: 'con_1p', catalogId: 'onepassword', label: '1Password', detail: null, fields: {} }),
+        connection(),
+      ],
+      [],
+      'hq',
+    );
+    expect(onePassword?.opens).toEqual({ screen: 'Thing', thingId: 'connection:con_1p' });
+    expect(ha?.opens).toBeNull();
+  });
 });
 
 describe('an account’s page from Connections (session minor 7)', () => {

@@ -186,7 +186,8 @@ export interface ConnectedRow {
   webPath: string;
   /**
    * An account row's page on a box that has them (session minor 7), else its own screen (Google, Microsoft 365, Email
-   * (IMAP), GitHub, Website feedback; AP-2909); null for a catalog connection.
+   * (IMAP), GitHub, Website feedback; AP-2909); for a catalog connection its page when the sync lives there (1Password,
+   * whose page opens on its own tab), else null (its Connection screen).
    */
   opens: RowOpens | null;
   /**
@@ -242,7 +243,10 @@ export function connectedRow(c: ConnectionView, slug: string): ConnectedRow {
     state,
     logo: connectionLogo(c.catalogId, entry?.name ?? c.label),
     webPath: connectionsWebPath(slug, c.catalogId, c.id),
-    opens: null,
+    // The Vault's sync is on its page's own tab, not on the Connection screen (Whombat onepassword-sync.md).
+    opens: isVaultSyncConnection(c.catalogId)
+      ? { screen: 'Thing', thingId: thingId('connection', c.id) }
+      : null,
     line: joinLine([meta, lookOnly]),
     accessibilityLabel: rowLabel(title, joinLine([meta, lookOnly]), state),
   };
