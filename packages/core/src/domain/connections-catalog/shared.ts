@@ -645,6 +645,14 @@ export const CatalogField = z.object({
   options: z.array(CatalogFieldOption).min(2).max(12).optional(),
   /** Only asked with these sign-in methods (Nextcloud's username: only with an app password). Absent: always. */
   methods: z.array(SignInKind).optional(),
+  /**
+   * Only asked while another of the entry's fields has one of these values (“Website or address”: the word to look
+   * for only for a website); that field's default counts while it is empty. Absent: always. A field left out this way
+   * isn't sent.
+   */
+  shownWhen: z
+    .object({ field: FieldId, values: z.array(z.string().min(1).max(100)).min(1).max(12) })
+    .optional(),
   /** A `text` field that becomes the connection's guide for agents (Custom API, CX-62). */
   guide: z.boolean().optional(),
   /**

@@ -18,6 +18,7 @@ import {
   type CatalogSignIn,
   type ConnectionView,
   catalogEntry,
+  fieldShown,
   fieldsFor,
   isAgentConnection,
   isGatewayConnection,
@@ -170,15 +171,22 @@ export function asksTwoStepCode(method: CatalogSignIn | null | undefined): boole
 
 /**
  * The fields the form shows for a sign-in (CX-01): `fieldsFor` (the method's own), without a `fromService` field (asked
- * only when the server needs the choice, CT-268), and without an optional username that belongs to another token shape
- * (a Custom API's username only with “Username and password”).
+ * only when the server needs the choice, CT-268), without an optional username that belongs to another token shape
+ * (a Custom API's username only with “Username and password”), and, given the values typed so far, without a field
+ * whose `shownWhen` doesn't hold (“Website or address”: the word to look for only for a website).
  */
-export function visibleFields(entry: CatalogEntry, choice: SignInChoice): Field[] {
+export function visibleFields(
+  entry: CatalogEntry,
+  choice: SignInChoice,
+  values?: Readonly<Record<string, string>>,
+): Field[] {
   const usernameOf = (m: CatalogSignIn) =>
     m.kind === 'token' && m.auth.type === 'basic' ? m.auth.usernameField : null;
   const own = usernameOf(choice.method);
   const others = new Set(entry.signIn.map(usernameOf).filter((f): f is string => f !== null && f !== own));
-  return fieldsFor(entry, choice.kind).filter((f) => !f.fromService && !(others.has(f.id) && !f.required));
+  return fieldsFor(entry, choice.kind).filter(
+    (f) => !f.fromService && !(others.has(f.id) && !f.required) && (!values || fieldShown(entry, f, values)),
+  );
 }
 
 /**

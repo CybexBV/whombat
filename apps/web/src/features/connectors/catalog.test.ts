@@ -279,6 +279,7 @@ describe('the overview’s entries (CX-70, AP-755)', () => {
       'unifi_network',
       'opnsense',
       'nginx_proxy_manager',
+      'uptime',
       'tailscale',
       'cloudflare',
       'portainer',

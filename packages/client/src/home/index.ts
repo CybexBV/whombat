@@ -13,6 +13,7 @@ export * from './lookPlan';
 export * from './lookResearch';
 export * from './needsYou';
 export * from './needsYouList';
+export * from './monitoring';
 export * from './overview';
 export * from './quiet';
 export * from './rename';
