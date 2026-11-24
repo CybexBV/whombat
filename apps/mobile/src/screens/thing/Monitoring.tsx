@@ -33,7 +33,7 @@ import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { firstPick, MONITORING_COPY, pickDays, pickedValue } from '../../data/monitoring';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
-import { Dot, OneCard } from '../../ui/assistant';
+import { Dot, MonoLabel, OneCard } from '../../ui/assistant';
 import { ClockField } from '../../ui/ClockField';
 import { FormField, FormMessage } from '../../ui/formField';
 import { BellOff, ChevronRight } from '../../ui/icons';
@@ -124,12 +124,14 @@ function KeepQuietBody({
           }))}
         />
         {choice === 'pick' ? (
-          <View style={{ gap: 12 }}>
+          // The days and the clock on one row, so the sheet's buttons stay in reach at a phone's height.
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <ScrollView
               accessibilityLabel={MONITORING_COPY.day}
               horizontal
               showsHorizontalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              style={{ flex: 1 }}
               contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
             >
               {days.map((d) => (
@@ -274,6 +276,7 @@ const HISTORY_FIRST = 5;
 
 /** The last 30 days of a thing or server (`things.history`); nothing on a Whombat that doesn't keep it. */
 export function WhatHappenedCard({ thing }: { thing: string }) {
+  const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const history = useThingHistory(slug, thing, 30);
@@ -309,7 +312,25 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
               onPress={() => setOpen(!open)}
             />
           ) : null}
-          {alertsOpen ? view.alerts.map((r) => <HistoryLine key={r.id} row={r} />) : null}
+          {/* A server's own alerts under their own small heading, so “Show N more” above stays with the outages. */}
+          {alertsOpen && view.alerts.length ? (
+            <>
+              <View
+                style={{
+                  paddingHorizontal: 14,
+                  paddingTop: 12,
+                  paddingBottom: 8,
+                  borderTopWidth: 1,
+                  borderTopColor: theme.colors.line,
+                }}
+              >
+                <MonoLabel>{HISTORY_WORDS.fromServer}</MonoLabel>
+              </View>
+              {view.alerts.map((r, i) => (
+                <HistoryLine key={r.id} row={r} first={i === 0} />
+              ))}
+            </>
+          ) : null}
           {view.alerts.length ? (
             <FoldRow
               label={alertsOpen ? HISTORY_WORDS.hideAlerts : HISTORY_WORDS.alerts(view.alerts.length)}
@@ -322,8 +343,11 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
   );
 }
 
-/** One outage or alert: its tone's dot, what it was, then when and how long, and its cause under that. */
-function HistoryLine({ row }: { row: HistoryRow }) {
+/**
+ * One outage or alert: its tone's dot, what it was, then when and how long, and its cause under that. The first under a
+ * small heading has no rule of its own.
+ */
+function HistoryLine({ row, first = false }: { row: HistoryRow; first?: boolean }) {
   const theme = useTheme();
   return (
     <View
@@ -336,7 +360,7 @@ function HistoryLine({ row }: { row: HistoryRow }) {
         paddingHorizontal: 14,
         paddingVertical: 11,
         minHeight: 52,
-        borderTopWidth: 1,
+        borderTopWidth: first ? 0 : 1,
         borderTopColor: theme.colors.line,
       }}
     >

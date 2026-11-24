@@ -367,6 +367,8 @@ export interface NoticeRowView {
    * line's quiet. A line held by a cause (MON-07) has neither: it lifts when the cause is back.
    */
   endNow: boolean;
+  /** Quiet with the whole thing (kept quiet, or down because of something else); null for its own or none. */
+  held: 'window' | 'cause' | null;
   spoken: string;
 }
 
@@ -418,6 +420,7 @@ export function noticeRows(
       quiet: quietText,
       undo: ref,
       endNow: quiet && held === 'window',
+      held,
       spoken: (quietText ? [n.title, quietText] : [words, n.title, detail]).filter(Boolean).join('. '),
     };
   });

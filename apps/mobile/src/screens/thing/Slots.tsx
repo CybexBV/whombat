@@ -5,7 +5,7 @@
  * (`ShelfCard`) —, and Inventory's counts as tiles two by two — rows with the count on the right in a wide page's half
  * (`CountsCard`). The words, tags and order are `data/serviceSlots.ts`'s; colours only from the theme.
  */
-import { handleTheseView, noticeGroups, thingImageInitial } from '@whombat/client';
+import { handleTheseView, KEEP_QUIET_WORDS, noticeGroups, thingImageInitial } from '@whombat/client';
 import type { ThingPagePanel, ThingTone } from '@whombat/core';
 import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
 import {
@@ -35,6 +35,7 @@ import {
   SWIPE_GAP,
   shelfShown,
   shelfTag,
+  splitHeld,
   stripOrder,
   stripSentence,
   stripTone,
@@ -111,7 +112,7 @@ function ToneTag({ text, tone }: { text: string; tone: ThingTone | null }) {
  * Worth a look on top as a slim strip: tinted in its worst tone, each line with its icon on a tinted tile, the card's
  * name over the first, the title and its detail as one sentence, then its link and button; the ⋯ menu (Ignore, Remind
  * me tomorrow, Stop watching; held on the line too) or a quiet line's Undo on the right. The first three, then “Show N
- * more”. Nothing at all when it has no line.
+ * more”; the lines quiet with the whole thing under their own “Show N on hold”. Nothing at all when it has no line.
  */
 export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelContext }) {
   const theme = useTheme();
@@ -128,9 +129,12 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
       .filter((r): r is NoticeRowView => !!r);
   }, [rows, panel.items]);
   const [open, setOpen] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<QuietMenuTarget | null>(null);
   if (!ordered.length) return null;
-  const { shown, more } = foldStrip(ordered, open);
+  // Lines quiet with the whole thing: the line under the head says why, so they fold apart.
+  const { lines, held } = splitHeld(ordered);
+  const { shown, more } = foldStrip(lines, open);
   const tone = stripTone(panel.items);
   const color = tone === 'info' ? theme.colors.ink2 : toneOf(theme, tone);
   const all = handleTheseView(noticeGroups(panel.items).asking, ctx.research, ctx.thing.name, agent.name);
@@ -153,6 +157,14 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
       }}
     >
       <View style={{ backgroundColor: tone === 'info' ? 'transparent' : tint(color, 0.08) }}>
+        {shown.length ? null : (
+          // Everything on hold: the card's name stands over the fold on its own.
+          <View style={{ paddingTop: 12, paddingHorizontal: 14 }}>
+            <Text size={10.5} weight={500} mono tracking={0.06} color={color} accessibilityRole="header">
+              {panel.title.toUpperCase()}
+            </Text>
+          </View>
+        )}
         {shown.map((r, i) => (
           <StripLine
             key={r.id}
@@ -164,24 +176,24 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
           />
         ))}
         {more || open ? (
-          <Touchable
+          <StripFold
+            label={open ? DASHBOARD_COPY.showFewer : DASHBOARD_COPY.showMore(more)}
             onPress={() => setOpen(!open)}
-            feedback="wash"
-            accessibilityRole="button"
-            accessibilityLabel={open ? DASHBOARD_COPY.showFewer : DASHBOARD_COPY.showMore(more)}
-            style={{
-              minHeight: 44,
-              justifyContent: 'center',
-              paddingHorizontal: 14,
-              borderTopWidth: 1,
-              borderTopColor: theme.colors.line,
-            }}
-          >
-            <Text size={13.5} weight={600} color={theme.colors.brand}>
-              {open ? DASHBOARD_COPY.showFewer : DASHBOARD_COPY.showMore(more)}
-            </Text>
-          </Touchable>
+          />
         ) : null}
+        {held.length ? (
+          <StripFold
+            label={heldOpen ? KEEP_QUIET_WORDS.hideHeld : KEEP_QUIET_WORDS.showHeld(held.length)}
+            expanded={heldOpen}
+            ruled={shown.length > 0}
+            onPress={() => setHeldOpen(!heldOpen)}
+          />
+        ) : null}
+        {heldOpen
+          ? held.map((r) => (
+              <StripLine key={r.id} row={r} label={null} labelColor={color} ctx={ctx} onMenu={openMenu} />
+            ))
+          : null}
         {all?.label || all?.busy ? (
           <View
             style={{
@@ -206,6 +218,42 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
       </View>
       {quiet ? <QuietMenuSheet target={menuFor} actions={quiet} onClose={() => setMenuFor(null)} /> : null}
     </View>
+  );
+}
+
+/** A strip's fold (“Show 2 more”, “Show 3 on hold”): `brand` words on a 44dp row under a hairline. */
+function StripFold({
+  label,
+  onPress,
+  expanded,
+  ruled = true,
+}: {
+  label: string;
+  onPress: () => void;
+  expanded?: boolean;
+  /** Under a line (a hairline); not right under the card's name. */
+  ruled?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <Touchable
+      onPress={onPress}
+      feedback="wash"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      {...(expanded !== undefined ? { accessibilityState: { expanded } } : {})}
+      style={{
+        minHeight: 44,
+        justifyContent: 'center',
+        paddingHorizontal: 14,
+        borderTopWidth: ruled ? 1 : 0,
+        borderTopColor: theme.colors.line,
+      }}
+    >
+      <Text size={13.5} weight={600} color={theme.colors.brand}>
+        {label}
+      </Text>
+    </Touchable>
   );
 }
 

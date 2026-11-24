@@ -15,6 +15,7 @@ import {
   shelfShown,
   shelfTag,
   slotColumns,
+  splitHeld,
   stripOrder,
   stripSentence,
   stripTone,
@@ -110,6 +111,19 @@ describe('Worth a look as a strip', () => {
     expect(foldStrip([1, 2, 3], false)).toEqual({ shown: [1, 2, 3], more: 0 });
     expect(foldStrip([1, 2, 3, 4, 5], false)).toEqual({ shown: [1, 2, 3], more: 2 });
     expect(foldStrip([1, 2, 3, 4, 5], true).shown).toHaveLength(5);
+  });
+
+  it('folds the lines held with the whole thing apart, not counted in “Show N more”', () => {
+    const rows = [
+      { id: 'a', held: null },
+      { id: 'b', held: 'window' as const },
+      { id: 'c', held: null },
+      { id: 'd', held: 'cause' as const },
+    ];
+    const { lines, held } = splitHeld(rows);
+    expect(lines.map((r) => r.id)).toEqual(['a', 'c']);
+    expect(held.map((r) => r.id)).toEqual(['b', 'd']);
+    expect(foldStrip(lines, false).more).toBe(0);
   });
 
   it('takes the tint of its worst line that still asks', () => {

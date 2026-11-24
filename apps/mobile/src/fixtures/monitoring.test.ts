@@ -3,11 +3,13 @@
  * Seerr down while its machine is stopped, What happened for every thing, and a server check's limit with Undo — each
  * answer through the session, parsed with its endpoint's schema.
  */
-import { heldLine, thingStateWords } from '@whombat/client';
-import { api, type ThingPage, type ThingPageNotice } from '@whombat/core';
+import { heldLine, historyView, thingStateWords, withoutHoldLine } from '@whombat/client';
+import { api, type ThingPage, type ThingPageNotice, type ThingPagePanel } from '@whombat/core';
 import { at, SERVICE_THINGS } from '@whombat/fixtures';
 import { createFixtureFetch } from '@whombat/fixtures/fetch';
 import { describe, expect, it } from 'vitest';
+import { splitHeld } from '../data/serviceSlots';
+import { noticeRows } from '../data/thingPage';
 import { demoClient } from '../demo/session';
 import { createClock } from '../lib/time';
 import { createFixtureServer } from './fixture-server';
@@ -28,6 +30,15 @@ function setup() {
   return { client: demoClient(server.fetch, { validateResponses: true }), now };
 }
 
+/** The strip as the page draws it: without the hold's heads-up line, which the line under the head says. */
+const withoutHold = (
+  panel: Extract<ThingPagePanel, { kind: 'notices' }>,
+  page: ThingPage,
+): Extract<ThingPagePanel, { kind: 'notices' }> => ({
+  ...panel,
+  items: [...withoutHoldLine(panel.items, page)],
+});
+
 const lines = (page: ThingPage): ThingPageNotice[] =>
   page.tabs.flatMap((t) => t.panels.flatMap((p) => (p.kind === 'notices' ? p.items : [])));
 
@@ -47,6 +58,15 @@ describe('monitoring in the demo world', () => {
     const items = lines(page);
     expect(items[0]?.id).toBe('quiet-window');
     expect(items.filter((n) => n.check).every((n) => heldLine(n) === 'window')).toBe(true);
+    // Its strip folds them under “Show N on hold”, as a server's page does: none is among the lines shown.
+    const strip = page.tabs[0]?.panels.find(
+      (p): p is Extract<ThingPagePanel, { kind: 'notices' }> => p.kind === 'notices' && p.place === 'top',
+    );
+    expect(strip).toBeTruthy();
+    const rows = noticeRows(withoutHold(strip as NonNullable<typeof strip>, page), [], { quiet: true });
+    const { lines: shown, held } = splitHeld(rows);
+    expect(held.length).toBeGreaterThan(0);
+    expect(shown.some((r) => r.endNow)).toBe(false);
     // The week's line, and the same words among the facts for an app that doesn't draw it.
     expect(page.uptime?.text).toBeTruthy();
     expect(page.facts.some((f) => f.map((p) => p.text).join('') === page.uptime?.text)).toBe(true);
@@ -119,6 +139,11 @@ describe('monitoring in the demo world', () => {
     expect(pve.incidents.length).toBeGreaterThan(0);
     expect(pve.alerts?.length).toBeGreaterThan(0);
     expect(pve.uptime?.text).toMatch(/^Up /);
+    // The server's own “isn’t checking in” is the outage its incidents already list: the card says it once.
+    const view = historyView(pve, Date.parse(at('14:05')), ZONE);
+    expect(view.rows.some((r) => r.words === 'Not answering')).toBe(true);
+    expect(view.alerts.map((a) => a.words)).not.toContain('pve-02 isn’t checking in');
+    expect(view.alerts.length).toBeGreaterThan(0);
     const quiet = await ok(
       client.request(api.things.history, { params: { burrow, thing: 'server:pve-01' }, query: { days: 30 } }),
     );

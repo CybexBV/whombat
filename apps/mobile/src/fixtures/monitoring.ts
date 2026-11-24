@@ -183,7 +183,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
   const ALERTS: Record<string, [string, 'critical' | 'warning', string, number, string, number][]> = {
     'server:pve-02': [
       ['CPU above 85 °C', 'warning', 'sensor.temp_high', 1, '15:42', 118],
-      ['pve-02 isn’t checking in', 'critical', 'host.offline', 4, '03:13', 11],
+      ['pve-02 isn’t checking in', 'critical', 'agent.heartbeat_missing', 4, '03:13', 11],
       ['Disk sdb has errors', 'warning', 'disk.smart_errors', 12, '10:05', 1440],
     ],
   };
