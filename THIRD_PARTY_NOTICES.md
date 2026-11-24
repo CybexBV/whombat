@@ -145,6 +145,7 @@ CC0 1.0 Universal. The others:
 | Sonarr | Sonarr's logo (<https://github.com/Sonarr/Sonarr>, a GPL-3.0 project) as 24-unit path data; not from Simple Icons, which has no Sonarr, and where the path data came from isn't recorded | not verified yet |
 | T3 Code | the “T3” of T3 Code's `assets/prod/logo.svg` (<https://github.com/pingdotgg/t3code>), without its black tile | MIT, Copyright (c) 2026 T3 Tools Inc. (the licence text under T3 Code above) |
 | Report tracker | Lucide `inbox` (a tracker connection shows its driver's own logo instead) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
+| Website or address | Lucide `activity` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 
 The marks and the names are trademarks of their owners; showing them names the service or system and implies no
 endorsement.
