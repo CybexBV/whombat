@@ -112,3 +112,30 @@ export const BoxPasskeyRegisterInput = z.strictObject({
   response: WebAuthnRegistrationResponse,
   name: PasskeyName,
 });
+
+/** Where making a box passkey stopped: the box's begin, the browser's prompt, the box's check, or the backup key. */
+export const BoxPasskeyFailedStage = z.enum(['begin', 'create', 'register', 'backups']);
+export type BoxPasskeyFailedStage = z.infer<typeof BoxPasskeyFailedStage>;
+
+/**
+ * `boxPasskey.failed` (enrolled; ephemeral): the page tells the box why making its passkey failed, so the reason is in
+ * the box's log, where support reads it. A failure in the browser never reaches the box otherwise. `code` is the page's
+ * reason (`PasskeyErrorCode`, or `cancelled`), `name` the browser's or the box's error name (`NotAllowedError`,
+ * `conflict`), `detail` the error's own message, cut short. The box only logs it; a box before this answers
+ * `unknown_op`, which the page ignores.
+ */
+export const BoxPasskeyFailedInput = z.strictObject({
+  stage: BoxPasskeyFailedStage,
+  code: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z][a-z_]*$/),
+  name: z
+    .string()
+    .max(64)
+    .regex(/^[A-Za-z0-9_.:-]*$/)
+    .optional(),
+  detail: z.string().max(300).optional(),
+});
+export type BoxPasskeyFailedInput = z.infer<typeof BoxPasskeyFailedInput>;

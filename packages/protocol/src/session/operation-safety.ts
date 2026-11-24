@@ -664,6 +664,8 @@ const TABLE = {
   'boxPasskey.enroll': NEVER,
   'boxPasskey.register.begin': NEVER,
   'boxPasskey.register': NEVER,
+  // Only a line in the box's log: one lost on the way is a line less.
+  'boxPasskey.failed': NEVER,
   // The own address (4.3). The switch is one commit. Looking up a link code only reads; linking acts at control before
   // anything commits here (the same code again for the same account is fine there, but a person checks).
   'ownAddress.status': READ,

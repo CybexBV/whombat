@@ -10,17 +10,17 @@ import {
   boxPasskeyRegisterChallengeBase64url,
   passkeyEnrollChallengeBase64url,
 } from '@whombat/protocol/session';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fakePeerId } from '../session/fake';
-import type { ApplianceSession } from '../session/types';
+import { type ApplianceSession, NotDeliveredError } from '../session/types';
 import {
   boxPasskeyCreationOptions,
   createAccountPasskey,
   createBoxPasskey,
   joinWithBoxPasskey,
 } from './box-passkeys';
-import { boxPasskeyOutcome, OWN_ADDRESS_TEXT } from './own-address';
-import { PasskeyCancelled, PasskeyError, type PasskeyPlatform } from './passkeys';
+import { boxPasskeyOutcome, boxPasskeySetupProblem, OWN_ADDRESS_TEXT } from './own-address';
+import { PASSKEY_COPY, PasskeyCancelled, PasskeyError, type PasskeyPlatform } from './passkeys';
 
 const BOX = fakePeerId('box');
 const ME = fakePeerId('new-browser');
@@ -65,7 +65,13 @@ const summary = {
 };
 
 /** A box that keeps what it's given: the backup key from the first touch, the envelope it opens on the second. */
-function box(options: { setup?: 'verify' | 'saving'; noBackups?: boolean } = {}) {
+function box(
+  options: {
+    setup?: 'verify' | 'saving';
+    noBackups?: boolean;
+    answers?: Record<string, () => { status: number; body: unknown }>;
+  } = {},
+) {
   const calls: { op: string; input: unknown }[] = [];
   let key: Uint8Array | null = null;
   let salt: string | null = null;
@@ -119,6 +125,8 @@ function box(options: { setup?: 'verify' | 'saving'; noBackups?: boolean } = {})
         },
         authzGeneration: 1,
       }),
+    'boxPasskey.failed': () => ok({ ok: true }),
+    ...options.answers,
   };
   const session = {
     state: () => ({ status: 'open', info: { appliance: { id: BOX } } }),
@@ -285,6 +293,102 @@ describe('making the box’s passkey (two touches, design §7.5)', () => {
       name: 'Safari',
     });
     expect(made.backups).toBe('not_armed');
+  });
+});
+
+describe('when making it fails', () => {
+  /** What the page told the box, once it has. */
+  const reported = async (b: ReturnType<typeof box>) => {
+    await vi.waitFor(() => expect(b.calls.some((c) => c.op === 'boxPasskey.failed')).toBe(true));
+    return b.calls.find((c) => c.op === 'boxPasskey.failed')?.input;
+  };
+
+  it('tells the box the browser’s own reason, and the person the way on', async () => {
+    const b = box();
+    const browser = Object.assign(new Error('The authenticator had a problem.'), { name: 'UnknownError' });
+    const failure = createBoxPasskey({
+      session: b.session,
+      platform: {
+        ...authenticator({ prfAtCreate: true }).platform,
+        create: async () => Promise.reject(new PasskeyError('failed', undefined, { cause: browser })),
+      },
+      appliance: BOX,
+      name: 'Chrome',
+    });
+    const error = await failure.catch((e: unknown) => e);
+    expect(await reported(b)).toMatchObject({ stage: 'create', code: 'failed', name: 'UnknownError' });
+    expect((await reported(b)) as { detail: string }).toMatchObject({
+      detail: expect.stringContaining('authenticator had a problem'),
+    });
+    expect(boxPasskeySetupProblem(error)).toBe(OWN_ADDRESS_TEXT.passkey.failed);
+    expect(OWN_ADDRESS_TEXT.passkey.failed).toContain('Later');
+  });
+
+  it('names the box’s refusal, and sends the person to the new address after a move', async () => {
+    const moved = { code: 'address_moved', host: 'new-name.whombat.app' };
+    const b = box({
+      answers: {
+        'boxPasskey.register.begin': () => ({
+          status: 409,
+          body: { error: { code: 'conflict', message: 'Moved.', details: moved } },
+        }),
+      },
+    });
+    const error = await createBoxPasskey({
+      session: b.session,
+      platform: authenticator({ prfAtCreate: true }).platform,
+      appliance: BOX,
+      name: 'Chrome',
+    }).catch((e: unknown) => e);
+    expect(await reported(b)).toMatchObject({ stage: 'begin', code: 'failed', name: 'address_moved' });
+    expect(boxPasskeySetupProblem(error)).toBe(OWN_ADDRESS_TEXT.passkey.moved);
+  });
+
+  it('says to check the connection when the Whombat stops answering on the way', async () => {
+    const b = box();
+    const offline = {
+      ...b.session,
+      invoke: async () => Promise.reject(new NotDeliveredError('end_1', 'req_1')),
+    } as unknown as ApplianceSession;
+    const error = await createBoxPasskey({
+      session: offline,
+      platform: authenticator({ prfAtCreate: true }).platform,
+      appliance: BOX,
+      name: 'Chrome',
+    }).catch((e: unknown) => e);
+    expect(boxPasskeySetupProblem(error)).toBe(PASSKEY_COPY.errors.unreachable);
+  });
+
+  it('tells the box of a dismissed prompt too, and says nothing to the person', async () => {
+    const b = box();
+    const error = await createBoxPasskey({
+      session: b.session,
+      platform: {
+        ...authenticator({ prfAtCreate: true }).platform,
+        create: async () => Promise.reject(new PasskeyCancelled()),
+      },
+      appliance: BOX,
+      name: 'Chrome',
+    }).catch((e: unknown) => e);
+    expect(await reported(b)).toMatchObject({ stage: 'create', code: 'cancelled' });
+    expect(boxPasskeySetupProblem(error)).toBeNull();
+  });
+
+  it('goes on as before with a box that doesn’t take the report', async () => {
+    const b = box({
+      answers: { 'boxPasskey.failed': () => ({ status: 404, body: { error: { code: 'unknown_op' } } }) },
+    });
+    const error = await createBoxPasskey({
+      session: b.session,
+      platform: {
+        ...authenticator({ prfAtCreate: true }).platform,
+        create: async () => Promise.reject(new PasskeyError('failed')),
+      },
+      appliance: BOX,
+      name: 'Chrome',
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PasskeyError);
+    await reported(b);
   });
 });
 

@@ -26,7 +26,14 @@ import {
   type WebAuthnRegistrationResponse,
 } from '@whombat/protocol/session';
 import { OperationError, sessionOps } from '../session/managed-ops';
-import type { ApplianceSession } from '../session/types';
+import {
+  type ApplianceSession,
+  DeadlineExceededError,
+  type DisconnectReason,
+  NotDeliveredError,
+  OutcomeUnknownError,
+  SessionClosedError,
+} from '../session/types';
 import { type ApplianceSummary, type ControlApi, ControlError, type ControlSession } from './control';
 import {
   type BackupArming,
@@ -238,8 +245,9 @@ export function keepOnlyLivePasskeys(
 /** The person dismissed the passkey prompt (or it was aborted): nothing to say, nothing changed. */
 export class PasskeyCancelled extends Error {
   override name = 'PasskeyCancelled';
-  constructor() {
-    super('The passkey prompt was dismissed.');
+  /** `cause`: the platform's own error, when there was one (the box's log names it). */
+  constructor(options?: ErrorOptions) {
+    super('The passkey prompt was dismissed.', options);
   }
 }
 
@@ -275,11 +283,13 @@ export type PasskeyErrorCode =
 
 export class PasskeyError extends Error {
   override name = 'PasskeyError';
+  /** `cause`: the platform's own error, when there was one (the box's log names it). */
   constructor(
     readonly code: PasskeyErrorCode,
     message: string = code,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 
@@ -292,9 +302,31 @@ export function operationReason(error: OperationError): string {
   return typeof detail === 'string' ? detail : error.code;
 }
 
+/** Session closes that mean the connection went, not that someone ended it (sign-out, an old app, …). */
+const CONNECTION_GONE: ReadonlySet<DisconnectReason> = new Set([
+  'offline',
+  'appliance_offline',
+  'busy',
+  'lost',
+]);
+
+/**
+ * The connection to the Whombat went while the call was on its way: never sent, no answer in time, or the session
+ * dropped. The person's network is the likely cause, so the words say to check it rather than “didn’t work”.
+ */
+function lostConnection(error: unknown): boolean {
+  return (
+    error instanceof NotDeliveredError ||
+    error instanceof DeadlineExceededError ||
+    error instanceof OutcomeUnknownError ||
+    (error instanceof SessionClosedError && CONNECTION_GONE.has(error.reason))
+  );
+}
+
 /** What a failure of these flows is, in this module's words; null for a dismissed prompt (said nowhere). */
 export function passkeyErrorOf(error: unknown): PasskeyErrorCode | null {
   if (error instanceof PasskeyCancelled) return null;
+  if (lostConnection(error)) return 'unreachable';
   if (error instanceof PasskeyError) return error.code;
   if (error instanceof OperationError)
     switch (operationReason(error)) {

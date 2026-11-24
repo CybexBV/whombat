@@ -32,6 +32,7 @@ import {
   type BOX_APP_STEPS,
   BOX_SETUP_TEXT,
   type BoxSetupStep,
+  boxPasskeySetupProblem,
   boxSetupSteps,
   COMMUNITY_TEXT,
   createBoxPasskey,
@@ -43,10 +44,8 @@ import {
   OWN_ADDRESS_TEXT,
   type OwnClaimPrefill,
   ownClaimProbeOf,
-  PasskeyCancelled,
   type PasskeySetupStep,
   PRIVACY_PAGE_URL,
-  passkeyErrorText,
   REACH_CHOICE_TEXT,
   REACH_TEXT,
   runLocalClaim,
@@ -459,7 +458,7 @@ function PasskeyStep({
       });
       onDone();
     } catch (error) {
-      if (!(error instanceof PasskeyCancelled)) setProblem(passkeyErrorText(error) ?? t.make);
+      setProblem(boxPasskeySetupProblem(error));
       setBusy(false);
       setPrompt(null);
     }
