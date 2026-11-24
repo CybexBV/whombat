@@ -18,6 +18,7 @@ import {
 import { HumanAvatar } from '../../avatars/Avatars';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { DASHBOARD_COPY } from '../../data/dashboard';
+import { MONITORING_COPY } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
 import { type GalleryItemView, galleryItems, rowsOf, SERVICE_COPY } from '../../data/servicePanels';
 import {
@@ -291,6 +292,8 @@ function StripLine({
     if (p && quiet) quiet[p](row.line);
   };
   const undo = row.undo && quiet ? row.undo : null;
+  // A line held because the whole thing is kept quiet ends with it: End now, not Undo (monitoring.md MON-04).
+  const endQuiet = row.endNow ? (ctx.endQuiet ?? null) : null;
   const text = (
     <View style={{ gap: 2 }}>
       {label ? (
@@ -347,7 +350,7 @@ function StripLine({
         paddingTop: 12,
         paddingBottom: 12,
         paddingLeft: 12,
-        paddingRight: menu || undo ? 4 : 14,
+        paddingRight: menu || undo || endQuiet ? 4 : 14,
         borderTopWidth: label ? 0 : 1,
         borderTopColor: theme.colors.line,
       }}
@@ -406,6 +409,21 @@ function StripLine({
         >
           <Text size={13} weight={600} color={theme.colors.brand}>
             {THING_PAGE_COPY.undo}
+          </Text>
+        </Touchable>
+      ) : null}
+      {endQuiet ? (
+        <Touchable
+          onPress={endQuiet.run}
+          disabled={endQuiet.busy}
+          feedback="fade"
+          ringRadius={10}
+          accessibilityLabel={`${MONITORING_COPY.endNow}: ${row.title}`}
+          accessibilityHint={MONITORING_COPY.endNowHint}
+          style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
+        >
+          <Text size={13} weight={600} color={theme.colors.brand}>
+            {MONITORING_COPY.endNow}
           </Text>
         </Touchable>
       ) : null}

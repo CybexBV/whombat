@@ -6,13 +6,13 @@
  * on.”), each a 52dp row. A press closes the sheet at once; the line greys or goes on the page and
  * the toast says so with Undo (`useQuietActions`). The sheet is the shared `quietMenu`.
  */
-import type { QuietMenuView } from '@whombat/client';
+import { LIMIT_WORDS, type LimitView, limitNow, type QuietMenuView } from '@whombat/client';
 import type { QuietActions, QuietTarget } from '@whombat/client/react';
 import type { ComponentType } from 'react';
 import { View } from 'react-native';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
-import { AlarmClock, BellOff, EyeOff } from '../../ui/icons';
+import { AlarmClock, BellOff, EyeOff, SlidersHorizontal } from '../../ui/icons';
 import { Sheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 
@@ -22,15 +22,20 @@ type Icon = ComponentType<{ size: number; color: string; strokeWidth: number }>;
 export interface QuietMenuTarget {
   menu: QuietMenuView;
   line: QuietTarget;
+  /** The limit of the check the line comes from, on a server (Whombat monitoring.md MON-15): Change the limit. */
+  limit?: LimitView | null;
 }
 
 export function QuietMenuSheet({
   target,
   actions,
+  onLimit = null,
   onClose,
 }: {
   target: QuietMenuTarget | null;
   actions: QuietActions;
+  /** Opens Change the limit for the line's check (a server's line with a limit). */
+  onLimit?: ((view: LimitView) => void) | null;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -60,6 +65,18 @@ export function QuietMenuSheet({
             onPress={() => pick(actions.ignore)}
           />
           <MenuRow icon={AlarmClock} label={menu.snooze.label} onPress={() => pick(actions.snooze)} />
+          {target.limit && onLimit ? (
+            <MenuRow
+              icon={SlidersHorizontal}
+              label={LIMIT_WORDS.menu}
+              words={limitNow(target.limit)}
+              onPress={() => {
+                const view = target.limit;
+                onClose();
+                if (view) onLimit(view);
+              }}
+            />
+          ) : null}
           <MenuRow
             icon={BellOff}
             label={menu.stop.label}

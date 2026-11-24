@@ -78,12 +78,15 @@ import {
   parseThingId,
   type RealtimeEvent,
   resolveAgentModelRuntime,
+  type ThingPage,
   type ThingSummary,
+  type ThingWatch,
   thingHref,
   thingId,
   type VaultEntry,
   type WatchItem,
 } from '@whombat/core';
+import type { KeepQuietBody, SetThingWatchLimitBody } from '@whombat/core/contracts';
 import { agentDefaultGrants, describeGrantChange, diffGrants } from '@whombat/core/keys';
 import {
   at,
@@ -106,6 +109,7 @@ import { createSiFixtures } from './hostsSi';
 import { createUpdatesFixtures } from './hostsUpdates';
 import { createLocalModelFixtures } from './localModel';
 import { createLookFixtures, lookThreads } from './looks';
+import { CAUSE_MACHINE, createMonitoringFixtures } from './monitoring';
 import {
   createServerAsksFixtures,
   DOCKER_CHAT_ID,
@@ -379,6 +383,8 @@ const PVE02_GUESTS: GuestSeed[] = [
   { vmid: 122, name: 'pihole', kind: 'container', state: 'running', cpu: 0.6, mem: [180, 512] },
   { vmid: 125, name: 'jellyfin', kind: 'vm', state: 'running', cpu: 18.9, mem: [6200, 8192] },
   { vmid: 130, name: 'win11-test', kind: 'vm', state: 'stopped', cpu: 0, mem: [0, 8192] },
+  // Seerr's machine, stopped: Seerr doesn't answer while it is (monitoring.md MON-07).
+  { vmid: 126, name: CAUSE_MACHINE.name, kind: 'container', state: 'stopped', cpu: 0, mem: [0, 2048] },
   { vmid: 131, name: 'build-runner', kind: 'container', state: 'paused', cpu: 0, mem: [900, 4096] },
   // Home Assistant's container (its page runs on it: connection-pages-mobile.md AP-1966).
   { vmid: 132, name: 'homeassistant', kind: 'container', state: 'running', cpu: 5.0, mem: [3000, 8192] },
@@ -918,15 +924,19 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
       at('13:52'),
       'array',
     ),
-    alert(
-      'al_pve02_temp',
-      'pve-02',
-      'warning',
-      'CPU running warm',
-      'It sat above 75 °C for 40 minutes during the backup.',
-      at('12:10'),
-      'sensors',
-    ),
+    // A rule with a limit (monitoring.md MON-15): its line's ⋯ offers Change the limit.
+    {
+      ...alert(
+        'al_pve02_temp',
+        'pve-02',
+        'warning',
+        'CPU running warm',
+        'It sat above 75 °C for 40 minutes during the backup.',
+        at('12:10'),
+        'sensors',
+      ),
+      rule: 'sensor.temp_high',
+    },
     {
       ...alert(
         'al_falcon_backup',
@@ -1211,7 +1221,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
       things: withServiceThings(
         [...servers.map((s) => serverThing(named(s))), ...otherThings(heat.status === 'on').map(relabelled)],
         listServices ? thingPages.serviceThings() : [],
-      ),
+      ).map(monitoring.withThing),
       automationsToday: [
         { id: 'aut_mail', name: 'Customer mail every morning', state: 'ran', at: at('08:00') },
         { id: 'aut_backup', name: 'Check the backups', state: 'failed', at: at('07:10') },
@@ -1467,6 +1477,8 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     assistant: () => ({ id: assistant.id, name: assistant.name }),
     heatChatHref: rooms?.heatHref ?? `/chats/${HEAT_CHAT_ID}`,
   });
+  // Monitoring (monitoring.md MON-04, MON-07, MON-09, MON-15): things kept quiet, a cause, history and limits.
+  const monitoring = createMonitoringFixtures({ now, timeZone: ZONE });
   // Home's Done recently, Everything I did and a pinned panel (home-redesign-mobile.md AP-2266).
   const homeParts = createHomeRedesignFixtures({
     now,
@@ -1502,7 +1514,53 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     const method = id === 'things.watch' ? 'GET' : 'POST';
     const body = method === 'POST' ? await bodyOf<Record<string, unknown>>(init) : {};
     const answer = hostQuiet.things({ method, serverId: thing.id, what, body });
-    return json(answer.body, answer.status);
+    // What Whombat watches with the limits of the checks that have one (MON-15).
+    const watched =
+      what === 'watch' && answer.status === 200
+        ? monitoring.withLimits(params.thing ?? '', answer.body as ThingWatch)
+        : answer.body;
+    return json(watched, answer.status);
+  }
+  /** Keep quiet, End now, What happened and a server check's limit (monitoring.md), else null. */
+  async function monitored(
+    id: string,
+    params: Record<string, string>,
+    init: RequestInit | undefined,
+    url: URL,
+  ): Promise<Response | null> {
+    const thing = params.thing ?? '';
+    const changed = () =>
+      emit(`me:${mara.id}`, { type: 'home.changed', parts: ['things', 'needsYou', 'watch'] });
+    switch (id) {
+      case 'things.keepQuiet': {
+        const answer = monitoring.keepQuiet(thing, await bodyOf<KeepQuietBody>(init));
+        if (answer.status === 200) changed();
+        return json(answer.body, answer.status);
+      }
+      case 'things.endQuiet': {
+        const answer = monitoring.endQuiet(thing);
+        if (answer.status === 200) changed();
+        return json(answer.body, answer.status);
+      }
+      case 'things.history':
+        return json(monitoring.history(thing, Number(url.searchParams.get('days') ?? 30) === 90 ? 90 : 30));
+      case 'things.setWatchLimit': {
+        const ref = parseThingId(thing);
+        const watchOf = () =>
+          ref?.kind === 'server'
+            ? (hostQuiet.things({ method: 'GET', serverId: ref.id, what: 'watch', body: {} })
+                .body as ThingWatch)
+            : null;
+        const answer = monitoring.setWatchLimit(thing, await bodyOf<SetThingWatchLimitBody>(init), watchOf);
+        return json(answer.body, answer.status);
+      }
+      case 'changes.undo': {
+        const answer = monitoring.undo(params.changeId ?? '');
+        return answer ? json(answer.body, answer.status) : null;
+      }
+      default:
+        return null;
+    }
   }
 
   /** The answer for a request this world serves, or null (the rest of the demo world answers). */
@@ -1515,14 +1573,17 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     if (!id) return null;
     const localAnswer = local.handle(id, init) ?? webSearch.handle(id, init);
     if (localAnswer) return localAnswer;
+    const watching = await monitored(id, params, init, url);
+    if (watching) return watching;
     const pages = await thingPages.handle(id, params, init, url);
-    // A page whose look Neo looked into carries what it found (AP-5925); a renamed connection's page its new name.
+    // A page whose look Neo looked into carries what it found (AP-5925); a renamed connection's page its new name; every
+    // page its week, and its window or its cause (monitoring.md).
     const research = id === 'things.page' && pages?.ok ? looks?.research(params.thing ?? '') : undefined;
     const ref = id === 'things.page' ? parseThingId(params.thing ?? '') : null;
     const label = ref?.kind === 'connection' ? labels.get(ref.id) : undefined;
-    if (pages && (research || label))
+    if (pages && id === 'things.page' && pages.ok)
       return json({
-        ...((await pages.json()) as object),
+        ...monitoring.withPage((await pages.json()) as ThingPage),
         ...(research ? { research } : {}),
         ...(label ? { name: label } : {}),
       });
@@ -1930,7 +1991,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
           query: {},
           body: {},
         });
-        return json(answer?.body ?? detail(s));
+        return json(monitoring.withServer((answer?.body ?? detail(s)) as HostServerDetail));
       }
       case 'hosts.listGuests': {
         const server = url.searchParams.get('server');
