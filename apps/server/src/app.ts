@@ -15,6 +15,8 @@ import { registerApiRoutes } from './routes/index';
 import { closeSchedules } from './schedules/ticker';
 import type { Services } from './services';
 import { protectEventsFor } from './things/kinds/home/protect-events';
+import { onePasswordSyncFor } from './vault/onepassword/sync';
+import { registerOnePasswordStandIn } from './vault/onepassword/testing/routes';
 import { closeVoiceTyping } from './voice/service';
 
 export interface AppDeps {
@@ -149,6 +151,7 @@ export async function buildApp({ services, logger }: AppDeps) {
   registerMcp(app, services);
   registerGatewayRelay(app, services);
   registerDemo(app, services);
+  registerOnePasswordStandIn(app, services);
   app.addHook('onClose', async () => {
     // Badges, notifications and pushes after the last commits finish while the database is still there (SV-02).
     await services.background.settle();
@@ -169,6 +172,7 @@ export async function buildApp({ services, logger }: AppDeps) {
     await services.tracker.close();
     await services.gateway.close();
     await protectEventsFor(services).close();
+    await onePasswordSyncFor(services).close();
     services.guides.close();
     await services.guides.settle();
     await homeJobsFor(services).close();

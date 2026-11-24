@@ -38,18 +38,18 @@ export function ConnectionsScreen({ navigation }: Props) {
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
   /**
-   * What pressing a row does: a catalog connection's screen; an account's page on a box that has them, else its own
-   * screen (AP-2902).
+   * What pressing a row does: a catalog connection's screen (1Password's page, where its sync is); an account's page on
+   * a box that has them, else its own screen.
    */
   const press = (r: ConnectedRow): (() => void) | undefined => {
-    if (r.kind === 'catalog')
+    const opens = r.opens;
+    if (r.kind === 'catalog' && opens?.screen !== 'Thing')
       return () =>
         navigation.navigate('Connection', {
           connectionId: r.id,
           title: r.title,
           back: CONNECTIONS_TEXT.title,
         });
-    const opens = r.opens;
     if (opens?.screen === 'Thing')
       return () =>
         navigation.navigate('Thing', {

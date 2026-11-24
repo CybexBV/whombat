@@ -11,7 +11,9 @@
  * level or tools but CLAUDE CODE AND CODEX: which tools go through it and a switch per tool (Fusebox's asks first, with
  * the terms). WHAT WHOMBAT WATCHES (Whombat quiet-notices.md
  * QN-15; quiet-notices-mobile.md AP-4865) lists its checks with their switches and what is excepted, each with Undo;
- * read only for Look only. The Vault entry screen's language.
+ * read only for Look only. 1Password (Whombat onepassword-sync.md) has no level, tools or guide either, and Remove asks
+ * whether the entries stay in the Vault; KEPT IN STEP and NOT IN YOUR VAULT are its page's own 1Password tab
+ * (`connect/OnePassword.tsx`), not here. The Vault entry screen's language.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -189,7 +191,9 @@ export function ConnectionScreen({ route, navigation }: Props) {
                   titleMono={!!model.detail}
                   trailing={
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      {!model.gateway ? <StatusPill text={model.access} tone="neutral" /> : null}
+                      {!model.gateway && !model.vaultSync ? (
+                        <StatusPill text={model.access} tone="neutral" />
+                      ) : null}
                       <StatusDot color={toneColor(theme, model.state.tone)} label={model.state.label} />
                     </View>
                   }
@@ -197,7 +201,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
                     `${model.detail ?? model.title}, ${model.state.label}`,
                     model.checked,
                     model.connectedBy,
-                    ...(!model.gateway ? [model.access] : []),
+                    ...(!model.gateway && !model.vaultSync ? [model.access] : []),
                     ...model.checks.map((k) => k.message),
                   ].join('. ')}
                 >
@@ -217,7 +221,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
               </Section>
 
               {conn ? <NameBlock key={`name-${conn.label}`} slug={slug} conn={conn} /> : null}
-              {conn && entry && !model.gateway ? (
+              {conn && entry && !model.gateway && !model.vaultSync ? (
                 <LevelBlock
                   key={`level-${conn.access}`}
                   slug={slug}
@@ -259,7 +263,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
                 </Section>
               ) : null}
 
-              {model.gateway ? null : (
+              {model.gateway || model.vaultSync ? null : (
                 <Section title={CONNECTIONS_TEXT.tools}>
                   {model.tools.length === 0 ? <CardNote>{CONNECTIONS_TEXT.noTools}</CardNote> : null}
                   {model.tools.map((t) => (

@@ -133,6 +133,10 @@ describe('catalog integrity (CX-01, CX-50…CX-62)', () => {
           e.signIn.map((m) => m.kind),
           e.id,
         ).toEqual(['none']);
+      } else if (e.check?.kind === 'onepassword') {
+        // 1Password is reached only through its own SDK: a base that is never requested, and nothing to request.
+        expect(e.baseUrl, e.id).toBe('onepassword:');
+        expect(e.request, e.id).toBeNull();
       } else expect(e.baseUrl, e.id).toMatch(/^(https?:\/\/|\{url\})/);
       if (e.transport === 'mcp')
         expect(e.signIn.some((m) => m.kind === 'mcp_oauth') || e.mcpPath !== null, e.id).toBe(true);
@@ -1135,8 +1139,9 @@ describe('a report tracker (report-trackers.md, TA-01, TA-02)', () => {
   it('is for automations only: no agent uses it, no request tool', () => {
     expect(isAgentConnection('tracker')).toBe(false);
     expect(isAgentConnection(entry('tracker'))).toBe(false);
-    // 0.76 (CT-332, AIG-01): the AI gateways aren't agents' connections either.
+    // The AI gateways aren't agents' connections either, nor is the Vault's 1Password sync.
     expect(CATALOG.filter((e) => !isAgentConnection(e)).map((e) => e.id)).toEqual([
+      'onepassword',
       'tracker',
       'fusebox',
       'ai_gateway',

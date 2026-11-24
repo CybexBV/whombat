@@ -1,19 +1,24 @@
 /**
  * A thing's page and Home's things for an older app (docs/decisions/findmy-timeline.md, connection-dashboards.md): an
  * app below session minor 5 gets a Find My connection's page without the Timeline tab it can't draw; one below minor 7
- * gets Home's accounts opening on Settings and no Website feedback; a newer one, and anything outside a session, gets it
- * all.
+ * gets Home's accounts opening on Settings and no Website feedback; one below minor 8 isn't offered 1Password and opens
+ * a 1Password connection on its Summary (onepassword-sync.md); a newer one, and anything outside a session, gets it all.
  */
 import {
   FEEDBACK_THING_ID,
   FIND_MY_TIMELINE_TAB,
   GITHUB_THING_ID,
   type HomeOverview,
+  ONEPASSWORD_TAB,
   type ThingPage,
   type ThingSummary,
   thingHref,
 } from '@whombat/core';
-import { ACCOUNT_PAGES_MINOR, FIND_MY_TIMELINE_MINOR } from '@whombat/protocol/session';
+import {
+  ACCOUNT_PAGES_MINOR,
+  FIND_MY_TIMELINE_MINOR,
+  ONEPASSWORD_SYNC_MINOR,
+} from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { thingAnswerFor, thingPageFor } from './older-apps';
 
@@ -42,6 +47,34 @@ describe('a thing’s page for an older app', () => {
     expect(thingPageFor(page, FIND_MY_TIMELINE_MINOR)).toBe(page);
     expect(thingPageFor(page, undefined)).toBe(page);
     expect(thingAnswerFor('things.quiet', page, 0)).toBe(page);
+  });
+});
+
+describe('a 1Password connection’s page for an older app (onepassword-sync.md)', () => {
+  const onePassword = {
+    id: 'connection:con_1password01',
+    kind: 'connection',
+    catalogId: 'onepassword',
+    name: '1Password',
+    tabs: [
+      { key: ONEPASSWORD_TAB, label: '1Password', panels: [] },
+      { key: 'overview', label: 'Summary', panels: [] },
+    ],
+  } as unknown as ThingPage;
+
+  it('opens on the Summary below minor 8, without the tab it would show empty', () => {
+    expect(keys(thingAnswerFor('things.page', onePassword, ONEPASSWORD_SYNC_MINOR - 1))).toEqual([
+      'overview',
+    ]);
+  });
+
+  it('opens on its 1Password tab from minor 8 on and outside a session', () => {
+    expect(thingAnswerFor('things.page', onePassword, ONEPASSWORD_SYNC_MINOR)).toBe(onePassword);
+    expect(thingAnswerFor('things.page', onePassword, undefined)).toBe(onePassword);
+  });
+
+  it('leaves Find My whole between minor 5 and 8', () => {
+    expect(thingAnswerFor('things.page', page, ONEPASSWORD_SYNC_MINOR - 1)).toBe(page);
   });
 });
 
@@ -83,5 +116,30 @@ describe('Home’s accounts for an older app', () => {
     expect(thingAnswerFor('home.overview', overview, ACCOUNT_PAGES_MINOR)).toBe(overview);
     expect(thingAnswerFor('home.overview', overview, undefined)).toBe(overview);
     expect(hrefs(overview).feedback).toBe(thingHref('connection', 'feedback'));
+  });
+});
+
+describe('the catalog for an older app (onepassword-sync.md)', () => {
+  const catalog = {
+    mode: 'real',
+    limit: 50,
+    entries: [
+      { catalogId: 'plex', available: true },
+      { catalogId: 'onepassword', available: true },
+    ],
+  };
+
+  it('leaves 1Password out below minor 8', () => {
+    const older = thingAnswerFor(
+      'connections.catalog',
+      catalog,
+      ONEPASSWORD_SYNC_MINOR - 1,
+    ) as typeof catalog;
+    expect(older.entries.map((e) => e.catalogId)).toEqual(['plex']);
+  });
+
+  it('offers it from minor 8 on and outside a session', () => {
+    expect(thingAnswerFor('connections.catalog', catalog, ONEPASSWORD_SYNC_MINOR)).toBe(catalog);
+    expect(thingAnswerFor('connections.catalog', catalog, undefined)).toBe(catalog);
   });
 });

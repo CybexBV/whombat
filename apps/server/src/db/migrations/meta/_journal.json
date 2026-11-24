@@ -141,6 +141,27 @@
       "when": 1795444177688,
       "tag": "0019_findmy_watches",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795511236749,
+      "tag": "0020_onepassword_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795519512681,
+      "tag": "0021_onepassword_pair_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795525997580,
+      "tag": "0022_onepassword_pull_first",
+      "breakpoints": true
     }
   ]
 }

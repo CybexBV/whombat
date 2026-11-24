@@ -42,6 +42,7 @@ export {
   usedByAgents,
   usedByAutomations,
   usedByGateway,
+  usedByVaultSync,
   visibleFields,
 } from '@whombat/client/connections';
 

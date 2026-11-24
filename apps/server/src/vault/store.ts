@@ -8,6 +8,7 @@ import {
   type VaultAuth,
   type VaultEntry,
   type VaultEntryDetail,
+  type VaultEntrySource,
   type VaultKeyView,
   type VaultNetwork,
   type VaultSshHostKey,
@@ -32,6 +33,7 @@ import { notFound } from '../lib/errors';
 import { iso, isoOrNull } from '../lib/time';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
+import { entrySources } from './onepassword/store';
 
 export type VaultEntryRow = typeof vaultEntries.$inferSelect;
 export type VaultToolRow = typeof vaultTools.$inferSelect;
@@ -142,7 +144,11 @@ export async function entryCount(db: Db | Tx, burrowId: string, ownerId: string)
   return row?.n ?? 0;
 }
 
-function toEntry(row: VaultEntryRow, servers: readonly VaultSshServer[]): VaultEntry {
+function toEntry(
+  row: VaultEntryRow,
+  servers: readonly VaultSshServer[],
+  source: VaultEntrySource | undefined,
+): VaultEntry {
   return {
     id: row.id,
     name: row.name,
@@ -170,6 +176,8 @@ function toEntry(row: VaultEntryRow, servers: readonly VaultSshServer[]): VaultE
     serverCount: row.kind === 'ssh' ? servers.length : 0,
     // An `mcp` entry still here is one the start-up move couldn't take to Connections (VLT-30).
     moveToConnections: row.kind === 'mcp',
+    // Kept in step with a linked 1Password vault (onepassword-sync.md): its tag and its page's line.
+    ...(source ? { source } : {}),
     lastUsedAt: isoOrNull(row.lastUsedAt),
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
@@ -246,8 +254,10 @@ export function toServer(row: VaultSshServerRow): VaultSshServer {
 /** YOUR ENTRIES (VT-70). */
 export async function entryViews(db: Db | Tx, rows: readonly VaultEntryRow[]): Promise<VaultEntry[]> {
   const sshIds = rows.filter((r) => r.kind === 'ssh').map((r) => r.id);
-  const servers = await serverRows(db, sshIds);
-  return rows.map((r) => toEntry(r, servers.filter((s) => s.entryId === r.id).map(toServer)));
+  const [servers, sources] = await Promise.all([serverRows(db, sshIds), entrySources(db, rows)]);
+  return rows.map((r) =>
+    toEntry(r, servers.filter((s) => s.entryId === r.id).map(toServer), sources.get(r.id)),
+  );
 }
 
 export function toTool(row: VaultToolRow): VaultTool {

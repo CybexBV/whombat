@@ -43,6 +43,7 @@ import { keptSiteEndpoints, keptSiteRunnerEndpoints } from './kept-sites.js';
 import { meEndpoints } from './me.js';
 import { memoryEndpoints } from './memory.js';
 import { deviceEndpoints, notificationEndpoints } from './notifications.js';
+import { onePasswordEndpoints } from './onepassword.js';
 import { promptEndpoints } from './prompts.js';
 import { providerSignInEndpoints } from './providers.js';
 import { runnerEndpoints } from './runner.js';
@@ -121,6 +122,7 @@ export * from './mcp-vault.js';
 export * from './me.js';
 export * from './memory.js';
 export * from './notifications.js';
+export * from './onepassword.js';
 export * from './prompts.js';
 export * from './providers.js';
 export * from './realtime.js';
@@ -170,7 +172,8 @@ export interface Api {
   connections: typeof connectionEndpoints &
     typeof connectionCatalogEndpoints &
     typeof findMyTimelineEndpoints &
-    typeof findMyWatchEndpoints;
+    typeof findMyWatchEndpoints &
+    typeof onePasswordEndpoints;
   attachments: typeof attachmentEndpoints;
   memory: typeof memoryEndpoints;
   skills: typeof skillLibraryEndpoints;
@@ -240,13 +243,15 @@ export const api: Api = {
   /**
    * Google and Microsoft connections; since 0.48 the connections catalog (Whombat connections-catalog.md, CT-266…):
    * shared and personal connections of catalog entries, their tools and tiers, OAuth and Nextcloud sign-ins; a Find My
-   * connection's timeline (Whombat findmy-timeline.md) and the one-time watch's Cancel (findmy-watch.md).
+   * connection's timeline (Whombat findmy-timeline.md) and the one-time watch's Cancel (findmy-watch.md); a 1Password
+   * connection's sync (Whombat onepassword-sync.md).
    */
   connections: {
     ...connectionEndpoints,
     ...connectionCatalogEndpoints,
     ...findMyTimelineEndpoints,
     ...findMyWatchEndpoints,
+    ...onePasswordEndpoints,
   },
   // Buzz-parity workstreams (docs/implementation/buzz-parity/PLAN.md): each file is owned by one workstream.
   attachments: attachmentEndpoints,

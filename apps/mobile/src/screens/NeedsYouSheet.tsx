@@ -25,6 +25,9 @@ import {
   needsYouListItems,
   needsYouListRow,
   needsYouSettledText,
+  ONEPASSWORD_APP_TEXT,
+  onePasswordAnsweredText,
+  onePasswordSetChanged,
   threadToOpen,
   withNeedsYouListItem,
 } from '@whombat/client';
@@ -40,12 +43,14 @@ import {
   useHandleLook,
   useHomeOverview,
   useIgnoreNeedsYou,
+  useOnePasswordWrite,
   useSnoozeNeedsYou,
   useStartChat,
   useStopWatchingNeedsYou,
 } from '@whombat/client/react';
 import type { ChatSubject, HomeOverview, HomeRef, NeedsYouItem } from '@whombat/core';
 import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
+import { api } from '@whombat/core/contracts';
 import { formatClock } from '@whombat/core/text';
 import { isBackupPasskeyHref } from '@whombat/protocol/session';
 import { useCallback, useRef, useState } from 'react';
@@ -85,8 +90,8 @@ function useLeaveHome(): (ref: HomeRef) => () => void {
 }
 
 /**
- * Carries out one of the server's own buttons (`needsYouIntent`): approve, tonight, decline, open; resolves true when
- * the sheet may close.
+ * Carries out one of the server's own buttons (`needsYouIntent`): approve, tonight, decline, open, the 1Password guard's
+ * answer (Whombat onepassword-sync.md); resolves true when the sheet may close.
  */
 function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Promise<boolean> {
   const { slug, timeZone } = useBurrowBase();
@@ -98,6 +103,7 @@ function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Prom
   const navigation = useAppNavigation();
   const words = useAgentWords();
   const start = useStartChat(slug);
+  const answerRemovals = useOnePasswordWrite(api.connections.onePasswordRemovals, slug);
   // “Your answer may have gone through”, and only asking the assistant to check (command-safety.md).
   const mayHaveGoneThrough = (title: string) =>
     Alert.alert(APPROVAL_CARD_WORDS.unknown, APPROVAL_CARD_WORDS.unknownBody, [
@@ -164,6 +170,31 @@ function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Prom
           }
           openHref(intent.href);
           return true;
+        case 'onePasswordRemovals': {
+          // The answer for the set the card showed; the Inbox reads again either way (the hook does).
+          const back = leave(item.ref);
+          try {
+            const result = await answerRemovals.mutateAsync({
+              params: { burrow: slug, connectionId: intent.connectionId },
+              body: { answer: intent.answer, token: intent.token },
+            });
+            if (result.status !== 'ok') {
+              back();
+              feedback.onResult(result);
+              return false;
+            }
+          } catch (error) {
+            back();
+            // The set changed since the card was drawn: nothing was removed, and the card comes back with the new set.
+            if (onePasswordSetChanged(error)) {
+              showNotice(ONEPASSWORD_APP_TEXT.changed);
+              return false;
+            }
+            throw error;
+          }
+          showNotice(onePasswordAnsweredText(intent.answer));
+          return true;
+        }
         default:
           return true;
       }

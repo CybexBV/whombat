@@ -35,6 +35,7 @@ import { ReturnLocation, ReturnPath } from '../domain/connectors.js';
 import { ThingRunsOn } from '../domain/thing-page.js';
 import { ConnectionToolLimits } from '../domain/tool-limits.js';
 import { ConnectionId, EventId, OAuthStateId } from '../ids.js';
+import { OnePasswordDisconnectChoice } from '../vault/onepassword-view.js';
 import { VaultPort } from '../vault/schemas.js';
 import { BurrowParam, endpoint } from './endpoint.js';
 import type { ErrorCode } from './errors.js';
@@ -649,8 +650,13 @@ export const connectionCatalogEndpoints = {
     method: 'DELETE',
     path: '/burrows/:burrow/connections/:connectionId',
     summary:
-      'Remove a connection (CX-24): its tools, pending approvals and secret go, OAuth tokens are revoked best effort, the pooled client is closed. Signs `connection.removed`. A Fusebox loses Whombat’s client key and the burrow’s gateway switches (AIG-03).',
+      'Remove a connection (CX-24): its tools, pending approvals and secret go, OAuth tokens are revoked best effort, the pooled client is closed. Signs `connection.removed`. A Fusebox loses Whombat’s client key and the burrow’s gateway switches (AIG-03). A 1Password connection keeps the entries it brought in the Vault as Whombat entries, or removes them with `vaultEntries` `remove`; 1Password itself is never changed.',
     params: BC,
+    /**
+     * A 1Password connection only (Whombat onepassword-sync.md): what becomes of the Vault entries kept in step with it.
+     * Absent: `keep`. Ignored for every other connection.
+     */
+    query: z.object({ vaultEntries: OnePasswordDisconnectChoice.optional() }),
     response: z.object({
       ok: z.literal(true),
       eventId: EventId.nullable(),

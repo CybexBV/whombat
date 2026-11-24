@@ -2,10 +2,11 @@
  * Your Vault (`vault.jsonl`, BF-05, BF-06): the person's entries with their secrets unsealed (an SSH entry's private
  * key, a login's authenticator key), which tools are on, whether each is switched on for the agent (with an API's
  * variable and an SSH key's servers, docs/decisions/vault-simplify.md VLT-10) and the SSH servers with their trusted host
- * keys and kept passwords.
+ * keys and kept passwords, and the 1Password item each entry is kept in step with.
  */
 import {
   type BackupVaultLine,
+  OnePasswordItemId,
   VAULT_DESCRIPTION_MAX,
   VAULT_NAME_MAX,
   VAULT_SECRET_MAX,
@@ -17,7 +18,7 @@ import {
   VAULT_URL_MAX,
 } from '@whombat/core';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { vaultEntries, vaultSshServers, vaultTools } from '../../db/schema/index';
+import { vaultEntries, vaultOnePasswordLinks, vaultSshServers, vaultTools } from '../../db/schema/index';
 import { iso } from '../../lib/time';
 import type { Services } from '../../services';
 import { agentKeyOf, vaultSecretAad, vaultServerPasswordAad, vaultTotpAad } from '../../vault/store';
@@ -47,6 +48,18 @@ export async function collectVault(scope: CollectScope, out: CategoryOut): Promi
         .where(inArray(vaultSshServers.entryId, ids))
         .orderBy(asc(vaultSshServers.createdAt))
     : [];
+  // The 1Password item each entry is kept in step with (onepassword-sync.md): a restore relinks to it.
+  const items = new Map(
+    (ids.length
+      ? await db
+          .select({ entryId: vaultOnePasswordLinks.entryId, itemId: vaultOnePasswordLinks.itemId })
+          .from(vaultOnePasswordLinks)
+          .where(and(inArray(vaultOnePasswordLinks.entryId, ids), eq(vaultOnePasswordLinks.state, 'synced')))
+      : []
+    )
+      .filter((l) => l.itemId && OnePasswordItemId.safeParse(l.itemId).success)
+      .map((l) => [l.entryId as string, l.itemId as string]),
+  );
   let leftOut = 0;
   for (const e of entries) {
     let secret: string | null = null;
@@ -99,6 +112,7 @@ export async function collectVault(scope: CollectScope, out: CategoryOut): Promi
                 }
               : null,
         })),
+        ...(items.has(e.id) ? { onepasswordItemId: items.get(e.id) } : {}),
         createdAt: iso(e.createdAt),
       }),
     );

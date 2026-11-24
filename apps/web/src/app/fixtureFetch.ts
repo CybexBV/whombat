@@ -52,6 +52,12 @@ import { createLocalModelFixtures } from './localModelFixtures';
 import { createLookFixtures, looksSeeded } from './lookFixtures';
 import { createModelFixtures } from './modelFixtures';
 import { ASSISTANT_NAME, createOneFixtures, DEFAULT_CHAT_ID } from './oneFixtures';
+import {
+  createOnePasswordFixtures,
+  ONEPASSWORD_FIXTURE_ENTRIES,
+  type OnePasswordFixtureKind,
+  onePasswordFixtureOf,
+} from './onePasswordFixtures';
 import { createPromptFixtures, type PromptWorldOptions } from './promptFixtures';
 import { createResourcefulFixtures } from './resourcefulFixtures';
 import { createRichFixtures } from './richFixtures';
@@ -180,6 +186,13 @@ export interface WebFixtureOptions {
    * `connectors: 'connected'`, whose list it joins. Off, the burrow has none, as the mock draws it.
    */
   gateway?: GatewayFixtureKind;
+  /**
+   * A 1Password vault kept in step with Mara's Vault (`onePasswordFixtures.ts`, app onepassword-sync.md): the
+   * connection, its page part as the last pass left it (`synced`, `waiting`, `failing`, `paused` with removals and the
+   * Inbox's card), and the entries it keeps in step. Default: `VITE_FIXTURE_ONEPASSWORD`; best with
+   * `connectors: 'connected'`, whose list it joins. Off, Mara has no 1Password, as the mock draws it.
+   */
+  onePassword?: OnePasswordFixtureKind;
   /**
    * A runner with Claude Code's and Codex's models (`modelFixtures.ts`, model-effort.md AP-1134): the agent on Fable at
    * High effort with the note that its last turn ran on the default. Default: `VITE_FIXTURE_MODELS=1`. Off, the world
@@ -372,16 +385,21 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
   const vaultSsh = options.vaultSsh ?? import.meta.env.VITE_FIXTURE_VAULT_SSH === '1';
   // The sign-in cards' world (`connect`) has the login with its authenticator key and prod-1's kept password too.
   const signIns = options.connect ?? import.meta.env.VITE_FIXTURE_CONNECT === '1';
+  const onePassword = options.onePassword ?? onePasswordFixtureOf(import.meta.env.VITE_FIXTURE_ONEPASSWORD);
+  const vaultEntries = commands
+    ? [COMMANDS_DEPLOY_KEY]
+    : signIns
+      ? vaultSignInEntries
+      : vaultSsh
+        ? [vaultSshDeployKey]
+        : [];
   const world = createFixtureFetch({
     latencyMs: options.latencyMs,
     failing: options.failing,
-    ...(commands
-      ? { vaultEntries: [COMMANDS_DEPLOY_KEY] }
-      : signIns
-        ? { vaultEntries: vaultSignInEntries }
-        : vaultSsh
-          ? { vaultEntries: [vaultSshDeployKey] }
-          : {}),
+    // The entries 1Password brought in (app onepassword-sync.md) join whichever Vault the world has.
+    ...(vaultEntries.length || onePassword
+      ? { vaultEntries: [...vaultEntries, ...(onePassword ? ONEPASSWORD_FIXTURE_ENTRIES : [])] }
+      : {}),
   });
   // Plans, activity and `work.overview` (contracts 0.12), which the shared fixture world doesn't serve.
   const work = createWorkFixtures();
@@ -603,6 +621,22 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
         if (own) return own;
       }
       return gateway.decorate(req, await inner(req));
+    };
+  }
+
+  const onePasswordFixtures = onePassword ? createOnePasswordFixtures({ kind: onePassword }) : null;
+  if (onePasswordFixtures) {
+    // The Vault kept in step with 1Password (app onepassword-sync.md): its connection, its page part and its entries'
+    // tags, inside the connections' own pages, which find it in the list.
+    const inner = out;
+    const fixtures = onePasswordFixtures;
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const own = await fixtures.handle(req.clone(), (r) => inner(r));
+        if (own) return own;
+      }
+      return fixtures.decorate(req, await inner(req.clone()));
     };
   }
 
@@ -920,6 +954,20 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
         if (own) return own;
       }
       return inner(req);
+    };
+  }
+  if (onePasswordFixtures) {
+    // The 1Password guard's card and the connection's page (app onepassword-sync.md): over the one-Whombat layer, which
+    // answers Home and the connections' own pages.
+    const inner = out;
+    const fixtures = onePasswordFixtures;
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const page = fixtures.page(req);
+        if (page) return page;
+      }
+      return fixtures.decorateInbox(req, await inner(req.clone()));
     };
   }
   {

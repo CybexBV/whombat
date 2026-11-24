@@ -1116,3 +1116,25 @@ speak these, and everything here is TypeScript only (Whombat connection-dashboar
   (`/settings?tab=connections&connection=<provider>`), as before.
 - The apps open an account's page from Connections only for a box at minor 7 or later; an older box keeps the
   Connections tab's page.
+
+## Session minor 8 of major 5: a 1Password vault kept in step with the Vault
+
+`SESSION_PROTOCOL` is `{major: 5, minor: 8}` (`ONEPASSWORD_SYNC_MINOR`). No contracts release: control and the relay don't
+speak these, and everything here is TypeScript only (Whombat onepassword-sync.md).
+
+- **The catalog**: the entry `onepassword` (“1Password”, the use `vault`, the check kind `onepassword`, base URL
+  `onepassword:`, never requested; `isVaultSyncConnection`). Its form asks a service account token, the vault
+  (`fromService`) and “Your Vault entries” (`put`, the default, or `keep`). A box offers it only to a session at minor 8
+  or later.
+- **`connections.onePassword {connectionId}`** → `OnePasswordSyncView` (the vault's name, counts, the last pass and how
+  it ended, `readOnly`, “Not in your Vault” with each item's reason, the removals the guard holds), a read (`safe`).
+- **`connections.onePasswordSync {connectionId}`** → `OnePasswordSyncView` with `syncing`, `receipt`.
+- **`connections.onePasswordRemovals {connectionId, answer, token}`** (`remove` or `keep` for the set `token` names) →
+  `OnePasswordSyncView`, destructive (`receipt`); `conflict` when the set changed since.
+- **`connections.disconnect`** takes `vaultEntries` (`keep`, the default, or `remove`) for a 1Password connection.
+- **`VaultEntry.source?`** `{kind: 'onepassword', state: 'synced' | 'pending' | 'problem', syncedAt, problem?}`. Older
+  apps strip it.
+- **`NeedsYouAction`** kind `onepassword_removals` with `removals` (`OnePasswordRemovalsBody`): the guard's card's
+  “Remove them here too” and “Keep them here”. An older app leaves the button out; the item's `href` leads to the
+  connection page.
+- None of these is a setting of the assistant.

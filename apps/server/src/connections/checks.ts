@@ -13,6 +13,7 @@ import {
   connectionTransport,
   fieldsFromCheck,
   jsonPathValue,
+  ONEPASSWORD_WORDS,
   resolveCheckPath,
   type SignInKind,
   sessionCredential,
@@ -24,6 +25,8 @@ import { hostsFor } from '../hosts/service';
 import { OutboundError, type OutboundResponse } from '../lib/outbound';
 import type { Services } from '../services';
 import { bindDriver } from '../trackers/drivers';
+import { OnePasswordError } from '../vault/onepassword/pool';
+import { onePasswordSyncFor } from '../vault/onepassword/sync';
 import { connectionCertificate, connectionFetch, jsonOf, outboundText, pinOf } from './http';
 import { parseWwwAuthenticate } from './oauth';
 import {
@@ -211,7 +214,7 @@ async function mcpCheck(
 export function checkKindFor(
   entry: CatalogEntry,
   kind: SignInKind,
-): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | 'mac' | null {
+): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | 'mac' | 'onepassword' | null {
   if (socketCheckOf(entry)) return 'socket';
   if (kind === 'mcp_oauth' || (kind === 'none' && connectionTransport(entry, kind) === 'mcp')) return 'mcp';
   return entry.check?.kind ?? null;
@@ -239,6 +242,8 @@ export async function runCatalogCheck(services: Services, input: RunCheckInput):
   if (kind === 'driver') return runDriverCheck(services, input);
   // A connection through a Mac (Find My) is checked against the hosts fleet, never over the network.
   if (kind === 'mac') return runMacConnectionCheck(services, input);
+  // 1Password signs in only through its own SDK, in the sync's worker process: nothing is sent to its base URL.
+  if (kind === 'onepassword') return runOnePasswordCheck(services, input);
   // A secret of another shape may have its own request (SG-12: Mollie's access tokens); a password never does.
   const secret = credential.secret !== undefined && !credential.session ? credential.secret : undefined;
   const check = secret !== undefined ? catalogCheckFor(entry, secret) : entry.check;
@@ -323,6 +328,36 @@ async function runMacConnectionCheck(services: Services, input: RunCheckInput): 
     json,
     checks: [{ id: 'credential', state: 'ok', message: null }],
   };
+}
+
+/**
+ * A 1Password connection (docs/decisions/onepassword-sync.md): the service account token signs in through the
+ * sync's worker and lists the vaults it can see, as `{id, name}`, the `fromService` choices of the vault field.
+ */
+async function runOnePasswordCheck(services: Services, input: RunCheckInput): Promise<CheckOutcome> {
+  const token = input.credential.secret?.trim();
+  if (!token) return failed(null, true, 'Paste the service account token.');
+  try {
+    const { vaults } = await onePasswordSyncFor(services).api.check(token);
+    return {
+      ok: true,
+      refused: false,
+      status: null,
+      message: null,
+      json: vaults.map((v) => ({ id: v.id, name: v.title })),
+      checks: [{ id: 'credential', state: 'ok', message: null }],
+    };
+  } catch (err) {
+    const kind = err instanceof OnePasswordError ? err.kind : 'failed';
+    if (kind === 'auth')
+      return failed(null, true, '1Password didn’t accept this token. Check it and try again.');
+    if (kind === 'limit')
+      return failed(null, false, '1Password says this token made too many requests. Try again in a while.');
+    if (kind === 'forbidden')
+      return failed(null, true, 'This token can’t see any vault. Give it a vault and try again.');
+    if (kind === 'stopped') return failed(null, false, ONEPASSWORD_WORDS.stopped);
+    return failed(null, false, ONEPASSWORD_WORDS.unreachable);
+  }
 }
 
 /**

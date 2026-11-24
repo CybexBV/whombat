@@ -437,6 +437,35 @@ export async function forgetCheckServerRows(
   await tx.delete(checkServers).where(inArray(checkServers.serverId, [...serverIds]));
 }
 
+/**
+ * Removes one of the person's entries: its servers' leftover check rows, a note to rotate what the agent's commands
+ * had, the signed neutral event, the row with its secret, keys, tools and RECENT USE, and the held
+ * forms of its value. The person's own Remove and the 1Password sync's removals both come here.
+ */
+export async function removeEntry(ctx: ApplyContext, row: VaultEntryRow): Promise<string> {
+  const tx = ctx.tx;
+  if (row.kind === 'ssh') {
+    const servers = await tx
+      .select({ id: vaultSshServers.id })
+      .from(vaultSshServers)
+      .where(eq(vaultSshServers.entryId, row.id));
+    await forgetCheckServerRows(
+      tx,
+      servers.map((s) => s.id),
+    );
+  }
+  // The agent's commands had it and may have kept a copy: the person is told to rotate it, before the entry and its
+  // servers go.
+  const agent = agentKeyOf(row) ? await loadAgentRow(tx, ctx.burrow.id) : undefined;
+  if (agent) await tellPersonToRotate(ctx, row, shortName(agent), { removed: true });
+  const event = await emitEntryEvent(ctx, 'entry.removed', row);
+  await tx.delete(vaultEntries).where(eq(vaultEntries.id, row.id));
+  forgetHeldSecretsAfter(ctx);
+  ctx.after(async () => forgetPassphrase(row.id));
+  publishVaultUpdated(ctx, row.ownerId, row.id);
+  return event.id;
+}
+
 /** Removes an entry: secret, keys, tools and RECENT USE go with it (VT-06). */
 export const removeVaultEntry = defineCommand({
   name: 'vault.remove',
@@ -444,26 +473,8 @@ export const removeVaultEntry = defineCommand({
   async apply(tx, ctx, input) {
     requirePerson(ctx);
     const row = await ownEntry(tx, ctx.burrow.id, ctx.actor.id, input.entryId);
-    if (row.kind === 'ssh') {
-      const servers = await tx
-        .select({ id: vaultSshServers.id })
-        .from(vaultSshServers)
-        .where(eq(vaultSshServers.entryId, row.id));
-      await forgetCheckServerRows(
-        tx,
-        servers.map((s) => s.id),
-      );
-    }
-    // The agent's commands had it and may have kept a copy: the person is told to rotate it (AC-34), before the
-    // entry and its servers go.
-    const agent = agentKeyOf(row) ? await loadAgentRow(tx, ctx.burrow.id) : undefined;
-    if (agent) await tellPersonToRotate(ctx, row, shortName(agent), { removed: true });
-    const event = await emitEntryEvent(ctx, 'entry.removed', row);
-    await tx.delete(vaultEntries).where(eq(vaultEntries.id, row.id));
-    forgetHeldSecretsAfter(ctx);
-    ctx.after(async () => forgetPassphrase(row.id));
-    publishVaultUpdated(ctx, ctx.actor.id, row.id);
-    return { entryId: row.id, eventId: event.id };
+    const eventId = await removeEntry(ctx, row);
+    return { entryId: row.id, eventId };
   },
 });
 

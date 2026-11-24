@@ -26,6 +26,7 @@ import { t3WatcherFor } from './t3code/watch';
 import { protectEventsFor } from './things/kinds/home/protect-events';
 import { moveMcpEntries } from './vault/move-mcp';
 import { writeNetworksFile } from './vault/networks';
+import { onePasswordSyncFor } from './vault/onepassword/sync';
 import { voiceTypingFor } from './voice/service';
 
 loadDotEnv();
@@ -172,6 +173,8 @@ if (!readOnly) {
   services.mailTriggers.start();
   // Find My read in the background where a connection asks or an automation listens (findmy-connection.md).
   findMyBackgroundFor(services).start();
+  // A linked 1Password vault kept in step with the Vault: a pass now, every 10 minutes and after a change.
+  onePasswordSyncFor(services).start();
   // The AI gateway (docs/decisions/ai-gateway.md AIG-11): each gateway connection read every minute, alerts to the
   // person.
   services.gateway.start();

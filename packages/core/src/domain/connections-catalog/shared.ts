@@ -737,6 +737,12 @@ export const CatalogCheck = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('mac') }),
   /**
+   * A 1Password connection's check (Whombat onepassword-sync.md): the service account token signs in through 1Password's
+   * own SDK, in a process of its own, and lists the vaults it can see. Nothing is ever sent to the entry's base URL, and
+   * it has no `request`.
+   */
+  z.object({ kind: z.literal('onepassword') }),
+  /**
    * A socket connection's check (0.97, CT-471; CM-13, CM-17): signs in on the socket, then calls `method` with `params`
    * (absent: none). `version` is where the result holds the service's version for the check line (TrueNAS
    * `system.info` → `version`); absent: a string result, else `result.version`, else what the dialect's first message
@@ -1004,9 +1010,11 @@ export type SocketSpec = z.input<typeof SocketSpec>;
 
 /**
  * Who uses an entry's connections (0.69, CT-325; Whombat report-trackers.md TA-02): agents, only automations, or (0.76, CT-332; Whombat ai-gateway.md AIG-01) the Claude Code and ChatGPT turns themselves: a
- * `gateway` entry (Fusebox, another AI gateway) carries their traffic while it is switched on.
+ * `gateway` entry (Fusebox, another AI gateway) carries their traffic while it is switched on. A `vault` entry
+ * (1Password, Whombat onepassword-sync.md) is used only by the Vault's sync, which keeps the person's Vault and a vault
+ * of theirs elsewhere in step.
  */
-export const CATALOG_USES = ['agents', 'automations', 'gateway'] as const;
+export const CATALOG_USES = ['agents', 'automations', 'gateway', 'vault'] as const;
 
 export const CatalogUse = z.enum(CATALOG_USES);
 
@@ -1038,7 +1046,9 @@ export const CatalogEntry = z.object({
    * one of an agent's connections (`DispatchConnection`) and looked after by nobody: automations read it, and the
    * connection page says “Used by automations” instead of the agents' access lines (`isAgentConnection`). A `gateway`
    * entry (0.76, AIG-01) is the same to agents; its page shows the burrow's switches (`Burrow.aiGateway`) instead, and a
-   * burrow has at most one gateway connection (`isGatewayConnection`).
+   * burrow has at most one gateway connection (`isGatewayConnection`). A `vault` entry (1Password) is the same to agents
+   * and looked after by nobody; only the Vault's sync uses its secret, its page shows the sync instead of the agents'
+   * access lines, and a burrow has at most one (`isVaultSyncConnection`).
    */
   use: CatalogUse.optional(),
   /** In the order the form offers them; the first is the default. Empty for builtins. */

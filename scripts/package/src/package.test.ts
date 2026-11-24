@@ -8,6 +8,7 @@ import * as esbuild from 'esbuild';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   APP_FILES,
+  addOnePasswordSdk,
   bundleOptions,
   copyAppFiles,
   ENTRIES,
@@ -138,4 +139,40 @@ describe('the release bundles load (MR-72, MR-76)', () => {
     );
     expect(load.status, load.stderr).toBe(0);
   }, 180_000);
+});
+
+describe('the 1Password worker in the release (onepassword-sync.md)', () => {
+  // The SDK's core reads its WASM from beside itself: bundled, it couldn't find it. Shipped in node_modules next to the
+  // bundles, the worker loads it with no network at all (a `probe` only loads the SDK).
+  it('loads 1Password’s SDK and its WASM from the packaged layout', async () => {
+    const build = { version: '0.0.0', gitSha: 'test', buildTime: new Date(0).toISOString() };
+    await esbuild.build({
+      ...bundleOptions(ENTRIES['onepassword-worker'], join(dir, 'app', 'onepassword-worker.mjs'), build),
+      logLevel: 'error',
+    });
+    const text = readFileSync(join(dir, 'app', 'onepassword-worker.mjs'), 'utf8');
+    // Kept outside the bundle: the worker imports the package by its name.
+    expect(text).toMatch(/import\(["']@1password\/sdk["']\)/);
+    addOnePasswordSdk(join(dir, 'node_modules'));
+    expect(existsSync(join(dir, 'node_modules', '@1password', 'sdk-core', 'nodejs', 'core_bg.wasm'))).toBe(
+      true,
+    );
+    const run = spawnSync(
+      process.execPath,
+      [join(dir, 'app', 'onepassword-worker.mjs'), '--whombat-onepassword-worker'],
+      {
+        cwd: dir,
+        env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
+        input: `${JSON.stringify({ id: 1, call: 'probe' })}\n`,
+        encoding: 'utf8',
+        timeout: 60_000,
+      },
+    );
+    expect(run.status, run.stderr).toBe(0);
+    expect(JSON.parse(run.stdout.trim().split('\n')[0] as string)).toEqual({
+      id: 1,
+      ok: true,
+      result: { loaded: true },
+    });
+  }, 120_000);
 });

@@ -76,6 +76,7 @@ implies no endorsement.
 | `nobaralinux.svg` | Nobara Linux | Simple Icons `nobaralinux` (<https://wiki.nobaraproject.org>) | CC0-1.0 |
 | `notion.svg` | Notion | Simple Icons `notion` (<https://www.notion.so>) | CC0-1.0 |
 | `nzbhydra.svg` | NZBHydra2 | Lucide `search` (NZBHydra2's own logo is GPL-3.0 artwork) | ISC |
+| `onepassword.svg` | 1Password | Simple Icons `1password` (<https://1password.com/press>) | CC0-1.0 |
 | `openai.svg` | OpenAI | Simple Icons `openai` (an earlier release; since removed there) | CC0-1.0 |
 | `openbsd.svg` | OpenBSD | Simple Icons `openbsd` (<https://en.wikipedia.org/wiki/OpenBSD>) | CC0-1.0 |
 | `openmediavault.svg` | openmediavault | Simple Icons `openmediavault` (<https://github.com/openmediavault/openmediavault/blob/12f8ef70f19f967733b744d6fb6156a4181f1ddc/deb/openmediavault/workbench/src/favicon.svg>) | CC0-1.0 |

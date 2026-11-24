@@ -364,6 +364,57 @@ describe('needsYouListIntent', () => {
     });
   });
 
+  it('keeps both of the 1Password guard’s answers in sight on its line, and carries them out on the connection', () => {
+    const gone = base({
+      id: 'connection:con_1p',
+      kind: 'connection',
+      nature: 'you',
+      title: '1Password says 4 items are gone',
+      group: 'you',
+      href: '/things/connection%3Acon_1p',
+      actions: [
+        {
+          id: 'remove',
+          label: 'Remove them here too',
+          style: 'secondary',
+          kind: 'onepassword_removals',
+          removals: { answer: 'remove', token: 'set_1' },
+        },
+        {
+          id: 'keep',
+          label: 'Keep them here',
+          style: 'primary',
+          kind: 'onepassword_removals',
+          removals: { answer: 'keep', token: 'set_1' },
+        },
+        {
+          id: 'open',
+          label: 'Open 1Password',
+          style: 'secondary',
+          kind: 'open',
+          href: '/things/connection%3Acon_1p',
+        },
+      ],
+    });
+    const row = view([gone]).groups[0]?.rows[0];
+    const shown = row?.buttons.filter((b) => !b.more) ?? [];
+    expect(shown.map((b) => [b.label, b.look])).toEqual([
+      ['Remove them here too', 'secondary'],
+      ['Keep them here', 'primary'],
+    ]);
+    expect(row?.buttons.filter((b) => b.more).map((b) => b.kind)).toEqual([
+      'action',
+      'settle',
+      'talk',
+      'snooze',
+    ]);
+    const [remove] = shown;
+    expect(remove && needsYouListIntent(gone, remove, NOW, TZ)).toEqual({
+      type: 'action',
+      action: gone.actions[0],
+    });
+  });
+
   it('names the thing in a new thread’s title only when the title doesn’t', () => {
     expect(askText({ title: 'pve-02 is running hot', subject: pve }).split('\n')[0]).toBe(
       'pve-02 is running hot',

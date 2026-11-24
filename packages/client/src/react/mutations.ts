@@ -958,10 +958,13 @@ export function useConnectionWrite<E extends ConnectionWrite>(
             result.data as ResponseData<typeof api.vaultNetworks.list>,
           );
         else if (ep.id === api.connections.disconnect.id && params?.connectionId) {
-          qc.removeQueries({
-            queryKey: queryKeys.scope(api.connections.tools, { connectionId: params.connectionId }),
-          });
+          for (const read of [api.connections.tools, api.connections.onePassword])
+            qc.removeQueries({ queryKey: queryKeys.scope(read, { connectionId: params.connectionId }) });
           void qc.invalidateQueries({ queryKey: queryKeys.scope(api.connections.list) });
+          // Removing the Vault's sync (1Password) takes its tag off the entries it kept in step, or the entries too
+          // (`vaultEntries`); the Vault reads again only where it is on screen.
+          if ((v as { query?: { vaultEntries?: unknown } }).query?.vaultEntries !== undefined)
+            invalidateVault(qc, null);
         } else if (ep.id === api.connections.setTool.id && params?.connectionId)
           qc.setQueryData(
             queryKeys.connections.tools({ params: { burrow, connectionId: params.connectionId } }),
@@ -980,6 +983,53 @@ export function useConnectionWrite<E extends ConnectionWrite>(
       return options?.onSuccess?.(result, v, context, ctx);
     },
   });
+}
+
+/**
+ * Sync now and the answer to the guard's “1Password says 4 items are gone” (Whombat onepassword-sync.md; contracts
+ * `connections.onePasswordSync`, `connections.onePasswordRemovals`): both answer the connection's page part, which goes
+ * into the cache at once. An answer changes the Vault (entries removed, or kept only in Whombat) and takes the guard's
+ * card out of the Inbox, so those read again; a refusal because the set changed reads the page part again, which shows
+ * the new set.
+ */
+export function useOnePasswordWrite<
+  E extends typeof api.connections.onePasswordSync | typeof api.connections.onePasswordRemovals,
+>(ep: E, burrow: string, options?: MutationOptions<CommitResult<ResponseData<E>>, CallInput<E>>) {
+  const { client } = useWhombat();
+  const qc = useQueryClient();
+  return useMutation<CommitResult<ResponseData<E>>, Error, CallInput<E>>({
+    ...options,
+    mutationFn: (input) => client.request(ep, input),
+    onSuccess: (result, v, context, ctx) => {
+      const connectionId = connectionOf(v);
+      if (result.status === 'ok') {
+        qc.setQueryData(
+          queryKeys.connections.onePassword({ params: { burrow, connectionId } }),
+          result.data as ResponseData<typeof api.connections.onePassword>,
+        );
+        if (ep.id === api.connections.onePasswordRemovals.id) {
+          invalidateVault(qc, null);
+          void qc.invalidateQueries({ queryKey: queryKeys.scope('home.overview') });
+        }
+      } else
+        void qc.invalidateQueries({
+          queryKey: queryKeys.scope(api.connections.onePassword, { connectionId }),
+        });
+      return options?.onSuccess?.(result, v, context, ctx);
+    },
+    onError: (error, v, context, ctx) => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.scope(api.connections.onePassword, { connectionId: connectionOf(v) }),
+      });
+      if (ep.id === api.connections.onePasswordRemovals.id)
+        void qc.invalidateQueries({ queryKey: queryKeys.scope('home.overview') });
+      return options?.onError?.(error, v, context, ctx);
+    },
+  });
+}
+
+function connectionOf(v: unknown): string {
+  return (v as { params: { connectionId: string } }).params.connectionId;
 }
 
 /** Save or remove the OAuth app of an `app_oauth` entry (Dropbox, CX-14): the answer is the catalog's status. */

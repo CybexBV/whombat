@@ -25,7 +25,10 @@ import {
   fieldsFor,
   fieldsProblems,
   gatewayClientLabel,
+  isVaultSyncConnection,
   newId,
+  ONEPASSWORD_BASE_URL,
+  type OnePasswordDisconnectChoice,
   resolveBaseUrl,
   resolveMcpUrl,
   type SignInKind,
@@ -53,6 +56,14 @@ import { serverLabel } from '../hosts/self';
 import { OutboundError } from '../lib/outbound';
 import { ok } from '../routes/define';
 import type { Services } from '../services';
+import {
+  ONEPASSWORD_CONNECTION_EXISTS,
+  onePasswordConnectionOf,
+  onePasswordState,
+  onePasswordVaultId,
+} from '../vault/onepassword/store';
+import { onePasswordSyncFor } from '../vault/onepassword/sync';
+import { ONEPASSWORD_VAULT_FIXED, onePasswordTokenMissesVault } from '../vault/onepassword/words';
 import {
   type CheckCredential,
   type CheckOutcome,
@@ -140,13 +151,16 @@ export function connectableEntry(catalogId: string): CatalogEntry {
 
 /**
  * Every address the connection will call is allowed now (CX-40), or `destination_refused` with what to add (CX-41).
- * The hosts service's own base (a connection through a Mac) isn't an address anything is sent to.
+ * The hosts service's own base (a connection through a Mac) and 1Password's (its SDK talks to 1Password itself, in the
+ * sync's worker) aren't addresses anything is sent to.
  */
 export async function requireDestination(
   services: Services,
   urls: readonly (string | null)[],
 ): Promise<void> {
-  for (const url of new Set(urls.filter((u): u is string => !!u && u !== HOSTS_BASE))) {
+  for (const url of new Set(
+    urls.filter((u): u is string => !!u && u !== HOSTS_BASE && u !== ONEPASSWORD_BASE_URL),
+  )) {
     const problem = await connectionDestinationProblem(services, url, 'save');
     if (!problem) continue;
     const s = problem.suggestion;
@@ -193,6 +207,7 @@ const HOSTS_BASE = 'whombat-hosts:';
  */
 export function requireBaseUrl(entry: CatalogEntry, fields: Record<string, string>): string {
   if (throughMac(entry)) return entry.baseUrl ?? HOSTS_BASE;
+  if (isVaultSyncConnection(entry)) return ONEPASSWORD_BASE_URL;
   const base = resolveBaseUrl(entry, fields);
   if (base) return base;
   const urlField = fieldsFor(entry, 'token').find((f) => f.kind === 'url')?.id ?? 'url';
@@ -568,6 +583,7 @@ export async function createTokenConnection(
   if (body.signIn !== 'token' && body.signIn !== 'none')
     throw connectionError('not_supported', { catalogId: entry.id });
   await requireNoOtherGateway(services, viewer, entry);
+  await requireNoOtherVaultSync(services, viewer, entry);
   let auth: TokenAuth | null = null;
   if (body.signIn === 'none') {
     if (!entry.signIn.some((m) => m.kind === 'none'))
@@ -629,7 +645,10 @@ export async function createTokenConnection(
       auth,
       secret: body.secret?.trim() ?? null,
       tokens: sessionTokens(outcome),
-      externalName: externalNameFrom(outcome.json),
+      // A 1Password connection's row names the vault it keeps in step (from the vaults its check listed).
+      externalName: isVaultSyncConnection(entry)
+        ? (serviceChoices(outcome.json).find((c) => c.value === chosen.vault)?.label ?? null)
+        : externalNameFrom(outcome.json),
       access: body.access,
       checks: outcome.checks,
       fromCheck: outcome.fromCheck ?? {},
@@ -689,6 +708,36 @@ export async function requireNoOtherGateway(
   if (!isGatewayCatalogId(entry.id)) return;
   const existing = await gatewayConnectionOf(services.db, viewer.burrowId);
   if (existing) throw connectionError('gateway_exists', {}, AI_GATEWAY_COPY.exists(gatewayName(existing)));
+}
+
+/**
+ * At most one 1Password connection per Whombat (onepassword-sync.md): a Vault kept in step with two vaults would
+ * have two sides that each win. A second is refused before its token is tried.
+ */
+export async function requireNoOtherVaultSync(
+  services: Services,
+  viewer: Pick<ConnectionViewer, 'burrowId'>,
+  entry: CatalogEntry,
+): Promise<void> {
+  if (!isVaultSyncConnection(entry)) return;
+  if (await onePasswordConnectionOf(services.db, viewer.burrowId))
+    throw connectionError('limit_reached', { max: 1 }, ONEPASSWORD_CONNECTION_EXISTS);
+}
+
+/**
+ * A new 1Password token that can't see the connection's vault is refused, naming the vault. Looked up in every vault the
+ * check listed, not only the choices a form would offer.
+ */
+async function requireTokenSeesVault(
+  services: Services,
+  row: CatalogConnectionRow,
+  outcome: CheckOutcome,
+): Promise<void> {
+  const vaultId = onePasswordVaultId(row);
+  const seen = Array.isArray(outcome.json) ? (outcome.json as { id?: unknown }[]) : [];
+  if (!vaultId || seen.some((v) => v?.id === vaultId)) return;
+  const state = await onePasswordState(services.db, row.id);
+  throw connectionError('check_failed', {}, onePasswordTokenMissesVault(state?.vaultTitle ?? null));
 }
 
 /** Where Fusebox's management API is, with the management key as the entry sends it and the pinned certificate. */
@@ -1244,6 +1293,9 @@ export async function updateConnection(
         { catalogId: entry.id },
         'Connect it again to use another address.',
       );
+    // A 1Password connection's pairs belong to its vault: another vault is linking again.
+    if (isVaultSyncConnection(entry) && onePasswordVaultId({ fields: next }) !== onePasswordVaultId(row))
+      throw connectionError('not_supported', { catalogId: entry.id }, ONEPASSWORD_VAULT_FIXED);
     if (!sameFields(next, current)) {
       // An MCP sign-in's tokens are for one server (its `resource`); an app's have no fields to change.
       if (kind === 'mcp_oauth' || kind === 'app_oauth')
@@ -1505,6 +1557,8 @@ export async function replaceConnectionSecret(
     credential,
   });
   requireCheckPassed(outcome);
+  // 1Password: a new token must see the vault the connection keeps in step (there is no choosing another here).
+  if (isVaultSyncConnection(entry)) await requireTokenSeesVault(services, row, outcome);
   // A Fusebox's new management key makes Whombat's client key again, in place of the old one (ai-gateway.md AIG-03).
   const made = await provisionGatewayKey(services, viewer, entry, {
     baseUrl: row.baseUrl,
@@ -1631,14 +1685,21 @@ export async function disconnectConnection(
   services: Services,
   viewer: ConnectionViewer,
   id: string,
+  /** A 1Password connection's entries: kept in the Vault (absent, `keep`) or removed with it. */
+  vaultEntries?: OnePasswordDisconnectChoice,
 ): Promise<{ eventId: string | null; notice: string | null }> {
   const row = await visibleConnection(services.db, viewer, id);
-  const { eventId } = ok(
-    await services.pipeline.commit(
+  const remove = () =>
+    services.pipeline.commit(
       removeConnection,
-      { connectionId: row.id },
+      { connectionId: row.id, ...(vaultEntries ? { vaultEntries } : {}) },
       { burrowId: viewer.burrowId, actorId: viewer.principal.id },
-    ),
+    );
+  // The Vault's sync: a write to 1Password going on ends first, and none starts after the connection is gone.
+  const { eventId } = ok(
+    isVaultSyncConnection(row.catalogId)
+      ? await onePasswordSyncFor(services).withoutWrites(remove)
+      : await remove(),
   );
   await emitConnectionLifecycle(services, { type: 'removed', connectionId: row.id });
   services.guides.track('connection revoke', () => revokeConnectionTokens(services, row));

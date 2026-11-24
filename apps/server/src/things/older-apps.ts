@@ -8,17 +8,27 @@
  *   the Connections tab as before, and Website feedback, which its sidebar never had, is left out
  *   (docs/decisions/connection-dashboards.md).
  *
+ * - An app below minor 8 can't draw a 1Password connection's part or answer its Inbox card: the catalog it is offered
+ *   leaves 1Password out, and a 1Password connection made from a newer app opens on its Summary without the 1Password
+ *   tab, which it would show empty (docs/decisions/onepassword-sync.md).
+ *
  * A newer app, and anything outside a session, gets the answer as it is.
  */
 import {
+  type ConnectionsCatalogStatus,
   FEEDBACK_THING_ID,
   FIND_MY_TIMELINE_TAB,
   type HomeOverview,
+  ONEPASSWORD_TAB,
   type ThingPage,
   type ThingPageTab,
   type ThingSummary,
 } from '@whombat/core';
-import { ACCOUNT_PAGES_MINOR, FIND_MY_TIMELINE_MINOR } from '@whombat/protocol/session';
+import {
+  ACCOUNT_PAGES_MINOR,
+  FIND_MY_TIMELINE_MINOR,
+  ONEPASSWORD_SYNC_MINOR,
+} from '@whombat/protocol/session';
 import { mailThingHref } from '../home/mail-glance';
 import { SUMMARY_TAB } from './panels';
 
@@ -26,10 +36,25 @@ import { SUMMARY_TAB } from './panels';
 export const readsFindMyTimeline = (minor: number | undefined) =>
   minor === undefined || minor >= FIND_MY_TIMELINE_MINOR;
 
-/** A thing's page as an app at `minor` reads it: below minor 5 without the Timeline tab and with the Summary first. */
+/**
+ * A thing's page as an app at `minor` reads it: below minor 5 without Find My's Timeline tab, below minor 8 without the
+ * 1Password connection's own tab, and with the Summary first whenever a tab is left out.
+ */
 export function thingPageFor(page: ThingPage, minor: number | undefined): ThingPage {
-  if (readsFindMyTimeline(minor)) return page;
-  const kept = page.tabs.filter((t) => !(t.key === FIND_MY_TIMELINE_TAB && t.server));
+  const timeline = readsFindMyTimeline(minor);
+  const onePassword = readsOnePassword(minor);
+  if (timeline && onePassword) return page;
+  const kept = page.tabs.filter(
+    (t) =>
+      !(!timeline && t.key === FIND_MY_TIMELINE_TAB && t.server) &&
+      !(!onePassword && t.key === ONEPASSWORD_TAB),
+  );
+  // Below minor 5 the Summary always came first, in case the app can't draw Find My's tab either.
+  return kept.length === page.tabs.length && timeline ? page : summaryFirst(page, kept);
+}
+
+/** The page with these tabs, the Summary first. */
+function summaryFirst(page: ThingPage, kept: ThingPageTab[]): ThingPage {
   const summary = kept.findIndex((t) => t.key === SUMMARY_TAB.key);
   const tabs = summary > 0 ? [kept[summary] as ThingPageTab, ...kept.filter((_, i) => i !== summary)] : kept;
   return tabs.length === page.tabs.length && summary <= 0 ? page : { ...page, tabs };
@@ -57,16 +82,26 @@ export function thingsFor(things: readonly ThingSummary[], minor: number | undef
     );
 }
 
+/** Whether a session at `minor` is offered 1Password; outside a session (`undefined`), it is. */
+export const readsOnePassword = (minor: number | undefined) =>
+  minor === undefined || minor >= ONEPASSWORD_SYNC_MINOR;
+
 /**
- * An op's answer as an app at `minor` reads it: `things.page`'s without what it can't draw, `home.overview`'s things as
- * it opens them, every other op's as it is.
+ * An op's answer as an app at `minor` reads it: `things.page`'s without the tabs it can't draw, `home.overview`'s things as
+ * it opens them, `connections.catalog`'s without 1Password below minor 8, every other op's as it is.
  */
 export function thingAnswerFor(op: string, body: unknown, minor: number | undefined): unknown {
   if (!body || typeof body !== 'object') return body;
+  if (op === 'connections.catalog' && !readsOnePassword(minor)) {
+    const status = body as ConnectionsCatalogStatus;
+    return Array.isArray(status.entries)
+      ? { ...status, entries: status.entries.filter((e) => e.catalogId !== 'onepassword') }
+      : body;
+  }
   if (op === 'home.overview' && !readsAccountPages(minor)) {
     const overview = body as HomeOverview;
     return Array.isArray(overview.things) ? { ...overview, things: thingsFor(overview.things, minor) } : body;
   }
-  if (op !== 'things.page' || readsFindMyTimeline(minor)) return body;
+  if (op !== 'things.page' || (readsFindMyTimeline(minor) && readsOnePassword(minor))) return body;
   return thingPageFor(body as ThingPage, minor);
 }

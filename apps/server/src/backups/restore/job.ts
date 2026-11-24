@@ -32,6 +32,7 @@ import { iso } from '../../lib/time';
 import type { PrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
 import { addNetwork } from '../../vault/networks';
+import { restoringVault } from '../../vault/onepassword/restore';
 import {
   type BatchResult,
   backupRestored,
@@ -203,11 +204,14 @@ export async function runRestore(job: RestoreJob): Promise<BackupRestoreSummary>
     ...(job.onOutcome ? { outcomes: true } : {}),
   });
   const commitBatch = async (category: BackupCategoryId, records: unknown[], phase: RestorePhase) => {
-    const result = await services.pipeline.commit(
-      restoreBatch,
-      { restoreId: job.restoreId, category, phase, records },
-      { burrowId: job.burrow.id, actorId: job.restorer.id },
-    );
+    const commit = () =>
+      services.pipeline.commit(
+        restoreBatch,
+        { restoreId: job.restoreId, category, phase, records },
+        { burrowId: job.burrow.id, actorId: job.restorer.id },
+      );
+    // A Vault entry brought back may take back a pair whose item the 1Password sync is about to archive.
+    const result = category === 'vault' ? await restoringVault(services, commit) : await commit();
     if (result.status !== 'ok') throw new Error('a restore batch was refused');
     merge(result.result);
   };

@@ -66,6 +66,7 @@ import {
   WidgetId,
 } from '../ids.js';
 import { KeyScope, Tier } from '../keys/catalog.js';
+import { OnePasswordItemId } from '../vault/onepassword.js';
 import {
   VAULT_DESCRIPTION_MAX,
   VAULT_NAME_MAX,
@@ -724,6 +725,12 @@ export const BackupVaultEntryRecord = rec('vault_entry', {
     )
     .max(VAULT_SSH_SERVERS_MAX)
     .default([]),
+  /**
+   * The 1Password item the entry was kept in step with (docs/decisions/onepassword-sync.md). Restoring relinks the
+   * entry to it, without a base, when the connection is there and the item in its vault, so 1Password's newer version
+   * wins at the next pass. Absent: a Whombat-only entry, or a file from before.
+   */
+  onepasswordItemId: OnePasswordItemId.optional(),
   createdAt: Timestamp,
 });
 export type BackupVaultEntryRecord = z.infer<typeof BackupVaultEntryRecord>;

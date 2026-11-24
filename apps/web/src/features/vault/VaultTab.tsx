@@ -5,12 +5,13 @@
  * failing entry is drawn loud; a secret's value is never shown, only replaced. Loading, empty and failed reads each have
  * a card of their own. Only the viewer's own entries are ever here: another person's entry is a plain 404.
  */
-import { VAULT_ROW_TEXT, vaultRowLine } from '@whombat/client';
+import { VAULT_ROW_TEXT, vaultEntrySourceLine, vaultEntryTag, vaultRowLine } from '@whombat/client';
 import { useTheAgent, useVault, useVaultNetworks } from '@whombat/client/react';
 import { VAULT_LIMIT_MESSAGES } from '@whombat/core/contracts';
 import { VAULT_COPY, type VaultEntry, type VaultNetwork, vaultEntryWhere } from '@whombat/core/vault';
 import { Lock } from 'lucide-react';
 import { useId, useState } from 'react';
+import { Tag } from '../../components/Tag';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import { errorDetail, PlaceRowBody, PlaceState, placeStyles as place } from '../settings/Place';
 import { AddToVaultModal } from './AddToVaultModal';
@@ -87,7 +88,8 @@ const NO_NETWORKS: VaultNetwork[] = [];
 
 /**
  * One entry: its lock, the name and one line — how its check went and when it was last used, or, only when its check
- * is failing, why in the Not working colour — opening in place to what it is, where it points and its detail.
+ * is failing, why in the Not working colour — opening in place to what it is, where it points and its detail. An entry
+ * kept in step with 1Password carries its tag after the name, and its open detail says how it stands there.
  */
 function EntryRow({
   burrow,
@@ -108,6 +110,8 @@ function EntryRow({
   const detailId = useId();
   const line = vaultRowLine(entry, { now: Date.now(), timeZone: viewer.timeZone, agent: agent.name });
   const where = vaultEntryWhere(entry);
+  const tag = vaultEntryTag(entry);
+  const source = vaultEntrySourceLine(entry, Date.now(), viewer.timeZone);
   return (
     <li className={styles.entry} data-open={open || undefined} data-entry={entry.id}>
       <button
@@ -119,7 +123,16 @@ function EntryRow({
       >
         <PlaceRowBody
           icon={Lock}
-          name={entry.name}
+          name={
+            tag ? (
+              <span className={styles.entryName}>
+                <span>{entry.name}</span>
+                <Tag data-source-tag="">{tag}</Tag>
+              </span>
+            ) : (
+              entry.name
+            )
+          }
           line={<span data-problem={line.failing ? '' : undefined}>{line.text}</span>}
           bad={line.failing}
         />
@@ -135,6 +148,15 @@ function EntryRow({
               </>
             ) : null}
           </p>
+          {source && (
+            <p
+              className={styles.detailWhat}
+              data-source=""
+              data-tone={source.tone === 'warn' ? 'warn' : undefined}
+            >
+              {source.text}
+            </p>
+          )}
           <VaultEntryDetailView burrow={burrow} entryId={entry.id} onRemoved={onRemoved} />
         </div>
       )}

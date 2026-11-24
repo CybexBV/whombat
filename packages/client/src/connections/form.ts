@@ -21,6 +21,7 @@ import {
   fieldsFor,
   isAgentConnection,
   isGatewayConnection,
+  isVaultSyncConnection,
   SignInKind,
 } from '@whombat/core/domain';
 import { ApiError, InvalidRequestError } from '../http/errors';
@@ -91,10 +92,20 @@ export function reauthText(
 
 /**
  * Whether only automations use connections of this entry (`CatalogEntry.use`, TA-02): no Look only or Manage, no
- * tools. An id the catalog doesn't know is the agent's entry, as core's `isAgentConnection` says.
+ * tools. An id the catalog doesn't know is the agent's entry, as core's `isAgentConnection` says. A gateway and the
+ * Vault's sync aren't automations' either: nobody but Claude Code and Codex, or the sync, uses them.
  */
 export function usedByAutomations(entry: CatalogEntry | string): boolean {
-  return !isAgentConnection(entry) && !usedByGateway(entry);
+  return !isAgentConnection(entry) && !usedByGateway(entry) && !usedByVaultSync(entry);
+}
+
+/**
+ * Whether connections of this entry keep the Vault in step with a vault elsewhere (`use: 'vault'`, 1Password; Whombat
+ * onepassword-sync.md): the agent never uses one, so its page has none of the agent's parts (level, handle, tools, last
+ * use) and shows the sync instead.
+ */
+export function usedByVaultSync(entry: CatalogEntry | string): boolean {
+  return isVaultSyncConnection(entry);
 }
 
 /**
@@ -106,7 +117,7 @@ export function usedByGateway(entry: CatalogEntry | string): boolean {
   return isGatewayConnection(entry);
 }
 
-/** Whether a connection of this entry is one agents use: neither automations' only nor a gateway. */
+/** Whether a connection of this entry is one agents use: not automations' only, a gateway or the Vault's sync. */
 export function usedByAgents(entry: CatalogEntry | string): boolean {
   return isAgentConnection(entry);
 }

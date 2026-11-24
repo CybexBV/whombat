@@ -84,7 +84,7 @@ const account = (over: Partial<GatewayAccountUsage> = {}): GatewayAccountUsage =
 
 describe('the AI gateway connections (0.76, CT-332, AIG-01, AIG-02, AIG-04, AIG-18)', () => {
   it('adds the gateway use and two shared developer entries without tools or request', () => {
-    expect(CATALOG_USES).toEqual(['agents', 'automations', 'gateway']);
+    expect(CATALOG_USES).toEqual(['agents', 'automations', 'gateway', 'vault']);
     for (const id of ['fusebox', 'ai_gateway']) {
       expect(entry(id), id).toMatchObject({
         category: 'developer',

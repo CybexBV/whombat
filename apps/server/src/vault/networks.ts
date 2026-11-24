@@ -26,6 +26,7 @@ import { principals, vaultNetworks } from '../db/schema/index';
 import { notFound } from '../lib/errors';
 import type { Services } from '../services';
 import { fieldError, vaultError } from './commands';
+import { vaultReachChanged } from './reach-changed';
 import { listedNetworks, networkViews } from './store';
 
 /** The home network list: the person changes it (one-person.md OP-S65). */
@@ -62,6 +63,8 @@ function afterChange(services: Services, session: { after(hook: () => Promise<vo
     await writeNetworksFile(services).catch((err: unknown) =>
       services.log.error({ err: String(err) }, 'could not write the Vault home network file'),
     );
+    // What was held for an address Whombat may not reach is looked at again.
+    vaultReachChanged(services);
   });
 }
 

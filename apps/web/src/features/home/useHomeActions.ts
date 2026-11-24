@@ -1,6 +1,7 @@
 /**
  * What Home's buttons do (one-whombat.md ONE-05, ONE-08, ONE-10, ONE-24; app one-whombat-shell.md AP-1266, AP-1269): the
- * Inbox's intents (`needsYouIntent`) carried out — approve, approve later, decline, snooze, open, look into it —, the
+ * Inbox's intents (`needsYouIntent`) carried out — approve, approve later, decline, snooze, open, look into it, the
+ * 1Password guard's answer (onepassword-sync.md) —, the
  * step the assistant offers on a look it looked into (look-research-web.md AP-5903), and Undo on a change.
  * Each says what happened in a short toast, as a person would.
  */
@@ -9,6 +10,9 @@ import {
   atText,
   lookFixOutcomeText,
   type NeedsYouIntent,
+  ONEPASSWORD_APP_TEXT,
+  onePasswordAnsweredText,
+  onePasswordSetChanged,
   startedChatPath,
   threadToOpen,
   undoOutcome,
@@ -18,12 +22,14 @@ import { patchEndpoint, queryKeys } from '@whombat/client/query';
 import {
   useDecideApproval,
   useFixLook,
+  useOnePasswordWrite,
   useSnoozeNeedsYou,
   useStartChat,
   useTheAgent,
   useUndoChange,
 } from '@whombat/client/react';
 import type { ChangeEntry, HomeOverview, HomeRef, LookResearch } from '@whombat/core';
+import { api } from '@whombat/core/contracts';
 import { formatClock } from '@whombat/core/text';
 import { useCallback, useState } from 'react';
 import { useNavigateHref, useSearchUpdate } from '../../app/routing/navigation';
@@ -40,6 +46,7 @@ export function useNeedsYouActions(burrow: string, timeZone: string) {
   const decide = useDecideApproval(burrow);
   const snooze = useSnoozeNeedsYou(burrow);
   const start = useStartChat(burrow);
+  const answerRemovals = useOnePasswordWrite(api.connections.onePasswordRemovals, burrow);
   const [busy, setBusy] = useState<string | null>(null);
   // The card says “I’m on it.” at once and its thread opens, where the step is taken (backup-places.md BPL-15); a
   // toast only when the step didn't go through.
@@ -112,14 +119,29 @@ export function useNeedsYouActions(burrow: string, timeZone: string) {
             navigateHref(startedChatPath(result.data));
             return;
           }
+          case 'onePasswordRemovals': {
+            // The answer for the set the card showed; the Inbox reads again either way (the hook does).
+            const result = await answerRemovals.mutateAsync({
+              params: { burrow, connectionId: intent.connectionId },
+              body: { answer: intent.answer, token: intent.token },
+            });
+            if (result.status !== 'ok') {
+              toast.show(result.status === 'blocked' ? result.message : SOMETHING_WENT_WRONG);
+              return;
+            }
+            leave(ref);
+            toast.show(onePasswordAnsweredText(intent.answer));
+            return;
+          }
         }
-      } catch {
-        toast.show(SOMETHING_WENT_WRONG);
+      } catch (error) {
+        // The set changed since the card was drawn: nothing was removed, and the card comes back with the new set.
+        toast.show(onePasswordSetChanged(error) ? ONEPASSWORD_APP_TEXT.changed : SOMETHING_WENT_WRONG);
       } finally {
         setBusy(null);
       }
     },
-    [burrow, decide, snooze, start, navigateHref, toast, leave, qc, timeZone],
+    [burrow, decide, snooze, start, answerRemovals, navigateHref, toast, leave, qc, timeZone],
   );
 
   /**

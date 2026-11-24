@@ -25,6 +25,7 @@ import {
   catalogEntry,
   connectionHost,
   isGatewayConnection,
+  isVaultSyncConnection,
   parseThingId,
   type ThingLine,
   type ThingPage,
@@ -341,8 +342,9 @@ export async function connectionPage(
     : null;
   if (card) summary.push(card);
   const items = accessItems(entry, row, tools);
-  // A gateway is no agent's (fusebox-page.md FP-01): nothing to say about what Whombat may do with it.
-  const gateway = isGatewayConnection(entry);
+  // A gateway is no agent's (fusebox-page.md), nor is the Vault's sync (onepassword-sync.md): nothing to
+  // say about what Whombat may do with it.
+  const gateway = isGatewayConnection(entry) || isVaultSyncConnection(entry);
   summary.push(
     ...closingPanels({
       changes: changed,
@@ -379,7 +381,11 @@ export async function connectionPage(
   if (!view?.facts.length && checked)
     facts.push(line(`Checked **${span(now.getTime() - checked.getTime())}** ago`));
   if (!gateway) facts.push(accessLine(row));
-  const address = connectionHost(entry, row.fields) ?? row.externalName ?? undefined;
+  // The Vault's sync has no address of its own: its row's detail is the vault, which the head's facts name already, and
+  // as an address it would ask what the connection runs on.
+  const address = isVaultSyncConnection(entry)
+    ? undefined
+    : (connectionHost(entry, row.fields) ?? row.externalName ?? undefined);
   const readAt = view?.readAt ?? row.glanceAt ?? null;
   return {
     id,

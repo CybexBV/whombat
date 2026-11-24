@@ -2,7 +2,8 @@
  * A connection's settings that are choices, changed later from its page (docs/implementation/macos/findmy-connection.md
  * §2.1): a `select` with its own options (Find My's Read in the background), and a choice the service gives when the
  * app knows the choices itself — the Mac of an entry checked through a Mac (Find My's), from the servers Whombat
- * watches. The rest of a `fromService` choice (Moneybird's administration) is only asked when connecting. Pure; the
+ * watches. The rest of a `fromService` choice (Moneybird's administration) is only asked when connecting, and so are
+ * the Vault's sync's (1Password's vault and its entries). Pure; the
  * web's ConnectionPage and the phone's Connection screen draw them as radio cards.
  */
 import type { CatalogEntry } from '@whombat/core/domain';
@@ -35,10 +36,13 @@ export interface MacChoice {
  * of an entry checked through a Mac with `macs` as its choices (none while the servers aren't known).
  */
 export function choiceSettings(
-  entry: Pick<CatalogEntry, 'fields' | 'check'>,
+  entry: Pick<CatalogEntry, 'fields' | 'check' | 'use'>,
   fields: Readonly<Record<string, string>>,
   macs: readonly MacChoice[] | null,
 ): ChoiceSetting[] {
+  // The Vault's sync (1Password) is asked its vault and what happens to the entries already there once, when linking:
+  // changing either later would mean linking again.
+  if (entry.use === 'vault') return [];
   const throughMac = entry.check?.kind === 'mac';
   return entry.fields.flatMap((f): ChoiceSetting[] => {
     if (f.kind !== 'select') return [];

@@ -31,6 +31,8 @@ interface ImportMetaEnv {
    */
   readonly VITE_FIXTURE_FEEDBACK_SOURCES?: string;
   readonly VITE_FIXTURE_GATEWAY?: string;
+  /** A 1Password vault kept in step with the Vault (`onePasswordFixtures.ts`): synced, waiting, failing or paused. */
+  readonly VITE_FIXTURE_ONEPASSWORD?: string;
   readonly VITE_FIXTURE_MODELS?: string;
   /** A model on the network saved (`localModelFixtures.ts`, hermes-engine-app.md AP-5047). */
   readonly VITE_FIXTURE_LOCAL_MODEL?: string;

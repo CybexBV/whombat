@@ -10,6 +10,7 @@
 #   migrations/  skills/  what the runtime reads from its release directory (WHOMBAT_APP_DIR, set by the bundles):
 #                        the shipped skills by category since Whombat skill-store.md SST-03 (NX-406), `packs/` before
 #   node_modules/node-pty  the sign-in console's PTY with its addon, built here with node-gyp (NX-37, MR-72)
+#   node_modules/@1password  1Password's SDK with its WASM core, which the 1Password worker loads
 #   web/                 the web app the direct listener serves to browsers on the local network and Tailscale (Whombat
 #                        HE-50, NX-442): a link to `passthru.web`, built from apps/web in a derivation of its own whose
 #                        source is only what that build reads, so a runtime update that doesn't change the web app
@@ -439,6 +440,8 @@ stdenv.mkDerivation (finalAttrs: {
       grep -qF '${lib.getExe hermes}' $out/bin/whombat-runner
       test -x $out/bin/whombat-hermes-check
     ''}
+    # 1Password's SDK compiles its WASM core as it loads, from beside itself; nothing is requested.
+    (cd $out && ${lib.getExe nodejs} --input-type=module -e "await import('@1password/sdk')")
     (cd $out && ${lib.getExe nodejs} --input-type=module -e "
       const m = await import('node-pty');
       const t = m.spawn('${stdenv.shell}', ['-c', 'echo pty-ok'], {});

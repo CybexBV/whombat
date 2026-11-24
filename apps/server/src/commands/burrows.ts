@@ -46,6 +46,7 @@ import {
 import { agentRuntimeOf, loadPrincipalRow, toActor } from '../read/principals';
 import { burrowView } from '../read/views';
 import type { Services } from '../services';
+import { vaultReachChanged } from '../vault/reach-changed';
 import { updateAgent } from './agents';
 
 /** A second burrow on an appliance (one-agent.md OA-01). */
@@ -262,6 +263,9 @@ export const setAgentsReachLan = defineCommand({
       ctx.burrow = row;
       await publishBurrow(ctx, row, event.id);
     }
+    // What was held for an address Whombat may not reach is looked at again (the 1Password sync's items).
+    const services = ctx.services;
+    ctx.after(async () => vaultReachChanged(services));
     return { burrowId: ctx.burrow.id, eventId: event.id };
   },
 });

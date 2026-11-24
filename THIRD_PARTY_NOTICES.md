@@ -115,7 +115,7 @@ The mobile app loads its fonts from the `@expo-google-fonts` packages listed und
 ### Service and system marks (`packages/brand`)
 
 The marks of the services people connect and the systems their servers run, listed one by one with their sources in
-`packages/brand/assets/marks/SOURCES.md`. 84 of them are path data from Simple Icons (<https://simpleicons.org>), released under
+`packages/brand/assets/marks/SOURCES.md`. 85 of them are path data from Simple Icons (<https://simpleicons.org>), released under
 CC0 1.0 Universal. The others:
 
 | Mark | From | Licence |
@@ -358,7 +358,7 @@ Every licence below allows distributing Whombat under AGPL-3.0-only (`pnpm notic
 
 | Licence | Packages | Next to the AGPL |
 |---|---|---|
-| MIT | 752 | permissive |
+| MIT | 754 | permissive |
 | ISC | 64 | permissive |
 | BSD-3-Clause | 25 | permissive |
 | Apache-2.0 | 23 | compatible with GPL-3.0 and the AGPL; attribution and NOTICE files required |
@@ -381,6 +381,8 @@ Corrected from the package's own files:
 
 | Package | Versions | Licence | Homepage |
 |---|---|---|---|
+| @1password/sdk | 0.5.0 | MIT |  |
+| @1password/sdk-core | 0.5.0 | MIT |  |
 | @agentclientprotocol/sdk | 1.5.0 | Apache-2.0 | <https://github.com/agentclientprotocol/typescript-sdk#readme> |
 | @antfu/install-pkg | 2.1.0 | MIT | <https://github.com/antfu-collective/install-pkg#readme> |
 | @babel/code-frame | 7.29.7 | MIT | <https://babel.dev/docs/en/next/babel-code-frame> |

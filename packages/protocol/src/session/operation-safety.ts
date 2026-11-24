@@ -305,6 +305,11 @@ const TABLE = {
   'connections.findMyTimelineMap': READ,
   // A one-time watch's Cancel: a watch that already ended answers as it is, so a retry changes nothing more.
   'connections.findMyWatchCancel': RECEIPT,
+  // A 1Password connection's sync: its page part is a read; Sync now only asks for a pass, which runs after its commit;
+  // answering the guard can remove entries, so a person decides whether to send it again.
+  'connections.onePassword': READ,
+  'connections.onePasswordSync': RECEIPT,
+  'connections.onePasswordRemovals': DESTRUCTIVE,
   'connectors.setApp': NEVER,
   'connectors.removeApp': DESTRUCTIVE,
 

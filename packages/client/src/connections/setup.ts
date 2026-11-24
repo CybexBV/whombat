@@ -93,7 +93,7 @@ export function setupSteps(entry: CatalogEntry): SetupStep[] {
 
 /**
  * The name field's help: how agents see it, or — only automations using it (TA-02) — how automations name it; an AI
- * gateway's (AIG-05, AP-1118) names its switches and its part of Usage.
+ * gateway's names its switches and its part of Usage; the Vault's sync (1Password) is named only here.
  */
 export function nameHelp(
   entry: CatalogEntry,
@@ -101,6 +101,7 @@ export function nameHelp(
 ): string {
   if (entry.use === 'gateway')
     return 'How it’s listed here, in its switches and in Usage. You can change it later.';
+  if (entry.use === 'vault') return 'How it’s listed here. You can change it later.';
   return isAgentConnection(entry)
     ? words.nameHelp
     : 'How it’s listed here and in automations. You can change it later.';

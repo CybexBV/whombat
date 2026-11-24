@@ -173,6 +173,38 @@ describe('the Inbox tab (inbox.md; needs-you-list.md NYL-01…NYL-09)', () => {
     expect(sheet.approval?.tonight?.at).toMatch(/2026 at 03:00 · /);
     // Settled with nothing in it shows no zero.
     expect(groupHeading({ label: 'Settled', rows: [] })).toBe('Settled');
+    // The 1Password guard's two answers both show under its row, equal, like an approval's.
+    const gone: NeedsYouItem = {
+      id: 'connection:con_1p',
+      ref: { kind: 'connection', id: 'con_1p' },
+      kind: 'connection',
+      severity: 'warn',
+      nature: 'you',
+      group: 'you',
+      title: '1Password says 4 items are gone',
+      body: '',
+      at: at('09:00'),
+      actions: [
+        {
+          id: 'remove',
+          label: 'Remove them here too',
+          style: 'secondary',
+          kind: 'onepassword_removals',
+          removals: { answer: 'remove', token: 't1' },
+        },
+        {
+          id: 'keep',
+          label: 'Keep them here',
+          style: 'primary',
+          kind: 'onepassword_removals',
+          removals: { answer: 'keep', token: 't1' },
+        },
+      ],
+    };
+    const guard = phoneRowInline(row(gone));
+    expect(guard?.answers.map((b) => b.label)).toEqual(['Remove them here too', 'Keep them here']);
+    expect(guard?.lead).toBeNull();
+    expect(guard?.more.map((b) => b.kind)).toEqual(['settle', 'talk', 'snooze']);
   });
 
   it('swipes left to Settle (or Bring back) with More beside it; Dusty’s rows only More', () => {
