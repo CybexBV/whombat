@@ -32,6 +32,7 @@ import { loadAssessmentCards, loadReportCards } from '../feedback/cards';
 import { toAttachment } from '../files/service';
 import { messageFileInFiles } from '../files/space';
 import { findMyWatchCards } from '../hosts/findmy-watch-cards';
+import { thingWatchCards } from '../incidents/thing-watch-cards';
 import { iso, isoOrNull } from '../lib/time';
 import { lookPlanCards } from '../looks/research';
 import { scheduleCardsFor } from '../schedules/store';
@@ -200,6 +201,7 @@ export async function loadMessages(
   const lookPlanIds = cards.flatMap((c) => (c.kind === 'look_plan' ? [c.researchId] : []));
   const featureRequestIds = cards.flatMap((c) => (c.kind === 'feature_request' ? [c.requestId] : []));
   const watchIds = cards.flatMap((c) => (c.kind === 'findmy_watch' ? [c.watchId] : []));
+  const thingWatchIds = cards.flatMap((c) => (c.kind === 'thing_watch' ? [c.watchId] : []));
   const attachmentIds = rows.flatMap((r) => r.attachmentIds);
   const [
     plans,
@@ -212,6 +214,7 @@ export async function loadMessages(
     lookPlanViews,
     featureRequestViews,
     watchViews,
+    thingWatchViews,
     reactionRows,
     attachmentRows,
   ] = await Promise.all([
@@ -230,6 +233,7 @@ export async function loadMessages(
     featureRequestCards(db, featureRequestIds),
     // A Find My watch reads the same for everyone too (findmy-watch.md).
     findMyWatchCards(db, watchIds),
+    thingWatchCards(db, thingWatchIds),
     db
       .select({
         messageId: reactions.messageId,
@@ -295,6 +299,12 @@ export async function loadMessages(
           kind: 'feature_request',
           requestId: card.requestId,
           request: featureRequestViews.get(card.requestId) ?? null,
+        };
+      case 'thing_watch':
+        return {
+          kind: 'thing_watch',
+          watchId: card.watchId,
+          watch: thingWatchViews.get(card.watchId) ?? null,
         };
       case 'findmy_watch':
         return { kind: 'findmy_watch', watchId: card.watchId, watch: watchViews.get(card.watchId) ?? null };

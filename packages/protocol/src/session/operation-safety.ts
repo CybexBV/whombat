@@ -536,6 +536,7 @@ const TABLE = {
   'things.history': READ,
   'things.setWatch': NEVER,
   'things.setWatchLimit': NEVER,
+  'things.cancelWatch': RECEIPT,
   // Keeping a server quiet makes or ends a maintenance window in the hosts service outside the receipt's transaction
   // (Whombat monitoring.md MON-04), so neither is resent by a client; not destructive (End now, Undo).
   'things.keepQuiet': NEVER,

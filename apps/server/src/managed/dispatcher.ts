@@ -36,7 +36,7 @@ import {
   SessionErrorCode as SessionErrorCodeSchema,
 } from '@whombat/protocol/session';
 import { type BurrowAccess, burrowAccess, type RequestAuth } from '../auth/request';
-import { answerFor } from '../automations/older-apps';
+import { answerFor, readsThingAutomations } from '../automations/older-apps';
 import { BACKUP_PLACE_HANDLERS } from '../backup-places/ops';
 import { type CommandScope, CommandStopped, type EffectEnd, runInCommandScope } from '../commit/scope';
 import type { Tx } from '../db/client';
@@ -1045,7 +1045,10 @@ export class SessionDispatcher {
     if (!ep || !def)
       throw new ApiError('not_implemented', `${spec.op} isn’t available on this appliance yet.`);
     const minor = principal.protocolMinor;
-    if (needsHostMonitoring(ep.id, input.body, minor))
+    if (
+      needsHostMonitoring(ep.id, input.body, minor) ||
+      (ep.id === 'things.cancelWatch' && !readsThingAutomations(minor))
+    )
       throw new SessionOpError('unavailable', 'Update the Whombat app, then try again.');
     const out = await runApiHandler(this.services, def, spec.op, principal.account, input);
     if (out.raw) return out;

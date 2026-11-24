@@ -94,6 +94,12 @@ export const ThingHistory = z.object({
 });
 export type ThingHistory = z.infer<typeof ThingHistory>;
 
+/** The page id used by monitoring triggers and watches. */
+export const ThingIncidentTarget = z
+  .string()
+  .max(220)
+  .regex(/^(server|connection|device):.+$/);
+
 /* Events for automations --------------------------------------------------------------------------------------------- */
 
 /** A thing stopped answering: an incident of nature `down` opened, or a `problem` one became `down`. */
@@ -114,6 +120,9 @@ export const ThingIncidentEvent = z.strictObject({
   thing: z.string().min(3).max(220),
   kind: z.enum(['server', 'connection', 'device']),
   name: z.string().min(1).max(120),
+  /** The catalog entry for a connection and the check that opened or worsened the incident. */
+  catalogId: z.string().max(120).optional(),
+  check: z.string().max(80).optional(),
   nature: IncidentNature,
   words: z.string().min(1).max(200),
   startedAt: Timestamp,

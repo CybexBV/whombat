@@ -26,6 +26,7 @@ import { useTheme } from '../theme/theme';
 import { Facts } from '../ui/facts';
 import { runBarColor } from '../ui/glanceColors';
 import {
+  Activity,
   ChevronRight,
   Clock,
   Inbox,
@@ -49,6 +50,7 @@ const AVATAR_STALE_MS = 6 * 60 * 60 * 1000;
 const ICONS: Record<Exclude<AutomationSource, 'github'>, LucideIcon> = {
   tracker: Inbox,
   mail: Mail,
+  thing: Activity,
   findmy: MapPin,
   schedule: Clock,
   message: MessageSquare,

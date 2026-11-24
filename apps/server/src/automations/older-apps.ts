@@ -7,8 +7,8 @@
  * gets a form it reads — the run's trigger as a message, such a step as an earlier step, the automation without that
  * definition (its summary and glance still say what it does) — and a newer app gets everything.
  */
-import type { Automation, AutomationExport, AutomationRun, RealtimeEvent } from '@whombat/core';
-import { FIND_MY_MINOR } from '@whombat/protocol/session';
+import type { Automation, AutomationExport, AutomationRun, Message, RealtimeEvent } from '@whombat/core';
+import { FIND_MY_MINOR, THING_AUTOMATIONS_MINOR } from '@whombat/protocol/session';
 import { ApiError } from '../lib/errors';
 import { newerDefinition, startedByFindMy } from './release-gate';
 
@@ -26,16 +26,28 @@ export const readsMailAutomations = (minor: number | undefined) =>
 export const readsFindMyAutomations = (minor: number | undefined) =>
   minor === undefined || minor >= FIND_MY_AUTOMATIONS_MINOR;
 
+export const readsThingAutomations = (minor: number | undefined) =>
+  minor === undefined || minor >= THING_AUTOMATIONS_MINOR;
+
 /** Whether an app at `minor` can't read this definition (or draft). */
 function unreadable(definition: unknown, minor: number | undefined): boolean {
-  return readsMailAutomations(minor) ? startedByFindMy(definition) : newerDefinition(definition);
+  const triggers = (definition as { triggers?: { kind?: string }[] } | null)?.triggers;
+  if (!readsThingAutomations(minor) && Array.isArray(triggers) && triggers.some((t) => t?.kind === 'thing'))
+    return true;
+  return (
+    !readsFindMyAutomations(minor) &&
+    (readsMailAutomations(minor) ? startedByFindMy(definition) : newerDefinition(definition))
+  );
 }
 
 /** An automation as an app at `minor` reads it. */
 export function automationFor(automation: Automation, minor: number | undefined): Automation {
-  if (readsFindMyAutomations(minor)) return automation;
+  if (readsThingAutomations(minor)) return automation;
   const source = automation.glance?.source;
-  const older = source === 'findmy' || (source === 'mail' && !readsMailAutomations(minor));
+  const older =
+    source === 'thing' ||
+    (source === 'findmy' && !readsFindMyAutomations(minor)) ||
+    (source === 'mail' && !readsMailAutomations(minor));
   return {
     ...automation,
     ...(unreadable(automation.definition, minor) ? { definition: null } : {}),
@@ -46,13 +58,15 @@ export function automationFor(automation: Automation, minor: number | undefined)
 
 /** A run as an app at `minor` reads it. */
 export function runFor(run: AutomationRun, minor: number | undefined): AutomationRun {
-  if (readsFindMyAutomations(minor)) return run;
+  if (readsThingAutomations(minor)) return run;
   const beforeMail = !readsMailAutomations(minor);
   const kind = run.trigger.kind;
   return {
     ...run,
     trigger:
-      kind === 'findmy' || (beforeMail && kind === 'mail')
+      kind === 'thing' ||
+      (kind === 'findmy' && !readsFindMyAutomations(minor)) ||
+      (beforeMail && kind === 'mail')
         ? { ...run.trigger, kind: 'message_posted' }
         : run.trigger,
     steps: beforeMail
@@ -64,6 +78,21 @@ export function runFor(run: AutomationRun, minor: number | undefined): Automatio
 type Answer = Record<string, unknown>;
 const withAutomation = (body: Answer, minor: number | undefined) =>
   body.automation ? { ...body, automation: automationFor(body.automation as Automation, minor) } : body;
+const messageFor = (message: Message): Message =>
+  message.card?.kind === 'thing_watch' ? { ...message, card: null } : message;
+
+function messagesFor(op: string, body: Answer): Answer {
+  if (op === 'messages.thread') {
+    const thread = body as unknown as { root: Message; replies: Message[] };
+    return { ...body, root: messageFor(thread.root), replies: thread.replies.map(messageFor) };
+  }
+  if (op === 'messages.list' || op === 'conversations.pins')
+    return { ...body, messages: (body.messages as Message[]).map(messageFor) };
+  if (op.startsWith('messages.') && body.message)
+    return { ...body, message: messageFor(body.message as Message) };
+  return body;
+}
+
 const withRun = (body: Answer, minor: number | undefined) =>
   body.run ? { ...body, run: runFor(body.run as AutomationRun, minor) } : body;
 
@@ -107,14 +136,16 @@ for (const op of [
 
 /** An op's answer as an app at `minor` reads it (every other op's as it is). */
 export function answerFor(op: string, body: unknown, minor: number | undefined): unknown {
+  if (readsThingAutomations(minor) || !body || typeof body !== 'object') return body;
   const to = ANSWERS[op];
-  if (!to || readsFindMyAutomations(minor) || !body || typeof body !== 'object') return body;
-  return to(body as Answer, minor);
+  return to ? to(body as Answer, minor) : messagesFor(op, body as Answer);
 }
 
 /** A live update as an app at `minor` reads it. */
 export function eventFor(event: RealtimeEvent, minor: number | undefined): RealtimeEvent {
-  if (readsFindMyAutomations(minor)) return event;
+  if (readsThingAutomations(minor)) return event;
+  if (event.type === 'message.created' || event.type === 'message.updated')
+    return { ...event, message: messageFor(event.message) };
   if (event.type === 'automation.updated')
     return { ...event, automation: automationFor(event.automation, minor) };
   if (event.type === 'automation.run.updated') return { ...event, run: runFor(event.run, minor) };

@@ -35,6 +35,7 @@ import {
   pruneIncidents,
   pushesSince,
 } from './store';
+import { deliverThingWatches } from './thing-watch';
 
 /** How often the watcher looks: as the look watcher. */
 export const INCIDENTS_WATCH_MS = 60_000;
@@ -160,6 +161,9 @@ export class IncidentWatcher {
   async pass(): Promise<void> {
     const rows = await this.services.db.select({ id: burrows.id }).from(burrows);
     for (const { id } of rows) {
+      await deliverThingWatches(this.services, id).catch((err) =>
+        this.services.log.warn({ err, burrowId: id }, 'Thing watches could not be read'),
+      );
       const seen = await watchIncidents(this.services, id, this.#before.get(id) ?? null).catch((err) => {
         this.services.log.warn({ err: String(err), burrowId: id }, 'incidents: the pass failed');
         return null;

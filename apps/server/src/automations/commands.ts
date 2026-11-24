@@ -543,6 +543,7 @@ export async function publishVersion(
       draftUpdatedById: ctx.actor.id,
       scheduleAnchor: ctx.now,
       mailActiveAt,
+      thingActiveAt: enable && def.triggers.some((t) => t.kind === 'thing') ? ctx.now : null,
       nextFireAt: enable ? scheduleNext(def, ctx.now, ctx.now) : null,
       updatedAt: ctx.now,
     })
@@ -900,6 +901,7 @@ export const setAutomationEnabled = defineCommand({
     const def = current.definition;
     if (input.enabled) await ctx.services.newerAutomations.refuse(def);
     const watchesMail = def.triggers.some((t) => t.kind === 'mail');
+    const watchesThings = def.triggers.some((t) => t.kind === 'thing');
     const watchesFindMy = def.triggers.some((t) => t.kind === 'findmy');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
@@ -923,6 +925,7 @@ export const setAutomationEnabled = defineCommand({
           status: 'published',
           scheduleAnchor: ctx.now,
           mailActiveAt: watchesMail ? ctx.now : null,
+          thingActiveAt: watchesThings ? ctx.now : null,
           nextFireAt: scheduleNext(def, ctx.now, ctx.now),
           updatedAt: ctx.now,
         })
@@ -963,6 +966,7 @@ export const setAutomationEnabled = defineCommand({
         status: input.enabled ? 'published' : 'disabled',
         scheduleAnchor: input.enabled ? ctx.now : row.scheduleAnchor,
         mailActiveAt: nextMailActiveAt,
+        thingActiveAt: !input.enabled || !watchesThings ? null : (row.thingActiveAt ?? ctx.now),
         nextFireAt: input.enabled ? scheduleNext(def, ctx.now, ctx.now) : null,
         updatedAt: ctx.now,
       })

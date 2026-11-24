@@ -71,7 +71,15 @@ export interface IncidentPassInput {
 export interface IncidentPassPlan {
   opened: (SeenLook & { startedAt: Date })[];
   /** Open incidents that got worse (a problem now down), or learned their cause. */
-  changed: { id: string; nature: IncidentNature; words: string; cause: SeenLook['cause']; worse: boolean }[];
+  changed: {
+    id: string;
+    nature: IncidentNature;
+    words: string;
+    cause: SeenLook['cause'];
+    worse: boolean;
+    check?: string | null;
+    subject?: string;
+  }[];
   ended: { id: string; endedAt: Date }[];
   /** What this pass saw, for the next. */
   seen: PassBefore;
@@ -98,6 +106,7 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
           words: worse ? look.words : inc.words,
           cause,
           worse,
+          ...(worse ? { check: look.check, subject: look.subject } : {}),
         });
       continue;
     }

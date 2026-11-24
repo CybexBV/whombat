@@ -22,6 +22,7 @@ import {
 import { MergeMethod } from './approval.js';
 import { JsonObject, Timestamp } from './common.js';
 import { FIND_MY_PLACE_MAX, FindMyPersonId } from './hosts-findmy.js';
+import { ThingIncidentTarget } from './incidents.js';
 import { TRACKER_CUSTOMER_REPLY_MAX, TrackerItemKind, TrackerRecipeWords } from './tracker.js';
 
 /** The longest `AutomationAssessment.valueWhy` (3.12). */
@@ -278,6 +279,31 @@ export const FindMyTrigger = z
   .strict();
 export type FindMyTrigger = z.infer<typeof FindMyTrigger>;
 
+/** One thing or a list of kinds. A connection kind can be narrowed to a catalog entry. */
+export const ThingTrigger = z
+  .strictObject({
+    kind: z.literal('thing'),
+    event: z.enum(['down', 'problem', 'back']),
+    thing: ThingIncidentTarget.optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+    kinds: z
+      .array(z.string().regex(/^(server|device|connection(?::[a-z0-9_]+)?)$/))
+      .min(1)
+      .max(20)
+      .optional(),
+    check: z.string().min(1).max(80).optional(),
+    checkName: z.string().trim().min(1).max(120).optional(),
+    forMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .max(7 * 24 * 60)
+      .optional(),
+  })
+  .refine((trigger) => !!trigger.thing !== !!trigger.kinds, 'Choose a thing or a list of kinds.')
+  .refine((trigger) => trigger.event !== 'back' || trigger.forMinutes === undefined, 'A return cannot wait.');
+export type ThingTrigger = z.infer<typeof ThingTrigger>;
+
 /** An authenticated inbound webhook (off until an owner turns it on and a secret exists). */
 export const WebhookTrigger = z.object({ kind: z.literal('webhook') }).strict();
 
@@ -294,6 +320,7 @@ export const AutomationTrigger = z.discriminatedUnion('kind', [
   TrackerTrigger,
   MailTrigger,
   FindMyTrigger,
+  ThingTrigger,
 ]);
 export type AutomationTrigger = z.infer<typeof AutomationTrigger>;
 export type AutomationTriggerInput = z.input<typeof AutomationTrigger>;
@@ -1148,6 +1175,7 @@ export const AutomationSource = z.enum([
   'tracker',
   'mail',
   'findmy',
+  'thing',
   'schedule',
   'message',
   'reaction',
@@ -1321,6 +1349,7 @@ export const AutomationTriggerInfo = z.object({
     'tracker',
     'mail',
     'findmy',
+    'thing',
   ]),
   /** “Mara in #bugs”, “Every day at 09:00”, “Webhook delivery 7f3c…”. */
   summary: z.string().max(200),
@@ -1457,4 +1486,5 @@ export const TRIGGER_KIND_LABELS: Record<AutomationTriggerKind, string> = {
   tracker: 'A report arrives in a tracker',
   mail: 'Matching mail arrives',
   findmy: 'Someone arrives or leaves',
+  thing: 'A thing goes down, has a problem or comes back',
 };

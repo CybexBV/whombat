@@ -32,6 +32,7 @@ import {
   type SearchResponse,
   type SearchResult,
   searchFilterOf,
+  type ThingWatchView,
   type ThreadView,
 } from '@whombat/core';
 
@@ -283,6 +284,10 @@ export const cardPatchers = {
     (watch: FindMyWatchView) =>
     (c: MessageCard): MessageCard =>
       c.kind === 'findmy_watch' && c.watchId === watch.id ? { ...c, watch } : c,
+  thingWatch:
+    (watch: ThingWatchView) =>
+    (c: MessageCard): MessageCard =>
+      c.kind === 'thing_watch' && c.watchId === watch.id ? { ...c, watch } : c,
 };
 
 /** Map every message inside a messages container (page, infinite pages, thread, single message). */

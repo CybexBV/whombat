@@ -514,6 +514,7 @@ export const EVENT_TRIGGER_KINDS = [
   'tracker',
   'mail',
   'findmy',
+  'thing',
 ] as const;
 
 /** Whether a trigger reads the events (the engine scans a burrow only while a live automation has one, SV-03). */

@@ -91,6 +91,7 @@ const SOURCES: Record<AutomationTrigger['kind'], AutomationSource> = {
   tracker: 'tracker',
   mail: 'mail',
   findmy: 'findmy',
+  thing: 'thing',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',

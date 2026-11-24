@@ -24,6 +24,7 @@ import {
   planPrompts,
   planSections,
   planTryIt,
+  thingWhenText,
 } from '@whombat/core';
 import { automationTrackerWords, unknownTracker } from './trackerItem';
 
@@ -144,6 +145,7 @@ export const AUTOMATION_SOURCE_LABELS: Record<AutomationSource, string> = {
   tracker: 'Report tracker',
   mail: 'Mail',
   findmy: 'Find My',
+  thing: 'Monitoring',
   schedule: 'Schedule',
   message: 'Message',
   reaction: 'Reaction',
@@ -216,6 +218,7 @@ const SOURCE_OF: Record<AutomationTrigger['kind'], AutomationSource> = {
   tracker: 'tracker',
   mail: 'mail',
   findmy: 'findmy',
+  thing: 'thing',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',
@@ -353,15 +356,15 @@ function nextEvent(triggers: readonly AutomationTrigger[]): string | null {
 }
 
 /**
- * What Find My triggers wait for, in their own words after “Next run”: “when Mara Visser arrives at Home”, two joined
+ * What monitoring and Find My triggers wait for, in their own words after “Next run”: “when Mara Visser arrives at Home”, two joined
  * with “or”. Null without one.
  */
-function findMyNext(triggers: readonly AutomationTrigger[]): string | null {
+function nextWhen(triggers: readonly AutomationTrigger[]): string | null {
   const whens = [
     ...new Set(
       triggers.flatMap((t) => {
-        if (t.kind !== 'findmy') return [];
-        const text = findMyWhenText(t);
+        const text = t.kind === 'findmy' ? findMyWhenText(t) : t.kind === 'thing' ? thingWhenText(t) : null;
+        if (!text) return [];
         return [text.charAt(0).toLowerCase() + text.slice(1)];
       }),
     ),
@@ -380,7 +383,7 @@ export function nextRunText(
   if (a.nextRunAt) return AUTOMATION_PAGE_TEXT.nextRun(runMoment(a.nextRunAt, now, timeZone));
   const triggers = a.definition?.triggers ?? [];
   const event = nextEvent(triggers);
-  const when = findMyNext(triggers);
+  const when = nextWhen(triggers);
   if (event && when) return `${AUTOMATION_PAGE_TEXT.nextOn(event)} or ${when}`;
   if (event) return AUTOMATION_PAGE_TEXT.nextOn(event);
   if (when) return AUTOMATION_PAGE_TEXT.nextWhen(when);

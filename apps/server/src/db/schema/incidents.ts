@@ -3,10 +3,14 @@
  * or had a bad dot, opened after two passes in a row and ended after two passes without, kept 90 days. The push it made
  * (if any) is named so it can be withdrawn when the incident ends.
  */
-import type { IncidentNature } from '@whombat/core';
+import type { IncidentNature, ThingWatchEvent, ThingWatchStatus } from '@whombat/core';
 import { sql } from 'drizzle-orm';
-import { index, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { automations } from './automations';
 import { ts } from './common';
+import { conversations, messages } from './conversations';
+import { events } from './events';
+import { principals } from './principals';
 import { burrows } from './tenancy';
 
 export const incidents = pgTable(
@@ -52,3 +56,58 @@ export const incidents = pgTable(
 );
 
 export type IncidentRow = typeof incidents.$inferSelect;
+
+/** One claim per automation and incident. A due time keeps a delayed start across restarts. */
+export const incidentTriggers = pgTable(
+  'incident_triggers',
+  {
+    automationId: text('automation_id')
+      .notNull()
+      .references(() => automations.id, { onDelete: 'cascade' }),
+    incidentId: text('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    burrowId: text('burrow_id')
+      .notNull()
+      .references(() => burrows.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id),
+    dueAt: ts('due_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.automationId, t.incidentId] }),
+    index('incident_triggers_due_idx').on(t.burrowId, t.dueAt).where(sql`${t.dueAt} is not null`),
+  ],
+);
+
+/** One-time requests from Chat. A signed incident can claim a watch before its reply is posted. */
+export const thingWatches = pgTable(
+  'thing_watches',
+  {
+    id: text('id').primaryKey(),
+    burrowId: text('burrow_id')
+      .notNull()
+      .references(() => burrows.id, { onDelete: 'cascade' }),
+    thing: text('thing_id').notNull(),
+    name: text('name').notNull(),
+    event: text('event').$type<ThingWatchEvent>().notNull(),
+    status: text('status').$type<ThingWatchStatus>().notNull(),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    threadRootId: text('thread_root_id'),
+    messageId: text('message_id').references(() => messages.id, { onDelete: 'set null' }),
+    eventId: text('event_id').references(() => events.id),
+    startedAt: ts('started_at').notNull(),
+    endsAt: ts('ends_at').notNull(),
+    endedAt: ts('ended_at'),
+  },
+  (t) => [
+    index('thing_watches_running_idx').on(t.burrowId, t.thing, t.event).where(sql`${t.status} = 'watching'`),
+  ],
+);

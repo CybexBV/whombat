@@ -24,6 +24,7 @@ import { Plan } from './plan.js';
 import { Run } from './run.js';
 import { ScheduleCard, StoredScheduleCard } from './schedules.js';
 import { TaskCard } from './task-card.js';
+import { StoredThingWatchCard, ThingWatchCard } from './thing-watch.js';
 
 /** A citation under an agent answer: [n] source · detail. Each receipt deep-links. */
 export const Receipt = z.object({
@@ -243,6 +244,7 @@ export const MessageCard = z.discriminatedUnion('kind', [
    * A one-time Find My watch with Cancel (Whombat findmy-watch.md); server-made (`findmy_watch`), resolved on read.
    */
   FindMyWatchCard,
+  ThingWatchCard,
 ]);
 export type MessageCard = z.infer<typeof MessageCard>;
 export const CARD_KINDS = [
@@ -269,6 +271,7 @@ export const CARD_KINDS = [
   'council',
   'delegation',
   'findmy_watch',
+  'thing_watch',
 ] as const;
 
 export type PlanCard = z.infer<typeof PlanCard>;
@@ -306,6 +309,7 @@ export const StoredCard = z.discriminatedUnion('kind', [
   CouncilCard,
   DelegationCard,
   StoredFindMyWatchCard,
+  StoredThingWatchCard,
 ]);
 export type StoredCard = z.infer<typeof StoredCard>;
 
@@ -357,6 +361,7 @@ const CARD_KIND_NAMES: Readonly<Record<(typeof CARD_KINDS)[number], string>> = {
   council: 'A council',
   delegation: 'Tasks to hand over',
   findmy_watch: 'A watch',
+  thing_watch: 'A watch',
 };
 
 /** The first non-empty line of a string field, or null. */

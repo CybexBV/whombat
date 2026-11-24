@@ -334,6 +334,7 @@ describe('the assistant’s tools (AG-18)', () => {
       // Sharing a thread by link, always on the person's yes (Whombat share-links.md).
       'share_link',
       'start_guide',
+      'thing_watch',
       // 0.112.0 (CT-782): the assistant runs its person's Vault.
       'vault_add_server',
       'vault_ask',

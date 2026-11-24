@@ -77,6 +77,7 @@ export * from './spend.js';
 export * from './task-card.js';
 export * from './thing-logo.js';
 export * from './thing-page.js';
+export * from './thing-watch.js';
 export * from './tool-limits.js';
 export * from './tracker.js';
 export * from './usage.js';
