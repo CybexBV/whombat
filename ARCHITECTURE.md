@@ -846,7 +846,11 @@ published automation details read their definition and publisher from one versio
   and issues of watched repositories, report trackers' reports, matched incoming emails of watched mailboxes), plus
   schedules (cron in a time zone) and Run now. A `thing` trigger listens to signed starts, escalations or ends of
   incidents for one thing or selected kinds. The engine claims each incident once per automation. A delayed claim
-  survives a restart and runs only while the incident is still open, independent and unmuted. Webhook triggers are refused: nothing from outside reaches the box. Runs
+  survives a restart and runs only while the incident is still open, independent and unmuted, and while the check it
+  waited on (the trigger's, else the one that opened the incident) still counts on the thing as the incident watcher
+  reads it; a thing it can't read then is asked again a minute later. Until the release a box would go back to knows
+  them (`0027_incident_automation_watches` in `runtime_releases`), such automations aren't made and their runs wait, as
+  Find My's do. Webhook triggers are refused: nothing from outside reaches the box. Runs
   are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
   start nothing.
   Cron catch-up parses once per call, reuses at most three days' computed instants and searches them by position,
@@ -1671,16 +1675,23 @@ Setup and operation: `docs/github.md`.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row and ended after two passes
-  without, at the first of them; amber opens none, a problem that goes down becomes a `down` one. Opening signs
-  `thing.down` or `thing.problem`, ending `thing.back` (`ThingIncidentEvent`, by the Servers signer, no text), for
-  automations and one-time watches. In the person's Chat, `thing_watch` adds a Cancel card and stores a watch for one
-  thing to go down or come back. Matching incidents claim it in the same commit as the event. Whombat replies once in
-  the same thread, also when a watch expires, without starting an agent turn. A watch of a state already seen answers
+  without, at the first of them; amber opens none, a problem that goes down becomes a `down` one. A thing that left
+  the looks because it is held (kept quiet, or down because of something else) or not seen (its check couldn't run, or
+  it isn't checked) keeps its incident: only two passes that see it fine end it. On a Whombat's first incidents, what
+  the watcher's first pass after its start already saw opens as told, so the update itself pushes nothing. Opening
+  signs `thing.down` or `thing.problem`, ending `thing.back` (`ThingIncidentEvent`, by the Servers signer, no text), for
+  automations and one-time watches, and tells Home's `things` (an open page's “What happened” reads again). In the
+  person's Chat, `thing_watch` adds a Cancel card and stores a watch for one thing to go down or come back. Matching
+  incidents claim it in the same commit as the event. A `back` watch of a thing without an outage of its own (down
+  because of its server, or not seen) happens when the watcher sees it answering again. Whombat replies once in the same
+  thread, also when a watch expires, without starting an agent turn. A watch of a state already seen answers
   immediately. An incident open 10 minutes about which no research finding pushed is pushed once as the person's
-  “Needs you” row (“Plex is down”, “3 things are down: …”), with the others that started within 5 minutes of it; never
-  one something else took down (`DeskLook.causedBy`), one more than an hour old, nor past 6 pushes a day and 2 of a
-  thing. The tap opens the thing's look thread, else its page (the Inbox for several). When the last incident a push
-  named ends, its row is read and a managed box clears the phone's notification. The health
+  “Needs you” row (“Plex is down”, “3 things are down: …”), with the others that started within 5 minutes of it; only
+  while its thing is still bad on that pass, never while it is kept quiet or down because of something else
+  (`DeskLook.causedBy`, checked again in the push's commit, whose words name only what is left), nor one more than an
+  hour old, nor past 6 pushes a day and 2 of a thing. The tap opens the thing's look thread, else its page (the Inbox
+  for several). When the last incident a push named ends, its row is read and a managed box clears the phone's
+  notification. The health
   pass stores whether each check answered (`up`, 1 or 0; none when the check couldn't run), so the hourly roll-up keeps
   an hour's share; uptime weighs each point by the time it stands for, at most an hour. Every page (a connection's,
   device's, account's and a server's, whose down time is its offline alerts in the hosts service and its incidents)
