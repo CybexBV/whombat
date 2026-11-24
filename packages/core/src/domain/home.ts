@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { ChangeId, ConversationId, MessageId, PrincipalId, WidgetId } from '../ids.js';
+import { OnePasswordRemovalsBody } from '../vault/onepassword-view.js';
 import { AutomationId } from './automation.js';
 import { Count, JsonObject, Timestamp } from './common.js';
 import { CHAT_ROOMS, type ChatRoom } from './conversation.js';
@@ -100,7 +101,10 @@ export type NeedsYouGroup = z.infer<typeof NeedsYouGroup>;
  * `executeAt` = `at`, “Tonight at 03:00”), `decline`, `snooze` (`needsYou.snooze` until `at`, or tomorrow 09:00 local
  * when absent: “Remind me tomorrow”, “Not now”), `open` (go to `href`), `investigate` (“Look into it”: `chats.start` with
  * the item's subject), `ask` (Whombat first-day.md: the person's yes to what the assistant proposes — `text`, in their
- * words, goes to the assistant as their message in a new thread, “Yes, do it”).
+ * words, goes to the assistant as their message in a new thread, “Yes, do it”), `onepassword_removals` (Whombat
+ * onepassword-sync.md: “Remove them here too” or “Keep them here” for the entries whose 1Password items are gone —
+ * `connections.onePasswordRemovals` on the connection the item's `ref` names, with `removals`). An app that doesn't know
+ * a kind leaves that button out; the item's `href` still leads to where it is done.
  */
 export const NEEDS_YOU_ACTION_KINDS = [
   'approve',
@@ -110,6 +114,7 @@ export const NEEDS_YOU_ACTION_KINDS = [
   'open',
   'investigate',
   'ask',
+  'onepassword_removals',
 ] as const;
 export const NeedsYouActionKind = z.enum(NEEDS_YOU_ACTION_KINDS);
 export type NeedsYouActionKind = z.infer<typeof NeedsYouActionKind>;
@@ -124,6 +129,8 @@ export const NeedsYouAction = z.object({
   href: HomeHref.optional(),
   /** `ask`: what the person says to the assistant (“Yes, back up this Whombat to nas-01.”). */
   text: z.string().min(1).max(500).optional(),
+  /** `onepassword_removals`: the answer and the set it answers (`OnePasswordRemovalsBody`). */
+  removals: OnePasswordRemovalsBody.optional(),
 });
 export type NeedsYouAction = z.infer<typeof NeedsYouAction>;
 

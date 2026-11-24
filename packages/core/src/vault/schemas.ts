@@ -308,6 +308,33 @@ export const VAULT_TOTP_UNSET: Readonly<VaultSecretState> = Object.freeze({ set:
 /** A server whose commands sign in with the key alone (`VaultSshServer.password`). */
 export const VAULT_SSH_PASSWORD_UNSET: Readonly<VaultSecretState> = VAULT_TOTP_UNSET;
 
+/**
+ * Where else an entry is kept in step (docs/decisions/onepassword-sync.md): today only a linked 1Password vault. An
+ * enum rather than a literal, so an app meets a newer place as something it leaves out, not as a broken entry.
+ */
+export const VAULT_ENTRY_SOURCE_KINDS = ['onepassword'] as const;
+export const VaultEntrySourceKind = z.enum(VAULT_ENTRY_SOURCE_KINDS);
+export type VaultEntrySourceKind = z.infer<typeof VaultEntrySourceKind>;
+
+/**
+ * How the entry stands with that place: `synced` (both sides agree, since `syncedAt`), `pending` (a change waits for
+ * the next pass, or the entry hasn't gone there yet), `problem` (the last pass couldn't keep it in step: `problem`
+ * says why in the person's words).
+ */
+export const VAULT_ENTRY_SOURCE_STATES = ['synced', 'pending', 'problem'] as const;
+export const VaultEntrySourceState = z.enum(VAULT_ENTRY_SOURCE_STATES);
+export type VaultEntrySourceState = z.infer<typeof VaultEntrySourceState>;
+
+export const VaultEntrySource = z.object({
+  kind: VaultEntrySourceKind,
+  state: VaultEntrySourceState,
+  /** When both sides last agreed; null before the first time. */
+  syncedAt: Timestamp.nullable(),
+  /** The `problem` state's words (“This token can only read. …”); never a value of the entry. */
+  problem: z.string().min(1).max(300).optional(),
+});
+export type VaultEntrySource = z.infer<typeof VaultEntrySource>;
+
 /** An entry in YOUR ENTRIES. */
 export const VaultEntry = z.object({
   id: VaultEntryId,
@@ -338,6 +365,11 @@ export const VaultEntry = z.object({
    * Connections”. False for every other entry.
    */
   moveToConnections: z.boolean().default(false),
+  /**
+   * Kept in step with a vault elsewhere (a linked 1Password vault): its row's tag and its page's line. Absent: a
+   * Whombat-only entry, or an older runtime.
+   */
+  source: VaultEntrySource.optional(),
   lastUsedAt: Timestamp.nullable(),
   createdAt: Timestamp,
   updatedAt: Timestamp,

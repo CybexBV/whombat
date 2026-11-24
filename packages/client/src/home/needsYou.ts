@@ -10,6 +10,7 @@ import {
   type HomeRef,
   type NeedsYouAction,
   type NeedsYouItem,
+  type OnePasswordRemovalAnswer,
   QUIET_WORDS,
   type WatchItem,
 } from '@whombat/core';
@@ -23,6 +24,8 @@ export type NeedsYouIntent =
   | { type: 'snooze'; ref: HomeRef; until: string }
   | { type: 'open'; href: string }
   | { type: 'investigate'; text: string; subject: ChatSubject | null }
+  /** The 1Password guard's answer (`connections.onePasswordRemovals` on the connection the item is about). */
+  | { type: 'onePasswordRemovals'; connectionId: string; answer: OnePasswordRemovalAnswer; token: string }
   /** A button this client can't carry out (an approval without its number, an `open` without a place). */
   | { type: 'none' };
 
@@ -32,7 +35,7 @@ export type NeedsYouIntent =
  */
 export function needsYouIntent(
   item: Pick<NeedsYouItem, 'ref' | 'title' | 'body' | 'subject' | 'approvalNumber'>,
-  action: Pick<NeedsYouAction, 'kind' | 'at' | 'href' | 'text'>,
+  action: Pick<NeedsYouAction, 'kind' | 'at' | 'href' | 'text' | 'removals'>,
   now: Date | number,
   timeZone: string,
 ): NeedsYouIntent {
@@ -53,6 +56,10 @@ export function needsYouIntent(
     case 'ask':
       // The person's yes to the assistant's proposal, in their words (first-day.md).
       return action.text ? { type: 'investigate', text: action.text, subject: null } : { type: 'none' };
+    case 'onepassword_removals':
+      return item.ref.kind === 'connection' && action.removals
+        ? { type: 'onePasswordRemovals', connectionId: item.ref.id, ...action.removals }
+        : { type: 'none' };
   }
 }
 

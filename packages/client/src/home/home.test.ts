@@ -143,6 +143,21 @@ describe('Needs you (AP-1266)', () => {
     expect(investigateText(alert)).toMatch(/^The disk array/);
   });
 
+  it('answers the 1Password guard on the connection the item is about', () => {
+    const gone = item({ kind: 'connection', ref: { kind: 'connection', id: 'con_1p' } });
+    const removals = { answer: 'keep', token: 't1' } as const;
+    expect(needsYouIntent(gone, { kind: 'onepassword_removals', removals }, NOW, TZ)).toEqual({
+      type: 'onePasswordRemovals',
+      connectionId: 'con_1p',
+      answer: 'keep',
+      token: 't1',
+    });
+    expect(needsYouIntent(gone, { kind: 'onepassword_removals' }, NOW, TZ)).toEqual({ type: 'none' });
+    expect(needsYouIntent(item(), { kind: 'onepassword_removals', removals }, NOW, TZ)).toEqual({
+      type: 'none',
+    });
+  });
+
   it('draws a glyph by kind and the corner time; a snoozed item leaves with its count', () => {
     const rows = needsYouRows(
       [item(), item({ id: 'ny_2', kind: 'device_skill', severity: 'info' })],
