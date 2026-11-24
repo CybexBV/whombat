@@ -449,6 +449,11 @@ export function limitLine(
   };
 }
 
+/** The limit that applies now, under Change the limit in a line's ⋯: “Now 90 %”, “Each sensor has its own now”. */
+export function limitNow(view: Pick<LimitView, 'value' | 'unit'>): string {
+  return view.value === null ? 'Each sensor has its own now' : `Now ${limitText(view.value, view.unit)}`;
+}
+
 /** What was typed as a limit, or the problem to show under the field. */
 export function parseLimit(
   typed: string,
