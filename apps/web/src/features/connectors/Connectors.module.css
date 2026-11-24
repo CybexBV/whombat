@@ -509,6 +509,11 @@
   color: var(--warn);
 }
 
+/* What has stopped working (the 1Password sync failing): red is for Not working. */
+.meta[data-tone="bad"] {
+  color: var(--bad);
+}
+
 .monogram {
   display: inline-flex;
   align-items: center;

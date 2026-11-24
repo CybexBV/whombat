@@ -14,11 +14,18 @@
  * “Used by automations” and how its poller is doing. An AI gateway (Fusebox or
  * the generic one; Whombat ai-gateway.md AIG-01, AIG-05, AIG-06; AP-1117) has none of them either, but which tools go
  * through it, the pool's line and CLAUDE CODE AND CODEX with a switch per tool (`GatewayParts`); removing it says what
- * the server says when Fusebox couldn't be told (AIG-03, AP-1119). Settings' cards, the Google page's checks and footer,
- * the Vault's tool rows.
+ * the server says when Fusebox couldn't be told (AIG-03, AP-1119). 1Password (Whombat onepassword-sync.md) has none of
+ * the agent's parts and no last use, but KEPT IN STEP (`OnePasswordParts`), and Remove asks whether the entries it kept
+ * in step stay in the Vault. Settings' cards, the Google page's checks and footer, the Vault's tool rows.
  */
 import { createLink, useNavigate } from '@tanstack/react-router';
-import { ApiError, withBurrow } from '@whombat/client';
+import {
+  ApiError,
+  disconnectQuery,
+  ONEPASSWORD_APP_TEXT,
+  ONEPASSWORD_DISCONNECT_OPTIONS,
+  withBurrow,
+} from '@whombat/client';
 import {
   accessChoices,
   type ChoiceSetting,
@@ -57,6 +64,7 @@ import {
   scopeListWords,
 } from '@whombat/core/domain';
 import { formatAgo } from '@whombat/core/text';
+import type { OnePasswordDisconnectChoice } from '@whombat/core/vault';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { useManaged } from '../../app/providers';
 import { Button, ButtonLink } from '../../components/Button';
@@ -95,6 +103,7 @@ import {
   usedByAgents,
   usedByAutomations,
   usedByGateway,
+  usedByVaultSync,
 } from './catalog';
 import {
   GatewayPoolLine,
@@ -103,6 +112,7 @@ import {
   useGatewayOf,
   useGatewayPool,
 } from './GatewayParts';
+import { OnePasswordSection } from './OnePasswordParts';
 import { useConnectionWords } from './useConnectionWords';
 
 const RouterButtonLink = createLink(ButtonLink);
@@ -199,6 +209,8 @@ export function ConnectionPage({
       />
       {/* Claude Code and ChatGPT through it (AIG-05, AP-1117): the switches, where the runtime has `ai.gateway`. */}
       {gateway && <GatewaySwitchesSection burrow={burrow} entry={entry} conn={conn} />}
+      {/* The Vault kept in step with a 1Password vault: the sync's state, Sync now and the guard's answers. */}
+      {usedByVaultSync(entry) && <OnePasswordSection burrow={burrow} conn={conn} />}
       <SignInSection burrow={burrow} entry={entry} conn={conn} leave={leave} againAsked={againAsked} />
       {usedByAgents(entry) && (
         <ToolsSection burrow={burrow} conn={conn} tools={data.tools} truncated={data.truncated} />
@@ -406,8 +418,13 @@ function ConnectionSection({
                 <dd className={k.mono}>{conn.handle}</dd>
               </>
             )}
-            <dt>LAST USED</dt>
-            <dd>{conn.lastUsedAt ? formatAgo(conn.lastUsedAt, new Date(), LOCAL_TZ) : 'Not yet'}</dd>
+            {/* The Vault's sync isn't used by anyone: KEPT IN STEP says when it last checked. */}
+            {!usedByVaultSync(entry) && (
+              <>
+                <dt>LAST USED</dt>
+                <dd>{conn.lastUsedAt ? formatAgo(conn.lastUsedAt, new Date(), LOCAL_TZ) : 'Not yet'}</dd>
+              </>
+            )}
           </dl>
           {problem && (
             <p className={c.error} role="alert">
@@ -752,6 +769,8 @@ function SignInSection({
   const [codeAsked, setCodeAsked] = useState<string | null>(null);
   const [codeTrouble, setCodeTrouble] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  // Removing the Vault's sync: whether the entries it kept in step stay in the Vault (the default) or go too.
+  const [vaultEntries, setVaultEntries] = useState<OnePasswordDisconnectChoice>('keep');
   const [problem, setProblem] = useState<string | null>(null);
   const [login, setLogin] = useState<StartNextcloudLoginResponse | null>(null);
   const [service, setService] = useState<ServiceLoginStarted | null>(null);
@@ -940,7 +959,11 @@ function SignInSection({
   async function remove() {
     setProblem(null);
     try {
-      const result = await disconnect.mutateAsync({ params: { burrow, connectionId: conn.id } });
+      const query = disconnectQuery(entry, vaultEntries);
+      const result = await disconnect.mutateAsync({
+        params: { burrow, connectionId: conn.id },
+        ...(query ? { query } : {}),
+      });
       if (result.status !== 'ok') return;
       // A Fusebox that didn't answer keeps Whombat's client: the server says to remove it there (AIG-03, AP-1119), and
       // that stays up until it is read.
@@ -1040,7 +1063,14 @@ function SignInSection({
                       {askedAny ? `Allow on ${entry.name}…` : 'Reconnect'}
                     </Button>
                   ) : null}
-                  <Button variant="ghost" size="sm" onClick={() => setConfirm(true)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setVaultEntries('keep');
+                      setConfirm(true);
+                    }}
+                  >
                     Remove
                   </Button>
                 </span>
@@ -1142,7 +1172,29 @@ function SignInSection({
                 </div>
               </form>
             )}
-            {confirm && (
+            {confirm && usedByVaultSync(entry) && (
+              // The Vault's sync asks what becomes of the entries it kept in step; 1Password itself never changes.
+              <div className={c.appForm} data-remove="vault-sync">
+                <p className={c.hint}>{ONEPASSWORD_APP_TEXT.removeAsk(conn.label)}</p>
+                <OptionCards
+                  name={`${ids}-vault-entries`}
+                  label={ONEPASSWORD_APP_TEXT.removeChoice}
+                  options={ONEPASSWORD_DISCONNECT_OPTIONS}
+                  value={vaultEntries}
+                  disabled={busy}
+                  onChange={(v) => setVaultEntries(v === 'remove' ? 'remove' : 'keep')}
+                />
+                <div className={c.formActions}>
+                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => void remove()}>
+                    Remove {conn.label}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            {confirm && !usedByVaultSync(entry) && (
               <div className={c.formActions}>
                 <span className={c.hint}>
                   {usedByGateway(entry)
