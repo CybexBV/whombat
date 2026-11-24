@@ -210,6 +210,12 @@ export const EVENT_TYPES = {
   // A person's place changed on a Find My connection an automation listens to (`FindMyPlaceChanged`: the connection,
   // the person's id and name, the place's words before and now; never a street or coordinates). Automations start on it.
   'findmy.place_changed': 'System',
+  // Whombat monitoring.md MON-06: an incident opened (`thing.down`: it doesn't answer; `thing.problem`: its dot turned
+  // bad) or ended (`thing.back`), signed by the Servers signer (`ThingIncidentEvent`: the thing, its name, the incident,
+  // its words, when; no text, it shows in no feed). Automations start on them.
+  'thing.down': 'System',
+  'thing.problem': 'System',
+  'thing.back': 'System',
   // Contracts 3.15 (Whombat assistant-settings.md): the assistant asked to change one of the person's settings and it
   // went ahead or was approved (`{op, deferred}`, hidden: the op signs what it changed itself).
   'setting.changed': 'System',

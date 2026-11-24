@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
 import { JsonObject, Timestamp } from './common.js';
+import { ThingUptime } from './incidents.js';
 import { NoticeQuiet } from './quiet.js';
 
 const N = z.number().nullable();
@@ -1336,6 +1337,11 @@ export const HostServerDetail = z.object({
   libvirt: HostLibvirtDetail.optional(),
   /** A Mac's own facts, its screen and its helper: on a Mac. */
   macos: HostMacosDetail.optional(),
+  /**
+   * Its week in one line (Whombat monitoring.md MON-09; session minor 9), from its offline alerts and Whombat's
+   * incidents: “Up 99.6 % this week · down 3 times, 41 min”. Absent: Whombat has nothing to tell.
+   */
+  uptime: ThingUptime.optional(),
 });
 export type HostServerDetail = z.infer<typeof HostServerDetail>;
 

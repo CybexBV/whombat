@@ -59,6 +59,7 @@ import { startGuide } from '../guides/commands';
 import { doneInputFor, reportDoneCommand } from '../home/done';
 import { reportChange } from '../home/reports';
 import { pinWidget } from '../home/widgets';
+import { watchHistoryTool, watchStatusTool } from '../incidents/agent';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK, reportLook } from '../looks/research';
 import { whombatBackupTool } from '../managed/backup-tool';
@@ -664,6 +665,9 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     run(ctx, reportDoneCommand, await doneInputFor(ctx.services.db, ctx.dispatch, input.summary), () => ({})),
   // What Whombat watches, switched only on the person's word (on-purpose.md).
   watch_checks: (ctx, input) => watchChecksTool(ctx, input),
+  // How everything is and what went wrong, read-only (monitoring.md MON-10).
+  watch_status: (ctx) => watchStatusTool(ctx),
+  watch_history: (ctx, input) => watchHistoryTool(ctx, input),
   // What the assistant found out about a look (look-research.md LR-05): listed and run only in a look's turns.
   look_report: async (ctx, input) => {
     if (!(await looksInTurn(ctx.services.db, ctx.agentId, ctx.dispatch.id))) throw forbidden(NOT_A_LOOK);

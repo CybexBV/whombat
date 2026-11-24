@@ -2135,6 +2135,7 @@ type DeskLook struct {
 	IgnoreWords *string           `json:"ignoreWords,omitempty"`
 	Question    *string           `json:"question,omitempty"`
 	Research    *DeskLookResearch `json:"research,omitempty"`
+	CausedBy    *DeskLookCausedBy `json:"causedBy,omitempty"`
 }
 
 // DeskStepState is one of "done", "now", "next".
@@ -2297,6 +2298,11 @@ type DeskLookResearch struct {
 	ConversationID *string  `json:"conversationId,omitempty"`
 	ThreadRootID   *string  `json:"threadRootId,omitempty"`
 	At             string   `json:"at"`
+}
+
+type DeskLookCausedBy struct {
+	Thing string `json:"thing"`
+	Name  string `json:"name"`
 }
 
 // DeskBoxPartKey is one of "whombat", "agent".

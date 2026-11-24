@@ -78,6 +78,12 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
 export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 8 };
 
 /**
+ * Session protocol minor (major 5) that reads a thing's history (`things.history`) and its week in one line (a page's
+ * `uptime`, Whombat monitoring.md MON-09); an app checks it before it asks.
+ */
+export const THING_HISTORY_MINOR = 9;
+
+/**
  * Session protocol minor (major 5) that links a 1Password vault (the catalog's 1Password entry and its connection
  * page); an older session's catalog leaves 1Password out.
  */

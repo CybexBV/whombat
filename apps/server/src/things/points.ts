@@ -1,6 +1,6 @@
 /**
  * Figures over time per connection (connection-pages.md CP-15; dashboards.md DS-11; dashboards-server.md DS-S03): the
- * health pass stores its check's response time (`rtt_ms`, null when it failed), the machine's disk (`disk_pct`,
+ * health pass stores its check's response time (`rtt_ms`, null when it failed) and whether it answered (`up`), the machine's disk (`disk_pct`,
  * `disk_gb`), Home Assistant's log errors and database (`log_err`, `log_err_top`, `db_mb`), UniFi's internet line,
  * gateway and clients, a NAS's used space (`nas_used_gb`), a device's numeric readings (`r_<key>`). Kept 30 days: 5-minute points for 48 hours, then one an
  * hour (their average, on the hour); the hourly job rolls them up and removes older ones. A page reads them back on its
@@ -21,6 +21,11 @@ export const POINTS_FINE_MS = 48 * 3600_000;
 
 /** The response time key (ms; null: the check failed). */
 export const RTT_KEY = 'rtt_ms';
+/**
+ * Whether the check answered (docs/decisions/monitoring.md MON-09): 1 or 0 each pass, none when Whombat couldn't run
+ * it. An hour rolled up keeps the share it answered, so short outages stay in the uptime.
+ */
+export const UP_KEY = 'up';
 /** The machine it runs on: its disk used, in percent and in GB (CP-08). */
 export const DISK_PCT_KEY = 'disk_pct';
 export const DISK_GB_KEY = 'disk_gb';

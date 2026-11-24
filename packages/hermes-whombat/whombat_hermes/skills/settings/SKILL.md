@@ -81,7 +81,7 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 - `agent.may` Settings → (your name) → What (your name) may do: every permission: servers, connections, the Vault, the local network and the risky keys
 - `agent.council` Settings → (your name) → Council: the councils (your name) can ask: which AIs sit on each, with which model and effort, and the default
 
-### Connections, servers and services — `references/connections.md` (66 settings)
+### Connections, servers and services — `references/connections.md` (67 settings)
 - `connections` Settings → Connections: your accounts (Google, Microsoft, mail), apps and services, and what needs you there
 - `overview` Overview: every server and service with its own page: how it is doing, what Whombat watches, its settings
 

@@ -1,12 +1,13 @@
 /**
  * Thing pages over REST and sessions (contracts CT-390…CT-393, CT-397, CT-1063; connection-pages.md CP-04, CP-08, CP-12;
  * dashboards.md DS-03; quiet-notices.md QN-10…QN-15): the page over its range, its actions, what a connection runs on,
- * and Ignore, Remind me tomorrow and What Whombat watches. The managed dispatcher runs
+ * Ignore, Remind me tomorrow, What Whombat watches and a thing's history. The managed dispatcher runs
  * these same handlers.
  */
 import { api, parseThingId } from '@whombat/core';
 import { viewerOf } from '../connections/routes';
 import { setServerWatchLimit } from '../hosts/quiet';
+import { thingHistory } from '../incidents/history';
 import { badRequest, forbidden } from '../lib/errors';
 import { type RouteDef, route } from '../routes/define';
 import { runThingAction } from './actions';
@@ -60,6 +61,17 @@ export const thingRoutes: RouteDef[] = [
       ctx.services,
       await viewerOf(ctx),
       thingParam(ctx.params.thing),
+      ctx.access.burrow.timeZone,
+    );
+  }),
+  // What went wrong over 30 or 90 days (monitoring.md MON-09).
+  route(api.things.history, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can see pages here.');
+    return thingHistory(
+      ctx.services,
+      await viewerOf(ctx),
+      thingParam(ctx.params.thing),
+      ctx.query.days ?? 30,
       ctx.access.burrow.timeZone,
     );
   }),

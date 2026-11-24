@@ -55,6 +55,7 @@ import {
   RTT_KEY,
   readPoints,
   recordPoints,
+  UP_KEY,
 } from '../things/points';
 import { applyQuiet, isSkipped, lineKey, type Skipped } from '../things/quiet/apply';
 import { notWatched } from '../things/quiet/defaults';
@@ -269,6 +270,8 @@ export async function checkConnectionHealth(
     : Promise.all([thingQuiet(services.db, burrowId, thing), thingStates(services.db, thing)]);
   let glance: ConnectionGlance;
   let points: Record<string, number | null> = { [RTT_KEY]: null };
+  // Whether it answered (monitoring.md MON-09): 1 or 0, none when the check couldn't run or Whombat couldn't ask.
+  let up: 0 | 1 | undefined;
   // Its lines as its page would show them (QN-S03), and the checks this pass didn't read (QN-S04).
   let lines: LooseNotice[] = [];
   let skipped: Skipped = [];
@@ -296,9 +299,12 @@ export async function checkConnectionHealth(
       credential,
       connectionId: row.id,
     });
+    up = outcome.unseen ? undefined : outcome.ok || outcome.refused ? 1 : 0;
+    // A check Whombat couldn't run says nothing of how it answers: no response time either.
+    if (outcome.unseen) points = {};
     if (outcome.uptime !== undefined) {
       const seen = uptimeSeen(outcome.uptime, row, now, await zoneOf(services, row));
-      points = seen.points;
+      if (!outcome.unseen) points = seen.points;
       glance = { ...seen.glance, status: outcome.unseen ? 'unknown' : 'ok' };
       lines = seen.notices ?? [];
       skipped = seen.skipped ?? [];
@@ -377,6 +383,8 @@ export async function checkConnectionHealth(
       lines = [signinNotice(row.label)];
       skipped = onlyRead('conn.signin');
     } else {
+      // A check that answered and failed after stays answered.
+      up ??= 0;
       glance = {
         ...failed('offline', (await unansweredWords(services, row, now)) ?? 'Couldn’t reach it', previous),
         outcome: 'offline',
@@ -430,7 +438,7 @@ export async function checkConnectionHealth(
       )
       .returning({ id: catalogConnections.id });
     if (!updated) return;
-    await recordPoints(session.tx, row.id, now, points);
+    await recordPoints(session.tx, row.id, now, { ...points, [UP_KEY]: up });
     await writePass(session.tx, burrowId, thing, result);
     if (!changed) return;
     publishHomeChanged(session, audience ?? (await homeAudience(session, row.burrowId)), ['things', 'watch']);

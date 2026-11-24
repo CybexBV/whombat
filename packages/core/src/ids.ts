@@ -117,6 +117,8 @@ export const ID_PREFIXES = {
   doneTask: 'dnt',
   /** What the assistant found out about a look (Whombat look-research.md LR-02): one per look while it stays. */
   lookResearch: 'lkr',
+  /** An outage or a bad dot of a server, connection or device, kept 90 days (Whombat monitoring.md MON-06, MON-09). */
+  incident: 'inc',
   /** A plan for an automation the agent proposed in Chat, which the person turns on or not (Whombat automation-chat.md). */
   automationPlan: 'apl',
   /** A tracker's feature request put to the person (Whombat report-trackers.md TA-44, contracts 3.12.0, CT-1636). */

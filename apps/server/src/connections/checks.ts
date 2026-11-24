@@ -63,8 +63,6 @@ export interface CheckCredential {
 export const NO_CREDENTIAL: CheckCredential = { headers: {}, query: {} };
 
 export interface CheckOutcome {
-  /** No observation is available for this pass. */
-  unseen?: true;
   /** The hub's reading for a saved Website or address connection. */
   uptime?: UptimeHubCheck | null;
   ok: boolean;
@@ -94,6 +92,11 @@ export interface CheckOutcome {
    * every later check that passed (`recordFromCheck`).
    */
   fromCheck?: Record<string, string>;
+  /**
+   * Whombat couldn't run the check now (the server it runs from isn't reporting): the time counts neither as up nor as
+   * down (docs/decisions/monitoring.md MON-13).
+   */
+  unseen?: true;
 }
 
 function withQuery(url: string, query: Record<string, string>): string {

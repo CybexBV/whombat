@@ -499,7 +499,8 @@ describe('the range and the points (DS-03, DS-11)', () => {
           'answer-time',
           'last-used',
         ]);
-        expect(answers?.kind === 'list' && answers.items[0]?.figure?.note).toBe('8 didn’t answer');
+        // Eight checks unanswered, each standing for an hour at most: how long it didn't answer.
+        expect(answers?.kind === 'list' && answers.items[0]?.figure?.note).toMatch(/\b8 h$/);
         const trend = panels.find((x) => x.id === 'week');
         expect(trend?.kind === 'chart' && trend.labels).toHaveLength(7);
         expect(trend?.kind === 'chart' && trend.figure?.value).toMatch(/^1\d\d ms$/);

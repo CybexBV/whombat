@@ -9,12 +9,15 @@
  *   (connection-pages.md CP-15, dashboards.md DS-11).
  * - **Looks**, every minute: the assistant looks into what needs a look by itself (look-research.md LR-01…LR-03,
  *   `looks/watch.ts`).
+ * - **Incidents**, every minute: outages kept from the same looks, and one push when something important went wrong
+ *   (monitoring.md MON-06, `incidents/watch.ts`).
  *
  * Kept out of the `Services` interface (`homeJobsFor`), like the connection pool.
  */
 import { and, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { CareWatcher } from '../care/watch';
 import { approvals } from '../db/schema/index';
+import { INCIDENTS_WATCH_MS, IncidentWatcher } from '../incidents/watch';
 import { LookWatcher, WATCH_MS } from '../looks/watch';
 import type { Services } from '../services';
 import { rollUpPoints } from '../things/points';
@@ -54,10 +57,12 @@ class HomeJobs {
   #running = new Set<Promise<unknown>>();
   readonly #looks: LookWatcher;
   readonly #care: CareWatcher;
+  readonly #incidents: IncidentWatcher;
 
   constructor(private readonly services: Services) {
     this.#looks = new LookWatcher(services);
     this.#care = new CareWatcher(services);
+    this.#incidents = new IncidentWatcher(services);
   }
 
   start(): void {
@@ -82,6 +87,7 @@ class HomeJobs {
       job('home.looks', WATCH_MS, () => this.#looks.pass()),
       // A care plan for a server that was just added (care-plan.md).
       job('home.care', WATCH_MS, () => this.#care.pass()),
+      job('home.incidents', INCIDENTS_WATCH_MS, () => this.#incidents.pass()),
     );
   }
 

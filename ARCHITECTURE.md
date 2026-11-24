@@ -1642,6 +1642,21 @@ Setup and operation: `docs/github.md`.
   it while it waits, leaves the server's missing backups to it, and never counts it against the day. A look that goes, gets worse or gains a line it didn't cover ends its research, and its
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
   back at once, without a message or a turn.
+- **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
+  beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
+  for each thing whose look is bad (`problem`) or down, opened on the second pass in a row and ended after two passes
+  without, at the first of them; amber opens none, a problem that goes down becomes a `down` one. Opening signs
+  `thing.down` or `thing.problem`, ending `thing.back` (`ThingIncidentEvent`, by the Servers signer, no text), for
+  automations. An incident open 10 minutes about which no research finding pushed is pushed once as the person's
+  “Needs you” row (“Plex is down”, “3 things are down: …”), with the others that started within 5 minutes of it; never
+  one something else took down (`DeskLook.causedBy`), one more than an hour old, nor past 6 pushes a day and 2 of a
+  thing. The tap opens the thing's look thread, else its page (the Inbox for several). When the last incident a push
+  named ends, its row is read and a managed box clears the phone's notification; nothing says it's back. The health
+  pass stores whether each check answered (`up`, 1 or 0; none when the check couldn't run), so the hourly roll-up keeps
+  an hour's share; uptime weighs each point by the time it stands for, at most an hour. Every page (a connection's,
+  device's, account's and a server's, whose down time is its offline alerts in the hosts service and its incidents)
+  says its week in one line (`uptime`, also one of a page's facts), `things.history` lists a thing's incidents over 30
+  or 90 days, and the assistant reads all of it with `watch_status` and `watch_history` (`incidents/agent.ts`).
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the

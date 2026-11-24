@@ -46,6 +46,7 @@ import { ChangeId, ConnectionId, DeviceSkillProposalId } from '../ids.js';
 import { Timestamp } from './common.js';
 import { HomeHref, ThingKind, ThingStatus } from './home.js';
 import { HostSeriesRange } from './hosts.js';
+import { ThingUptime } from './incidents.js';
 import { LookResearch } from './look-research.js';
 import { NoticeCheck, NoticeIgnore, NoticeNature, NoticeQuiet, NoticeSubject } from './quiet.js';
 import { ThingLogo } from './thing-logo.js';
@@ -938,6 +939,11 @@ export const ThingPage = z.object({
    * looked (an older Whombat).
    */
   research: LookResearch.optional(),
+  /**
+   * Its week in one line (Whombat monitoring.md MON-09; session minor 9): “Up 99.6 % this week · down 3 times, 41 min”.
+   * The same words are one of `facts`, so an older app shows them too. Absent: Whombat has nothing to tell yet.
+   */
+  uptime: ThingUptime.optional(),
 });
 export type ThingPage = z.infer<typeof ThingPage>;
 

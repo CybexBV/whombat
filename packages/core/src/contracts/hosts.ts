@@ -292,7 +292,8 @@ export const hostsEndpoints = {
     id: 'hosts.listAlerts',
     method: 'GET',
     path: '/burrows/:burrow/hosts/alerts',
-    summary: 'Alerts, open ones most severe first; resolved ones newest first.',
+    summary:
+      'Alerts, open ones most severe first; resolved ones newest first. With `resolved` or `all`, `since`, `until` and `before` bound the period (the hosts service keeps 90 days); `rule` is a rule or a prefix ending in a dot, `q` words in the title or detail.',
     params: B,
     query: z.object({
       state: z.enum(['open', 'resolved', 'all']).optional(),
@@ -300,6 +301,14 @@ export const hostsEndpoints = {
       severity: z.enum(['critical', 'warning']).optional(),
       limit: z.coerce.number().int().min(1).max(1000).optional(),
       before: z.iso.datetime({ offset: true }).optional(),
+      since: z.iso.datetime({ offset: true }).optional(),
+      until: z.iso.datetime({ offset: true }).optional(),
+      rule: z
+        .string()
+        .max(120)
+        .regex(/^[a-z0-9_.-]+$/)
+        .optional(),
+      q: z.string().max(200).optional(),
     }),
     response: HostAlertsResponse,
   }),

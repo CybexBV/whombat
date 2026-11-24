@@ -159,6 +159,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The hub check id and when the hub last took new probe settings, in two nullable columns on catalog_connections."
+    },
+    "0025_incidents": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Incidents (docs/decisions/monitoring.md MON-06, MON-09): a new table incidents, one row per stretch a server, connection or device was down or had a bad dot, with its words, cause and the push to withdraw, cascading with the burrow and kept 90 days. The release before it never reads the table."
     }
   }
 }

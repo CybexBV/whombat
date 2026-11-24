@@ -261,6 +261,7 @@ export const WORK_SETTINGS = {
   'things.setWatchLimit': NONE,
   'things.setWatch': change('overview', 'Stop or start watching a check on a connection or device'),
   'things.watch': read('overview', 'Read what Whombat watches on a connection or device'),
+  'things.history': read('overview', 'Read what went wrong with a server, connection or device lately'),
 
   'tracker.decide': NONE,
   'tracker.item': NONE,

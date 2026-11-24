@@ -723,6 +723,11 @@ export const DeskLook = z.object({
    * in Talk; `fixing` and `fixed` say where the step is. Absent or `failed`: the card as before.
    */
   research: LookResearch.optional(),
+  /**
+   * Down because what it runs on is down (Whombat monitoring.md MON-07): that thing's key and name. Such a look makes
+   * no incident or push of its own.
+   */
+  causedBy: z.object({ thing: text(120), name: text(40) }).optional(),
 });
 export type DeskLook = z.infer<typeof DeskLook>;
 

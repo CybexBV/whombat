@@ -27,11 +27,23 @@ describe('the page of a connection without a kind', () => {
     expect(slotProblems(view)).toEqual([]);
     const [answers, week] = view.panels;
     expect(answers?.kind === 'list' && answers.items.map((i) => [i.title, i.figure])).toEqual([
-      ['Answers', { value: '98.8 %', note: '2 didn’t answer', tone: 'warn' }],
+      ['Answers', { value: '98.8 %', note: 'Didn’t answer for 2 h', tone: 'warn' }],
       ['Answers in', { value: '200 ms', note: '+100 % on last week' }],
     ]);
     expect(week?.kind === 'chart' && week.series[0]?.values).toEqual([200, 200, 200, 200, 200, 200, 200]);
     expect(week?.kind === 'chart' && week.stats?.[0]?.[0]).toMatchObject({ text: '+100 %' });
+  });
+
+  it('takes whether its checks answered from `up` once there are such points', () => {
+    // Older hours by their response time; the last day by `up`, where two hours answered half the time.
+    const rtt = checks(7 * 24, () => 200);
+    const up = checks(24, (h) => (h === 3 || h === 4 ? 0.5 : 1));
+    const view = genericSlots({ status: 'active', glance: null }, rtt, NOW, TZ, up);
+    const [answers] = view.panels;
+    expect(answers?.kind === 'list' && answers.items[0]?.figure).toMatchObject({
+      value: '99.4 %',
+      tone: 'warn',
+    });
   });
 
   it('leaves out what it has no readings for, and says when it is signed out', () => {

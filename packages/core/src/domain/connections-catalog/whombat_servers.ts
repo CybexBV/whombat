@@ -956,11 +956,15 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
   },
   {
     name: 'alerts_list',
-    title: 'Open alerts',
+    title: 'Alerts',
     description:
-      'Open alerts and hints of one server or all, most severe first, with whether someone acknowledged them.',
+      'Alerts of one server or all. Open ones (the default) with the hints, most severe first, with whether someone acknowledged them; resolved ones or all of them, newest first, with when they opened and resolved, optionally since a time.',
     access: 'read',
-    inputSchema: obj({ server: str('Only this server (optional)') }),
+    inputSchema: obj({
+      server: str('Only this server (optional)'),
+      state: str('open (default), resolved or all', { enum: ['open', 'resolved', 'all'] }),
+      since: str('With resolved or all: only alerts since this time (ISO 8601, like 2026-11-20T00:00:00Z)'),
+    }),
   },
   {
     name: 'alert_snooze',
