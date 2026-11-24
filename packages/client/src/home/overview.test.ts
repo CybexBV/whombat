@@ -106,6 +106,15 @@ describe('a connection’s tile (OVP-09)', () => {
     );
     const by = new Map(out.map((t) => [t.row.id, t]));
     expect(by.get('plex')).toMatchObject({ held: 'cause', line: { text: cause.words, tone: 'mut' } });
+    // Its subtitle carries the same words as its own line: the foot leaves them out.
+    const [again] = overviewTiles(
+      [row({ id: 'plex', subtitle: `Media · ${cause.words}` })],
+      [{ id: 'plex', causedBy: cause }],
+      NOW,
+      TZ,
+      'Dusty',
+    );
+    expect(again?.what).toBe('Media');
     expect(by.get('nas')).toMatchObject({ held: 'quiet', line: { text: 'Quiet until 23:00', tone: 'mut' } });
     // A quiet time that is over says nothing of it.
     expect(by.get('ha')?.held).toBeNull();

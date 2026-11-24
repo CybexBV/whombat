@@ -155,7 +155,16 @@ export function overviewTiles(
     }
     const at = thing?.usedAt;
     const used = at ? upFirst(usedPhrase(at, now, timeZone)) : null;
-    const what = usedSubtitle ? null : row.subtitle;
+    // The held words are the line already: the foot doesn't say them again (a thing down because of something else
+    // has them as its own line too).
+    const what = usedSubtitle
+      ? null
+      : heldWords && row.subtitle
+        ? row.subtitle
+            .split(' · ')
+            .filter((part) => part !== heldWords)
+            .join(' · ') || null
+        : row.subtitle;
     return {
       row,
       line,
