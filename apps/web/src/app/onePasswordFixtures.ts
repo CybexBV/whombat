@@ -308,7 +308,12 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
       const data = (await response.json()) as HomeOverview;
       const item = card();
       if (!item || !data.needsYouList) return json(data);
-      return json({ ...data, needsYouList: [item, ...data.needsYouList] });
+      // It needs Mara: the one count follows.
+      return json({
+        ...data,
+        summary: { ...data.summary, needsYou: data.summary.needsYou + 1 },
+        needsYouList: [item, ...data.needsYouList],
+      });
     },
   };
 
