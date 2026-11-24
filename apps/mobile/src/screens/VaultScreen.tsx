@@ -2,13 +2,14 @@
  * The Vault on iPhone and Android (docs/decisions/vault.md VT-73; the final design,
  * docs/design-handoff/council-ui-2026-11/16-final/vault/, docs/decisions/final-settings-vault-files-usage.md): the
  * title and one line, “Add to Vault” on a line of its own (AP-718: every template but an SSH key, which is added on the
- * web), your entries in one card — each its lock, name and one line: how its check went and when it was last used, or,
+ * web), your entries in one card — each its lock, name (with the 1Password tag when it is kept in step there) and one
+ * line: how its check went and when it was last used, or,
  * only for a failing one, why it isn't working in the Not working colour — opening its entry screen, where a secret is
  * only ever replaced, never shown. Then what the Vault never shows, what saving from chat does where the Whombat does it
  * (VS-08; AP-4040) and the home network list, read-only. Loading, empty and failed reads each have a card of their own.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { VAULT_ROW_TEXT, vaultRowLine } from '@whombat/client';
+import { VAULT_ROW_TEXT, vaultEntryTag, vaultRowLine } from '@whombat/client';
 import { useVault, useVaultNetworks } from '@whombat/client/react';
 import { VAULT_COPY } from '@whombat/core/vault';
 import { useMemo, useState } from 'react';
@@ -50,7 +51,14 @@ export function VaultScreen({ navigation, route }: Props) {
         const line = entry
           ? vaultRowLine(entry, { now, timeZone, agent: words.name })
           : { text: row.meta, failing: false };
-        return { ...row, line, accessibilityLabel: `${row.name}, ${line.text}. ${row.meta}` };
+        // Kept in step with 1Password: its tag after the name, read with it.
+        const tag = entry ? vaultEntryTag(entry) : null;
+        return {
+          ...row,
+          line,
+          tag,
+          accessibilityLabel: `${tag ? `${row.name}, ${tag}` : row.name}, ${line.text}. ${row.meta}`,
+        };
       }),
     [query.data, now, timeZone, agent, words.name],
   );
@@ -127,6 +135,7 @@ export function VaultScreen({ navigation, route }: Props) {
                 first={i === 0}
                 icon={Lock}
                 title={r.name}
+                tag={r.tag}
                 line={r.line.text}
                 bad={r.line.failing}
                 label={r.accessibilityLabel}

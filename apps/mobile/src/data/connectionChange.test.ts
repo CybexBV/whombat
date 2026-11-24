@@ -58,6 +58,10 @@ describe('a connection’s sign-in on the phone', () => {
   it('asks before Remove, saying what stops', () => {
     expect(removeAsk(entry('homeassistant'), { label: 'Home' }, 'Dusty')).toContain('Dusty');
     expect(removeAsk(entry('tracker'), { label: 'Acme Desk' }, 'Dusty')).toContain('Automations');
+    // 1Password stops keeping the Vault in step, and isn't changed itself: never the agent's or automations' words.
+    const onepassword = removeAsk(entry('onepassword'), { label: '1Password' }, 'Dusty');
+    expect(onepassword).toMatch(/^Remove 1Password\?/);
+    expect(onepassword).not.toMatch(/Dusty|Automations/);
   });
 
   it('says a key made at Look only stays that way once raised, where the service limits it (CS-11)', () => {

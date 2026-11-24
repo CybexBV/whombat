@@ -9,10 +9,11 @@
  * covers. An old `secret` entry (packs used it; Whombat skill-store.md SST-09) has one line that nothing uses it and
  * Remove from Vault (skill-store.md AP-4156, AP-4157). Editing and removing other entries, an SSH key's servers and host
  * keys stay on the web; a production server carries PRODUCTION (AC-11), read-only.
+ * An entry kept in step with 1Password says how it stands there under its name (Whombat onepassword-sync.md).
  * Outcomes: an alert only when something didn't go through.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { VAULT_MCP_MOVE_TEXT, VAULT_TOTP_TEXT, vaultProblemOf } from '@whombat/client';
+import { VAULT_MCP_MOVE_TEXT, VAULT_TOTP_TEXT, vaultEntrySourceLine, vaultProblemOf } from '@whombat/client';
 import { useVaultEntry, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import {
@@ -73,6 +74,8 @@ export function VaultEntryScreen({ route, navigation }: Props) {
     () => (query.data ? vaultEntryScreen(query.data.entry, ctx) : null),
     [query.data, ctx],
   );
+  // Kept in step with 1Password: how it stands there, a problem in the warning colour.
+  const source = query.data ? vaultEntrySourceLine(query.data.entry, ctx.now, ctx.timeZone) : null;
   const toolBusy = setTool.isPending ? setTool.variables?.params.tool : null;
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
@@ -156,6 +159,15 @@ export function VaultEntryScreen({ route, navigation }: Props) {
           {model ? (
             <Text size={11.5} mono color={theme.colors.mut}>
               {model.meta}
+            </Text>
+          ) : null}
+          {source ? (
+            <Text
+              size={13.5}
+              lh={1.45}
+              color={source.tone === 'warn' ? theme.colors.warn : theme.colors.ink2}
+            >
+              {source.text}
             </Text>
           ) : null}
           {model?.description ? (

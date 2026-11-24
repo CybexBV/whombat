@@ -183,7 +183,7 @@ export function phoneRowActions(row: Pick<NeedsYouListRow, 'buttons'>): { name: 
 
 /**
  * What a Needs you row shows under its words (the one approval card, inbox.md): an approval its answers, equal and in
- * the one order; anything else its one way forward. The rest waits under More. Other groups show nothing inline: they
+ * the one order, and so the 1Password guard's two; anything else its one way forward. The rest waits under More. Other groups show nothing inline: they
  * swipe and open their sheet.
  */
 export interface PhoneRowInline {
@@ -201,6 +201,9 @@ export function phoneRowInline(
   const shown = row.buttons.filter((b) => !b.more);
   const more = needsYouMore(row);
   if (row.item.kind === 'approval') return { answers: shown, lead: null, more };
+  // The 1Password guard's two answers are equal ways forward, like an approval's (Whombat onepassword-sync.md).
+  if (shown.length > 1 && shown.every((b) => b.action?.kind === 'onepassword_removals'))
+    return { answers: shown, lead: null, more };
   const [lead = null, ...rest] = shown;
   return { answers: [], lead, more: [...rest, ...more] };
 }

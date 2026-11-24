@@ -11,6 +11,7 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ChevronRight, type LucideIcon } from './icons';
 import { Button } from './primitives';
+import { StatusPill } from './StatusPill';
 import { Touchable } from './Touchable';
 
 /** The pages' sides: the large title's 20 from the edge, the cards at the same. */
@@ -62,11 +63,15 @@ export function PlaceCard({ children }: { children: ReactNode }) {
   );
 }
 
-/** A row of a card: its icon (or a face), the name over its line, and a chevron; the first has no line above. */
+/**
+ * A row of a card: its icon (or a face), the name (and a quiet tag after it: a Vault entry kept in step with 1Password)
+ * over its line, and a chevron; the first has no line above.
+ */
 export function PlaceRow({
   icon: Icon,
   mark,
   title,
+  tag,
   line,
   bad = false,
   first = false,
@@ -78,6 +83,8 @@ export function PlaceRow({
   /** In place of the icon: a face or a logo. */
   mark?: ReactNode;
   title: string;
+  /** After the name, wrapping under it on a narrow row. */
+  tag?: string | null;
   line?: string | null;
   /** The line in the Not working colour. */
   bad?: boolean;
@@ -114,9 +121,20 @@ export function PlaceRow({
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text size={16} weight={600}>
-          {title}
-        </Text>
+        {tag ? (
+          <View
+            style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 4 }}
+          >
+            <Text size={16} weight={600}>
+              {title}
+            </Text>
+            <StatusPill text={tag} tone="neutral" />
+          </View>
+        ) : (
+          <Text size={16} weight={600}>
+            {title}
+          </Text>
+        )}
         {line ? (
           <Text size={13.5} lh={1.4} color={bad ? theme.colors.bad : theme.colors.ink2}>
             {line}
