@@ -13,6 +13,7 @@ import { FIRST_KINDS } from './first';
 import { HOME_KINDS } from './home/index';
 import { INFRA_KINDS } from './infra/index';
 import { MEDIA_KINDS } from './media/index';
+import { ONEPASSWORD_KIND } from './onepassword';
 import { OWN_KINDS } from './own/index';
 import { PS5_KIND } from './ps5';
 import type { KindModule } from './registry';
@@ -32,6 +33,7 @@ export const KIND_MODULES: Record<string, KindModule> = {
   ...SERVER_KINDS,
   ps5: PS5_KIND,
   findmy: FIND_MY_KIND,
+  onepassword: ONEPASSWORD_KIND,
 };
 
 // Which of their checks Whombat watches from the start (watch-defaults.md).

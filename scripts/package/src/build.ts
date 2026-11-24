@@ -11,11 +11,12 @@
  * dist/whombat-runtime-<version>-linux-<arch>/                  the bundle, unpacked:
  *   bin/whombat                 the CLI (sh): node app/cli.mjs; the helper runs `schema-check` / `migrate` with it
  *   bin/whombat-server  bin/whombat-runner  bin/whombat-agent-net   the units' entry points (sh): node app/<name>.mjs
- *   app/cli.mjs server.mjs runner.mjs image-worker.mjs shots-worker.mjs agent-net.mjs   esbuild bundles (platform
- *                               node, target node24, ESM)
+ *   app/cli.mjs server.mjs runner.mjs image-worker.mjs shots-worker.mjs onepassword-worker.mjs agent-net.mjs   esbuild
+ *                               bundles (platform node, target node24, ESM)
  *   app/shim.mjs …              files the bundles open next to themselves (APP_FILES)
  *   migrations/                 the SQL migrations, their journal and compat.json
- *   node_modules/node-pty       what can't be bundled: the sign-in console's PTY with its native addon
+ *   node_modules/node-pty       what can't be bundled: the sign-in console's PTY with its native addon, and
+ *   node_modules/@1password/…   1Password's SDK with its WASM core (the 1Password worker loads it)
  *   THIRD-PARTY-NOTICES.txt  LICENSE  manifest.json
  * ```
  *
@@ -67,6 +68,12 @@ const CLAUDE_CODE = '@anthropic-ai/claude-code';
  * shipped as a package in node_modules, never bundled (bundled, every entry point failed at start).
  */
 const NODE_PTY = 'node-pty';
+/**
+ * 1Password's SDK (docs/decisions/onepassword-sync.md OPW-30): CommonJS whose core reads its WASM file from beside
+ * itself (`readFileSync(join(__dirname, 'core_bg.wasm'))`), so both packages are shipped in node_modules as they are,
+ * never bundled. Only the 1Password worker loads them.
+ */
+export const ONEPASSWORD_SDK = ['@1password/sdk', '@1password/sdk-core'] as const;
 export const ENTRIES = {
   cli: 'apps/cli/src/bin.ts',
   server: 'apps/server/src/index.ts',
@@ -75,6 +82,8 @@ export const ENTRIES = {
   'image-worker': 'apps/server/src/feedback/image-worker.ts',
   /** The council's picture worker the server starts next to it (apps/server/src/council/shots-pool.ts). */
   'shots-worker': 'apps/server/src/council/shots-worker.ts',
+  /** The 1Password worker the server starts as a process of its own (apps/server/src/vault/onepassword/pool.ts). */
+  'onepassword-worker': 'apps/server/src/vault/onepassword/worker.ts',
   /** The commands' network (docs/decisions/one-person.md OP-S106): `whombat-agent-net`, under its own uid. */
   'agent-net': 'apps/agent-net/src/index.ts',
 } as const;
@@ -144,7 +153,7 @@ export function bundleOptions(
     platform: 'node',
     target: 'node24',
     format: 'esm',
-    external: [`${CLAUDE_CODE}-*`, NODE_PTY],
+    external: [`${CLAUDE_CODE}-*`, NODE_PTY, ...ONEPASSWORD_SDK],
     banner: { js: BANNER },
     define: {
       __WHOMBAT_BUILD__: JSON.stringify(build),
@@ -242,6 +251,33 @@ function addNodePty(arch: ReleaseArch, dest: string, log: (l: string) => void): 
       `${addon} is missing: pnpm install builds it with node-gyp (python3, make, a C++ compiler)`,
     );
   copyNormalized(addon, join(dest, 'build', 'Release', 'pty.node'));
+}
+
+/**
+ * 1Password's SDK into `nm` (`node_modules`), flat, as `@1password/sdk` resolves `@1password/sdk-core` from there: each
+ * package's package.json, readme and files (its JavaScript, type declarations and the core's WASM). The same for every
+ * arch: the WASM runs anywhere Node does.
+ */
+export function addOnePasswordSdk(nm: string): void {
+  for (const name of ONEPASSWORD_SDK) {
+    const src =
+      installedPackageDir('apps/server', name) ??
+      (name === '@1password/sdk-core' ? sdkCoreBesideSdk() : null);
+    if (!src) throw new Error(`${name} isn’t installed (pnpm install)`);
+    copyNormalized(src, join(nm, name), (rel) => rel === 'node_modules' || rel.startsWith('node_modules/'));
+  }
+}
+
+/** pnpm installs the core beside the SDK, not as one of the server's own dependencies. */
+function sdkCoreBesideSdk(): string | null {
+  const sdk = installedPackageDir('apps/server', '@1password/sdk');
+  if (!sdk) return null;
+  const req = createRequire(join(sdk, 'package.json'));
+  try {
+    return dirname(dirname(req.resolve('@1password/sdk-core')));
+  } catch {
+    return null;
+  }
 }
 
 /** Fails the build when a text file of the release names the build machine's paths. */
@@ -362,7 +398,8 @@ export async function buildRelease(options: BuildOptions): Promise<BuildResult> 
   // 3. What can't be bundled.
   const nm = join(root, 'node_modules');
   addNodePty(options.arch, join(nm, NODE_PTY), log);
-  log(`node_modules: ${NODE_PTY}`);
+  addOnePasswordSdk(nm);
+  log(`node_modules: ${[NODE_PTY, ...ONEPASSWORD_SDK].join(', ')}`);
 
   // 4. Entry points, notices.
   mkdirSync(join(root, 'bin'), { mode: 0o755 });
@@ -374,7 +411,7 @@ export async function buildRelease(options: BuildOptions): Promise<BuildResult> 
     if (existsSync(join(REPO_ROOT, license))) copyNormalized(join(REPO_ROOT, license), join(root, license));
   writeFileSync(
     join(root, 'THIRD-PARTY-NOTICES.txt'),
-    noticesText([...[...bundled].sort(), join(nm, NODE_PTY)]),
+    noticesText([...[...bundled].sort(), join(nm, NODE_PTY), ...ONEPASSWORD_SDK.map((n) => join(nm, n))]),
   );
   chmodSync(join(root, 'THIRD-PARTY-NOTICES.txt'), 0o644);
 

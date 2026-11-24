@@ -1,8 +1,8 @@
 /**
  * A thing's page and Home's things for an older app (docs/decisions/findmy-timeline.md, connection-dashboards.md): an
  * app below session minor 5 gets a Find My connection's page without the Timeline tab it can't draw; one below minor 7
- * gets Home's accounts opening on Settings and no Website feedback; a newer one, and anything outside a session, gets it
- * all.
+ * gets Home's accounts opening on Settings and no Website feedback; one below minor 8 isn't offered 1Password
+ * (onepassword-sync.md); a newer one, and anything outside a session, gets it all.
  */
 import {
   FEEDBACK_THING_ID,
@@ -13,7 +13,11 @@ import {
   type ThingSummary,
   thingHref,
 } from '@whombat/core';
-import { ACCOUNT_PAGES_MINOR, FIND_MY_TIMELINE_MINOR } from '@whombat/protocol/session';
+import {
+  ACCOUNT_PAGES_MINOR,
+  FIND_MY_TIMELINE_MINOR,
+  ONEPASSWORD_SYNC_MINOR,
+} from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { thingAnswerFor, thingPageFor } from './older-apps';
 
@@ -83,5 +87,30 @@ describe('Home’s accounts for an older app', () => {
     expect(thingAnswerFor('home.overview', overview, ACCOUNT_PAGES_MINOR)).toBe(overview);
     expect(thingAnswerFor('home.overview', overview, undefined)).toBe(overview);
     expect(hrefs(overview).feedback).toBe(thingHref('connection', 'feedback'));
+  });
+});
+
+describe('the catalog for an older app (onepassword-sync.md OPW-K17)', () => {
+  const catalog = {
+    mode: 'real',
+    limit: 50,
+    entries: [
+      { catalogId: 'plex', available: true },
+      { catalogId: 'onepassword', available: true },
+    ],
+  };
+
+  it('leaves 1Password out below minor 8', () => {
+    const older = thingAnswerFor(
+      'connections.catalog',
+      catalog,
+      ONEPASSWORD_SYNC_MINOR - 1,
+    ) as typeof catalog;
+    expect(older.entries.map((e) => e.catalogId)).toEqual(['plex']);
+  });
+
+  it('offers it from minor 8 on and outside a session', () => {
+    expect(thingAnswerFor('connections.catalog', catalog, ONEPASSWORD_SYNC_MINOR)).toBe(catalog);
+    expect(thingAnswerFor('connections.catalog', catalog, undefined)).toBe(catalog);
   });
 });

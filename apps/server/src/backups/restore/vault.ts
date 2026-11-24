@@ -5,13 +5,16 @@
  * AAD; then its SSH servers with their trusted host keys and the agent's switch as the file has it (on with its variable
  * and servers, or off; docs/decisions/vault-simplify.md VLT-10). A login's authenticator key and a server's kept password
  * are sealed again the same way (CT-1664). Tools come back with the next check of the entry (they are read from the
- * service itself).
+ * service itself). An entry kept in step with a 1Password item is paired with it again, without a base, when this
+ * Whombat's 1Password connection is there: the next pass reads the item and 1Password's version wins
+ * (docs/decisions/onepassword-sync.md OPW-42).
  */
 import { type BackupVaultEntryRecord, type BackupVaultLine, newId, vaultAuditText } from '@whombat/core';
 import { and, eq, sql } from 'drizzle-orm';
 import { vaultEntries, vaultSshServers } from '../../db/schema/index';
 import { loadAgentRow, shortName } from '../../read/principals';
 import { createVaultEntry, keyEventFields, publishVaultUpdated, switchedOn } from '../../vault/commands';
+import { relinkOnePassword } from '../../vault/onepassword/restore';
 import { createVaultSshEntry } from '../../vault/ssh-commands';
 import { importSshKey } from '../../vault/ssh-keys';
 import { vaultSecretAad, vaultServerPasswordAad, vaultTotpAad } from '../../vault/store';
@@ -38,6 +41,8 @@ async function entry(run: RestoreRun, r: BackupVaultEntryRecord): Promise<Record
       (r.kind === 'ssh' || secret === r.secret);
     await restoreServersAndKeys(run, here, r, false);
     if (!run.dry && r.kind === 'login' && r.totp && !row.totpSealed) await restoreTotp(run, here, r.totp);
+    if (!run.dry && r.onepasswordItemId)
+      await relinkOnePassword(run.tx, run.burrow.id, here, r.onepasswordItemId);
     if (same) return 'unchanged';
     return run.different(async () => {
       await run.tx
@@ -95,6 +100,7 @@ async function entry(run: RestoreRun, r: BackupVaultEntryRecord): Promise<Record
   run.remember(r.id, id, 'vault_entry');
   if (r.kind === 'login' && r.totp) await restoreTotp(run, id, r.totp);
   await restoreServersAndKeys(run, id, r, true);
+  if (r.onepasswordItemId) await relinkOnePassword(run.tx, run.burrow.id, id, r.onepasswordItemId);
   return 'added';
 }
 

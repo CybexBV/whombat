@@ -129,6 +129,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "One-time Find My watches (docs/decisions/findmy-watch.md): a new table findmy_watches, each watch the assistant started (whose, leaves or arrives, the card's place words, where they were while it watches, its thread and card, its status), kept when the connection goes (its connection_id set null, so the watch can say it stopped), cascading with the conversation and the agent. The release before it never reads the table; a findmy_watch card it finds shows as its message's text."
+    },
+    "0020_onepassword_sync": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A 1Password vault kept in step with the Vault (docs/decisions/onepassword-sync.md): two new tables, vault_onepassword_links (one row per pair of a Vault entry and a 1Password item: its state, the item's version and time, the base as an HMAC per field, never a value; the entry set null when it is removed, so the item is archived next) and vault_onepassword_state (one row per 1Password connection: what the last pass saw and how it ended), both cascading with the connection. The release before it never reads either table, and offers no 1Password connection."
     }
   }
 }

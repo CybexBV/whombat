@@ -39,6 +39,7 @@ import { libraryRoutes } from '../skills/library-routes';
 import { thingRoutes } from '../things/routes';
 import { trackerRoutes } from '../trackers/routes';
 import { usageRoutes } from '../usage/routes';
+import { onePasswordRoutes } from '../vault/onepassword/routes';
 import { vaultRoutes } from '../vault/routes';
 import { burrowRoutes } from './burrows';
 import { connectorRoutes } from './connectors';
@@ -88,6 +89,7 @@ export const ROUTES: RouteDef[] = [
   ...feedbackRoutes,
   ...guideRoutes,
   ...vaultRoutes,
+  ...onePasswordRoutes,
   ...usageRoutes,
   // Notification levels (docs/decisions/essentials-people.md).
   ...peopleRoutes,

@@ -1480,7 +1480,16 @@ Setup and operation: `docs/github.md`.
   tool switches (`vault/move-mcp.ts`), and one that can't (the 50-connection limit, basic or query sign-in) stays a
   Hermes MCP server and reads “Move it to Connections”. Its screens name kinds in a person's words from core (Sign-in
   key, Password, Website login, Server key) and keep fingerprints, the `authorized_keys` line, sign-in types and
-  variable names under Advanced or Technical details. [vault.md](docs/decisions/vault.md) (its “What holds today”),
+  variable names under Advanced or Technical details. A linked 1Password vault (a 1Password connection, at most one,
+  which no agent uses) is kept in step with it both ways (`vault/onepassword/`): website logins and API tokens with
+  bearer or basic sign-in, by one pass at a time (at start, every 10 minutes, 10 s after a change, on Sync now) that
+  reads 1Password first through the SDK in a worker process of its own (`onepassword-worker`, JSON lines, only
+  1Password's hosts), decides each pair in core against a base of per-field HMACs (`vault_onepassword_links`), and
+  applies the result as the person through one Vault command in commits of at most ten entries, then writes Whombat's
+  changes into 1Password; a clash keeps Whombat's version, a pair without a base (restored) takes 1Password's, and
+  removals past a guard wait for the person's answer in the Inbox. The page and Home read the stored state
+  (`vault_onepassword_state`); no call or DNS lookup runs under the write lock.
+  [onepassword-sync.md](docs/decisions/onepassword-sync.md). [vault.md](docs/decisions/vault.md) (its “What holds today”),
   [vault-simplify.md](docs/decisions/vault-simplify.md), [settings-groups.md](docs/decisions/settings-groups.md)
 - **Worth a look on a connection's page** is a strip on top, there only while it has a line, and at most three lines per check (two items and one “N more” past that,
   `things/quiet/items.ts`); a service's updates are one line, and a line's title is Whombat's own with the service's

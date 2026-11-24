@@ -42,6 +42,7 @@ import { thePerson } from '../domain/the-person';
 import { hostsFor } from '../hosts/service';
 import { ApiError } from '../lib/errors';
 import { iso } from '../lib/time';
+import { forgetOnePasswordBases } from '../vault/onepassword/restore';
 import { BACKUP_DOWN_TEXT, LIST, port, READ, reason } from './backup';
 import { noteBroughtBack, placeMovedTo, withBringBack } from './backup-key';
 import { boxBackupStatus } from './box-backup';
@@ -482,6 +483,11 @@ export const BACKUP_OPTIONS_HANDLERS: Readonly<Record<string, Handler>> = {
         rotate: n.rotate ?? { since: iso(c.services.clock()), tries: 0, lastError: null },
       }));
     await noteBroughtBack(c.services, before.oldApplianceId, before.restored?.createdAt ?? null);
+    // The restored Vault is older than 1Password: every pair forgets its base before any pass can run, so 1Password's
+    // version wins at the next one (onepassword-sync.md OPW-42).
+    await forgetOnePasswordBases(c.services).catch((err: unknown) =>
+      c.services.log.warn({ err: String(err) }, 'backup restore: the 1Password pairs kept their bases'),
+    );
     // What the backup service may use to trust the earlier Whombat's key only up to the restored backup.
     const released = await port(c).call('POST', '/v1/quarantine/release', {
       oldWhombat: input.oldWhombat,
