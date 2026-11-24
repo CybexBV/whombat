@@ -12,7 +12,14 @@
  * seconds per machine and range, the last ones serving while new ones are slow (PS-03).
  */
 import { BlockList, isIP } from 'node:net';
-import { catalogEntry, type HostGuest, type HostServer, type ThingRunsOn, thingHref } from '@whombat/core';
+import {
+  catalogEntry,
+  type HostGuest,
+  type HostServer,
+  type ThingRunsOn,
+  thingHref,
+  UPTIME_ID,
+} from '@whombat/core';
 import type { CatalogConnectionRow } from '../connections/types';
 import type { StoredRunsOn } from '../db/schema/index';
 import { HOSTS_API, seg } from '../hosts/client';
@@ -239,10 +246,36 @@ export function addressIndexIfReady(hosts: HostsService): AddressIndex | null {
   return hit.settled;
 }
 
+/**
+ * The host a “Website or address” check talks to, from its address field: a website's host, a port's host, or the bare
+ * name or address a ping or name lookup is about; none for a check-in, which calls Whombat instead.
+ */
+export function uptimeHostname(
+  fields: Readonly<Record<string, string | undefined>> | null | undefined,
+): string | null {
+  const kind = fields?.kind;
+  const address = fields?.address?.trim();
+  if (!address || kind === 'heartbeat') return null;
+  if (kind === 'http') {
+    try {
+      return normal(new URL(address).hostname) || null;
+    } catch {
+      return null;
+    }
+  }
+  if (kind === 'tcp') {
+    const host = /^(\[[^\]]+\]|[^:/?#@]+):\d{1,5}$/.exec(address)?.[1];
+    return host ? normal(host) || null : null;
+  }
+  return normal(address).replace(/\.$/, '') || null;
+}
+
 /** The host a connection talks to, when a person typed its address (a fixed public API has none to match). */
 export function connectionHostname(
   row: Pick<CatalogConnectionRow, 'catalogId' | 'baseUrl' | 'fields'>,
 ): string | null {
+  // Its address is a field of its own; its entry's base address only names the hosts service.
+  if (row.catalogId === UPTIME_ID) return uptimeHostname(row.fields);
   const entry = catalogEntry(row.catalogId);
   const typed = row.fields?.url ?? (entry?.fields.some((f) => f.id === 'url') ? row.baseUrl : null);
   if (!typed && entry?.baseUrl && !entry.baseUrl.includes('{')) return null;

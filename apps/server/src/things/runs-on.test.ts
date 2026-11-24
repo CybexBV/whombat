@@ -19,6 +19,7 @@ import {
   matchServerName,
   metricSeries,
   nicAddresses,
+  uptimeHostname,
 } from './runs-on';
 
 describe('runs on', () => {
@@ -96,6 +97,20 @@ describe('runs on', () => {
     expect(
       connectionHostname({ catalogId: 'hetzner', baseUrl: 'https://api.hetzner.cloud', fields: {} }),
     ).toBeNull();
+  });
+
+  it('a “Website or address” check talks to the host in its address field; a check-in to none', () => {
+    const uptime = (fields: Record<string, string>) =>
+      connectionHostname({ catalogId: 'uptime', baseUrl: 'whombat-hosts:', fields });
+    expect(uptime({ kind: 'http', address: 'https://Status.Example.com:8443/ready' })).toBe(
+      'status.example.com',
+    );
+    expect(uptime({ kind: 'tcp', address: 'nas.local:445' })).toBe('nas.local');
+    expect(uptime({ kind: 'tcp', address: '[2001:db8::7]:22' })).toBe('2001:db8::7');
+    expect(uptime({ kind: 'ping', address: '10.100.0.9' })).toBe('10.100.0.9');
+    expect(uptime({ kind: 'dns', address: 'example.com.' })).toBe('example.com');
+    expect(uptime({ kind: 'heartbeat' })).toBeNull();
+    expect(uptimeHostname({ kind: 'http', address: 'not a url' })).toBeNull();
   });
 
   it('a guest’s figures: memory and disk in GB, the 24 hours as CPU % and memory GB', () => {

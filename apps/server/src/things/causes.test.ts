@@ -106,4 +106,13 @@ describe('onInternet', () => {
     expect(onInternet(row('http://homeassistant:8123'), undefined)).toBe(false);
     expect(onInternet(row('https://api.example.com'), { serverId: 'pve-02' })).toBe(false);
   });
+
+  it('reads a “Website or address” check’s own address, so it joins the internet’s one message', () => {
+    const uptime = (fields: Record<string, string>) =>
+      ({ catalogId: 'uptime', baseUrl: 'whombat-hosts:', fields }) as Parameters<typeof onInternet>[0];
+    expect(onInternet(uptime({ kind: 'http', address: 'https://example.com/ready' }), undefined)).toBe(true);
+    expect(onInternet(uptime({ kind: 'tcp', address: '203.0.113.20:443' }), undefined)).toBe(true);
+    expect(onInternet(uptime({ kind: 'ping', address: '10.100.0.9' }), undefined)).toBe(false);
+    expect(onInternet(uptime({ kind: 'heartbeat' }), undefined)).toBe(false);
+  });
 });
