@@ -1404,8 +1404,8 @@ Setup and operation: `docs/github.md`.
 - **Servers** (`apps/server/src/hosts/`): the hosts service (`hosts/`, the program `whombat-hosts`) owns the agents on monitored servers, their
   history, alerts and consoles; the server talks to it over its socket, signs every change the person makes, relays
   consoles through the session. Probe checks report when their agent stops sending fresh results and keep
-  their previous result's time. The hosts service leaves a stale check's alerts alone until it sees a fresh result;
-  connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
+  their previous result's time. The hosts service leaves a stale check's alerts alone until it sees a fresh result.
+  Connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
   automatically runs out of memory or an autostart libvirt VM crashes and stays stopped. Stops the hub requested
   stay quiet. The server gives the agent the built-in Servers
   connection, which acts without asking unless the person sets a server to ask before risky actions. Powering off,

@@ -2053,9 +2053,9 @@ connection handles those alerts.
 `true` and the check is `pending`. Its last result and timestamp stay
 visible, and its alerts keep their state until a fresh result arrives.
 `last` also has `error` and `answer` (DNS) when set.
-`uptime_24h` is a percentage and `latency_24h` 96 points over 24 hours (in
-`GET /checks` only; the other routes answer `null` and `[]`). `ping_url` is
-set for heartbeat checks when the caller is an admin.
+`uptime_24h` is a percentage and `latency_24h` holds 96 points over 24
+hours. `GET /checks` includes both. The other routes answer `null` and
+`[]`. `ping_url` is set for heartbeat checks when the caller is an admin.
 
 **`POST /checks`** and **`PATCH /checks/{id}`** (every field optional in
 PATCH):

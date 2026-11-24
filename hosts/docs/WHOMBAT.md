@@ -393,13 +393,13 @@ REST-API "Alerts", "Watch settings", "Maintenance", "Checks".
 | `hosts.alerts.unack` | `DELETE /alerts/{id}/ack` | operator |
 | `hosts.watch.get` | `GET /servers/{id}/watch` → `{rules: [{rule, entity?, off: true, by, at}], limits: [{rule, entity?, value}]}` | viewer |
 | `hosts.watch.set` | `PUT /servers/{id}/watch {rule, entity?, off}` → the same | operator |
-| `things.setWatchLimit` | `PUT /servers/{id}/watch {rule, entity?, limit, expected_limit?}` → the same; `null` clears a limit | operator |
+| `things.setWatchLimit` | `PUT /servers/{id}/watch {rule, entity?, limit, expected_limit?}` → the same. `null` clears a limit | operator |
 | `hosts.maintenance.list` | `GET /maintenance` | viewer |
 | `hosts.maintenance.create` | `POST /maintenance {scope: server\|group\|all, target, starts_at?, ends_at? \| duration_min, weekdays?, start_time?, tz?, note?}` | operator |
 | `hosts.maintenance.remove` | `DELETE /maintenance/{id}` | operator |
 | `hosts.checks.list` | `GET /checks` | viewer |
 | `hosts.getCheck` | `GET /checks/{id}` | viewer |
-| `hosts.checks.create` | `POST /checks {name, kind: http\|tcp\|ping\|dns\|heartbeat, target, runner?, interval_s?, timeout_s?, grace_s?, options?, owner?}`; `PATCH /checks/{id}` | admin |
+| `hosts.checks.create` | `POST /checks {name, kind: http\|tcp\|ping\|dns\|heartbeat, target, runner?, interval_s?, timeout_s?, grace_s?, options?, owner?}` and `PATCH /checks/{id}` | admin |
 | `hosts.checks.remove` | `DELETE /checks/{id}` | admin |
 
 **Quiet notices** (Whombat QN-23; decisions HS-190…HS-197). A server's
