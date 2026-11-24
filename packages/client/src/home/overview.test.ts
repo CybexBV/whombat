@@ -118,6 +118,15 @@ describe('a connection’s tile (OVP-09)', () => {
     expect(by.get('nas')).toMatchObject({ held: 'quiet', line: { text: 'Quiet until 23:00', tone: 'mut' } });
     // A quiet time that is over says nothing of it.
     expect(by.get('ha')?.held).toBeNull();
+    // Kept quiet and down because of something else: the window someone chose, as its page says.
+    const [both] = overviewTiles(
+      [row({ id: 'plex' })],
+      [{ id: 'plex', causedBy: cause, quietUntil: '2026-10-19T21:00:00.000Z' }],
+      NOW,
+      TZ,
+      'Dusty',
+    );
+    expect(both).toMatchObject({ held: 'quiet', line: { text: 'Quiet until 23:00' } });
   });
 
   it('falls back to words the person can act on when nobody said why', () => {

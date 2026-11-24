@@ -214,6 +214,22 @@ export function holdView(page: {
 }
 
 /**
+ * Whether the head's state pill would say what the hold's line under it says: kept quiet, the server's badge is the
+ * window's first words (“Quiet until 23:00”); down because of something else, the cause's words (cut to the badge's
+ * length). A page that draws the line leaves the pill out then, so the words are said once.
+ */
+export function holdSaysBadge(page: {
+  badge: string;
+  keptQuiet?: KeptQuiet | null;
+  causedBy?: ThingCause | null;
+}): boolean {
+  const hold = holdView(page);
+  const badge = page.badge.trim();
+  if (!hold || !badge) return false;
+  return hold.kind === 'window' ? hold.words.split(' · ')[0] === badge : hold.words.startsWith(badge);
+}
+
+/**
  * The ids of the heads-up line a page sends first while it is held, for an app that doesn't draw `keptQuiet` or
  * `causedBy` itself (the server's `keptLine` and `causeLine`). An app that draws the hold under the head leaves it out.
  */
@@ -241,17 +257,18 @@ export function heldLine(line: { quiet?: Pick<NoticeQuiet, 'held'> | null }): 'w
 /* A thing's state in a list (MON-04, MON-07) ----------------------------------------------------------------------- */
 
 /**
- * The words a list draws for a thing's state: why it is down because of something else, else “Quiet until 23:00” while
- * it is kept quiet, else its own line. Null when it has none.
+ * The words a list draws for a thing's state: “Quiet until 23:00” while it is kept quiet, else why it is down because of
+ * something else, else its own line. Null when it has none. The window comes first as on its page: someone chose it, and
+ * it holds whatever the cause.
  */
 export function thingStateWords(
   thing: Pick<ThingSummary, 'causedBy' | 'quietUntil' | 'line'>,
   now: Date | number,
   timeZone: string,
 ): string | null {
-  if (thing.causedBy) return thing.causedBy.words;
   if (thing.quietUntil && Date.parse(thing.quietUntil) > toDate(now).getTime())
     return `Quiet until ${quietEndWords(thing.quietUntil, now, timeZone)}`;
+  if (thing.causedBy) return thing.causedBy.words;
   return thing.line ?? null;
 }
 
@@ -264,6 +281,8 @@ export const HISTORY_WORDS = {
   /** The fold under the incidents with a server's own alerts. */
   alerts: (n: number) => `Show ${n} ${n === 1 ? 'alert' : 'alerts'} from the server`,
   hideAlerts: 'Hide the alerts from the server',
+  /** The small heading over a server's own alerts once they are shown. */
+  fromServer: 'From the server',
   fewer: 'Show fewer',
   failed: 'What happened couldn’t load. Try again.',
 } as const;
@@ -342,10 +361,39 @@ function alertRow(a: ThingHistoryAlert, index: number, now: Date | number, timeZ
   };
 }
 
-/** `things.history` as the list draws it: newest first, its uptime line, and the empty words. */
+/** The hosts service's alert that says a server stopped checking in: its offline time. */
+export const SERVER_OFFLINE_RULE = 'agent.heartbeat_missing';
+
+/**
+ * Whether a server's alert is an outage the incidents list already has: it stopped checking in while a `down` incident
+ * was open. The two start a pass or two apart, so they count as one when their times overlap.
+ */
+export function sameOutage(
+  alert: Pick<ThingHistoryAlert, 'rule' | 'openedAt' | 'resolvedAt'>,
+  incidents: readonly Pick<ThingIncident, 'nature' | 'startedAt' | 'endedAt'>[],
+  now: Date | number,
+): boolean {
+  if (alert.rule !== SERVER_OFFLINE_RULE) return false;
+  const end = toDate(now).getTime();
+  const from = Date.parse(alert.openedAt);
+  const to = alert.resolvedAt ? Date.parse(alert.resolvedAt) : end;
+  return incidents.some(
+    (i) =>
+      i.nature === 'down' &&
+      Date.parse(i.startedAt) <= to &&
+      (i.endedAt ? Date.parse(i.endedAt) : end) >= from,
+  );
+}
+
+/**
+ * `things.history` as the list draws it: newest first, its uptime line, and the empty words. A server's alert that is the
+ * same outage as one of its incidents is left out: the incident already says it.
+ */
 export function historyView(history: ThingHistory, now: Date | number, timeZone: string): HistoryView {
   const rows = history.incidents.map((i) => incidentRow(i, now, timeZone));
-  const alerts = (history.alerts ?? []).map((a, i) => alertRow(a, i, now, timeZone));
+  const alerts = (history.alerts ?? [])
+    .filter((a) => !sameOutage(a, history.incidents, now))
+    .map((a, i) => alertRow(a, i, now, timeZone));
   return {
     uptime: history.uptime?.text ?? null,
     rows,

@@ -4,6 +4,7 @@ import {
   durationWords,
   heldLine,
   historyView,
+  holdSaysBadge,
   holdView,
   keepQuietBody,
   keepQuietOptions,
@@ -115,6 +116,19 @@ describe('a held thing', () => {
     expect(holdView({})).toBeNull();
   });
 
+  it('knows when the head’s pill says what the hold’s line says', () => {
+    expect(holdSaysBadge({ badge: 'Quiet until 23:00', keptQuiet: kept })).toBe(true);
+    expect(holdSaysBadge({ badge: cause.words, causedBy: cause })).toBe(true);
+    // The server cuts a long cause to the badge's length.
+    expect(holdSaysBadge({ badge: cause.words.slice(0, 20), causedBy: cause })).toBe(true);
+    // Its own state while kept quiet (“1 offline”) or quiet with its server: the pill says something else.
+    expect(holdSaysBadge({ badge: '1 offline', keptQuiet: kept })).toBe(false);
+    expect(holdSaysBadge({ badge: 'Running fine', causedBy: { ...cause, kind: 'quiet' as const } })).toBe(
+      false,
+    );
+    expect(holdSaysBadge({ badge: 'Running fine' })).toBe(false);
+  });
+
   it('a kept window wins over a cause', () => {
     expect(holdView({ keptQuiet: kept, causedBy: cause })?.kind).toBe('window');
   });
@@ -133,13 +147,21 @@ describe('a held thing', () => {
     expect(heldLine({})).toBeNull();
   });
 
-  it('says a thing’s state in a list: its cause, else its quiet, else its line', () => {
+  it('says a thing’s state in a list: its quiet, else its cause, else its line', () => {
     expect(thingStateWords({ line: 'Up', causedBy: cause }, NOW, ZONE)).toBe(cause.words);
     expect(thingStateWords({ line: 'Up', quietUntil: '2026-11-24T22:00:00Z' }, NOW, ZONE)).toBe(
       'Quiet until 23:00',
     );
     expect(thingStateWords({ line: 'Up', quietUntil: '2026-11-24T10:00:00Z' }, NOW, ZONE)).toBe('Up');
     expect(thingStateWords({}, NOW, ZONE)).toBeNull();
+  });
+
+  it('puts the person’s window before a cause, as the page does', () => {
+    const both = { line: 'Up', causedBy: cause, quietUntil: '2026-11-24T22:00:00Z' };
+    expect(thingStateWords(both, NOW, ZONE)).toBe('Quiet until 23:00');
+    expect(holdView({ keptQuiet: kept, causedBy: cause })?.kind).toBe('window');
+    // Once the window is over, the cause is what the list says.
+    expect(thingStateWords({ ...both, quietUntil: '2026-11-24T10:00:00Z' }, NOW, ZONE)).toBe(cause.words);
   });
 });
 
@@ -197,6 +219,43 @@ describe('what happened', () => {
     expect(view.rows[1]?.cause).toBe('While pve-01 was down');
     expect(view.alerts[0]).toMatchObject({ tone: 'warn', when: 'Yesterday 21:00 · 1 h 30 min' });
     expect(view.empty).toBeNull();
+  });
+
+  it('leaves out a server’s offline alert that is the same outage as an incident', () => {
+    const offline = {
+      title: 'pve-02 isn’t checking in',
+      severity: 'critical' as const,
+      rule: 'agent.heartbeat_missing',
+    };
+    const view = historyView(
+      {
+        ...history,
+        incidents: [
+          ...history.incidents,
+          {
+            id: 'inc_0',
+            nature: 'down',
+            words: 'Not checking in',
+            startedAt: '2026-11-17T07:22:00Z',
+            endedAt: '2026-11-17T07:44:00Z',
+            minutes: 22,
+          },
+        ],
+        alerts: [
+          // Opened a pass later than the incident: the same outage.
+          { ...offline, openedAt: '2026-11-17T07:23:00Z', resolvedAt: '2026-11-17T07:44:00Z' },
+          // Still open while the incident still lasts: the same.
+          { ...offline, openedAt: '2026-11-24T12:51:00Z', resolvedAt: null },
+          // An offline stretch with no incident of its own stays.
+          { ...offline, openedAt: '2026-11-05T03:00:00Z', resolvedAt: '2026-11-05T03:09:00Z' },
+          ...(history.alerts ?? []),
+        ],
+      },
+      NOW,
+      ZONE,
+    );
+    expect(view.alerts.map((a) => a.words)).toEqual(['pve-02 isn’t checking in', 'Disk / is 93 % full']);
+    expect(view.alerts[0]?.when).toContain('5 Nov');
   });
 
   it('says nothing went wrong when the period is empty', () => {

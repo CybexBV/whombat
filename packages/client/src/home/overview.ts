@@ -136,7 +136,8 @@ export function overviewTiles(
     const thing = byId.get(row.id);
     const heldWords =
       thing && (thing.causedBy || thing.quietUntil) ? thingStateWords(thing, now, timeZone) : null;
-    const held = heldWords ? (thing?.causedBy ? 'cause' : 'quiet') : null;
+    // Its cause's grey only when the cause's words are what it says: a window someone chose comes first.
+    const held = heldWords ? (heldWords === thing?.causedBy?.words ? 'cause' : 'quiet') : null;
     if (heldWords) {
       line = { text: heldWords, tone: 'mut' };
     } else if (row.level === 'notWorking' || row.level === 'needsLook') {
