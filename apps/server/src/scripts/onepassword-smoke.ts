@@ -9,8 +9,8 @@
  * The token is read from the file (never an argument or a variable's value). It works only on items it makes, each
  * titled “Whombat smoke test …”, through the worker exactly as the sync does: it makes a Login and an API Credential,
  * reads them back, writes a change (a new password, a one-time password and a custom field without a section), writes
- * again with the old version to see 1Password's refusal, and archives both. It prints facts (ids, versions, field ids
- * and types, outcomes, error words), never a value.
+ * again with the old version to see 1Password's refusal, archives both and lists the vault again to see them gone from
+ * the list. It prints facts (ids, versions, field ids and types, outcomes, error words), never a value.
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -183,7 +183,22 @@ async function main(): Promise<number> {
     say('      rate-limit counters: not exposed by @1password/sdk 0.5.0');
     return 0;
   } finally {
-    for (const item of made) await step(`archive ${item.id}`, () => pool.archive(token, vaultId, item.id));
+    const archived = new Set<string>();
+    for (const item of made)
+      if (await step(`archive ${item.id}`, () => pool.archive(token, vaultId, item.id).then(() => true)))
+        archived.add(item.id);
+    if (archived.size) {
+      // The sync takes an item missing from the list as gone from the vault: an archived one mustn't be listed active.
+      const again = await step('list the vault’s items again', () => pool.list(token, vaultId));
+      if (again) {
+        const still = again.filter((o) => archived.has(o.id));
+        say(
+          `      archived items gone from the list: ${still.length === 0}${
+            still.length ? `; still listed: ${still.map((o) => `${o.id} (${o.state})`).join(', ')}` : ''
+          }`,
+        );
+      }
+    }
     pool.close();
   }
 }
