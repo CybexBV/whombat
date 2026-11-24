@@ -28,6 +28,7 @@ import { FIND_MY_COMMANDS } from '../hosts/findmy-places';
 import { FIND_MY_TIMELINE_COMMANDS } from '../hosts/findmy-timeline';
 import { FIND_MY_WATCH_COMMANDS } from '../hosts/findmy-watch';
 import { FOLLOWED_TASK_COMMANDS } from '../hosts/followed';
+import { INCIDENT_COMMANDS } from '../incidents/store';
 import { MAIL_TRIGGER_COMMANDS } from '../mail-triggers/index';
 import { setAgentNotes } from '../memory/notes';
 import { PROMPT_COMMANDS } from '../prompts/commands';
@@ -219,6 +220,8 @@ export const COMMANDS: CommandDef[] = [
   ...FOLLOWED_TASK_COMMANDS,
   // Where people are on Find My, kept for the automations that listen — findmy-connection.md.
   ...FIND_MY_COMMANDS,
+  // Outages and their push — monitoring.md.
+  ...INCIDENT_COMMANDS,
   // Where the people the person ticked were, 30 days — findmy-timeline.md.
   ...FIND_MY_TIMELINE_COMMANDS,
   ...FIND_MY_WATCH_COMMANDS,
