@@ -5,7 +5,7 @@
 import { VAULT_TOTP_KIND_TEXT, VaultEntryId, VaultTotpInput } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { defineCommand } from '../commit/types';
+import { type ApplyContext, defineCommand } from '../commit/types';
 import { vaultEntries } from '../db/schema/index';
 import { notFound } from '../lib/errors';
 import {
@@ -15,8 +15,31 @@ import {
   requirePerson,
   vaultError,
 } from './commands';
-import { ownEntry, vaultTotpAad } from './store';
+import { ownEntry, type VaultEntryRow, vaultTotpAad } from './store';
 import { canonicalTotp } from './totp-code';
+
+/**
+ * Sets, replaces or removes (null) a website login's authenticator key: sealed in core's one form, signed as a change,
+ * and the held forms of values read again. The person's own page and the 1Password sync both come here.
+ */
+export async function replaceTotp(
+  ctx: ApplyContext,
+  row: VaultEntryRow,
+  totp: string | null,
+): Promise<string> {
+  if (row.kind !== 'login') throw vaultError('wrong_kind', {}, VAULT_TOTP_KIND_TEXT);
+  const sealed = totp === null ? null : ctx.services.custody.seal(vaultTotpAad(row.id), canonicalTotp(totp));
+  const [updated] = await ctx.tx
+    .update(vaultEntries)
+    .set({ totpSealed: sealed, totpSetAt: sealed ? ctx.now : null, updatedAt: ctx.now })
+    .where(eq(vaultEntries.id, row.id))
+    .returning();
+  if (!updated) throw notFound('Vault entry');
+  const event = await emitEntryEvent(ctx, 'entry.changed', updated);
+  forgetHeldSecretsAfter(ctx);
+  publishVaultUpdated(ctx, updated.ownerId, row.id);
+  return event.id;
+}
 
 export const setVaultTotp = defineCommand({
   name: 'vault.setTotp',
@@ -24,19 +47,8 @@ export const setVaultTotp = defineCommand({
   async apply(tx, ctx, input) {
     requirePerson(ctx);
     const row = await ownEntry(tx, ctx.burrow.id, ctx.actor.id, input.entryId);
-    if (row.kind !== 'login') throw vaultError('wrong_kind', {}, VAULT_TOTP_KIND_TEXT);
-    const sealed =
-      input.totp === null ? null : ctx.services.custody.seal(vaultTotpAad(row.id), canonicalTotp(input.totp));
-    const [updated] = await tx
-      .update(vaultEntries)
-      .set({ totpSealed: sealed, totpSetAt: sealed ? ctx.now : null, updatedAt: ctx.now })
-      .where(eq(vaultEntries.id, row.id))
-      .returning();
-    if (!updated) throw notFound('Vault entry');
-    const event = await emitEntryEvent(ctx, 'entry.changed', updated);
-    forgetHeldSecretsAfter(ctx);
-    publishVaultUpdated(ctx, updated.ownerId, row.id);
-    return { entryId: row.id, eventId: event.id };
+    const eventId = await replaceTotp(ctx, row, input.totp);
+    return { entryId: row.id, eventId };
   },
 });
 

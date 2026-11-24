@@ -15,6 +15,7 @@ import { registerApiRoutes } from './routes/index';
 import { closeSchedules } from './schedules/ticker';
 import type { Services } from './services';
 import { protectEventsFor } from './things/kinds/home/protect-events';
+import { onePasswordSyncFor } from './vault/onepassword/sync';
 import { closeVoiceTyping } from './voice/service';
 
 export interface AppDeps {
@@ -169,6 +170,7 @@ export async function buildApp({ services, logger }: AppDeps) {
     await services.tracker.close();
     await services.gateway.close();
     await protectEventsFor(services).close();
+    await onePasswordSyncFor(services).close();
     services.guides.close();
     await services.guides.settle();
     await homeJobsFor(services).close();
