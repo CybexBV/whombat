@@ -1487,9 +1487,11 @@ Setup and operation: `docs/github.md`.
   of its own (`onepassword-worker`, JSON lines, only 1Password's hosts), decides each pair in core against a base of per-field
   HMACs (`vault_onepassword_links`), and applies the result as the person through one Vault command in commits of at
   most ten entries, then writes Whombat's changes into 1Password, each write only while the connection, its token and
-  vault are as the pass found them and no disconnect or drain waits (a pass whose token was replaced commits nothing); a
-  clash keeps Whombat's version, as does a pair made by linking, which is decided in the pass that makes it; a pair
-  without a base (restored) takes 1Password's, and removals past a guard wait for the person's answer in the Inbox. The page and Home read the stored state
+  vault are as the pass found them, its pair is still the one the pass read, and no disconnect, drain, guard's answer or
+  restore of Vault records waits (a pass whose token was replaced commits nothing); a clash keeps Whombat's version, as
+  does a pair made by linking, which is decided in the pass that makes it and takes in what only the item has; a pair
+  without a base (restored, or made again after a whole-box restore until a pass completes) takes 1Password's, and
+  removals past a guard wait for the person's answer in the Inbox. The page and Home read the stored state
   (`vault_onepassword_state`); no call or DNS lookup runs under the write lock. A development box answers `ops_dev_`
   tokens with a stand-in 1Password of made-up vaults (`testing/standin.ts`, kept in `$WHOMBAT_HOME`), changed while it
   runs through `/internal/dev/onepassword`; never in production.
