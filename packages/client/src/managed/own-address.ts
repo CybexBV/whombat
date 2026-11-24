@@ -19,6 +19,7 @@ import { DIRECT_PATH } from '@whombat/protocol/direct';
 import { AccountLinkCode, type DirectRoute } from '@whombat/protocol/session';
 import { OperationError, type OwnAddressSummary, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
+import { operationReason, PASSKEY_COPY, passkeyErrorOf } from './passkeys';
 
 /** The own-address host this page is on (`<name>.whombat.app`, `<label>.box.whombat.app`, `<name>.dev.whombat.app`), or null. */
 export function ownAddressOfPage(hostname: string): string | null {
@@ -396,6 +397,12 @@ export const OWN_ADDRESS_TEXT = {
     notArmed:
       'Your passkey is made and opens this Whombat. It doesn’t unlock your backups yet: touch it again in Settings → Devices.',
     next: 'Continue',
+    /** It wasn't made: the way on is Later, and the passkey waits in Settings → Devices. */
+    failed: 'The passkey wasn’t made. Try again, or choose Later and make it in Settings → Devices.',
+    unsupported:
+      'This browser can’t make the passkey. Choose Later and make it in Settings → Devices in another browser.',
+    moved:
+      'Your Whombat’s address changed. Choose Later, then open it at its new address to make the passkey.',
   },
   /** Joining at the address with a box passkey (design §7.3). */
   join: {
@@ -471,6 +478,22 @@ export const OWN_ADDRESS_TEXT = {
     },
   },
 } as const;
+
+/**
+ * What the setup's passkey step says when the passkey wasn't made; null for a dismissed prompt. Each says the way on,
+ * because the setup goes on without it (Later) and the passkey can be made in Settings → Devices.
+ */
+export function boxPasskeySetupProblem(error: unknown): string | null {
+  const t = OWN_ADDRESS_TEXT.passkey;
+  if (error instanceof OperationError && operationReason(error) === 'address_moved') return t.moved;
+  const code = passkeyErrorOf(error);
+  if (!code) return null;
+  if (code === 'unsupported') return t.unsupported;
+  // These say what happened and what to do already; the rest (“didn’t open your Whombat”, …) are about signing in.
+  if (code === 'exists' || code === 'limit' || code === 'rate_limited' || code === 'unreachable')
+    return PASSKEY_COPY.errors[code];
+  return t.failed;
+}
 
 /** What the page says once the box's passkey is made, by what came of its backup key. */
 export function boxPasskeyOutcome(made: { backups: string }): string {
