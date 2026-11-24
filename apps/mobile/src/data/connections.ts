@@ -186,7 +186,7 @@ export interface ConnectedRow {
   webPath: string;
   /**
    * An account row's page on a box that has them (session minor 7), else its own screen (Google, Microsoft 365, Email
-   * (IMAP), GitHub, Website feedback; AP-2909); for a catalog connection its page when the sync lives there (1Password,
+   * (IMAP), GitHub, Website feedback); for a catalog connection its page when the sync lives there (1Password,
    * whose page opens on its own tab), else null (its Connection screen).
    */
   opens: RowOpens | null;

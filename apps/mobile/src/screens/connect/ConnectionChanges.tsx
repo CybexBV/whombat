@@ -565,7 +565,7 @@ export function SignInBlock({
       .then(
         (result) => {
           if (result.status !== 'ok') return;
-          // A Fusebox that didn't answer keeps Whombat's client: the server says so (AIG-03).
+          // A Fusebox that didn't answer keeps Whombat's client: the server says so.
           const notice = (result.data as { notice?: string | null }).notice?.trim();
           showNotice(notice || CONNECTION_CHANGE_TEXT.removed(conn.label));
           onRemoved();

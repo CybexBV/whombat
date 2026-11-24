@@ -1139,7 +1139,7 @@ describe('a report tracker (report-trackers.md, TA-01, TA-02)', () => {
   it('is for automations only: no agent uses it, no request tool', () => {
     expect(isAgentConnection('tracker')).toBe(false);
     expect(isAgentConnection(entry('tracker'))).toBe(false);
-    // 0.76 (CT-332, AIG-01): the AI gateways aren't agents' connections either, nor is the Vault's 1Password sync.
+    // The AI gateways aren't agents' connections either, nor is the Vault's 1Password sync.
     expect(CATALOG.filter((e) => !isAgentConnection(e)).map((e) => e.id)).toEqual([
       'onepassword',
       'tracker',

@@ -39,7 +39,7 @@ export function ConnectionsScreen({ navigation }: Props) {
 
   /**
    * What pressing a row does: a catalog connection's screen (1Password's page, where its sync is); an account's page on
-   * a box that has them, else its own screen (AP-2902).
+   * a box that has them, else its own screen.
    */
   const press = (r: ConnectedRow): (() => void) | undefined => {
     const opens = r.opens;

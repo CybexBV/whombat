@@ -181,7 +181,7 @@ function lowerFirst(label: string): string {
 }
 
 /**
- * What Remove asks first (the web's words, by what stops; the agent by its name, AP-4945, AP-4991). The Vault's sync
+ * What Remove asks first (the web's words, by what stops; the agent by its name). The Vault's sync
  * (1Password) asks it above its two choices for the entries it kept in step.
  */
 export function removeAsk(entry: CatalogEntry, conn: Pick<ConnectionView, 'label'>, agent: string): string {

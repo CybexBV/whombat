@@ -93,7 +93,7 @@ export function setupSteps(entry: CatalogEntry): SetupStep[] {
 
 /**
  * The name field's help: how agents see it, or — only automations using it (TA-02) — how automations name it; an AI
- * gateway's (AIG-05, AP-1118) names its switches and its part of Usage; the Vault's sync (1Password) is named only here.
+ * gateway's names its switches and its part of Usage; the Vault's sync (1Password) is named only here.
  */
 export function nameHelp(
   entry: CatalogEntry,

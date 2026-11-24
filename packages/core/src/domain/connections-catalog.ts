@@ -463,7 +463,7 @@ export function catalogEntry(id: string): CatalogEntry | null {
 
 /**
  * Whether agents use connections of this entry (0.69, CT-325, TA-02): every entry but those only automations use
- * (the trackers), the AI gateways (Fusebox, AI gateway; 0.76, AIG-01) and the Vault's sync (1Password,
+ * (the trackers), the AI gateways (Fusebox, AI gateway) and the Vault's sync (1Password,
  * `isVaultSyncConnection`). False: the connection is never listed or
  * callable for an agent (`connection_tools`, `connection_call`), never one of `DispatchContext.connections`, never
  * counts as one an agent can use and is looked after by nobody. An id this catalog doesn't know counts as an agents'
@@ -688,7 +688,7 @@ export function defaultConnectionLabel(
   fields: Readonly<Record<string, string>>,
   opts: { onlyOne?: boolean } = {},
 ): string {
-  // A gateway's name goes into sentences (“Send Claude Code through Fusebox”) and a burrow has only one (0.76, AIG-05);
+  // A gateway's name goes into sentences (“Send Claude Code through Fusebox”) and a burrow has only one;
   // a burrow has only one Vault sync too, and it has no address to tell it apart.
   if (entry.use === 'gateway' || entry.use === 'vault' || opts.onlyOne) return entry.name;
   const host = connectionHost(entry, fields);
