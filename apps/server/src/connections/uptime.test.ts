@@ -68,6 +68,12 @@ describe('Website or address', () => {
     });
   });
 
+  it('fits the check name in the hub’s byte limit', () => {
+    const name = uptimeSpec({ ...row, label: `Check\n${'🙂'.repeat(30)}` }).name;
+    expect(Buffer.byteLength(name)).toBeLessThanOrEqual(80);
+    expect(name).not.toMatch(/[\n�]/);
+  });
+
   it('uses the hub latency and ignores observations from before an edit or from a stale runner', () => {
     expect(uptimeSeen(check, row, now, 'UTC').points.rtt_ms).toBe(82);
     const stale = uptimeSeen({ ...check, stale: true }, row, now, 'UTC');

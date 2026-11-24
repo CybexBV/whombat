@@ -48,11 +48,23 @@ export async function uptimeRunners(services: Services, burrowId: string) {
   ];
 }
 
+function hubCheckName(label: string): string {
+  const printable = label.replace(/[^\p{L}\p{M}\p{N}\p{P}\p{S} ]/gu, '').trim();
+  let remaining = 80;
+  let name = '';
+  for (const char of printable) {
+    remaining -= Buffer.byteLength(char);
+    if (remaining < 0) break;
+    name += char;
+  }
+  return name.trimEnd() || 'Website or address';
+}
+
 export function uptimeSpec(row: Pick<UptimeRow, 'label' | 'fields'>) {
   const fields = UptimeFields.parse(row.fields);
   const heartbeat = fields.kind === 'heartbeat';
   return {
-    name: Array.from(row.label).slice(0, 80).join(''),
+    name: hubCheckName(row.label),
     kind: fields.kind,
     target: heartbeat ? '' : (fields.address ?? ''),
     runner: heartbeat ? UPTIME_HUB_RUNNER : fields.runner,
