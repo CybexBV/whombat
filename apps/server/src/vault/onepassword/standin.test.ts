@@ -3,6 +3,10 @@
  * production; it answers only `ops_dev_` tokens (their vaults and rights by name) and leaves every other token to the
  * worker; the development door changes its items as a person would in 1Password's app.
  */
+
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   ONEPASSWORD_SKIP_TEXT,
   type OnePasswordItem,
@@ -109,6 +113,40 @@ describe('the stand-in 1Password', () => {
       tags: [],
     };
     await expect(standIn.create(token, item)).rejects.toMatchObject({ kind: 'forbidden' });
+  });
+});
+
+describe('across restarts', () => {
+  it('finds the same vaults and items, and writes later times than the kept ones', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'onepassword-standin-'));
+    try {
+      const file = join(dir, 'onepassword-standin.json');
+      const first = new StandInOnePassword(() => realWorker().api, { file });
+      changeStandIn(first.fake, { action: 'edit', item: 'Grafana', password: 'before-the-restart' });
+      first.save();
+      const before = changeStandIn(first.fake, { action: 'state' }) as {
+        vaults: { id: string; items: { id: string; updatedAt: string }[] }[];
+      };
+
+      const again = new StandInOnePassword(() => realWorker().api, { file });
+      const after = changeStandIn(again.fake, { action: 'state' }) as typeof before;
+      expect(after).toEqual(before);
+      expect((await again.check('ops_dev_mara')).vaults.map((v) => v.id)).toEqual(
+        before.vaults.map((v) => v.id),
+      );
+      const edited = changeStandIn(again.fake, { action: 'edit', item: 'Grafana', username: 'root' }) as {
+        item: { updatedAt: string; secret: string };
+      };
+      expect(edited.item.secret).toBe('before-the-restart');
+      const latest =
+        before.vaults
+          .flatMap((v) => v.items.map((i) => i.updatedAt))
+          .sort()
+          .at(-1) ?? '';
+      expect(edited.item.updatedAt > latest).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

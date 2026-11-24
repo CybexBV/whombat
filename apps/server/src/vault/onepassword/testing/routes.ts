@@ -153,6 +153,8 @@ export function registerOnePasswordStandIn(app: FastifyInstance, services: Servi
     const parsed = Body.safeParse(req.body ?? {});
     if (!parsed.success)
       throw new ApiError('bad_request', 'Send {"action": "state" | "edit" | "add" | "remove", …}.');
-    return reply.send(changeStandIn(standIn.fake, parsed.data));
+    const answer = changeStandIn(standIn.fake, parsed.data);
+    standIn.save();
+    return reply.send(answer);
   });
 }

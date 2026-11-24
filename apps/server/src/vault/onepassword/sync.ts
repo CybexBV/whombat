@@ -5,6 +5,8 @@
  * quarantine: the next reason after it ends runs one. Home's health and the connection page read the stored state and
  * never wait for a pass.
  */
+import { join } from 'node:path';
+import { defaultWhombatHome } from '@whombat/agent-runtime/host';
 import { ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_PASS_EVERY_MS } from '@whombat/core';
 import { onConnectionLifecycle } from '../../connections/lifecycle';
 import type { Services } from '../../services';
@@ -53,7 +55,10 @@ export class OnePasswordSync {
   /** Development's stand-in 1Password, or null where it isn't on (always in production). */
   get standIn(): StandInOnePassword | null {
     if (!onePasswordStandInOn(this.#services.config)) return null;
-    this.#standIn ??= new StandInOnePassword(() => this.#worker());
+    const home = defaultWhombatHome({ WHOMBAT_HOME: this.#services.config.WHOMBAT_HOME });
+    this.#standIn ??= new StandInOnePassword(() => this.#worker(), {
+      file: join(home, 'onepassword-standin.json'),
+    });
     return this.#standIn;
   }
 

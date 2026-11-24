@@ -9,14 +9,32 @@
  * - `ops_dev_read…`: both vaults, read only.
  *
  * While the box runs, its items change through `/internal/dev/onepassword` (`routes.ts`, the runner's token;
- * `pnpm --filter @whombat/server onepassword:dev`), as a person would change them in 1Password's app. Nothing is kept
- * across restarts. Never in production: the config refuses `WHOMBAT_ONEPASSWORD=fake` there, and `onePasswordStandInOn`
- * is false there whatever it says.
+ * `pnpm --filter @whombat/server onepassword:dev`), as a person would change them in 1Password's app. Its vaults are
+ * kept in a file of the box's own folder (`$WHOMBAT_HOME/onepassword-standin.json`) after every change, so a restart
+ * (a development server restarts at every saved file) finds the same vaults and items; delete it to start again.
+ * Never in production: the config refuses `WHOMBAT_ONEPASSWORD=fake` there, and `onePasswordStandInOn` is false there
+ * whatever it says.
  */
-import type { OnePasswordItem, OnePasswordNewItem } from '@whombat/core';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { OnePasswordItem, type OnePasswordNewItem } from '@whombat/core';
+import { z } from 'zod';
 import type { Config } from '../../../config';
 import type { OnePasswordApi } from '../pool';
 import { FakeOnePassword } from './fake';
+
+/** The file's shape: the vaults with their items, as the fake holds them. */
+const Kept = z.object({
+  vaults: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      contentVersion: z.number().int(),
+      items: z.array(OnePasswordItem),
+      archived: z.array(OnePasswordItem),
+    }),
+  ),
+});
 
 /** What a token for the stand-in starts with (1Password's own start with `ops_`). */
 export const ONEPASSWORD_DEV_TOKEN = 'ops_dev_';
@@ -28,16 +46,60 @@ export function onePasswordStandInOn(config: Pick<Config, 'NODE_ENV' | 'WHOMBAT_
 }
 
 export class StandInOnePassword implements OnePasswordApi {
-  readonly fake = new FakeOnePassword();
+  readonly fake: FakeOnePassword;
   readonly #real: () => OnePasswordApi;
+  readonly #file: string | null;
   readonly #whombat: string;
   readonly #team: string;
 
-  constructor(real: () => OnePasswordApi) {
+  /** `file`: where its vaults are kept between restarts (none: in memory only, as in tests). */
+  constructor(real: () => OnePasswordApi, options: { file?: string } = {}) {
     this.#real = real;
-    const { whombat, team } = seedStandIn(this.fake);
-    this.#whombat = whombat;
-    this.#team = team;
+    this.#file = options.file ?? null;
+    const kept = this.#file ? readKept(this.#file) : null;
+    // Its times go on from now, later than every kept one: the sync tells a change by a new time.
+    const latest = Math.max(
+      0,
+      ...(kept?.vaults ?? []).flatMap((v) => [...v.items, ...v.archived].map((i) => Date.parse(i.updatedAt))),
+    );
+    this.fake = new FakeOnePassword({ clockStart: Math.max(Date.now(), latest) });
+    if (kept) {
+      for (const v of kept.vaults)
+        this.fake.vaults.set(v.id, {
+          id: v.id,
+          title: v.title,
+          contentVersion: v.contentVersion,
+          items: new Map(v.items.map((i) => [i.id, i])),
+          archived: new Map(v.archived.map((i) => [i.id, i])),
+        });
+    }
+    const [whombat, team] = kept ? kept.vaults.map((v) => v.id) : [];
+    if (whombat && team) {
+      this.#whombat = whombat;
+      this.#team = team;
+    } else {
+      this.fake.vaults.clear();
+      ({ whombat: this.#whombat, team: this.#team } = seedStandIn(this.fake));
+      this.save();
+    }
+  }
+
+  /** Keeps the vaults in the file, when it has one (after every change). */
+  save(): void {
+    if (!this.#file) return;
+    const kept = {
+      vaults: [...this.fake.vaults.values()].map((v) => ({
+        id: v.id,
+        title: v.title,
+        contentVersion: v.contentVersion,
+        items: [...v.items.values()],
+        archived: [...v.archived.values()],
+      })),
+    };
+    mkdirSync(dirname(this.#file), { recursive: true });
+    const next = `${this.#file}.next`;
+    writeFileSync(next, JSON.stringify(kept), { mode: 0o600 });
+    renameSync(next, this.#file);
   }
 
   check(token: string) {
@@ -53,13 +115,20 @@ export class StandInOnePassword implements OnePasswordApi {
     return this.#to(token).get(token, vaultId, itemIds);
   }
   create(token: string, item: OnePasswordNewItem) {
-    return this.#to(token).create(token, item);
+    return this.#kept(this.#to(token).create(token, item));
   }
   put(token: string, item: OnePasswordItem) {
-    return this.#to(token).put(token, item);
+    return this.#kept(this.#to(token).put(token, item));
   }
   archive(token: string, vaultId: string, itemId: string) {
-    return this.#to(token).archive(token, vaultId, itemId);
+    return this.#kept(this.#to(token).archive(token, vaultId, itemId));
+  }
+
+  /** A write's answer, the vaults kept once it is made. */
+  async #kept<T>(write: Promise<T>): Promise<T> {
+    const out = await write;
+    this.save();
+    return out;
   }
 
   /** The stand-in for a development token (its vaults by the token's name), the real worker for any other. */
@@ -74,6 +143,17 @@ export class StandInOnePassword implements OnePasswordApi {
     // Only what a person would see in the app's own log: the calls aren't needed and would grow for ever.
     this.fake.calls.length = 0;
     return this.fake;
+  }
+}
+
+/** The kept vaults, or null when there are none yet (or the file can't be read: the stand-in starts again). */
+function readKept(file: string): z.infer<typeof Kept> | null {
+  if (!existsSync(file)) return null;
+  try {
+    const parsed = Kept.safeParse(JSON.parse(readFileSync(file, 'utf8')));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
   }
 }
 

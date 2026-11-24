@@ -1489,8 +1489,8 @@ Setup and operation: `docs/github.md`.
   changes into 1Password; a clash keeps Whombat's version, a pair without a base (restored) takes 1Password's, and
   removals past a guard wait for the person's answer in the Inbox. The page and Home read the stored state
   (`vault_onepassword_state`); no call or DNS lookup runs under the write lock. A development box answers `ops_dev_`
-  tokens with a stand-in 1Password of made-up vaults (`testing/standin.ts`), changed while it runs through
-  `/internal/dev/onepassword`; never in production.
+  tokens with a stand-in 1Password of made-up vaults (`testing/standin.ts`, kept in `$WHOMBAT_HOME`), changed while it
+  runs through `/internal/dev/onepassword`; never in production.
   [onepassword-sync.md](docs/decisions/onepassword-sync.md). [vault.md](docs/decisions/vault.md) (its “What holds today”),
   [vault-simplify.md](docs/decisions/vault-simplify.md), [settings-groups.md](docs/decisions/settings-groups.md)
 - **Worth a look on a connection's page** is a strip on top, there only while it has a line, and at most three lines per check (two items and one “N more” past that,
