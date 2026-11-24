@@ -427,6 +427,27 @@ export function limitView(
   };
 }
 
+/**
+ * A check's limit as What Whombat watches says it under its name: “Warns above 85 %”, “Warns above 90 %, the default”,
+ * “Each sensor warns at its own limit”; with the items that have their own (“/mnt/backup above 97 %”). Null: no limit.
+ */
+export function limitLine(
+  check: Pick<ThingWatchCheck, 'limit'>,
+): { words: string; items: { subject: NoticeSubject; words: string }[] } | null {
+  const l = check.limit;
+  if (!l) return null;
+  const words =
+    l.value !== null
+      ? `Warns above ${limitText(l.value, l.unit)}`
+      : l.defaultValue !== undefined
+        ? `Warns above ${limitText(l.defaultValue, l.unit)}, the default`
+        : 'Each sensor warns at its own limit';
+  return {
+    words,
+    items: l.items.map((i) => ({ subject: i.subject, words: `above ${limitText(i.value, l.unit)}` })),
+  };
+}
+
 /** What was typed as a limit, or the problem to show under the field. */
 export function parseLimit(
   typed: string,

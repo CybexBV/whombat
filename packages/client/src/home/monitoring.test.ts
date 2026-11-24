@@ -252,6 +252,17 @@ describe('change the limit', () => {
     expect(lineLimit(line, null)).toBeNull();
   });
 
+  it('says the limit in What Whombat watches, with the items that have their own', () => {
+    expect(limitLine(disk)).toEqual({
+      words: 'Warns above 85 %',
+      items: [{ subject: { id: '/mnt/backup', name: '/mnt/backup' }, words: 'above 97 %' }],
+    });
+    expect(limitLine({ limit: { ...(disk.limit as never), value: null, items: [] } })?.words).toContain(
+      'the default',
+    );
+    expect(limitLine({})).toBeNull();
+  });
+
   it('reads a typed limit within its range', () => {
     const view = { min: 1, max: 100, unit: '%' };
     expect(parseLimit('95', view)).toBe(95);
