@@ -70,9 +70,18 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * own-address hosts outside the three-word `box.`/`dev.` shape, which a box names only to a session at minor 6 or later
  * (Whombat own-address.md); minor 7 is a page for each account (Google, Microsoft 365, Email, GitHub, Website
  * feedback): `things.page` answers for them and their things open it, which a box says only to a session at minor 7 or
- * later (Whombat connection-dashboards.md).
+ * later (Whombat connection-dashboards.md); minor 8 is a 1Password vault kept in step with the Vault: the catalog's
+ * `onepassword` entry (the use `vault`, the check kind `onepassword`), the `connections.onePassword…` operations,
+ * `connections.disconnect`'s `vaultEntries`, a Vault entry's `source` and the Inbox's `onepassword_removals` button,
+ * which a box offers only to a session at minor 8 or later (Whombat onepassword-sync.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 7 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 8 };
+
+/**
+ * Session protocol minor (major 5) that links a 1Password vault (the catalog's 1Password entry and its connection
+ * page); an older session's catalog leaves 1Password out.
+ */
+export const ONEPASSWORD_SYNC_MINOR = 8;
 
 /**
  * Session protocol minor (major 5) that opens an account's own page (`things.page` for Google, Microsoft 365, Email,

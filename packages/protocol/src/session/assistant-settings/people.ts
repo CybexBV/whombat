@@ -40,6 +40,10 @@ export const PEOPLE_SETTINGS = {
   'connections.findMyTimelineSet': NONE,
   // The assistant starts and stops its watches through its own tool (findmy_watch).
   'connections.findMyWatchCancel': NONE,
+  // The 1Password sync is the person's, like the Vault's secrets: the assistant neither reads it nor runs it.
+  'connections.onePassword': NONE,
+  'connections.onePasswordRemovals': NONE,
+  'connections.onePasswordSync': NONE,
   'connections.finishGoogle': NONE,
   'connections.finishMicrosoft': NONE,
   'connections.finishOAuth': NONE,
