@@ -17,7 +17,6 @@ import {
   hostWatchLimit,
   type KeepQuietBody,
   type KeptQuiet,
-  type NeedsYouItem,
   type NoticeQuiet,
   type SetThingWatchLimitBody,
   type ThingCause,
@@ -290,22 +289,9 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
     return out;
   }
 
-  /** Whether what a Needs you item is about is held: kept quiet, or down because of something else. */
-  const heldSubject = (subject: { kind: string; id: string } | undefined) => {
-    if (!subject) return false;
-    const id = `${subject.kind}:${subject.id}`;
-    return !!window(id) || causes.has(id);
-  };
-
-  function decorateHome<
-    T extends { things: ThingSummary[]; needsYou?: NeedsYouItem[]; needsYouList?: NeedsYouItem[] },
-  >(home: T): T {
-    // What is kept quiet or down because of something else makes no Needs you item of its own.
-    const keep = (items: NeedsYouItem[] | undefined) => items?.filter((n) => !heldSubject(n.subject));
+  function decorateHome<T extends { things: ThingSummary[] }>(home: T): T {
     return {
       ...home,
-      ...(home.needsYou ? { needsYou: keep(home.needsYou) } : {}),
-      ...(home.needsYouList ? { needsYouList: keep(home.needsYouList) } : {}),
       things: home.things.map((t) => {
         const cause = causes.get(t.id);
         const w = window(t.id);
