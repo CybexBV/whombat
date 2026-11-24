@@ -81,8 +81,11 @@ export const ONEPASSWORD_MARKER = {
 export const OnePasswordItemField = z.looseObject({
   id: z.string(),
   title: z.string(),
-  /** Absent or empty for built-in fields (a Login's username and password). */
-  sectionId: z.string().optional(),
+  /**
+   * Null for built-in fields (a Login's username and password): that is what the SDK answers (checked against a real
+   * account); absent or empty is taken the same way.
+   */
+  sectionId: z.string().nullish(),
   fieldType: z.string(),
   value: z.string(),
 });
@@ -293,7 +296,7 @@ export const ONEPASSWORD_SKIP_TEXT: Record<OnePasswordSkipReason, string> = {
 
 /* Reading an item ------------------------------------------------------------------------------------ */
 
-const isBuiltIn = (f: OnePasswordItemField) => f.sectionId === undefined || f.sectionId === '';
+const isBuiltIn = (f: OnePasswordItemField) => f.sectionId == null || f.sectionId === '';
 
 /** A built-in field by its id: the one without a section first, as 1Password keeps them, else any with that id. */
 function builtInField(fields: readonly OnePasswordItemField[], id: string): OnePasswordItemField | undefined {

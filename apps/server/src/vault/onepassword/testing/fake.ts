@@ -29,6 +29,19 @@ interface FakeToken {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
+/**
+ * An item as the real SDK sends it back: a field without a section has `sectionId: null`, a field without details
+ * `details: null`, an item without a document `document: null` (seen on a real account; a shape that only had
+ * `undefined` there once hid a refusal of every new Login).
+ */
+function asSent(item: OnePasswordItem): OnePasswordItem {
+  return {
+    ...item,
+    fields: item.fields.map((f) => ({ ...f, sectionId: f.sectionId ?? null, details: f.details ?? null })),
+    document: item.document ?? null,
+  };
+}
+
 let seq = 0;
 /** An id like 1Password's: 26 lower-case letters and digits. */
 export function fakeOnePasswordId(): string {
@@ -264,7 +277,7 @@ export class FakeOnePassword implements OnePasswordApi {
     const { vault, item } = this.#find(input.id);
     if (input.version !== item.version)
       throw new OnePasswordError('failed', 'the item has changed since it was read (version conflict)');
-    const next = clone(input);
+    const next = asSent(clone(input));
     next.version = item.version + 1;
     next.updatedAt = this.now();
     next.createdAt = item.createdAt;
@@ -317,7 +330,7 @@ export class FakeOnePassword implements OnePasswordApi {
   ): OnePasswordItem {
     const v = this.vault(vaultId);
     const at = this.now();
-    const item: OnePasswordItem = {
+    const item = asSent({
       id: fakeOnePasswordId(),
       title: input.title,
       category: input.category,
@@ -331,7 +344,7 @@ export class FakeOnePassword implements OnePasswordApi {
       files: [],
       createdAt: at,
       updatedAt: at,
-    };
+    });
     v.items.set(item.id, item);
     v.contentVersion++;
     return clone(item);
