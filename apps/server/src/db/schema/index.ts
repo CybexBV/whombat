@@ -37,6 +37,7 @@ export * from './kept-sites';
 export * from './mail-triggers';
 export * from './managed';
 export * from './merges';
+export * from './onepassword';
 export * from './principals';
 export * from './prompts';
 export * from './quiet';
