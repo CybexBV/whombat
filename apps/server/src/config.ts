@@ -340,6 +340,17 @@ export const ConfigSchema = z
      */
     WHOMBAT_LINK_PREVIEWS: z.enum(['on', 'off']).optional(),
     /**
+     * Whombat checks its own way out every minute (docs/decisions/monitoring.md MON-08): its router, name lookups and the
+     * internet. `on` in production; a development box and tests never probe the internet unless it is `on`.
+     */
+    WHOMBAT_WAY_OUT: z.enum(['on', 'off']).optional(),
+    /**
+     * The two addresses the way-out check reaches the internet at, `host:port` comma-separated: Whombat's own service
+     * (the hosted app's host, `WHOMBAT_APP_URL`) and a well-known anycast address. Default: those two, or two anycast
+     * addresses on a box without Whombat's service.
+     */
+    WHOMBAT_WAY_OUT_TARGETS: z.string().max(400).optional(),
+    /**
      * GitHub (docs/github.md): `gh` = each burrow's GitHub as the GitHub sign-in of the person who connected it
      * (PV-06), `fake` = the in-memory FakeGitHub (dev, tests, demo), `off`. `auto` (default): gh in production, the
      * fake otherwise.
@@ -493,6 +504,7 @@ export const ConfigSchema = z
       (cfg.NODE_ENV === 'production' || cfg.WHOMBAT_EDITION === 'community' ? undefined : DEV_APP_URL),
     WHOMBAT_GOOGLE: cfg.WHOMBAT_GOOGLE ?? (cfg.NODE_ENV === 'test' || cfg.WHOMBAT_DEMO ? 'fake' : 'real'),
     WHOMBAT_LINK_PREVIEWS: cfg.WHOMBAT_LINK_PREVIEWS ?? (cfg.NODE_ENV === 'test' ? 'off' : 'on'),
+    WHOMBAT_WAY_OUT: cfg.WHOMBAT_WAY_OUT ?? (cfg.NODE_ENV === 'production' ? 'on' : 'off'),
     /** Where the database is: `url` (DATABASE_URL) or `dev`. */
     DATABASE_SOURCE: (cfg.DATABASE_URL ? 'url' : 'dev') as 'url' | 'dev',
     // Mail is optional in production (no silent fallback to a local Mailpit); development and tests keep it.

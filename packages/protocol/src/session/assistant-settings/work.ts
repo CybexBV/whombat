@@ -255,6 +255,9 @@ export const WORK_SETTINGS = {
   'search.query': NONE,
 
   'things.action': ask('overview', 'Change a service’s setting, or run an action on it like Restart'),
+  // Keeping something quiet is the person's word: the assistant has `quiet_until`, which acts only on it.
+  'things.endQuiet': NONE,
+  'things.keepQuiet': NONE,
   'things.page': read('overview', 'Read how a connection or device is doing'),
   'things.quiet': change('overview', 'Ignore or snooze a Worth a look line'),
   // The assistant uses watch_checks on the person's word.

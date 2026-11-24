@@ -8,6 +8,7 @@
  * snooze). A call that starts a task on the server is followed (`follow.ts`, proxmox.md PX-05): Whombat says in the
  * chat how it ended. An argument a tool doesn't take is refused, naming it (PX-08), rather than dropped.
  */
+
 import {
   type GuideCard,
   HOST_ASKS_FIRST_DEFAULT,
@@ -25,6 +26,7 @@ import type { Adapter, AdapterContext } from '../connections/adapters/types';
 import { type CallOutput, ConnectionArgumentError } from '../connections/request';
 import { makeCard } from '../guides/flows';
 import { loadPrincipalRow } from '../read/principals';
+import { keepQuietForWork, RESTART_MS } from '../things/quiet/window-work';
 import { serverAsksOf } from './asks-store';
 import { HOSTS_API, seg } from './client';
 import { askAddServer, committed } from './commands';
@@ -497,6 +499,15 @@ const TOOLS: Adapter = {
       });
       const r = obj(raw);
       s.hosts.forget('fleet');
+      // Whombat's own restart is planned work: the machine is kept quiet for it (monitoring.md MON-05).
+      if (r.noop !== true && (hubAction === 'reboot' || hubAction === 'restart'))
+        await keepQuietForWork(s.call.services, {
+          burrowId: s.call.burrowId,
+          serverId: id,
+          guestId: guest.id,
+          work: `power:${id}/${guest.id}:${str(r.action_id) ?? Date.now()}`,
+          expectedMs: RESTART_MS,
+        });
       const text = powerText(hubAction, guest.name, id);
       const inverse = r.noop === true ? null : powerInverse(hubAction, guest.kind);
       await record(s, {

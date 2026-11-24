@@ -49,6 +49,7 @@ import { type ApprovalRow, approvalByNumber, approvalForViewer } from '../read/w
 import type { Services } from '../services';
 import { thingLines, thingNotice } from '../things/quiet/connection';
 import type { GlanceNotice } from '../things/quiet/glance';
+import { takenFrom, takenWords } from '../things/quiet/windows';
 import type {
   DeskAsk,
   DeskBox,
@@ -679,6 +680,8 @@ export function deskLooks(
   max = DESK_LOOKS_MAX,
 ): DeskLook[] {
   const looks: DeskLook[] = [];
+  // What a server that is down takes with it, from the things down because of it (monitoring.md MON-07).
+  const taken = takenFrom(thingList);
   for (const s of servers) {
     const state = SERVER_LOOK[s.state];
     if (!state) continue;
@@ -686,7 +689,8 @@ export function deskLooks(
     // card only warm (a heads-up); a card read some other way keeps its look without one.
     const notice = cardNotice(s);
     if (notice === null) continue;
-    const reason = lookReason(s.note);
+    const takes = state === 'down' && s.id ? takenWords(taken.get(`server:${s.id}`) ?? []) : null;
+    const reason = lookReason(takes ?? s.note);
     const look: DeskLook = {
       key: screenText(`server:${s.id ?? s.name}`, 120),
       kind: 'server',
@@ -709,6 +713,9 @@ export function deskLooks(
     const notice = thingNotice(t);
     if (notice?.nature === 'fyi') continue;
     const reason = lookReason(t.reason);
+    const cause = t.causedBy
+      ? { thing: screenText(t.causedBy.thing, 120), name: screenText(t.causedBy.name, 40) }
+      : null;
     const look: DeskLook = {
       key,
       kind: t.kind,
@@ -716,6 +723,7 @@ export function deskLooks(
       state,
       ...(reason ? { reason } : {}),
       ...lookNotice(notice),
+      ...(cause?.thing && cause.name ? { causedBy: cause } : {}),
     };
     LOOK_LINES.set(look, lookLines(thingLines(t)));
     looks.push(look);

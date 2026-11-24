@@ -11,6 +11,8 @@
  *   `looks/watch.ts`).
  * - **Incidents**, every minute: outages kept from the same looks, and one push when something important went wrong
  *   (monitoring.md MON-06, `incidents/watch.ts`).
+ * - **Causes** and **the way out**, every minute (monitoring.md MON-07, MON-08): what each thing is down because of
+ *   (`things/causes.ts`), and whether Whombat reaches its router, name lookups and the internet (`managed/way-out.ts`).
  *
  * Kept out of the `Services` interface (`homeJobsFor`), like the connection pool.
  */
@@ -19,7 +21,9 @@ import { CareWatcher } from '../care/watch';
 import { approvals } from '../db/schema/index';
 import { INCIDENTS_WATCH_MS, IncidentWatcher } from '../incidents/watch';
 import { LookWatcher, WATCH_MS } from '../looks/watch';
+import { WAY_OUT_CHECK_MS, WayOutWatch } from '../managed/way-out';
 import type { Services } from '../services';
+import { CAUSES_MS, passCauses } from '../things/causes';
 import { rollUpPoints } from '../things/points';
 import { pollConnectionHealth } from './health';
 import { pollMailGlances } from './mail-glance';
@@ -58,11 +62,13 @@ class HomeJobs {
   readonly #looks: LookWatcher;
   readonly #care: CareWatcher;
   readonly #incidents: IncidentWatcher;
+  readonly #wayOut: WayOutWatch;
 
   constructor(private readonly services: Services) {
     this.#looks = new LookWatcher(services);
     this.#care = new CareWatcher(services);
     this.#incidents = new IncidentWatcher(services);
+    this.#wayOut = new WayOutWatch(services);
   }
 
   start(): void {
@@ -88,6 +94,9 @@ class HomeJobs {
       // A care plan for a server that was just added (care-plan.md).
       job('home.care', WATCH_MS, () => this.#care.pass()),
       job('home.incidents', INCIDENTS_WATCH_MS, () => this.#incidents.pass()),
+      // The box's own way out, then what each thing is down because of (monitoring.md MON-07, MON-08).
+      job('home.way-out', WAY_OUT_CHECK_MS, () => this.#wayOut.pass()),
+      job('home.causes', CAUSES_MS, () => passCauses(this.services)),
     );
   }
 

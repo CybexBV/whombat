@@ -16,9 +16,9 @@ import {
   parseThingId,
   thingId,
 } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
 import { connectionByHandle } from '../connections/context';
-import { burrows, type IncidentRow } from '../db/schema/index';
+import { burrows, type IncidentRow, quietWindows } from '../db/schema/index';
 import { deskFleet, deskLooks } from '../desk/glance';
 import { turnPerson } from '../domain/turn-person';
 import { homeOverview } from '../home/overview';
@@ -76,15 +76,33 @@ export function agentIncident(row: IncidentRow, now: Date, timeZone: string): Ag
 }
 
 /**
- * The quiet windows now (a thing kept quiet until a time, with its note), for `watch_status`. Quiet windows are another
- * part of the monitoring work; until they are kept, there are none.
+ * The quiet windows that hold now (a thing kept quiet until a time, with its note), for `watch_status`, named as Home
+ * names the thing; a window on something Home doesn't list keeps its id.
  */
 export async function quietWindowsFor(
-  _services: Services,
-  _burrowId: string,
-  _now: Date,
+  services: Services,
+  burrowId: string,
+  now: Date,
+  names: ReadonlyMap<string, string> = new Map(),
 ): Promise<{ thing: string; name: string; until: Date; note?: string }[]> {
-  return [];
+  const rows = await services.db
+    .select()
+    .from(quietWindows)
+    .where(
+      and(
+        eq(quietWindows.ownerId, burrowId),
+        isNull(quietWindows.endedAt),
+        lte(quietWindows.startsAt, now),
+        gt(quietWindows.endsAt, now),
+      ),
+    )
+    .orderBy(asc(quietWindows.endsAt));
+  return rows.map((w) => ({
+    thing: w.thingId,
+    name: names.get(w.thingId) ?? w.thingId,
+    until: w.endsAt,
+    ...(w.note ? { note: w.note } : {}),
+  }));
 }
 
 /** The person the turn is for, its time zone and how the hosts service names the assistant for them. */
@@ -114,12 +132,17 @@ export async function watchStatusTool(ctx: ToolContext): Promise<McpToolOutput<'
   if (!burrow) throw notFound('Burrow');
   const now = services.clock();
   const timeZone = burrow.timeZone;
-  const [overview, fleet, open, quiet] = await Promise.all([
+  const [overview, fleet, open] = await Promise.all([
     homeOverview(services, { burrow, principal: person }),
     deskFleet(services, burrowId).catch(() => null),
     openIncidents(services.db, burrowId),
-    quietWindowsFor(services, burrowId, now),
   ]);
+  const quiet = await quietWindowsFor(
+    services,
+    burrowId,
+    now,
+    new Map(overview.things.map((t) => [t.id, t.name])),
+  );
   const waiting = (overview.needsYouList ?? []).filter(
     (i) => (i.group ?? needsYouGroupOf(i)) === 'you' && (i.state ?? 'open') === 'open',
   );

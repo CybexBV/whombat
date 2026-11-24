@@ -165,6 +165,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Incidents (docs/decisions/monitoring.md MON-06, MON-09): a new table incidents, one row per stretch a server, connection or device was down or had a bad dot, with its words, cause and the push to withdraw, cascading with the burrow and kept 90 days. The release before it never reads the table."
+    },
+    "0026_quiet_windows": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Keeping things quiet for a while, causes and the way out (docs/decisions/monitoring.md MON-04…MON-08): three new tables. The release before it never reads or writes them."
     }
   }
 }

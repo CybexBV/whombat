@@ -311,14 +311,18 @@ export function serverVerdict(input: {
       input.guestsOf,
     ).hints)
       if (!h.row) lines.push(h.line);
-  const r = applyQuiet({ lines, quiets: [], offs: [], states: [], now: input.now, pass: false });
+  // Kept quiet (monitoring.md MON-04): its alerts are muted in the hosts service too, but count for nothing here
+  // even before the hub has the maintenance window.
+  const windows = input.quiet?.windows ?? [];
+  const r = applyQuiet({ lines, quiets: [], offs: [], states: [], now: input.now, pass: false, windows });
   const worst = r.worst;
   const asking = worst ? [worst, ...r.asking.filter((l) => l !== worst)] : [];
   const hubNote = card.statusNote?.trim() || null;
   if (input.pending) return { status: 'pending', note: hubNote, dot: false, worst: null, asking: [] };
   if (card.status === 'offline') {
     const beat = own.find((a) => a.rule === HEARTBEAT_RULE);
-    const quiet = input.heartbeatOff === true || (beat !== undefined && !asksAttention(beat));
+    const quiet =
+      r.held !== null || input.heartbeatOff === true || (beat !== undefined && !asksAttention(beat));
     const beatLine = beat && !quiet ? alertLine(beat) : null;
     const behind = beatLine ?? worst;
     return {

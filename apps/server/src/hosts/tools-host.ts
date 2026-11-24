@@ -1,5 +1,6 @@
 import type { Adapter } from '../connections/adapters/types';
 import { ConnectionArgumentError } from '../connections/request';
+import { keepQuietForWork, SERVER_RESTART_MS } from '../things/quiet/window-work';
 import { seg } from './client';
 import { arr, num, obj, str, toHostManageResult, toHostTask } from './map';
 import { taskPlatform } from './task-platform';
@@ -432,6 +433,14 @@ export const HOST_TOOLS: Adapter = {
           }),
         );
         s.hosts.forget('fleet');
+        // Whombat's own restart is planned work: the server is kept quiet for it (monitoring.md MON-05).
+        if (action === 'reboot')
+          await keepQuietForWork(s.call.services, {
+            burrowId: s.call.burrowId,
+            serverId: id,
+            work: `reboot:${id}:${str(raw.action_id) ?? Date.now()}`,
+            expectedMs: SERVER_RESTART_MS,
+          });
         await record(
           s,
           changeOf('server_power', id, null, action === 'reboot' ? `Rebooted ${id}` : `Shut down ${id}`, {

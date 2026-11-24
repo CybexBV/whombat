@@ -14,7 +14,7 @@ import { Count, JsonObject, Timestamp } from './common.js';
 import { CHAT_ROOMS, type ChatRoom } from './conversation.js';
 import { LookResearch } from './look-research.js';
 import { OverviewLayout } from './overview-layout.js';
-import { NoticeCheck, NoticeNature, NoticeSubject } from './quiet.js';
+import { NoticeCheck, NoticeNature, NoticeSubject, ThingCause } from './quiet.js';
 import { ThingLogo } from './thing-logo.js';
 
 /* References and links ---------------------------------------------------------------------------- */
@@ -354,6 +354,13 @@ export const ThingSummary = z.object({
    * “Connected · used today”. Absent: never, or a server.
    */
   usedAt: Timestamp.optional(),
+  /**
+   * Down because of something else (Whombat monitoring.md MON-07, MON-08): its server is down, its machine stopped or
+   * is kept quiet, or the internet is down. Its dot is grey (`unknown`) and `line` says why.
+   */
+  causedBy: ThingCause.optional(),
+  /** Kept quiet until this time (MON-04, MON-05): its lines colour nothing until then. */
+  quietUntil: Timestamp.optional(),
 });
 export type ThingSummary = z.infer<typeof ThingSummary>;
 

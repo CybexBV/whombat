@@ -183,6 +183,13 @@
       "when": 1795554383485,
       "tag": "0025_incidents",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795554583331,
+      "tag": "0026_quiet_windows",
+      "breakpoints": true
     }
   ]
 }

@@ -536,6 +536,10 @@ const TABLE = {
   'things.history': READ,
   'things.setWatch': NEVER,
   'things.setWatchLimit': NEVER,
+  // Keeping a server quiet makes or ends a maintenance window in the hosts service outside the receipt's transaction
+  // (Whombat monitoring.md MON-04), so neither is resent by a client; not destructive (End now, Undo).
+  'things.keepQuiet': NEVER,
+  'things.endQuiet': NEVER,
   // Servers (CT-339): every write is a call to the hosts service, which acts outside the receipt's transaction, so none
   // is resent by a client. `createEnrollment` (the install command's token) and `createConsole` (the console token)
   // are secret.

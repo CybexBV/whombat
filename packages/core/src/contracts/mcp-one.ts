@@ -11,11 +11,15 @@
  *   person said so (Whombat docs/decisions/on-purpose.md).
  * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period (Whombat
  *   docs/decisions/monitoring.md MON-10), read-only.
+ * - `quiet_until`: keep a connection, server or device quiet until a time, or end that, when the person said so
+ *   (Whombat docs/decisions/monitoring.md MON-04).
  */
 import { z } from 'zod';
 import { DeviceDriver, DeviceProfile, DeviceReading } from '../domain/devices.js';
 import { WIDGET_REFRESH_MAX_S, WIDGET_REFRESH_MIN_S, WidgetSource } from '../domain/home.js';
 import {
+  KEEP_QUIET_MAX_MINUTES,
+  KEEP_QUIET_MIN_MINUTES,
   NoticeCheck,
   NoticeNature,
   NoticeSubjectId,
@@ -220,6 +224,27 @@ export const ONE_MCP_TOOLS = {
     }),
     requiredKey: null,
     readOnly: true,
+    personal: true,
+  }),
+  quiet_until: oneTool({
+    name: 'quiet_until',
+    title: 'Keep quiet for a while',
+    description:
+      'Keep a connection, server or device quiet until a time, or for some minutes, with an optional short note (“Moving the NAS”): until then its problems make no look, Inbox item or push, and a server’s alerts are muted too. When it ends, what is still wrong counts again. With end: true it ends now. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle. Without until, minutes or end it only says whether it is kept quiet. Do it only when the person told you to in this conversation (“keep the NAS quiet tonight”); it shows in what you did, with Undo.',
+    input: z.object({
+      thing: z.string().trim().min(1).max(220),
+      /** When it ends, with its offset (“2026-11-24T23:00:00+01:00”). */
+      until: z.iso.datetime({ offset: true }).optional(),
+      minutes: z.number().int().min(KEEP_QUIET_MIN_MINUTES).max(KEEP_QUIET_MAX_MINUTES).optional(),
+      note: z.string().trim().min(1).max(120).optional(),
+      end: z.boolean().optional(),
+    }),
+    output: commitOutcome({
+      /** How it is kept quiet now (“Quiet until 23:00 · Moving the NAS”); null when it isn't. */
+      quiet: z.object({ words: z.string(), until: z.string() }).nullable(),
+    }),
+    requiredKey: null,
+    readOnly: false,
     personal: true,
   }),
 } as const;

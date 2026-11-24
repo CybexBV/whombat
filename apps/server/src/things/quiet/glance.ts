@@ -10,6 +10,7 @@ import { type ApplyLine, applyQuiet, natureOf, type StateRow } from './apply';
 import { notWatched } from './defaults';
 import type { ThingQuiet } from './store';
 import type { LooseNotice, NoticeIgnore, NoticeNature, NoticeSubject } from './types';
+import type { Hold } from './windows';
 
 /** A line as the glance keeps it (server only). */
 export interface GlanceLine {
@@ -75,6 +76,8 @@ export interface Verdict {
   worst: GlanceLine | null;
   /** Every line behind it, worst first: what the assistant looks into when it looks into the thing. */
   asking?: GlanceLine[];
+  /** What holds the whole thing quiet now (a window or a cause, monitoring.md MON-04, MON-07). */
+  held?: Hold;
 }
 
 /** The notice a desk look carries for a line. */
@@ -107,7 +110,7 @@ export function verdict(lines: readonly GlanceLine[], quiet: ThingQuiet, now: Da
   );
   const r = applyQuiet({ lines, quiets: quiet.quiets, ...notWatched(quiet), states, now, pass: false });
   const worst = r.worst;
-  if (!worst) return { status: 'ok', worst: null };
+  if (!worst) return { status: 'ok', worst: null, ...(r.held ? { held: r.held } : {}) };
   const notice = noticeOf(worst);
   return {
     status: worst.offline ? 'offline' : r.status,

@@ -13,8 +13,10 @@
  * `canInstall` comes from the server's detail read as admin, the switches the install meets (task-feedback.md TF-01);
  * when they look off, `next` leaves the last word to the install itself (TF-03).
  */
+
 import type { Adapter } from '../connections/adapters/types';
 import { ConnectionArgumentError } from '../connections/request';
+import { keepQuietForWork, updateWork } from '../things/quiet/window-work';
 import { HostsError } from './client';
 import { hostsErrorText } from './errors';
 import { camel, obj, remoteControl, remoteControlFromAgent, toHostInspect, toHostManageResult } from './map';
@@ -193,6 +195,14 @@ export const UPDATE_TOOLS: Adapter = {
         );
         // The report gains the running package task.
         s.hosts.forget('fleet');
+        // Installing updates is Whombat's planned work: the server is kept quiet until 15 minutes after its task ends
+        // (monitoring.md MON-05; the task's end moves it, `workEnded`).
+        if (action === 'install' && r.task?.id)
+          await keepQuietForWork(s.call.services, {
+            burrowId: s.call.burrowId,
+            serverId: id,
+            work: updateWork(id, r.task.id),
+          });
         const detail = [reason.slice(0, 300), packages ? `Only ${listWords(packages, 10)}` : null]
           .filter(Boolean)
           .join('\n');

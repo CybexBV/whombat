@@ -321,6 +321,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'look_report',
       'pin_widget',
       'propose_device_skill',
+      // Keeping a thing quiet for a while, on the person's word (Whombat monitoring.md MON-04).
+      'quiet_until',
       // What the assistant finished, for the desk's Done today (Whombat done-today.md DN-01).
       'report_done',
       'set_chat_title',
