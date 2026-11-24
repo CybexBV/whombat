@@ -9,6 +9,7 @@ import {
   keepQuietOptions,
   keepQuietUntil,
   keptToast,
+  limitLine,
   limitView,
   lineLimit,
   parseLimit,
@@ -257,9 +258,10 @@ describe('change the limit', () => {
       words: 'Warns above 85 %',
       items: [{ subject: { id: '/mnt/backup', name: '/mnt/backup' }, words: 'above 97 %' }],
     });
-    expect(limitLine({ limit: { ...(disk.limit as never), value: null, items: [] } })?.words).toContain(
-      'the default',
-    );
+    expect(
+      limitLine({ limit: { ...(disk.limit as NonNullable<typeof disk.limit>), value: null, items: [] } })
+        ?.words,
+    ).toContain('the default');
     expect(limitLine({})).toBeNull();
   });
 
