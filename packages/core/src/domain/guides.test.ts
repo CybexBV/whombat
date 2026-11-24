@@ -338,6 +338,9 @@ describe('the assistant’s tools (AG-18)', () => {
       'vault_save',
       // What Whombat watches, switched on the person's word (Whombat on-purpose.md).
       'watch_checks',
+      // How everything is and what went wrong, read-only (Whombat monitoring.md).
+      'watch_history',
+      'watch_status',
       // This Whombat's own backups, on the person's yes (Whombat first-day.md).
       'whombat_backup',
     ]);
