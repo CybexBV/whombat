@@ -236,8 +236,15 @@ export function parseConversationPick(
   return id === 'pins' || id === 'plans' || id === 'files' ? { kind: 'link', key: id } : null;
 }
 
-/** A notice line's ⋯ menu (QN-10): its title on top, Ignore and Stop watching with what they mean under them. */
-export function quietLineMenu(menu: QuietMenuView, title: string): NativeMenuSpec {
+/**
+ * A notice line's ⋯ menu (QN-10): its title on top, Ignore and Stop watching with what they mean under them; on a
+ * server's line whose check has a limit, Change the limit with the limit now under it (Whombat monitoring.md MON-15).
+ */
+export function quietLineMenu(
+  menu: QuietMenuView,
+  title: string,
+  limit: { label: string; words: string } | null = null,
+): NativeMenuSpec {
   return plainMenu(
     [
       [
@@ -245,6 +252,7 @@ export function quietLineMenu(menu: QuietMenuView, title: string): NativeMenuSpe
         { id: 'snooze', title: menu.snooze.label, icon: 'alarm' },
       ],
       [{ id: 'stop', title: menu.stop.label, subtitle: menu.stop.words, icon: 'bell.slash' }],
+      limit ? [{ id: 'limit', title: limit.label, subtitle: limit.words, icon: 'slider.horizontal.3' }] : [],
     ],
     title,
   );

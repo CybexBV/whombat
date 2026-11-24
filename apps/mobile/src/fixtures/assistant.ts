@@ -1529,10 +1529,8 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     url: URL,
   ): Promise<Response | null> {
     const thing = params.thing ?? '';
-    const changed = () => {
+    const changed = () =>
       emit(`me:${mara.id}`, { type: 'home.changed', parts: ['things', 'needsYou', 'watch'] });
-      if (thing.startsWith('server:')) emit(`hosts:${BURROW_ID}`, { type: 'hosts.changed' });
-    };
     switch (id) {
       case 'things.keepQuiet': {
         const answer = monitoring.keepQuiet(thing, await bodyOf<KeepQuietBody>(init));
