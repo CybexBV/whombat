@@ -51,6 +51,13 @@ import { TrackerEnvironment } from './tracker.js';
 export { FIND_MY_PEOPLE_TOOL, FIND_MY_TIMELINE_TOOL } from './connections-catalog/findmy.js';
 export { NOTION_VERSION } from './connections-catalog/notion.js';
 export {
+  ONEPASSWORD_BASE_URL,
+  ONEPASSWORD_ENTRIES_CHOICES,
+  ONEPASSWORD_ENTRIES_FIELD,
+  ONEPASSWORD_VAULT_FIELD,
+  type OnePasswordEntriesChoice,
+} from './connections-catalog/onepassword.js';
+export {
   ALWAYS_ASKS_LABEL,
   CATALOG_CATEGORIES,
   CATALOG_CATEGORY_LABELS,
@@ -166,6 +173,7 @@ import { entry as nextcloudEntry } from './connections-catalog/nextcloud.js';
 import { entry as nginxProxyManagerEntry } from './connections-catalog/nginx_proxy_manager.js';
 import { entry as notionEntry } from './connections-catalog/notion.js';
 import { entry as nzbhydraEntry } from './connections-catalog/nzbhydra.js';
+import { entry as onepasswordEntry } from './connections-catalog/onepassword.js';
 import { entry as opnsenseEntry } from './connections-catalog/opnsense.js';
 import { entry as overseerrEntry } from './connections-catalog/overseerr.js';
 import { entry as paperlessEntry } from './connections-catalog/paperless.js';
@@ -210,6 +218,7 @@ const ENTRIES = [
   notionEntry,
   todoistEntry,
   airtableEntry,
+  onepasswordEntry,
   nextcloudEntry,
   dropboxEntry,
   moneybirdEntry,
@@ -293,6 +302,7 @@ export const CATALOG_IDS = [
   'notion',
   'todoist',
   'airtable',
+  'onepassword',
   'nextcloud',
   'dropbox',
   'moneybird',
@@ -453,7 +463,8 @@ export function catalogEntry(id: string): CatalogEntry | null {
 
 /**
  * Whether agents use connections of this entry (0.69, CT-325, TA-02): every entry but those only automations use
- * (the trackers) and the AI gateways (Fusebox, AI gateway; 0.76, AIG-01). False: the connection is never listed or
+ * (the trackers), the AI gateways (Fusebox, AI gateway; 0.76, AIG-01) and the Vault's sync (1Password,
+ * `isVaultSyncConnection`). False: the connection is never listed or
  * callable for an agent (`connection_tools`, `connection_call`), never one of `DispatchContext.connections`, never
  * counts as one an agent can use and is looked after by nobody. An id this catalog doesn't know counts as an agents'
  * entry.
@@ -470,6 +481,17 @@ export function isAgentConnection(entry: CatalogEntry | string): boolean {
  */
 export function isGatewayConnection(entry: CatalogEntry | string): boolean {
   return gatewayKindOf(entry) !== null;
+}
+
+/**
+ * Whether connections of this entry keep the Vault in step with a vault elsewhere (1Password; Whombat
+ * onepassword-sync.md): never an agent's (`isAgentConnection` false), never in Home's five-minute health pass, looked
+ * after by nobody, at most one per burrow. Only the sync uses its secret; its page shows the sync instead of the agents'
+ * access lines.
+ */
+export function isVaultSyncConnection(entry: CatalogEntry | string): boolean {
+  const e = typeof entry === 'string' ? catalogEntry(entry) : entry;
+  return e?.use === 'vault';
 }
 
 /** The gateway kind of an entry (`fusebox`, `ai_gateway`), or null for every other entry (AIG-01). */
@@ -666,8 +688,9 @@ export function defaultConnectionLabel(
   fields: Readonly<Record<string, string>>,
   opts: { onlyOne?: boolean } = {},
 ): string {
-  // A gateway's name goes into sentences (“Send Claude Code through Fusebox”) and a burrow has only one (0.76, AIG-05).
-  if (entry.use === 'gateway' || opts.onlyOne) return entry.name;
+  // A gateway's name goes into sentences (“Send Claude Code through Fusebox”) and a burrow has only one (0.76, AIG-05);
+  // a burrow has only one Vault sync too, and it has no address to tell it apart.
+  if (entry.use === 'gateway' || entry.use === 'vault' || opts.onlyOne) return entry.name;
   const host = connectionHost(entry, fields);
   const label = host ? `${entry.name} · ${host}` : entry.name;
   return label.slice(0, CONNECTION_LABEL_MAX);
