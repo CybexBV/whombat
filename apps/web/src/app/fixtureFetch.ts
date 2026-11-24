@@ -51,6 +51,7 @@ import { createKeptSiteFixtures } from './keptSiteFixtures';
 import { createLocalModelFixtures } from './localModelFixtures';
 import { createLookFixtures, looksSeeded } from './lookFixtures';
 import { createModelFixtures } from './modelFixtures';
+import { createMonitoringFixtures, monitoringSeeded } from './monitoringFixtures';
 import { ASSISTANT_NAME, createOneFixtures, DEFAULT_CHAT_ID } from './oneFixtures';
 import {
   createOnePasswordFixtures,
@@ -261,6 +262,12 @@ export interface WebFixtureOptions {
    * (`/things/connection:con_plex`), and Home Assistant's page stays as the mock draws it.
    */
   services?: boolean;
+  /**
+   * Monitoring's states to look at (`monitoringFixtures.ts`): blackbox and UniFi kept quiet, Home Assistant down while
+   * its machine is stopped, each page's week and what happened. Default: `VITE_FIXTURE_MONITORING=1` or the visual
+   * suite's `whombat:fixture-monitoring`.
+   */
+  monitoring?: boolean;
   /**
    * With Chat: Mara's thread about tonight's server work (`chatChannelFixtures.ts`, task-feedback.md AP-4304), its task
    * cards running, done, done with warnings and failed. Default: `VITE_FIXTURE_TASKS=1`, so Chat stays as drawn
@@ -705,6 +712,16 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
         if (own) return own;
       }
       return one.decorate(req, await inner(req.clone()));
+    };
+  }
+  {
+    // Monitoring (monitoring.md MON-04, MON-07, MON-09, MON-15): keeping quiet, what happened and a server's limits, over
+    // the servers and the one-Whombat world, whose pages, servers and Home it reads through.
+    const inner = out;
+    const monitoring = createMonitoringFixtures({ seeded: monitoringSeeded(options.monitoring) });
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      return signedIn ? monitoring.fetch(req, (r) => inner(r)) : inner(req);
     };
   }
   if (models) {
