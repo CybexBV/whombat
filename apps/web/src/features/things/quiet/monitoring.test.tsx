@@ -13,6 +13,7 @@ const HETZNER = '/things/connection%3Acon_hetzner';
 const UNIFI = '/things/connection%3Acon_unifi';
 const HA = '/things/connection%3Acon_home-assistant';
 const PVE02 = '/things/server%3Apve-02';
+const BLACKBOX = '/things/server%3Ablackbox';
 const calm = () => fixtureServices({ hosts: true, connectors: 'connected', monitoring: false });
 const seeded = () => fixtureServices({ hosts: true, connectors: 'connected', monitoring: true });
 const T = { timeout: 12_000 };
@@ -59,6 +60,13 @@ describe('keep quiet for a while (MON-04)', () => {
     renderApp(UNIFI, seeded());
     const hold = await screen.findByRole('region', { name: 'Kept quiet' }, T);
     expect(hold.textContent).toContain('Replacing the attic access point');
+    // The head's state pill would say the hold's first words again: the line under it says them once.
+    const head = screen.getByRole('main', { name: 'UniFi' });
+    expect(
+      within(head)
+        .getAllByText(/^Quiet until/)
+        .every((el) => hold.contains(el)),
+    ).toBe(true);
     const worth = await screen.findByRole('region', { name: 'Worth a look' }, T);
     // The hold's heads-up line is for apps that don't draw the line under the head.
     expect(within(worth).queryByText(/^Quiet until/, { selector: 'b' })).toBeNull();
@@ -81,6 +89,30 @@ describe('one cause (MON-07)', () => {
       'pve-02',
     );
     expect(within(hold).queryByRole('button', { name: 'End now' })).toBeNull();
+    // Said once: not again in the head's state pill above it.
+    expect(screen.getAllByText('Not answering while homeassistant is stopped')).toHaveLength(1);
+  });
+});
+
+describe('a server’s tabs while it is kept quiet (MON-04)', () => {
+  it('a held line on a tab offers End now, never Undo, and ends the whole window', async () => {
+    const user = userEvent.setup();
+    renderApp(`${BLACKBOX}?tab=array`, calm());
+    await screen.findByText('The disk array on blackbox has failed', { selector: 'b' }, T);
+    await user.click(await screen.findByRole('button', { name: 'More for blackbox' }, T));
+    await user.click(await screen.findByRole('menuitem', { name: 'Keep quiet…' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Keep quiet' }));
+    await screen.findByRole('region', { name: 'Kept quiet' }, T);
+    const line = await waitFor(() => {
+      const b = screen.getByText('The disk array on blackbox has failed', { selector: 'b' });
+      const held = b.closest('[data-quiet]');
+      expect(held).toBeTruthy();
+      return held as HTMLElement;
+    }, T);
+    expect(line.textContent).toContain('Kept quiet by Mara');
+    expect(within(line).queryByRole('button', { name: /^Undo/ })).toBeNull();
+    await user.click(within(line).getByRole('button', { name: /^End now/ }));
+    expect(await screen.findByText('Whombat watches blackbox again.')).toBeTruthy();
   });
 });
 
@@ -93,6 +125,24 @@ describe('what happened (MON-09)', () => {
     await waitFor(() => expect(card.querySelectorAll('[data-history]').length).toBeGreaterThan(0));
     expect(card.textContent).toContain('still going');
     expect(card.textContent).toContain('While homeassistant was down');
+  });
+
+  it('says a server’s outage once, its own alerts under “From the server”, “Show N more” with the outages', async () => {
+    const user = userEvent.setup();
+    renderApp(PVE02, seeded());
+    const card = (await screen.findByRole('heading', { name: 'What happened' }, T)).closest(
+      'section',
+    ) as HTMLElement;
+    await waitFor(() => expect(card.querySelectorAll('[data-history]').length).toBeGreaterThan(0));
+    // Its “isn’t checking in” alerts are the outages listed above: only the other two are left to show.
+    const fold = within(card).getByRole('button', { name: 'Show 2 alerts from the server' });
+    await user.click(fold);
+    const group = within(card).getByRole('region', { name: 'From the server' });
+    expect(group.querySelectorAll('[data-history]')).toHaveLength(2);
+    expect(card.textContent).not.toContain('isn’t checking in');
+    // “Show 1 more” belongs to the outages: it comes before the heading.
+    const more = within(card).getByRole('button', { name: 'Show 1 more' });
+    expect(more.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('says nothing went wrong on a calm world', async () => {

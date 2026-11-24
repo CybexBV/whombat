@@ -76,6 +76,7 @@ import wc from '../HostFleet.module.css';
 import { IncusSystem } from '../incus/IncusSystem';
 import { LibvirtActivity } from '../libvirt/LibvirtSystem';
 import { AppLink, Card, ConfirmDialog, Empty, ErrorLine, StateCell, useChangeRunner } from '../parts';
+import { useServerEndQuiet } from '../quiet/KeepQuiet';
 import { useServerQuiet } from '../quiet/useQuiet';
 import { WatchSettings } from '../quiet/WatchSettings';
 import styles from '../Things.module.css';
@@ -102,6 +103,8 @@ export function SystemTab({ burrow, serverId, detail, timeZone }: TabProps) {
   // the Health card's own lines (with Install and Restart), so they aren't said twice, once as “available” beside
   // “Installing…”.
   const sq = useServerQuiet(burrow, serverId);
+  // A line held because the server is kept quiet ends with it: End now, as under the page's head.
+  const end = useServerEndQuiet(burrow, serverId, detail.server.name ?? serverId);
   const hints = serverWatch(
     [],
     detail.hints.filter(
@@ -121,7 +124,7 @@ export function SystemTab({ burrow, serverId, detail, timeZone }: TabProps) {
   const updates = useServerUpdates(burrow, serverId, detail);
   return (
     <>
-      <WatchNotices burrow={burrow} rows={hints} quiet={sq.actions} />
+      <WatchNotices burrow={burrow} rows={hints} quiet={sq.actions} onEnd={end.onEnd} ending={end.ending} />
       <Card title="Health">
         {sys ? (
           <div className={styles.rows}>

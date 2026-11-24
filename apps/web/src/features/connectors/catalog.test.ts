@@ -6,6 +6,7 @@ import {
   CONNECTABLE,
   catalogRow,
   catalogRows,
+  catalogTileFor,
   catalogTileState,
   connectableEntry,
   connectionState,
@@ -257,6 +258,13 @@ describe('the overview’s entries (CX-70, AP-755)', () => {
       note: 'Add a Mac first',
       addServer: true,
     });
+  });
+
+  it('leaves out an entry the Whombat’s catalog doesn’t list (an older box), offers all until it answers', () => {
+    const older = [{ catalogId: 'notion', available: true, reason: null }];
+    expect(catalogTileFor(older, 'uptime')).toBeNull();
+    expect(catalogTileFor(older, 'notion')?.action).toBe('Connect');
+    expect(catalogTileFor(undefined, 'uptime')?.action).toBe('Connect');
   });
 
   it('groups tiles in the catalog’s category order and searches name, line and category', () => {

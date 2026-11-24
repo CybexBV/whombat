@@ -15,6 +15,7 @@ import {
   pickerValue,
 } from '@whombat/client';
 import { type KeepQuietActions, useKeepQuiet, useSessionProtocol } from '@whombat/client/react';
+import { thingId } from '@whombat/core';
 import { KEEP_QUIET_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { BellOff, Power } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -51,6 +52,20 @@ export function useThingKeepQuiet(burrow: string, thing: string, name: string): 
       else toast.show(message, o?.failed ? { duration: FAILED_TOAST_MS } : undefined);
     },
   });
+}
+
+/**
+ * End now for a server's lines held by its window, where a tab draws them away from the page's head; null on a Whombat
+ * that doesn't keep things quiet. The toast says so, as the head's End now does.
+ */
+export function useServerEndQuiet(
+  burrow: string,
+  serverId: string,
+  name: string,
+): { onEnd: (() => void) | null; ending: boolean } {
+  const keeps = useKeepsQuiet();
+  const actions = useThingKeepQuiet(burrow, thingId('server', serverId), name);
+  return { onEnd: keeps ? () => void actions.end() : null, ending: actions.busy };
 }
 
 /** Two hours from now, on the hour: where Pick a time starts. */

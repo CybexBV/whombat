@@ -1,13 +1,14 @@
 /**
  * What happened (Whombat docs/decisions/monitoring.md MON-09; `things.history`, session minor 9): at the end of a
  * thing's or server's Summary, its outages and problems over the last 30 days (or 90), newest first — what it was, when
- * and how long, and what took it down — under its uptime over the period; for a server its own alerts fold under them.
- * Drawn as Worth a look's rows: one still going in its tone, the past ones grey. Nothing on an older Whombat.
+ * and how long, and what took it down — under its uptime over the period; for a server its own alerts fold under them,
+ * under “From the server”, without the outages the incidents already list. Drawn as Worth a look's rows: one still going
+ * in its tone, the past ones grey. Nothing on an older Whombat.
  */
 import { HISTORY_WORDS, type HistoryRow, historyView } from '@whombat/client';
 import { useThingHistory } from '@whombat/client/react';
 import { AlertTriangle, Power } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
@@ -27,6 +28,7 @@ export function WhatHappened({ burrow, thing }: { burrow: string; thing: string 
   const [days, setDays] = useState<30 | 90>(30);
   const [open, setOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const ids = useId();
   const q = useThingHistory(burrow, thing, days);
   if (!q.supported) return null;
   const view = q.data ? historyView(q.data, now, timeZone) : null;
@@ -73,8 +75,18 @@ export function WhatHappened({ burrow, thing }: { burrow: string; thing: string 
               {open ? HISTORY_WORDS.fewer : `Show ${more} more`}
             </button>
           ) : null}
-          {/* A server's own alerts fold under its incidents; open, they come before the row that folds them again. */}
-          {alertsOpen ? view.alerts.map((r) => <Row key={r.id} row={r} alert />) : null}
+          {/* A server's own alerts fold under its incidents, under their own small heading once open (so “Show N more”
+              above stays with the incidents); open, they come before the row that folds them again. */}
+          {alertsOpen && view.alerts.length ? (
+            <section aria-labelledby={`${ids}-from-server`}>
+              <h3 id={`${ids}-from-server`} className={quiet.historyGroup}>
+                {HISTORY_WORDS.fromServer}
+              </h3>
+              {view.alerts.map((r) => (
+                <Row key={r.id} row={r} alert />
+              ))}
+            </section>
+          ) : null}
           {view.alerts.length ? (
             <button
               type="button"
