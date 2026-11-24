@@ -144,6 +144,41 @@ describe('the 1Password connection’s page', () => {
   });
 });
 
+describe('connecting 1Password', () => {
+  it('asks the token and what happens to the entries, then the vault the token sees, with the generic form', async () => {
+    const user = userEvent.setup();
+    const base = createWebFixtureFetch({ connectors: 'connected' });
+    const bodies: Record<string, unknown>[] = [];
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input instanceof Request ? input.url : input), 'http://whombat.test');
+      if (init?.method === 'POST' && url.pathname.endsWith('/connections'))
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return base(new Request(url, init), init);
+    }) as unknown as typeof globalThis.fetch;
+    renderApp('/connections?connection=onepassword', mockedServices(fetch));
+    await user.type(
+      await screen.findByLabelText('SERVICE ACCOUNT TOKEN', {}, { timeout: 12_000 }),
+      'ops_fixture',
+    );
+    // The one question, its first answer chosen.
+    const put = screen.getByRole('radio', {
+      name: 'Also put them in this 1Password vault',
+    }) as HTMLInputElement;
+    expect(put.checked).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Keep them only in Whombat' })).toBeTruthy();
+    // The vault isn't asked until the token answers.
+    expect(screen.queryByRole('radio', { name: 'Whombat' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    await user.click(await screen.findByRole('radio', { name: 'Shared with Whombat' }));
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toMatchObject({
+      catalogId: 'onepassword',
+      fields: { vault: 'm4pqr7c8g3y5zje6xanw0dk9b1', entries: 'put' },
+    });
+  });
+});
+
 describe('the Vault', () => {
   it('tags the entries kept in step with 1Password, and says how each stands there', async () => {
     const user = userEvent.setup();
