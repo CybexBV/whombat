@@ -64,6 +64,18 @@ describe('the connect form (CX-71, AP-756)', () => {
     expect(visibleFields(moneybird, signInChoices(moneybird)[0] as never).map((f) => f.id)).toEqual([]);
   });
 
+  it('asks only the fields that fit what is chosen so far (Website or address)', () => {
+    const uptime = entry('uptime');
+    const none = signInChoices(uptime)[0] as never;
+    const ids = (values: Record<string, string>) => visibleFields(uptime, none, values).map((f) => f.id);
+    // The kind's default (a website) counts while nothing is picked; where it runs from is asked when connecting.
+    expect(ids({})).toEqual(['kind', 'address', 'keyword', 'every']);
+    expect(ids({ kind: 'tcp' })).toEqual(['kind', 'address', 'every']);
+    expect(ids({ kind: 'heartbeat' })).toEqual(['kind', 'every', 'late']);
+    // Without the values, every field as before.
+    expect(visibleFields(uptime, none).map((f) => f.id)).toContain('late');
+  });
+
   it('warns about a plain-http address', () => {
     expect(httpWarning({ url: 'http://192.168.1.5:8123' })).toContain('the token crosses');
     expect(httpWarning({ url: 'http://192.168.1.5:8123' }, 'password')).toContain('your password');

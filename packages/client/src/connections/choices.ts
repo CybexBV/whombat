@@ -6,7 +6,7 @@
  * the Vault's sync's (1Password's vault and its entries). Pure; the
  * web's ConnectionPage and the phone's Connection screen draw them as radio cards.
  */
-import type { CatalogEntry } from '@whombat/core/domain';
+import { type CatalogEntry, fieldShown } from '@whombat/core/domain';
 
 export interface ChoiceOption {
   value: string;
@@ -45,7 +45,8 @@ export function choiceSettings(
   if (entry.use === 'vault') return [];
   const throughMac = entry.check?.kind === 'mac';
   return entry.fields.flatMap((f): ChoiceSetting[] => {
-    if (f.kind !== 'select') return [];
+    // A choice that doesn't fit the others (how late a website may be) isn't offered.
+    if (f.kind !== 'select' || !fieldShown(entry, f, fields)) return [];
     const options: ChoiceOption[] = f.options
       ? f.options.map((o) => ({ value: o.value, label: o.label }))
       : f.fromService && throughMac && f.id === 'mac' && macs?.length
