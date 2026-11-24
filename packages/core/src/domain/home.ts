@@ -13,6 +13,7 @@ import { AutomationId } from './automation.js';
 import { Count, JsonObject, Timestamp } from './common.js';
 import { CHAT_ROOMS, type ChatRoom } from './conversation.js';
 import { LookResearch } from './look-research.js';
+import { OverviewLayout } from './overview-layout.js';
 import { NoticeCheck, NoticeNature, NoticeSubject } from './quiet.js';
 import { ThingLogo } from './thing-logo.js';
 
@@ -714,6 +715,11 @@ export const HomeOverview = z.object({
    * *Done today*. Absent from an older server: Chat shows none.
    */
   doneToday: z.array(DoneTodayItem).max(DONE_TODAY_MAX).optional(),
+  /**
+   * How the Overview is arranged (Whombat overview-arranged.md): null until the person first arranged it (the page
+   * draws its starting layout). Absent from an older Whombat, which can't keep one: the page offers no Arrange there.
+   */
+  arranged: OverviewLayout.nullable().optional(),
   generatedAt: Timestamp,
 });
 export type HomeOverview = z.infer<typeof HomeOverview>;

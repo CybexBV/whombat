@@ -215,6 +215,9 @@ export const BOX_SETTINGS = {
   ),
   'voice.update': change('appliance.overview', 'Change the voice typing settings'),
 
+  'overview.arrange': change('overview', 'Arrange the Overview: what each tile shows, its size and place'),
+  'overview.figures': read('overview', 'Read what the Overview’s tiles can show'),
+  'overview.views': NONE,
   'widgets.list': read('overview', 'Read the widgets on the Overview'),
   'widgets.move': change('overview', 'Move a widget on the Overview'),
   'widgets.remove': ask('overview', 'Remove a widget from the Overview'),

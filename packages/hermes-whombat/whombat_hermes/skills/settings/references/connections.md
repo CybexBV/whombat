@@ -63,6 +63,8 @@ Every server and service with its own page: how it is doing, what Whombat watche
 - Keep server agents up to date by themselves, or stop — `hosts.updateAgentSettings` · change, always asks
 - Change a check or switch it off — `hosts.updateCheck` · change (`body.target`, `body.enabled` always ask)
 - Rename a server or change its group, place, parent or remote-control switches — `hosts.updateServer` · change, always asks
+- Arrange the Overview: what each tile shows, its size and place — `overview.arrange` · change
+- Read what the Overview’s tiles can show — `overview.figures` · read
 - Read what the assistant runs on the box — `services.list` · read
 - Stop a service the assistant runs — `services.stop` · change, always asks
 - Change a service’s setting, or run an action on it like Restart — `things.action` · change, always asks

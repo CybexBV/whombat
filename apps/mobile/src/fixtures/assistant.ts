@@ -30,7 +30,7 @@
  * Pure TypeScript over `Response`, unit-tested: every answer parses with its endpoint's response schema.
  */
 
-import { nextAt } from '@whombat/client';
+import { createOverviewFixtures, nextAt } from '@whombat/client';
 import {
   createFindMyTimelineFixture,
   createMacFixture,
@@ -73,6 +73,7 @@ import {
   isReservedAgentName,
   type Message,
   type NeedsYouItem,
+  type OverviewLayout,
   type Principal,
   parseThingId,
   type RealtimeEvent,
@@ -1224,9 +1225,12 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
         { id: 'dnt_mail', text: 'Wrote replies to 3 customer emails', at: at('09:20') },
         { id: 'dnt_zigbee', text: 'Restarted Zigbee in Home Assistant', at: at('03:12'), fixed: true },
       ],
+      arranged: arranging.arranged(),
       generatedAt: now().toISOString(),
     };
   }
+  // Arranging the Overview (overview-arranged.md): the layout kept, the tiles' figures made from Home's things.
+  const arranging = createOverviewFixtures(() => overview().things);
 
   function watch(state: 'open' | 'all'): WatchItem[] {
     const items: WatchItem[] = [];
@@ -1553,6 +1557,17 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     switch (id) {
       case 'home.overview':
         return json(overview());
+      // Arranging the Overview (overview-arranged.md): its layout and its tiles' figures.
+      case 'overview.arrange': {
+        const { layout } = await bodyOf<{ layout: OverviewLayout }>(init);
+        const answer = arranging.arrange(layout);
+        emit(`me:${mara.id}`, { type: 'home.changed', parts: ['things'] });
+        return json(answer);
+      }
+      case 'overview.views':
+        return json(arranging.views(url.searchParams.get('show') ?? ''));
+      case 'overview.figures':
+        return json(arranging.figures(url.searchParams.get('thing') ?? undefined));
       case 'watch.list':
         return json({ items: watch(url.searchParams.get('state') === 'open' ? 'open' : 'all') });
       case 'needsYou.snooze': {

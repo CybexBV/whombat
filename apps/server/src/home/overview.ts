@@ -60,6 +60,7 @@ import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
 import { NO_QUIET, type QuietBook, quietBook, type ThingQuiet } from '../things/quiet/store';
 import { featureRequestItems } from '../trackers/features';
+import { arrangedOf } from './arrange';
 import { assistantCalled } from './assistant-name';
 import { doneRecently } from './changes';
 import {
@@ -1008,6 +1009,7 @@ export async function homeOverview(
     widgets: widgetList.slice(0, 24),
     doneRecently: done,
     doneToday: finished,
+    arranged: arrangedOf(viewer.burrow),
     generatedAt: now.toISOString(),
   };
 }

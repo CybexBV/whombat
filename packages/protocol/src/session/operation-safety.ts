@@ -462,6 +462,10 @@ const TABLE = {
   'changeWindow.set': RECEIPT,
   'changes.list': READ,
   'changes.undo': DESTRUCTIVE_NEVER,
+  // Arranging the Overview (overview-arranged.md): one layout written whole; views and figures only read.
+  'overview.arrange': RECEIPT,
+  'overview.figures': READ,
+  'overview.views': READ,
   'widgets.list': READ,
   'widgets.remove': DESTRUCTIVE,
   'widgets.move': RECEIPT,

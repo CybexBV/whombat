@@ -143,15 +143,16 @@ describe('Servers on Overview (overview-one-page.md OVP-02…OVP-08)', () => {
     await serverRows(servers);
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     const links = within(nav).getAllByRole('link');
+    // Connections first, then Servers (overview-arranged.md OVA-07).
     expect(links.map((l) => l.getAttribute('href'))).toEqual([
-      '#overview-servers',
       '#overview-connections',
+      '#overview-servers',
       '#overview-pinned',
     ]);
     // Servers counts its rows and carries the dot of the one that isn't working.
-    expect(links[0]?.textContent).toMatch(/^Servers5/);
+    expect(links[1]?.textContent).toMatch(/^Servers5/);
     expect(
-      within(links[0] as HTMLElement).getByRole('img', { name: 'something isn’t working' }),
+      within(links[1] as HTMLElement).getByRole('img', { name: 'something isn’t working' }),
     ).toBeTruthy();
     // The old `?tab=services` landed on Connections.
     await waitFor(() => expect(document.activeElement?.id).toBe('overview-connections'));

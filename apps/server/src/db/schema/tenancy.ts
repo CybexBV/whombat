@@ -4,6 +4,7 @@ import type {
   BackupCategoryId,
   LiveProvider,
   LocalModelCheck,
+  OverviewLayout,
   Preferences,
   WebSearchCheck,
   WebSearchProvider,
@@ -101,6 +102,11 @@ export const burrows = pgTable('burrows', {
    * Notes), put in the prompt of the person's turns (one-person.md OP-S64). Null: none written.
    */
   agentNotes: jsonb('agent_notes').$type<StoredAgentNotes>(),
+  /**
+   * How the Overview is arranged (docs/decisions/overview-arranged.md): one layout for the whole Whombat, written whole
+   * by `overview.arrange`. Null: never arranged (the page draws its starting layout).
+   */
+  overviewLayout: jsonb('overview_layout').$type<OverviewLayout>(),
   /**
    * The quiet hours for changes (docs/decisions/care-plan.md), `HH:MM` in `time_zone`: when updates, restarts and an
    * approval's *Tonight* happen. Null: never moved (03:00–05:00).

@@ -1,134 +1,18 @@
 /**
  * Overview's parts on the phone (docs/design-handoff/council-ui-2026-11/16-final/overview; the decision file
- * docs/decisions/overview-server-connection-final.md): the broken thing as the first line — its heading in `bad`, its
- * consequence, one *Look into it* — and the link to the rest of the Inbox under it; the note a page shows when its first
- * read fails or a refresh fails (the saved readings stay under it); page-shaped placeholders while it loads (shared by
+ * docs/decisions/overview-server-connection-final.md; the broken thing leads the summary card, `SummaryCard.tsx`): the
+ * note a page shows when its first read fails or a refresh fails (the saved readings stay under it); page-shaped placeholders while it loads (shared by
  * Overview, a server's page and a connection's page); and Overview's jump chips under its title.
  */
-import {
-  type ConnectionsTab,
-  NEEDS_YOU_WORDS,
-  OVERVIEW_WORDS,
-  type OverviewHeadline,
-  type OverviewSectionView,
-} from '@whombat/client';
-import type { NeedsYouItem } from '@whombat/core';
-import { useState } from 'react';
+import { type ConnectionsTab, OVERVIEW_WORDS, type OverviewSectionView } from '@whombat/client';
 import { View } from 'react-native';
-import { useAgentWords } from '../../data/useAgent';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { MoreFold } from '../../ui/fold';
-import { ChevronRight } from '../../ui/icons';
 import { Button, Skeleton } from '../../ui/primitives';
 import { Touchable } from '../../ui/Touchable';
 import { hitSlopFor } from '../../ui/touchTarget';
 import { errorText } from '../feedback';
-import { useNeedsYouPress } from '../NeedsYouSheet';
-
-/** The Inbox's own *handle it* on the item, named as Overview names it. */
-const LOOK_INTO_IT = {
-  id: 'handle',
-  kind: 'handle',
-  label: OVERVIEW_WORDS.lookIntoIt,
-  look: 'primary',
-} as const;
-
-/**
- * The broken thing (mock `overview/ios-light.png`): a card with a 4dp `bad` rule on its leading edge, the heading in
- * `bad` 22/700, the consequence in `ink2`, and one *Look into it* — or, while the assistant already looks into it, its
- * words instead of the button.
- */
-export function BrokenCard({
-  headline,
-  item,
-}: {
-  headline: Extract<OverviewHeadline, { kind: 'broken' }>;
-  item: NeedsYouItem | null;
-}) {
-  const theme = useTheme();
-  const words = useAgentWords();
-  const press = useNeedsYouPress();
-  const [busy, setBusy] = useState(false);
-  const look = () => {
-    if (!item) return;
-    setBusy(true);
-    void press(item, LOOK_INTO_IT).finally(() => setBusy(false));
-  };
-  return (
-    <View
-      style={{
-        backgroundColor: theme.colors.sf,
-        borderWidth: 1,
-        borderColor: theme.colors.line,
-        borderLeftWidth: 4,
-        borderLeftColor: theme.colors.bad,
-        borderRadius: 16,
-        paddingHorizontal: 18,
-        paddingVertical: 18,
-        gap: 10,
-      }}
-    >
-      <Text
-        size={22}
-        weight={700}
-        lh={1.25}
-        tracking={-0.01}
-        color={theme.colors.bad}
-        accessibilityRole="header"
-      >
-        {headline.title}
-      </Text>
-      {headline.detail ? (
-        <Text size={15} lh={1.45} color={theme.colors.ink2}>
-          {headline.detail}
-        </Text>
-      ) : null}
-      {headline.busy ? (
-        <Text size={14} weight={500} color={theme.colors.mut}>
-          {headline.busy === 'looking' ? NEEDS_YOU_WORDS.looking(words) : NEEDS_YOU_WORDS.fixing(words)}
-        </Text>
-      ) : item ? (
-        <Button
-          label={OVERVIEW_WORDS.lookIntoIt}
-          onPress={look}
-          busy={busy}
-          accessibilityLabel={`${OVERVIEW_WORDS.lookIntoIt}: ${headline.title}`}
-          style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 16 }}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-/** “2 other things need you ›”: a 44dp link to the Inbox, under the broken thing. */
-export function OthersLink({ count, onPress }: { count: number; onPress: () => void }) {
-  const theme = useTheme();
-  if (count <= 0) return null;
-  const text = OVERVIEW_WORDS.others(count);
-  return (
-    <Touchable
-      onPress={onPress}
-      feedback="fade"
-      ringRadius={8}
-      accessibilityRole="link"
-      accessibilityLabel={text}
-      style={{
-        alignSelf: 'flex-start',
-        minHeight: 44,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginVertical: -6,
-      }}
-    >
-      <Text size={14} color={theme.colors.ink2}>
-        {text}
-      </Text>
-      <ChevronRight size={14} color={theme.colors.mut} strokeWidth={1.8} />
-    </Touchable>
-  );
-}
 
 /**
  * The note of a read that failed (mock `-failed`, `-saved-failed`): its heading in `warnText` (a read failing isn't

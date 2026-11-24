@@ -1,7 +1,7 @@
 /*
  * Overview on one page (docs/decisions/overview-one-page.md): the mock's `.head`, `.body`, `.sech`, the servers' list
- * `.srvlist`/`.srv`, the connections' tiles `.con` and its container queries in
- * docs/design-handoff/overview-one-page/overview.html — sizes, weights and spacing 1:1, colours from the tokens. The
+ * `.srvlist`/`.srv` and its container queries in docs/design-handoff/overview-one-page/overview.html (the summary card,
+ * Today and the tiles are `Arranged.module.css`) — sizes, weights and spacing 1:1, colours from the tokens. The
  * page answers to its own column's width, not the window's.
  */
 
@@ -11,7 +11,7 @@
   font: 400 15px / 1.45 var(--font-sans);
 }
 
-/* Title row: Overview, the status sentence when nothing is broken, the jump links on the right. */
+/* Title row: Overview, the jump links and Arrange on the right. */
 
 .head {
   display: flex;
@@ -26,38 +26,6 @@
   margin: 0;
   font: 700 28px / 1.45 var(--font-sans);
   letter-spacing: -0.02em;
-}
-
-.sentence {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  margin: 0 0 0 4px;
-  color: var(--mut);
-  font: 400 15.5px / 1.45 var(--font-sans);
-}
-
-.sentence[data-tone="ok"] {
-  color: var(--ok-text);
-}
-
-.sentence b {
-  color: var(--warn-text);
-  font-weight: 600;
-}
-
-.sentence[data-tone="bad"] b {
-  color: var(--bad);
-}
-
-.okDot {
-  display: inline-block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
 }
 
 .jump {
@@ -100,88 +68,6 @@
 .body {
   max-width: 1200px;
   padding: 24px 40px 56px;
-}
-
-/* The broken thing first (overview-server-connection-final.md OSC-01), then the rest of the Inbox. */
-
-.broken {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 20px 24px;
-  border: 1px solid var(--line2);
-  border-left: 4px solid var(--bad);
-  border-radius: var(--radius-card);
-  background: var(--sf);
-}
-
-.brokenText {
-  flex: 1;
-  min-width: 0;
-}
-
-.brokenText h2 {
-  margin: 0 0 4px;
-  font: 700 23px / 1.45 var(--font-sans);
-  letter-spacing: -0.01em;
-}
-
-.brokenText p {
-  margin: 0;
-  color: var(--ink2);
-  font: 400 15.5px / 1.45 var(--font-sans);
-}
-
-.brokenTitle,
-.brokenTitle:hover {
-  color: var(--bad);
-  text-decoration: none;
-}
-
-.brokenTitle:hover {
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.lookButton {
-  flex: none;
-  height: 44px;
-  margin-left: auto;
-  padding: 0 18px;
-  border: 0;
-  border-radius: var(--radius-button);
-  background: var(--btn);
-  color: var(--btnfg);
-  font: 600 15px var(--font-sans);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.lookButton:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.busy {
-  flex: none;
-  color: var(--mut);
-  font: 500 14px var(--font-sans);
-}
-
-.others,
-.others:hover {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 14px 0 0;
-  color: var(--ink2);
-  font: 400 14px var(--font-sans);
-  text-decoration: none;
-}
-
-.others:hover {
-  text-decoration: underline;
 }
 
 /* Sections: Servers, Connections, Pinned, each with its heading, count, summary line and links. */
@@ -274,13 +160,9 @@
   background: var(--sf);
 }
 
-.brokenTitle:focus-visible,
-.others:focus-visible,
-.lookButton:focus-visible,
 .jump a:focus-visible,
 .link:focus-visible,
-.m:focus-visible,
-.con:focus-visible {
+.m:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
@@ -643,112 +525,6 @@ a.m:hover .v b {
   outline-offset: 2px;
 }
 
-/* Connections: small tiles, one line of what it says now. */
-
-.cons {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
-  gap: 12px;
-}
-
-.con,
-.con:hover {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 12px;
-  padding: 14px 16px 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  background: var(--sf);
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.con:hover {
-  border-color: var(--line2);
-  background: color-mix(in srgb, var(--sf) 60%, var(--sf2));
-}
-
-.con[data-edge="warn"] {
-  box-shadow: inset 3px 0 0 var(--warn);
-}
-
-.con[data-edge="bad"] {
-  box-shadow: inset 3px 0 0 var(--bad);
-}
-
-.cwho {
-  min-width: 0;
-}
-
-.cname {
-  display: block;
-  overflow: hidden;
-  font: 600 15.5px / 1.45 var(--font-sans);
-  letter-spacing: -0.005em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cline {
-  display: block;
-  margin-top: 1px;
-  overflow: hidden;
-  color: var(--ink2);
-  font: 400 13.5px / 1.45 var(--font-sans);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cline[data-tone="warn"] {
-  color: var(--warn-text);
-  font-weight: 500;
-}
-
-.cline[data-tone="bad"] {
-  color: var(--bad);
-  font-weight: 500;
-}
-
-/* Why it isn't fine is the one thing a tile must say in full: two lines before it is cut. */
-.cline[data-tone="warn"],
-.cline[data-tone="bad"] {
-  display: -webkit-box;
-  white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-.cline[data-tone="mut"] {
-  color: var(--mut);
-}
-
-.cstate {
-  display: flex;
-  align-self: start;
-  padding-top: 4px;
-  color: var(--ok);
-}
-
-.cfoot {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 11px;
-  padding-top: 9px;
-  border-top: 1px solid var(--line);
-  color: var(--mut);
-  font: 400 11.5px / 1.45 var(--font-mono);
-}
-
-.cused {
-  margin-left: auto;
-  text-align: right;
-}
-
 /* Loading: placeholders in the page's shape — a heading, the servers' rows, the tiles. */
 
 .loading {
@@ -798,7 +574,6 @@ a.m:hover .v b {
 }
 
 @media (pointer: coarse) {
-  .others,
   .link,
   .jump a {
     min-height: 44px;
@@ -904,40 +679,28 @@ a.m:hover .v b {
 
 /* Phone: one under the other. */
 @container overview (max-width: 620px) {
+  /* The title and Arrange on one row, the jump links under them. */
   .head {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-flow: row wrap;
+    align-items: center;
     gap: 8px;
     padding: 18px 16px 14px;
     border-bottom: 0;
   }
 
-  .jump {
-    flex-wrap: wrap;
-    margin: 4px 0 0;
+  .head h1 {
+    flex: 1;
   }
 
-  .sentence {
-    margin: 0;
+  .jump {
+    flex-wrap: wrap;
+    order: 2;
+    width: 100%;
+    margin: 4px 0 0;
   }
 
   .body {
     padding: 4px 16px 40px;
-  }
-
-  .broken {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 14px;
-    padding: 16px 18px;
-  }
-
-  .brokenText h2 {
-    font-size: 20px;
-  }
-
-  .lookButton {
-    margin: 0;
   }
 
   .srvlist {
@@ -954,11 +717,6 @@ a.m:hover .v b {
     bottom: 50%;
     left: -27px;
     width: 10px;
-  }
-
-  .cons {
-    grid-template-columns: 1fr;
-    gap: 8px;
   }
 
   .links {

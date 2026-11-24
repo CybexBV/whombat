@@ -150,6 +150,11 @@ const PARITY_FILES = [
   'screens/home/ServicesCard.tsx',
   'screens/home/DoneParts.tsx',
   'screens/home/PanelsCards.tsx',
+  // The arranged Overview (overview-arranged.md): the summary card, Today, the parts and a gear's sheet.
+  'screens/home/SummaryCard.tsx',
+  'screens/home/TodayCard.tsx',
+  'screens/home/ArrangedParts.tsx',
+  'screens/home/ArrangeSheets.tsx',
   'screens/DoneScreen.tsx',
   // Tabs with an underline (underline-tabs-android.md AP-2636): the tabs, then a trailing Settings, as shown.
   'ui/UnderlineTabs.tsx',

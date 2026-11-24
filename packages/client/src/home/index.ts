@@ -2,9 +2,11 @@
  * The one-Whombat shell's pure view models (one-whombat.md ONE-04…ONE-10; app one-whombat-shell.md): Home, the Needs you
  * list, task chats, Done recently and widgets, shared by web and phone.
  */
+export * from './arrange';
 export * from './automationIdeas';
 export * from './changes';
 export * from './chats';
+export * from './fakeArrange';
 export * from './greeting';
 export * from './handoff';
 export * from './lookPlan';

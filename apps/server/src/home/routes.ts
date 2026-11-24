@@ -17,6 +17,7 @@ import { commitAs } from '../routes/burrows';
 import { type HandlerContext, type RouteDef, route } from '../routes/define';
 import { quietThingNotice } from '../things/quiet/service';
 import { thingParam } from '../things/routes';
+import { arrangeOverview, overviewFigures, overviewViews } from './arrange';
 import { listChanges, undoChange } from './changes';
 import { discussOpener } from './discuss';
 import { connectionNoticeRef, homeOverview, watchList } from './overview';
@@ -189,4 +190,16 @@ export const oneWhombatRoutes: RouteDef[] = [
     await commitAs(ctx, moveWidget, { widgetId: ctx.params.widgetId, position: ctx.body.position });
     return { widgets: await listWidgets(ctx.services.db, ctx.access.principal, ctx.services.clock(), place) };
   }),
+  // Arranging the Overview (overview-arranged.md): the person's or, through its settings, the assistant's.
+  route(api.overview.arrange, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person' && ctx.access.principal.kind !== 'agent')
+      throw new ApiError('forbidden', 'Only the person arranges the Overview.');
+    return commitAs(ctx, arrangeOverview, ctx.body);
+  }),
+  route(api.overview.views, async (ctx) =>
+    overviewViews(ctx.services, await viewerOf(ctx), ctx.access.burrow.timeZone, ctx.query.show),
+  ),
+  route(api.overview.figures, async (ctx) =>
+    overviewFigures(ctx.services, await viewerOf(ctx), ctx.access.burrow.timeZone, ctx.query.thing),
+  ),
 ];
