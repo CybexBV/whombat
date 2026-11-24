@@ -9,6 +9,8 @@
  * - `propose_device_skill`: the device's profile, tested, as a `device_skill` card for the owner to switch on.
  * - `watch_checks`: what Whombat watches on a connection, server or device, and switching a check off or on when the
  *   person said so (Whombat docs/decisions/on-purpose.md).
+ * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period (Whombat
+ *   docs/decisions/monitoring.md MON-10), read-only.
  */
 import { z } from 'zod';
 import { DeviceDriver, DeviceProfile, DeviceReading } from '../domain/devices.js';
@@ -21,6 +23,22 @@ import type { McpTool } from './mcp.js';
 function oneTool<I extends z.ZodObject, O extends z.ZodType>(def: McpTool<I, O>): McpTool<I, O> {
   return def;
 }
+
+/** A thing's incident as the assistant reads it: what, when, how long, and its cause. */
+export const AgentIncident = z.object({
+  thing: z.string(),
+  name: z.string(),
+  /** `down` (doesn't answer) or `problem` (answers, but something is wrong). */
+  nature: z.enum(['down', 'problem']),
+  words: z.string(),
+  started: z.string(),
+  /** Absent while it lasts. */
+  ended: z.string().optional(),
+  minutes: z.number().int(),
+  /** Down because this one, what it runs on, was down. */
+  causedBy: z.string().optional(),
+});
+export type AgentIncident = z.infer<typeof AgentIncident>;
 
 /** A device's address on the local network: an IPv4/IPv6 address or a host name (no scheme, no path). */
 const DeviceHost = z
@@ -139,6 +157,61 @@ export const ONE_MCP_TOOLS = {
     output: commitOutcome({ checks: z.array(AgentWatchCheck) }),
     requiredKey: null,
     readOnly: false,
+    personal: true,
+  }),
+  watch_status: oneTool({
+    name: 'watch_status',
+    title: 'How everything is',
+    description:
+      'What needs the person now, in one call: what waits for them in the Inbox, the servers, connections and devices that aren’t fine and why, what is down or broken right now (with since when), and what is kept quiet for a while. Use it for “Is everything OK?” before looking at single things.',
+    input: z.object({}),
+    output: commitOutcome({
+      inbox: z.string(),
+      notFine: z.array(
+        z.object({
+          thing: z.string(),
+          name: z.string(),
+          state: z.enum(['down', 'bad', 'look']),
+          reason: z.string().optional(),
+          causedBy: z.string().optional(),
+        }),
+      ),
+      incidents: z.array(AgentIncident),
+      quiet: z.array(
+        z.object({ thing: z.string(), name: z.string(), until: z.string(), note: z.string().optional() }),
+      ),
+    }),
+    requiredKey: null,
+    readOnly: true,
+    personal: true,
+  }),
+  watch_history: oneTool({
+    name: 'watch_history',
+    title: 'What went wrong',
+    description:
+      'What went wrong over a period, for one thing or all: each time something was down or had a problem (when, how long, why), how much of the time it answered, and the alerts the servers had. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle; leave out for everything. days: how far back, 1 to 90 (7 when left out). Use it for “What broke while I was away?”.',
+    input: z.object({
+      thing: z.string().trim().min(1).max(220).optional(),
+      days: z.number().int().min(1).max(90).optional(),
+    }),
+    output: commitOutcome({
+      from: z.string(),
+      days: z.number().int(),
+      incidents: z.array(AgentIncident),
+      uptime: z.array(z.object({ thing: z.string(), name: z.string(), text: z.string() })),
+      serverAlerts: z.array(
+        z.object({
+          server: z.string(),
+          title: z.string(),
+          severity: z.enum(['critical', 'warning']),
+          opened: z.string(),
+          resolved: z.string().optional(),
+        }),
+      ),
+      note: z.string().optional(),
+    }),
+    requiredKey: null,
+    readOnly: true,
     personal: true,
   }),
 } as const;

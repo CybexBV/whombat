@@ -46,6 +46,7 @@ export * from './host-marks.js';
 export * from './host-watch.js';
 export * from './hosts.js';
 export * from './hosts-findmy.js';
+export * from './incidents.js';
 export * from './job-result.js';
 export * from './links.js';
 export * from './local-model.js';

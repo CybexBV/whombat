@@ -21,6 +21,7 @@ import {
 import { DESK_SCREEN_VIEWS_MAX, DeskCatalog, DeskWidgetRef, DeskWidgetView } from '../domain/desk-screens.js';
 import { DeviceActionChoice, DeviceSkillCard } from '../domain/devices.js';
 import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain/home.js';
+import { ThingHistory, ThingHistoryQuery } from '../domain/incidents.js';
 import { LookResearch } from '../domain/look-research.js';
 import { Message, MessageTextInput } from '../domain/message.js';
 import { ArrangeOverviewBody, OverviewLayout, OverviewViewsQuery } from '../domain/overview-layout.js';
@@ -472,6 +473,16 @@ export const thingEndpoints = {
       'What Whombat watches on a thing (0.122): every check it can raise in plain words, whether it is on, and what is excepted (switched off, ignored or snoozed for an item), with who and when.',
     params: B.extend({ thing: ThingParam }),
     response: ThingWatch,
+  }),
+  history: endpoint({
+    id: 'things.history',
+    method: 'GET',
+    path: '/burrows/:burrow/things/:thing/history',
+    summary:
+      'What happened to a server, connection or device over the last 30 or 90 days (session minor 9): its incidents (down or a problem, when, how long, what and their cause), its uptime over the period, and for a server the alerts the hosts service had.',
+    params: B.extend({ thing: ThingParam }),
+    query: ThingHistoryQuery,
+    response: ThingHistory,
   }),
   setWatch: endpoint({
     id: 'things.setWatch',

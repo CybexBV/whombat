@@ -533,6 +533,7 @@ const TABLE = {
   // receipt's transaction (QN-23), so neither is resent by a client; not destructive (Undo, Watch again).
   'things.quiet': NEVER,
   'things.watch': READ,
+  'things.history': READ,
   'things.setWatch': NEVER,
   // Servers (CT-339): every write is a call to the hosts service, which acts outside the receipt's transaction, so none
   // is resent by a client. `createEnrollment` (the install command's token) and `createConsole` (the console token)
