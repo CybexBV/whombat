@@ -143,6 +143,7 @@ How the split was made: `docs.md`.
 - `home-redesign.md` — Home and an honest Done recently.
 - `quiet-notices.md` — what Whombat watches, and Ignore.
 - `watch-defaults.md` — which checks Whombat watches from the start: only the very important ones it can act on.
+- `monitoring.md` — monitoring servers, networks and services: your own checks, keeping quiet, one push per outage, one cause, uptime and outage history.
 - `on-purpose.md` — stop watching what is set up so on purpose (the assistant asks and switches it on your word, the
   Inbox's More), and an Ignore that outlasts a blip.
 - `look-research.md` — the assistant looks into a problem by itself and says what is wrong and what it can do.
