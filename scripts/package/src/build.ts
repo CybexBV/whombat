@@ -69,7 +69,7 @@ const CLAUDE_CODE = '@anthropic-ai/claude-code';
  */
 const NODE_PTY = 'node-pty';
 /**
- * 1Password's SDK (docs/decisions/onepassword-sync.md OPW-30): CommonJS whose core reads its WASM file from beside
+ * 1Password's SDK (docs/decisions/onepassword-sync.md): CommonJS whose core reads its WASM file from beside
  * itself (`readFileSync(join(__dirname, 'core_bg.wasm'))`), so both packages are shipped in node_modules as they are,
  * never bundled. Only the 1Password worker loads them.
  */

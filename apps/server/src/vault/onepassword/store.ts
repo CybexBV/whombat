@@ -1,5 +1,5 @@
 /**
- * Reading the 1Password sync's rows (docs/decisions/onepassword-sync.md OPW-40, OPW-50): the burrow's 1Password
+ * Reading the 1Password sync's rows (docs/decisions/onepassword-sync.md): the burrow's 1Password
  * connection, its links and state, the connection page's part and each Vault entry's `source`. Nothing here calls
  * 1Password or returns a value: the page and Home read what the last pass stored.
  */
@@ -33,7 +33,7 @@ export type OnePasswordStateRow = typeof vaultOnePasswordState.$inferSelect;
 /** The catalog id of 1Password's entry. */
 export const ONEPASSWORD_CATALOG_ID = 'onepassword';
 
-/** A second 1Password connection, refused (OPW-01). */
+/** A second 1Password connection, refused. */
 export const ONEPASSWORD_CONNECTION_EXISTS =
   'This Whombat already keeps its Vault in step with 1Password. Remove that connection first.';
 

@@ -173,8 +173,7 @@ if (!readOnly) {
   services.mailTriggers.start();
   // Find My read in the background where a connection asks or an automation listens (findmy-connection.md).
   findMyBackgroundFor(services).start();
-  // A linked 1Password vault kept in step with the Vault: a pass now, every 10 minutes and after a change
-  // (onepassword-sync.md OPW-20).
+  // A linked 1Password vault kept in step with the Vault: a pass now, every 10 minutes and after a change.
   onePasswordSyncFor(services).start();
   // The AI gateway (docs/decisions/ai-gateway.md AIG-11): each gateway connection read every minute, alerts to the
   // person.

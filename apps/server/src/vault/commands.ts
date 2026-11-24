@@ -438,8 +438,8 @@ export async function forgetCheckServerRows(
 }
 
 /**
- * Removes one of the person's entries (VT-06): its servers' leftover check rows, a note to rotate what the agent's
- * commands had (AC-34), the signed neutral event, the row with its secret, keys, tools and RECENT USE, and the held
+ * Removes one of the person's entries: its servers' leftover check rows, a note to rotate what the agent's commands
+ * had, the signed neutral event, the row with its secret, keys, tools and RECENT USE, and the held
  * forms of its value. The person's own Remove and the 1Password sync's removals both come here.
  */
 export async function removeEntry(ctx: ApplyContext, row: VaultEntryRow): Promise<string> {
@@ -454,8 +454,8 @@ export async function removeEntry(ctx: ApplyContext, row: VaultEntryRow): Promis
       servers.map((s) => s.id),
     );
   }
-  // The agent's commands had it and may have kept a copy: the person is told to rotate it (AC-34), before the
-  // entry and its servers go.
+  // The agent's commands had it and may have kept a copy: the person is told to rotate it, before the entry and its
+  // servers go.
   const agent = agentKeyOf(row) ? await loadAgentRow(tx, ctx.burrow.id) : undefined;
   if (agent) await tellPersonToRotate(ctx, row, shortName(agent), { removed: true });
   const event = await emitEntryEvent(ctx, 'entry.removed', row);

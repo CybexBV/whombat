@@ -1,5 +1,5 @@
 /**
- * Development's stand-in 1Password (docs/decisions/onepassword-sync.md OPW-S19): the tests' in-memory 1Password
+ * Development's stand-in 1Password (docs/decisions/onepassword-sync.md): the tests' in-memory 1Password
  * (`fake.ts`) with two made-up vaults, answering the tokens that start with `ops_dev_`, so a development box can link a
  * vault and keep it in step without a 1Password account. Every other token goes to the real worker, which starts only
  * when one is used.

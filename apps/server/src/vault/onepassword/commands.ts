@@ -1,5 +1,5 @@
 /**
- * The 1Password sync's writes (docs/decisions/onepassword-sync.md OPW-21…OPW-28, OPW-61): one Vault command a pass
+ * The 1Password sync's writes (docs/decisions/onepassword-sync.md): one Vault command a pass
  * applies its decisions with, in small batches, run as the person; the state a pass ends with; and the person's answer
  * to the guard. Entries change only through the Vault's own helpers (insert, replace the secret, set the authenticator
  * key, switch on for the assistant, remove), so the held secrets are read again, the events are the Vault's neutral
@@ -98,17 +98,18 @@ const Problem = z.string().min(1).max(300).nullable();
 
 /**
  * One decision of a pass:
- * - `pull`: 1Password's fields into the entry, all of them (OPW-23), and the link's new base; only into the pair the
+ * - `pull`: 1Password's fields into the entry, all of them, and the link's new base; only into the pair the
  *   pass read (still kept in step, with the same item);
- * - `add`: a new entry from an item, switched on for the assistant (OPW-25), with its link;
+ * - `add`: a new entry from an item, switched on for the assistant, with its link;
  * - `relink`: an existing entry without a link paired with an item that is already its own (it names the entry, holds
  *   what it holds, or signs in as it does), with the item as just read as its base: the pass decides the pair at once,
  *   and where the two differ Whombat's values go to 1Password, which keeps the old ones in the item's history;
  * - `mark`: the link's bookkeeping only (the base renewed, an item's new version, a problem or none);
- * - `creating`: a link written before an item is made for the entry, so a retry finds the item by its marker (OPW-22);
+ * - `creating`: a link written before an item is made for the entry, so a retry finds the item by its marker;
  * - `created`: that link with its item;
- * - `local`: the entry kept only in Whombat from now on (OPW-27 with a problem, the guard's “Keep them here” without);
- * - `remove`: the entry removed, its item gone from the vault (OPW-24);
+ * - `local`: the entry kept only in Whombat from now on (one that stopped fitting, with a problem; the guard's “Keep
+ *   them here”, without);
+ * - `remove`: the entry removed, its item gone from the vault;
  * - `drop`: the link goes (its item archived, or nothing left of it); with `entryId`, only while the link still has the
  *   entry the pass saw (an entry brought back from a backup meanwhile keeps its pair).
  */
@@ -350,7 +351,7 @@ async function applyOp(
       });
       const row = await insertEntry(ctx, input, { skipLimit: true });
       await emitEntryEvent(ctx, 'entry.added', row);
-      // What comes in from 1Password is for the assistant at once, as an entry the person saves is (OPW-25).
+      // What comes in from 1Password is for the assistant at once, as an entry the person saves is.
       await giveOwnAssistantKey(ctx, row);
       publishVaultUpdated(ctx, row.ownerId, row.id);
       const linkId = newLinkId();
@@ -513,7 +514,7 @@ async function applyOp(
   }
 }
 
-/** At most this many ops that change an entry in one commit (OPW-21). */
+/** At most this many ops that change an entry in one commit. */
 export const ONEPASSWORD_ENTRY_OPS: ReadonlySet<OnePasswordOp['op']> = new Set([
   'pull',
   'add',
@@ -746,7 +747,7 @@ export const answerOnePasswordRemovals = defineCommand({
 /* Linking and disconnecting ------------------------------------------------------------------------------ */
 
 /**
- * A new 1Password connection, in the commit that adds it: its state row, the answer to “Your Vault entries” (OPW-02),
+ * A new 1Password connection, in the commit that adds it: its state row, the answer to “Your Vault entries”,
  * and a pass as soon as it is in.
  */
 export async function linkOnePassword(
@@ -802,7 +803,7 @@ export async function onePasswordConnectionChanged(
 }
 
 /**
- * At linking (OPW-02), with “Keep them only in Whombat”: every entry that would sync stays Whombat-only, a link kept
+ * At linking, with “Keep them only in Whombat”: every entry that would sync stays Whombat-only, a link kept
  * only here. With the other answer nothing is written: the first pass puts them in.
  */
 export async function keepEntriesLocal(

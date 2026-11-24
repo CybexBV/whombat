@@ -173,7 +173,7 @@ async function page(connectionId: string) {
   };
 }
 
-describe('linking (OPW-01, OPW-02)', () => {
+describe('linking', () => {
   beforeAll(reset);
 
   it('signs in through the worker and offers the token’s vaults; one vault is taken, several are asked', async () => {
@@ -216,7 +216,7 @@ describe('linking (OPW-01, OPW-02)', () => {
     expect(fake.count('create')).toBe(0);
     const mail = await entryByName('Mail');
     expect(mail).toBeDefined();
-    // Switched on for the assistant at once (OPW-25).
+    // Switched on for the assistant at once.
     expect(mail?.agentOnAt).not.toBeNull();
     expect((await secretOf(own)).source).toBeUndefined();
     expect((await secretOf(mail?.id as string)).source).toMatchObject({
@@ -289,7 +289,7 @@ describe('linking (OPW-01, OPW-02)', () => {
   });
 });
 
-describe('pushing and pulling (OPW-20…OPW-23)', () => {
+describe('pushing and pulling', () => {
   let connectionId = '';
   let bank = '';
   let api1 = '';
@@ -451,7 +451,7 @@ describe('pushing and pulling (OPW-20…OPW-23)', () => {
   });
 });
 
-describe('the guard (OPW-24)', () => {
+describe('the guard', () => {
   let connectionId = '';
   const names = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -594,7 +594,7 @@ describe('when things go wrong', () => {
       personId: IDS.mara,
       now: new Date(),
     });
-    // Its check starts off (OPW-51): nothing in the Inbox.
+    // Its check starts off: nothing in the Inbox.
     expect(items.some((i) => i.id.endsWith(':limit'))).toBe(false);
     await t.services.db
       .update(vaultOnePasswordState)
@@ -758,7 +758,7 @@ describe('when things go wrong', () => {
   });
 });
 
-describe('backups (OPW-42)', () => {
+describe('backups', () => {
   let connectionId = '';
   let bank = '';
 
@@ -886,7 +886,7 @@ function setPassword(itemId: string, value: string) {
 const passwordOf = async (entryId: string) =>
   t.services.custody.open(`vault:${entryId}:secret`, (await entry(entryId))?.sealed as string);
 
-describe('restoring while work waits (OPW-42)', () => {
+describe('restoring while work waits', () => {
   let connectionId = '';
 
   beforeAll(async () => {
@@ -939,7 +939,7 @@ describe('restoring while work waits (OPW-42)', () => {
   });
 });
 
-describe('disconnecting while a pass reads (F3)', () => {
+describe('disconnecting while a pass reads', () => {
   beforeAll(reset);
 
   it('writes nothing to 1Password once the connection is gone', async () => {
@@ -962,7 +962,7 @@ describe('disconnecting while a pass reads (F3)', () => {
   });
 });
 
-describe('what starts a pass (F5, F6)', () => {
+describe('what starts a pass', () => {
   let connectionId = '';
   let bank = '';
 
@@ -1017,7 +1017,7 @@ describe('what starts a pass (F5, F6)', () => {
     expect(await passwordOf(bank)).toBe('from-whombat');
     expect((await state(connectionId))?.contentVersion).toBeNull();
     await sync();
-    // Both changed: Whombat's wins (OPW-23).
+    // Both changed: Whombat's wins.
     expect(fake.field(itemId, 'password')).toBe('from-whombat');
   });
 
@@ -1064,7 +1064,7 @@ describe('what starts a pass (F5, F6)', () => {
   });
 });
 
-describe('a read that misses items (F7)', () => {
+describe('a read that misses items', () => {
   let connectionId = '';
 
   beforeAll(async () => {
@@ -1096,7 +1096,7 @@ describe('a read that misses items (F7)', () => {
   });
 });
 
-describe('writing into 1Password (F9, F10, F16, F17)', () => {
+describe('writing into 1Password', () => {
   let connectionId = '';
 
   beforeAll(async () => {
@@ -1209,7 +1209,7 @@ describe('writing into 1Password (F9, F10, F16, F17)', () => {
   });
 });
 
-describe('the guard’s answer while a pass reads (F14)', () => {
+describe('the guard’s answer while a pass reads', () => {
   let connectionId = '';
 
   beforeAll(async () => {

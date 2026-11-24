@@ -1,5 +1,5 @@
 /**
- * The base a link keeps (docs/decisions/onepassword-sync.md OPW-23): an HMAC of each field's canonical text, with a key
+ * The base a link keeps (docs/decisions/onepassword-sync.md): an HMAC of each field's canonical text, with a key
  * of the box's own (the key custody's, for this purpose only), separated by entry and field. So a pass can tell which
  * side changed without a second copy of any secret, and a digest of one entry's password says nothing about another's.
  */
@@ -38,7 +38,7 @@ export function onePasswordDigests(
   return out;
 }
 
-/** Whether a stored base has every field (an older or broken one counts as none: 1Password wins, OPW-23). */
+/** Whether a stored base has every field (an older or broken one counts as none: 1Password wins). */
 export function storedBase(base: unknown): OnePasswordDigests | null {
   if (!base || typeof base !== 'object') return null;
   const b = base as Record<string, unknown>;

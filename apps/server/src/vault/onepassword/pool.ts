@@ -1,5 +1,5 @@
 /**
- * The server's side of the 1Password worker (docs/decisions/onepassword-sync.md OPW-30): the worker process is started
+ * The server's side of the 1Password worker (docs/decisions/onepassword-sync.md): the worker process is started
  * when a pass or a check first needs it, stopped after 15 minutes without work, and replaced when it dies. Every call
  * has a deadline; a worker that dies or stops answering fails its calls with “1Password sync stopped unexpectedly”, and
  * the next call starts a new one.

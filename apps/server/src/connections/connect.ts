@@ -711,7 +711,7 @@ export async function requireNoOtherGateway(
 }
 
 /**
- * At most one 1Password connection per Whombat (onepassword-sync.md OPW-01): a Vault kept in step with two vaults would
+ * At most one 1Password connection per Whombat (onepassword-sync.md): a Vault kept in step with two vaults would
  * have two sides that each win. A second is refused before its token is tried.
  */
 export async function requireNoOtherVaultSync(
@@ -1685,7 +1685,7 @@ export async function disconnectConnection(
   services: Services,
   viewer: ConnectionViewer,
   id: string,
-  /** A 1Password connection's entries: kept in the Vault (absent, `keep`) or removed with it (OPW-50). */
+  /** A 1Password connection's entries: kept in the Vault (absent, `keep`) or removed with it. */
   vaultEntries?: OnePasswordDisconnectChoice,
 ): Promise<{ eventId: string | null; notice: string | null }> {
   const row = await visibleConnection(services.db, viewer, id);

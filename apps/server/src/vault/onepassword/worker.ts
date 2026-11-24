@@ -1,5 +1,5 @@
 /**
- * The 1Password worker (docs/decisions/onepassword-sync.md OPW-30, OPW-31): a process of its own that runs 1Password's
+ * The 1Password worker (docs/decisions/onepassword-sync.md): a process of its own that runs 1Password's
  * SDK, a 0.x WASM library, so a crash or a leak in it can't take the server down. The server's pool (`pool.ts`) starts
  * it with `--whombat-onepassword-worker` and speaks JSON lines with it: one request per line on stdin
  * (`OnePasswordRequest`), one answer per line on stdout (`OnePasswordReply`), in any order, matched by `id`.
@@ -129,7 +129,7 @@ function requestUrl(input: unknown): string {
 /**
  * The global `fetch`, wrapped: only 1Password's own hosts over https, never a redirect (a redirect elsewhere would
  * leave the rule behind). The server's outbound guard (`lib/outbound.ts`) can't wrap the SDK's client, so this is its
- * guard (OPW-31).
+ * guard.
  */
 export function guardFetch(real: typeof fetch): typeof fetch {
   const guarded = (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {

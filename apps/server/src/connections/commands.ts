@@ -202,7 +202,7 @@ export const addConnection = defineCommand({
     }
     const vaultSync = isVaultSyncConnection(input.values.catalogId);
     if (vaultSync) {
-      // At most one 1Password connection per burrow (OPW-01), checked again here so two at once can't both get in.
+      // At most one 1Password connection per burrow, checked again here so two at once can't both get in.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`vault_sync:${ctx.burrow.id}`}))`);
       if (await onePasswordConnectionOf(tx, ctx.burrow.id))
         throw connectionError('limit_reached', { max: 1 }, ONEPASSWORD_CONNECTION_EXISTS);
@@ -290,7 +290,7 @@ export const removeConnection = defineCommand({
   name: 'catalog_connection.remove',
   schema: z.object({
     connectionId: z.string(),
-    /** A 1Password connection: its entries stay in the Vault (`keep`, absent) or go with it (OPW-50). */
+    /** A 1Password connection: its entries stay in the Vault (`keep`, absent) or go with it. */
     vaultEntries: OnePasswordDisconnectChoice.optional(),
   }),
   requiredKey: () => manage('remove a connection'),

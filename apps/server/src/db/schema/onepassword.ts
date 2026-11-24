@@ -1,5 +1,5 @@
 /**
- * A 1Password vault kept in step with the Vault (docs/decisions/onepassword-sync.md OPW-40): one link per pair of a
+ * A 1Password vault kept in step with the Vault (docs/decisions/onepassword-sync.md): one link per pair of a
  * Vault entry and a 1Password item, and one state row per 1Password connection. Everything a pass needs to decide is
  * here; the worker holds nothing that matters. No value of an entry or an item is stored: the base is an HMAC per field
  * (`vault/onepassword/digests.ts`).
@@ -94,12 +94,12 @@ export const vaultOnePasswordState = pgTable('vault_onepassword_state', {
   outcome: text('outcome').$type<OnePasswordPassOutcome>(),
   /** `failing`: why, in the person's words. */
   problem: text('problem'),
-  /** A push found that the token can only read (OPW-04). */
+  /** A push found that the token can only read. */
   readOnly: boolean('read_only').notNull().default(false),
   notInVault: jsonb('not_in_vault').$type<OnePasswordNotInVaultRow[]>().notNull().default([]),
-  /** The removals the guard holds for the person (OPW-24); null: none. */
+  /** The removals the guard holds for the person; null: none. */
   removals: jsonb('removals').$type<OnePasswordRemovals>(),
-  /** 1Password's limit (OPW-26): the times in a row it was hit, and when the next pass may try. */
+  /** 1Password's limit: the times in a row it was hit, and when the next pass may try. */
   limitHits: integer('limit_hits').notNull().default(0),
   nextTryAt: ts('next_try_at'),
   /** Passes in a row that couldn't finish: the red card waits for the second. */

@@ -484,7 +484,7 @@ export const BACKUP_OPTIONS_HANDLERS: Readonly<Record<string, Handler>> = {
       }));
     await noteBroughtBack(c.services, before.oldApplianceId, before.restored?.createdAt ?? null);
     // The restored Vault is older than 1Password: every pair forgets its base and the backup's unfinished archiving
-    // before any pass can run, so 1Password's version wins at the next one (onepassword-sync.md OPW-42). When it
+    // before any pass can run, so 1Password's version wins at the next one (onepassword-sync.md). When it
     // fails, the restore isn't finished: the box stays quarantined and the answer can be sent again (this is safe twice).
     await forgetOnePasswordBases(c.services);
     // What the backup service may use to trust the earlier Whombat's key only up to the restored backup.

@@ -48,7 +48,7 @@ export async function collectVault(scope: CollectScope, out: CategoryOut): Promi
         .where(inArray(vaultSshServers.entryId, ids))
         .orderBy(asc(vaultSshServers.createdAt))
     : [];
-  // The 1Password item each entry is kept in step with (onepassword-sync.md OPW-42): a restore relinks to it.
+  // The 1Password item each entry is kept in step with (onepassword-sync.md): a restore relinks to it.
   const items = new Map(
     (ids.length
       ? await db

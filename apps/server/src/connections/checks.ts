@@ -331,7 +331,7 @@ async function runMacConnectionCheck(services: Services, input: RunCheckInput): 
 }
 
 /**
- * A 1Password connection (docs/decisions/onepassword-sync.md OPW-01): the service account token signs in through the
+ * A 1Password connection (docs/decisions/onepassword-sync.md): the service account token signs in through the
  * sync's worker and lists the vaults it can see, as `{id, name}`, the `fromService` choices of the vault field.
  */
 async function runOnePasswordCheck(services: Services, input: RunCheckInput): Promise<CheckOutcome> {

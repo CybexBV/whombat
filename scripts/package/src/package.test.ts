@@ -141,7 +141,7 @@ describe('the release bundles load (MR-72, MR-76)', () => {
   }, 180_000);
 });
 
-describe('the 1Password worker in the release (onepassword-sync.md OPW-30)', () => {
+describe('the 1Password worker in the release (onepassword-sync.md)', () => {
   // The SDK's core reads its WASM from beside itself: bundled, it couldn't find it. Shipped in node_modules next to the
   // bundles, the worker loads it with no network at all (a `probe` only loads the SDK).
   it('loads 1Password’s SDK and its WASM from the packaged layout', async () => {

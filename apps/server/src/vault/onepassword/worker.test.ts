@@ -184,7 +184,7 @@ describe('reading a get’s answer', () => {
   });
 });
 
-describe('the worker’s network (OPW-31)', () => {
+describe('the worker’s network', () => {
   it('goes only to 1Password’s own hosts, over https', () => {
     for (const ok of [
       'https://my.1password.com/api/v1/auth',
@@ -215,7 +215,7 @@ describe('the worker’s network (OPW-31)', () => {
   });
 });
 
-describe('the worker process (OPW-30)', () => {
+describe('the worker process', () => {
   const dir = mkdtempSync(join(tmpdir(), 'whombat-1p-worker-'));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 

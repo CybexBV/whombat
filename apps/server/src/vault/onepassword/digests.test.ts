@@ -14,7 +14,7 @@ const login: OnePasswordProjection = {
   totp: null,
 };
 
-describe('the base’s digests (OPW-23)', () => {
+describe('the base’s digests', () => {
   it('are the same for the same values of the same entry, compared by meaning', () => {
     const a = onePasswordDigests(custody, 'vlt_aaaaaaaaaaaa', login);
     const b = onePasswordDigests(custody, 'vlt_aaaaaaaaaaaa', {

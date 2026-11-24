@@ -119,7 +119,7 @@ describe('Home’s accounts for an older app', () => {
   });
 });
 
-describe('the catalog for an older app (onepassword-sync.md OPW-K17)', () => {
+describe('the catalog for an older app (onepassword-sync.md)', () => {
   const catalog = {
     mode: 'real',
     limit: 50,

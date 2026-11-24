@@ -1,5 +1,5 @@
 /**
- * One pass of the 1Password sync (docs/decisions/onepassword-sync.md OPW-20…OPW-28, OPW-04, OPW-61): read first, then
+ * One pass of the 1Password sync (docs/decisions/onepassword-sync.md): read first, then
  * commit. It works out what waits in Whombat first: a pass asked for only by a change to an entry (or to where the
  * Vault may connect) makes no 1Password call when nothing waits for it. Otherwise it asks for the vault's
  * `contentVersion`; unchanged, with nothing waiting in Whombat, it is done. Otherwise it lists the items, gets those that
@@ -72,7 +72,7 @@ import { ONEPASSWORD_PASS_WORDS } from './words';
 
 export { ONEPASSWORD_PASS_WORDS } from './words';
 
-/** Why an item that was in step can't come in now (OPW-28): “1Password’s item has no website now”. */
+/** Why an item that was in step can't come in now: “1Password’s item has no website now”. */
 export function itemStopsFittingText(reason: OnePasswordSkipReason): string {
   switch (reason) {
     case 'no_website':
@@ -112,7 +112,7 @@ export interface OnePasswordWriteGate {
 
 export interface PassOptions {
   api: OnePasswordApi;
-  /** In [0, 1): the limit's jitter (OPW-26). */
+  /** In [0, 1): the limit's jitter. */
   random?: () => number;
   /** Why it runs (absent: the regular pass). */
   reasons?: ReadonlySet<OnePasswordPassReason>;
@@ -160,7 +160,7 @@ function stopFor(err: unknown): PassStop {
   return new PassStop('answer');
 }
 
-/** Answers 1Password gives a write it won't take, however often it is sent: the pair waits for a change (F10). */
+/** Answers 1Password gives a write it won't take, however often it is sent: the pair waits for a change. */
 const REFUSED = new Set<OnePasswordFailure>(['invalid', 'not_found', 'failed']);
 
 /** The entry's values as both sides compare them, unsealed for this pass only; null when it doesn't sync. */
@@ -225,7 +225,7 @@ class Pass {
   readonly #state: OnePasswordStateRow | null;
   readonly #reasons: ReadonlySet<OnePasswordPassReason>;
   readonly #gate: OnePasswordWriteGate;
-  /** A read-only token is tried once a pass (OPW-04). */
+  /** A read-only token is tried once a pass. */
   #triedReadOnly = false;
   readOnly: boolean;
 
@@ -300,7 +300,10 @@ class Pass {
     if (res.status !== 'ok') throw new Error(`the 1Password sync's record answered ${res.status}`);
   }
 
-  /** Ends the pass on a failure: the limit's wait (kept, OPW-26), the failing line, or quietly when it was stopped. */
+  /**
+   * Ends the pass on a failure: the limit's wait (kept with the state), the failing line, or quietly when it was
+   * stopped.
+   */
   async fail(stop: PassStop): Promise<PassOutcome> {
     if (stop.failure === 'gone') return { ran: false, why: 'stopped' };
     const hits = this.#state?.limitHits ?? 0;
@@ -1127,7 +1130,7 @@ export async function runOnePasswordPass(
   const person = await thePerson(services.db, connection.burrowId);
   if (!person) return { ran: false, why: 'no_person' };
   const state = await onePasswordState(services.db, connection.id);
-  // 1Password's limit: the passes wait until the time kept with the state (OPW-26), a restart included.
+  // 1Password's limit: the passes wait until the time kept with the state, a restart included.
   if (state?.nextTryAt && state.nextTryAt.getTime() > services.clock().getTime())
     return { ran: false, why: 'waiting' };
   const token = onePasswordToken(services, connection);

@@ -1,5 +1,5 @@
 /**
- * The 1Password connection's sync over sessions (docs/decisions/onepassword-sync.md OPW-K12): its page part, Sync now
+ * The 1Password connection's sync over sessions (docs/decisions/onepassword-sync.md): its page part, Sync now
  * and the answer to the guard. Only the box's person; reading never calls 1Password.
  */
 import { api } from '@whombat/core';

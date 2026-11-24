@@ -1,5 +1,5 @@
 /**
- * Development's stand-in 1Password (docs/decisions/onepassword-sync.md OPW-S19): on in development, never in
+ * Development's stand-in 1Password (docs/decisions/onepassword-sync.md): on in development, never in
  * production; it answers only `ops_dev_` tokens (their vaults and rights by name) and leaves every other token to the
  * worker; the development door changes its items as a person would in 1Password's app.
  */
