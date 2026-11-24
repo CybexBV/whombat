@@ -73,10 +73,13 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 		return
 	}
 	prev := s.report
+	if !s.reportAt.IsZero() && now.Sub(s.reportAt) >= h.cfg.HeartbeatTimeout {
+		s.reportGapAt = s.reportAt.Add(h.cfg.HeartbeatTimeout)
+	}
 	s.report, s.reportAt, s.dirty = r, now, true
 	s.memo.Observe(r, now)
 	s.macHelperOff = model.HelperOffSince(s.macHelperOff, r, now)
-	conds := append(rules.HostConditions(r), s.memo.Conditions(now)...)
+	conds := append(rules.HostConditionsWithLimits(r, h.watch.limitsFor(id)), s.memo.Conditions(now)...)
 	for _, v := range r.Volumes() {
 		if days, ok := s.forecast[v.Entity]; ok {
 			if c, ok := rules.FullSoonCondition(v.Entity, v.Label, days); ok {
@@ -90,10 +93,16 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 	if v := cleanText(r.Agent.Version, 32); v != "" {
 		s.meta.AgentVersion = v
 	}
+	dockerSeen := r.Docker != nil && r.Docker.Error == ""
 	seen := map[string]bool{}
 	for _, g := range r.AllGuests() {
 		gid := model.GuestID(g.Platform, g.ID)
 		seen[gid] = true
+		if dockerSeen {
+			if c, ok := rules.GuestStoppedCondition(g); ok && !s.plannedStop(gid, *g.FinishedAt) {
+				conds = append(conds, c)
+			}
+		}
 		if old, ok := s.guestStates[gid]; ok && old != g.State {
 			changes = append(changes, change{gid, g.State})
 			if g.State == proto.StateStopped {
@@ -106,6 +115,13 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 		if !seen[gid] {
 			delete(s.guestStates, gid)
 			stopped = append(stopped, gid)
+		}
+	}
+	if dockerSeen {
+		for gid := range s.guestStops {
+			if !seen[gid] {
+				delete(s.guestStops, gid)
+			}
 		}
 	}
 	var policyChanged bool
@@ -130,7 +146,10 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 				"host_power": onOff(pol.HostPower), "update": onOff(pol.Update), "manage": onOff(pol.Manage)}})
 	}
 
-	h.applyAlerts(ctx, h.alerts.Evaluate(id, conds, notHeartbeat, now))
+	managed := func(rule string) bool {
+		return notHeartbeat(rule) && (rule != rules.RuleGuestStopped || dockerSeen)
+	}
+	h.applyAlerts(ctx, h.alerts.Evaluate(id, conds, managed, now))
 	for _, cr := range r.Checks {
 		h.checkResult(ctx, id, cr)
 	}

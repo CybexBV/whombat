@@ -83,6 +83,9 @@ export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 8 };
  */
 export const ONEPASSWORD_SYNC_MINOR = 8;
 
+/** Session protocol minor that reads check ownership and freshness and changes server alert limits. */
+export const HOST_MONITORING_MINOR = 9;
+
 /**
  * Session protocol minor (major 5) that opens an account's own page (`things.page` for Google, Microsoft 365, Email,
  * GitHub and Website feedback); an older session's account things open their page on the Connections tab.

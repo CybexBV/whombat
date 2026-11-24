@@ -63,6 +63,7 @@ import {
   type HostUnraidDetail,
   type HostUnraidDisk,
   type HostUnraidParityRun,
+  hostWatchLimit,
 } from '@whombat/core';
 import { toAgentUpdate, withAgentUpdateHints } from './agent-updates';
 import { serverVerdict } from './quiet-lines';
@@ -1434,6 +1435,18 @@ export function toHostMaintenance(raw: unknown): HostMaintenance {
   };
 }
 
+export function toHostWatchLimits(raw: unknown) {
+  return arr(obj(raw).limits).flatMap((row) => {
+    const entry = obj(row);
+    const rule = text(entry.rule);
+    const range = hostWatchLimit(rule);
+    const value = num(entry.value);
+    if (!range || value === null || value < range.min || value > range.max) return [];
+    const entity = str(entry.entity) || undefined;
+    return [{ rule, entity, value }];
+  });
+}
+
 export function toHostCheck(raw: unknown) {
   const c = obj(raw);
   const last = c.last ? obj(c.last) : null;
@@ -1455,6 +1468,8 @@ export function toHostCheck(raw: unknown) {
     graceS: int(c.grace_s) ?? 0,
     options: camel(obj(c.options)) as Record<string, unknown>,
     enabled: bool(c.enabled),
+    ...(typeof c.owner === 'string' && c.owner ? { owner: c.owner } : {}),
+    ...(typeof c.stale === 'boolean' ? { stale: c.stale } : {}),
     status: (['up', 'down', 'pending', 'disabled'].includes(status) ? status : 'pending') as
       | 'up'
       | 'down'

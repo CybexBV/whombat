@@ -1580,6 +1580,15 @@ export const hostsRoutes: RouteDef[] = [
     };
   }),
 
+  route(api.hosts.getCheck, async (ctx) => {
+    const g = await guard(ctx);
+    const raw = await hostsCall(() =>
+      g.hosts.call<unknown>({ path: `${HOSTS_API}/checks/${seg(ctx.params.checkId)}`, actor: g.actor }),
+    );
+    const check = toHostCheck(raw);
+    return g.manages ? check : { ...check, pingUrl: null };
+  }),
+
   route(api.hosts.createCheck, async (ctx) => {
     const g = await guard(ctx, { manage: true });
     const raw = await act('createCheck', {}, () =>
@@ -2071,6 +2080,7 @@ function checkBody(b: {
   graceS?: number;
   options?: Record<string, unknown>;
   enabled?: boolean;
+  owner?: string;
 }): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const map: Record<string, string> = { intervalS: 'interval_s', timeoutS: 'timeout_s', graceS: 'grace_s' };

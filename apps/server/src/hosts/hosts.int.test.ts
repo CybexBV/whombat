@@ -880,7 +880,7 @@ describe('agents that keep themselves up to date (agent-updates.md)', () => {
 describe('quiet notices on servers (quiet-notices.md QN-21…QN-24)', () => {
   const thing = (server: string, suffix: string) =>
     `/api/v1/burrows/burrow-hq/things/${encodeURIComponent(`server:${server}`)}${suffix}`;
-  async function quietCall(method: 'GET' | 'POST', url: string, body?: unknown) {
+  async function quietCall(method: 'GET' | 'POST' | 'PUT', url: string, body?: unknown) {
     const res = await t.api.inject({
       method,
       url,
@@ -1047,6 +1047,29 @@ describe('quiet notices on servers (quiet-notices.md QN-21…QN-24)', () => {
     hostsFor(t.services).forget();
     expect((await watchItem())?.state).toBe('open');
     fake.setHint('granite', 'guest.no_backup_job', null);
+  });
+
+  it('changes a server alert limit as the person and only undoes it if the limit still holds', async () => {
+    const path = thing('granite', '/watch/limit');
+    const check = 'host.disk.space_high';
+    const set = (limit: number | null) => quietCall('PUT', path, { check, limit });
+    const watch = async () => {
+      const response = await quietCall('GET', thing('granite', '/watch'));
+      return (response.body.checks as Array<{ check: string }>).find((c) => c.check === check);
+    };
+    const undo = (id: unknown) => pressUndo(String(id));
+    expect((await set(101)).status).toBe(400);
+    const first = await set(95);
+    expect(first.status).toBe(200);
+    expect(await watch()).toMatchObject({ limit: { unit: '%', value: 95, defaultValue: 90 } });
+    expect((await lastChange('hosts.watch_limit'))?.actorId).toBe(IDS.mara);
+    const second = await set(98);
+    expect(second.status).toBe(200);
+    expect((await undo(first.body.changeId)).status).toBe(409);
+    expect((await undo(second.body.changeId)).status).toBe(200);
+    expect(await watch()).toMatchObject({ limit: { value: 95 } });
+    expect((await set(null)).status).toBe(200);
+    expect(await watch()).toMatchObject({ limit: { value: null } });
   });
 
   it('switches the rules that start off off in the hosts service, until someone turns one on (watch-defaults.md)', async () => {

@@ -24,7 +24,14 @@ import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain
 import { LookResearch } from '../domain/look-research.js';
 import { Message, MessageTextInput } from '../domain/message.js';
 import { ArrangeOverviewBody, OverviewLayout, OverviewViewsQuery } from '../domain/overview-layout.js';
-import { NoticeCheck, NoticeQuiet, NoticeRef, NoticeSubject, ThingWatch } from '../domain/quiet.js';
+import {
+  NoticeCheck,
+  NoticeQuiet,
+  NoticeRef,
+  NoticeSubject,
+  ThingWatch,
+  WatchLimitValue,
+} from '../domain/quiet.js';
 import {
   ThingButtonValue,
   ThingImageRef,
@@ -432,6 +439,20 @@ export const SetThingWatchBody = z.object({
 });
 export type SetThingWatchBody = z.infer<typeof SetThingWatchBody>;
 
+export const SetThingWatchLimitBody = z.object({
+  check: NoticeCheck,
+  subject: NoticeSubject.optional(),
+  /** Null restores the server's limit for one item, or the check's default for a whole server. */
+  limit: WatchLimitValue.nullable(),
+});
+export type SetThingWatchLimitBody = z.infer<typeof SetThingWatchLimitBody>;
+
+export const SetThingWatchLimitResponse = z.object({
+  watch: ThingWatch,
+  changeId: ChangeId.optional(),
+});
+export type SetThingWatchLimitResponse = z.infer<typeof SetThingWatchLimitResponse>;
+
 export const thingEndpoints = {
   page: endpoint({
     id: 'things.page',
@@ -482,6 +503,15 @@ export const thingEndpoints = {
     params: B.extend({ thing: ThingParam }),
     body: SetThingWatchBody,
     response: ThingWatch,
+  }),
+  setWatchLimit: endpoint({
+    id: 'things.setWatchLimit',
+    method: 'PUT',
+    path: '/burrows/:burrow/things/:thing/watch/limit',
+    summary: 'Set or clear a custom alert limit for a server or one item.',
+    params: B.extend({ thing: ThingParam }),
+    body: SetThingWatchLimitBody,
+    response: SetThingWatchLimitResponse,
   }),
 };
 

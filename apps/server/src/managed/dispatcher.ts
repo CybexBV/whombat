@@ -44,6 +44,7 @@ import { binarySchema } from '../db/migrate';
 import { DESK_SESSION_HANDLERS } from '../desk/ops';
 import type { ScreenSessions } from '../desk/screen-sessions';
 import type { DeskService } from '../desk/service';
+import { hostAnswerFor, needsHostMonitoring } from '../hosts/older-apps';
 import { errorForLog, sqlState } from '../lib/db-errors';
 import { ApiError, UnknownOutcomeError, unauthorized, validationError } from '../lib/errors';
 import { OutcomeReply, Raw, type RouteDef } from '../routes/define';
@@ -1043,11 +1044,13 @@ export class SessionDispatcher {
     const def = ep ? this.routes.get(ep.id) : undefined;
     if (!ep || !def)
       throw new ApiError('not_implemented', `${spec.op} isn’t available on this appliance yet.`);
-    const out = await runApiHandler(this.services, def, spec.op, principal.account, input);
-    // An older app gets what its contracts read (`automations/older-apps.ts`, `things/older-apps.ts`).
-    if (out.raw) return out;
     const minor = principal.protocolMinor;
-    return { ...out, body: answerFor(ep.id, thingAnswerFor(ep.id, out.body, minor), minor) };
+    if (needsHostMonitoring(ep.id, input.body, minor))
+      throw new SessionOpError('unavailable', 'Update the Whombat app, then try again.');
+    const out = await runApiHandler(this.services, def, spec.op, principal.account, input);
+    if (out.raw) return out;
+    const hostAnswer = hostAnswerFor(ep.id, out.body, minor);
+    return { ...out, body: answerFor(ep.id, thingAnswerFor(ep.id, hostAnswer, minor), minor) };
   }
 
   /**

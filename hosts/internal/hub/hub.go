@@ -110,11 +110,14 @@ type srvState struct {
 	meta          store.Server
 	report        *proto.Report // immutable once stored
 	reportAt      time.Time
+	reportGapAt   time.Time // when reports last went missing
 	lastFrame     time.Time
 	conn          *AgentConn
 	skew          *float64
 	offline       bool // last announced status was offline
 	guestStates   map[string]string
+	guestStops    map[string]time.Time // most recent planned stop or restart for each guest
+	hostStop      time.Time
 	dirty         bool                               // report / last_seen not yet persisted
 	reportSavedAt time.Time                          // last time the report was written to the database
 	guestSampleTS int64                              // last guest history sample (report time)

@@ -198,6 +198,18 @@ export type ThingWatchException = z.infer<typeof ThingWatchException>;
 export const THING_WATCH_EXCEPTIONS_MAX = 100;
 export const THING_WATCH_CHECKS_MAX = 120;
 
+export const WatchLimitValue = z.number().min(1).max(150);
+
+export const ThingWatchLimit = z.object({
+  unit: z.enum(['%', '°C']),
+  min: WatchLimitValue,
+  max: WatchLimitValue,
+  /** The default when the check has one fixed limit. Sensors can have their own defaults. */
+  defaultValue: WatchLimitValue.optional(),
+  value: WatchLimitValue.nullable(),
+  items: z.array(z.object({ subject: NoticeSubject, value: WatchLimitValue })).max(500),
+});
+
 /**
  * One switch of What Whombat watches (QN-15): the check in plain words (“Access points and switches going offline”),
  * its kind of line, whether it is on, whether its lines are about one item each (`perItem`: Stop watching can be for
@@ -211,6 +223,7 @@ export const ThingWatchCheck = z.object({
   perItem: z.boolean(),
   off: z.object({ by: QuietBy.optional(), at: Timestamp }).optional(),
   exceptions: z.array(ThingWatchException).max(THING_WATCH_EXCEPTIONS_MAX),
+  limit: ThingWatchLimit.optional(),
 });
 export type ThingWatchCheck = z.infer<typeof ThingWatchCheck>;
 

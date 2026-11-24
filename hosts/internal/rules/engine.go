@@ -121,6 +121,11 @@ func (e *Engine) Load(alerts []Alert) {
 // alerts whose rule satisfies managed can be resolved by this call (so the
 // report rules and the heartbeat rule can be evaluated independently).
 func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule string) bool, now time.Time) Changes {
+	return e.EvaluateHolding(server, conds, managed, nil, now)
+}
+
+// EvaluateHolding leaves alerts for entities without fresh observations in their current state.
+func (e *Engine) EvaluateHolding(server string, conds []Condition, managed func(rule string) bool, held map[string]bool, now time.Time) Changes {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	var ch Changes
@@ -243,7 +248,7 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 	sort.Strings(okeys)
 	for _, k := range okeys {
 		a := open[k]
-		if _, ok := desired[k]; ok || !managed(a.Rule) {
+		if _, ok := desired[k]; ok || held[a.Entity] || !managed(a.Rule) {
 			continue
 		}
 		t := tr[k]
@@ -258,7 +263,7 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 
 	// Forget tracks of conditions that are no longer true and not open.
 	for k, t := range tr {
-		if _, ok := present[k]; ok {
+		if _, ok := present[k]; ok || held[k[len(ruleOfKey(k))+1:]] {
 			continue
 		}
 		if c := open[k]; c != nil && now.Sub(t.lastTrue) < c.ClearAfter {

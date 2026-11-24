@@ -1556,6 +1556,8 @@ export const HostCheck = z.object({
   graceS: z.number().int(),
   options: HostCheckOptions,
   enabled: z.boolean(),
+  owner: z.string().max(160).optional(),
+  stale: z.boolean().optional(),
   status: z.enum(['up', 'down', 'pending', 'disabled']),
   since: Timestamp.nullable(),
   last: z

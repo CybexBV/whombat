@@ -7,6 +7,8 @@ import { CHAT_COMMANDS } from '../chats/commands';
 import type { CommandDef } from '../commit/types';
 import { CONNECTION_UNDO_KIND } from '../connections/changes';
 import { undoConnectionChange } from '../connections/undo';
+import { WATCH_LIMIT_CHANGE } from '../hosts/commands';
+import { undoServerWatchLimit } from '../hosts/quiet';
 import { LOOK_COMMANDS } from '../looks/research';
 import { THING_ACTION_UNDO_KIND, THING_COMMANDS, undoThingAction } from '../things/actions';
 import { undoAgentWatch } from '../things/quiet/agent';
@@ -21,6 +23,7 @@ import { WIDGET_COMMANDS } from './widgets';
 registerDirectUndoer(CONNECTION_UNDO_KIND, undoConnectionChange);
 // What the assistant switched in what Whombat watches, on the person's word (on-purpose.md).
 registerDirectUndoer(AGENT_WATCH_CHANGE_KIND, undoAgentWatch);
+registerDirectUndoer(WATCH_LIMIT_CHANGE, undoServerWatchLimit);
 // Put it back on a service's setting (service-settings.md SST-03).
 registerDirectUndoer(THING_ACTION_UNDO_KIND, undoThingAction);
 

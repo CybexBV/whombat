@@ -34,6 +34,7 @@ const (
 	RuleFanFailed    = "sensor.fan_failed"
 	RuleOOM          = "host.oom"
 	RuleRestartLoop  = "guest.restart_loop"
+	RuleGuestStopped = "guest.stopped"
 	RuleDiskFullSoon = "disk.full_soon"
 )
 
@@ -143,7 +144,7 @@ func cond(rule, entity, sev, link, note, title, detail, advice string, forD time
 }
 
 // healthConditions evaluates the stateless host health rules.
-func healthConditions(r *proto.Report) []Condition {
+func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 	var out []Condition
 
 	// Disks: SMART failing (critical) and error counters (warning).
@@ -225,10 +226,12 @@ func healthConditions(r *proto.Report) []Condition {
 		}
 		if f.InodesTotal > 0 {
 			p := float64(f.InodesUsed) / float64(f.InodesTotal) * 100
-			if p >= InodesHighPct-eps {
+			threshold, custom := limits.threshold(RuleInodesHigh, ent, InodesHighPct)
+			if p >= threshold-eps {
+				detail := fmt.Sprintf("%s%% of its room for files is used (%s of %s), even with space left", pct0(p), Thousands(int64(f.InodesUsed)), Thousands(int64(f.InodesTotal)))
 				out = append(out, cond(RuleInodesHigh, ent, SevWarning, LinkStorage, "too many files",
 					fmt.Sprintf("%s can’t take many more files", PlainVolume(ent, f.Mount)),
-					fmt.Sprintf("%s%% of its room for files is used (%s of %s), even with space left", pct0(p), Thousands(int64(f.InodesUsed)), Thousands(int64(f.InodesTotal))),
+					withLimitWords(detail, p, threshold, "%", custom),
 					"Remove small files you don’t need (caches, old mail, sessions).", SpaceFor))
 			}
 		}

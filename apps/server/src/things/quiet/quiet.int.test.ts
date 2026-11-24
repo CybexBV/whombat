@@ -303,6 +303,13 @@ describe('The assistant stops watching on the person’s word (on-purpose.md)', 
     ).rejects.toThrow(ASK_FIRST_TEXT);
   });
 
+  it('requires the person’s word before the assistant can change a server alert limit', async () => {
+    const input = { thing: 'server:granite', check: 'host.disk.space_high', limit: 95 };
+    for (const asked of [undefined, IDS.dusty]) {
+      await expect(watchChecksTool(toolCtx(asked), input)).rejects.toThrow('Ask the person');
+    }
+  });
+
   it('records the switch as the assistant’s change for the person, whose Undo watches it again', async () => {
     const off = await watchChecksTool(toolCtx(IDS.mara), {
       thing: thing(),
