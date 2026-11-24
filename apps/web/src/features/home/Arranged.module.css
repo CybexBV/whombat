@@ -637,6 +637,10 @@
   background: var(--ok);
 }
 
+.okDot.heldDot {
+  background: var(--mut);
+}
+
 .tv {
   position: relative;
   display: flex;
