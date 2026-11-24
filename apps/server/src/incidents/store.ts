@@ -14,6 +14,7 @@ import {
   INCIDENTS_KEEP_DAYS,
   type IncidentNature,
   newId,
+  parseThingId,
   THING_BACK,
   THING_DOWN,
   THING_PROBLEM,
@@ -25,7 +26,13 @@ import type { ApplyContext } from '../commit/types';
 import { defineCommand } from '../commit/types';
 import { managedAppOrigin } from '../config';
 import type { Db, Tx } from '../db/client';
-import { type IncidentRow, incidents, lookResearches, notifications } from '../db/schema/index';
+import {
+  catalogConnections,
+  type IncidentRow,
+  incidents,
+  lookResearches,
+  notifications,
+} from '../db/schema/index';
 import { linkOfMessage } from '../domain/links';
 import { publishNotificationsRead } from '../domain/notification-read';
 import { notify } from '../domain/notify';
@@ -36,6 +43,7 @@ import { forbidden } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { loadPrincipalRow } from '../read/principals';
 import type { OpenIncident } from './plan';
+import { claimThingWatches, deliverThingWatches } from './thing-watch';
 
 /** Incidents are kept this long after they ended. */
 export const INCIDENTS_KEEP_MS = INCIDENTS_KEEP_DAYS * 24 * 60 * 60_000;
@@ -64,6 +72,8 @@ const Changed = z.object({
   words: z.string().min(1).max(200),
   cause: Cause,
   worse: z.boolean(),
+  check: z.string().max(80).nullable().optional(),
+  subject: z.string().max(160).optional(),
 });
 const Ended = z.object({ id: z.string().min(1).max(80), endedAt: z.iso.datetime({ offset: true }) });
 
@@ -74,23 +84,40 @@ async function requireSigner(tx: Tx, actorId: string): Promise<void> {
 
 /** The event an incident signs, its payload checked. */
 async function sign(ctx: ApplyContext, type: string, row: IncidentRow): Promise<void> {
-  await ctx.emit({
+  const target = parseThingId(row.thingId);
+  const [connection] =
+    target?.kind === 'connection'
+      ? await ctx.tx
+          .select({ catalogId: catalogConnections.catalogId })
+          .from(catalogConnections)
+          .where(and(eq(catalogConnections.id, target.id), eq(catalogConnections.burrowId, row.burrowId)))
+      : [];
+  const payload = ThingIncidentEvent.parse({
+    incidentId: row.id,
+    thing: row.thingId,
+    kind: row.kind,
+    name: row.name.slice(0, 120),
+    nature: row.nature,
+    words: row.words.slice(0, 200),
+    ...(connection ? { catalogId: connection.catalogId } : {}),
+    ...(row.checkId ? { check: row.checkId } : {}),
+    startedAt: row.startedAt.toISOString(),
+    ...(row.endedAt ? { endedAt: row.endedAt.toISOString() } : {}),
+    ...(row.causeThing && row.causeName ? { cause: { thing: row.causeThing, name: row.causeName } } : {}),
+  });
+  const event = await ctx.emit({
     type,
     kind: 'System',
     text: null,
     where: null,
-    payload: ThingIncidentEvent.parse({
-      incidentId: row.id,
-      thing: row.thingId,
-      kind: row.kind,
-      name: row.name.slice(0, 120),
-      nature: row.nature,
-      words: row.words.slice(0, 200),
-      startedAt: row.startedAt.toISOString(),
-      ...(row.endedAt ? { endedAt: row.endedAt.toISOString() } : {}),
-      ...(row.causeThing && row.causeName ? { cause: { thing: row.causeThing, name: row.causeName } } : {}),
-    }),
+    payload,
   });
+  if (await claimThingWatches(ctx, type, payload, event.id))
+    ctx.background(
+      'thing watch replies',
+      () => deliverThingWatches(ctx.services, ctx.burrow.id),
+      `thing-watches:${ctx.burrow.id}`,
+    );
 }
 
 /**
@@ -192,6 +219,7 @@ export const incidentsPass = defineCommand({
         .set({
           nature: c.nature,
           words: c.words,
+          ...(c.check === undefined ? {} : { checkId: c.check, subject: c.subject ?? '' }),
           ...(c.cause ? { causeThing: c.cause.thing, causeName: c.cause.name } : {}),
         })
         .where(and(eq(incidents.id, c.id), eq(incidents.burrowId, ctx.burrow.id), isNull(incidents.endedAt)))

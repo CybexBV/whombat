@@ -43,12 +43,14 @@ import {
   ThingPageKey,
   ThingPageQuery,
 } from '../domain/thing-page.js';
+import { ThingWatchView } from '../domain/thing-watch.js';
 import {
   ChangeId,
   ConnectionId,
   ConversationId,
   DeviceSkillProposalId,
   MessageId,
+  ThingWatchId,
   WidgetId,
 } from '../ids.js';
 import { API_PREFIX, BurrowParam, endpoint, limitQuery, QueryBool } from './endpoint.js';
@@ -477,6 +479,15 @@ export const KeepQuietResponse = z.object({ keptQuiet: KeptQuiet.nullable() });
 export type KeepQuietResponse = z.infer<typeof KeepQuietResponse>;
 
 export const thingEndpoints = {
+  cancelWatch: endpoint({
+    id: 'things.cancelWatch',
+    method: 'POST',
+    path: '/burrows/:burrow/thing-watches/:watchId/cancel',
+    summary: 'Stop a one-time watch started in Chat.',
+    params: z.object({ burrow: BurrowParam, watchId: ThingWatchId }),
+    body: z.object({}),
+    response: ThingWatchView,
+  }),
   page: endpoint({
     id: 'things.page',
     method: 'GET',

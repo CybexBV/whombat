@@ -20,6 +20,7 @@ import { findMyWhenText } from './findmy.js';
 import { mailTriggerProblems, mailWhenText } from './mail.js';
 import { checkSchedule, describeSchedule, ScheduleError } from './schedule.js';
 import { templatePaths } from './template.js';
+import { thingWhenText } from './thing.js';
 
 export type ValidationResult =
   | { ok: true; definition: AutomationDefinition; problems: [] }
@@ -299,6 +300,8 @@ export function triggerSummary(
           return `${t.event === 'reporter_replied' ? 'Customer replies' : trackerSummary(t.itemKinds)} in ${connectionLabel(t.connectionId) ?? 'a tracker connection'}`;
         case 'mail':
           return mailWhenText(t, connectionLabel(t.connectionId));
+        case 'thing':
+          return thingWhenText(t);
         case 'findmy':
           return findMyWhenText(t);
       }

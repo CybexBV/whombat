@@ -27,6 +27,7 @@ import {
   taskCardView,
   taskLine,
   theAgentOf,
+  thingWatchLine,
   turnFailedLine,
 } from '@whombat/client';
 import { findCachedMessage, queryKeys } from '@whombat/client/query';
@@ -38,6 +39,7 @@ import {
   useFindMyWatchCancel,
   useRetryTurn,
   useScheduleAction,
+  useThingWatchCancel,
   useUndoApproval,
 } from '@whombat/client/react';
 import {
@@ -59,7 +61,9 @@ import {
   scheduleCardTitle,
   scheduleCopy,
   shortNameOf,
+  type ThingWatchCard as ThingWatchCardData,
   type TurnFailedCard as TurnFailedCardData,
+  thingWatchCardLines,
   turnFailureRetryable,
 } from '@whombat/core';
 import { approvalAnswer, approvalView, type Decider, isEverydayAsk } from '@whombat/core/approvals';
@@ -89,7 +93,6 @@ import { DelegationCard } from './DelegationCard';
 import { DeviceSkillCardContainer } from './DeviceSkillCardContainer';
 import { DigestCard } from './DigestCard';
 import { FeatureRequestCardContainer } from './FeatureRequestCardContainer';
-import { FindMyWatchCard } from './FindMyWatchCard';
 import { GuideCardContainer } from './GuideCardContainer';
 import { AnswerCard, CommitsCard, PillCard } from './ListCards';
 import { LookPlanCardContainer } from './LookPlanCard';
@@ -108,6 +111,7 @@ import { TaskCard } from './TaskCard';
 import { TurnFailedCard } from './TurnFailedCard';
 import turnStyles from './TurnFailedCard.module.css';
 import { retryFailureText, turnFailureFix } from './turnFailed';
+import { WatchCard } from './WatchCard';
 
 export interface MessageCardProps {
   burrow: string;
@@ -390,9 +394,9 @@ function MessageCardBody({
             lead={(authorId ? principals(authorId) : theAgentOf(boot?.principals))?.name ?? null}
           />
         );
+      case 'thing_watch':
       case 'findmy_watch':
-        // A one-time Find My watch with Cancel while it watches (findmy-watch.md); once ended, its line.
-        return <FindMyWatchCardContainer burrow={burrow} card={card} />;
+        return <WatchCardContainer burrow={burrow} card={card} />;
       default:
         // A card kind this client doesn't know yet: the message's own text still shows (FB-16).
         return null;
@@ -548,6 +552,16 @@ function SettledCardLine({
           {opened}
         </SettledLine>
       );
+    case 'thing_watch':
+      return card.watch ? (
+        <SettledLine
+          line={thingWatchLine(card.watch, timeZone, Date.now())}
+          label={thingWatchCardLines(card.watch, timeZone, Date.now()).title}
+          card={card.kind}
+          size={size}
+          id={anchorId}
+        />
+      ) : null;
     case 'findmy_watch':
       // An ended watch is one line and nothing to open; a watch nobody can read any more leaves the message's words.
       return card.watch ? (
@@ -796,13 +810,20 @@ function ScheduleCardContainer({
 }
 
 /**
- * A Find My watch while it watches, with Cancel (`connections.findMyWatchCancel`): the answer turns it into its line at
- * once. A card shown as it was earlier has no Cancel.
+ * Cancel turns a watch into its settled line. Cards shown as they were earlier have no Cancel.
  */
-function FindMyWatchCardContainer({ burrow, card }: { burrow: string; card: FindMyWatchCardData }) {
+function WatchCardContainer({
+  burrow,
+  card,
+}: {
+  burrow: string;
+  card: FindMyWatchCardData | ThingWatchCardData;
+}) {
   const timeZone = useCardTimeZone();
   const still = useCardStill();
-  const cancel = useFindMyWatchCancel();
+  const cancelFindMy = useFindMyWatchCancel();
+  const cancelThing = useThingWatchCancel();
+  const cancel = card.kind === 'thing_watch' ? cancelThing : cancelFindMy;
   const [problem, setProblem] = useState<string | null>(null);
   const watch = card.watch;
   if (!watch) return null;
@@ -818,7 +839,7 @@ function FindMyWatchCardContainer({ burrow, card }: { burrow: string; card: Find
     }
   };
   return (
-    <FindMyWatchCard
+    <WatchCard
       watch={watch}
       timeZone={timeZone}
       nowMs={Date.now()}

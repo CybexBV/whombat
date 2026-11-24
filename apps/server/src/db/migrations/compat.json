@@ -171,6 +171,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Keeping things quiet for a while, causes and the way out (docs/decisions/monitoring.md MON-04…MON-08): three new tables. The release before it never reads or writes them."
+    },
+    "0027_incident_automation_watches": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "One claim per automation and incident, one-time watches with their chat messages, and a nullable activation time on automations."
     }
   }
 }

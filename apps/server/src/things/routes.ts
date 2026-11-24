@@ -8,7 +8,9 @@ import { api, parseThingId } from '@whombat/core';
 import { viewerOf } from '../connections/routes';
 import { setServerWatchLimit } from '../hosts/quiet';
 import { thingHistory } from '../incidents/history';
+import { cancelThingWatch } from '../incidents/thing-watch';
 import { badRequest, forbidden } from '../lib/errors';
+import { commitAs } from '../routes/burrows';
 import { type RouteDef, route } from '../routes/define';
 import { runThingAction } from './actions';
 import { thingPage } from './page';
@@ -26,6 +28,11 @@ export function thingParam(value: string | undefined): string | undefined {
 }
 
 export const thingRoutes: RouteDef[] = [
+  route(api.things.cancelWatch, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can stop a watch.');
+    const { watch } = await commitAs(ctx, cancelThingWatch, { watchId: ctx.params.watchId });
+    return watch;
+  }),
   route(api.things.page, async (ctx) => {
     if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can see pages here.');
     return thingPage(

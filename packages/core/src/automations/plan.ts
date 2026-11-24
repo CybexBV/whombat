@@ -31,6 +31,7 @@ import { findMyTriggerDetail, findMyWhenText } from './findmy.js';
 import { mailTriggerDetail, mailWhenText } from './mail.js';
 import { RECIPE_FIX_IMPORTANCE, recipeOf, trackerItemNoun, UNKNOWN_TRACKER_CONNECTION } from './recipes.js';
 import { describeSchedule } from './schedule.js';
+import { thingWhenText } from './thing.js';
 
 export interface PlanNames {
   /** The agent's name: the label of what it does (“DUSTY”). */
@@ -183,6 +184,8 @@ function whenLine(t: AutomationTrigger, names: PlanNames): AutomationPlanLine {
       const mailbox = names.connectionLabel?.(t.connectionId);
       return line(mailWhenText(t, mailbox), mailTriggerDetail(mailbox));
     }
+    case 'thing':
+      return line(thingWhenText(t));
     case 'findmy':
       return line(findMyWhenText(t), findMyTriggerDetail(names.connectionLabel?.(t.connectionId)));
     case 'webhook':

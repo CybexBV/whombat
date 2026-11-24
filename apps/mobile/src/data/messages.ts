@@ -55,6 +55,7 @@ import {
   taskCardView,
   taskLine,
   textFoldsIntoCard,
+  thingWatchLine,
   turnFailedLine,
 } from '@whombat/client';
 import {
@@ -111,6 +112,7 @@ import {
   SCHEDULE_STATUS_LABELS,
   scheduleCardTitle,
   type Tone,
+  thingWatchCardLines,
 } from '@whombat/core';
 import { type PlanCardView, planCardView, planDisplay, planSettledLine } from './automationPlan';
 import { type RanOnView, ranOnView } from './chatRuntime';
@@ -162,6 +164,7 @@ export interface CardSummary {
   task?: TaskCardModel | null;
   /** A one-time Find My watch that still watches (findmy-watch.md): its Cancel. */
   findMyWatch?: { watchId: string } | null;
+  thingWatch?: { watchId: string } | null;
 }
 
 /** A card's head in the one layout, with its time in the person's zone and what folds under it. */
@@ -756,6 +759,17 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
         },
       };
     }
+    case 'thing_watch': {
+      if (!card.watch) return null;
+      const lines = thingWatchCardLines(card.watch, ctx.timeZone, ctx.now);
+      return {
+        ...base,
+        label: '',
+        title: lines.title,
+        detail: lines.detail,
+        thingWatch: lines.canCancel ? { watchId: card.watchId } : null,
+      };
+    }
     case 'findmy_watch': {
       // A one-time Find My watch (findmy-watch.md), every word core's: what it waits for and until when, with Cancel
       // while it watches. One nobody can read any more leaves the message's words alone.
@@ -857,6 +871,8 @@ export function settledLine(
       return deploySettledLine(card);
     case 'task':
       return taskLine(card, ctx.now.getTime());
+    case 'thing_watch':
+      return card.watch ? thingWatchLine(card.watch, ctx.timeZone, ctx.now.getTime()) : null;
     case 'findmy_watch':
       return card.watch ? findMyWatchLine(card.watch, ctx.timeZone, ctx.now.getTime()) : null;
     default:

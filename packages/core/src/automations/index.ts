@@ -15,6 +15,7 @@ export * from './rooms.js';
 export * from './schedule.js';
 export * from './template.js';
 export * from './templates.js';
+export * from './thing.js';
 export * from './tracker.js';
 export * from './validate.js';
 export * from './verdict.js';

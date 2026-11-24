@@ -83,6 +83,9 @@ export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 9 };
  */
 export const THING_HISTORY_MINOR = 9;
 
+/** Session protocol minor that reads incident automations and one-time thing watch cards. */
+export const THING_AUTOMATIONS_MINOR = 9;
+
 /**
  * Session protocol minor (major 5) that links a 1Password vault (the catalog's 1Password entry and its connection
  * page); an older session's catalog leaves 1Password out.

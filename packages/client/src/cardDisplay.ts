@@ -18,6 +18,7 @@ import type {
   ScheduleCard,
   TaskCard,
   TaskCardState,
+  ThingWatchView,
   TurnFailedCard,
 } from '@whombat/core';
 import {
@@ -41,6 +42,7 @@ import {
   taskCardElapsedMs,
   taskCardLine,
   taskResultLine,
+  thingWatchCardLines,
 } from '@whombat/core';
 import { formatClock, formatDuration, plural, shortSha } from '@whombat/core/text';
 import { lookPlanCardView } from './home/lookPlan';
@@ -131,6 +133,7 @@ export function cardDisplay(card: MessageCard): CardDisplay {
       // A thing's plan (handle-it.md): a card while it waits, is taken or says what was done; one line once no longer
       // needed.
       return lookPlanCardView(card.plan)?.state === 'gone' || !card.plan ? 'line' : 'full';
+    case 'thing_watch':
     case 'findmy_watch':
       // A Find My watch is a card with Cancel while it watches, one line once it ended (findmy-watch.md).
       return card.watch?.status === 'watching' ? 'full' : 'line';
@@ -281,11 +284,21 @@ export const FIND_MY_WATCH_WORDS = {
  */
 export function findMyWatchLine(watch: FindMyWatchView, timeZone: string, nowMs: number): SettledLine {
   const { title } = findMyWatchCardLines(watch, timeZone, nowMs);
+  return watchLine(title, FIND_MY_WATCH_TONES[watch.status]);
+}
+
+export function thingWatchLine(watch: ThingWatchView, timeZone: string, nowMs: number): SettledLine {
+  const { title } = thingWatchCardLines(watch, timeZone, nowMs);
+  const tone = watch.status === 'happened' ? (watch.event === 'down' ? 'bad' : 'ok') : 'mut';
+  return watchLine(title, tone);
+}
+
+function watchLine(title: string, tone: SettledLine['tone']): SettledLine {
   const at = title.lastIndexOf(' · ');
   return {
     lead: at < 0 ? title : title.slice(0, at),
     detail: at < 0 ? null : title.slice(at + 3),
-    tone: FIND_MY_WATCH_TONES[watch.status],
+    tone,
   };
 }
 

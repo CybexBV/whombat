@@ -14,6 +14,7 @@ import {
   type McpToolOutput,
   needsYouGroupOf,
   parseThingId,
+  THING_WATCH_DEFAULT_MINUTES,
   thingId,
 } from '@whombat/core';
 import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
@@ -21,17 +22,19 @@ import { connectionByHandle } from '../connections/context';
 import { burrows, type IncidentRow, quietWindows } from '../db/schema/index';
 import { deskFleet, deskLooks } from '../desk/glance';
 import { turnPerson } from '../domain/turn-person';
-import { homeOverview } from '../home/overview';
+import { homeOverview, things } from '../home/overview';
 import type { HostsActor } from '../hosts/client';
 import { HEARTBEAT_RULE } from '../hosts/quiet-lines';
-import { forbidden, notFound } from '../lib/errors';
-import type { ToolContext } from '../mcp/tools';
+import { badRequest, forbidden, notFound } from '../lib/errors';
+import type { ToolContext, ToolHandler } from '../mcp/tools';
 import { loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import { outsidersTurn } from '../runtime/person';
 import type { Services } from '../services';
 import { thingVisible } from '../things/page';
 import { hostsAlertsSince, periodUptime } from './history';
 import { incidentsSince, openIncidents } from './store';
+import { cancelThingWatch, runningThingWatches, startThingWatch } from './thing-watch';
+import { thingWatchView } from './thing-watch-cards';
 
 const DAY = 24 * 60 * 60_000;
 /** How far back `watch_history` looks unless asked. */
@@ -259,3 +262,90 @@ export async function watchHistoryTool(
     ...(note ? { note } : {}),
   };
 }
+
+/** Use the same things and status the person sees, including the fleet's own server ids. */
+async function watchTarget(ctx: ToolContext, person: PrincipalRow, value: string) {
+  const { services, burrowId } = ctx;
+  const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, burrowId));
+  if (!burrow) throw notFound('Burrow');
+  const observedAt = services.clock();
+  const parsed = parseThingId(value);
+  const [list, fleet] = await Promise.all([
+    parsed?.kind === 'server' ? [] : things(services, { burrow, principal: person }, observedAt),
+    parsed && parsed.kind !== 'server' ? null : deskFleet(services, burrowId).catch(() => null),
+  ]);
+  const targets = [
+    ...list.filter((thing) => thing.kind !== 'server'),
+    ...[...(fleet?.rows ?? [])].map(([id, server]) => ({
+      id: thingId('server', id),
+      name: fleet?.cards.find((card) => card.id === id)?.name ?? id,
+      status: server.status,
+    })),
+  ];
+  const key = value.toLowerCase();
+  const named = targets.filter(
+    (t) => t.id === value || (!parsed && (t.name.toLowerCase() === key || t.id === thingId('server', value))),
+  );
+  const connection =
+    named.length || parsed ? null : await connectionByHandle(services.db, ctx.agentId, ctx.dispatch, value);
+  const matches = connection ? targets.filter((t) => parseThingId(t.id)?.id === connection.row.id) : named;
+  if (matches.length > 1) throw badRequest('More than one thing has that name. Which one did you mean?');
+  const target = matches[0];
+  if (!target) throw notFound('Thing');
+  const observed =
+    target.status === 'offline'
+      ? 'down'
+      : target.status === 'ok' || target.status === 'warn'
+        ? 'up'
+        : 'unknown';
+  return {
+    thing: target.id,
+    name: target.name.slice(0, 120),
+    observed,
+    observedAt: observedAt.toISOString(),
+  } as const;
+}
+
+export const thingWatchTool: ToolHandler<'thing_watch'> = async (ctx, input) => {
+  const { person } = await turnOf(ctx);
+  const { services, burrowId, agentId, dispatch, onBehalfOf } = ctx;
+  const options = { burrowId, actorId: agentId, onBehalfOf };
+  if (input.action === 'list') {
+    const rows = await runningThingWatches(services.db, burrowId, agentId);
+    return {
+      status: 'ok',
+      watches: rows.map(thingWatchView),
+      note: rows.length ? 'These watches are running.' : 'No watches are running.',
+    };
+  }
+  if (input.action === 'cancel') {
+    if (!input.watchId) throw badRequest('Choose a watch to stop.');
+    const result = await services.pipeline.commit(cancelThingWatch, { watchId: input.watchId }, options);
+    if (result.status !== 'ok') return result;
+    return { status: 'ok', watches: [result.result.watch], note: 'The watch has ended.' };
+  }
+  if (!input.thing || !input.event)
+    throw badRequest('Choose a thing and whether to watch for it to go down or come back.');
+  const target = await watchTarget(ctx, person, input.thing);
+  const result = await services.pipeline.commit(
+    startThingWatch,
+    {
+      ...target,
+      event: input.event,
+      minutes: input.minutes ?? THING_WATCH_DEFAULT_MINUTES,
+      conversationId: dispatch.conversationId,
+      threadRootId: dispatch.threadRootId ?? dispatch.messageId,
+    },
+    options,
+  );
+  if (result.status !== 'ok') return result;
+  const { watch } = result.result;
+  return {
+    status: 'ok',
+    watches: [watch],
+    note:
+      watch.status === 'happened'
+        ? 'It already happened. The result is in Chat. You can finish without repeating it.'
+        : 'The watch is already in Chat. You can finish without repeating it.',
+  };
+};

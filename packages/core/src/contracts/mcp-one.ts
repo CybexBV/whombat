@@ -26,7 +26,8 @@ import {
   ThingWatchLimit,
   WatchLimitValue,
 } from '../domain/quiet.js';
-import { DeviceSkillProposalId, WidgetId } from '../ids.js';
+import { ThingWatchEvent, ThingWatchMinutes, ThingWatchView } from '../domain/thing-watch.js';
+import { DeviceSkillProposalId, ThingWatchId, WidgetId } from '../ids.js';
 import { commitOutcome } from './errors.js';
 import type { McpTool } from './mcp.js';
 
@@ -195,6 +196,26 @@ export const ONE_MCP_TOOLS = {
     }),
     requiredKey: null,
     readOnly: true,
+    personal: true,
+  }),
+  thing_watch: oneTool({
+    name: 'thing_watch',
+    title: 'Watch for something once',
+    description:
+      'When the person asks in this chat, start a one-time watch for a server, connection or device to go down or come back. Use action: start, thing (its page id, name or handle) and event: down or back. Use minutes for a deadline like tonight (24 hours by default, at most 7 days). Whombat posts a card and tells them once in this thread, immediately if it already happened. Use action: list to see running watches and action: cancel with watchId to stop one. Use an automation for every time.',
+    input: z.object({
+      action: z.enum(['start', 'list', 'cancel']),
+      thing: z.string().trim().min(1).max(220).optional(),
+      event: ThingWatchEvent.optional(),
+      minutes: ThingWatchMinutes.optional(),
+      watchId: ThingWatchId.optional(),
+    }),
+    output: commitOutcome({
+      watches: z.array(ThingWatchView),
+      note: z.string(),
+    }),
+    requiredKey: null,
+    readOnly: false,
     personal: true,
   }),
   watch_history: oneTool({
