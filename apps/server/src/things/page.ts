@@ -33,6 +33,7 @@ import {
   type ThingPageTab,
   type ThingStatus,
   thingId,
+  UPTIME_ID,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { logoOf } from '../connections/look';
@@ -388,7 +389,7 @@ export async function connectionPage(
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];
   if (connected) facts.push(connected);
-  const checked = row.glanceAt ?? row.checkedAt;
+  const checked = row.catalogId === UPTIME_ID ? view?.readAt : (row.glanceAt ?? row.checkedAt);
   if (!view?.facts.length && checked)
     facts.push(line(`Checked **${span(now.getTime() - checked.getTime())}** ago`));
   if (!gateway) facts.push(accessLine(row));
@@ -397,7 +398,7 @@ export async function connectionPage(
   const address = isVaultSyncConnection(entry)
     ? undefined
     : (connectionHost(entry, row.fields) ?? row.externalName ?? undefined);
-  const readAt = view?.readAt ?? row.glanceAt ?? null;
+  const readAt = view?.readAt ?? (row.catalogId === UPTIME_ID ? null : row.glanceAt);
   return {
     id,
     kind: 'connection',

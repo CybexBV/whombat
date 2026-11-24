@@ -60,6 +60,9 @@ const restarts: string[] = [];
 
 beforeAll(async () => {
   await fake.start();
+  const guest = fake.guest('shale', 'pve:200');
+  if (!guest) throw new Error('Missing fixture guest.');
+  guest.last_backup = { result: 'ok', at: new Date(t.services.clock().getTime() - 3_600_000).toISOString() };
   // CT 200 on shale is “HomeAssistant”: the hosts service lists it without addresses, its configuration has one.
   fake.configOf('shale', 'pve:200').values.net0 =
     'name=eth0,bridge=vmbr0,firewall=1,ip=192.168.92.10/24,type=veth';
@@ -195,6 +198,7 @@ describe('Home Assistant’s page', () => {
     expect(machine?.kind === 'bars' && machine.items.map((i) => i.label)).toEqual([
       'Processor',
       'Memory',
+      expect.stringContaining('Backed up'),
       'Home Assistant',
       'Database',
     ]);
@@ -360,7 +364,11 @@ describe('every connection gets a page (CP-06, CP-10)', () => {
     const panels = p.tabs[0]?.panels ?? [];
     expect(panels.filter((x) => x.kind === 'kpis' || x.kind === 'chart')).toEqual([]);
     const card = panels.find((x) => x.id === 'machine');
-    expect(card?.kind === 'bars' && card.items.map((i) => i.label)).toEqual(['Processor', 'Memory']);
+    expect(card?.kind === 'bars' && card.items.map((i) => i.label)).toEqual([
+      'Processor',
+      'Memory',
+      expect.stringContaining('Backed up'),
+    ]);
     expect(card).toMatchObject({ title: 'The machine', link: { kind: 'href' } });
     // Nothing on it follows the range: no range picker.
     expect(p.ranges).toEqual([p.range]);
@@ -606,6 +614,8 @@ describe('Website or address connections', () => {
     Object.assign(hubCheck, { status: 'down', last: { at: at.toISOString(), ok: false }, stale: true });
     const stale = await checkConnectionHealth(t.services, await load(), new Date(at.getTime() + 300_000));
     expect(stale).toMatchObject({ status: 'unknown', line: 'Not checked' });
+    const unseen = await page(mara, thingId('connection', connection.id));
+    expect(unseen).toMatchObject({ status: 'unknown', readAt: at.toISOString() });
     hubCheck.stale = false;
     const down = await checkConnectionHealth(t.services, await load(), new Date(at.getTime() + 600_000));
     expect(down).toMatchObject({ status: 'offline', lines: [{ check: 'uptime.down' }] });
