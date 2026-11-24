@@ -10,6 +10,7 @@ import {
   keepQuietUntil,
   keptToast,
   limitLine,
+  limitNow,
   limitView,
   lineLimit,
   parseLimit,
@@ -263,6 +264,11 @@ describe('change the limit', () => {
         ?.words,
     ).toContain('the default');
     expect(limitLine({})).toBeNull();
+  });
+
+  it('says the limit that applies now under Change the limit', () => {
+    expect(limitNow({ value: 90, unit: '%' })).toBe('Now 90 %');
+    expect(limitNow({ value: null, unit: '°C' })).toContain('own');
   });
 
   it('reads a typed limit within its range', () => {
