@@ -162,7 +162,8 @@ export const WORK_SETTINGS = {
   'hosts.guestMetrics': read('overview', 'Read a guest’s charts'),
   'hosts.inspect': read('overview', 'Look inside a server: services, disks, network and more'),
   'hosts.listAlerts': read('overview', 'Read the server alerts'),
-  'hosts.getCheck': read('overview', 'Read a check on a server or website'),
+  // The single-check answer can include the heartbeat credential.
+  'hosts.getCheck': NONE,
   'hosts.listChecks': read('overview', 'Read the checks on servers and websites'),
   'hosts.listEnrollments': NONE,
   'hosts.listGuests': read('overview', 'Read the virtual machines and containers of a server'),
@@ -256,7 +257,8 @@ export const WORK_SETTINGS = {
   'things.action': ask('overview', 'Change a service’s setting, or run an action on it like Restart'),
   'things.page': read('overview', 'Read how a connection or device is doing'),
   'things.quiet': change('overview', 'Ignore or snooze a Worth a look line'),
-  'things.setWatchLimit': never('overview', 'Change a server’s alert limit'),
+  // The assistant uses watch_checks on the person's word.
+  'things.setWatchLimit': NONE,
   'things.setWatch': change('overview', 'Stop or start watching a check on a connection or device'),
   'things.watch': read('overview', 'Read what Whombat watches on a connection or device'),
 
