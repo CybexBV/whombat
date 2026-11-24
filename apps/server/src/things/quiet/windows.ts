@@ -160,3 +160,28 @@ export function thingCause(c: CauseLike, href?: string | null): ThingCause {
     ...(href ? { href: href.slice(0, 500) } : {}),
   };
 }
+
+/** “Plex and 4 more are down with it”: what a cause takes with it, or null when nothing. */
+export function takenWords(names: readonly string[]): string | null {
+  const [a, b] = names;
+  if (!a) return null;
+  if (!b) return `${a} is down with it`;
+  if (names.length === 2) return `${a} and ${b} are down with it`;
+  return `${a} and ${names.length - 1} more are down with it`;
+}
+
+/** The names of the things down because of each cause, from Home's things (`ThingSummary.causedBy`), by name. */
+export function takenFrom(
+  things: readonly { name: string; causedBy?: { thing: string } }[],
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const t of things) {
+    const cause = t.causedBy?.thing;
+    if (!cause) continue;
+    // A thing down with one of a server's machines is down with the server too, for the server's look.
+    const server = cause.split('/guest/')[0] as string;
+    for (const key of new Set([cause, server])) out.set(key, [...(out.get(key) ?? []), t.name]);
+  }
+  for (const names of out.values()) names.sort((a, b) => a.localeCompare(b));
+  return out;
+}

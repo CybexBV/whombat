@@ -65,7 +65,7 @@ import {
   writePass,
 } from '../things/quiet/store';
 import type { LooseNotice } from '../things/quiet/types';
-import { readMachine, resolveRunsOn } from '../things/runs-on';
+import { type ResolvedMachine, readMachine, resolveRunsOn } from '../things/runs-on';
 import { forecastFull } from '../things/series';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
 import { homeAudience, publishHomeChanged } from './notify';
@@ -110,11 +110,16 @@ async function machineDisk(
   row: CatalogConnectionRow,
   now: Date,
   seen?: KindSeen['machine'],
-): Promise<{ points: Record<string, number>; line: LooseNotice | null; read: boolean }> {
+): Promise<{
+  points: Record<string, number>;
+  line: LooseNotice | null;
+  read: boolean;
+  at: ResolvedMachine | null;
+}> {
   const at = row.burrowId ? await within(resolveRunsOn(services, row.burrowId, row), 5_000, null) : null;
   const figures = at ? await within(readMachine(services, at, null), 5_000, null) : null;
   const m = seen ? seen(figures) : figures;
-  if (!m) return { points: {}, line: null, read: false };
+  if (!m) return { points: {}, line: null, read: false, at };
   const pct =
     (await readPoints(services.db, row.id, [DISK_PCT_KEY], now, POINTS_KEEP_MS)).get(DISK_PCT_KEY) ?? [];
   const name = figures?.name ?? null;
@@ -126,7 +131,7 @@ async function machineDisk(
       ? `The disk of ${name} is filling up. What takes the space, and what can go?`
       : `The disk ${row.label} runs on is filling up. What takes the space, and what can go?`,
   });
-  return { points: diskPoints(m), line, read: true };
+  return { points: diskPoints(m), line, read: true, at };
 }
 
 /**
@@ -202,6 +207,8 @@ function failed(
     facts: previous?.facts ?? [],
     reason: words,
     ...(previous?.hostname ? { hostname: previous.hostname } : {}),
+    // Where it ran stays: a machine that stopped isn't found by its address any more (monitoring.md MON-07).
+    ...(previous?.machine ? { machine: previous.machine } : {}),
   };
 }
 
@@ -340,6 +347,9 @@ export async function checkConnectionHealth(
       }
       const disk = await machineDisk(services, row, now, seen?.machine).catch(() => null);
       Object.assign(points, disk?.points ?? {});
+      if (disk?.at)
+        glance.machine = { serverId: disk.at.serverId, guestId: disk.at.guestId, name: disk.at.runsOn.name };
+      else if (!disk && previous?.machine) glance.machine = previous.machine;
       // A kind that draws its machine says its disk itself (Home Assistant's Supervisor); one line per check.
       const own = new Set(lines.map((l) => l.check).filter(Boolean));
       if (disk?.line && !own.has(disk.line.check)) lines.push(disk.line);

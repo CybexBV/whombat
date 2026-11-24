@@ -59,6 +59,8 @@ import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
 import { NO_QUIET, type QuietBook, quietBook, type ThingQuiet } from '../things/quiet/store';
+import { activeWindow, thingCause } from '../things/quiet/windows';
+import { causeHref } from '../things/quiet/wire';
 import { featureRequestItems } from '../trackers/features';
 import { arrangedOf } from './arrange';
 import { assistantCalled } from './assistant-name';
@@ -429,20 +431,30 @@ export function connectionThing(
     );
   }
   if (glance) {
-    const status = v?.status ?? glance.status;
+    // Down because of something else (monitoring.md MON-07): grey, its line saying why, no reason of its own.
+    const cause =
+      v?.held?.kind === 'cause' && v.held.cause
+        ? thingCause(v.held.cause, causeHref(v.held.cause.causeThing))
+        : null;
+    const window = activeWindow(quiet.of.windows, quiet.now);
+    const status = cause ? 'unknown' : (v?.status ?? glance.status);
     const reason = v ? v.reason : glance.reason;
     return withNotice(
       {
         ...base,
         status,
         // Why it isn't fine (sidebar.md SB-03), for the sidebar's dot.
-        ...(status !== 'ok' && reason ? { reason: clip(reason, 160) } : {}),
-        ...(glance.line
-          ? { line: clip(glance.line, 160) }
-          : row.glanceAt
-            ? { line: `Last checked ${localTime(row.glanceAt, timeZone)}` }
-            : {}),
+        ...(status !== 'ok' && !cause && reason ? { reason: clip(reason, 160) } : {}),
+        ...(cause
+          ? { line: clip(cause.words, 160) }
+          : glance.line
+            ? { line: clip(glance.line, 160) }
+            : row.glanceAt
+              ? { line: `Last checked ${localTime(row.glanceAt, timeZone)}` }
+              : {}),
         facts: glance.facts.slice(0, 8),
+        ...(cause ? { causedBy: cause } : {}),
+        ...(window ? { quietUntil: window.endsAt.toISOString() } : {}),
       },
       v?.notice,
       v?.asking,

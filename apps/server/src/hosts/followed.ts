@@ -12,6 +12,7 @@
  * The bookkeeping of the follow-up itself (when a task was last asked about, deleting the ended ones after 30 days)
  * isn't anybody's change: it is written in a plain transaction.
  */
+
 import {
   type DispatchContext,
   FollowedTaskId,
@@ -38,6 +39,7 @@ import { loadConversationRow } from '../read/conversations';
 import { loadMessageRow, loadMessages } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
+import { updateWork, workEnded } from '../things/quiet/window-work';
 import { HostsChangeInput, recordHostsChange } from './commands';
 import type { FollowedTask, NewFollowedTask, TaskEnd, TaskStore } from './follow';
 import { endedChange } from './task-change';
@@ -375,6 +377,8 @@ export function dbTaskStore(services: Services): TaskStore {
         },
         { burrowId: task.burrowId, actorId: task.agentId },
       );
+      // An update Whombat installed is over: its server stays quiet 15 minutes more (monitoring.md MON-05).
+      await workEnded(services, updateWork(task.serverId, task.taskId), new Date(end.endedAt));
       return res.status === 'ok' && res.result !== null;
     },
     async sweep(before) {
