@@ -430,7 +430,8 @@ function Head({
       detail={detail.length ? detail.map((line) => <Fact key={factKey(line)} line={line} />) : null}
       actions={
         <>
-          <AskButton burrow={burrow} />
+          {/* The assistant doesn't use the Vault's 1Password sync: nothing to ask it about here. */}
+          {isVaultSyncConnection(page.catalogId ?? '') ? null : <AskButton burrow={burrow} />}
           {page.open ? (
             <ButtonLink
               className={things.btn}

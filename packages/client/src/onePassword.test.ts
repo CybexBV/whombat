@@ -65,10 +65,24 @@ describe('the Vault', () => {
     ).toBeNull();
   });
 
-  it('says on removal that a synced entry’s item goes to 1Password’s archive, and only for that one', () => {
-    expect(vaultEntryRemoveNote({ source: { kind: 'onepassword', state: 'synced', syncedAt: NOW } })).toBe(
-      ONEPASSWORD_WORDS.removeArchives,
-    );
+  it('says on removal that a synced entry’s item goes to 1Password’s archive, only while it is paired with one', () => {
+    expect(
+      vaultEntryRemoveNote({ source: { kind: 'onepassword', state: 'synced', syncedAt: NOW, paired: true } }),
+    ).toBe(ONEPASSWORD_WORDS.removeArchives);
+    expect(
+      vaultEntryRemoveNote({
+        source: { kind: 'onepassword', state: 'problem', syncedAt: NOW, problem: 'x', paired: true },
+      }),
+    ).toBe(ONEPASSWORD_WORDS.removeArchives);
+    // Waiting to go there, or from a box that doesn't say: no item to archive.
+    expect(
+      vaultEntryRemoveNote({
+        source: { kind: 'onepassword', state: 'pending', syncedAt: null, paired: false },
+      }),
+    ).toBeNull();
+    expect(
+      vaultEntryRemoveNote({ source: { kind: 'onepassword', state: 'synced', syncedAt: NOW } }),
+    ).toBeNull();
     expect(vaultEntryRemoveNote({})).toBeNull();
   });
 

@@ -26,6 +26,7 @@ import {
   type OnePasswordSyncView,
   onePasswordGoneTitle,
   onePasswordKeptLine,
+  onePasswordRemovalsBody,
   onePasswordWaitingLine,
   type VaultEntry,
   type VaultEntryDetail,
@@ -85,18 +86,19 @@ export const ONEPASSWORD_FIXTURE_ENTRIES: readonly VaultEntryDetail[] = [
 
 /** How each entry stands with 1Password. */
 const SOURCES: Record<string, VaultEntrySource> = {
-  [vaultGrafana.id]: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED },
-  [vaultPrinter.id]: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED },
-  vlt_1p_billing: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED },
-  vlt_1p_status: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED },
-  vlt_1p_router: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED },
+  [vaultGrafana.id]: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED, paired: true },
+  [vaultPrinter.id]: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED, paired: true },
+  vlt_1p_billing: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED, paired: true },
+  vlt_1p_status: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED, paired: true },
+  vlt_1p_router: { kind: 'onepassword', state: 'synced', syncedAt: SYNCED, paired: true },
   vlt_1p_mail: {
     kind: 'onepassword',
     state: 'problem',
     syncedAt: SYNCED,
     problem: '1Password’s item has no website now',
+    paired: true,
   },
-  vlt_1p_backups: { kind: 'onepassword', state: 'pending', syncedAt: null },
+  vlt_1p_backups: { kind: 'onepassword', state: 'pending', syncedAt: null, paired: false },
 };
 
 /** What 1Password says is gone in `paused`. */
@@ -182,7 +184,7 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
       nature: 'you',
       group: 'you',
       title: onePasswordGoneTitle(removals.entries.length),
-      body: 'Whombat kept them in your Vault for now. Remove them here too, or keep them only in Whombat.',
+      body: onePasswordRemovalsBody(removals.entries.map((e) => e.name)),
       at: removals.since,
       href,
       subject: { kind: 'connection', id: connection.id, name: connection.label },
@@ -190,8 +192,8 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
         {
           id: 'remove',
           label: ONEPASSWORD_WORDS.removeHere,
-          // As the server sends it: removing follows 1Password, the guard only asked first.
-          style: 'primary',
+          // As the server sends it: neither answer is the recommended one.
+          style: 'secondary',
           kind: 'onepassword_removals',
           removals: { answer: 'remove', token },
         },

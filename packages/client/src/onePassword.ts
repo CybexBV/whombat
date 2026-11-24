@@ -57,9 +57,14 @@ export function vaultEntryTag(entry: Pick<VaultEntry, 'source'>): string | null 
   return entry.source?.kind === 'onepassword' ? ONEPASSWORD_WORDS.tag : null;
 }
 
-/** What removing a synced entry also does, said in its confirmation; null for an entry not kept in step. */
+/**
+ * What removing a synced entry also does, said in its confirmation: only for an entry paired with an item now (one
+ * waiting to go, or from a box that doesn't say, has no item there to archive); null otherwise.
+ */
 export function vaultEntryRemoveNote(entry: Pick<VaultEntry, 'source'>): string | null {
-  return entry.source?.kind === 'onepassword' ? ONEPASSWORD_WORDS.removeArchives : null;
+  return entry.source?.kind === 'onepassword' && entry.source.paired === true
+    ? ONEPASSWORD_WORDS.removeArchives
+    : null;
 }
 
 /** A line with how loud it is: `warn` for what needs a look, `bad` only for what has stopped working. */
