@@ -118,13 +118,13 @@ export interface DashboardContext {
   /** The change being put back now (its row's link is busy). */
   puttingBack?: string | null;
   /**
-   * End now on a line quiet because the thing is kept quiet (monitoring.md MON-04): `things.endQuiet`. None: the line's
+   * End now on a line quiet because the thing is kept quiet: `things.endQuiet`. None: the line's
    * Undo ends it.
    */
   endQuiet?: (() => void) | null;
   endingQuiet?: boolean;
   /**
-   * A line's “Change the limit” in its ⋯ (a server's check with a limit, MON-15): the limit now in words and how to open
+   * A line's “Change the limit” in its ⋯ (a server's check with a limit): the limit now in words and how to open
    * its sheet; null: the line has none.
    */
   limitFor?: ((line: ThingPageNotice) => { now: string; open: () => void } | null) | null;

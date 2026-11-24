@@ -1,5 +1,5 @@
 /**
- * Monitoring on the phone (Whombat monitoring.md MON-04, MON-07, MON-09, MON-15): Pick a time's days and first value,
+ * Monitoring on the phone: Pick a time's days and first value,
  * the head's facts without the week's copy, the hold's heads-up left out where the page draws the hold, held lines in
  * Worth a look (End now, not Undo), the ⋯ menus and a limit's words.
  */

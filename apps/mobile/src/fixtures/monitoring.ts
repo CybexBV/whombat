@@ -1,5 +1,5 @@
 /**
- * The demo world's monitoring (Whombat monitoring.md MON-04, MON-07, MON-09, MON-15): a thing kept quiet for a while
+ * The demo world's monitoring: a thing kept quiet for a while
  * (`things.keepQuiet`, `things.endQuiet`: UniFi until 23:00 while its access points move, the-falcon while its backup
  * disk moves), a connection down because of something else (Seerr while its machine `media` is stopped), the
  * week's line and “What happened” (`things.history`) for every thing, and a server check's limit
@@ -40,7 +40,7 @@ export const MONITORING_THINGS = {
   pve02: 'server:pve-02',
 } as const;
 
-/** Seerr runs on this machine of pve-02, stopped: it doesn't answer while it is (MON-07). */
+/** Seerr runs on this machine of pve-02, stopped: it doesn't answer while it is. */
 export const CAUSE_MACHINE = { serverId: 'pve-02', guestId: 'pve:126', name: 'media' } as const;
 
 interface Window {
@@ -210,7 +210,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     });
   }
 
-  /** The week's line (MON-49): “Up 99.6 % this week · down once, 12 min”, “Up all week”. */
+  /** The week's line: “Up 99.6 % this week · down once, 12 min”, “Up all week”. */
   function uptimeOf(thing: string, days = 7): ThingUptime {
     const from = now().getTime() - days * DAY;
     const downs = incidentsOf(thing, from).filter((i) => i.nature === 'down');
@@ -232,7 +232,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     };
   }
 
-  /** `things.history?days=` (MON-51). */
+  /** `things.history?days=`. */
   function history(thing: string, days: number): ThingHistory {
     const from = now().getTime() - days * DAY;
     const alerts = thing.startsWith('server:')
@@ -406,7 +406,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
   >();
   const SUBJECT_NAMES: Record<string, string> = { 'fs:/mnt/backup': '/mnt/backup' };
 
-  /** What Whombat watches on a server, with the limits of the checks that have one (MON-15). */
+  /** What Whombat watches on a server, with the limits of the checks that have one. */
   function withLimits(thing: string, watch: ThingWatch): ThingWatch {
     if (!thing.startsWith('server:')) return watch;
     const server = thing.slice('server:'.length);

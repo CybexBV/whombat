@@ -1,5 +1,5 @@
 /**
- * Change the limit (Whombat docs/decisions/monitoring.md MON-15; `things.setWatchLimit`, session minor 9): a server
+ * Change the limit (Whombat; `things.setWatchLimit`, session minor 9): a server
  * check with a limit (disks filling up, SSD wear, temperatures, inodes), for the whole server or one disk or mount, from
  * its line's ⋯ on the Summary or its row in What Whombat watches. A small sheet with the value and its unit, the allowed
  * range and the default under it, Use the default when it has its own, then Cancel and Save; the toast says the new

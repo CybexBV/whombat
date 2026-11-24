@@ -1,6 +1,5 @@
 /**
- * Monitoring on the web (Whombat docs/decisions/monitoring.md MON-04, MON-07, MON-09, MON-15; app
- * monitoring-web.md AP-9930…) against the fixture world: Keep quiet… from a page's ⋯ and End now, the line under the
+ * Monitoring on the web against the fixture world: Keep quiet… from a page's ⋯ and End now, the line under the
  * head of a thing kept quiet or down because of something else, held lines folded with End now, What happened, and a
  * server check's limit from a line's ⋯.
  */
@@ -18,7 +17,7 @@ const calm = () => fixtureServices({ hosts: true, connectors: 'connected', monit
 const seeded = () => fixtureServices({ hosts: true, connectors: 'connected', monitoring: true });
 const T = { timeout: 12_000 };
 
-describe('keep quiet for a while (MON-04)', () => {
+describe('keep quiet for a while', () => {
   it('keeps a thing quiet from ⋯ until a time with a note, says so under the head, and ends it', async () => {
     const user = userEvent.setup();
     renderApp(HETZNER, calm());
@@ -80,7 +79,7 @@ describe('keep quiet for a while (MON-04)', () => {
   });
 });
 
-describe('one cause (MON-07)', () => {
+describe('one cause', () => {
   it('says why under the head with a link to the cause, and its lines offer neither Undo nor End now', async () => {
     renderApp(HA, seeded());
     const hold = await screen.findByRole('region', { name: 'Why it isn’t answering' }, T);
@@ -94,7 +93,7 @@ describe('one cause (MON-07)', () => {
   });
 });
 
-describe('a server’s tabs while it is kept quiet (MON-04)', () => {
+describe('a server’s tabs while it is kept quiet', () => {
   it('a held line on a tab offers End now, never Undo, and ends the whole window', async () => {
     const user = userEvent.setup();
     renderApp(`${BLACKBOX}?tab=array`, calm());
@@ -116,7 +115,7 @@ describe('a server’s tabs while it is kept quiet (MON-04)', () => {
   });
 });
 
-describe('what happened (MON-09)', () => {
+describe('what happened', () => {
   it('lists a thing’s incidents with when and how long, and says when nothing went wrong', async () => {
     renderApp(HA, seeded());
     const card = (await screen.findByRole('heading', { name: 'What happened' }, T)).closest(
@@ -154,7 +153,7 @@ describe('what happened (MON-09)', () => {
   });
 });
 
-describe('change the limit (MON-15)', () => {
+describe('change the limit', () => {
   it('changes a disk’s limit from its line’s ⋯ with Undo in the toast', async () => {
     const user = userEvent.setup();
     renderApp(PVE02, seeded());

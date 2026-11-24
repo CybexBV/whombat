@@ -144,12 +144,12 @@ export interface PanelContext {
    */
   putBack?: ((changeId: string) => void) | null;
   /**
-   * End now on a line held because the thing is kept quiet (Whombat monitoring.md MON-04): ends the whole window. None
+   * End now on a line held because the thing is kept quiet: ends the whole window. None
    * on a Whombat without it, or for who may not end it.
    */
   endQuiet?: { run: () => void; busy: boolean } | null;
   /**
-   * Change the limit in a line's ⋯ (monitoring.md MON-15): the limit of a server's check the line comes from, for its
+   * Change the limit in a line's ⋯: the limit of a server's check the line comes from, for its
    * item, and what opens its sheet. None where nothing has a limit.
    */
   limits?: { of: (line: QuietTarget) => LimitView | null; open: (view: LimitView) => void } | null;
@@ -916,7 +916,7 @@ function NoticeLine({
   const quiet = ctx.quiet ?? null;
   const menu = row.menu && onMenu ? () => onMenu(row) : null;
   // On iPhone the menu is iOS's own, from the line held or its ⋯ tapped.
-  // A server's line whose check has a limit offers Change the limit in its ⋯ too (monitoring.md MON-15).
+  // A server's line whose check has a limit offers Change the limit in its ⋯ too.
   const limit = menu && ctx.limits ? ctx.limits.of(row.line) : null;
   const native =
     menu && row.menu && quiet && hasNativeMenu
@@ -932,7 +932,7 @@ function NoticeLine({
     if (p && quiet) quiet[p](row.line);
   };
   const undo = row.undo && quiet ? row.undo : null;
-  // A line held because the whole thing is kept quiet ends with it: End now, not Undo (MON-04).
+  // A line held because the whole thing is kept quiet ends with it: End now, not Undo.
   const endQuiet = row.endNow ? (ctx.endQuiet ?? null) : null;
   const inner = (
     <>

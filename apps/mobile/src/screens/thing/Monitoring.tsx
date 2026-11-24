@@ -1,5 +1,5 @@
 /**
- * Monitoring's parts on a thing's and a server's screen (Whombat monitoring.md MON-04, MON-07, MON-09, MON-15), in the
+ * Monitoring's parts on a thing's and a server's screen, in the
  * phone's own patterns:
  * - **Keep quiet…** (`KeepQuietSheet`): the one-Whombat sheet with “Keep pve-02 quiet”, what it means, the choices as
  *   radio cards (For an hour, Until tonight, Until tomorrow morning, each saying until when, and Pick a time: a row of

@@ -297,7 +297,7 @@ export function ConnectionTile({
         </View>
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {tile.row.level === 'connected' ? (
-            // Down because of something else is grey, not fine (monitoring.md MON-07).
+            // Down because of something else is grey, not fine.
             <View
               style={{
                 width: 8,

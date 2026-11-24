@@ -5,7 +5,7 @@
  * until it’s back”, who and when under it) with Undo. The shared `thingWatchView`; the switches and Undo run through
  * the thing's `useQuietActions` (the toast says so). Look only and guests read the same rows with “On” or “Off” instead
  * of a switch and no Undo. Only the rows: the caller puts them in its card (a connection's settings, a server's Summary).
- * A server's check with a limit (Whombat monitoring.md MON-15) says when it warns (“Warns above 90 %”, and each item
+ * A server's check with a limit says when it warns (“Warns above 90 %”, and each item
  * with its own) with Change, which opens Change the limit.
  */
 import {

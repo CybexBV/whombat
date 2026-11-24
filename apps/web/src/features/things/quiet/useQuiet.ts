@@ -33,7 +33,7 @@ export function useThingQuiet(burrow: string, thing: string): QuietActions {
 export interface ServerQuiet {
   mayQuiet: boolean;
   actions: QuietActions;
-  /** What Whombat watches on it: the checks with their limits (Change the limit, monitoring.md MON-15). */
+  /** What Whombat watches on it: the checks with their limits (Change the limit). */
   checks: readonly ThingWatchCheck[] | null;
 }
 

@@ -383,7 +383,7 @@ const PVE02_GUESTS: GuestSeed[] = [
   { vmid: 122, name: 'pihole', kind: 'container', state: 'running', cpu: 0.6, mem: [180, 512] },
   { vmid: 125, name: 'jellyfin', kind: 'vm', state: 'running', cpu: 18.9, mem: [6200, 8192] },
   { vmid: 130, name: 'win11-test', kind: 'vm', state: 'stopped', cpu: 0, mem: [0, 8192] },
-  // Seerr's machine, stopped: Seerr doesn't answer while it is (monitoring.md MON-07).
+  // Seerr's machine, stopped: Seerr doesn't answer while it is.
   { vmid: 126, name: CAUSE_MACHINE.name, kind: 'container', state: 'stopped', cpu: 0, mem: [0, 2048] },
   { vmid: 131, name: 'build-runner', kind: 'container', state: 'paused', cpu: 0, mem: [900, 4096] },
   // Home Assistant's container (its page runs on it: connection-pages-mobile.md AP-1966).
@@ -924,7 +924,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
       at('13:52'),
       'array',
     ),
-    // A rule with a limit (monitoring.md MON-15): its line's ⋯ offers Change the limit.
+    // A rule with a limit: its line's ⋯ offers Change the limit.
     {
       ...alert(
         'al_pve02_temp',
@@ -1477,7 +1477,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     assistant: () => ({ id: assistant.id, name: assistant.name }),
     heatChatHref: rooms?.heatHref ?? `/chats/${HEAT_CHAT_ID}`,
   });
-  // Monitoring (monitoring.md MON-04, MON-07, MON-09, MON-15): things kept quiet, a cause, history and limits.
+  // Monitoring: things kept quiet, a cause, history and limits.
   const monitoring = createMonitoringFixtures({ now, timeZone: ZONE });
   // Home's Done recently, Everything I did and a pinned panel (home-redesign-mobile.md AP-2266).
   const homeParts = createHomeRedesignFixtures({
@@ -1514,14 +1514,14 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     const method = id === 'things.watch' ? 'GET' : 'POST';
     const body = method === 'POST' ? await bodyOf<Record<string, unknown>>(init) : {};
     const answer = hostQuiet.things({ method, serverId: thing.id, what, body });
-    // What Whombat watches with the limits of the checks that have one (MON-15).
+    // What Whombat watches with the limits of the checks that have one.
     const watched =
       what === 'watch' && answer.status === 200
         ? monitoring.withLimits(params.thing ?? '', answer.body as ThingWatch)
         : answer.body;
     return json(watched, answer.status);
   }
-  /** Keep quiet, End now, What happened and a server check's limit (monitoring.md), else null. */
+  /** Keep quiet, End now, What happened and a server check's limit, else null. */
   async function monitored(
     id: string,
     params: Record<string, string>,
@@ -1577,7 +1577,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     if (watching) return watching;
     const pages = await thingPages.handle(id, params, init, url);
     // A page whose look Neo looked into carries what it found (AP-5925); a renamed connection's page its new name; every
-    // page its week, and its window or its cause (monitoring.md).
+    // page its week, and its window or its cause.
     const research = id === 'things.page' && pages?.ok ? looks?.research(params.thing ?? '') : undefined;
     const ref = id === 'things.page' ? parseThingId(params.thing ?? '') : null;
     const label = ref?.kind === 'connection' ? labels.get(ref.id) : undefined;

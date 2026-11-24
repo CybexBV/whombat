@@ -101,7 +101,7 @@ export function TileCard({ entry, view, editing, preview = false, linkProps, onG
         <b>{r.name}</b>
         <span className={s.st}>
           {item.held === 'cause' ? (
-            // Down because of something else: grey, not fine and not a second alarm (monitoring.md MON-68).
+            // Down because of something else: grey, not fine and not a second alarm.
             <span className={cx(s.okDot, s.heldDot)} role="img" aria-label={item.line.text} />
           ) : r.level === 'connected' ? (
             <span className={s.okDot} role="img" aria-label={STATUS_LEVEL_WORDS.connected} />

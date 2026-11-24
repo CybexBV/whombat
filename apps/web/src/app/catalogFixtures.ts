@@ -792,7 +792,7 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
             },
           );
         // A website, port, ping or name lookup is checked from this Whombat or a server it watches: picked after the
-        // address, as the runtime asks (monitoring.md MON-01); a check-in always reports to this Whombat.
+        // address, as the runtime asks; a check-in always reports to this Whombat.
         if (catalogId === 'uptime' && (fields.kind ?? 'http') !== 'heartbeat' && !fields.runner)
           return refuse(409, 'field_choice_needed', 'Choose where Whombat checks it from.', {
             field: 'runner',

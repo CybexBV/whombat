@@ -1,5 +1,5 @@
 /**
- * Monitoring on the phone (Whombat monitoring.md MON-04, MON-07, MON-09, MON-15): what the phone adds around the shared
+ * Monitoring on the phone: what the phone adds around the shared
  * parts (`@whombat/client`'s `keepQuietOptions`, `holdView`, `historyView`, `limitView`, `useKeepQuiet`, …) — Pick a
  * time as a row of days and a clock, the ⋯ menus that offer Keep quiet…, the head's week line without its copy among
  * the facts, and the words a screen reader hears. Pure; the screens are `screens/thing/Monitoring.tsx`,

@@ -155,7 +155,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
   });
   // Ignore, Remind me tomorrow, Stop watching and Undo on its lines (quiet-notices.md AP-4822).
   const quiet = useThingQuiet(burrow, thing);
-  // Keep quiet for a while and End now (monitoring.md MON-04), for who may manage it on a Whombat that has it.
+  // Keep quiet for a while and End now, for who may manage it on a Whombat that has it.
   const keeps = useKeepsQuiet();
   const watch = useThingWatch(keeps ? { params: { burrow, thing } } : null, {
     retry: false,
@@ -266,7 +266,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
     // A tab about a server the page draws from that server's own reads (Find My's names its Mac).
     const about = tabs.find((t) => t.key === tab)?.server ?? null;
     const summary = tab === tabs[0]?.key;
-    // The hold's heads-up line is for an app that doesn't draw the line under the head (MON-63).
+    // The hold's heads-up line is for an app that doesn't draw the line under the head.
     const hold = keeps ? holdView(page) : null;
     const panels = (serverTab(page, tab)?.panels ?? []).map((p) =>
       hold && p.kind === 'notices' ? { ...p, items: [...withoutHoldLine(p.items, page)] } : p,
@@ -352,7 +352,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
               {summary && page.catalogId && placeKindOfCatalog(page.catalogId) ? (
                 <BackupsKeptHere thing={page.id} />
               ) : null}
-              {/* Its outages and problems over the last 30 days (monitoring.md MON-09). */}
+              {/* Its outages and problems over the last 30 days. */}
               {summary ? <WhatHappened burrow={burrow} thing={page.id} /> : null}
             </>
           )}
@@ -449,7 +449,7 @@ function Head({
   page: ThingPage;
   buttons: ThingButtons;
   onPickRunsOn: () => void;
-  /** Keep quiet… in ⋯ (monitoring.md MON-04); null where the viewer may not or the Whombat can't. */
+  /** Keep quiet… in ⋯; null where the viewer may not or the Whombat can't. */
   onKeepQuiet: (() => void) | null;
   /** The hold's line under the head says the state pill's words: the pill is left out, as on the phone. */
   stateInHold?: boolean;

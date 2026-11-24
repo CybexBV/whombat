@@ -22,7 +22,7 @@ type Icon = ComponentType<{ size: number; color: string; strokeWidth: number }>;
 export interface QuietMenuTarget {
   menu: QuietMenuView;
   line: QuietTarget;
-  /** The limit of the check the line comes from, on a server (Whombat monitoring.md MON-15): Change the limit. */
+  /** The limit of the check the line comes from, on a server: Change the limit. */
   limit?: LimitView | null;
 }
 

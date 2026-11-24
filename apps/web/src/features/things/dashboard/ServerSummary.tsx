@@ -63,10 +63,10 @@ export function ServerSummary({
   status?: HostServerStatus;
   /** Links to what reads through this server, after its panels (a Mac's Find My). */
   links?: ReactNode;
-  /** End now on a line quiet because the server is kept quiet (monitoring.md MON-04). */
+  /** End now on a line quiet because the server is kept quiet. */
   endQuiet?: (() => void) | null;
   endingQuiet?: boolean;
-  /** Change the limit in a line's ⋯ (MON-15). */
+  /** Change the limit in a line's ⋯. */
   limitFor?: DashboardContext['limitFor'];
 }) {
   const [, set] = useThingSearch();
@@ -133,7 +133,7 @@ export function ServerSummary({
       {links}
       {/* When it keeps this Whombat's backups (backup-places.md AP-6710). */}
       <BackupsKeptHere thing={thing} />
-      {/* Its outages and its alerts over the last 30 days (monitoring.md MON-09). */}
+      {/* Its outages and its alerts over the last 30 days. */}
       <WhatHappened burrow={burrow} thing={thing} />
       <TechnicalDetails
         rows={technical?.rows ?? []}

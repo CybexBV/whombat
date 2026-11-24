@@ -21,7 +21,7 @@ export const QUIET_COPY = {
   readOnly: 'Only those who manage it change what Whombat watches.',
   showMore: (n: number) => `Show ${n} more`,
   showFewer: 'Show fewer',
-  /** A check's limit's button (Whombat monitoring.md MON-15). */
+  /** A check's limit's button. */
   change: 'Change',
 } as const;
 

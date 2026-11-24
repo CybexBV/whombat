@@ -194,7 +194,7 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
 
   // The name a person gave it (“The Titan”), else its id.
   const name = d?.server.name ?? d?.server.id ?? serverId;
-  // Keep quiet for a while and End now (monitoring.md MON-04), and Change the limit (MON-15), for who may.
+  // Keep quiet for a while and End now, and Change the limit, for who may.
   const keeps = useKeepsQuiet();
   const keepQuiet = useThingKeepQuiet(burrow, thingId('server', serverId), name);
   const [keeping, setKeeping] = useState(false);
@@ -447,7 +447,7 @@ function ServerHead({
   onShell: () => void;
   /** A Mac's screen (macos-servers.md). */
   onScreen: () => void;
-  /** Keep quiet… in ⋯ (monitoring.md MON-04); null where the viewer may not or the Whombat can't. */
+  /** Keep quiet… in ⋯; null where the viewer may not or the Whombat can't. */
   onKeepQuiet: (() => void) | null;
 }) {
   const now = useNow(30_000);
@@ -481,7 +481,7 @@ function ServerHead({
           <>
             <ReadTime at={serverReportAt(detail)} now={now} timeZone={timeZone} />
             {head.idLine ? <span className={styles.idLine}>{head.idLine}</span> : null}
-            {/* Its week in one line (monitoring.md MON-09), where a service's page has it. */}
+            {/* Its week in one line, where a service's page has it. */}
             {detail.uptime ? <span>{detail.uptime.text}</span> : null}
           </>
         }
@@ -596,7 +596,7 @@ function ServerMore({
   reason?: string | null;
   /** This Whombat runs on it: the question says it goes down too (IU-02). */
   thisWhombat?: boolean;
-  /** Keep quiet… (monitoring.md MON-04): before Restart, as it goes with planned work. */
+  /** Keep quiet…: before Restart, as it goes with planned work. */
   onKeepQuiet: (() => void) | null;
 }) {
   const [ask, setAsk] = useState<ServerPowerAction | null>(null);

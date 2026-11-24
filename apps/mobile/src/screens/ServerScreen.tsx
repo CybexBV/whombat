@@ -154,7 +154,7 @@ export function ServerScreen({
   const watch = useThingWatch({ params: { burrow: slug, thing } }, { retry: false });
   const quiet = useQuietActions(slug, thing, { timeZone, note: quietNote(showToast) });
   const agent = useAgentWords();
-  // Keep quiet for a while (Whombat monitoring.md MON-04) and a check's limit (MON-15): on a Whombat at session minor 9.
+  // Keep quiet for a while and a check's limit: on a Whombat at session minor 9.
   const keepsQuiet = protocolAtLeast(useSessionProtocol(), KEEP_QUIET_MINOR);
   const [keeping, setKeeping] = useState(false);
   const [limitFor, setLimitFor] = useState<LimitView | null>(null);
@@ -393,7 +393,7 @@ export function ServerScreen({
           }
         />
         {hold?.kind === 'window' ? (
-          // Kept quiet until a time (MON-04): its words, who, and End now; its banner waits meanwhile.
+          // Kept quiet until a time: its words, who, and End now; its banner waits meanwhile.
           <KeptQuietLine
             words={hold.words}
             who={hold.who}
@@ -531,7 +531,7 @@ export function ServerScreen({
                     wide={widePage.wide}
                   />
                 )}
-                {/* The last 30 days (MON-09): its outages and problems, and its own alerts folded under them. */}
+                {/* The last 30 days: its outages and problems, and its own alerts folded under them. */}
                 <WhatHappenedCard thing={thing} />
                 {/* When it keeps this Whombat's backups (backup-places.md AP-6721). */}
                 <BackupsKeptHere thing={thing} />
@@ -688,7 +688,7 @@ export function ServerScreen({
   );
 }
 
-/** The head's ⋯ (44dp): Rename, and Keep quiet… (MON-04). iOS's own menu from the button on iPhone, a sheet elsewhere. */
+/** The head's ⋯ (44dp): Rename, and Keep quiet…. iOS's own menu from the button on iPhone, a sheet elsewhere. */
 function ServerMenu({
   name,
   onRename,
@@ -773,7 +773,7 @@ function ServerHead({
   readAt: string | null;
   /** “Runs here, in whombat”: this Whombat runs on it. */
   here: string | null;
-  /** Its week in one line (MON-09): “Up 99.6 % this week · down once, 12 min”. */
+  /** Its week in one line: “Up 99.6 % this week · down once, 12 min”. */
   week: string | null;
   fallback: { status: Parameters<typeof serverThingStatus>[0]; words: string } | null;
 }) {

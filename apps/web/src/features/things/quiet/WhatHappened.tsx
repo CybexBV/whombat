@@ -1,5 +1,5 @@
 /**
- * What happened (Whombat docs/decisions/monitoring.md MON-09; `things.history`, session minor 9): at the end of a
+ * What happened (Whombat; `things.history`, session minor 9): at the end of a
  * thing's or server's Summary, its outages and problems over the last 30 days (or 90), newest first — what it was, when
  * and how long, and what took it down — under its uptime over the period; for a server its own alerts fold under them,
  * under “From the server”, without the outages the incidents already list. Drawn as Worth a look's rows: one still going

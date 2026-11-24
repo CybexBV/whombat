@@ -363,8 +363,8 @@ export interface NoticeRowView {
   /** Undo on a quiet line, for who may quiet it: the line it takes back. */
   undo: NoticeRef | null;
   /**
-   * End now on a line held by the thing kept quiet (Whombat monitoring.md MON-04): it ends the whole window, not this
-   * line's quiet. A line held by a cause (MON-07) has neither: it lifts when the cause is back.
+   * End now on a line held by the thing kept quiet: it ends the whole window, not this
+   * line's quiet. A line held by a cause has neither: it lifts when the cause is back.
    */
   endNow: boolean;
   /** Quiet with the whole thing (kept quiet, or down because of something else); null for its own or none. */

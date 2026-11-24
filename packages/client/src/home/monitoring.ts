@@ -1,6 +1,5 @@
 /**
- * Monitoring on a thing's page, the parts web and phone share (Whombat docs/decisions/monitoring.md MON-04, MON-07,
- * MON-09, MON-15): Keep quiet… and its choices with the time each ends, the line a page draws while a thing is kept
+ * Monitoring on a thing's page, the parts web and phone share: Keep quiet… and its choices with the time each ends, the line a page draws while a thing is kept
  * quiet or down because of something else, which Worth a look lines are held (End now, not Undo), a thing's state words
  * in a list, the “What happened” list, and the sheet that changes a server check's limit. Pure.
  */
@@ -25,7 +24,7 @@ import {
 import { daysAgo, formatClock, formatDate, formatShortWeekday, toDate, zonedParts } from '@whombat/core/text';
 import { localAt, untilText } from './time';
 
-/* Keep quiet… (MON-04) --------------------------------------------------------------------------------------------- */
+/* Keep quiet… --------------------------------------------------------------------------------------------- */
 
 export const KEEP_QUIET_WORDS = {
   /** The ⋯ item; it opens the sheet. */
@@ -166,7 +165,7 @@ export function keepQuietTitle(name: string): string {
   return fillQuietWords(KEEP_QUIET_WORDS.title, { name });
 }
 
-/* The line under a page's head (MON-04, MON-07) -------------------------------------------------------------------- */
+/* The line under a page's head -------------------------------------------------------------------- */
 
 export interface HoldView {
   kind: 'window' | 'cause';
@@ -254,7 +253,7 @@ export function heldLine(line: { quiet?: Pick<NoticeQuiet, 'held'> | null }): 'w
   return line.quiet?.held ?? null;
 }
 
-/* A thing's state in a list (MON-04, MON-07) ----------------------------------------------------------------------- */
+/* A thing's state in a list ----------------------------------------------------------------------- */
 
 /**
  * The words a list draws for a thing's state: “Quiet until 23:00” while it is kept quiet, else why it is down because of
@@ -272,7 +271,7 @@ export function thingStateWords(
   return thing.line ?? null;
 }
 
-/* What happened (MON-09) ------------------------------------------------------------------------------------------- */
+/* What happened ------------------------------------------------------------------------------------------- */
 
 export const HISTORY_WORDS = {
   title: 'What happened',
@@ -402,7 +401,7 @@ export function historyView(history: ThingHistory, now: Date | number, timeZone:
   };
 }
 
-/* Change the limit (MON-15) ---------------------------------------------------------------------------------------- */
+/* Change the limit ---------------------------------------------------------------------------------------- */
 
 export const LIMIT_WORDS = {
   menu: 'Change the limit',

@@ -1,5 +1,5 @@
 /**
- * Monitoring in fixture mode (Whombat docs/decisions/monitoring.md MON-04, MON-07, MON-09, MON-15; session minor 9):
+ * Monitoring in fixture mode (Whombat; session minor 9):
  * `things.keepQuiet` and `things.endQuiet` for any thing, `things.history`, a server check's limits in What Whombat
  * watches with `things.setWatchLimit` and its Undo, and the pages, servers and Home read through them as the runtime
  * answers — a thing kept quiet has `keptQuiet`, its lines held (End now) and the hold's heads-up line first; a thing down

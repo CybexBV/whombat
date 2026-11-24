@@ -340,7 +340,7 @@ function StripLine({
     if (p && quiet) quiet[p](row.line);
   };
   const undo = row.undo && quiet ? row.undo : null;
-  // A line held because the whole thing is kept quiet ends with it: End now, not Undo (monitoring.md MON-04).
+  // A line held because the whole thing is kept quiet ends with it: End now, not Undo.
   const endQuiet = row.endNow ? (ctx.endQuiet ?? null) : null;
   const text = (
     <View style={{ gap: 2 }}>

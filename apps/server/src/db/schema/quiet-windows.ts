@@ -1,5 +1,5 @@
 /**
- * Keeping things quiet for a while, causes, and the box's own way out (`docs/decisions/monitoring.md`).
+ * Keeping things quiet for a while, causes, and the box's own way out (` `).
  *
  * - `quiet_windows`: a server, connection or device kept quiet until a time, by a person (with an optional note) or by
  *   Whombat for its own planned work (`work`). `thing_id` is the thing's id as `things.page` takes it; `guest_id` narrows

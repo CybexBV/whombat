@@ -94,7 +94,7 @@ export interface OverviewTile {
   label: string;
   /**
    * Down because of something else (`cause`: “Not answering while pve-02 is down”) or kept quiet (`quiet`: “Quiet until
-   * 23:00”): the line says so whatever else the tile could show (Whombat monitoring.md MON-04, MON-07). Null otherwise.
+   * 23:00”): the line says so whatever else the tile could show. Null otherwise.
    */
   held: 'cause' | 'quiet' | null;
 }

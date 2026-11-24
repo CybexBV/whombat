@@ -275,7 +275,7 @@ const FILES: Record<string, number> = {
   // “Show more here” chip (36dp, padded); the rest is Button, BigButton, OneRow and the sheets.
   // + a service's head (service-slots-mobile.md AP-7130…): its 44dp ⋯ in the back bar and the two 46dp buttons (one
   // site). + the head of every page (phone-refresh-status.md): “Runs on”, the 44dp address that copies and More detail.
-  // + the 44dp ⋯ of a page whose only item is Keep quiet… (monitoring.md MON-04).
+  // + the 44dp ⋯ of a page whose only item is Keep quiet….
   'src/screens/ThingPageScreen.tsx': 6,
   'src/screens/thing/ThingTabs.tsx': 1,
   'src/screens/thing/parts.tsx': 1,
@@ -287,15 +287,15 @@ const FILES: Record<string, number> = {
   // + quiet notices (quiet-notices-mobile.md AP-4861, AP-4862): a line's 44dp ⋯ and a quiet line's 44dp Undo; on
   // iPhone the line held in iOS's menu is its own 52dp site (ios-native.md AP-6271).
   // + a server's figures' 44dp See reading history (overview-server-connection-final.md).
-  // + a held line's 44dp End now (monitoring.md MON-04).
+  // + a held line's 44dp End now.
   'src/screens/thing/Panels.tsx': 14,
-  // Monitoring (monitoring.md MON-04, MON-07): the hold's 44dp End now and the 36dp cause link (padded); What happened
+  // Monitoring: the hold's 44dp End now and the 36dp cause link (padded); What happened
   // and the sheets are rows, OneCard, Chip, the clock field and BigButton.
   'src/screens/thing/Monitoring.tsx': 2,
   // Quiet notices (quiet-notices-mobile.md AP-4861…AP-4867): the ⋯ menu's 52dp rows (one site); What Whombat watches'
   // 44dp Undo on an exception and its 44dp “Show N more”; the toast's 44dp Undo and, with VoiceOver, its 44dp ✕.
   'src/screens/thing/QuietMenu.tsx': 1,
-  // + a limit's 44dp Change (monitoring.md MON-15).
+  // + a limit's 44dp Change.
   'src/screens/thing/WhatWhombatWatches.tsx': 3,
   'src/ui/Toast.tsx': 2,
   // A service's page (service-dashboards.md AP-4630…): a gallery item's link (its picture and words, 100dp and more), the
@@ -306,7 +306,7 @@ const FILES: Record<string, number> = {
   // A service's Summary in slots (service-slots-mobile.md AP-7130…): the strip's 44dp “Show N more”, a line's 30dp link
   // button (padded), its words (44dp, held for the menu), its 44dp ⋯ and Undo; a Live card and a
   // shelf picture (100dp and more); a tile's 30dp Scan is ThingButton's icon button (padded). + a held line's 44dp End now
-  // (monitoring.md MON-04).
+  //.
   'src/screens/thing/Slots.tsx': 8,
   'src/screens/thing/Controls.tsx': 2,
   'src/screens/thing/Picture.tsx': 0,

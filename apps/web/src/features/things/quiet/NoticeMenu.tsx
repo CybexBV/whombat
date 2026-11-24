@@ -1,10 +1,10 @@
 /**
  * A Worth a look line's ⋯ menu and a quiet line's Undo (Whombat quiet-notices.md QN-10, QN-14; app quiet-notices.md
  * AP-4822, AP-4823; the quiet mock's panel 1): the app's menu button opening Ignore (with when you'll hear again under
- * it), Remind me tomorrow and, apart, the line's own extras (a server check's Change the limit,
- * monitoring.md MON-15) and Stop watching {item} (with what that means). Only on a line with Ignore's words (who may manage the thing) and
+ * it), Remind me tomorrow and, apart, the line's own extras (a server check's Change the limit)
+ * and Stop watching {item} (with what that means). Only on a line with Ignore's words (who may manage the thing) and
  * actions (a Whombat with `things.quiet`); a quiet line has Undo instead. A line quiet because the whole thing is kept
- * quiet has End now instead of Undo, and one quiet because of its cause neither (monitoring.md MON-04, MON-07).
+ * quiet has End now instead of Undo, and one quiet because of its cause neither.
  */
 import { heldLine, KEEP_QUIET_WORDS, type QuietLine, quietMenu, quietUndo } from '@whombat/client';
 import type { QuietActions } from '@whombat/client/react';

@@ -238,7 +238,7 @@ export function parseConversationPick(
 
 /**
  * A notice line's ⋯ menu (QN-10): its title on top, Ignore and Stop watching with what they mean under them; on a
- * server's line whose check has a limit, Change the limit with the limit now under it (Whombat monitoring.md MON-15).
+ * server's line whose check has a limit, Change the limit with the limit now under it.
  */
 export function quietLineMenu(
   menu: QuietMenuView,

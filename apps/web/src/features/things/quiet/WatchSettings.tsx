@@ -5,7 +5,7 @@
  * switched off, and what is excepted (“Not for: Garage AP until it’s back · Attic AP always”), each with Undo. Look only
  * and guests see the same list with the switches greyed and no Undo (`mayChange` false). Nothing on a Whombat without
  * `things.quiet`. A server's check with a limit says it under its name (“Warns above 85 %”, a disk with its own beside
- * it) with Change the limit (monitoring.md MON-15).
+ * it) with Change the limit.
  */
 import {
   LIMIT_WORDS,

@@ -1,6 +1,6 @@
 /**
- * Monitoring's reads and changes on a thing's page (Whombat docs/decisions/monitoring.md MON-04, MON-09, MON-15;
- * session minor 9): Keep quiet and End now (`things.keepQuiet`, `things.endQuiet`), What happened (`things.history`,
+ * Monitoring's reads and changes on a thing's page (session
+ * minor 9): Keep quiet and End now (`things.keepQuiet`, `things.endQuiet`), What happened (`things.history`,
  * only asked of a Whombat that has it) and a server check's limit (`things.setWatchLimit`, Undo through
  * `changes.undo`). Each says how it went through the app's `note` (a toast), with Undo where it can be taken back; the
  * page, Home and the watch lists are read again after the answer. Works in React DOM and React Native.

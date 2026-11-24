@@ -1,5 +1,5 @@
 /**
- * Keep quiet for a while (Whombat docs/decisions/monitoring.md MON-04, MON-05, MON-07; session minor 9): the sheet a
+ * Keep quiet for a while (Whombat; session minor 9): the sheet a
  * page's ⋯ “Keep quiet…” opens — For an hour, Until tonight, Until tomorrow morning or a time picked, each with when it
  * ends, and an optional note — and the line under a page's head while it holds: “Quiet until 23:00 · Moving the NAS”
  * with End now for who may end it, or “Not answering while pve-02 is down” with a link to its cause. The toast says
@@ -202,7 +202,7 @@ export function KeepQuietDialog({
 }
 
 /**
- * The line under a page's head while it is held (MON-04, MON-07): kept quiet, with who kept it so in its tooltip and End
+ * The line under a page's head while it is held: kept quiet, with who kept it so in its tooltip and End
  * now; or down or quiet because of something else, with a link to the cause's page.
  */
 export function HoldLine({

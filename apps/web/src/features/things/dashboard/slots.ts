@@ -21,7 +21,7 @@ export interface StripLines<T> {
   /** Quiet lines (ignored or snoozed, with Undo), last. */
   quiet: T[];
   /**
-   * Lines quiet with the whole thing (kept quiet, or down because of something else; monitoring.md MON-04, MON-07):
+   * Lines quiet with the whole thing (kept quiet, or down because of something else):
    * folded behind their own “Show N on hold”, since the line under the page's head already says why.
    */
   held: T[];

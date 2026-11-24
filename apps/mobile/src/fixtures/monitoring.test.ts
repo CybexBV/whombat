@@ -1,5 +1,5 @@
 /**
- * Monitoring in the demo world (Whombat monitoring.md MON-04, MON-07, MON-09, MON-15): UniFi and the-falcon kept quiet,
+ * Monitoring in the demo world: UniFi and the-falcon kept quiet,
  * Seerr down while its machine is stopped, What happened for every thing, and a server check's limit with Undo — each
  * answer through the session, parsed with its endpoint's schema.
  */

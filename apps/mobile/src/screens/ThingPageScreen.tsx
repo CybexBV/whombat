@@ -197,7 +197,7 @@ export function ThingPageScreen({
   // Ignore, Remind me tomorrow, Stop watching and Undo on its lines (quiet-notices-mobile.md AP-4861): on a Whombat
   // with `things.quiet`; the toast says how it went, with Undo.
   const quiet = useQuietActions(slug, thingId, { timeZone, note: quietNote(showToast) });
-  // Keep quiet for a while and End now (Whombat monitoring.md MON-04): on a Whombat at session minor 9, for who may
+  // Keep quiet for a while and End now: on a Whombat at session minor 9, for who may
   // manage the thing (What Whombat watches says so).
   const keepsQuiet = protocolAtLeast(useSessionProtocol(), KEEP_QUIET_MINOR);
   const watch = useThingWatch(keepsQuiet ? { params: { burrow: slug, thing: thingId } } : null, {
@@ -313,10 +313,10 @@ export function ThingPageScreen({
   const service = !!page?.open;
   const more = page && service && (page.actions.length || page.buttons?.length);
   const [menu, setMenu] = useState(false);
-  // Keep quiet… in the ⋯ (MON-04): for who may manage it; a page kept quiet already offers End now under its head.
+  // Keep quiet… in the ⋯: for who may manage it; a page kept quiet already offers End now under its head.
   const canKeepQuiet = !!page && keepsQuiet && (!!watch.data?.mayChange || !!page.keptQuiet?.canEnd);
   const hold = page && keepsQuiet ? holdView(page) : null;
-  // The hold under the state (MON-04, MON-07): kept quiet with who and End now; quiet with its server in its words. Down
+  // The hold under the state: kept quiet with who and End now; quiet with its server in its words. Down
   // because of something else says so as its state already.
   const holdLine =
     page && hold?.kind === 'window' ? (
@@ -510,7 +510,7 @@ export function ThingPageScreen({
                 {shown === tabs[0]?.key && page.catalogId && placeKindOfCatalog(page.catalogId) ? (
                   <BackupsKeptHere thing={page.id} />
                 ) : null}
-                {/* The last 30 days (MON-09): outages and problems with when, how long and why. */}
+                {/* The last 30 days: outages and problems with when, how long and why. */}
                 {shown === tabs[0]?.key ? <WhatHappenedCard thing={page.id} /> : null}
                 {shown === tabs[0]?.key && subject && !service ? (
                   <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
@@ -661,9 +661,9 @@ function ServiceHead({
   wide: boolean;
   /** Ask and Open under the head (a service's); a page without them keeps its own actions under it. */
   withButtons?: boolean;
-  /** The way to what it is down because of, beside its state (monitoring.md MON-07). */
+  /** The way to what it is down because of, beside its state. */
   cause?: { label: string; onPress: () => void } | null;
-  /** The hold under the state: kept quiet (MON-04), which says the state itself, or quiet with its server. */
+  /** The hold under the state: kept quiet, which says the state itself, or quiet with its server. */
   hold?: ReactNode;
 }) {
   const theme = useTheme();
@@ -673,11 +673,11 @@ function ServiceHead({
   const open = withButtons ? page.open : undefined;
   const verdict = page.verdict?.trim() || null;
   const runsOn = page.runsOn;
-  // Down because of something else is grey, not fine (MON-68): the hollow ring and grey words of a thing not known yet.
+  // Down because of something else is grey, not fine: the hollow ring and grey words of a thing not known yet.
   const level = page.causedBy && page.causedBy.kind !== 'quiet' ? 'learning' : thingStatusLevel(page.status);
   // Kept quiet, the server's badge is the hold's own first words (“Quiet until 23:00”): the hold line says them.
   const kept = !!hold && !!page.keptQuiet && page.badge === page.keptQuiet.words.split(' · ')[0];
-  // The week's line (MON-09) sits by when it was checked; the server also sends it among the facts for older apps.
+  // The week's line sits by when it was checked; the server also sends it among the facts for older apps.
   const { checked, detail } = headFacts(factsWithoutUptime(page.facts, page.uptime));
   const week = page.uptime?.text ?? null;
   const openRunsOn = () => {

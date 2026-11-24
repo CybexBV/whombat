@@ -97,7 +97,7 @@ export function ServersCard({
     sortKey,
   );
   const rename = useThingRename(slug);
-  // A server kept quiet says so on its card (Whombat monitoring.md MON-04): Home's thing has until when.
+  // A server kept quiet says so on its card: Home's thing has until when.
   const home = useHomeOverview({ params: { burrow: slug } });
   const quietWords = useMemo(() => {
     const out = new Map<string, string>();

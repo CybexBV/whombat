@@ -715,7 +715,7 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
     };
   }
   {
-    // Monitoring (monitoring.md MON-04, MON-07, MON-09, MON-15): keeping quiet, what happened and a server's limits, over
+    // Monitoring: keeping quiet, what happened and a server's limits, over
     // the servers and the one-Whombat world, whose pages, servers and Home it reads through.
     const inner = out;
     const monitoring = createMonitoringFixtures({ seeded: monitoringSeeded(options.monitoring) });
