@@ -19,6 +19,8 @@ Code: `packages/core/src/vault/onepassword.ts` (mapping, comparison, merge, guar
 `packages/core/src/domain/connections-catalog/onepassword.ts`, `apps/server/src/vault/onepassword/` (the worker, the
 pass, the commands), the Vault and connection screens on web and phone.
 
+Checked against a real account (2026-11-24, `apps/server/src/scripts/onepassword-smoke.ts`, SDK 0.5.0): a Login's built-in fields come back with `sectionId`, `details` and the item's `document` as `null` (the item shape first refused them, so no new Login could be made); a new Login, API Credential, marker field and one-time password round-trip and read back as the same entry; a custom field put without a section is kept (its section then reads as empty); a `put` with an old version is refused with “The submitted item is not up to date. Refetch the item and retry the request.”; every create and put moves the vault's `contentVersion`; the SDK shows no limit counters. Each call took 0.2 to 0.7 s.
+
 ## Linking
 
 | # | Decision | Why |
