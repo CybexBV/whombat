@@ -12,7 +12,7 @@ import {
 } from '@whombat/protocol/session';
 import { describe, expect, it, vi } from 'vitest';
 import { fakePeerId } from '../session/fake';
-import type { ApplianceSession } from '../session/types';
+import { type ApplianceSession, NotDeliveredError } from '../session/types';
 import {
   boxPasskeyCreationOptions,
   createAccountPasskey,
@@ -20,7 +20,7 @@ import {
   joinWithBoxPasskey,
 } from './box-passkeys';
 import { boxPasskeyOutcome, boxPasskeySetupProblem, OWN_ADDRESS_TEXT } from './own-address';
-import { PasskeyCancelled, PasskeyError, type PasskeyPlatform } from './passkeys';
+import { PASSKEY_COPY, PasskeyCancelled, PasskeyError, type PasskeyPlatform } from './passkeys';
 
 const BOX = fakePeerId('box');
 const ME = fakePeerId('new-browser');
@@ -342,6 +342,21 @@ describe('when making it fails', () => {
     }).catch((e: unknown) => e);
     expect(await reported(b)).toMatchObject({ stage: 'begin', code: 'failed', name: 'address_moved' });
     expect(boxPasskeySetupProblem(error)).toBe(OWN_ADDRESS_TEXT.passkey.moved);
+  });
+
+  it('says to check the connection when the Whombat stops answering on the way', async () => {
+    const b = box();
+    const offline = {
+      ...b.session,
+      invoke: async () => Promise.reject(new NotDeliveredError('end_1', 'req_1')),
+    } as unknown as ApplianceSession;
+    const error = await createBoxPasskey({
+      session: offline,
+      platform: authenticator({ prfAtCreate: true }).platform,
+      appliance: BOX,
+      name: 'Chrome',
+    }).catch((e: unknown) => e);
+    expect(boxPasskeySetupProblem(error)).toBe(PASSKEY_COPY.errors.unreachable);
   });
 
   it('tells the box of a dismissed prompt too, and says nothing to the person', async () => {
