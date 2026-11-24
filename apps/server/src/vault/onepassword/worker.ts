@@ -346,10 +346,27 @@ function serve(): void {
   });
   // The server went away (or stopped the worker): nothing more to do.
   input.on('close', () => process.exit(0));
-  process.on('uncaughtException', (err) => {
-    process.stderr.write(`onepassword worker: ${scrubText(err.name || 'Error', [])}\n`);
-    process.exit(70);
-  });
+  endOnCrash(process, process.stderr, (code) => process.exit(code));
+}
+
+/**
+ * Anything thrown or rejected that nothing caught ends the worker with 70, said by its name only (never its words, which
+ * may hold a value): the pool fails what it had and starts another.
+ */
+export function endOnCrash(
+  target: {
+    on(event: 'uncaughtException' | 'unhandledRejection', listener: (err: unknown) => void): unknown;
+  },
+  stderr: { write(text: string): unknown },
+  exit: (code: number) => void,
+): void {
+  const die = (err: unknown) => {
+    const name = err instanceof Error ? err.name || 'Error' : 'Error';
+    stderr.write(`onepassword worker: ${scrubText(name, [])}\n`);
+    exit(70);
+  };
+  target.on('uncaughtException', die);
+  target.on('unhandledRejection', die);
 }
 
 if (process.argv.includes(ONEPASSWORD_WORKER_FLAG)) serve();

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,7 @@ import { OnePasswordError, OnePasswordPool, readGetAnswer } from './pool';
 import {
   classifyError,
   createWorker,
+  endOnCrash,
   guardFetch,
   onePasswordAddressAllowed,
   type Sdk,
@@ -154,6 +156,21 @@ describe('the worker’s protocol', () => {
     expect(scrubText('x'.repeat(400), []).length).toBe(300);
     // Values too short to be secrets stay, so the words still read.
     expect(scrubText('a field is empty', ['a'])).toBe('a field is empty');
+  });
+});
+
+describe('the worker’s end', () => {
+  it('ends on a rejection nothing caught as on a throw, saying only its name', () => {
+    const target = new EventEmitter();
+    const written: string[] = [];
+    const exits: number[] = [];
+    endOnCrash(target, { write: (text: string) => written.push(text) }, (code) => exits.push(code));
+    target.emit('unhandledRejection', new TypeError(`no item for ${TOKEN} with hunter2`));
+    target.emit('uncaughtException', new RangeError('hunter2'));
+    expect(exits).toEqual([70, 70]);
+    expect(written.join('')).toContain('TypeError');
+    expect(written.join('')).not.toContain('hunter2');
+    expect(written.join('')).not.toContain(TOKEN);
   });
 });
 

@@ -241,7 +241,7 @@ export class OnePasswordPool implements OnePasswordApi {
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => this.#onData(child, chunk));
     child.stderr?.setEncoding('utf8');
-    child.stderr?.on('data', (chunk: string) => this.#onStderr(chunk));
+    child.stderr?.on('data', (chunk: string) => this.#onStderr(child, chunk));
     child.stdin?.on('error', () => {});
     child.on('error', (err) => this.#onDeath(child, (err as { code?: string }).code ?? 'error'));
     child.on('exit', (code, signal) => this.#onDeath(child, signal ?? String(code)));
@@ -277,8 +277,12 @@ export class OnePasswordPool implements OnePasswordApi {
     this.#idleCheck();
   }
 
-  /** What the worker writes to stderr goes to the log with every token it was sent taken out, briefly. */
-  #onStderr(chunk: string): void {
+  /**
+   * What the worker writes to stderr goes to the log with every token it was sent taken out, briefly. A worker already
+   * replaced is ignored: the tokens it was sent are forgotten, so its words couldn't be cleaned of them.
+   */
+  #onStderr(child: ChildProcess, chunk: string): void {
+    if (child !== this.#child) return;
     let text = chunk;
     for (const token of this.#tokens) if (token.length >= 4) text = text.split(token).join('[hidden]');
     text = text.replace(/ops_[A-Za-z0-9+/=_-]{8,}/g, '[hidden]').trim();
