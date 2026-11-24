@@ -125,6 +125,11 @@ export const useConnectors = queryHook(api.connectors.status);
 export const useConnectionsCatalog = queryHook(api.connections.catalog);
 export const useCatalogConnections = queryHook(api.connections.list);
 export const useConnectionTools = queryHook(api.connections.tools);
+/**
+ * A 1Password connection's page part (Whombat onepassword-sync.md): the last pass's stored state, never a call to
+ * 1Password. Only on a box at session minor 8 or later, the only ones that offer 1Password.
+ */
+export const useOnePassword = queryHook(api.connections.onePassword);
 /** Supervised automations (docs/decisions/bp-automations.md). */
 export const useAutomations = queryHook(api.automations.list);
 export const useAutomation = queryHook(api.automations.get);

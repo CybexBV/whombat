@@ -653,6 +653,8 @@ const handlers: Handlers = {
   // websites included.
   'vault.updated': (ctx, { entryId }) => {
     invalidateVault(ctx.qc, entryId);
+    // A 1Password pass that changed entries changes its connection's counts too (Whombat onepassword-sync.md).
+    void ctx.qc.invalidateQueries({ queryKey: queryKeys.scope('connections.onePassword') });
     return true;
   },
 
