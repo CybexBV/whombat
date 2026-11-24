@@ -1,5 +1,5 @@
 {
-  "id": "c8e50fc1-9559-4424-b9a1-f380a4ec2816",
+  "id": "89b9e4e4-538d-40f9-a0aa-14bd84877334",
   "prevId": "fe4717fc-52e6-490b-aa0b-e16363361b23",
   "version": "7",
   "dialect": "postgresql",
@@ -19449,6 +19449,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'down'"
         },
         "words": {
           "name": "words",

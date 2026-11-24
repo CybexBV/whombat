@@ -19,6 +19,7 @@ CREATE TABLE "thing_causes" (
 	"thing_id" text NOT NULL,
 	"cause_thing" text NOT NULL,
 	"cause_name" text NOT NULL,
+	"kind" text DEFAULT 'down' NOT NULL,
 	"words" text NOT NULL,
 	"since" timestamp with time zone NOT NULL,
 	"checked_at" timestamp with time zone NOT NULL,

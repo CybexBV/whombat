@@ -69,6 +69,8 @@ export interface CauseWorld {
 export interface FoundCause {
   causeThing: string;
   causeName: string;
+  /** `down`: it doesn't answer because of it; `quiet`: it is quiet with a server or machine kept quiet. */
+  kind: 'down' | 'quiet';
   words: string;
 }
 
@@ -98,6 +100,7 @@ export function causesFor(
       out.set(c.thingId, {
         causeThing: machineThing(m.serverId, null),
         causeName: server.name,
+        kind: 'down',
         words: `while ${server.name} is down`,
       });
       continue;
@@ -106,6 +109,7 @@ export function causesFor(
       out.set(c.thingId, {
         causeThing: machineThing(m.serverId, m.guestId),
         causeName: guest.name,
+        kind: 'down',
         words: `while ${guest.name} is stopped`,
       });
       continue;
@@ -117,6 +121,7 @@ export function causesFor(
       out.set(c.thingId, {
         causeThing: machineThing(m.serverId, window.guestId),
         causeName: name,
+        kind: 'quiet',
         words: window.work ? `while Whombat is updating ${name}` : `while ${name} is kept quiet`,
       });
       continue;
@@ -125,6 +130,7 @@ export function causesFor(
       out.set(c.thingId, {
         causeThing: WAY_OUT_THING,
         causeName: WAY_OUT_CAUSE[world.wayOut].name,
+        kind: 'down',
         words: WAY_OUT_CAUSE[world.wayOut].words,
       });
   }
@@ -295,7 +301,8 @@ async function keepCauses(
         .where(and(eq(thingCauses.ownerId, burrowId), inArray(thingCauses.thingId, gone)));
     for (const [thing, cause] of found) {
       const was = keptBy.get(thing);
-      const same = was && was.causeThing === cause.causeThing && was.words === cause.words;
+      const same =
+        was && was.causeThing === cause.causeThing && was.kind === cause.kind && was.words === cause.words;
       if (!same) changed = true;
       await tx
         .insert(thingCauses)
@@ -319,12 +326,15 @@ async function keepCauses(
 /* What a cause takes with it -------------------------------------------------------------------------------------- */
 
 /**
- * The names of the things down because of `cause` in a burrow (`server:pve-02` also takes those on its machines),
+ * The names of the things that don't answer because of `cause` in a burrow (`server:pve-02` also takes those on its
+ * machines),
  * people's names for them, by name.
  */
 export async function takenNames(db: Db | Tx, burrowId: string, cause: string): Promise<string[]> {
   const rows = await db.select().from(thingCauses).where(eq(thingCauses.ownerId, burrowId));
   const ids = rows
+    // Only what doesn't answer because of it is down with it; what is quiet with it isn't.
+    .filter((r) => r.kind === 'down')
     .filter((r) => r.causeThing === cause || r.causeThing.startsWith(`${cause}/guest/`))
     .map((r) => r.thingId)
     .filter((t) => t.startsWith('connection:') || t.startsWith('device:'))

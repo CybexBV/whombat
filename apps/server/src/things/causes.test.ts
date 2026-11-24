@@ -38,6 +38,7 @@ describe('causesFor', () => {
     expect(found.get(plex.thingId)).toEqual({
       causeThing: 'server:pve-02',
       causeName: 'pve-02',
+      kind: 'down',
       words: 'while pve-02 is down',
     });
     expect(found.get(ha.thingId)?.causeThing).toBe('server:pve-02');
@@ -59,6 +60,7 @@ describe('causesFor', () => {
           {
             causeThing: machineThing('pve-02', 'pve:131'),
             causeName: 'homeassistant',
+            kind: 'down',
             words: 'while homeassistant is stopped',
           },
         ],
@@ -70,7 +72,7 @@ describe('causesFor', () => {
   it('a server kept quiet keeps what runs on it quiet, answering or not; Whombat’s work says so', () => {
     const quiet = world({ windows: [{ serverId: 'pve-02', guestId: null, work: false }] });
     const found = causesFor([{ ...plex, answering: true }, ha], quiet);
-    expect(found.get(plex.thingId)?.words).toBe('while pve-02 is kept quiet');
+    expect(found.get(plex.thingId)).toMatchObject({ kind: 'quiet', words: 'while pve-02 is kept quiet' });
     expect(found.get(ha.thingId)?.causeThing).toBe('server:pve-02');
     const work = world({ windows: [{ serverId: 'pve-02', guestId: 'pve:131', work: true }] });
     const byWork = causesFor([plex, ha], work);

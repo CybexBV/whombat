@@ -129,14 +129,16 @@ export const KeptQuiet = z.object({
 export type KeptQuiet = z.infer<typeof KeptQuiet>;
 
 /**
- * What a thing is down because of (MON-07, MON-08): the server it runs on that is down, its machine that stopped or is
- * kept quiet, or the internet (`box:network`). `thing` is the cause's id (`server:pve-02`); `words` the page's line
- * (“Not answering while pve-02 is down”); `href` the cause's page when it has one.
+ * What a thing is down because of (MON-07, MON-08): the server it runs on that is down, its machine that stopped, or the
+ * internet (`box:network`); or, with `kind: 'quiet'`, the server or machine it runs on that is kept quiet (MON-04), which
+ * quiets it whatever it answers. `thing` is the cause's id (`server:pve-02`); `words` the page's line (“Not answering
+ * while pve-02 is down”, “Quiet while pve-02 is kept quiet”); `href` the cause's page when it has one.
  */
 export const ThingCause = z.object({
   thing: z.string().min(3).max(220),
   name: z.string().min(1).max(80),
   words: z.string().min(1).max(160),
+  kind: z.enum(['down', 'quiet']).optional(),
   href: z.string().min(1).max(500).optional(),
 });
 export type ThingCause = z.infer<typeof ThingCause>;

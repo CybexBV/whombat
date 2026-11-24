@@ -37,6 +37,7 @@ const window = (over: Partial<WindowLike> = {}): WindowLike => ({
 const cause = (over: Partial<CauseLike> = {}): CauseLike => ({
   causeThing: 'server:pve-02',
   causeName: 'pve-02',
+  kind: 'down',
   words: 'while pve-02 is down',
   since: min(-5),
   checkedAt: min(-1),
@@ -204,6 +205,13 @@ describe('the words', () => {
     });
   });
 
+  it('says a thing quiet with its server as quiet, not as not answering', () => {
+    expect(thingCause(cause({ kind: 'quiet', words: 'while pve-02 is kept quiet' }))).toMatchObject({
+      kind: 'quiet',
+      words: 'Quiet while pve-02 is kept quiet',
+    });
+  });
+
   it('names what a cause takes with it', () => {
     expect(takenWords([])).toBeNull();
     expect(takenWords(['Plex'])).toBe('Plex is down with it');
@@ -215,6 +223,7 @@ describe('the words', () => {
       { name: 'Sonarr', causedBy: { thing: 'server:pve-02' } },
       { name: 'Home Assistant', causedBy: { thing: 'server:pve-02/guest/pve%3A131' } },
       { name: 'GitHub', causedBy: { thing: 'box:network' } },
+      { name: 'Plex', causedBy: { thing: 'server:pve-02', kind: 'quiet' } },
       { name: 'Grafana' },
     ]);
     expect(taken.get('server:pve-02')).toEqual(['Home Assistant', 'Sonarr']);

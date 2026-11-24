@@ -56,7 +56,12 @@ export const thingCauses = pgTable(
     causeThing: text('cause_thing').notNull(),
     /** Its name as people know it (“pve-02”, “homeassistant”, “the internet”). */
     causeName: text('cause_name').notNull(),
-    /** Why, lower case without a full stop, after “Not answering ”: “while pve-02 is down”. */
+    /**
+     * `down`: it doesn't answer because of the cause (its server down, its machine stopped, the internet); `quiet`: it
+     * is quiet with a server or machine kept quiet, whatever it answers.
+     */
+    kind: text('kind').$type<'down' | 'quiet'>().notNull().default('down'),
+    /** Why, lower case without a full stop: “while pve-02 is down”, “while pve-02 is kept quiet”. */
     words: text('words').notNull(),
     since: ts('since').notNull(),
     /** When the job last found it still so: a row the job no longer keeps current doesn't count. */

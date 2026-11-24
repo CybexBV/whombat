@@ -183,7 +183,7 @@ function causeLine(cause: ThingCause): WireNotice {
 
 /**
  * A page's head and fields while the thing is held quiet (monitoring.md MON-04, MON-07): down because of something else
- * is grey with the cause's words as its badge; kept quiet keeps its status. `keptQuiet` and `causedBy` for the page.
+ * is grey with the cause's words as its badge; kept quiet, or quiet with its server, keeps its status. `keptQuiet` and `causedBy` for the page.
  */
 export function heldPage(
   marked: Pick<MarkedLines, 'keptQuiet' | 'causedBy'>,
@@ -196,7 +196,7 @@ export function heldPage(
     ...(marked.keptQuiet ? { keptQuiet: marked.keptQuiet } : {}),
     ...(marked.causedBy ? { causedBy: marked.causedBy } : {}),
   };
-  if (marked.causedBy && !marked.keptQuiet)
+  if (marked.causedBy && !marked.keptQuiet && marked.causedBy.kind !== 'quiet')
     return { head: { status: 'unknown', badge: marked.causedBy.words.slice(0, 60) }, fields };
   return { head, fields };
 }

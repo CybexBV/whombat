@@ -431,22 +431,24 @@ export function connectionThing(
     );
   }
   if (glance) {
-    // Down because of something else (monitoring.md MON-07): grey, its line saying why, no reason of its own.
+    // Down because of something else (monitoring.md MON-07): grey, its line saying why, no reason of its own; quiet
+    // with a server kept quiet keeps its dot and line.
     const cause =
       v?.held?.kind === 'cause' && v.held.cause
         ? thingCause(v.held.cause, causeHref(v.held.cause.causeThing))
         : null;
     const window = activeWindow(quiet.of.windows, quiet.now);
-    const status = cause ? 'unknown' : (v?.status ?? glance.status);
+    const down = cause && cause.kind !== 'quiet' ? cause : null;
+    const status = down ? 'unknown' : (v?.status ?? glance.status);
     const reason = v ? v.reason : glance.reason;
     return withNotice(
       {
         ...base,
         status,
         // Why it isn't fine (sidebar.md SB-03), for the sidebar's dot.
-        ...(status !== 'ok' && !cause && reason ? { reason: clip(reason, 160) } : {}),
-        ...(cause
-          ? { line: clip(cause.words, 160) }
+        ...(status !== 'ok' && !down && reason ? { reason: clip(reason, 160) } : {}),
+        ...(down
+          ? { line: clip(down.words, 160) }
           : glance.line
             ? { line: clip(glance.line, 160) }
             : row.glanceAt

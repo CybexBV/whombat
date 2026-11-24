@@ -17,7 +17,10 @@ export type WindowLike = Pick<
   'id' | 'startsAt' | 'endsAt' | 'endedAt' | 'note' | 'byId' | 'work' | 'guestId'
 >;
 /** A cause as `holdOf` reads it. */
-export type CauseLike = Pick<ThingCauseRow, 'causeThing' | 'causeName' | 'words' | 'since' | 'checkedAt'>;
+export type CauseLike = Pick<
+  ThingCauseRow,
+  'causeThing' | 'causeName' | 'kind' | 'words' | 'since' | 'checkedAt'
+>;
 
 /**
  * How long a cause counts after the job last found it: the job runs every minute, so a cause it stopped keeping current
@@ -151,12 +154,16 @@ export function keptQuiet(
   };
 }
 
-/** A cause as a page carries it (`ThingCause`): “Not answering while pve-02 is down”. */
+/**
+ * A cause as a page carries it (`ThingCause`): “Not answering while pve-02 is down”, or for a thing quiet with its server
+ * “Quiet while pve-02 is kept quiet”.
+ */
 export function thingCause(c: CauseLike, href?: string | null): ThingCause {
   return {
     thing: c.causeThing.slice(0, 220),
     name: c.causeName.slice(0, 80) || c.causeThing.slice(0, 80),
-    words: `Not answering ${c.words}`.slice(0, 160),
+    words: `${c.kind === 'quiet' ? 'Quiet' : 'Not answering'} ${c.words}`.slice(0, 160),
+    ...(c.kind === 'quiet' ? { kind: 'quiet' as const } : {}),
     ...(href ? { href: href.slice(0, 500) } : {}),
   };
 }
@@ -172,12 +179,13 @@ export function takenWords(names: readonly string[]): string | null {
 
 /** The names of the things down because of each cause, from Home's things (`ThingSummary.causedBy`), by name. */
 export function takenFrom(
-  things: readonly { name: string; causedBy?: { thing: string } }[],
+  things: readonly { name: string; causedBy?: { thing: string; kind?: 'down' | 'quiet' } }[],
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const t of things) {
     const cause = t.causedBy?.thing;
-    if (!cause) continue;
+    // What is only quiet with its server isn't down with it.
+    if (!cause || t.causedBy?.kind === 'quiet') continue;
     // A thing down with one of a server's machines is down with the server too, for the server's look.
     const server = cause.split('/guest/')[0] as string;
     for (const key of new Set([cause, server])) out.set(key, [...(out.get(key) ?? []), t.name]);
