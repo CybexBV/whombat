@@ -1,0 +1,1 @@
+ALTER TABLE "burrows" ADD COLUMN "overview_layout" jsonb;

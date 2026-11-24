@@ -33,6 +33,7 @@ import {
   homeEndpoints,
   lookEndpoints,
   needsYouEndpoints,
+  overviewEndpoints,
   thingEndpoints,
   watchEndpoints,
   widgetEndpoints,
@@ -196,6 +197,7 @@ export interface Api {
   councils: typeof councilEndpoints;
   delegations: typeof delegationEndpoints;
   home: typeof homeEndpoints;
+  overview: typeof overviewEndpoints;
   watch: typeof watchEndpoints;
   needsYou: typeof needsYouEndpoints;
   looks: typeof lookEndpoints;
@@ -303,6 +305,8 @@ export const api: Api = {
   // One Whombat (Whombat one-whombat.md, 0.80, CT-336…CT-343): session ops too, feature `shell.assistant`.
   /** Home for the caller (ONE-05). */
   home: homeEndpoints,
+  /** Arranging the Overview (Whombat overview-arranged.md). */
+  overview: overviewEndpoints,
   /** Watch: alerts, hints, stopped connections, failed automations (ONE-07). */
   watch: watchEndpoints,
   /** Snoozing a Needs you item (ONE-10). */

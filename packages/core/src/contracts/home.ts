@@ -18,10 +18,18 @@ import {
   Conversation,
   ThreadPlace,
 } from '../domain/conversation.js';
+import {
+  DESK_SCREEN_VIEWS_MAX,
+  DeskCatalog,
+  DeskWidgetRef,
+  DeskWidgetSpec,
+  DeskWidgetView,
+} from '../domain/desk-screens.js';
 import { DeviceActionChoice, DeviceSkillCard } from '../domain/devices.js';
 import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain/home.js';
 import { LookResearch } from '../domain/look-research.js';
 import { Message, MessageTextInput } from '../domain/message.js';
+import { ArrangeOverviewBody, OverviewLayout } from '../domain/overview-layout.js';
 import { NoticeCheck, NoticeQuiet, NoticeRef, NoticeSubject, ThingWatch } from '../domain/quiet.js';
 import {
   ThingButtonValue,
@@ -294,6 +302,45 @@ export const widgetEndpoints = {
     params: B.extend({ widgetId: WidgetId }),
     body: MoveWidgetBody,
     response: WidgetsResponse,
+  }),
+};
+
+/* Arranging the Overview (Whombat overview-arranged.md) --------------------------------------------------------- */
+
+export const ArrangeOverviewResponse = z.object({ arranged: OverviewLayout });
+export const OverviewViewsBody = z.object({ widgets: z.array(DeskWidgetSpec).max(DESK_SCREEN_VIEWS_MAX) });
+export const OverviewViewsResponse = z.object({ views: z.array(DeskWidgetView).max(DESK_SCREEN_VIEWS_MAX) });
+
+export const overviewEndpoints = {
+  arrange: endpoint({
+    id: 'overview.arrange',
+    method: 'PUT',
+    path: '/burrows/:burrow/overview/layout',
+    summary:
+      'Arrange the Overview: the whole layout — what each tile shows, its size and place, the four figures at the top, the pinned charts’ widths. One for the whole Whombat; the person only.',
+    params: B,
+    body: ArrangeOverviewBody,
+    response: ArrangeOverviewResponse,
+  }),
+  views: endpoint({
+    id: 'overview.views',
+    method: 'POST',
+    path: '/burrows/:burrow/overview/views',
+    summary:
+      'What the Overview’s tiles and figures show now: the views of desk-screen widgets of type `figures` or `panel` (a connection’s, a device’s or an account’s), as a screen would draw them.',
+    params: B,
+    body: OverviewViewsBody,
+    response: OverviewViewsResponse,
+  }),
+  figures: endpoint({
+    id: 'overview.figures',
+    method: 'GET',
+    path: '/burrows/:burrow/overview/figures',
+    summary:
+      'What a tile or a figure can show: each connection’s, device’s and account’s figures and the panels of its page; with `thing`, only that one’s (its page read now).',
+    params: B,
+    query: z.object({ thing: DeskWidgetRef.optional() }),
+    response: DeskCatalog,
   }),
 };
 

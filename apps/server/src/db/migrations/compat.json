@@ -147,6 +147,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "After a whole-box restore 1Password's values win until a complete pass (docs/decisions/onepassword-sync.md): one boolean on vault_onepassword_state (default false). The release before it never reads the table."
+    },
+    "0023_overview_layout": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "How the Overview is arranged (docs/decisions/overview-arranged.md): one nullable jsonb column on burrows. The release before it never reads or writes it, and a row it wrote reads as before there."
     }
   }
 }
