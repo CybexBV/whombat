@@ -9,7 +9,12 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ONEPASSWORD_APP_TEXT } from '@whombat/client';
 import { api, buildPath } from '@whombat/core/contracts';
-import { ONEPASSWORD_WORDS, onePasswordSkipText, VAULT_COPY } from '@whombat/core/vault';
+import {
+  ONEPASSWORD_WORDS,
+  onePasswordSkipText,
+  onePasswordWaitingLine,
+  VAULT_COPY,
+} from '@whombat/core/vault';
 import { burrow } from '@whombat/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { createWebFixtureFetch } from '../../app/fixtureFetch';
@@ -90,7 +95,9 @@ describe('the 1Password connection’s page', () => {
   it('says why it waits for 1Password’s limit and when it tries again', async () => {
     renderApp(PAGE, world('waiting'));
     const part = await keptInStep();
-    const waiting = await within(part).findByText('Waiting for 1Password’s limit. Next try at 11:40.');
+    // The page says the clock time in the zone it runs in (11:40 in Amsterdam).
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const waiting = await within(part).findByText(onePasswordWaitingLine('2026-09-23T09:40:00.000Z', zone));
     expect(waiting.getAttribute('data-tone')).toBe('warn');
   });
 
