@@ -165,6 +165,8 @@ export const ONEPASSWORD_WORDS = {
   keepHere: 'Keep them here',
   disconnectKeep: 'Keep the entries in your Vault',
   disconnectRemove: 'Remove them too',
+  /** Said when removing a synced entry: the item isn't deleted there, only archived. */
+  removeArchives: 'Its item in 1Password goes to 1Password’s archive.',
 } as const;
 
 /** Why an item isn't in the Vault, in the person's words. */

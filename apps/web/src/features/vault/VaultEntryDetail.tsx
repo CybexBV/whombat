@@ -13,6 +13,7 @@ import { createLink } from '@tanstack/react-router';
 import {
   VAULT_MCP_MOVE_TEXT,
   VAULT_TOTP_TEXT,
+  vaultEntryRemoveNote,
   vaultEntryStaysMcp,
   vaultProblemOf,
   vaultTotpLine,
@@ -782,7 +783,9 @@ function Remove({ burrow, entry, onRemoved }: EntryProps & { onRemoved: () => vo
           )}
           {confirming ? (
             <div className={styles.confirm}>
-              <p className={styles.confirmText}>{words.removeConfirm(entry.name)}</p>
+              <p className={styles.confirmText}>
+                {[words.removeConfirm(entry.name), vaultEntryRemoveNote(entry)].filter(Boolean).join(' ')}
+              </p>
               <Button
                 variant="secondary"
                 size="sm"

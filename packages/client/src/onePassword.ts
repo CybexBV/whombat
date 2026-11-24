@@ -57,6 +57,11 @@ export function vaultEntryTag(entry: Pick<VaultEntry, 'source'>): string | null 
   return entry.source?.kind === 'onepassword' ? ONEPASSWORD_WORDS.tag : null;
 }
 
+/** What removing a synced entry also does, said in its confirmation; null for an entry not kept in step. */
+export function vaultEntryRemoveNote(entry: Pick<VaultEntry, 'source'>): string | null {
+  return entry.source?.kind === 'onepassword' ? ONEPASSWORD_WORDS.removeArchives : null;
+}
+
 /** A line with how loud it is: `warn` for what needs a look, `bad` only for what has stopped working. */
 export interface ToneLine {
   text: string;

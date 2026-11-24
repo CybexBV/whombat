@@ -20,6 +20,7 @@ import {
   ONEPASSWORD_DISCONNECT_OPTIONS,
   onePasswordAnsweredText,
   onePasswordPage,
+  vaultEntryRemoveNote,
   vaultEntrySourceLine,
   vaultEntryTag,
 } from './onePassword';
@@ -62,6 +63,13 @@ describe('the Vault', () => {
     expect(
       vaultEntryTag({ source: { kind: 'bitwarden', state: 'synced', syncedAt: NOW } as never }),
     ).toBeNull();
+  });
+
+  it('says on removal that a synced entry’s item goes to 1Password’s archive, and only for that one', () => {
+    expect(vaultEntryRemoveNote({ source: { kind: 'onepassword', state: 'synced', syncedAt: NOW } })).toBe(
+      ONEPASSWORD_WORDS.removeArchives,
+    );
+    expect(vaultEntryRemoveNote({})).toBeNull();
   });
 
   it('says how the entry stands with 1Password on its page, a problem in the warning colour', () => {
