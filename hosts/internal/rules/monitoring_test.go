@@ -14,7 +14,7 @@ func TestGuestStoppedNeedsEvidence(t *testing.T) {
 	guest := proto.Guest{
 		ID: "photos", State: proto.StateStopped, Autostart: &autostart, OOMKilled: true, ExitCode: &code, FinishedAt: &finished,
 	}
-	if c, ok := GuestStoppedCondition(proto.PlatformGuest{Platform: proto.PlatformDocker, Guest: &guest}); !ok ||
+	if c, ok := GuestStoppedCondition(proto.PlatformGuest{Platform: proto.PlatformDocker, Guest: &guest}, false); !ok ||
 		c.Entity != "docker/photos" || c.Severity != SevCritical || c.ClearAfter != 0 {
 		t.Fatalf("proved exit condition: %+v %v", c, ok)
 	}
@@ -32,7 +32,7 @@ func TestGuestStoppedNeedsEvidence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := guest
 			tc.change(&g)
-			if c, ok := GuestStoppedCondition(proto.PlatformGuest{Platform: tc.platform, Guest: &g}); ok {
+			if c, ok := GuestStoppedCondition(proto.PlatformGuest{Platform: tc.platform, Guest: &g}, false); ok {
 				t.Fatalf("unexpected stop condition: %+v", c)
 			}
 		})

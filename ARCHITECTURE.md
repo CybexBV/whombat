@@ -1406,7 +1406,8 @@ Setup and operation: `docs/github.md`.
   consoles through the session. Probe checks report when their agent stops sending fresh results and keep
   their previous result's time. The hosts service leaves a stale check's alerts alone until it sees a fresh result;
   connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
-  automatically stops after running out of memory, unless the hub requested the stop or restart. The server gives the agent the built-in Servers
+  automatically runs out of memory or an autostart libvirt VM crashes and stays stopped. Stops the hub requested
+  stay quiet. The server gives the agent the built-in Servers
   connection, which acts without asking unless the person sets a server to ask before risky actions. Powering off,
   restarting or updating the server this
   Whombat runs on always asks. A server's name, which the person can give it (“Attic server”), is Whombat's own

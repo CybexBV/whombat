@@ -107,24 +107,25 @@ type Hub struct {
 
 // srvState is the live state of one server.
 type srvState struct {
-	meta          store.Server
-	report        *proto.Report // immutable once stored
-	reportAt      time.Time
-	reportGapAt   time.Time // when reports last went missing
-	lastFrame     time.Time
-	conn          *AgentConn
-	skew          *float64
-	offline       bool // last announced status was offline
-	guestStates   map[string]string
-	guestStops    map[string]time.Time // most recent planned stop or restart for each guest
-	hostStop      time.Time
-	dirty         bool                               // report / last_seen not yet persisted
-	reportSavedAt time.Time                          // last time the report was written to the database
-	guestSampleTS int64                              // last guest history sample (report time)
-	memo          rules.Memo                         // history of the stateful alert rules
-	forecast      map[string]float64                 // volume entity -> days until full (forecast job)
-	macHelperOff  time.Time                          // a Mac's helper missing from the screen's session since then
-	diskUsage     map[string]proto.DiskUsageResponse // mount -> latest on-request breakdown
+	meta           store.Server
+	report         *proto.Report // immutable once stored
+	reportAt       time.Time
+	reportGapAt    time.Time // when reports last went missing
+	lastFrame      time.Time
+	conn           *AgentConn
+	skew           *float64
+	offline        bool // last announced status was offline
+	guestStates    map[string]string
+	guestStops     map[string]time.Time // most recent planned stop or restart for each guest
+	hostStop       time.Time
+	libvirtCrashes map[string]libvirtCrash
+	dirty          bool                               // report / last_seen not yet persisted
+	reportSavedAt  time.Time                          // last time the report was written to the database
+	guestSampleTS  int64                              // last guest history sample (report time)
+	memo           rules.Memo                         // history of the stateful alert rules
+	forecast       map[string]float64                 // volume entity -> days until full (forecast job)
+	macHelperOff   time.Time                          // a Mac's helper missing from the screen's session since then
+	diskUsage      map[string]proto.DiskUsageResponse // mount -> latest on-request breakdown
 }
 
 // New opens the data directory and prepares the hub. It prints the
@@ -287,7 +288,13 @@ func (h *Hub) load(ctx context.Context) error {
 	// Drop alerts of servers that no longer exist.
 	var keep []rules.Alert
 	for _, a := range open {
-		if _, ok := h.servers[a.Server]; ok || a.Server == "" { // "": hub-level alerts
+		s := h.servers[a.Server]
+		if s != nil && a.Rule == rules.RuleGuestStopped {
+			if guest, ok := strings.CutPrefix(a.Entity, "libvirt/"); ok {
+				s.rememberLibvirtCrash(model.GuestID(proto.PlatformLibvirt, guest), libvirtCrash{at: a.OpenedAt, sawStopped: true})
+			}
+		}
+		if s != nil || a.Server == "" { // "": hub-level alerts
 			keep = append(keep, a)
 		}
 	}

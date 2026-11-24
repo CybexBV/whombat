@@ -369,7 +369,8 @@ func (h *Hub) evaluateCheckAlerts(ctx context.Context) {
 		}
 	}
 	h.checks.mu.RUnlock()
-	h.applyAlerts(ctx, h.alerts.EvaluateHolding("", conds, func(r string) bool { return strings.HasPrefix(r, "check.") }, held, now))
+	managed := func(rule, entity string) bool { return strings.HasPrefix(rule, "check.") && !held[entity] }
+	h.applyAlerts(ctx, h.alerts.EvaluateScoped("", conds, managed, now))
 }
 
 // ---- heartbeat pings --------------------------------------------------------------

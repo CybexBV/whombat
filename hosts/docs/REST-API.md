@@ -786,7 +786,7 @@ Server-Sent Events. Each event is `id: <n>`, `event: <name>`,
 | `guest.state_changed` | everyone | `{"server", "id", "state"}` |
 | `alert.opened`, `alert.updated`, `alert.resolved` | everyone | the alert object; `alert.updated` when it is acknowledged or unacknowledged, a snooze lapses, or its severity changes (a rise also ends the acknowledgement) |
 | `maintenance.changed` | everyone | `{}` |
-| `watch.changed` | everyone | `{"server", "rule", "entity"?, "off"}` ([Watch settings](#watch-settings)) |
+| `watch.changed` | everyone | `{"server", "rule", "entity"?, "off" or "limit"}` ([Watch settings](#watch-settings)) |
 | `checks.changed` | everyone | `{}` or `{"id"}` |
 | `action.finished` | everyone | `{"action_id", "server", "guest", "action", "result": "ok"\|"error", "message", "state", "noop", "code"}` |
 | `task.finished` | everyone | `{"server", "guest", "task", "op", "result": "ok"\|"warning"\|"error", "message", "new_id"?, "code"?}` ([Manage](#manage)) |

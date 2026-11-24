@@ -189,3 +189,43 @@ func TestGuestStopAfterHubActionIsQuiet(t *testing.T) {
 	report.Docker.Error = ""
 	check(0)
 }
+
+func TestLibvirtGuestStopNeedsCrashEvent(t *testing.T) {
+	e, admin := adminEnv(t, nil)
+	e.enroll(admin, "basalt", "Lab")
+	ctx := context.Background()
+	report := func(state string, autostart bool, wantAlert bool) {
+		t.Helper()
+		now := e.h.now()
+		e.h.ingestReport(ctx, "basalt", &proto.Report{At: now, Libvirt: &proto.Platform{
+			Guests: []proto.Guest{{ID: "files", State: state, Autostart: &autostart}},
+		}})
+		found := false
+		for _, a := range e.h.alerts.Open("basalt") {
+			if a.Rule == rules.RuleGuestStopped && a.Entity == "libvirt/files" {
+				found = true
+			}
+		}
+		if found != wantAlert {
+			t.Fatalf("guest stopped alert: %t, wanted %t", found, wantAlert)
+		}
+	}
+	event := func(message string) {
+		e.h.ingestEvent("basalt", proto.Event{
+			At: e.h.now(), Kind: "guest.state_changed", Platform: proto.PlatformLibvirt,
+			GuestID: "files", State: proto.StateStopped, Message: message,
+		})
+	}
+	report(proto.StateRunning, true, false)
+	event("stopped")
+	report(proto.StateStopped, true, false)
+	report(proto.StateRunning, true, false)
+	event("crashed")
+	report(proto.StateRunning, true, false) // the collector still has its previous list
+	report(proto.StateStopped, true, true)
+	report(proto.StateStopped, false, false)
+	report(proto.StateRunning, true, false)
+	e.h.notePlannedStop("basalt", "libvirt:files", proto.ActionShutdown)
+	event("crashed")
+	report(proto.StateStopped, true, false)
+}

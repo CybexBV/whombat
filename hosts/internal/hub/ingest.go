@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"regexp"
+	"strings"
 	"time"
 
 	"rackoon/internal/hub/model"
@@ -94,13 +95,27 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 		s.meta.AgentVersion = v
 	}
 	dockerSeen := r.Docker != nil && r.Docker.Error == ""
+	libvirtSeen := r.Libvirt != nil && r.Libvirt.Error == ""
 	seen := map[string]bool{}
+	unreadStops := map[string]bool{}
 	for _, g := range r.AllGuests() {
 		gid := model.GuestID(g.Platform, g.ID)
 		seen[gid] = true
-		if dockerSeen {
-			if c, ok := rules.GuestStoppedCondition(g); ok && !s.plannedStop(gid, *g.FinishedAt) {
-				conds = append(conds, c)
+		if guestStopUnread(g) {
+			unreadStops[g.Platform+"/"+g.ID] = true
+		}
+		switch g.Platform {
+		case proto.PlatformDocker:
+			if dockerSeen {
+				if c, ok := rules.GuestStoppedCondition(g, false); ok && !s.plannedStop(gid, *g.FinishedAt) {
+					conds = append(conds, c)
+				}
+			}
+		case proto.PlatformLibvirt:
+			if libvirtSeen {
+				if c, ok := s.libvirtStoppedCondition(g, gid, now); ok {
+					conds = append(conds, c)
+				}
 			}
 		}
 		if old, ok := s.guestStates[gid]; ok && old != g.State {
@@ -117,10 +132,17 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 			stopped = append(stopped, gid)
 		}
 	}
-	if dockerSeen {
-		for gid := range s.guestStops {
+	for gid := range s.guestStops {
+		platform, _, _ := strings.Cut(gid, ":")
+		observed := (platform == proto.PlatformDocker && dockerSeen) || (platform == proto.PlatformLibvirt && libvirtSeen)
+		if observed && !seen[gid] {
+			delete(s.guestStops, gid)
+		}
+	}
+	if libvirtSeen {
+		for gid := range s.libvirtCrashes {
 			if !seen[gid] {
-				delete(s.guestStops, gid)
+				delete(s.libvirtCrashes, gid)
 			}
 		}
 	}
@@ -146,10 +168,16 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 				"host_power": onOff(pol.HostPower), "update": onOff(pol.Update), "manage": onOff(pol.Manage)}})
 	}
 
-	managed := func(rule string) bool {
-		return notHeartbeat(rule) && (rule != rules.RuleGuestStopped || dockerSeen)
+	managed := func(rule, entity string) bool {
+		if rule != rules.RuleGuestStopped {
+			return notHeartbeat(rule)
+		}
+		if strings.HasPrefix(entity, "libvirt/") {
+			return libvirtSeen && !unreadStops[entity]
+		}
+		return dockerSeen && !unreadStops[entity]
 	}
-	h.applyAlerts(ctx, h.alerts.Evaluate(id, conds, managed, now))
+	h.applyAlerts(ctx, h.alerts.EvaluateScoped(id, conds, managed, now))
 	for _, cr := range r.Checks {
 		h.checkResult(ctx, id, cr)
 	}
@@ -244,7 +272,15 @@ func (h *Hub) ingestEvent(id string, ev proto.Event) {
 			h.mu.Unlock()
 			return
 		}
-		if old, known := s.guestStates[gid]; !known || old == state {
+		old, known := s.guestStates[gid]
+		if !known {
+			h.mu.Unlock()
+			return
+		}
+		if ev.Platform == proto.PlatformLibvirt {
+			s.noteLibvirtGuestEvent(gid, ev, h.now())
+		}
+		if old == state {
 			h.mu.Unlock()
 			return
 		}

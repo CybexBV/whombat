@@ -58,7 +58,8 @@ export function hintId(h: Pick<HostHint, 'kind' | 'entity' | 'id'>): string {
 function subjectOf(c: HostWatchCheck, entity: string | undefined): NoticeSubject | undefined {
   const id = hostNoticeSubjectId(c, entity);
   if (!id) return undefined;
-  const name = c.rule === 'guest.stopped' ? id.replace(/^docker\//, '') : hostEntityName(entity ?? id);
+  const name =
+    c.rule === 'guest.stopped' ? id.replace(/^(docker|libvirt)\//, '') : hostEntityName(entity ?? id);
   return { id, name: (name || id).slice(0, 80) };
 }
 

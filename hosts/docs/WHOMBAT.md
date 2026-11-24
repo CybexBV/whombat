@@ -416,6 +416,10 @@ within its server). What Whombat's menu does on a server's line:
 | Undo | `DELETE /alerts/{id}/ack` | in Whombat |
 | Stop watching {disk, guest …} / this | `PUT /servers/{id}/watch {rule, entity: <alert's entity>, off: true}`, or without `entity` for the whole rule; `off: false` undoes | in Whombat |
 
+An autostart Unraid Docker container that ran out of memory or an
+autostart libvirt VM that crashed can open a critical `guest.stopped`
+alert if it stays stopped. Stops the hub requested stay quiet.
+
 Custom limits for disk use, inodes, SSD wear and temperature apply to the
 server unless the alert's entity has its own. A limit change keeps the same
 watch switch. Whombat signs the change as the person and uses
@@ -780,7 +784,7 @@ admin-only events arrive). Data shapes: `docs/REST-API.md` "Events".
 | `server.updated` `{id, status, status_note, current, last_seen, agent_connected}`, `server.online`, `server.offline` `{id, at}`, `server.settings_changed`, `server.deleted` `{id}` | `hosts.server` |
 | `guest.state_changed` `{server, id, state}` | `hosts.guest` |
 | `alert.opened`, `alert.updated`, `alert.resolved` (the alert object; `alert.updated` also when the severity changes) | `hosts.alert` |
-| `watch.changed` `{server, rule, entity?, off}` | a server's watch settings changed: refetch `GET /servers/{id}/watch` |
+| `watch.changed` `{server, rule, entity?, off or limit}` | a server's watch settings changed: refetch `GET /servers/{id}/watch` |
 | `action.finished` `{action_id, server, guest, action, result, message, state, noop, code}`, `task.finished` `{server, guest, task, op, result: ok\|warning\|error, message, new_id?, code?}` (`new_id`: an image's fingerprint after publish or image.download; `code`: `task_failed`, `not_found`, `timeout`, a package task's `busy`) | `hosts.task` |
 | `enrollment.pending` `{id, hostname}` (admins) | Needs you: a server waits for approval (not sent for a pre-approved one) |
 | `enrollment.approved` `{id, server_id, hostname}` (admins) | the enrollment became a server (pre-approved or by hand): clear Needs you |
