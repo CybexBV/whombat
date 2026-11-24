@@ -199,6 +199,7 @@ How the split was made: `docs.md`.
 - `vault-self-serve.md` — the agent holds keys by default, saves what it is sent (*in part*).
 - `vault-asks.md` — *in part*: a run's turn stays in the thread it was asked in.
 - `vault-simplify.md` — the Vault for one person: one switch per entry, Hermes's plugin doors, MCP entries in Connections, one card that asks for every sign-in.
+- `onepassword-sync.md` — a 1Password vault kept in step with the Vault, both ways: logins and API tokens, Whombat wins a clash, a guard on removals.
 - `browser.md` — Vault logins in the browser, previews (*in part*: Whombat's own browser host is gone).
 
 ## Connections and servers
