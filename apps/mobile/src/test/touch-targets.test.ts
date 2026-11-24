@@ -313,10 +313,17 @@ const FILES: Record<string, number> = {
   // a section heading's 44dp “Add a server” or “Add a connection”, a change's Undo or Review (44dp); Everything I did
   // and the pinned panels are card rows, Buttons and the chart's own element.
   'src/screens/home/ServersCard.tsx': 1,
-  // Overview's first line (overview-server-connection-final.md): the 44dp “2 other things need you” link; Look into
-  // it and Try again are Buttons, More detail the fold's own. + the jump chips under the title (34dp, padded).
-  'src/screens/home/OverviewParts.tsx': 2,
-  'src/screens/home/ServicesCard.tsx': 1,
+  // Try again is a Button, More detail the fold's own; the jump chips under the title (34dp, padded).
+  'src/screens/home/OverviewParts.tsx': 1,
+  // The arranged Overview (overview-arranged.md): a tile (tall with content) and the dashed Add
+  // to Overview (150dp); Arrange beside the title (40dp, padded) and a gear (34dp, padded); the summary card's 44dp
+  // “2 other things need you” (Look into it is a Button); Today's 44dp All activity, a moment (44dp) and Show all; a
+  // gear's sheet: Close (40dp, padded), a choice (44dp), a size (44dp) and Remove from Overview (44dp).
+  'src/screens/home/ServicesCard.tsx': 2,
+  'src/screens/home/ArrangedParts.tsx': 2,
+  'src/screens/home/SummaryCard.tsx': 1,
+  'src/screens/home/TodayCard.tsx': 3,
+  'src/screens/home/ArrangeSheets.tsx': 4,
   'src/screens/home/Section.tsx': 1,
   'src/screens/home/DoneParts.tsx': 1,
   'src/screens/home/PanelsCards.tsx': 0,
