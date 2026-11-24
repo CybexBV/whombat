@@ -175,14 +175,14 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
     const token = removals.token;
     const href = `/things/connection%3A${connection.id}`;
     return {
-      id: `connection:${connection.id}`,
+      id: `onepassword:${connection.id}:removals`,
       ref: { kind: 'connection', id: connection.id },
       kind: 'connection',
       severity: 'warn',
       nature: 'you',
       group: 'you',
       title: onePasswordGoneTitle(removals.entries.length),
-      body: removals.entries.map((e) => e.name).join(', '),
+      body: 'Whombat kept them in your Vault for now. Remove them here too, or keep them only in Whombat.',
       at: removals.since,
       href,
       subject: { kind: 'connection', id: connection.id, name: connection.label },
@@ -190,14 +190,15 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
         {
           id: 'remove',
           label: ONEPASSWORD_WORDS.removeHere,
-          style: 'secondary',
+          // As the server sends it: removing follows 1Password, the guard only asked first.
+          style: 'primary',
           kind: 'onepassword_removals',
           removals: { answer: 'remove', token },
         },
         {
           id: 'keep',
           label: ONEPASSWORD_WORDS.keepHere,
-          style: 'primary',
+          style: 'secondary',
           kind: 'onepassword_removals',
           removals: { answer: 'keep', token },
         },
