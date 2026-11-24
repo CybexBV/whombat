@@ -8,6 +8,7 @@
 import { join } from 'node:path';
 import { defaultWhombatHome } from '@whombat/agent-runtime/host';
 import { ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_PASS_EVERY_MS } from '@whombat/core';
+import { outsideCommandScope } from '../../commit/scope';
 import { onConnectionLifecycle } from '../../connections/lifecycle';
 import type { Services } from '../../services';
 import { runOnePasswordPass } from './pass';
@@ -114,7 +115,9 @@ export class OnePasswordSync {
     if (this.#timer && this.#dueAt !== null && this.#dueAt <= due) return;
     if (this.#timer) clearTimeout(this.#timer);
     this.#dueAt = due;
-    this.#timer = setTimeout(() => this.#fire(), Math.max(0, delayMs));
+    // Asked for by a command (adding the connection, Sync now, a change to an entry): the pass commits as itself, never
+    // as part of that command, whose receipt may be settled by then.
+    this.#timer = outsideCommandScope(() => setTimeout(() => this.#fire(), Math.max(0, delayMs)));
     this.#timer.unref();
   }
 
