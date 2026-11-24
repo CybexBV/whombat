@@ -32,15 +32,18 @@ function fakeSdk(behaviour: { fail?: Error } = {}) {
       items: {
         list: async () => [],
         getAll: async (_vault, ids) => ({
-          individualResponses: ids.map((id) =>
-            id === 'missing'
-              ? { error: { type: 'itemNotFound' } }
-              : id === 'nulled'
-                ? { content: null, error: { type: 'itemNotFound' } }
-                : id === 'broken'
-                  ? { error: { type: 'internal' } }
-                  : { content: { id, files: [{ content: new Uint8Array([1, 2]) }] } },
-          ),
+          // An answer shorter than what was asked: its last ids say nothing.
+          individualResponses: ids
+            .filter((id) => id !== 'unanswered')
+            .map((id) =>
+              id === 'missing'
+                ? { error: { type: 'itemNotFound' } }
+                : id === 'nulled'
+                  ? { content: null, error: { type: 'itemNotFound' } }
+                  : id === 'broken'
+                    ? { error: { type: 'internal' } }
+                    : { content: { id, files: [{ content: new Uint8Array([1, 2]) }] } },
+            ),
         }),
         create: async () => {
           throw behaviour.fail ?? new Error('no');
@@ -63,7 +66,7 @@ async function run(worker: ReturnType<typeof createWorker>, out: string[], reque
   return JSON.parse(out.at(-1) as string);
 }
 
-describe('the worker’s protocol (OPW-30)', () => {
+describe('the worker’s protocol', () => {
   it('answers each line by its id, with one SDK client per token', async () => {
     const { sdk, createClient } = fakeSdk();
     const out: string[] = [];
@@ -81,13 +84,14 @@ describe('the worker’s protocol (OPW-30)', () => {
       call: 'get',
       token: TOKEN,
       vaultId: 'v1',
-      itemIds: ['a1', 'missing', 'nulled', 'broken'],
+      itemIds: ['a1', 'missing', 'nulled', 'broken', 'unanswered'],
     });
     expect(got.result).toEqual({
       items: [{ id: 'a1', files: [{ content: [1, 2] }] }],
       // An answer that has no item beside its error is no item, never an item that is null.
       missing: ['missing', 'nulled'],
-      failed: ['broken'],
+      // One the answer said nothing about wasn't read.
+      failed: ['broken', 'unanswered'],
     });
     expect(createClient).toHaveBeenCalledTimes(1);
     expect(createClient.mock.calls[0]?.[0]).toMatchObject({ auth: TOKEN, integrationName: 'Whombat' });
@@ -137,6 +141,12 @@ describe('the worker’s protocol (OPW-30)', () => {
     expect(classifyError(new Error('The request timed out'), null)).toBe('network');
     expect(classifyError(new Error('timeout while waiting for the server'), null)).toBe('network');
     expect(classifyError(new Error('invalid service account token'), null)).toBe('auth');
+    expect(classifyError(new Error('The service account token has been revoked'), null)).toBe('auth');
+    expect(classifyError(new Error('token expired'), null)).toBe('auth');
+    expect(classifyError(new Error('This token was not accepted'), null)).toBe('auth');
+    // Naming a token isn't a token's failure.
+    expect(classifyError(new Error('the field “token” is too long'), null)).toBe('failed');
+    expect(classifyError(new Error('could not parse token count in response'), null)).toBe('failed');
   });
 
   it('scrubs a token’s shape even when it wasn’t sent, and cuts long words', () => {

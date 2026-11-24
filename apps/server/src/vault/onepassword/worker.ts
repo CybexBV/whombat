@@ -194,8 +194,9 @@ export function classifyError(err: unknown, sdk: Partial<Sdk> | null): OnePasswo
     )
   )
     return 'forbidden';
+  // Only a token's own failure: a message that merely names a token (a field, a limit per token) is not one.
   if (
-    /invalid (service account )?token|unauthori[sz]ed|authenticat|auth expired|sign.?in failed|token/i.test(
+    /\btoken\b[^.]{0,40}\b(expired|revoked|invalid|rejected|not (valid|accepted))\b|\b(expired|revoked|invalid|rejected) (service account )?token\b|unauthori[sz]ed|authenticat|auth expired|sign.?in failed/i.test(
       text,
     )
   )
@@ -277,6 +278,8 @@ export function createWorker(options: WorkerOptions) {
           else if (r.error?.type === 'itemNotFound') result.missing.push(id);
           else result.failed.push(id);
         });
+        // An item the answer says nothing about wasn't read.
+        result.failed.push(...ids.slice(answer.individualResponses.length));
         return result;
       }
       case 'create':
