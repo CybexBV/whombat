@@ -178,7 +178,7 @@ function thingOf(
     quiet,
     now,
   );
-  // Kept quiet until a time (monitoring.md MON-04), as Home's connections and servers say it.
+  // Kept quiet until a time, as Home's connections and servers say it.
   const window = activeWindow(quiet.windows, now);
   const status = v.status !== 'ok' ? v.status : failed ? 'unknown' : fresh ? 'ok' : 'unknown';
   const usedAt = deviceUsedAt(row.lastReadAt, lastWorkedAt);

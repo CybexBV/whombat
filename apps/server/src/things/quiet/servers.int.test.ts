@@ -1,6 +1,5 @@
 /**
- * Keeping servers quiet and one cause, against the hosts service's stand-in rather than fixtures (monitoring.md MON-04,
- * MON-05, MON-07, MON-08). It needs Postgres because the windows, the causes job, Home's reads and the commit pipeline
+ * Keeping servers quiet and one cause, against the hosts service's stand-in rather than fixtures. It needs Postgres because the windows, the causes job, Home's reads and the commit pipeline
  * meet only there. A server kept quiet: Home's thing says until when, its open alerts are held with the window whether
  * or not the hub muted them (and whether or not it made the maintenance window), they leave the Inbox, and Undo on one
  * ends the window. End now ends Whombat's own window for its work beside the person's; the work's end and windows that
@@ -125,7 +124,7 @@ function homeChanged() {
   return { parts, stop };
 }
 
-describe('a server kept quiet, with the real hosts service (MON-04)', () => {
+describe('a server kept quiet, with the real hosts service', () => {
   it('says until when on Home, holds its alerts with the window and leaves them out of the Inbox', async () => {
     const before = await needsYou(t.services, await viewer());
     expect(before.map((i) => i.id)).toContain('hosts.alert:al_01');
@@ -187,7 +186,7 @@ describe('a server kept quiet, with the real hosts service (MON-04)', () => {
   });
 });
 
-describe('End now and Whombat’s own work (MON-05)', () => {
+describe('End now and Whombat’s own work', () => {
   it('ends every window holding the server, Whombat’s beside the person’s', async () => {
     await keepQuiet('basalt', 30);
     await keepQuietForWork(t.services, {
@@ -277,7 +276,7 @@ describe('End now and Whombat’s own work (MON-05)', () => {
   });
 });
 
-describe('one cause with the real hosts service (MON-07, MON-08)', () => {
+describe('one cause with the real hosts service', () => {
   it('a website check down while the internet is down stays down because of it', async () => {
     const added = await call('POST', '/connections', {
       catalogId: 'uptime',

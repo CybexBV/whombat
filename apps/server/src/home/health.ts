@@ -314,7 +314,7 @@ export async function checkConnectionHealth(
       if (!outcome.unseen) points = seen.points;
       glance = { ...seen.glance, status: outcome.unseen ? 'unknown' : 'ok' };
       // A probe that is down doesn't answer, also while a cause quiets its line: the causes job reads this, so the
-      // cause holds instead of ending the next minute (monitoring.md MON-07).
+      // cause holds instead of ending the next minute.
       const down = !outcome.unseen && outcome.uptime?.status === 'down' && row.fields.kind !== 'heartbeat';
       if (down) glance.outcome = 'offline';
       // What it runs on, as for any connection; kept while it doesn't answer or can't be checked, since a stopped

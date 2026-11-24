@@ -220,7 +220,7 @@ export function alertQuiet(
 }
 
 /**
- * An open alert of a server kept quiet (monitoring.md MON-04), as the server's other lines are: quiet with the window
+ * An open alert of a server kept quiet, as the server's other lines are: quiet with the window
  * (`held`, its words the window's: “until 23:00”, with who kept it quiet), whether or not the hosts service muted it (a
  * maintenance window it refused shouldn't make the alert loud). Its own Ignore or Remind me tomorrow stays its own; the
  * hub's checks aren't the server's. None without a window.
@@ -322,7 +322,7 @@ export interface ServerVerdict {
   worst: ServerLine | null;
   /** Every line behind it, worst first: what the assistant looks into when it looks into the server. */
   asking: ServerLine[];
-  /** Kept quiet until this time (monitoring.md MON-04): Home's `quietUntil`. */
+  /** Kept quiet until this time: Home's `quietUntil`. */
   quietUntil?: string;
 }
 

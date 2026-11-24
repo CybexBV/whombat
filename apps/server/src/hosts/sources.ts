@@ -109,7 +109,7 @@ export function serverThing(s: HostServer): ThingSummary {
     ...(status !== 'ok' && s.statusNote?.trim() ? { reason: reasonWords(s.statusNote).slice(0, 160) } : {}),
     facts,
     href: thingHref('server', s.id),
-    // Kept quiet until a time (monitoring.md MON-04), as Home's connections and devices say it.
+    // Kept quiet until a time, as Home's connections and devices say it.
     ...(verdict?.quietUntil ? { quietUntil: verdict.quietUntil } : {}),
   };
 }
@@ -159,7 +159,7 @@ export function alertNeedsYou(a: HostAlert): NeedsYouItem {
 /**
  * An alert on Watch, with its acknowledgement or snooze (QN-22): an open one only while it asks for attention; muted
  * by maintenance or held back while its parent is offline, it was put aside too (`acknowledged`). Its server kept quiet
- * snoozes it until the window ends (monitoring.md MON-04).
+ * snoozes it until the window ends.
  */
 export function alertWatch(a: HostAlert, now: Date): WatchItem {
   const held = a.quiet?.held === 'window' ? (a.quiet.until ?? null) : null;

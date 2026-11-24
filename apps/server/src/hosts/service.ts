@@ -556,7 +556,7 @@ export class HostsService {
     const now = this.deps.clock();
     const burrow = await this.homeBurrow().catch(() => null);
     const zone = burrow?.timeZone ?? 'UTC';
-    // Its server kept quiet holds it too, also while the hub still asks for attention (monitoring.md MON-04).
+    // Its server kept quiet holds it too, also while the hub still asks for attention.
     const window =
       burrow && alert.serverId && !HUB_LEVEL(alert.rule)
         ? activeWindow(
@@ -604,7 +604,7 @@ export class HostsService {
       : null;
     const marked = markHints(detail.hints, quiet ?? NO_QUIET, now, hintGuests);
     const alerts = detail.alerts ?? [];
-    // Kept quiet until a time (monitoring.md MON-04): every open alert of it is held with the window.
+    // Kept quiet until a time: every open alert of it is held with the window.
     const window = activeWindow(quiet?.windows, now);
     const names = await quietNames(this.deps.db, [
       ...ackPeople(alerts).map((byId) => ({ byId })),
@@ -676,7 +676,7 @@ export class HostsService {
     const hold = out.servers.some((s) => s.status === 'offline') ? await this.reconnecting() : null;
     const kept: typeof out.hints = [];
     const hintRows: MarkedHints['hints'] = [];
-    // Servers kept quiet now, by id (monitoring.md MON-04): their open alerts are held with the window.
+    // Servers kept quiet now, by id: their open alerts are held with the window.
     const windows = new Map<string, QuietWindowRow>();
     for (const s of out.servers) {
       const quiet = book?.of(serverThingId(s.id)) ?? NO_QUIET;
