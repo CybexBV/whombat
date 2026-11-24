@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 import {
   factsWithoutUptime,
   firstPick,
-  limitViewWords,
   parseMonitoringPick,
   pickDays,
   pickedValue,
@@ -17,6 +16,7 @@ import {
   thingMoreMenu,
   withoutHoldLines,
 } from './monitoring';
+import { quietLineMenu } from './nativeMenu';
 import { noticeRows } from './thingPage';
 
 const ZONE = 'Europe/Amsterdam';
@@ -165,11 +165,24 @@ describe('menus and limits', () => {
     expect(parseMonitoringPick('rename')).toBeNull();
   });
 
-  it('says when a line’s check warns, else what applies without a limit', () => {
-    expect(limitViewWords({ value: 90, unit: '%', defaultWords: 'The default is 90 %.' })).toBe(
-      'Warns above 90 %',
-    );
-    const sensors = 'Without one, each sensor uses its own limit.';
-    expect(limitViewWords({ value: null, unit: '°C', defaultWords: sensors })).toBe(sensors);
+  it('offers Change the limit in a line’s ⋯ before Stop watching, the gentler choice', () => {
+    const menu = {
+      ref: { check: 'host.sensor.temp_high' },
+      label: 'More for CPU running warm',
+      ignore: { label: 'Ignore', words: 'Until it cools down.' },
+      snooze: { label: 'Remind me tomorrow' },
+      stop: { label: 'Stop watching this', words: 'Whombat won’t warn about it.' },
+    };
+    const ids = (limit: { label: string; words: string } | null) =>
+      quietLineMenu(menu, 'CPU running warm', limit)
+        .sections.flat()
+        .map((i) => i.id);
+    expect(ids({ label: 'Change the limit', words: 'Now 80 °C' })).toEqual([
+      'ignore',
+      'snooze',
+      'limit',
+      'stop',
+    ]);
+    expect(ids(null)).toEqual(['ignore', 'snooze', 'stop']);
   });
 });

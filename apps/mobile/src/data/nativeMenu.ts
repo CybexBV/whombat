@@ -251,8 +251,9 @@ export function quietLineMenu(
         { id: 'ignore', title: menu.ignore.label, subtitle: menu.ignore.words, icon: 'eye.slash' },
         { id: 'snooze', title: menu.snooze.label, icon: 'alarm' },
       ],
-      [{ id: 'stop', title: menu.stop.label, subtitle: menu.stop.words, icon: 'bell.slash' }],
+      // The gentler way out before Stop watching: warn later instead of never.
       limit ? [{ id: 'limit', title: limit.label, subtitle: limit.words, icon: 'slider.horizontal.3' }] : [],
+      [{ id: 'stop', title: menu.stop.label, subtitle: menu.stop.words, icon: 'bell.slash' }],
     ],
     title,
   );

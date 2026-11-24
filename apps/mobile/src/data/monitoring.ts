@@ -5,7 +5,7 @@
  * the facts, and the words a screen reader hears. Pure; the screens are `screens/thing/Monitoring.tsx`,
  * `ThingPageScreen` and `ServerScreen`.
  */
-import { KEEP_QUIET_WORDS, LIMIT_WORDS, type LimitView, limitText, withoutHoldLine } from '@whombat/client';
+import { KEEP_QUIET_WORDS, LIMIT_WORDS, withoutHoldLine } from '@whombat/client';
 import type { ThingPage } from '@whombat/core';
 import { zonedParts } from '@whombat/core/text';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
@@ -24,9 +24,6 @@ export const MONITORING_COPY = {
   openCauseHint: 'Opens what it depends on',
   history: 'What happened',
   historyLoading: 'Loading what happened',
-  /** A check with a limit in What Whombat watches: “Warns above 90 %”, and its button. */
-  warnsAbove: (value: string) => `Warns above ${value}`,
-  ownLimits: (n: number) => `${n} ${n === 1 ? 'item has' : 'items have'} its own`,
   changeLimit: LIMIT_WORDS.menu,
   changeLimitHint: (name: string) => `Changes when Whombat warns about “${name}”`,
   /** The ⋯ of a page with nothing else in it. */
@@ -121,11 +118,4 @@ export function serverMoreMenu(keepQuiet: boolean): NativeMenuSpec {
 
 export function parseMonitoringPick(id: string): MonitoringPick | null {
   return id === 'keep_quiet' ? id : null;
-}
-
-/** A line's ⋯ under Change the limit: “Warns above 90 %” (what applies to it now), else what applies without one. */
-export function limitViewWords(view: Pick<LimitView, 'value' | 'unit' | 'defaultWords'>): string {
-  return view.value === null
-    ? view.defaultWords
-    : MONITORING_COPY.warnsAbove(limitText(view.value, view.unit));
 }
