@@ -137,23 +137,37 @@ export function registerOnePasswordSource(): void {
 
 /** The source: the person's, for the burrow's 1Password connection, minus what they switched off or quieted. */
 export async function onePasswordNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
+  // The state alone first: Home reads its connections once for all its parts, and a Whombat whose sync has nothing to
+  // say (or no 1Password at all) costs it no second read of them.
+  const [state] = await ctx.db
+    .select()
+    .from(vaultOnePasswordState)
+    .where(eq(vaultOnePasswordState.burrowId, ctx.burrowId))
+    .limit(1);
+  if (
+    !state ||
+    (!state.readOnly &&
+      state.outcome !== 'failing' &&
+      state.outcome !== 'paused' &&
+      state.outcome !== 'waiting')
+  )
+    return [];
   const [row] = await ctx.db
-    .select({ connection: catalogConnections, state: vaultOnePasswordState, timeZone: burrows.timeZone })
+    .select({ id: catalogConnections.id, label: catalogConnections.label, timeZone: burrows.timeZone })
     .from(catalogConnections)
-    .innerJoin(vaultOnePasswordState, eq(vaultOnePasswordState.connectionId, catalogConnections.id))
     .innerJoin(burrows, eq(burrows.id, catalogConnections.burrowId))
     .where(
       and(
-        eq(catalogConnections.burrowId, ctx.burrowId),
+        eq(catalogConnections.id, state.connectionId),
         eq(catalogConnections.catalogId, ONEPASSWORD_CATALOG_ID),
       ),
     );
   if (!row) return [];
   const person = ctx.reads?.person ?? (await loadPrincipalRow(ctx.db, ctx.personId));
   if (person?.kind !== 'person') return [];
-  const items = onePasswordItems(row.connection, row.state, row.timeZone || 'UTC');
+  const items = onePasswordItems(row, state, row.timeZone || 'UTC');
   if (!items.length) return [];
   const book = ctx.reads ? await ctx.reads.quiet() : await quietBook(ctx.db, [ctx.burrowId]);
-  const quiet = book.of(thingId('connection', row.connection.id));
+  const quiet = book.of(thingId('connection', row.id));
   return items.filter((i) => !i.watch || !quietNow(quiet, i.watch.check, '', ctx.now));
 }
