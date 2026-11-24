@@ -150,7 +150,10 @@ describe('Keep quiet for a while (MON-04)', () => {
     expect(p.status).not.toBe('bad');
     const lines = worth(p);
     expect(lines[0]).toMatchObject({ id: 'quiet-window', nature: 'fyi' });
-    expect(lines.find((l) => l.check === 'conn.answers')?.quiet).toMatchObject({ state: 'snoozed', held: 'window' });
+    expect(lines.find((l) => l.check === 'conn.answers')?.quiet).toMatchObject({
+      state: 'snoozed',
+      held: 'window',
+    });
 
     const mine = await myThing();
     expect(mine?.status).toBe('ok');
@@ -161,7 +164,10 @@ describe('Keep quiet for a while (MON-04)', () => {
     expect(await states()).toEqual([]);
 
     // Kept quiet with Undo, in what was done.
-    const [change] = await t.services.db.select().from(changes).where(eq(changes.kind, KEEP_QUIET_CHANGE_KIND));
+    const [change] = await t.services.db
+      .select()
+      .from(changes)
+      .where(eq(changes.kind, KEEP_QUIET_CHANGE_KIND));
     expect(change?.title).toContain('Grafana');
   });
 
@@ -210,7 +216,11 @@ describe('Keep quiet for a while (MON-04)', () => {
       services: t.services,
       agentId: IDS.dusty,
       burrowId: t.burrowId,
-      dispatch: { id: 'dsp_quiet_test', burrowId: t.burrowId, onBehalfOfAccountId: 'acc_mara' } as DispatchRow,
+      dispatch: {
+        id: 'dsp_quiet_test',
+        burrowId: t.burrowId,
+        onBehalfOfAccountId: 'acc_mara',
+      } as DispatchRow,
       onBehalfOf: asked ? { principalId: asked } : {},
     });
     await expect(quietUntilTool(toolCtx(undefined), { thing: thing(), minutes: 60 })).rejects.toThrow(
@@ -267,6 +277,8 @@ describe('One cause, one message (MON-07, MON-08)', () => {
     // Once the internet is back the cause goes, and the connection counts again on its own.
     await t.services.db.update(wayOutOutages).set({ endedAt: t.services.clock() });
     await passCauses(t.services);
-    expect(await t.services.db.select().from(thingCauses).where(eq(thingCauses.thingId, thing()))).toEqual([]);
+    expect(await t.services.db.select().from(thingCauses).where(eq(thingCauses.thingId, thing()))).toEqual(
+      [],
+    );
   });
 });
