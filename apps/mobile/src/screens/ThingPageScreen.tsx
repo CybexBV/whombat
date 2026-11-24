@@ -60,7 +60,7 @@ import { type HostSeriesRange, parseThingId, type ThingPage, type ThingPageActio
 import { FIND_MY_TIMELINE_TAB, isVaultSyncConnection, placeKindOfCatalog } from '@whombat/core/domain';
 import { ONEPASSWORD_TAB } from '@whombat/core/vault';
 import { KEEP_QUIET_MINOR, protocolAtLeast } from '@whombat/protocol/session';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import { DEFAULT_RANGE, rangeOptions } from '../data/dashboard';
@@ -316,6 +316,20 @@ export function ThingPageScreen({
   // Keep quiet… in the ⋯ (MON-04): for who may manage it; a page kept quiet already offers End now under its head.
   const canKeepQuiet = !!page && keepsQuiet && (!!watch.data?.mayChange || !!page.keptQuiet?.canEnd);
   const hold = page && keepsQuiet ? holdView(page) : null;
+  // The hold under the state (MON-04, MON-07): kept quiet with who and End now; quiet with its server in its words. Down
+  // because of something else says so as its state already.
+  const holdLine =
+    page && hold?.kind === 'window' ? (
+      <KeptQuietLine
+        words={hold.words}
+        who={hold.who}
+        endNow={hold.endNow}
+        busy={keep.busy}
+        onEnd={() => void keep.end()}
+      />
+    ) : page && hold && page.badge !== hold.words ? (
+      <KeptQuietLine words={hold.words} who={null} endNow={false} busy={false} onEnd={() => {}} />
+    ) : null;
   // What it is down because of, opened from beside its state (“Open media ›”).
   const causeLink =
     hold?.kind === 'cause' && hold.link
@@ -412,6 +426,7 @@ export function ThingPageScreen({
                 onAsk={subject ? askAbout : null}
                 wide={widePage.wide}
                 cause={causeLink}
+                hold={holdLine}
               />
             ) : (
               <>
@@ -422,22 +437,12 @@ export function ThingPageScreen({
                   wide={false}
                   withButtons={false}
                   cause={causeLink}
+                  hold={holdLine}
                 />
                 <Actions page={page} onConfirm={setConfirm} buttons={buttons} />
               </>
             )}
-            {hold?.kind === 'window' ? (
-              <KeptQuietLine
-                words={hold.words}
-                who={hold.who}
-                endNow={hold.endNow}
-                busy={keep.busy}
-                onEnd={() => void keep.end()}
-              />
-            ) : hold && page.badge !== hold.words ? (
-              // Down because of something else says so as its state; quiet with its server says so here.
-              <KeptQuietLine words={hold.words} who={null} endNow={false} busy={false} onEnd={() => {}} />
-            ) : null}
+
             {query.error ? (
               // A failed refresh keeps the saved page, Needs a look and its problems with it; its controls may have changed.
               <ReadNote
@@ -648,6 +653,7 @@ function ServiceHead({
   wide,
   withButtons = true,
   cause = null,
+  hold = null,
 }: {
   page: ThingPage;
   problem: string | null;
@@ -657,6 +663,8 @@ function ServiceHead({
   withButtons?: boolean;
   /** The way to what it is down because of, beside its state (monitoring.md MON-07). */
   cause?: { label: string; onPress: () => void } | null;
+  /** The hold under the state: kept quiet (MON-04), which says the state itself, or quiet with its server. */
+  hold?: ReactNode;
 }) {
   const theme = useTheme();
   const agent = useAgentWords();
@@ -667,6 +675,8 @@ function ServiceHead({
   const runsOn = page.runsOn;
   // Down because of something else is grey, not fine (MON-68): the hollow ring and grey words of a thing not known yet.
   const level = page.causedBy && page.causedBy.kind !== 'quiet' ? 'learning' : thingStatusLevel(page.status);
+  // Kept quiet, the server's badge is the hold's own first words (“Quiet until 23:00”): the hold line says them.
+  const kept = !!hold && !!page.keptQuiet && page.badge === page.keptQuiet.words.split(' · ')[0];
   // The week's line (MON-09) sits by when it was checked; the server also sends it among the facts for older apps.
   const { checked, detail } = headFacts(factsWithoutUptime(page.facts, page.uptime));
   const week = page.uptime?.text ?? null;
@@ -716,18 +726,21 @@ function ServiceHead({
           {page.name}
         </Text>
       </View>
-      {/* The first line: how it is, and why. */}
-      <View
-        style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 6 }}
-      >
-        <LevelPill level={level} word={page.badge} />
-        {cause ? <CauseLink label={cause.label} onPress={cause.onPress} /> : null}
-        {verdict ? (
-          <Text size={15} lh={1.4} color={theme.colors.ink2} style={{ flexShrink: 1, minWidth: 160 }}>
-            {verdict}
-          </Text>
-        ) : null}
-      </View>
+      {/* The first line: how it is, and why. Kept quiet, the hold under it says the pill's words, and more. */}
+      {kept && !verdict ? null : (
+        <View
+          style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 6 }}
+        >
+          {kept ? null : <LevelPill level={level} word={page.badge} />}
+          {cause ? <CauseLink label={cause.label} onPress={cause.onPress} /> : null}
+          {verdict ? (
+            <Text size={15} lh={1.4} color={theme.colors.ink2} style={{ flexShrink: 1, minWidth: 160 }}>
+              {verdict}
+            </Text>
+          ) : null}
+        </View>
+      )}
+      {hold}
       {where ? (
         <View
           style={{

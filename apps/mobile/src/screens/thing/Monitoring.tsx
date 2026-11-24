@@ -312,7 +312,7 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
           {alertsOpen ? view.alerts.map((r) => <HistoryLine key={r.id} row={r} />) : null}
           {view.alerts.length ? (
             <FoldRow
-              label={alertsOpen ? HISTORY_WORDS.fewer : HISTORY_WORDS.alerts(view.alerts.length)}
+              label={alertsOpen ? HISTORY_WORDS.hideAlerts : HISTORY_WORDS.alerts(view.alerts.length)}
               onPress={() => setAlertsOpen(!alertsOpen)}
             />
           ) : null}

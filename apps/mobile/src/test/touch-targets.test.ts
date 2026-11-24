@@ -305,8 +305,9 @@ const FILES: Record<string, number> = {
   'src/screens/thing/ThingButton.tsx': 3,
   // A service's Summary in slots (service-slots-mobile.md AP-7130…): the strip's 44dp “Show N more”, a line's 30dp link
   // button (padded), its words (44dp, held for the menu), its 44dp ⋯ and Undo; a Live card and a
-  // shelf picture (100dp and more); a tile's 30dp Scan is ThingButton's icon button (padded).
-  'src/screens/thing/Slots.tsx': 7,
+  // shelf picture (100dp and more); a tile's 30dp Scan is ThingButton's icon button (padded). + a held line's 44dp End now
+  // (monitoring.md MON-04).
+  'src/screens/thing/Slots.tsx': 8,
   'src/screens/thing/Controls.tsx': 2,
   'src/screens/thing/Picture.tsx': 0,
   'src/screens/thing/Changes.tsx': 0,
