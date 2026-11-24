@@ -11,6 +11,7 @@ export * from './greeting';
 export * from './handoff';
 export * from './lookPlan';
 export * from './lookResearch';
+export * from './monitoring';
 export * from './needsYou';
 export * from './needsYouList';
 export * from './overview';

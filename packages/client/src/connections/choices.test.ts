@@ -34,4 +34,15 @@ describe('a connection’s choices on its page', () => {
     if (!notion) throw new Error('no notion entry');
     expect(choiceSettings(notion, {}, [])).toEqual([]);
   });
+
+  it('offers only the choices that fit the others (a check-in’s lateness)', () => {
+    const uptime = catalogEntry('uptime');
+    if (!uptime) throw new Error('uptime');
+    expect(choiceSettings(uptime, { kind: 'http' }, null).map((c) => c.field)).toEqual(['kind', 'every']);
+    expect(choiceSettings(uptime, { kind: 'heartbeat' }, null).map((c) => c.field)).toEqual([
+      'kind',
+      'every',
+      'late',
+    ]);
+  });
 });

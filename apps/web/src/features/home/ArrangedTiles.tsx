@@ -76,10 +76,11 @@ export function TileCard({ entry, view, editing, preview = false, linkProps, onG
   // A view that only says it has nothing to show leaves the tile its own line.
   const face = view && !(view.kind === 'text' && !view.problem) ? viewFace(view) : null;
   const shown = face && (face.value || face.line) ? face : null;
-  // What isn't fine is said in its colour wherever the tile sits; otherwise the view's own line.
+  // What isn't fine is said in its colour wherever the tile sits, and a thing kept quiet or down because of something
+  // else says so; otherwise the view's own line.
   const notFine = item.line.tone === 'warn' || item.line.tone === 'bad';
   const line =
-    notFine || !shown?.line
+    notFine || item.held || !shown?.line
       ? item.line
       : { text: shown.line, tone: shown.tone === 'warn' ? 'warn' : 'plain' };
   const rows =
@@ -99,7 +100,10 @@ export function TileCard({ entry, view, editing, preview = false, linkProps, onG
         </span>
         <b>{r.name}</b>
         <span className={s.st}>
-          {r.level === 'connected' ? (
+          {item.held === 'cause' ? (
+            // Down because of something else: grey, not fine and not a second alarm (monitoring.md MON-68).
+            <span className={cx(s.okDot, s.heldDot)} role="img" aria-label={item.line.text} />
+          ) : r.level === 'connected' ? (
             <span className={s.okDot} role="img" aria-label={STATUS_LEVEL_WORDS.connected} />
           ) : (
             <StatusMark level={r.level} label={r.word} />

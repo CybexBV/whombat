@@ -536,6 +536,22 @@ export function fieldsFor(entry: CatalogEntry, kind: SignInKind): z.output<typeo
 }
 
 /**
+ * Whether a field is asked with the values typed so far (`shownWhen`): always without one, else while the field it
+ * follows has one of its values (its default while it is empty).
+ */
+export function fieldShown(
+  entry: Pick<CatalogEntry, 'fields'>,
+  field: Pick<CatalogField, 'shownWhen'>,
+  values: Readonly<Record<string, string>>,
+): boolean {
+  const when = field.shownWhen;
+  if (!when) return true;
+  const other = entry.fields.find((f) => f.id === when.field);
+  const value = values[when.field]?.trim() || other?.default || '';
+  return when.values.includes(value);
+}
+
+/**
  * The values of the entry's `fromCheck` fields in a check's JSON answer (0.111, CT-737; SG-15a): each field's first
  * string or number at its path, trimmed, when it is there and fits a field (at most `CONNECTION_FIELD_VALUE_MAX`, no
  * control characters); fields the answer doesn't hold are left out. The server merges them into the connection's fields

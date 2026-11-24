@@ -42,6 +42,7 @@ import {
   taglineOf,
   takesPaste,
   trustText,
+  WHAT_TO_CHECK_STEP_TITLE,
 } from './setup';
 
 const entry = (id: string) => {
@@ -82,6 +83,9 @@ describe('the connect form’s steps (CS-50, AP-843)', () => {
     expect(setupSteps(entry('findmy'))).toEqual(['access', 'signIn']);
     expect(setupStepTitle(entry('findmy'), 'signIn')).toBe(READ_THROUGH_MAC_STEP_TITLE);
     expect(setupStepTitle(entry('proxmox'), 'signIn')).toBe(SETUP_STEP_TITLES.signIn);
+    // Nothing to sign in to and no address: the step is what Whombat checks, and there is no level to choose.
+    expect(setupStepTitle(entry('uptime'), 'signIn')).toBe(WHAT_TO_CHECK_STEP_TITLE);
+    expect(setupSteps(entry('uptime'))).toEqual(['signIn']);
   });
 
   it('asks nothing about agents for an entry only automations use (a report tracker, TA-02)', () => {

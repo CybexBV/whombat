@@ -17,6 +17,8 @@ export const UPTIME_KINDS = [
 ] as const;
 
 const EVERY = ['1', '5', '15'] as const;
+/** The kinds Whombat asks itself (everything but a check-in, which calls Whombat). */
+const PROBES = ['http', 'tcp', 'ping', 'dns'] as const;
 const LATE = ['0', '1', '5', '15', '60'] as const;
 const address = z.string().trim().max(500);
 const keyword = z
@@ -133,14 +135,16 @@ export const entry = {
       label: 'Address',
       kind: 'text',
       required: false,
-      help: 'Use a full website address, a host and port, a host name, or a name to look up. Leave blank for a check-in.',
+      help: 'A full website address, a host and port like example.com:443, a host name, or a name to look up.',
+      shownWhen: { field: 'kind', values: [...PROBES] },
     },
     {
       id: 'keyword',
-      label: 'Word to look for',
+      label: 'Word to look for (optional)',
       kind: 'text',
       required: false,
-      help: 'For a website, you can ask Whombat to look for a word on the page.',
+      help: 'Whombat checks that the page has it, so an error page doesn’t count as up.',
+      shownWhen: { field: 'kind', values: ['http'] },
     },
     {
       id: 'runner',
@@ -149,6 +153,7 @@ export const entry = {
       required: true,
       fromService: true,
       help: 'Check from this Whombat or from one of the servers it watches. Scripts check in with this Whombat.',
+      shownWhen: { field: 'kind', values: [...PROBES] },
     },
     {
       id: 'every',
@@ -177,7 +182,8 @@ export const entry = {
               ? '1 hour'
               : `${value} ${value === '1' ? 'minute' : 'minutes'}`,
       })),
-      help: 'For a check-in, how long to wait after it was due before telling you.',
+      help: 'How long to wait after it was due before telling you.',
+      shownWhen: { field: 'kind', values: ['heartbeat'] },
     },
   ],
   transport: 'rest',
