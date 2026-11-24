@@ -12,7 +12,9 @@ import {
   onePasswordCheckedLine,
   onePasswordEntryLine,
   onePasswordGoneTitle,
+  onePasswordHeldNames,
   onePasswordKeptLine,
+  onePasswordRemovalsBody,
   onePasswordSkipText,
   onePasswordStatusLines,
   onePasswordWaitingLine,
@@ -79,6 +81,13 @@ describe('what the person sees', () => {
       'This token can only read. Make one that can read and write the vault.',
     ]);
     expect(onePasswordGoneTitle(1)).toBe('1Password says 1 item is gone');
+    // The card names the entries: up to three, then how many more.
+    expect(onePasswordHeldNames(['Bank'])).toBe('Bank');
+    expect(onePasswordHeldNames(['Bank', 'Mail'])).toBe('Bank and Mail');
+    expect(onePasswordHeldNames(['Bank', 'Mail', 'Shop'])).toBe('Bank, Mail and Shop');
+    expect(onePasswordHeldNames(['Bank', 'Mail', 'Shop', 'Wiki', 'Git'])).toBe('Bank, Mail, Shop and 2 more');
+    expect(onePasswordRemovalsBody(['Bank'])).toContain('Remove it here too');
+    expect(onePasswordRemovalsBody(['Bank', 'Mail'])).toContain('Bank and Mail');
     expect(ONEPASSWORD_WORDS.removeHere).toBe('Remove them here too');
     expect(ONEPASSWORD_WORDS.keepHere).toBe('Keep them here');
   });

@@ -25,7 +25,9 @@ import {
   onePasswordItemProjection,
   onePasswordLimitWaitMs,
   onePasswordRemovalGuard,
+  onePasswordTotpFieldId,
   onePasswordTotpValue,
+  writeOnePasswordItem,
 } from './onepassword.js';
 import { parseVaultTotp, vaultTotpCanonical } from './totp.js';
 
@@ -358,6 +360,44 @@ describe('writing a change into an item', () => {
     const into = applyOnePasswordProjection(bare, { ...projectionOf(bare), totp: canonicalKey(KEY) });
     expect(into.sections).toEqual([{ id: 'whombat', title: 'Whombat' }]);
     expect(into.fields.find((f) => f.fieldType === 'Totp')?.sectionId).toBe('whombat');
+  });
+
+  it('follows one one-time password field: never another in its place, and removing the key removes only it', () => {
+    const second = {
+      id: 'otp2',
+      title: 'backup',
+      sectionId: 'add more',
+      fieldType: 'Totp',
+      value: KEY2,
+    };
+    const item = login({ fields: [...login().fields, second] });
+    // Following none yet: the first with a value is taken, and remembered.
+    expect(onePasswordTotpFieldId(item, null)).toBe('otp1');
+    expect(onePasswordTotpFieldId(item, 'otp2')).toBe('otp2');
+    expect(onePasswordTotpFieldId(apiCredential(), null)).toBeNull();
+    expect(projectionOf(item).totp).toBe(canonicalKey(KEY));
+    const followSecond = onePasswordItemProjection(item, 'otp2');
+    expect(followSecond.ok && followSecond.projection.totp).toBe(canonicalKey(KEY2));
+    // The followed field gone: no key, and the other field isn't taken instead.
+    const withoutFirst = login({ fields: item.fields.filter((f) => f.id !== 'otp1') });
+    const gone = onePasswordItemProjection(withoutFirst, 'otp1');
+    expect(gone.ok && gone.projection.totp).toBeNull();
+    // Writing goes into the followed field only.
+    const p = projectionOf(item);
+    const changed = writeOnePasswordItem(item, { ...p, totp: canonicalKey(KEY) }, 'otp2');
+    expect(field(changed.item, 'otp2')?.value).toBe(KEY);
+    expect(field(changed.item, 'otp1')?.value).toBe(field(item, 'otp1')?.value);
+    expect(changed.totpFieldId).toBe('otp2');
+    // Removing the key removes the followed field only, and it is still the one followed.
+    const removed = writeOnePasswordItem(item, { ...p, totp: null }, 'otp1');
+    expect(field(removed.item, 'otp1')).toBeUndefined();
+    expect(field(removed.item, 'otp2')?.value).toBe(KEY2);
+    expect(removed.totpFieldId).toBe('otp1');
+    // A key set again after its field was removed comes back under the same id.
+    const back = writeOnePasswordItem(withoutFirst, { ...p, totp: canonicalKey(KEY) }, 'otp1');
+    expect(field(back.item, 'otp1')?.fieldType).toBe('Totp');
+    expect(field(back.item, 'otp2')?.value).toBe(KEY2);
+    expect(back.totpFieldId).toBe('otp1');
   });
 
   it('writes a key’s own parameters into its link, and keeps a bare key bare', () => {

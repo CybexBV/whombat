@@ -193,6 +193,19 @@ export function onePasswordGoneTitle(count: number): string {
   return count === 1 ? '1Password says 1 item is gone' : `1Password says ${count} items are gone`;
 }
 
+/** The entries the guard holds, by name: “Bank”, “Bank and Mail”, “Bank, Mail and Shop”, “Bank, Mail, Shop and 2 more”. */
+export function onePasswordHeldNames(names: readonly string[]): string {
+  if (names.length > 3) return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** The guard's Inbox card: which entries Whombat kept, and the two ways on. */
+export function onePasswordRemovalsBody(names: readonly string[]): string {
+  const them = names.length === 1 ? 'it' : 'them';
+  return `Whombat kept ${onePasswordHeldNames(names)} in your Vault for now. Remove ${them} here too, or keep ${them} only in Whombat.`;
+}
+
 /** “Waiting for 1Password’s limit. Next try at 14:20.” */
 export function onePasswordWaitingLine(nextTryAt: string, timeZone: string): string {
   return `Waiting for 1Password’s limit. Next try at ${formatClock(nextTryAt, timeZone)}.`;

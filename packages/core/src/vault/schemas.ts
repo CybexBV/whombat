@@ -332,6 +332,11 @@ export const VaultEntrySource = z.object({
   syncedAt: Timestamp.nullable(),
   /** The `problem` state's words (“This token can only read. …”); never a value of the entry. */
   problem: z.string().min(1).max(300).optional(),
+  /**
+   * Whether the entry is paired with an item there now (removing it archives that item). Absent from an older box:
+   * taken as not paired.
+   */
+  paired: z.boolean().optional(),
 });
 export type VaultEntrySource = z.infer<typeof VaultEntrySource>;
 

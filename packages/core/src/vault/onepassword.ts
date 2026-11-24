@@ -303,9 +303,32 @@ function builtInField(fields: readonly OnePasswordItemField[], id: string): OneP
   return fields.find((f) => f.id === id && isBuiltIn(f)) ?? fields.find((f) => f.id === id);
 }
 
-/** The first one-time password field, which a login's authenticator key maps to. */
+/** The first one-time password field with a value: the one a pair that follows none yet takes. */
 function totpField(fields: readonly OnePasswordItemField[]): OnePasswordItemField | undefined {
   return fields.find((f) => f.fieldType === ONEPASSWORD_FIELD_TYPES.totp && f.value.trim() !== '');
+}
+
+/**
+ * The one-time password field a login's authenticator key maps to: the one the pair follows (`followed`, its id), else
+ * the first with a value. A followed field that is gone is never replaced by another one-time password field of the
+ * item: the key is then none.
+ */
+export function onePasswordTotpField(
+  fields: readonly OnePasswordItemField[],
+  followed: string | null = null,
+): OnePasswordItemField | undefined {
+  if (followed === null) return totpField(fields);
+  return fields.find((f) => f.id === followed && f.fieldType === ONEPASSWORD_FIELD_TYPES.totp);
+}
+
+/** The field id a pair follows after reading an item: the one it followed, else the field it takes now (null: none). */
+export function onePasswordTotpFieldId(
+  item: Pick<OnePasswordItem, 'category' | 'fields'>,
+  followed: string | null,
+): string | null {
+  if (followed !== null) return followed;
+  if (item.category !== ONEPASSWORD_CATEGORIES.login) return null;
+  return totpField(item.fields)?.id ?? null;
 }
 
 /**
@@ -366,6 +389,8 @@ function secretProblem(secret: string, auth: VaultAuth['type']): OnePasswordSkip
  */
 export function onePasswordItemProjection(
   item: Pick<OnePasswordItem, 'title' | 'category' | 'fields' | 'websites'>,
+  /** The one-time password field the pair follows (`onePasswordTotpField`); null: the first with a value. */
+  totpFieldId: string | null = null,
 ): OnePasswordItemReading {
   const fail = (reason: OnePasswordSkipReason): OnePasswordItemReading => ({ ok: false, reason });
   if (item.category === ONEPASSWORD_CATEGORIES.sshKey) return fail('ssh_key');
@@ -388,8 +413,8 @@ export function onePasswordItemProjection(
   const problem = secretProblem(secret, login ? 'form' : username === null ? 'bearer' : 'basic');
   if (problem) return fail(problem);
   let totp: string | null = null;
-  const otp = login ? totpField(item.fields) : undefined;
-  if (otp) {
+  const otp = login ? onePasswordTotpField(item.fields, totpFieldId) : undefined;
+  if (otp && otp.value.trim() !== '') {
     const parsed = parseVaultTotp(otp.value);
     if (!parsed.ok) return fail('bad_totp');
     totp = vaultTotpCanonical(parsed.totp);
@@ -548,7 +573,24 @@ function setBuiltIn(
  * history): only the fields whose canonical text differs from the item's own are written, so a title Whombat shortened
  * stays whole and a key's label stays when only the secret changed. Whombat then `put`s it with the item's `version`.
  */
-export function applyOnePasswordProjection(item: OnePasswordItem, p: OnePasswordProjection): OnePasswordItem {
+export function applyOnePasswordProjection(
+  item: OnePasswordItem,
+  p: OnePasswordProjection,
+  totpFieldId: string | null = null,
+): OnePasswordItem {
+  return writeOnePasswordItem(item, p, totpFieldId).item;
+}
+
+/**
+ * `applyOnePasswordProjection`, and the one-time password field the pair follows afterwards: the field the key went
+ * into, or the one it followed (kept when the key was removed, so another field never takes its place).
+ */
+export function writeOnePasswordItem(
+  item: OnePasswordItem,
+  p: OnePasswordProjection,
+  totpFieldId: string | null = null,
+): { item: OnePasswordItem; totpFieldId: string | null } {
+  let followed = totpFieldId;
   const fields = item.fields.map((f) => ({ ...f }));
   const sections = item.sections.map((s) => ({ ...s }));
   const websites = item.websites.map((w) => ({ ...w }));
@@ -583,22 +625,27 @@ export function applyOnePasswordProjection(item: OnePasswordItem, p: OnePassword
   if ((builtInField(fields, secretId)?.value ?? '') !== p.secret)
     setBuiltIn(fields, secretId, ONEPASSWORD_FIELD_TYPES.concealed, p.secret);
   if (login) {
-    const otp = totpField(fields);
-    if (onePasswordCanonicalTotp(otp?.value ?? null) !== want.totp) {
+    // Only the field the pair follows (or, following none, the first with a value): a second one is never touched.
+    const otp = onePasswordTotpField(fields, followed);
+    const current = otp && otp.value.trim() !== '' ? otp.value : null;
+    if (otp) followed = otp.id;
+    if (onePasswordCanonicalTotp(current) !== want.totp) {
       if (p.totp === null) {
         if (otp) fields.splice(fields.indexOf(otp), 1);
-      } else if (otp) otp.value = onePasswordTotpValue(otp.value, p.totp, title);
-      else
+      } else if (otp) otp.value = onePasswordTotpValue(current, p.totp, title);
+      else {
+        followed = freeFieldId(fields, followed ?? 'onetimepassword');
         fields.push({
-          id: freeFieldId(fields, 'onetimepassword'),
+          id: followed,
           title: 'one-time password',
           sectionId: customSection(sections),
           fieldType: ONEPASSWORD_FIELD_TYPES.totp,
           value: onePasswordTotpValue(null, p.totp, title),
         });
+      }
     }
   }
-  return { ...item, title, fields, sections, websites };
+  return { item: { ...item, title, fields, sections, websites }, totpFieldId: login ? followed : null };
 }
 
 /**
