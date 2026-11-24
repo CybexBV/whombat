@@ -67,7 +67,7 @@ describe('a server’s page (mock 2)', () => {
       within(screen.getByRole('menu', { name: 'More for pve-02' }))
         .getAllByRole('menuitem')
         .map((m) => m.textContent),
-    ).toEqual(['Rename', 'Open a shell', 'Restart pve-02', 'Shut pve-02 down']);
+    ).toEqual(['Rename', 'Open a shell', 'Keep quiet…', 'Restart pve-02', 'Shut pve-02 down']);
     await user.keyboard('{Escape}');
     const glance = await screen.findByRole('region', { name: 'At a glance' });
     expect(text(glance)).toContain('Memory');
