@@ -39,6 +39,21 @@ export function thingTriggerDueAt(
   return Date.parse(facts.incident.startedAt) + Math.min(...delays) * 60_000;
 }
 
+/**
+ * The checks a delayed start still needs at its deadline, from the triggers due first: each one's own check, else the
+ * check that opened or worsened the incident. A start goes on while any of them still counts on the thing. Empty when
+ * one of those triggers names none and the incident has none either: there is nothing more to ask.
+ */
+export function thingTriggerChecks(triggers: readonly ThingTrigger[], facts: ThingTriggerFacts): string[] {
+  const matching = triggers.filter((t) => thingTriggerMatches(t, facts));
+  if (!matching.length) return [];
+  const first = Math.min(...matching.map((t) => t.forMinutes ?? 0));
+  const checks = matching
+    .filter((t) => (t.forMinutes ?? 0) === first)
+    .map((t) => t.check ?? facts.incident.check ?? null);
+  return checks.some((c) => c === null) ? [] : [...new Set(checks as string[])];
+}
+
 function kindName(kind: string): string {
   if (kind === 'server') return 'a server';
   if (kind === 'device') return 'a device';

@@ -3,7 +3,9 @@
  *
  * - **Incidents.** A thing whose look is bad or down on two passes in a row opens one (amber never does); one not seen on
  *   two passes in a row ends, at the first of them. While it lasts, going from a problem to down makes it a `down` one.
- *   A server not read on this pass is unknown: nothing opens or ends for it.
+ *   A server not read on this pass is unknown: nothing opens or ends for it. Nor for a thing that left the looks because
+ *   it is held (kept quiet, or down because of something else) or because Whombat couldn't see it: only seeing it fine
+ *   again ends its incident.
  * - **The push.** An incident open 10 minutes, about which no research finding pushed meanwhile, is pushed once,
  *   together with the others that opened within a few minutes of it. Not one that something else took down with it
  *   (its cause), nor one older than an hour when Whombat first could push it (it was down before Whombat watched, or
@@ -56,6 +58,8 @@ export interface OpenIncident {
 export interface PassBefore {
   at: Date;
   things: ReadonlySet<string>;
+  /** It was the watcher's first pass since it started: what it saw was bad before Whombat watched. */
+  first?: boolean;
 }
 
 export interface IncidentPassInput {
@@ -65,11 +69,19 @@ export interface IncidentPassInput {
   before: PassBefore | null;
   /** The servers' cards were read: a server without a look is fine; else unknown. */
   serversRead: boolean;
+  /**
+   * Things without a look that Whombat didn't see fine this pass: held (kept quiet, down because of something else) or
+   * not seen (a check that couldn't run, a thing not checked). Their open incidents neither end nor count a pass.
+   */
+  blind?: ReadonlySet<string>;
+  /** The Whombat has no incidents yet: its first ones are what it found already bad when it started watching. */
+  noneYet?: boolean;
   now: Date;
 }
 
 export interface IncidentPassPlan {
-  opened: (SeenLook & { startedAt: Date })[];
+  /** `pushed`: bad before Whombat watched, so it is told as already pushed (no push now). */
+  opened: (SeenLook & { startedAt: Date; pushed?: true })[];
   /** Open incidents that got worse (a problem now down), or learned their cause. */
   changed: {
     id: string;
@@ -94,6 +106,7 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
   const opened: IncidentPassPlan['opened'] = [];
   const changed: IncidentPassPlan['changed'] = [];
   const ended: IncidentPassPlan['ended'] = [];
+  const keep = new Set<string>();
   for (const inc of input.open) {
     const look = byThing.get(inc.thing);
     if (look) {
@@ -110,19 +123,27 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
         });
       continue;
     }
+    // Held or not seen isn't fine: it stays open, and seeing it fine starts the two passes again.
+    if (input.blind?.has(inc.thing)) {
+      keep.add(inc.thing);
+      continue;
+    }
     if (unknown(inc.thing) || !before || before.things.has(inc.thing)) continue;
     ended.push({ id: inc.id, endedAt: before.at });
   }
+  // The update itself mustn't push about what was red for days: on a Whombat's first incidents, what its watcher's
+  // first pass already saw opens as told.
+  const inherited = !!(input.noneYet && before?.first);
   if (before)
     for (const look of input.looks) {
       if (openThings.has(look.thing) || !before.things.has(look.thing)) continue;
       const since = look.since && look.since < before.at ? look.since : before.at;
-      opened.push({ ...look, startedAt: since });
+      opened.push({ ...look, startedAt: since, ...(inherited ? { pushed: true as const } : {}) });
     }
-  const things = new Set(input.looks.map((l) => l.thing));
+  const things = new Set([...input.looks.map((l) => l.thing), ...keep]);
   // Servers not read this pass keep what the pass before saw of them.
   if (!input.serversRead && before) for (const t of before.things) if (t.startsWith('server:')) things.add(t);
-  return { opened, changed, ended, seen: { at: now, things } };
+  return { opened, changed, ended, seen: { at: now, things, first: before === null } };
 }
 
 /** An open incident as the push weighs it. */
@@ -161,9 +182,15 @@ export function planPush(input: PushInput): PushCandidate[] {
   const first = due[0];
   if (!first) return [];
   const start = first.startedAt.getTime();
-  return pushable
-    .filter((i) => Math.abs(i.startedAt.getTime() - start) <= PUSH_GROUP_MS)
-    .sort((a, b) => (a.nature === b.nature ? a.name.localeCompare(b.name) : a.nature === 'down' ? -1 : 1));
+  return pushable.filter((i) => Math.abs(i.startedAt.getTime() - start) <= PUSH_GROUP_MS).sort(pushOrder);
+}
+
+/** The order a push names its incidents in: down first, then by name. */
+export function pushOrder(
+  a: Pick<OpenIncident, 'nature' | 'name'>,
+  b: Pick<OpenIncident, 'nature' | 'name'>,
+) {
+  return a.nature === b.nature ? a.name.localeCompare(b.name) : a.nature === 'down' ? -1 : 1;
 }
 
 /** A name as it reads inside a sentence: “The NAS” becomes “the NAS”, “Plex” stays. */

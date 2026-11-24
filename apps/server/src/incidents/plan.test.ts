@@ -7,6 +7,7 @@ import type { DeskLook } from '../desk/shapes';
 import {
   incidentPushText,
   type OpenIncident,
+  type PassBefore,
   PUSH_AFTER_MS,
   PUSHES_PER_DAY,
   PUSHES_PER_THING,
@@ -93,6 +94,56 @@ describe('incidents from the looks', () => {
     expect(once.ended).toEqual([]);
     const twice = planIncidents({ looks: [], open, before: once.seen, serversRead: true, now: at(7) });
     expect(twice.ended).toEqual([{ id: open[0]?.id, endedAt: at(6) }]);
+  });
+
+  it('keeps one open while its thing is held or unseen, and ends it only after two passes seen fine', () => {
+    // pve-02 kept quiet while Plex, on it, is down: Plex leaves the looks, but it hasn't come back.
+    const open = [incident('connection:plex')];
+    const blind = new Set(['connection:plex']);
+    let before: PassBefore = { at: at(5), things: new Set(['connection:plex']) };
+    for (const minute of [6, 7, 8]) {
+      const held = planIncidents({ looks: [], open, before, serversRead: true, blind, now: at(minute) });
+      expect(held.ended).toEqual([]);
+      before = held.seen;
+    }
+    const fine = planIncidents({ looks: [], open, before, serversRead: true, now: at(9) });
+    expect(fine.ended).toEqual([]);
+    const again = planIncidents({ looks: [], open, before: fine.seen, serversRead: true, now: at(10) });
+    expect(again.ended).toEqual([{ id: open[0]?.id, endedAt: at(9) }]);
+  });
+
+  it('opens what the first pass after a start already saw as told, on a Whombat with no incidents yet', () => {
+    const plex = look('connection:plex');
+    const first = planIncidents({ looks: [plex], open: [], before: null, serversRead: true, now: at(0) });
+    expect(first.seen.first).toBe(true);
+    const inherited = planIncidents({
+      looks: [plex],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      noneYet: true,
+      now: at(1),
+    });
+    expect(inherited.opened[0]?.pushed).toBe(true);
+    // With incidents kept already, or seen first on a later pass, it is news.
+    const kept = planIncidents({
+      looks: [plex],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      now: at(1),
+    });
+    expect(kept.opened[0]?.pushed).toBeUndefined();
+    const later = planIncidents({ looks: [], open: [], before: first.seen, serversRead: true, now: at(1) });
+    const news = planIncidents({
+      looks: [plex],
+      open: [],
+      before: { ...later.seen, things: new Set(['connection:plex']) },
+      serversRead: true,
+      noneYet: true,
+      now: at(2),
+    });
+    expect(news.opened.map((o) => [o.thing, o.pushed])).toEqual([['connection:plex', undefined]]);
   });
 
   it('knows nothing of a server whose cards weren’t read', () => {

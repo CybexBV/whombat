@@ -15,6 +15,7 @@ import {
   needsYouGroupOf,
   parseThingId,
   THING_WATCH_DEFAULT_MINUTES,
+  type ThingCause,
   thingId,
 } from '@whombat/core';
 import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
@@ -33,6 +34,7 @@ import { outsidersTurn } from '../runtime/person';
 import type { Services } from '../services';
 import { thingVisible } from '../things/page';
 import { hostsAlertsSince, periodUptime } from './history';
+import { observedOf } from './looks';
 import { incidentsSince, openIncidents } from './store';
 import { cancelThingWatch, runningThingWatches, startThingWatch } from './thing-watch';
 import { thingWatchView } from './thing-watch-cards';
@@ -283,7 +285,7 @@ async function watchTarget(ctx: ToolContext, person: PrincipalRow, value: string
     parsed?.kind === 'server' ? [] : things(services, { burrow, principal: person }, observedAt),
     parsed && parsed.kind !== 'server' ? null : deskFleet(services, burrowId).catch(() => null),
   ]);
-  const targets = [
+  const targets: { id: string; name: string; status: string; causedBy?: ThingCause }[] = [
     ...list.filter((thing) => thing.kind !== 'server'),
     ...[...(fleet?.rows ?? [])].map(([id, server]) => ({
       id: thingId('server', id),
@@ -301,17 +303,14 @@ async function watchTarget(ctx: ToolContext, person: PrincipalRow, value: string
   if (matches.length > 1) throw badRequest('More than one thing has that name. Which one did you mean?');
   const target = matches[0];
   if (!target) throw notFound('Thing');
-  const observed =
-    target.status === 'offline'
-      ? 'down'
-      : target.status === 'ok' || target.status === 'warn'
-        ? 'up'
-        : 'unknown';
+  // Down because of what it runs on: no outage of its own will say it's back, its answering again will.
+  const cause = target.causedBy && target.causedBy.kind !== 'quiet' ? target.causedBy : null;
   return {
     thing: target.id,
     name: target.name.slice(0, 120),
-    observed,
+    observed: observedOf(target.status),
     observedAt: observedAt.toISOString(),
+    cause: cause ? { thing: cause.thing, name: cause.name } : null,
   } as const;
 }
 

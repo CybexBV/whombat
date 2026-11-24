@@ -26,6 +26,7 @@ import {
   claimIncidentTrigger,
   dropIncidentTrigger,
   dueIncidentTriggers,
+  liveChecks,
   skipDueIncidentTriggers,
 } from './incident-triggers';
 import type { EngineOptions } from './options';
@@ -108,6 +109,7 @@ export async function scanBurrow(
     let created = 0;
     const now = services.clock();
     const due = await dueIncidentTriggers(tx, burrowId, now);
+    const active = liveChecks(services, burrowId, now);
     const work = [
       ...due,
       ...batch.filter((event) => EVENT_TYPES.includes(event.type)).map((event) => ({ event, pending: null })),
@@ -143,7 +145,8 @@ export async function scanBurrow(
         if (facts.facts.kind === 'thing') {
           if (event.createdAt < (a.thingActiveAt ?? v.publishedAt)) continue;
           const triggers = v.definition.triggers.filter((t) => t.kind === 'thing');
-          if (!(await claimIncidentTrigger(tx, a.id, v.n, triggers, facts.facts, event, now))) continue;
+          if (!(await claimIncidentTrigger(tx, a.id, v.n, triggers, facts.facts, event, now, active)))
+            continue;
         }
         const conversationId = facts.conversationId ?? v.definition.conversationId;
         // The publisher must still be allowed, and still read the room the event happened in (BP-C20): otherwise

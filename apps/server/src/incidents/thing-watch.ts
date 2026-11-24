@@ -115,6 +115,11 @@ export const startThingWatch = defineCommand({
     threadRootId: MessageId.nullable(),
     observed: z.enum(['up', 'down', 'unknown']),
     observedAt: z.iso.datetime({ offset: true }),
+    /** Down because of this (what it runs on is down): its own return is what a `back` watch waits for. */
+    cause: z
+      .object({ thing: z.string().min(3).max(220), name: z.string().min(1).max(120) })
+      .nullable()
+      .optional(),
   }),
   async apply(tx, ctx, input) {
     if (ctx.actor.kind !== 'agent') throw forbidden('Only the assistant starts a watch.');
@@ -178,7 +183,7 @@ export const startThingWatch = defineCommand({
     if (!row) throw notFound('Watch');
     const posted = await postMessage(ctx, {
       conversation,
-      text: already ? thingWatchResultText(row) : thingWatchStartText(row),
+      text: already ? thingWatchResultText(row) : thingWatchStartText(row, input.cause),
       card: { kind: 'thing_watch', watchId: row.id },
       threadRootId: input.threadRootId,
       mentions: [],
@@ -227,7 +232,72 @@ export const cancelThingWatch = defineCommand({
   },
 });
 
-export const THING_WATCH_COMMANDS = [startThingWatch, endThingWatch, cancelThingWatch];
+/**
+ * A `back` watch whose thing Whombat sees answering again without an outage of its own (it was down because of
+ * something else, or not seen): it happened. One with an open incident of its own waits for that incident's end, which
+ * says how long it was down.
+ */
+export const seenThingWatch = defineCommand({
+  name: 'thing.watch_seen',
+  schema: z.object({ watchId: ThingWatchId }),
+  async apply(tx, ctx, input) {
+    const row = await watchIn(ctx, input.watchId);
+    if (ctx.actor.id !== row.agentId) throw forbidden('Only the assistant that started a watch ends it.');
+    if (row.status !== 'watching' || row.eventId || row.event !== 'back' || row.endsAt <= ctx.now) return;
+    const [own] = await tx
+      .select({ id: incidents.id })
+      .from(incidents)
+      .where(
+        and(
+          eq(incidents.burrowId, ctx.burrow.id),
+          eq(incidents.thingId, row.thing),
+          isNull(incidents.endedAt),
+          isNull(incidents.causeThing),
+        ),
+      )
+      .limit(1);
+    if (own || (await holdsIncident(tx, ctx.burrow.id, row.thing, ctx.now))) return;
+    await settleWatch(ctx, row, 'happened');
+    const conversation = await loadConversationRow(tx, row.conversationId);
+    if (!conversation) return;
+    await postMessage(ctx, {
+      conversation,
+      text: thingWatchResultText(row),
+      threadRootId:
+        row.threadRootId && (await loadMessageRow(tx, row.threadRootId)) ? row.threadRootId : row.messageId,
+      mentions: [],
+      dispatch: false,
+    });
+  },
+});
+
+export const THING_WATCH_COMMANDS = [startThingWatch, endThingWatch, cancelThingWatch, seenThingWatch];
+
+/** Settles the `back` watches whose thing is in `fine` (seen answering now, `seenFine`), as `thing.watch_seen` decides. */
+export async function settleSeenBack(
+  services: Services,
+  burrowId: string,
+  fine: ReadonlySet<string>,
+): Promise<void> {
+  if (!fine.size) return;
+  const now = services.clock();
+  const rows = await services.db
+    .select()
+    .from(thingWatches)
+    .where(
+      and(
+        eq(thingWatches.burrowId, burrowId),
+        eq(thingWatches.status, 'watching'),
+        eq(thingWatches.event, 'back'),
+        isNull(thingWatches.eventId),
+        gt(thingWatches.endsAt, now),
+      ),
+    );
+  for (const row of rows.filter((r) => fine.has(r.thing)))
+    await services.pipeline
+      .commit(seenThingWatch, { watchId: row.id }, { burrowId, actorId: row.agentId })
+      .catch((err: unknown) => services.log.warn({ err, watchId: row.id }, 'A thing watch will be retried'));
+}
 
 export async function deliverThingWatches(services: Services, burrowId: string): Promise<void> {
   const rows = await services.db
