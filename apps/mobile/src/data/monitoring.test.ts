@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   factsWithoutUptime,
   firstPick,
-  limitLine,
+  limitViewWords,
   parseMonitoringPick,
   pickDays,
   pickedValue,
@@ -165,8 +165,11 @@ describe('menus and limits', () => {
     expect(parseMonitoringPick('rename')).toBeNull();
   });
 
-  it('says when a check warns, and nothing when each sensor has its own', () => {
-    expect(limitLine({ value: 90, unit: '%' })).toBe('Warns above 90 %');
-    expect(limitLine({ value: null, unit: '°C' })).toBeNull();
+  it('says when a line’s check warns, else what applies without a limit', () => {
+    expect(limitViewWords({ value: 90, unit: '%', defaultWords: 'The default is 90 %.' })).toBe(
+      'Warns above 90 %',
+    );
+    const sensors = 'Without one, each sensor uses its own limit.';
+    expect(limitViewWords({ value: null, unit: '°C', defaultWords: sensors })).toBe(sensors);
   });
 });

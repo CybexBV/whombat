@@ -10,7 +10,7 @@
  */
 import {
   type LimitView,
-  limitText,
+  limitLine,
   limitView,
   thingWatchView,
   type WatchCheckView,
@@ -20,7 +20,7 @@ import type { QuietActions } from '@whombat/client/react';
 import type { ThingWatch } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { Switch, View } from 'react-native';
-import { limitLine, MONITORING_COPY } from '../../data/monitoring';
+import { MONITORING_COPY } from '../../data/monitoring';
 import { checkToastName, exceptionText, foldWatchRows, QUIET_COPY, watchRowSpoken } from '../../data/quiet';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -255,20 +255,21 @@ function LimitLines({
   open: (view: LimitView) => void;
 }) {
   const whole = limitView(check);
-  if (!whole || !check.limit) return null;
+  const line = limitLine(check);
+  if (!whole || !line) return null;
   return (
     <View style={{ paddingBottom: 4 }}>
       <LimitLine
-        text={limitLine(whole) ?? whole.defaultWords}
+        text={line.words}
         spoken={MONITORING_COPY.changeLimitHint(check.name)}
         onPress={() => open(whole)}
       />
-      {check.limit.items.map((item) => {
+      {line.items.map((item) => {
         const own = limitView(check, item.subject);
         return own ? (
           <LimitLine
             key={item.subject.id}
-            text={`${item.subject.name}: ${limitText(item.value, check.limit?.unit ?? '')}`}
+            text={`${item.subject.name} ${item.words}`}
             spoken={MONITORING_COPY.changeLimitHint(`${check.name} · ${item.subject.name}`)}
             onPress={() => open(own)}
           />

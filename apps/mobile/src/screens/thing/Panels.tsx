@@ -50,7 +50,7 @@ import {
   wideLayout,
 } from '../../data/dashboard';
 import type { ChartSwatch, HostReadout } from '../../data/hostStatus';
-import { limitLine, MONITORING_COPY } from '../../data/monitoring';
+import { limitViewWords, MONITORING_COPY } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
 import { LINE_PICTURE_WIDTH, SERVICE_COPY } from '../../data/servicePanels';
 import { panelAsk } from '../../data/serviceSettings';
@@ -922,7 +922,7 @@ function NoticeLine({
       ? quietLineMenu(
           row.menu,
           row.line.title,
-          limit ? { label: LIMIT_WORDS.menu, words: limitLine(limit) ?? limit.defaultWords } : null,
+          limit ? { label: LIMIT_WORDS.menu, words: limitViewWords(limit) } : null,
         )
       : null;
   const pick = (id: string) => {

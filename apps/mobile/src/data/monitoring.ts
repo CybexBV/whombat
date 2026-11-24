@@ -123,7 +123,9 @@ export function parseMonitoringPick(id: string): MonitoringPick | null {
   return id === 'keep_quiet' ? id : null;
 }
 
-/** “Warns above 90 %” for a check's row and its ⋯: its own limit, else what applies; null when each sensor has its own. */
-export function limitLine(view: Pick<LimitView, 'value' | 'unit'>): string | null {
-  return view.value === null ? null : MONITORING_COPY.warnsAbove(limitText(view.value, view.unit));
+/** A line's ⋯ under Change the limit: “Warns above 90 %” (what applies to it now), else what applies without one. */
+export function limitViewWords(view: Pick<LimitView, 'value' | 'unit' | 'defaultWords'>): string {
+  return view.value === null
+    ? view.defaultWords
+    : MONITORING_COPY.warnsAbove(limitText(view.value, view.unit));
 }

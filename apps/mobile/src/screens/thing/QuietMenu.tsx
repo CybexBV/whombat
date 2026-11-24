@@ -10,7 +10,7 @@ import { LIMIT_WORDS, type LimitView, type QuietMenuView } from '@whombat/client
 import type { QuietActions, QuietTarget } from '@whombat/client/react';
 import type { ComponentType } from 'react';
 import { View } from 'react-native';
-import { limitLine } from '../../data/monitoring';
+import { limitViewWords } from '../../data/monitoring';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { AlarmClock, BellOff, EyeOff, SlidersHorizontal } from '../../ui/icons';
@@ -76,7 +76,7 @@ export function QuietMenuSheet({
             <MenuRow
               icon={SlidersHorizontal}
               label={LIMIT_WORDS.menu}
-              words={limitLine(target.limit) ?? target.limit.defaultWords}
+              words={limitViewWords(target.limit)}
               onPress={() => {
                 const view = target.limit;
                 onClose();
