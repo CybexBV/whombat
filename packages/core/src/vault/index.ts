@@ -8,6 +8,7 @@ export * from './copy.js';
 export * from './entry.js';
 export * from './keys.js';
 export * from './network.js';
+export * from './onepassword.js';
 export * from './request.js';
 export * from './schemas.js';
 export * from './ssh.js';
