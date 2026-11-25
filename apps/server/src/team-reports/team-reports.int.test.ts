@@ -6,9 +6,12 @@
  * sending it from the form instead withdraws the card. A retry sends nothing twice, a long conversation fits one answer,
  * a person whose Link ended can still read and withdraw, and the copies go when the box leaves Link or moves to new
  * hardware (with the cards of the drafts that go, and again in the next round when a drop failed). A read that answers
- * after a withdrawal brings nothing back, the form doesn't send a draft its card is sending, and It works answered
- * with no report is a refusal. Needs Postgres: the copies, the drafts, the notification and the approval go through
- * the commit pipeline.
+ * after a withdrawal, or a drop of every copy, brings nothing back, and one that started before a new report was sent
+ * doesn't take its copy away. The card and the form never send a draft at once; a card whose send didn't go says so and
+ * leaves the draft to the form. It works answered with no report is a refusal, and so is one long after closing. The
+ * person is told about a report first seen waiting for them and about each new question; reading it reads its
+ * notifications, and taking it back removes them. Old drafts go with their cards. Needs Postgres: the copies, the
+ * drafts, the notification and the approval go through the commit pipeline.
  */
 import { TeamReport } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
@@ -39,7 +42,8 @@ import {
 } from './commands';
 import { TEAM_REPORT_WORDS, useTeamReports } from './control';
 import { TEAM_REPORT_ANSWER_MAX_BYTES } from './fit';
-import { followTeamReports } from './follow';
+import { followTeamReports, teamReportsLinkChanged } from './follow';
+import { decodeTeamPayload, encodeTeamPayload } from './payload';
 import {
   draftRequestId,
   dropTeamReportsForNewHardware,
@@ -192,6 +196,12 @@ describe('reports to the Whombat Team', () => {
     expect(opened.json().report.messages.map((m: { author: string }) => m.author)).toEqual(['team']);
     expect((await req('GET', '/team-reports')).json().reports[0].unread).toBe(false);
     expect((await copyOf(report.id))?.readRevision).toBe(1);
+    // And its notification with it.
+    const [readNotice] = await t.services.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.dedupKey, `team-report:${report.id}:1`));
+    expect(readNotice?.readAt).not.toBeNull();
 
     // The person answers: the report goes back to the team, and their own words make nothing unread.
     const replied = await req('POST', `/team-reports/${report.id}/replies`, { text: 'Firefox on Linux' });
@@ -222,6 +232,13 @@ describe('reports to the Whombat Team', () => {
     expect(back.json()).toEqual({ report: null, earlier: 0 });
     expect(manager.team.reports.has(report.id)).toBe(false);
     expect(await copyOf(report.id)).toBeUndefined();
+    // Its notifications go with it.
+    expect(
+      await t.services.db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.dedupKey, `team-report:${report.id}:1`)),
+    ).toEqual([]);
     expect((await req('GET', '/team-reports')).json().reports).toEqual([]);
     const [withdrawn] = await t.services.db
       .select()
@@ -266,6 +283,9 @@ describe('reports to the Whombat Team', () => {
     expect(sent.map((r) => [r.kind, r.text])).toEqual([['idea', 'Let me sort the Inbox by date']]);
     expect((await copyOf(sent[0]?.id ?? ''))?.createdById).toBe(IDS.mara);
     expect((await req('GET', `/team-report-drafts/${draftId}`)).json().draft.done).toBe(true);
+    // The card says it was done once the report went.
+    const [done] = await t.services.db.select().from(approvals).where(eq(approvals.id, asked.approvalId));
+    expect(done?.execution.state).toBe('succeeded');
   });
 
   it('leave a declined draft done, and nothing sent', async () => {
@@ -755,5 +775,241 @@ describe('reports to the Whombat Team', () => {
       linkOn = true;
       linkLeft = false;
     }
+  });
+
+  it('say on the card when its send didn’t go, and leave the draft to the form', async () => {
+    linkOn = true;
+    const { draftId, approvalId } = await draftWithCard('The lights blink at noon');
+    const before = manager.team.reports.size;
+    useTeamReports(
+      t.services,
+      slowManager({
+        teamReportsCreate: async () => {
+          throw new ManagerCallError('/v1/runtime/team-reports/create', 0, 'unreachable', 'offline');
+        },
+      }),
+      link,
+    );
+    try {
+      const [a] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+      const yes = await t.commit(IDS.mara, decideApproval, { number: a?.number, decision: 'approve' });
+      expect(yes.status).toBe('ok');
+      await t.services.background.settle();
+    } finally {
+      useTeamReports(t.services, manager, link);
+    }
+    // Not done: the card says the send didn't work, in plain words.
+    const [card] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+    expect(card?.execution).toMatchObject({ state: 'failed', error: TEAM_REPORT_WORDS.unreachable });
+    const [draft] = await t.services.db
+      .select()
+      .from(teamReportDrafts)
+      .where(eq(teamReportDrafts.id, draftId));
+    expect(draft?.state).toBe('waiting');
+    expect((await req('GET', `/team-report-drafts/${draftId}`)).json().draft.done).toBe(false);
+    // The form sends it now, as it is.
+    const form = await req('POST', '/team-reports', {
+      kind: 'bug',
+      text: 'The lights blink at noon',
+      draftId,
+    });
+    expect(form.statusCode, form.body).toBe(201);
+    expect(manager.team.reports.size).toBe(before + 1);
+    expect((await req('GET', `/team-report-drafts/${draftId}`)).json().draft.done).toBe(true);
+  });
+
+  it('refuse the card’s yes while the form sends the draft, and send it once', async () => {
+    linkOn = true;
+    const { draftId, approvalId } = await draftWithCard('The door bell rings twice');
+    const before = manager.team.reports.size;
+    const create = held();
+    useTeamReports(
+      t.services,
+      slowManager({
+        teamReportsCreate: async (r) => {
+          create.reached();
+          await create.open;
+          return manager.teamReportsCreate(r);
+        },
+      }),
+      link,
+    );
+    try {
+      const form = req('POST', '/team-reports', {
+        kind: 'bug',
+        text: 'The door bell rings twice at night',
+        draftId,
+      });
+      await create.arrived;
+      const [a] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+      const yes = await t.commit(IDS.mara, decideApproval, { number: a?.number, decision: 'approve' });
+      expect(yes.status).toBe('ok');
+      await t.services.background.settle();
+      const [card] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+      expect(card?.execution).toMatchObject({ state: 'failed', error: TEAM_REPORT_WORDS.draftSending });
+      create.release();
+      const sent = await form;
+      expect(sent.statusCode, sent.body).toBe(201);
+      expect(manager.team.reports.size).toBe(before + 1);
+      expect(manager.team.reports.get(sent.json().report.id)?.text).toContain('at night');
+    } finally {
+      create.release();
+      useTeamReports(t.services, manager, link);
+    }
+  });
+
+  it('keep a report sent while a list was on its way', async () => {
+    linkOn = true;
+    const list = held();
+    useTeamReports(
+      t.services,
+      slowManager({
+        teamReportsList: async () => {
+          const answer = await manager.teamReportsList();
+          list.reached();
+          await list.open;
+          return answer;
+        },
+      }),
+      link,
+    );
+    try {
+      const listing = req('GET', '/team-reports');
+      await list.arrived;
+      const made = await req('POST', '/team-reports', {
+        kind: 'bug',
+        text: 'Sent meanwhile',
+        requestId: rid('p'),
+      });
+      expect(made.statusCode, made.body).toBe(201);
+      list.release();
+      expect((await listing).statusCode).toBe(200);
+      expect(await copyOf(made.json().report.id)).toBeTruthy();
+    } finally {
+      list.release();
+      useTeamReports(t.services, manager, link);
+    }
+  });
+
+  it('tell the person about a report first seen waiting for them, and about each new question', async () => {
+    linkOn = true;
+    // A report the box hasn't seen yet, which the team already asks about.
+    const made = manager.team.create({
+      requestId: rid('q'),
+      payload: encodeTeamPayload({ kind: 'bug', text: 'Seen late', expected: '', context: {} }),
+    });
+    const { id } = decodeTeamPayload(TeamReport, made.report);
+    manager.team.teamSays(id, 'Which phone?', 'needs_information');
+    await followTeamReports(t.services);
+    const told = async () =>
+      (await t.services.db.select().from(notifications))
+        .filter((n) => n.dedupKey?.startsWith(`team-report:${id}:`))
+        .map((n) => n.dedupKey);
+    expect(await told()).toEqual([`team-report:${id}:1`]);
+    // The team asks again while it still waits: told again, once.
+    manager.team.teamSays(id, 'Which version?');
+    await followTeamReports(t.services);
+    await followTeamReports(t.services);
+    expect((await told()).sort()).toEqual([`team-report:${id}:1`, `team-report:${id}:2`]);
+  });
+
+  it('keep nothing from a read that left before every copy was dropped, and look again once Link runs', async () => {
+    linkOn = true;
+    const made = await req('POST', '/team-reports', {
+      kind: 'bug',
+      text: 'Before the drop',
+      requestId: rid('r'),
+    });
+    const id = made.json().report.id as string;
+    const get = held();
+    useTeamReports(
+      t.services,
+      slowManager({
+        teamReportsGet: async (r) => {
+          const answer = await manager.teamReportsGet(r);
+          get.reached();
+          await get.open;
+          return answer;
+        },
+      }),
+      link,
+    );
+    try {
+      const opening = req('GET', `/team-reports/${id}`);
+      await get.arrived;
+      await forgetAllTeamReports(t.services, { drafts: false });
+      get.release();
+      expect((await opening).statusCode).toBe(200);
+      expect(await copyOf(id)).toBeUndefined();
+    } finally {
+      get.release();
+      useTeamReports(t.services, manager, link);
+    }
+    // The drop forgot what control said about sending: Link running looks again at once.
+    expect(lastAvailability(t.services)).toBeNull();
+    await teamReportsLinkChanged(t.services);
+    expect(lastAvailability(t.services)).not.toBeNull();
+  });
+
+  it('refuse It works long after closing, and a new report’s retry after it was taken back', async () => {
+    linkOn = true;
+    const made = await req('POST', '/team-reports', {
+      kind: 'bug',
+      text: 'Closed long ago',
+      requestId: rid('s'),
+    });
+    const id = made.json().report.id as string;
+    manager.teamFails = new ManagerCallError(
+      '/v1/runtime/team-reports/act',
+      502,
+      'control_refused',
+      'manager /v1/runtime/team-reports/act: 502 {"error":{"code":"control_refused","message":"conflict report_closed: control refused team.reports.act"}}',
+    );
+    try {
+      const works = await req('POST', `/team-reports/${id}/act`, { action: 'works', requestId: rid('t') });
+      expect(works.statusCode).toBe(409);
+      expect(works.json().error.message).toBe(TEAM_REPORT_WORDS.closedLongAgo);
+    } finally {
+      manager.teamFails = null;
+    }
+    await req('POST', `/team-reports/${id}/act`, { action: 'withdraw' });
+    const size = manager.team.reports.size;
+    const again = await req('POST', '/team-reports', {
+      kind: 'bug',
+      text: 'Closed long ago',
+      requestId: rid('s'),
+    });
+    expect(again.statusCode).toBe(404);
+    expect(manager.team.reports.size).toBe(size);
+  });
+
+  it('withdraw the cards of drafts kept too long, and give back drafts a stopped process left sending', async () => {
+    linkOn = true;
+    const old = await draftWithCard('An old draft');
+    await t.services.db
+      .update(teamReportDrafts)
+      .set({ createdAt: new Date(t.services.clock().getTime() - 31 * 86_400_000) })
+      .where(eq(teamReportDrafts.id, old.draftId));
+    const stuck = await draftWithCard('A stuck draft');
+    await t.services.db
+      .update(teamReportDrafts)
+      .set({ state: 'sending' })
+      .where(eq(teamReportDrafts.id, stuck.draftId));
+    await followTeamReports(t.services);
+    expect(
+      await t.services.db.select().from(teamReportDrafts).where(eq(teamReportDrafts.id, old.draftId)),
+    ).toEqual([]);
+    const [card] = await t.services.db.select().from(approvals).where(eq(approvals.id, old.approvalId));
+    expect(card?.state).toBe('declined');
+    const [why] = await t.services.db
+      .select()
+      .from(events)
+      .where(and(eq(events.type, 'approval.declined'), eq(events.approvalId, old.approvalId)));
+    expect(why?.payload).toMatchObject({ withdrawn: true });
+    const [back] = await t.services.db
+      .select()
+      .from(teamReportDrafts)
+      .where(eq(teamReportDrafts.id, stuck.draftId));
+    expect(back?.state).toBe('waiting');
   });
 });

@@ -2,12 +2,13 @@
  * A whole report in one answer (docs/decisions/team-reports.md): an answer travels in one session CONTROL message of at
  * most 64 KiB, but a report may hold 200 messages of 6 000 characters. The answer keeps the report's own words and the
  * newest messages that fit a budget well inside that message, and says how many of the oldest it left out
- * (`earlier`); the box's copy keeps the whole report. The list fits the same budget: 100 rows of long titles in
- * three-byte letters would not, so long titles are cut shorter first.
+ * (`earlier`); when not even the newest fits whole, its words are cut to fit, so the latest answer always shows. The
+ * box's copy keeps the whole report. The list fits the same budget: 100 rows of long titles in three-byte letters would
+ * not, so long titles are cut shorter first.
  */
 
 import type { TeamReportsList } from '@whombat/core';
-import { TEAM_REPORT_CLOSED, type TeamReport } from '@whombat/core/domain';
+import { TEAM_REPORT_CLOSED, type TeamReport, type TeamReportMessage } from '@whombat/core/domain';
 import { SESSION_MAX_CONTROL_BYTES } from '@whombat/protocol';
 
 /** The most bytes of UTF-8 JSON an answer with a whole report takes: three quarters of a CONTROL message. */
@@ -17,7 +18,8 @@ const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8
 
 /**
  * The report as one answer carries it: everything but the oldest messages beyond `maxBytes` (counted as the UTF-8 JSON
- * of `{report, earlier}`), and how many of them it left out.
+ * of `{report, earlier}`), and how many of them it left out. When not even the newest message fits, it comes with its
+ * words cut to fit (whole characters, an ellipsis where it was cut).
  */
 export function fitTeamReport(
   report: TeamReport,
@@ -35,7 +37,33 @@ export function fitTeamReport(
     kept += 1;
   }
   if (kept === all.length) return { report, earlier: 0 };
+  const newest = all[all.length - 1];
+  if (kept === 0 && newest) {
+    const room = maxBytes - bytes({ report: { ...report, messages: [] }, earlier: all.length - 1 });
+    const cut = cutMessage(newest, room);
+    if (cut) return { report: { ...report, messages: [cut] }, earlier: all.length - 1 };
+  }
   return { report: { ...report, messages: all.slice(all.length - kept) }, earlier: all.length - kept };
+}
+
+/** The message with as much of its text as fits `room` bytes of JSON, an ellipsis where it was cut; null if none does. */
+function cutMessage(message: TeamReportMessage, room: number): TeamReportMessage | null {
+  if (bytes(message) <= room) return message;
+  const chars = Array.from(message.text);
+  const withFirst = (n: number) => ({
+    ...message,
+    text: `${chars.slice(0, n).join('').trimEnd()}…`,
+  });
+  // The most characters that fit, found by halving: the JSON grows with every character kept.
+  let lo = 0;
+  let hi = chars.length - 1;
+  if (bytes(withFirst(0)) > room) return null;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (bytes(withFirst(mid)) <= room) lo = mid;
+    else hi = mid - 1;
+  }
+  return withFirst(lo);
 }
 
 /** The lengths titles are cut to, one after the other, until the list fits. */

@@ -6,10 +6,12 @@
 import {
   connectionSignature,
   customerSignature,
+  TEAM_REPORT_ANSWER_DAYS,
   TeamReport,
   TeamReportDraft,
   TeamReportList,
   type TeamReportStatus,
+  teamReportCanConfirmNow,
 } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { standInAnswer } from '../managed/dev-standins';
@@ -19,9 +21,9 @@ import type { Services } from '../services';
 import {
   sameTeamReportSummary,
   TEAM_REPORT_NOTICE_WORDS,
-  teamReportEnteredNeedsYou,
   teamReportNoticeTitle,
   teamReportOlderThanCopy,
+  teamReportTellsPerson,
 } from './commands';
 import {
   controlFailure,
@@ -35,7 +37,9 @@ import { fitTeamReport, fitTeamReportsList, TEAM_REPORT_ANSWER_MAX_BYTES } from 
 import {
   TEAM_REPORTS_FIRST_JITTER_MS,
   TEAM_REPORTS_FIRST_MS,
+  TEAM_REPORTS_FIRST_TRIES,
   TEAM_REPORTS_FOLLOW_MS,
+  TEAM_REPORTS_RETRY_MS,
   teamReportsFollowPeriod,
 } from './follow';
 import { teamReportItem } from './inbox';
@@ -77,17 +81,16 @@ describe('what is new to the person', () => {
 
   it('tells them when the team asks something or offers a fix, not when they answered themselves', () => {
     const before = { status: 'investigating', revision: 1 };
-    expect(teamReportEnteredNeedsYou(before, { status: 'needs_information', revision: 2 })).toBe(true);
-    expect(teamReportEnteredNeedsYou(before, { status: 'available', revision: 2 })).toBe(true);
-    expect(teamReportEnteredNeedsYou(before, { status: 'in_progress', revision: 2 })).toBe(false);
-    // Still waiting for the same answer, and a status change without a team change.
-    expect(
-      teamReportEnteredNeedsYou(
-        { status: 'needs_information', revision: 2 },
-        { status: 'needs_information', revision: 3 },
-      ),
-    ).toBe(false);
-    expect(teamReportEnteredNeedsYou(before, { status: 'needs_information', revision: 1 })).toBe(false);
+    expect(teamReportTellsPerson(before, { status: 'needs_information', revision: 2 })).toBe(true);
+    expect(teamReportTellsPerson(before, { status: 'available', revision: 2 })).toBe(true);
+    expect(teamReportTellsPerson(before, { status: 'in_progress', revision: 2 })).toBe(false);
+    // The team asks again while the report waits: told again (each revision once).
+    expect(teamReportTellsPerson({ revision: 2 }, { status: 'needs_information', revision: 3 })).toBe(true);
+    // A status change without a team change: their own answer.
+    expect(teamReportTellsPerson(before, { status: 'needs_information', revision: 1 })).toBe(false);
+    // Seen for the first time already waiting for them.
+    expect(teamReportTellsPerson(null, { status: 'available', revision: 4 })).toBe(true);
+    expect(teamReportTellsPerson(null, { status: 'investigating', revision: 4 })).toBe(false);
   });
 
   it('is said in fixed words that open the report, never the team’s', () => {
@@ -339,6 +342,28 @@ describe('a whole report in one answer', () => {
     expect(tighter.reports[0]?.id).toBe(list.reports[0]?.id);
   });
 
+  it('keeps the newest message, its words cut whole characters at a time, when not even it fits', () => {
+    const clef = '𝄞';
+    const report = {
+      ...longReport(3, 200),
+      messages: [
+        { id: 'm0', author: 'reporter' as const, text: 'First', at: 1_790_000_000 },
+        { id: 'm1', author: 'team' as const, text: clef.repeat(6000), at: 1_790_000_001 },
+      ],
+    };
+    const max = size({ report: { ...report, messages: [] }, earlier: 2 }) + 2_000;
+    const fitted = fitTeamReport(report, max);
+    expect(size(fitted)).toBeLessThanOrEqual(max);
+    expect(fitted.earlier).toBe(1);
+    expect(fitted.report.messages.map((m) => m.id)).toEqual(['m1']);
+    const chars = Array.from(fitted.report.messages[0]?.text ?? '');
+    expect(chars.at(-1)).toBe('…');
+    expect(chars.length).toBeGreaterThan(100);
+    // Four-byte letters are never split: every one before the ellipsis is whole.
+    expect(chars.slice(0, -1).every((c) => c === clef)).toBe(true);
+    expect(TeamReport.safeParse(fitted.report).success).toBe(true);
+  });
+
   it('fits a session message with room to spare for any report the contract allows', () => {
     for (const n of [1, 2, 5, 200]) {
       const fitted = fitTeamReport(longReport(n));
@@ -370,8 +395,10 @@ describe('the box’s copy', () => {
   });
 
   it('needs no write when control’s list says what the copies say', () => {
-    const row = (id: string) =>
-      ({ reportId: id, ...copy }) as unknown as Parameters<typeof teamListMatchesCopies>[1][number];
+    const row = (id: string, copiedAt = 1_790_000_100_000) =>
+      ({ reportId: id, ...copy, copiedAt: new Date(copiedAt) }) as unknown as Parameters<
+        typeof teamListMatchesCopies
+      >[1][number];
     const listed = (id: string, over = {}) => ({
       id,
       number: 1,
@@ -387,17 +414,27 @@ describe('the box’s copy', () => {
     // A copy control no longer lists goes, but only with the whole list.
     expect(teamListMatchesCopies([listed(a)], [row(a), row(b)], true)).toBe(false);
     expect(teamListMatchesCopies([listed(a)], [row(a), row(b)], false)).toBe(true);
+    // A copy made after the list was asked (a report sent meanwhile) isn't missing from it.
+    expect(
+      teamListMatchesCopies([listed(a)], [row(a), row(b, 1_790_000_200_000)], true, 1_790_000_150_000),
+    ).toBe(true);
   });
 });
 
 describe('following the answers', () => {
   it('looks first shortly after start, at a moment of its own, then every ten minutes', () => {
-    expect(teamReportsFollowPeriod(false, 0)).toBe(TEAM_REPORTS_FIRST_MS);
-    expect(teamReportsFollowPeriod(false, 0.999)).toBeLessThan(
+    expect(teamReportsFollowPeriod(0, false, 0)).toBe(TEAM_REPORTS_FIRST_MS);
+    expect(teamReportsFollowPeriod(0, false, 0.999)).toBeLessThan(
       TEAM_REPORTS_FIRST_MS + TEAM_REPORTS_FIRST_JITTER_MS,
     );
-    expect(teamReportsFollowPeriod(false, 0.999)).toBeLessThan(TEAM_REPORTS_FOLLOW_MS / 5);
-    expect(teamReportsFollowPeriod(true)).toBe(TEAM_REPORTS_FOLLOW_MS);
+    expect(teamReportsFollowPeriod(0, false, 0.999)).toBeLessThan(TEAM_REPORTS_FOLLOW_MS / 5);
+    expect(teamReportsFollowPeriod(1, true)).toBe(TEAM_REPORTS_FOLLOW_MS);
+  });
+
+  it('looks again a minute later, a few times, while it doesn’t know whether the person may send', () => {
+    expect(teamReportsFollowPeriod(1, false)).toBe(TEAM_REPORTS_RETRY_MS);
+    expect(teamReportsFollowPeriod(TEAM_REPORTS_FIRST_TRIES - 1, false)).toBe(TEAM_REPORTS_RETRY_MS);
+    expect(teamReportsFollowPeriod(TEAM_REPORTS_FIRST_TRIES, false)).toBe(TEAM_REPORTS_FOLLOW_MS);
   });
 });
 
@@ -451,6 +488,14 @@ describe('the stand-in team', () => {
       report: null,
     });
     expect(() => team.get({ reportId: id })).toThrow(FakeTeamRefusal);
+    // As control: the report's own request, retried after it was taken back, doesn't make it again.
+    team.available = true;
+    team.reason = null;
+    const sent = list.find((r) => r.id === id);
+    const requestId = sent?.number === one.number ? 'r'.repeat(16) : 's'.repeat(16);
+    expect(() => team.create({ requestId, payload })).toThrow(
+      expect.objectContaining({ code: 'report_unknown' }),
+    );
   });
 
   it('answers the manager’s team report paths in development, with control’s refusals', () => {
@@ -472,6 +517,24 @@ describe('the stand-in team', () => {
     );
     expect(unknown.status).toBe(502);
     expect(JSON.stringify(unknown.body)).toContain('report_unknown');
+  });
+});
+
+describe('It works and Still happening', () => {
+  const day = 86_400;
+  const closedAt = 1_790_000_000;
+  it('are offered for a fix to try, and for a closed report until 30 days after it closed', () => {
+    expect(teamReportCanConfirmNow({ status: 'available', updatedAt: closedAt }, closedAt + 90 * day)).toBe(
+      true,
+    );
+    expect(teamReportCanConfirmNow({ status: 'closed', updatedAt: closedAt }, closedAt + 2 * day)).toBe(true);
+    expect(
+      teamReportCanConfirmNow(
+        { status: 'closed', updatedAt: closedAt },
+        closedAt + TEAM_REPORT_ANSWER_DAYS * day + 1,
+      ),
+    ).toBe(false);
+    expect(teamReportCanConfirmNow({ status: 'investigating', updatedAt: closedAt }, closedAt)).toBe(false);
   });
 });
 

@@ -3,7 +3,8 @@
  * development box's manager stand-in answers the team report paths with it, so `pnpm dev` shows the whole way, and tests
  * use it as the fake manager's control. It keeps reports as control would (numbered, only the team's changes counted in
  * `revision`, a request done once per request id, Still happening opening it again as new) and refuses as control
- * does, with its codes. With `replyAfterMs` the
+ * does, with its codes: a new report's request retried after the person took it back answers that it is gone. With
+ * `replyAfterMs` the
  * team answers each new report once, that long after it came, the next time it is asked about: no timers to stop.
  */
 import { randomBytes } from 'node:crypto';
@@ -105,7 +106,12 @@ export class FakeTeam {
   create(input: { requestId: string; payload: string }): { report: string } {
     this.asked.push('create');
     const again = this.#done.get(input.requestId);
-    if (again) return { report: encodeTeamPayload(this.reports.get(again.id) ?? again) };
+    if (again) {
+      // Taken back since: as control, the retry doesn't make it again.
+      const kept = this.reports.get(again.id);
+      if (!kept) throw new FakeTeamRefusal('report_unknown', 'No such report.');
+      return { report: encodeTeamPayload(kept) };
+    }
     // Control says why in its code: the team's switch is `team_reports_unavailable`, the others their own reason.
     if (!this.available)
       throw new FakeTeamRefusal(

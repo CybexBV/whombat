@@ -129,6 +129,8 @@ export const TEAM_REPORT_WORDS = {
   refused: 'Whombat’s servers didn’t take it. Try again in a moment.',
   unknown: 'That report isn’t there any more.',
   closed: 'This report can’t take that now.',
+  /** It works or Still happening, refused a while after the report closed: the team's Whombat watches it no more. */
+  closedLongAgo: 'This report closed a while ago. Send a new report instead.',
   rateLimited: 'That’s a lot for one day. Try again tomorrow.',
   invalid: 'Whombat’s servers didn’t accept those words. Shorten them and try again.',
   draftSent: 'This report was sent already. You’ll find it under Reports.',

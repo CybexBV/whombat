@@ -4,7 +4,8 @@
  * The box keeps a copy of each report as the person last read it: the list shows the copies while control
  * can't be reached, and a report is unread while control's revision is past the one the person read. A new report
  * carries the box's version and update channel besides what the app said about itself. Each send carries one request
- * id for every try of it (the app's, or the draft's), so control takes the words once.
+ * id for every try of it (the app's, or the draft's), so control takes the words once. Each call keeps the copies'
+ * generation from its start (`in-flight.ts`): after every copy was dropped, its answer keeps nothing.
  */
 import { randomBytes } from 'node:crypto';
 import { TEAM_PAYLOAD_REQUEST_MAX_BYTES } from '@whombat/control-contracts/device';
@@ -24,14 +25,14 @@ import {
   TeamReportList,
   type TeamReportStatus,
 } from '@whombat/core/domain';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt, ne } from 'drizzle-orm';
 import type { z } from 'zod';
 import { answerAfterApproval, grantedResult } from '../approvals/result';
 import { approvalThread } from '../approvals/wake';
 import { externalEffect } from '../commit/scope';
 import { approvals, teamReportCopies, teamReportDrafts } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
-import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { ApiError, badRequest, forbidden, notFound } from '../lib/errors';
 import type { Services } from '../services';
 import {
   doneTeamReportDraft,
@@ -39,8 +40,11 @@ import {
   forgetTeamReport,
   keepTeamReport,
   loadDraft,
+  releaseTeamReportDraft,
+  reserveTeamReportDraft,
   sameTeamReportSummary,
   seeTeamReports,
+  type TeamReportDraftWords,
 } from './commands';
 import {
   boxContext,
@@ -53,6 +57,12 @@ import {
   type TeamUse,
   teamPortOf,
 } from './control';
+import {
+  draftSendingHere,
+  draftSendOver,
+  raiseTeamReportsGeneration,
+  teamReportsGeneration,
+} from './in-flight';
 import { decodeTeamPayload, encodeTeamPayload, TeamPayloadError } from './payload';
 import { noteTeamReportWithdrawn, teamReportWithdrawnLately } from './withdrawn';
 
@@ -166,12 +176,13 @@ function listFailureReason(err: unknown): TeamReportsReason {
 
 /**
  * Whether control's list says nothing the copies don't: every report as its copy has it (or older), and with the whole
- * list no copy of a report control no longer has.
+ * list no copy of a report control no longer has, among those the box had before the list was asked (`startedAt`).
  */
 export function teamListMatchesCopies(
   reports: readonly TeamReportList['reports'][number][],
   copies: readonly CopyRow[],
   complete: boolean,
+  startedAt = Number.POSITIVE_INFINITY,
 ): boolean {
   const byId = new Map(copies.map((c) => [c.reportId, c]));
   if (
@@ -183,7 +194,7 @@ export function teamListMatchesCopies(
     return false;
   if (!complete) return true;
   const listed = new Set(reports.map((s) => s.id));
-  return copies.every((c) => listed.has(c.reportId));
+  return copies.every((c) => listed.has(c.reportId) || c.copiedAt.getTime() >= startedAt);
 }
 
 /**
@@ -197,6 +208,9 @@ export async function listTeamReports(
 ): Promise<TeamReportsList> {
   const port = teamPortOf(services, 'read');
   if (!port) return keptList(services, burrowId, 'link_off');
+  // Only copies the box had before the list was asked may go for not being on it.
+  const startedAt = services.clock().getTime();
+  const generation = teamReportsGeneration(services);
   let answer: Awaited<ReturnType<TeamPort['teamReportsList']>>;
   let reports: TeamReportList['reports'];
   let complete: boolean;
@@ -219,8 +233,12 @@ export async function listTeamReports(
   const copies = await teamReportCopiesOf(services, burrowId);
   const before = new Map(copies.map((c) => [c.reportId, c]));
   // Nothing new: nothing to keep, nobody to tell.
-  if (!teamListMatchesCopies(reports, copies, complete))
-    await services.pipeline.commit(seeTeamReports, { reports, complete }, { burrowId, actorId });
+  if (!teamListMatchesCopies(reports, copies, complete, startedAt))
+    await services.pipeline.commit(
+      seeTeamReports,
+      { reports, complete, startedAt, generation },
+      { burrowId, actorId },
+    );
   return {
     available: answer.available,
     reason: answer.reason,
@@ -248,24 +266,25 @@ async function keptReport(
 
 /**
  * Keeps what control answered about a report; the person has read it now. An answer older than the copy (it crossed a
- * newer one) leaves the copy as it is, and the person sees the copy when it holds the whole report. An answer about a
- * report the person took back meanwhile keeps nothing, and the report isn't there for them any more.
+ * newer one) leaves the copy as it is, and the person sees the copy when it holds the whole report at least as new. An
+ * answer about a report the person took back meanwhile keeps nothing, and the report isn't there for them any more. A
+ * call that started before every copy was dropped (`generation`) keeps nothing either, and shows what it was answered.
  */
 async function keep(
   services: Services,
   burrowId: string,
   actorId: string,
   report: TeamReport,
-  sent = false,
+  options: { generation: number; sent?: boolean },
 ): Promise<TeamReport> {
   const kept = await services.pipeline.commit(
     keepTeamReport,
-    { report, read: true, sent },
+    { report, read: true, sent: options.sent ?? false, generation: options.generation },
     { burrowId, actorId },
   );
-  const result = kept.status === 'ok' ? (kept.result as { older?: boolean; withdrawn?: boolean }) : {};
+  const result = kept.status === 'ok' ? (kept.result as { kept?: boolean; withdrawn?: boolean }) : {};
   if (result.withdrawn) throw notFound('Report');
-  if (result.older) return (await keptReport(services, burrowId, report.id)) ?? report;
+  if (result.kept) return (await keptReport(services, burrowId, report.id)) ?? report;
   return report;
 }
 
@@ -288,6 +307,7 @@ export async function getTeamReport(
     if (kept) return kept;
     throw new ApiError('unavailable', TEAM_REPORT_WORDS.linkOff);
   }
+  const generation = teamReportsGeneration(services);
   let report: TeamReport;
   try {
     const answer = await atControl('get', () => port.teamReportsGet({ reportId }), true);
@@ -301,7 +321,7 @@ export async function getTeamReport(
     }
     throw controlFailure(err, 'read');
   }
-  return keep(services, burrowId, actorId, report);
+  return keep(services, burrowId, actorId, report, { generation });
 }
 
 /** Control characters other than tabs and line breaks: the contract refuses them, so they are left out. */
@@ -335,32 +355,52 @@ export async function teamReportDraftFor(
 
 /**
  * Sends the person's report to the team and keeps its copy (read: they wrote it). Made from the assistant's draft
- * (`draftId`), it goes with the draft's request id, so control answers the same report whether the card's yes or the
- * form sent it first, and the draft is done; a draft sent already is refused and nothing goes, and so is the form's
- * send of a draft whose card said yes (the card is sending it: the form's words would be lost). Otherwise the app's
- * `requestId`: the same one again answers the same report. `fromCard`: the card's yes is the one sending it.
+ * (`draftId`), it first reserves the draft with these words (`team_report_draft_reserve`): a draft sent already, or
+ * whose send (the card's yes, or the form on another device) is on its way, is refused and nothing goes. It goes with
+ * the draft's request id, so control answers the same report whichever path sent it; a send that didn't go gives the
+ * draft back, and either path may try again. Otherwise the app's `requestId`: the same one again answers the same
+ * report.
  */
 export async function createTeamReport(
   services: Services,
   burrowId: string,
   actorId: string,
   body: Pick<CreateTeamReportBody, 'kind' | 'text' | 'expected' | 'context' | 'draftId' | 'requestId'>,
-  options: { fromCard?: boolean } = {},
 ): Promise<TeamReport> {
   const port = portOrRefuse(services, 'send');
-  let request = requestIdOf(body.requestId);
-  if (body.draftId) {
-    const made = await loadDraft(services.db, burrowId, body.draftId);
-    if (made.personId !== actorId) throw notFound('Draft');
-    if (made.state === 'sent') throw conflict(TEAM_REPORT_WORDS.draftSent);
-    if (!options.fromCard && made.approvalId && (await cardSaidYes(services, made.approvalId)))
-      throw conflict(TEAM_REPORT_WORDS.draftSending);
-    request = { requestId: draftRequestId(made.id), given: true };
-  }
   const draft = await teamReportDraftFor(services, body);
-  const payload = encodeTeamPayload(draft);
+  if (!body.draftId)
+    return sendTeamReport(services, burrowId, actorId, port, draft, requestIdOf(body.requestId));
+  const made = await loadDraft(services.db, burrowId, body.draftId);
+  if (made.personId !== actorId) throw notFound('Draft');
+  // Too long: refused before the draft is touched.
+  payloadOf(draft);
+  await services.pipeline.commit(
+    reserveTeamReportDraft,
+    { draftId: made.id, kind: draft.kind, text: draft.text, expected: draft.expected },
+    { burrowId, actorId },
+  );
+  return sendReservedDraft(services, burrowId, actorId, made.id, draft);
+}
+
+/** A report as control takes it, within the device op's size. */
+function payloadOf(draft: TeamReportDraft): string {
   if (Buffer.byteLength(JSON.stringify(draft), 'utf8') > TEAM_PAYLOAD_REQUEST_MAX_BYTES)
     throw new ApiError('too_large', 'This report is too long. Shorten it and try again.');
+  return encodeTeamPayload(draft);
+}
+
+/** One new report to control with `request`, its copy kept. */
+async function sendTeamReport(
+  services: Services,
+  burrowId: string,
+  actorId: string,
+  port: TeamPort,
+  draft: TeamReportDraft,
+  request: { requestId: string; given: boolean },
+): Promise<TeamReport> {
+  const generation = teamReportsGeneration(services);
+  const payload = payloadOf(draft);
   let made: TeamReport;
   try {
     const answer = await atControl(
@@ -372,23 +412,49 @@ export async function createTeamReport(
   } catch (err) {
     throw controlFailure(err);
   }
-  const report = await keep(services, burrowId, actorId, made, true);
-  if (body.draftId)
-    await services.pipeline.commit(
-      doneTeamReportDraft,
-      { draftId: body.draftId, state: 'sent', reportId: report.id },
-      { burrowId, actorId },
-    );
-  return report;
+  return keep(services, burrowId, actorId, made, { generation, sent: true });
 }
 
-/** Whether the card asking about a draft was answered yes: its send is on its way. */
-async function cardSaidYes(services: Services, approvalId: string): Promise<boolean> {
-  const [approval] = await services.db
-    .select({ state: approvals.state })
-    .from(approvals)
-    .where(eq(approvals.id, approvalId));
-  return approval?.state === 'approved';
+/**
+ * The reserved draft goes as the person's report, with the draft's request id. Sent: the draft is done (its card
+ * withdrawn when the form sent it) and the copy kept. Not sent: the draft waits again, and the error is the caller's.
+ */
+async function sendReservedDraft(
+  services: Services,
+  burrowId: string,
+  personId: string,
+  draftId: string,
+  draft: TeamReportDraft,
+): Promise<TeamReport> {
+  const commit = { burrowId, actorId: personId };
+  const generation = teamReportsGeneration(services);
+  try {
+    let made: TeamReport;
+    try {
+      const port = portOrRefuse(services, 'send');
+      const payload = payloadOf(draft);
+      const answer = await atControl(
+        'create',
+        () => port.teamReportsCreate({ requestId: draftRequestId(draftId), payload }),
+        true,
+      );
+      made = decoded(TeamReport, answer.report);
+    } catch (err) {
+      await services.pipeline
+        .commit(releaseTeamReportDraft, { draftId }, commit)
+        .catch((e) => services.log.warn({ err: String(e) }, 'team reports: a draft wasn’t given back'));
+      throw controlFailure(err);
+    }
+    // Control has it: the draft is done whatever happens to the copy.
+    await services.pipeline.commit(
+      doneTeamReportDraft,
+      { draftId, state: 'sent', reportId: made.id },
+      commit,
+    );
+    return await keep(services, burrowId, personId, made, { generation, sent: true });
+  } finally {
+    draftSendOver(services, draftId);
+  }
 }
 
 /** The person answers the team in one of their reports; `requestId` as with a new report. */
@@ -405,6 +471,7 @@ export async function replyToTeamReport(
   if (!words) throw badRequest('Write your answer first.');
   const payload = encodeTeamPayload({ text: words });
   const request = requestIdOf(requestId);
+  const generation = teamReportsGeneration(services);
   let report: TeamReport;
   try {
     const answer = await atControl(
@@ -417,13 +484,14 @@ export async function replyToTeamReport(
     if (refusalCode(err) === 'report_unknown') return gone(services, burrowId, actorId, reportId);
     throw controlFailure(err);
   }
-  return keep(services, burrowId, actorId, report);
+  return keep(services, burrowId, actorId, report, { generation });
 }
 
 /**
  * The fix works, the problem still happens, or the person takes the report back (deleted at control at once,
  * and its copy here); null after a withdrawal. Withdrawing works whenever control knows the box; the others need Link
- * on. `requestId` as with a new report: pressing It works again counts once.
+ * on, and control refuses them a while after the report closed (the team's Whombat stops watching it then).
+ * `requestId` as with a new report: pressing It works again counts once.
  */
 export async function actOnTeamReport(
   services: Services,
@@ -436,6 +504,7 @@ export async function actOnTeamReport(
   const withdraw = action === 'withdraw';
   const port = portOrRefuse(services, withdraw ? 'read' : 'send');
   const request = requestIdOf(requestId);
+  const generation = teamReportsGeneration(services);
   let report: TeamReport | null;
   try {
     const answer = await atControl(
@@ -452,6 +521,8 @@ export async function actOnTeamReport(
     // Taking back a report control no longer has: it is gone already.
     if (refusalCode(err) === 'report_unknown' && withdraw) report = null;
     else if (refusalCode(err) === 'report_unknown') return gone(services, burrowId, actorId, reportId);
+    else if (refusalCode(err) === 'report_closed' && !withdraw)
+      throw new ApiError('conflict', TEAM_REPORT_WORDS.closedLongAgo);
     else throw controlFailure(err, withdraw ? 'read' : 'send');
   }
   if (report === null) {
@@ -460,13 +531,13 @@ export async function actOnTeamReport(
     await services.pipeline.commit(forgetTeamReport, { reportId, withdrawn: true }, { burrowId, actorId });
     return null;
   }
-  return keep(services, burrowId, actorId, report);
+  return keep(services, burrowId, actorId, report, { generation });
 }
 
 /**
  * Every copy goes, in every burrow (and with `drafts`, the assistant's drafts not sent yet): a backup restored onto new
  * hardware starts without the earlier box's reports, and a box taken out of Link keeps none, as control keeps none of
- * it any more.
+ * it any more. Answers to calls that started before keep nothing.
  */
 export async function forgetAllTeamReports(
   services: Services,
@@ -474,6 +545,7 @@ export async function forgetAllTeamReports(
 ): Promise<number> {
   // What control said about sending was said to the earlier box, or to one in Link.
   heard.delete(services);
+  raiseTeamReportsGeneration(services);
   const withCopies = await services.db
     .selectDistinct({ burrowId: teamReportCopies.burrowId })
     .from(teamReportCopies);
@@ -481,7 +553,7 @@ export async function forgetAllTeamReports(
     ? await services.db
         .selectDistinct({ burrowId: teamReportDrafts.burrowId })
         .from(teamReportDrafts)
-        .where(eq(teamReportDrafts.state, 'waiting'))
+        .where(ne(teamReportDrafts.state, 'sent'))
     : [];
   const burrowIds = new Set([...withCopies, ...withDrafts].map((r) => r.burrowId));
   let gone = 0;
@@ -513,7 +585,10 @@ export async function dropTeamReportsForNewHardware(services: Services): Promise
 
 /* The assistant's drafts ------------------------------------------------------------------------------------------- */
 
-/** A draft as the form opens it; done once sent or declined. Only the person it is for sees it. */
+/**
+ * A draft as the form opens it, with the words it was last sent with when a send didn't go; done once sent or declined
+ * (a send on its way, or one that failed, isn't done). Only the person it is for sees it.
+ */
 export async function teamReportDraftView(
   services: Services,
   burrowId: string,
@@ -522,51 +597,59 @@ export async function teamReportDraftView(
 ): Promise<TeamReportDraftView> {
   const draft = await loadDraft(services.db, burrowId, draftId);
   if (draft.personId !== personId) throw notFound('Draft');
-  let declined = false;
-  if (draft.state === 'waiting' && draft.approvalId) {
+  let declined = draft.state === 'declined';
+  if (draft.state !== 'sent' && draft.approvalId) {
     const [approval] = await services.db
       .select({ state: approvals.state })
       .from(approvals)
       .where(eq(approvals.id, draft.approvalId));
-    declined = approval?.state === 'declined';
+    declined ||= approval?.state === 'declined';
   }
   return {
     id: draft.id,
     kind: draft.kind as TeamReportDraftView['kind'],
     text: draft.text,
     expected: draft.expected,
-    done: draft.state !== 'waiting' || declined,
+    done: draft.state === 'sent' || declined,
   };
 }
 
 /**
- * After the person's yes to the assistant's card: the draft goes to the team as the person's report (with the draft's
- * request id, so a second try, or the form's send of it, sends nothing twice), and the assistant is woken with its
- * number, or why not.
+ * After the person's yes to the assistant's card (its command reserved the draft with the words the card quoted): the
+ * draft goes to the team as the person's report, with the draft's request id, so a second try, or the form's send of
+ * it, sends nothing twice. The assistant is woken with its number, or why not; a send that didn't go (or a draft the
+ * form is sending or sent) is thrown, so the approval's execution fails and the card says so.
  */
 export async function sendDraftForAssistant(
   services: Services,
   burrowId: string,
-  call: { draftId: string; agentId: string; approvalId: string | null; conversationId: string | null },
+  call: {
+    draftId: string;
+    personId: string;
+    agentId: string;
+    approvalId: string | null;
+    conversationId: string | null;
+    words: TeamReportDraftWords;
+    /** Why the draft couldn't be reserved, in the person's words; null: it was. */
+    refused: string | null;
+  },
 ): Promise<void> {
   let result: ReturnType<typeof grantedResult>;
   let fallback: string;
+  let failure: ApiError | null = null;
   try {
-    const draft = await loadDraft(services.db, burrowId, call.draftId);
-    if (draft.state !== 'waiting') throw new ApiError('conflict', 'This report was sent already.');
-    const report = await createTeamReport(
-      services,
-      burrowId,
-      draft.personId,
-      {
-        kind: draft.kind as TeamReportDraft['kind'],
-        text: draft.text,
-        expected: draft.expected,
-        context: {},
-        draftId: draft.id,
-      },
-      { fromCard: true },
-    );
+    if (call.refused !== null) throw new ApiError('conflict', call.refused);
+    let draft: TeamReportDraft;
+    try {
+      draft = await teamReportDraftFor(services, { ...call.words, context: {} });
+    } catch (err) {
+      await services.pipeline
+        .commit(releaseTeamReportDraft, { draftId: call.draftId }, { burrowId, actorId: call.personId })
+        .catch(() => {});
+      draftSendOver(services, call.draftId);
+      throw err;
+    }
+    const report = await sendReservedDraft(services, burrowId, call.personId, call.draftId, draft);
     // For the assistant: the number only; the team's answer shows on the report's page.
     result = grantedResult(
       'done',
@@ -574,23 +657,52 @@ export async function sendDraftForAssistant(
     );
     fallback = `I sent it to the Whombat Team as report #${report.number}. Their answer shows under Reports.`;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : TEAM_REPORT_WORDS.refused;
-    result = grantedResult('failed', message);
-    fallback = `I couldn’t send it to the Whombat Team. ${message}`;
+    failure = err instanceof ApiError ? err : new ApiError('unavailable', TEAM_REPORT_WORDS.refused);
+    result = grantedResult('failed', failure.message);
+    fallback = `I couldn’t send it to the Whombat Team. ${failure.message}`;
   }
-  if (!call.conversationId) return;
-  const threadRootId = call.approvalId
-    ? await approvalThread(services.db, call.approvalId, call.conversationId).catch(() => null)
-    : null;
-  await answerAfterApproval(services, {
-    burrowId,
-    agentId: call.agentId,
-    approvalId: call.approvalId,
-    postIn: call.conversationId,
-    threadRootId,
-    result,
-    fallback,
-  });
+  if (call.conversationId) {
+    const threadRootId = call.approvalId
+      ? await approvalThread(services.db, call.approvalId, call.conversationId).catch(() => null)
+      : null;
+    await answerAfterApproval(services, {
+      burrowId,
+      agentId: call.agentId,
+      approvalId: call.approvalId,
+      postIn: call.conversationId,
+      threadRootId,
+      result,
+      fallback,
+    });
+  }
+  if (failure) throw failure;
+}
+
+/**
+ * Drafts left `sending` by a process that stopped (no send here holds them) wait again, so the card's yes or the form
+ * can send them. Answers how many.
+ */
+export async function releaseStaleDraftSends(services: Services): Promise<number> {
+  const rows = await services.db
+    .select({
+      id: teamReportDrafts.id,
+      burrowId: teamReportDrafts.burrowId,
+      personId: teamReportDrafts.personId,
+    })
+    .from(teamReportDrafts)
+    .where(eq(teamReportDrafts.state, 'sending'))
+    .limit(100);
+  let released = 0;
+  for (const row of rows) {
+    if (draftSendingHere(services, row.id)) continue;
+    const res = await services.pipeline.commit(
+      releaseTeamReportDraft,
+      { draftId: row.id },
+      { burrowId: row.burrowId, actorId: row.personId },
+    );
+    if (res.status === 'ok' && (res.result as { released: boolean }).released) released += 1;
+  }
+  return released;
 }
 
 /** The person may read and act on the reports of this Whombat: people only. */
@@ -606,6 +718,6 @@ export async function oldDrafts(
   return services.db
     .select({ id: teamReportDrafts.id, burrowId: teamReportDrafts.burrowId })
     .from(teamReportDrafts)
-    .where(lt(teamReportDrafts.createdAt, before))
+    .where(and(lt(teamReportDrafts.createdAt, before), ne(teamReportDrafts.state, 'sending')))
     .limit(500);
 }

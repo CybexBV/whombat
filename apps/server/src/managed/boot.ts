@@ -28,7 +28,7 @@ import type { Services } from '../services';
 import { useShares } from '../shares/publish';
 import { startShareRound } from '../shares/round';
 import { teamReportsLeftLink, useTeamReports } from '../team-reports/control';
-import { startTeamReportsFollow } from '../team-reports/follow';
+import { startTeamReportsFollow, teamReportsLinkChanged } from '../team-reports/follow';
 import { registerTeamReportsSource } from '../team-reports/inbox';
 import { dropTeamReportsForNewHardware, forgetAllTeamReports } from '../team-reports/service';
 import { AdminSocket } from './admin-socket';
@@ -162,6 +162,7 @@ export async function startManaged(
       void forgetAllTeamReports(services, { drafts: false }).catch((err) =>
         services.log.warn({ err: String(err) }, 'team reports: the copies weren’t dropped'),
       );
+    else void teamReportsLinkChanged(services);
   });
   registerTeamReportsSource();
   startTeamReportsFollow(services);

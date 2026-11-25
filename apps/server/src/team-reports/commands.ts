@@ -2,16 +2,20 @@
  * Reports to the Whombat Team through the commit pipeline (docs/decisions/team-reports.md). Control keeps the reports;
  * the calls to it happen outside any transaction (`service.ts`), and these commands keep what it answered:
  *
- * - `team_report_keep`: a whole report as control answered it, and whether the person has read it now;
- * - `team_report_seen`: control's list. A team change shows as unread; a status entering a question or a fix to try is
- *   an Inbox item and a notification in fixed words, never the team's;
- * - `team_report_forget`: a report that is gone (withdrawn, or no longer at control) leaves the box at once;
+ * - `team_report_keep`: a whole report as control answered it, and whether the person has read it now (its
+ *   notifications are read then too);
+ * - `team_report_seen`: control's list. A team change shows as unread; a report waiting for the person (a question or
+ *   a fix to try) that the team changed is an Inbox item and a notification in fixed words, never the team's;
+ * - `team_report_forget`: a report that is gone (withdrawn, or no longer at control) leaves the box at once, with its
+ *   notifications;
  * - `team_reports_drop`: every copy goes (a backup restored onto new hardware, a box taken out of Link).
  *
  * The assistant drafts: `team_report_draft_save` keeps its draft and `team_report_draft_send` always asks the
  * person on a card that quotes exactly what goes, whatever the assistant's keys say; their yes sends it as them
- * (`sendDraftForAssistant`), and the card's Edit opens the form with the draft. Sent from the form, the card that
- * still asks about it is withdrawn (`team_report_draft_done`).
+ * (`sendDraftForAssistant`), and the card's Edit opens the form with the draft. Either way a send first reserves the
+ * draft (`sending`, with the words it sends), so the card and the form never send it at once; a failed send gives it
+ * back (`team_report_draft_release`). Sent from the form, the card that still asks about it is withdrawn
+ * (`team_report_draft_done`).
  */
 import { randomBytes } from 'node:crypto';
 import {
@@ -26,19 +30,23 @@ import {
   TeamReportSummary,
   teamReportNeedsYou,
 } from '@whombat/core/domain';
-import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, ne, notInArray, or, type SQL, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { publishApproval, syncPlanSteps } from '../approvals/engine';
 import { type ApplyContext, defineCommand, type KeyRequirement } from '../commit/types';
 import type { Db, Tx } from '../db/client';
 import { approvals, notifications, teamReportCopies, teamReportDrafts } from '../db/schema/index';
+import { publishNotificationsRead } from '../domain/notification-read';
 import { notifyInCommit } from '../domain/notify';
+import { GENERIC_PUSH_TITLE } from '../domain/push-preview';
 import { thePerson } from '../domain/the-person';
 import { homeAudience, publishHomeChanged } from '../home/notify';
-import { conflict, forbidden, notFound } from '../lib/errors';
+import { ApiError, conflict, forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { toApproval } from '../read/work';
 import { quoted } from '../trackers/reply';
+import { TEAM_REPORT_WORDS } from './control';
+import { noteDraftSending, teamReportsGeneration } from './in-flight';
 import { sendDraftForAssistant } from './service';
 import { teamReportWithdrawnLately } from './withdrawn';
 
@@ -128,16 +136,16 @@ export function sameTeamReportSummary(
 }
 
 /**
- * Whether control's newer summary entered a status that waits for the person by a change of the team's (its revision
- * moved): the person's own reply moves no revision, so it never notifies them.
+ * Whether control's summary is something to tell the person: the report waits for them (a question, a fix to try) and
+ * the team changed it since the box last saw it (its revision moved), or the box sees it for the first time
+ * (`before` null). The revision counts the team's changes only, so a move is always the team's newest word, and the
+ * person's own reply never notifies them; each revision is told once (`team-report:<id>:<revision>`).
  */
-export function teamReportEnteredNeedsYou(
-  before: Pick<CopyRow, 'status' | 'revision'>,
+export function teamReportTellsPerson(
+  before: Pick<CopyRow, 'revision'> | null,
   after: Pick<Summary, 'status' | 'revision'>,
 ): boolean {
-  return (
-    teamReportNeedsYou(after.status) && after.status !== before.status && after.revision > before.revision
-  );
+  return teamReportNeedsYou(after.status) && (!before || after.revision > before.revision);
 }
 
 /** Home reads its Inbox again (an item came or went). */
@@ -146,31 +154,56 @@ async function inboxChanged(ctx: ApplyContext): Promise<void> {
 }
 
 /**
- * The person's report as the box keeps it now: the whole report, and whether they read it. An answer older than the
- * copy (`older`) leaves the copy as it is; the person has still read what it shows. A report the person took back a
- * moment ago (an answer that left before the withdrawal) is kept no more (`withdrawn`).
+ * Whether a call that started at `generation` may still write copies: a drop of every copy since (the box left Link,
+ * or moved to new hardware) makes its answer one about reports the box no longer keeps.
+ */
+function droppedSince(ctx: ApplyContext, generation: number | undefined): boolean {
+  return generation !== undefined && generation !== teamReportsGeneration(ctx.services);
+}
+
+/** The copy of the whole report the person sees instead of an older answer, when it is at least as new. */
+function keptShown(had: CopyRow, r: Pick<Summary, 'revision'>): TeamReport | null {
+  const kept = TeamReport.safeParse(had.report);
+  return kept.success && kept.data.revision >= r.revision ? kept.data : null;
+}
+
+/**
+ * The person's report as the box keeps it now: the whole report, and whether they read it (its notifications are read
+ * with it). An answer older than the copy (`older`) leaves the copy as it is, and the person reads the copy's whole
+ * report when it is at least as new as the answer (`kept`), else the answer. A report the person took back a moment
+ * ago (an answer that left before the withdrawal) is kept no more (`withdrawn`), and nothing is kept from a call that
+ * started before every copy was dropped (`dropped`).
  */
 export const keepTeamReport = defineCommand({
   name: 'team_report_keep',
-  schema: z.object({ report: TeamReport, read: z.boolean(), sent: z.boolean().default(false) }),
+  schema: z.object({
+    report: TeamReport,
+    read: z.boolean(),
+    sent: z.boolean().default(false),
+    generation: z.number().int().min(0).optional(),
+  }),
   async apply(tx, ctx, input) {
     const r = input.report;
-    if (teamReportWithdrawnLately(ctx.services, ctx.burrow.id, r.id))
-      return { reportId: r.id, older: false, withdrawn: true };
+    const nothing = { reportId: r.id, older: false, kept: false, withdrawn: false, dropped: false };
+    if (teamReportWithdrawnLately(ctx.services, ctx.burrow.id, r.id)) return { ...nothing, withdrawn: true };
+    if (droppedSince(ctx, input.generation)) return { ...nothing, dropped: true };
     const [had] = await tx
       .select()
       .from(teamReportCopies)
       .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)))
       .for('update');
-    const readRevision = input.read ? Math.max(had?.readRevision ?? 0, r.revision) : (had?.readRevision ?? 0);
+    if (input.read) await settleTeamReportNotices(ctx, [r.id], 'read');
     if (had && teamReportOlderThanCopy(had, r)) {
+      const shown = keptShown(had, r);
+      const readRevision = input.read ? Math.max(had.readRevision, (shown ?? r).revision) : had.readRevision;
       if (readRevision !== had.readRevision)
         await tx
           .update(teamReportCopies)
           .set({ readRevision })
           .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)));
-      return { reportId: r.id, older: true, withdrawn: false };
+      return { ...nothing, older: true, kept: shown !== null };
     }
+    const readRevision = input.read ? Math.max(had?.readRevision ?? 0, r.revision) : (had?.readRevision ?? 0);
     // Control's revision only grows: an answer that crossed a newer list doesn't move it back.
     const revision = Math.max(had?.revision ?? 0, r.revision);
     const values = { ...summaryColumns(r), revision, readRevision, report: r, copiedAt: ctx.now };
@@ -199,7 +232,7 @@ export const keepTeamReport = defineCommand({
       });
     if (teamReportNeedsYou(r.status) !== (had ? teamReportNeedsYou(had.status as TeamReportStatus) : false))
       await inboxChanged(ctx);
-    return { reportId: r.id, older: false, withdrawn: false };
+    return nothing;
   },
 });
 
@@ -213,18 +246,24 @@ export function teamReportLink(reportId: string) {
 
 /**
  * Control's list of the box's reports: the copies take its summaries (a report the box didn't know comes in unread
- * when the team changed it), and with the whole list (`complete`) copies of reports control no longer keeps go. A
- * report that now waits for the person is told to them once, in fixed words. A report the person took back a moment
- * ago (a list that left before the withdrawal) comes back neither as a copy nor as a notification.
+ * when the team changed it), and with the whole list (`complete`) copies of reports control no longer keeps go, with
+ * their notifications; only copies the box had before the list was asked (`startedAt`, ms), never one a send made
+ * while it was on its way. A report waiting for the person is told to them in fixed words: when the box first sees it
+ * so, and each time the team changes it while it waits. A report the person took back a moment ago (a list that left
+ * before the withdrawal) comes back neither as a copy nor as a notification, and a list that started before every
+ * copy was dropped keeps nothing (`generation`).
  */
 export const seeTeamReports = defineCommand({
   name: 'team_report_seen',
   schema: z.object({
     reports: z.array(TeamReportSummary).max(TEAM_REPORTS_LIST_MAX),
     complete: z.boolean(),
+    startedAt: z.number().int().min(0).optional(),
+    generation: z.number().int().min(0).optional(),
   }),
   async apply(tx, ctx, input) {
     const burrowId = ctx.burrow.id;
+    if (droppedSince(ctx, input.generation)) return { told: 0, gone: 0, dropped: true };
     const rows = await tx
       .select()
       .from(teamReportCopies)
@@ -248,6 +287,7 @@ export const seeTeamReports = defineCommand({
           copiedAt: ctx.now,
         });
         changed ||= teamReportNeedsYou(s.status);
+        if (teamReportTellsPerson(null, s)) tell.push(s);
         continue;
       }
       if (sameTeamReportSummary(had, s)) continue;
@@ -256,7 +296,7 @@ export const seeTeamReports = defineCommand({
         .set({ ...summaryColumns(s), revision: Math.max(had.revision, s.revision), copiedAt: ctx.now })
         .where(and(eq(teamReportCopies.burrowId, burrowId), eq(teamReportCopies.reportId, s.id)));
       if (teamReportNeedsYou(s.status) !== teamReportNeedsYou(had.status as TeamReportStatus)) changed = true;
-      if (teamReportEnteredNeedsYou(had, s)) tell.push(s);
+      if (teamReportTellsPerson(had, s)) tell.push(s);
     }
     let gone = 0;
     if (input.complete) {
@@ -267,16 +307,26 @@ export const seeTeamReports = defineCommand({
           and(
             eq(teamReportCopies.burrowId, burrowId),
             kept.length ? notInArray(teamReportCopies.reportId, kept) : undefined,
+            // A copy made while the list was on its way (a new report) isn't in it yet.
+            input.startedAt !== undefined
+              ? lt(teamReportCopies.copiedAt, new Date(input.startedAt))
+              : undefined,
           ),
         )
-        .returning({ status: teamReportCopies.status });
+        .returning({ reportId: teamReportCopies.reportId, status: teamReportCopies.status });
       gone = left.length;
       if (left.some((l) => teamReportNeedsYou(l.status as TeamReportStatus))) changed = true;
+      await settleTeamReportNotices(
+        ctx,
+        left.map((l) => l.reportId),
+        'remove',
+      );
     }
     const person = tell.length ? await thePerson(tx, burrowId) : null;
+    let told = 0;
     for (const s of person ? tell : []) {
       const words = TEAM_REPORT_NOTICE_WORDS[s.status as 'needs_information' | 'available'];
-      const dedupKey = `team-report:${s.id}:${s.revision}`;
+      const dedupKey = `${teamReportNoticePrefix(s.id)}${s.revision}`;
       if (!person || (await notifiedAlready(tx, person.id, dedupKey))) continue;
       await notifyInCommit(ctx, {
         burrowId,
@@ -289,13 +339,83 @@ export const seeTeamReports = defineCommand({
         link: teamReportLink(s.id),
         createdAt: ctx.now,
         dedupKey,
-        group: `team-report:${s.id}`,
+        group: teamReportPushGroup(s.id),
       });
+      told += 1;
     }
     if (changed || tell.length) await inboxChanged(ctx);
-    return { told: person ? tell.length : 0, gone };
+    return { told, gone, dropped: false };
   },
 });
+
+/** The start of the dedup key of a report's notifications, one per revision (`team-report:<id>:<revision>`). */
+const teamReportNoticePrefix = (reportId: string) => `team-report:${reportId}:`;
+/** A report's notifications on the person's phones, as one group. */
+const teamReportPushGroup = (reportId: string) => `team-report:${reportId}`;
+
+/**
+ * The person read a report (`read`), or it is gone (`remove`: withdrawn, no longer at control, every copy dropped): its
+ * notifications are read, the person's devices told (`notification.read`) and, on a managed Whombat, its push leaves
+ * their phones, as reading a message's does; gone, they are deleted too. Nothing is said.
+ */
+async function settleTeamReportNotices(
+  ctx: ApplyContext,
+  reportIds: readonly string[] | 'all',
+  how: 'read' | 'remove',
+): Promise<number> {
+  if (reportIds !== 'all' && !reportIds.length) return 0;
+  const about: SQL | undefined =
+    reportIds === 'all'
+      ? sql`starts_with(${notifications.dedupKey}, 'team-report:')`
+      : or(
+          ...reportIds.map(
+            (id) => sql`starts_with(${notifications.dedupKey}, ${teamReportNoticePrefix(id)})`,
+          ),
+        );
+  const read = await ctx.tx
+    .update(notifications)
+    .set({ readAt: ctx.now })
+    .where(and(eq(notifications.burrowId, ctx.burrow.id), about, isNull(notifications.readAt)))
+    .returning({
+      id: notifications.id,
+      principalId: notifications.principalId,
+      dedupKey: notifications.dedupKey,
+    });
+  if (how === 'remove')
+    await ctx.tx.delete(notifications).where(and(eq(notifications.burrowId, ctx.burrow.id), about));
+  if (!read.length) return 0;
+  const byPerson = new Map<string, string[]>();
+  for (const r of read) byPerson.set(r.principalId, [...(byPerson.get(r.principalId) ?? []), r.id]);
+  for (const [principalId, ids] of byPerson) await publishNotificationsRead(ctx, principalId, { ids });
+  const control = ctx.services.push.control;
+  if (control) {
+    const slug = ctx.burrow.slug;
+    const clears = new Set(
+      read.map((r) => {
+        const key = r.dedupKey ?? '';
+        return `${r.principalId}|${key.slice(0, key.lastIndexOf(':'))}`;
+      }),
+    );
+    ctx.background('team report push cleared', async () => {
+      for (const clear of clears) {
+        const [principalId = '', group = ''] = clear.split('|');
+        await control(
+          [principalId],
+          {
+            burrow: slug,
+            notificationId: null,
+            kind: 'needs_you',
+            title: GENERIC_PUSH_TITLE,
+            body: '',
+            path: `/${slug}`,
+          },
+          { group, clear: true },
+        );
+      }
+    });
+  }
+  return read.length;
+}
 
 async function notifiedAlready(tx: Tx, principalId: string, dedupKey: string): Promise<boolean> {
   const [row] = await tx
@@ -306,7 +426,10 @@ async function notifiedAlready(tx: Tx, principalId: string, dedupKey: string): P
   return !!row;
 }
 
-/** A report that is gone: its copy leaves the box. `withdrawn`: the person took it back (the log says so). */
+/**
+ * A report that is gone: its copy and its notifications leave the box. `withdrawn`: the person took it back (the log
+ * says so).
+ */
 export const forgetTeamReport = defineCommand({
   name: 'team_report_forget',
   schema: z.object({ reportId: z.string().min(1).max(64), withdrawn: z.boolean() }),
@@ -323,15 +446,16 @@ export const forgetTeamReport = defineCommand({
         where: 'Reports',
         payload: { reportId: input.reportId, number: gone?.number ?? null, kind: gone?.kind ?? null },
       });
+    await settleTeamReportNotices(ctx, [input.reportId], 'remove');
     if (gone && teamReportNeedsYou(gone.status as TeamReportStatus)) await inboxChanged(ctx);
     return { reportId: input.reportId, gone: !!gone };
   },
 });
 
 /**
- * Every copy of the burrow's reports goes, and with `drafts` the assistant's drafts not sent yet: a backup restored onto
- * new hardware starts without the earlier box's reports, and a box taken out of Link keeps none. The cards still asking
- * about those drafts are withdrawn with them, so no yes is left that would send nothing.
+ * Every copy of the burrow's reports goes, with their notifications, and with `drafts` the assistant's drafts not sent
+ * yet: a backup restored onto new hardware starts without the earlier box's reports, and a box taken out of Link keeps
+ * none. The cards still asking about those drafts are withdrawn with them, so no yes is left that would send nothing.
  */
 export const dropTeamReports = defineCommand({
   name: 'team_reports_drop',
@@ -341,10 +465,11 @@ export const dropTeamReports = defineCommand({
       .delete(teamReportCopies)
       .where(eq(teamReportCopies.burrowId, ctx.burrow.id))
       .returning({ status: teamReportCopies.status });
+    await settleTeamReportNotices(ctx, 'all', 'remove');
     const drafts = input.drafts
       ? await tx
           .delete(teamReportDrafts)
-          .where(and(eq(teamReportDrafts.burrowId, ctx.burrow.id), eq(teamReportDrafts.state, 'waiting')))
+          .where(and(eq(teamReportDrafts.burrowId, ctx.burrow.id), ne(teamReportDrafts.state, 'sent')))
           .returning({ id: teamReportDrafts.id, approvalId: teamReportDrafts.approvalId })
       : [];
     let withdrawn = 0;
@@ -402,9 +527,99 @@ export function draftCardText(draft: Pick<DraftRow, 'kind' | 'text' | 'expected'
   return `I wrote down ${what} for the Whombat Team. Nothing goes until you say yes.\n\n${quoted(draft.text)}${expected}`;
 }
 
+/** What one send of a draft carries: the kind and the words, exactly. */
+export const TeamReportDraftWords = z.object({
+  kind: TeamReportKind,
+  text: z.string().trim().min(1).max(TEAM_REPORT_TEXT_MAX),
+  expected: z.string().trim().max(TEAM_REPORT_EXPECTED_MAX),
+});
+export type TeamReportDraftWords = z.output<typeof TeamReportDraftWords>;
+
+/** The draft, locked for this commit. */
+async function lockDraft(ctx: ApplyContext, draftId: string): Promise<DraftRow> {
+  const [draft] = await ctx.tx
+    .select()
+    .from(teamReportDrafts)
+    .where(and(eq(teamReportDrafts.id, draftId), eq(teamReportDrafts.burrowId, ctx.burrow.id)))
+    .for('update');
+  if (!draft) throw notFound('Draft');
+  return draft;
+}
+
+/**
+ * One send of the draft may go now: it becomes `sending` with the words it sends, in the same commit, and this process
+ * notes it sends it. Refused while another send of it is on its way (the card's yes or the form, on any device) and once
+ * it went: control would answer the same report for both, and the other's words would be lost.
+ */
+async function reserveDraft(ctx: ApplyContext, draft: DraftRow, words: TeamReportDraftWords): Promise<void> {
+  if (draft.state === 'sent') throw conflict(TEAM_REPORT_WORDS.draftSent);
+  if (draft.state === 'sending') throw conflict(TEAM_REPORT_WORDS.draftSending);
+  await ctx.tx
+    .update(teamReportDrafts)
+    .set({ state: 'sending', kind: words.kind, text: words.text, expected: words.expected })
+    .where(eq(teamReportDrafts.id, draft.id));
+  noteDraftSending(ctx.services, draft.id);
+}
+
+/** The form sends the person's words for the assistant's draft: it is theirs to send, and only one send goes at once. */
+export const reserveTeamReportDraft = defineCommand({
+  name: 'team_report_draft_reserve',
+  schema: TeamReportDraftWords.extend({ draftId: z.string().min(8).max(64) }),
+  async apply(_tx, ctx, input) {
+    const draft = await lockDraft(ctx, input.draftId);
+    if (ctx.actor.kind !== 'person' || ctx.actor.id !== draft.personId) throw notFound('Draft');
+    await reserveDraft(ctx, draft, input);
+    return { draftId: draft.id };
+  },
+});
+
+/** A send of the draft didn't go: it waits again, and the card's yes or the form may try once more. */
+export const releaseTeamReportDraft = defineCommand({
+  name: 'team_report_draft_release',
+  schema: z.object({ draftId: z.string().min(8).max(64) }),
+  async apply(tx, ctx, input) {
+    const back = await tx
+      .update(teamReportDrafts)
+      .set({ state: 'waiting' })
+      .where(
+        and(
+          eq(teamReportDrafts.id, input.draftId),
+          eq(teamReportDrafts.burrowId, ctx.burrow.id),
+          eq(teamReportDrafts.state, 'sending'),
+        ),
+      )
+      .returning({ id: teamReportDrafts.id });
+    return { released: back.length > 0 };
+  },
+});
+
+/** The words the card quoted (its approval's data), which its yes sends; the draft's own when it carries none. */
+async function cardWords(ctx: ApplyContext, draft: DraftRow): Promise<TeamReportDraftWords> {
+  const own = { kind: draft.kind, text: draft.text, expected: draft.expected };
+  if (!ctx.approvalId) return TeamReportDraftWords.parse(own);
+  const [row] = await ctx.tx
+    .select({ action: approvals.action })
+    .from(approvals)
+    .where(and(eq(approvals.id, ctx.approvalId), eq(approvals.burrowId, ctx.burrow.id)));
+  const action = row?.action;
+  const data =
+    action?.type === 'custom' && action.params.name === TEAM_REPORT_ACTION
+      ? ((action.params.data ?? {}) as Record<string, unknown>)
+      : {};
+  const quotedWords = TeamReportDraftWords.safeParse({
+    kind: data.kind ?? draft.kind,
+    text: data.text,
+    expected: data.expected ?? '',
+  });
+  return quotedWords.success ? quotedWords.data : TeamReportDraftWords.parse(own);
+}
+
 /**
  * Sending the assistant's draft: always a card first, whatever its keys say. On the person's yes this runs again as the
- * assistant with the approval, and the report goes out after the commit (`sendDraftForAssistant`).
+ * assistant with the approval: it reserves the draft with the words the card quoted, and the report goes out right
+ * after the commit (`sendDraftForAssistant`, a step the approval waits for). A send that didn't go, or a draft the form
+ * is sending or sent already, fails the approval's execution in plain words, so the card says it didn't work; the
+ * assistant is woken with how it went either way.
  */
 export const sendTeamReportDraft = defineCommand({
   name: 'team_report_draft_send',
@@ -422,8 +637,9 @@ export const sendTeamReportDraft = defineCommand({
         params: {
           name: TEAM_REPORT_ACTION,
           keyId: TEAM_REPORT_KEY_ID,
-          // The words go with the card, so every place it can be answered shows exactly what would be sent.
-          data: { draftId: draft.id, text: draft.text, expected: draft.expected },
+          // The words go with the card, so every place it can be answered shows exactly what would be sent, and its
+          // yes sends exactly these.
+          data: { draftId: draft.id, kind: draft.kind, text: draft.text, expected: draft.expected },
         },
       },
       where: 'Reports',
@@ -442,26 +658,36 @@ export const sendTeamReportDraft = defineCommand({
       },
     };
   },
-  async apply(tx, ctx, input) {
-    const [draft] = await tx
-      .select()
-      .from(teamReportDrafts)
-      .where(and(eq(teamReportDrafts.id, input.draftId), eq(teamReportDrafts.burrowId, ctx.burrow.id)))
-      .for('update');
-    if (!draft) throw notFound('Draft');
+  async apply(_tx, ctx, input) {
+    const draft = await lockDraft(ctx, input.draftId);
     if (ctx.actor.kind === 'agent' && !ctx.approvalId) throw forbidden();
     if (ctx.actor.kind === 'person' && ctx.actor.id !== draft.personId) throw forbidden();
-    if (draft.state !== 'waiting') throw conflict('This report was sent already.');
+    const words = await cardWords(ctx, draft);
+    let refused: string | null = null;
+    try {
+      await reserveDraft(ctx, draft, words);
+    } catch (err) {
+      if (!(err instanceof ApiError)) throw err;
+      refused = err.message;
+    }
     const services = ctx.services;
     const call = {
       draftId: draft.id,
+      personId: draft.personId,
       agentId: draft.agentId ?? ctx.actor.id,
       approvalId: ctx.approvalId,
       conversationId: draft.conversationId,
+      words,
+      refused,
     };
-    // The send happens after this commit, outside any transaction; the assistant is woken with how it went.
-    ctx.after(() => sendDraftForAssistant(services, ctx.burrow.id, call));
-    return { draftId: draft.id };
+    // The send happens after this commit, outside any transaction, and the approval waits for it: its failure is the
+    // commit's, so the card says the send didn't work. The assistant is woken with how it went.
+    const burrowId = ctx.burrow.id;
+    ctx.complete(async () => {
+      await sendDraftForAssistant(services, burrowId, call);
+      return [];
+    });
+    return { draftId: draft.id, reserved: refused === null };
   },
 });
 
@@ -482,6 +708,7 @@ export const askedTeamReportDraft = defineCommand({
 const DRAFT_CARD_WITHDRAWN = {
   sent: 'the report was sent from the form instead',
   dropped: 'the draft stayed with the earlier Whombat',
+  old: 'the draft was more than 30 days old',
 } as const;
 
 /**
@@ -527,7 +754,10 @@ async function withdrawDraftCard(ctx: ApplyContext, approvalId: string, why: str
   return true;
 }
 
-/** The draft is done: sent (as which report), or no longer wanted. Sent from the form, its card is withdrawn. */
+/**
+ * The draft is done: sent (as which report), or no longer wanted. Sent from the form, its card is withdrawn; sent by the
+ * card's yes, the card is the one that sent it and stays as it is.
+ */
 export const doneTeamReportDraft = defineCommand({
   name: 'team_report_draft_done',
   schema: z.object({
@@ -543,7 +773,7 @@ export const doneTeamReportDraft = defineCommand({
         and(
           eq(teamReportDrafts.id, input.draftId),
           eq(teamReportDrafts.burrowId, ctx.burrow.id),
-          eq(teamReportDrafts.state, 'waiting'),
+          inArray(teamReportDrafts.state, ['waiting', 'sending']),
         ),
       )
       .returning({ id: teamReportDrafts.id, approvalId: teamReportDrafts.approvalId });
@@ -556,7 +786,10 @@ export const doneTeamReportDraft = defineCommand({
   },
 });
 
-/** Drafts older than this go (sent, declined or left waiting): the card's Edit then says the draft is gone. */
+/**
+ * Drafts older than this go (sent, declined or left waiting), and the cards still asking about them are withdrawn, so
+ * no yes is left that would send nothing; the card's Edit then says the draft is gone. One being sent now stays.
+ */
 export const TEAM_REPORT_DRAFT_KEEP_DAYS = 30;
 
 export const sweepTeamReportDrafts = defineCommand({
@@ -565,9 +798,19 @@ export const sweepTeamReportDrafts = defineCommand({
   async apply(tx, ctx, input) {
     const gone = await tx
       .delete(teamReportDrafts)
-      .where(and(eq(teamReportDrafts.burrowId, ctx.burrow.id), inArray(teamReportDrafts.id, input.ids)))
-      .returning({ id: teamReportDrafts.id });
-    return { gone: gone.length };
+      .where(
+        and(
+          eq(teamReportDrafts.burrowId, ctx.burrow.id),
+          inArray(teamReportDrafts.id, input.ids),
+          ne(teamReportDrafts.state, 'sending'),
+        ),
+      )
+      .returning({ id: teamReportDrafts.id, approvalId: teamReportDrafts.approvalId });
+    let withdrawn = 0;
+    for (const d of gone)
+      if (d.approvalId && (await withdrawDraftCard(ctx, d.approvalId, DRAFT_CARD_WITHDRAWN.old)))
+        withdrawn += 1;
+    return { gone: gone.length, withdrawn };
   },
 });
 
@@ -578,6 +821,8 @@ export const TEAM_REPORT_COMMANDS = [
   dropTeamReports,
   saveTeamReportDraft,
   sendTeamReportDraft,
+  reserveTeamReportDraft,
+  releaseTeamReportDraft,
   askedTeamReportDraft,
   doneTeamReportDraft,
   sweepTeamReportDrafts,
