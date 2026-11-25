@@ -1,5 +1,5 @@
 /**
- * New report (`/reports/new`; Whombat team-reports.md TR-02, TR-07): Something’s wrong or An idea, one question that
+ * New report (`/reports/new`): Something’s wrong or An idea, one question that
  * must be answered, “What did you expect?” for a problem, what is sent with it (folded), the quiet warning that the
  * team and its AI assistant read it, where a security problem goes instead, and Send. `?draft=<id>` fills it with the
  * assistant's draft (its card's Edit); a draft already sent or put aside fills nothing. After Send the report's page

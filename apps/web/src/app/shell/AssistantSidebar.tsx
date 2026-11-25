@@ -519,7 +519,7 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
           <button type="button" className={styles.menuItem} onClick={toggleTheme}>
             {theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           </button>
-          {/* Reports to the Whombat Team (Whombat team-reports.md TR-01): only where one can be sent or some exist. */}
+          {/* Reports to the Whombat Team: only where one can be sent or some exist. */}
           {teamReports ? (
             <Link to="/reports" className={styles.menuItem} onClick={close} data-account-reports="">
               {TEAM_REPORT_WORDS.entry}

@@ -1,5 +1,5 @@
 /**
- * One report (`/reports/<reportId>`; Whombat team-reports.md TR-05, TR-06, TR-08, TR-09): its title, number and kind,
+ * One report (`/reports/<reportId>`): its title, number and kind,
  * the status in words and the four steps, then the conversation oldest first — what the person sent, the team's
  * answers as “Whombat Team”, status changes as quiet lines — and a box to write to the team. The team's words are plain
  * text only: no formatting, links not clickable, no pictures. It works / Still happening once a fix is available or

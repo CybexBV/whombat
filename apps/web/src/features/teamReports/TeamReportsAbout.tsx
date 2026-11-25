@@ -1,5 +1,5 @@
 /**
- * About's WHOMBAT TEAM (Whombat team-reports.md TR-01): Report a problem or idea, with how many reports the person sent
+ * About's WHOMBAT TEAM: Report a problem or idea, with how many reports the person sent
  * and how many have a new answer, opening Your reports. Only where the person may send one or has some.
  */
 import { createLink } from '@tanstack/react-router';
