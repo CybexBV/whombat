@@ -2,7 +2,7 @@
  * The box's page at its own address (own-address.md): the claim only with the link from
  * the box's screen, the setup's words only on a box set up there, and the hosted list and its link code.
  */
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { fakePeerId } from '@whombat/client/fake';
 import {
@@ -100,6 +100,38 @@ describe('an unclaimed box at its own address', () => {
     expect(boxPasskey.create).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('heading', { name: T.passkey.title })).toBeNull();
     expect(screen.queryByRole('button', { name: T.passkey.next })).toBeNull();
+  });
+
+  it('finishes a service’s sign-in that comes back to its address, and goes where the box says', async () => {
+    const user = userEvent.setup();
+    const world = await ownBoxPage(
+      `/c/${FAKE_OWN_CLAIM_LINK}#name=Mara+Visser&email=mara%40burrowhq.example&from=link`,
+    );
+    await user.type(
+      await screen.findByLabelText(COMMUNITY_TEXT.claim.letters),
+      world.faults.ownLetters() as string,
+    );
+    await user.click(screen.getByRole('button', { name: COMMUNITY_TEXT.claim.next }));
+    await user.click(await screen.findByRole('button', { name: T.passkey.make }, { timeout: 5_000 }));
+    await vi.waitFor(() => expect(window.location.pathname).toBe('/connect-ai'), { timeout: 5_000 });
+    cleanup();
+    // Cloudflare sends the browser back to this page with its code, the state and its own name.
+    window.history.replaceState(
+      null,
+      '',
+      '/connect/cloudflare?code=abc123&state=oas_back&iss=https%3A%2F%2Fmcp.cloudflare.com',
+    );
+    render(<BoxRoot env={{ ...world.box(), secure: () => true } as unknown as BoxEnvironment} />);
+    // Out of the address at once: the code goes only to the box.
+    expect(window.location.search).toBe('');
+    await vi.waitFor(() => expect(window.location.search).toContain('connected=cloudflare'), {
+      timeout: 5_000,
+    });
+    expect(window.location.pathname).toBe('/settings');
+    expect(world.faults.oauthFinishes('dev_4WNBX8QA')).toEqual([
+      { code: 'abc123', state: 'oas_back', iss: 'https://mcp.cloudflare.com' },
+    ]);
+    expect(screen.queryByRole('heading', { name: 'Nothing lives here' })).toBeNull();
   });
 
   it('from the link page without a name: the claim asks for the name beside the letters', async () => {
