@@ -33,10 +33,19 @@ export const TeamAnswerPayload = payload(TEAM_PAYLOAD_ANSWER_MAX_BYTES);
 /** A whole report in an answer (`TeamReport`, base64url JSON). */
 const ReportAnswer = z.object({ report: TeamAnswerPayload });
 
-/** Why control refused a team report op, besides the general device refusals. */
+/**
+ * Why control refused a team report op, besides the general device refusals: control's `details.code`, which the manager
+ * puts first in its message.
+ */
 export const TeamReportRefusalCode = z.enum([
-  /** The person can't send reports now (`TeamReportsUnavailable` says why in `team.reports.list`). */
+  /** The team switched new reports off for a while. */
   'team_reports_unavailable',
+  /** The box's Link account isn't on the invitation list. */
+  'not_invited',
+  /** Sending needs Link on or in grace (reading and withdrawing don't). */
+  'link_off',
+  /** The account has as many open reports as it may: a new one waits until one is closed. */
+  'too_many_open',
   /** No such report of this box's Link account. */
   'report_unknown',
   /** The report can't take this now (a reply to a closed report, “It works” before a fix, a full conversation). */
@@ -70,8 +79,9 @@ export const TEAM_REPORTS_DEVICE_OPS = {
   },
   /**
    * A new report (`payload` a `TeamReportDraft`). Control numbers it, keeps it for the team and answers it as it keeps
-   * it; the same `requestId` again answers the same report. Refuses while sending is off (`team_reports_unavailable`),
-   * past the day's limits (`rate_limited`) and a payload that isn't a draft (`validation_failed`).
+   * it; the same `requestId` again answers the same report. Refuses while sending is off (`team_reports_unavailable`,
+   * `not_invited`, `link_off`), with too many open reports (`too_many_open`), past the day's limits (`rate_limited`) and
+   * a payload that isn't a draft (`validation_failed`).
    */
   'team.reports.create': {
     body: z.strictObject({ requestId: TeamRequestId, payload: TeamRequestPayload }),
@@ -89,7 +99,9 @@ export const TEAM_REPORTS_DEVICE_OPS = {
   /**
    * The person says the fix works (`works`: the report is confirmed), that it still happens (`still_happening`: open
    * again for the team), or takes the report back (`withdraw`: control deletes it and tells the team, and answers
-   * `report` null). `works` and `still_happening` only once the team offered a fix or closed it (`report_closed`).
+   * `report` null, also to a withdrawal it did before). `works` and `still_happening` only once the team offered a fix
+   * or closed it (`report_closed`); the same `requestId` again changes nothing. Withdrawing works in every Link state
+   * control answers; the others need Link on or in grace (`link_off`).
    */
   'team.reports.act': {
     body: z.strictObject({ requestId: TeamRequestId, reportId: TeamReportId, action: TeamReportAction }),

@@ -9,6 +9,7 @@ import {
   teamReportDraftPath,
   teamReportGroups,
   teamReportRowLine,
+  teamReportSentWith,
   teamReportSentWithLine,
   teamReportsShown,
   teamReportsSummary,
@@ -148,6 +149,32 @@ describe('a report’s conversation', () => {
     });
     expect(entries.map((e) => e.kind)).toEqual(['sent', 'message']);
   });
+
+  it('keeps the first message shown when older ones were left out', () => {
+    const entries = teamReportTimeline({ ...report, messages: report.messages.slice(0, 1) }, 3);
+    expect(entries.map((e) => e.kind)).toEqual(['sent', 'message']);
+  });
+
+  it('shows the person’s answer that moved the status as their words, never as a press', () => {
+    const entries = teamReportTimeline({
+      ...report,
+      messages: [
+        { id: 'q', author: 'team', text: 'Which browser?', at: 200, status: 'needs_information' },
+        { id: 'a', author: 'reporter', text: 'Firefox on Linux.', at: 300, status: 'investigating' },
+        { id: 'p', author: 'reporter', text: '', at: 400, status: 'investigating' },
+      ],
+    });
+    expect(entries.map((e) => [e.kind, e.key])).toEqual([
+      ['sent', 'sent'],
+      ['status', 'q-status'],
+      ['message', 'q'],
+      ['message', 'a'],
+      ['status', 'p-status'],
+    ]);
+    expect(entries[3]).toMatchObject({ who: TEAM_REPORT_WORDS.you, text: 'Firefox on Linux.' });
+    // Only the press without words is “Still happening”.
+    expect(entries[4]?.kind === 'status' && entries[4].words).toContain('still happens');
+  });
 });
 
 describe('the track', () => {
@@ -181,16 +208,24 @@ describe('what is sent with a report', () => {
     expect(teamReportClientContext({ client: 'android', device: 'a'.repeat(200) }).device).toHaveLength(120);
   });
 
-  it('says it in one line', () => {
-    expect(
-      teamReportSentWithLine({
-        runtimeVersion: '0.304.0',
-        client: 'web',
-        appVersion: '3.158.0',
-        device: 'Firefox 146 · Linux',
-        language: 'en-GB',
-      }),
-    ).toBe('Whombat 0.304.0 · Web app 3.158.0 · Firefox 146 · Linux · en-GB');
+  it('says it in one line, with the Whombat’s version and update channel', () => {
+    const app = {
+      client: 'web' as const,
+      appVersion: '3.158.0',
+      device: 'Firefox 146 · Linux',
+      language: 'en-GB',
+    };
+    expect(teamReportSentWithLine({ ...app, runtimeVersion: '0.304.0', channel: 'development' })).toBe(
+      'Whombat 0.304.0 · Beta · Web app 3.158.0 · Firefox 146 · Linux · en-GB',
+    );
+    // What the app doesn't know is still named: the Whombat adds it.
+    const unknown = teamReportSentWithLine({ ...app, runtimeVersion: '0.304.0' });
+    expect(unknown.startsWith('Web app 3.158.0')).toBe(true);
+    expect(unknown).toContain('version and update channel');
+    expect(teamReportSentWith({ ...app, channel: 'production' })[0]).toMatchObject({ label: 'Whombat' });
+    expect(teamReportSentWith({ ...app, runtimeVersion: '0.304.0', channel: 'production' })[0]?.value).toBe(
+      '0.304.0 · Production',
+    );
   });
 
   it('names a browser and its system in a few words', () => {

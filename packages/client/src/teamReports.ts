@@ -82,6 +82,8 @@ export const TEAM_REPORT_WORDS = {
   cancel: 'Cancel',
   notFound: 'This report isn’t here any more.',
   reportFailed: 'This report couldn’t load. Try again.',
+  /** Above a conversation too long for one answer: its oldest messages aren't here. */
+  earlier: 'Earlier messages aren’t shown here.',
   failed: 'That didn’t go through. Try again in a moment.',
   full: 'This report can’t take more replies. Start a new report if something is still wrong.',
 } as const;
@@ -230,15 +232,29 @@ export type TeamReportEntry =
 
 /**
  * A report's conversation in time order: what the person sent first, then every message as it came, a status change as
- * its own quiet line before the words sent with it. A first message that only repeats the report is left out.
+ * its own quiet line before the words sent with it. A first message that only repeats the report is left out (only
+ * when the answer has the first message: `earlier` counts the oldest it left out). Only an entry of the person's with a
+ * status and no words is their press (It works, Still happening); a reply of theirs that moved the status (an answer to
+ * the team's question) is their message, as they wrote it.
  */
-export function teamReportTimeline(report: Pick<TeamReport, 'text' | 'expected' | 'createdAt' | 'messages'>) {
+export function teamReportTimeline(
+  report: Pick<TeamReport, 'text' | 'expected' | 'createdAt' | 'messages'>,
+  earlier = 0,
+) {
   const entries: TeamReportEntry[] = [
     { kind: 'sent', key: 'sent', at: report.createdAt, text: report.text, expected: report.expected },
   ];
   report.messages.forEach((m, i) => {
-    if (i === 0 && m.author === 'reporter' && !m.status && m.text.trim() === report.text.trim()) return;
-    if (m.status)
+    if (
+      earlier === 0 &&
+      i === 0 &&
+      m.author === 'reporter' &&
+      !m.status &&
+      m.text.trim() === report.text.trim()
+    )
+      return;
+    const press = m.author === 'reporter' && !m.text.trim();
+    if (m.status && (m.author === 'team' || press))
       entries.push({
         kind: 'status',
         key: `${m.id}-status`,
@@ -259,7 +275,7 @@ export function teamReportTimeline(report: Pick<TeamReport, 'text' | 'expected' 
   return entries;
 }
 
-/** A status change in the conversation: the team's as the new status, the person's as what they said. */
+/** A status change in the conversation: the team's as the new status, the person's press as what they said. */
 export function teamReportStatusLine(status: TeamReportStatus, author: 'reporter' | 'team' = 'team'): string {
   if (author === 'reporter') {
     if (status === 'confirmed') return 'You said it works';
@@ -332,15 +348,35 @@ const CLIENT_WORDS: Record<'web' | 'android' | 'ios', string> = {
   ios: 'iPhone app',
 };
 
+/** The update channel as people say it: Beta is the development channel. */
+const CHANNEL_WORDS: Record<NonNullable<TeamReportContext['channel']>, string> = {
+  development: 'Beta',
+  production: 'Production',
+};
+
+type SentWithContext = Pick<
+  TeamReportContext,
+  'runtimeVersion' | 'channel' | 'client' | 'appVersion' | 'device' | 'language'
+>;
+
 /**
- * “What’s sent with it”, one line each: the Whombat's version (the box adds it), this app's, the device and system in
- * a few words, the language. A part not known is left out.
+ * What the box adds about itself, its version and update channel, in the words the app knows: “0.304.0 · Beta”, or
+ * what it doesn't know named (“0.304.0 and its update channel”). The box always adds both.
  */
-export function teamReportSentWith(
-  context: Pick<TeamReportContext, 'runtimeVersion' | 'client' | 'appVersion' | 'device' | 'language'>,
-): { label: string; value: string }[] {
-  const rows: { label: string; value: string }[] = [];
-  if (context.runtimeVersion) rows.push({ label: 'Whombat', value: context.runtimeVersion });
+function boxWords(context: SentWithContext): string {
+  const channel = context.channel ? CHANNEL_WORDS[context.channel] : null;
+  if (context.runtimeVersion && channel) return `${context.runtimeVersion} · ${channel}`;
+  if (context.runtimeVersion) return `${context.runtimeVersion} and its update channel`;
+  return 'Its version and update channel';
+}
+
+/**
+ * “What’s sent with it”, one line each: the Whombat's version and update channel (the box adds them; named even where
+ * the app doesn't know them), this app's version, the device and system in a few words, the language. Another part not
+ * known is left out.
+ */
+export function teamReportSentWith(context: SentWithContext): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [{ label: 'Whombat', value: boxWords(context) }];
   if (context.client)
     rows.push({
       label: CLIENT_WORDS[context.client],
@@ -351,13 +387,19 @@ export function teamReportSentWith(
   return rows;
 }
 
-/** “What’s sent with it” folded into one line: “Whombat 0.304.0 · Web app 3.158.0 · Firefox 146 · Linux · en-GB”. */
-export function teamReportSentWithLine(
-  context: Pick<TeamReportContext, 'runtimeVersion' | 'client' | 'appVersion' | 'device' | 'language'>,
-): string {
-  return teamReportSentWith(context)
+/**
+ * “What’s sent with it” folded into one line: “Whombat 0.304.0 · Beta · Web app 3.158.0 · Firefox 146 · Linux · en-GB”,
+ * or “Web app 3.158.0 · … · en-GB, and this Whombat’s version and update channel” while the app doesn't know them.
+ */
+export function teamReportSentWithLine(context: SentWithContext): string {
+  const known = !!context.runtimeVersion && !!context.channel;
+  const parts = teamReportSentWith(context)
+    .filter((r) => known || r.label !== 'Whombat')
     .map((r) => (r.label === 'Device' || r.label === 'Language' ? r.value : `${r.label} ${r.value}`))
     .join(' · ');
+  if (known) return parts;
+  const box = 'this Whombat’s version and update channel';
+  return parts ? `${parts}, and ${box}` : box.charAt(0).toUpperCase() + box.slice(1);
 }
 
 /**

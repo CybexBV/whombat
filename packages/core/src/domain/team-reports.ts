@@ -61,6 +61,8 @@ export const TEAM_REPORT_MESSAGES_MAX = 200;
 export const TEAM_REPORTS_LIST_MAX = 100;
 /** The longest title (the team's, or the start of the description until the team names it). */
 export const TEAM_REPORT_TITLE_MAX = 200;
+/** The most open reports one Link account may have: a new one waits until one of them is closed. */
+export const TEAM_REPORTS_OPEN_MAX = 20;
 
 /** Control characters other than a tab and line breaks: words a person or the team wrote never carry them. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: they are what it refuses

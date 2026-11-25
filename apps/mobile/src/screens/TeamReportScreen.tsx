@@ -1,8 +1,9 @@
 /**
  * One report to the Whombat Team on the phone (Whombat docs/decisions/team-reports.md), where its Inbox item and push
  * lead: its number and kind, its title, its status in words and the four-step track; It works / Still happening once
- * a fix is there for the person or the report was closed; then the conversation, oldest first — what the person sent,
- * their messages and the Whombat Team's, status changes as quiet lines — and the reply box. The team's words are plain
+ * a fix is there for the person or the report was closed; then the conversation, oldest first (a quiet line above it
+ * when the oldest messages of a long one were left out) — what the person sent, their messages and the Whombat Team's,
+ * status changes as quiet lines — and, while the report is open, the reply box. The team's words are plain
  * text: no formatting, no links to tap, no pictures. Withdraw report is in the ⋯, asked first. Opening it reads it.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -27,6 +28,7 @@ import {
   type TeamReportAction,
   TeamReportId,
   teamReportCanConfirm,
+  teamReportOpen,
 } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, TextInput, View } from 'react-native';
@@ -54,7 +56,10 @@ export function TeamReportScreen({ navigation, route }: Props) {
   const reportId = route.params.reportId;
   // A link may name anything: a report's id is asked for, anything else isn't here.
   const valid = TeamReportId.safeParse(reportId).success;
-  const { report, supported, error, isError, refetch } = useTeamReport(slug, valid ? reportId : null);
+  const { report, earlier, supported, error, isError, refetch } = useTeamReport(
+    slug,
+    valid ? reportId : null,
+  );
   const act = useActTeamReport(slug, reportId);
   // “Sent.” shows once, as the page opens after the form; the param goes so a later visit doesn't say it again.
   const [sent] = useState(route.params.sent === true);
@@ -202,8 +207,20 @@ export function TeamReportScreen({ navigation, route }: Props) {
           <ErrorLine
             text={act.isError && act.variables !== 'withdraw' ? teamReportErrorText(act.error) : null}
           />
-          <Conversation report={report} />
-          <ReplyBox report={report} onSent={() => scroller.current?.scrollToEnd({ animated: true })} />
+          {earlier > 0 ? (
+            <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
+              {TEAM_REPORT_WORDS.earlier}
+            </Text>
+          ) : null}
+          <Conversation report={report} earlier={earlier} />
+          {/* A closed report takes no replies: “Still happening” opens it again. */}
+          {teamReportOpen(report.status) ? (
+            <ReplyBox
+              report={report}
+              earlier={earlier}
+              onSent={() => scroller.current?.scrollToEnd({ animated: true })}
+            />
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -211,8 +228,8 @@ export function TeamReportScreen({ navigation, route }: Props) {
 }
 
 /** The conversation, oldest first: the person's words in their bubble, the team's on the page, status lines quiet. */
-function Conversation({ report }: { report: TeamReport }) {
-  const entries = teamReportTimeline(report);
+function Conversation({ report, earlier }: { report: TeamReport; earlier: number }) {
+  const entries = teamReportTimeline(report, earlier);
   return (
     <View style={{ gap: 14 }}>
       {entries.map((entry) => (
@@ -283,12 +300,12 @@ function Entry({ entry }: { entry: TeamReportEntry }) {
 }
 
 /** “Write to the Whombat Team” and Send; a report that can't take more replies says so instead. */
-function ReplyBox({ report, onSent }: { report: TeamReport; onSent: () => void }) {
+function ReplyBox({ report, earlier, onSent }: { report: TeamReport; earlier: number; onSent: () => void }) {
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const reply = useReplyTeamReport(slug, report.id);
   const [text, setText] = useState('');
-  if (report.messages.length >= TEAM_REPORT_MESSAGES_MAX)
+  if (report.messages.length + earlier >= TEAM_REPORT_MESSAGES_MAX)
     return (
       <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
         {TEAM_REPORT_WORDS.full}

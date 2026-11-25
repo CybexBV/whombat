@@ -1,6 +1,7 @@
 /**
  * One report (`/reports/<reportId>`): its title, number and kind,
- * the status in words and the four steps, then the conversation oldest first — what the person sent, the team's
+ * the status in words and the four steps, then the conversation oldest first (a quiet line above it when the oldest
+ * messages of a long one were left out) — what the person sent, the team's
  * answers as “Whombat Team”, status changes as quiet lines — and a box to write to the team. The team's words are plain
  * text only: no formatting, links not clickable, no pictures. It works / Still happening once a fix is available or
  * the report was closed; Withdraw report in ⋯, after asking. Opening the page reads the report (the box marks it read).
@@ -69,7 +70,8 @@ export function TeamReportScreen({
   // A report that is gone (withdrawn, or 90 days after closing) says so, even where an older answer is still cached.
   const missing = query.error ? teamReportMissing(query.error) : false;
   const report = missing ? undefined : query.report;
-  if (report) return <ReportPage burrow={burrow} report={report} justSent={justSent} />;
+  if (report)
+    return <ReportPage burrow={burrow} report={report} earlier={query.earlier} justSent={justSent} />;
   return (
     <PlacePage title={TEAM_REPORT_WORDS.title} back={<BackToReports />} screen="team-report">
       {!query.supported ? (
@@ -93,7 +95,18 @@ export function TeamReportScreen({
   );
 }
 
-function ReportPage({ burrow, report, justSent }: { burrow: string; report: TeamReport; justSent: boolean }) {
+function ReportPage({
+  burrow,
+  report,
+  earlier,
+  justSent,
+}: {
+  burrow: string;
+  report: TeamReport;
+  /** How many of the oldest messages the answer left out. */
+  earlier: number;
+  justSent: boolean;
+}) {
   const navigate = useNavigate();
   const toast = useToast();
   const act = useActTeamReport(burrow, report.id);
@@ -154,9 +167,14 @@ function ReportPage({ burrow, report, justSent }: { burrow: string; report: Team
           </Button>
         </div>
       ) : null}
-      <Conversation burrow={burrow} report={report} />
+      {earlier > 0 ? (
+        <p className={styles.quiet} data-report-earlier="">
+          {TEAM_REPORT_WORDS.earlier}
+        </p>
+      ) : null}
+      <Conversation burrow={burrow} report={report} earlier={earlier} />
       {teamReportOpen(report.status) ? (
-        report.messages.length >= TEAM_REPORT_MESSAGES_MAX ? (
+        report.messages.length + earlier >= TEAM_REPORT_MESSAGES_MAX ? (
           <p className={styles.quiet}>{TEAM_REPORT_WORDS.full}</p>
         ) : (
           <ReplyBox burrow={burrow} reportId={report.id} />
@@ -244,11 +262,11 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
 }
 
 /** The conversation, oldest first, in Chat's rows. */
-function Conversation({ burrow, report }: { burrow: string; report: TeamReport }) {
+function Conversation({ burrow, report, earlier }: { burrow: string; report: TeamReport; earlier: number }) {
   const { timeZone } = useBurrowContext(burrow);
   const me = useBootstrapSelect(burrow, selectMe);
   const now = useNow(60_000);
-  const entries = teamReportTimeline(report);
+  const entries = teamReportTimeline(report, earlier);
   return (
     <ol className={styles.thread} aria-label="Conversation" data-report-thread="">
       {entries.map((entry) => (

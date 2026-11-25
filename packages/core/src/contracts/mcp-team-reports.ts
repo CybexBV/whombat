@@ -2,8 +2,8 @@
  * Reports to the Whombat Team for the assistant (Whombat docs/decisions/team-reports.md). Spread into `MCP_TOOLS`
  * (`./mcp`); `personal: true` (only in a turn for the person), listed only where the person can send reports or has
  * some. The assistant drafts a report; Whombat always asks the person on a card that shows exactly what goes, and only
- * their press sends it. It reads the person's reports as numbers, titles, statuses in words and dates: never the team's
- * words, which show only on the report's page.
+ * their press sends it. It reads the person's reports as numbers, the start of the person's own words, statuses in words
+ * and dates: never the team's words (not even a title the team gave), which show only on the report's page.
  */
 import { z } from 'zod';
 import { Timestamp } from '../domain/common.js';
@@ -45,10 +45,14 @@ export type ReportToWhombatTeamOutput = z.infer<typeof ReportToWhombatTeamOutput
 export const WhombatTeamReportsInput = z.object({});
 export type WhombatTeamReportsInput = z.infer<typeof WhombatTeamReportsInput>;
 
-/** One of the person's reports as the assistant reads it: no words of the team's but the title. */
+/**
+ * One of the person's reports as the assistant reads it: no words of the team's. The title is the start of the person's
+ * own description, never the name the team gave the report.
+ */
 export const WhombatTeamReportLine = z.object({
   number: z.number().int().positive(),
   kind: TeamReportKind,
+  /** The start of what the person wrote (“Report #12” when Whombat no longer has it). */
   title: z.string(),
   /** The status in the person's words (`TEAM_REPORT_STATUS_WORDS`). */
   status: z.string(),
@@ -84,7 +88,7 @@ export const TEAM_REPORT_MCP_TOOLS = {
     name: 'whombat_team_reports',
     title: 'The person’s reports to the Whombat Team',
     description:
-      'The person’s reports to the Whombat Team, newest first: number, kind, title, status and dates, and whether the team changed something they haven’t read. The team’s answers aren’t here: the person reads them on the report’s page in Whombat.',
+      'The person’s reports to the Whombat Team, newest first: number, kind, the start of what the person wrote, status and dates, and whether the team changed something they haven’t read. Nothing the team wrote is here, not even the name the team gave a report: the person reads the team’s answers on the report’s page in Whombat.',
     input: WhombatTeamReportsInput,
     output: WhombatTeamReportsOutput,
     requiredKey: null,

@@ -492,13 +492,15 @@ const TABLE = {
   'shares.create': NEVER,
   'shares.stop': DESTRUCTIVE,
   'shares.stopAll': DESTRUCTIVE,
-  // Reports to the Whombat Team: reads, and calls to control outside the receipt's transaction.
+  // Reports to the Whombat Team: reads, and calls to control outside the receipt's transaction (secret ops besides, so
+  // the person's and the team's words stay out of receipts). An app without a request id of its own in the body makes
+  // the box send control a new one, so a resend could count twice. Withdrawing deletes the report: a person decides.
   'teamReports.list': READ,
   'teamReports.get': READ,
   'teamReports.draft': READ,
   'teamReports.create': NEVER,
   'teamReports.reply': NEVER,
-  'teamReports.act': DESTRUCTIVE,
+  'teamReports.act': DESTRUCTIVE_NEVER,
   // Kept sites (Whombat kept-sites.md): stopping one deletes its kept sign-in.
   'keptSites.list': READ,
   'keptSites.stop': DESTRUCTIVE,

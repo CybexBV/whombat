@@ -2,23 +2,27 @@
  * Reports to the Whombat Team in React (Whombat docs/decisions/team-reports.md): the person's list, one report (opening
  * it reads it), sending a new one, replying, It works / Still happening / Withdraw, and the assistant's draft for the
  * form. Asked only of a Whombat whose session speaks them (minor 10). Each answer is put in the cache where the list
- * and the report's page read it. Works in React DOM and React Native.
+ * and the report's page read it. Each send keeps one request id from the moment its form or box opens, for every try,
+ * and takes a new one once it went: the team gets the words once however often the app tries. Works in React DOM and
+ * React Native.
  */
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateTeamReportBody,
   TeamReport,
   TeamReportAction,
+  TeamReportAnswer,
   TeamReportRow,
   TeamReportsList,
 } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { protocolAtLeast, TEAM_REPORTS_MINOR } from '@whombat/protocol/session';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { commitOutcomeText, hostErrorInfo } from '../hosts/errors';
 import { ApiError } from '../http/errors';
 import type { CommitResult } from '../http/types';
 import { endpointKey, endpointScope } from '../query/keys';
+import { newRequestId } from '../session/ids';
 import { TEAM_REPORT_WORDS, teamReportsShown } from '../teamReports';
 import { useSessionProtocol, useWhombat } from './context';
 import { queryHook } from './queries';
@@ -76,6 +80,26 @@ function rowOf(report: TeamReport): TeamReportRow {
   return { ...summary, unread: false };
 }
 
+/** One send's request id: the same for every try, a new one once it went (`next`). */
+function useSendId() {
+  const id = useRef<string | null>(null);
+  return {
+    current: () => {
+      id.current ??= newRequestId();
+      return id.current;
+    },
+    next: () => {
+      id.current = newRequestId();
+    },
+  };
+}
+
+/** A whole report as an answer brings it: on its page and as its row in the list. */
+function putAnswer(qc: QueryClient, burrow: string, answer: TeamReportAnswer) {
+  qc.setQueryData(reportKey(burrow, answer.report.id), answer);
+  putRow(qc, burrow, answer.report);
+}
+
 /** The list with this report's row as the answer says (read now), added at the top when it is new. */
 function putRow(qc: QueryClient, burrow: string, report: TeamReport) {
   qc.setQueryData<TeamReportsList>(listKey(burrow), (list) => {
@@ -111,8 +135,8 @@ export function teamReportMissing(error: unknown): boolean {
 }
 
 /**
- * One report with its whole conversation (`teamReports.get`). Opening it reads it: the box marks it read, so the list's
- * row loses its dot and the Inbox is read again.
+ * One report with its conversation (`teamReports.get`): a long one with its newest messages, `earlier` counting those
+ * left out. Opening it reads it: the box marks it read, so the list's row loses its dot and the Inbox is read again.
  */
 export function useTeamReport(burrow: string, reportId: string | null | undefined) {
   const supported = useTeamReportsSupported();
@@ -128,7 +152,7 @@ export function useTeamReport(burrow: string, reportId: string | null | undefine
     putRow(qc, burrow, report);
     void qc.invalidateQueries({ queryKey: endpointScope('home.overview', { burrow }) });
   }, [qc, burrow, report, read]);
-  return { supported, ...query, report };
+  return { supported, ...query, report, earlier: query.data?.earlier ?? 0 };
 }
 
 /** The assistant's draft for the form (`teamReports.draft`, its card's Edit); null id: none. */
@@ -147,64 +171,75 @@ function okOrThrow<T>(result: CommitResult<T>): T {
   throw new Error(commitOutcomeText(result) ?? TEAM_REPORT_WORDS.failed);
 }
 
-/** Send a new report (`teamReports.create`); the answer is the report, its page ready to open. */
+/**
+ * Send a new report (`teamReports.create`); the answer is the report, its page ready to open. The form's request id
+ * goes with every try (one with `draftId` goes with the draft's own, which the Whombat uses).
+ */
 export function useCreateTeamReport(burrow: string) {
   const { client } = useWhombat();
   const qc = useQueryClient();
-  return useMutation<TeamReport, Error, CreateTeamReportBody>({
+  const sendId = useSendId();
+  return useMutation<TeamReport, Error, Omit<CreateTeamReportBody, 'requestId'>>({
     mutationFn: async (body) => {
-      const result = await client.request(api.teamReports.create, { params: { burrow }, body });
-      return okOrThrow(result).report;
-    },
-    onSuccess: (report) => {
-      qc.setQueryData(reportKey(burrow, report.id), { report });
-      putRow(qc, burrow, report);
+      const result = await client.request(api.teamReports.create, {
+        params: { burrow },
+        body: { ...body, requestId: sendId.current() },
+      });
+      const answer = okOrThrow(result);
+      sendId.next();
+      putAnswer(qc, burrow, answer);
+      return answer.report;
     },
     onSettled: () => qc.invalidateQueries({ queryKey: listKey(burrow) }),
   });
 }
 
-/** Write to the Whombat Team in a report (`teamReports.reply`). */
+/** Write to the Whombat Team in a report (`teamReports.reply`); the box's request id goes with every try. */
 export function useReplyTeamReport(burrow: string, reportId: string) {
   const { client } = useWhombat();
   const qc = useQueryClient();
+  const sendId = useSendId();
   return useMutation<TeamReport, Error, string>({
     mutationFn: async (text) => {
       const result = await client.request(api.teamReports.reply, {
         params: { burrow, reportId },
-        body: { text },
+        body: { text, requestId: sendId.current() },
       });
-      return okOrThrow(result).report;
-    },
-    onSuccess: (report) => {
-      qc.setQueryData(reportKey(burrow, report.id), { report });
-      putRow(qc, burrow, report);
+      const answer = okOrThrow(result);
+      sendId.next();
+      putAnswer(qc, burrow, answer);
+      return answer.report;
     },
   });
 }
 
 /**
  * It works, Still happening or Withdraw (`teamReports.act`). A withdrawn report is gone from the list and its page
- * (the answer is null).
+ * (the answer is null). Pressing the same button again after a failure goes with the same request id, so it counts
+ * once; another button gets its own.
  */
 export function useActTeamReport(burrow: string, reportId: string) {
   const { client } = useWhombat();
   const qc = useQueryClient();
+  const sendId = useSendId();
+  const lastAction = useRef<TeamReportAction | null>(null);
   return useMutation<TeamReport | null, Error, TeamReportAction>({
     mutationFn: async (action) => {
+      if (lastAction.current !== action) sendId.next();
+      lastAction.current = action;
       const result = await client.request(api.teamReports.act, {
         params: { burrow, reportId },
-        body: { action },
+        body: { action, requestId: sendId.current() },
       });
-      return okOrThrow(result).report;
-    },
-    onSuccess: (report, action) => {
-      if (action === 'withdraw' || !report) {
+      const answer = okOrThrow(result);
+      sendId.next();
+      lastAction.current = null;
+      if (action === 'withdraw' || !answer.report) {
         dropReport(qc, burrow, reportId);
-        return;
+        return null;
       }
-      qc.setQueryData(reportKey(burrow, report.id), { report });
-      putRow(qc, burrow, report);
+      putAnswer(qc, burrow, { report: answer.report, earlier: answer.earlier });
+      return answer.report;
     },
     onSettled: () => qc.invalidateQueries({ queryKey: listKey(burrow) }),
   });

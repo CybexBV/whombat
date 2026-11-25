@@ -191,6 +191,10 @@ export const SECRET_OPS = [
   'signins.consoleWrite',
   'signins.loginStart',
   'signins.loginSubmit',
+  // What the person and the team wrote in a report to the Whombat Team stays out of receipts (Whombat team-reports.md).
+  'teamReports.act',
+  'teamReports.create',
+  'teamReports.reply',
   'vault.create',
   'vault.replaceSshKey',
   'vault.setSecret',

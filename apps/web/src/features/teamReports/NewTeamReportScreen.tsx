@@ -1,10 +1,12 @@
 /**
  * New report (`/reports/new`): Something’s wrong or An idea, one question that
- * must be answered, “What did you expect?” for a problem, what is sent with it (folded), the quiet warning that the
+ * must be answered, “What did you expect?” for a problem, what is sent with it (folded; the Whombat's version and update
+ * channel named even before the app knows them), the quiet warning that the
  * team and its AI assistant read it, where a security problem goes instead, and Send. `?draft=<id>` fills it with the
  * assistant's draft (its card's Edit); a draft already sent or put aside fills nothing. After Send the report's page
  * opens and says it was sent.
  */
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
   browserDeviceWords,
@@ -15,6 +17,7 @@ import {
   teamReportSentWithLine,
   teamReportsUnavailableText,
 } from '@whombat/client';
+import { readUpdatesChannel } from '@whombat/client/managed';
 import {
   teamReportErrorText,
   useCreateTeamReport,
@@ -24,6 +27,7 @@ import {
 import { TEAM_REPORT_EXPECTED_MAX, TEAM_REPORT_TEXT_MAX, type TeamReportKind } from '@whombat/core';
 import { ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
@@ -33,6 +37,19 @@ import { BackToReports, KindIcon } from './parts';
 import styles from './TeamReports.module.css';
 
 const KINDS: readonly TeamReportKind[] = ['bug', 'idea'];
+
+/** The Whombat's update channel, which it adds to a report itself: read here only to show it. Null while unknown. */
+function useUpdateChannel() {
+  const { managed, session } = useAppServices();
+  const channel = useQuery({
+    queryKey: ['whombat', 'updates.channel'],
+    queryFn: () => readUpdatesChannel(session),
+    enabled: Boolean(managed),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  return channel.data?.channel ?? null;
+}
 
 /** What this web app says about itself: its version, the browser and system, the language. */
 function webContext() {
@@ -58,7 +75,12 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
   const [sentWithOpen, setSentWithOpen] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const context = useMemo(webContext, []);
-  const sentWith = { ...context, ...(versions.runtime ? { runtimeVersion: versions.runtime } : {}) };
+  const channel = useUpdateChannel();
+  const sentWith = {
+    ...context,
+    ...(versions.runtime ? { runtimeVersion: versions.runtime } : {}),
+    ...(channel ? { channel } : {}),
+  };
 
   // The assistant's draft fills the form once, unless it was already sent or put aside.
   const filled = useRef<string | null>(null);

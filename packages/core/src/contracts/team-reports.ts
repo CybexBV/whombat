@@ -15,6 +15,7 @@ import {
   TeamReportId,
   TeamReportKind,
   TeamReportSummary,
+  TeamRequestId,
 } from '../domain/team-reports.js';
 import { BurrowParam, endpoint } from './endpoint.js';
 
@@ -64,8 +65,37 @@ export const CreateTeamReportBody = z.strictObject({
     .string()
     .regex(/^[A-Za-z0-9_-]{8,64}$/)
     .optional(),
+  /**
+   * The app's id for this send, the same for every try of it (new once one went): the team gets the words once,
+   * however often the app tries. A draft's send uses the draft's own instead.
+   */
+  requestId: TeamRequestId.optional(),
 });
 export type CreateTeamReportBody = z.infer<typeof CreateTeamReportBody>;
+
+/** The person's answer in a report; `requestId` as with a new report. */
+export const ReplyTeamReportBody = z.strictObject({
+  text: z.string().trim().min(1).max(TEAM_REPORT_REPLY_MAX),
+  requestId: TeamRequestId.optional(),
+});
+export type ReplyTeamReportBody = z.infer<typeof ReplyTeamReportBody>;
+
+/** It works, Still happening or Withdraw; `requestId` as with a new report, so pressing again counts once. */
+export const ActTeamReportBody = z.strictObject({
+  action: TeamReportAction,
+  requestId: TeamRequestId.optional(),
+});
+export type ActTeamReportBody = z.infer<typeof ActTeamReportBody>;
+
+/**
+ * How many of a report's oldest messages an answer leaves out (0 when none): a whole report with a long conversation
+ * doesn't fit one answer, so the box sends the report's own words and the newest messages.
+ */
+const Earlier = z.number().int().min(0).default(0);
+
+/** A whole report as an answer carries it. */
+export const TeamReportAnswer = z.object({ report: TeamReport, earlier: Earlier });
+export type TeamReportAnswer = z.infer<typeof TeamReportAnswer>;
 
 /** A report the assistant drafted for the person to send (its card's Edit opens the form with it). */
 export const TeamReportDraftView = z.object({
@@ -92,9 +122,10 @@ export const teamReportEndpoints = {
     id: 'teamReports.get',
     method: 'GET',
     path: '/burrows/:burrow/team-reports/:reportId',
-    summary: 'One of the caller’s reports with its whole conversation; the caller has read it now.',
+    summary:
+      'One of the caller’s reports with its conversation (the newest messages when it is long; `earlier` counts those left out); the caller has read it now.',
     params: R,
-    response: z.object({ report: TeamReport }),
+    response: TeamReportAnswer,
   }),
   create: endpoint({
     id: 'teamReports.create',
@@ -104,7 +135,7 @@ export const teamReportEndpoints = {
       'Send the Whombat Team a problem or an idea. The team reads it (with its AI assistant) and answers in the report.',
     params: B,
     body: CreateTeamReportBody,
-    response: z.object({ report: TeamReport }),
+    response: TeamReportAnswer,
     status: 201,
   }),
   reply: endpoint({
@@ -113,8 +144,8 @@ export const teamReportEndpoints = {
     path: '/burrows/:burrow/team-reports/:reportId/replies',
     summary: 'Answer the Whombat Team in one of the caller’s reports.',
     params: R,
-    body: z.strictObject({ text: z.string().trim().min(1).max(TEAM_REPORT_REPLY_MAX) }),
-    response: z.object({ report: TeamReport }),
+    body: ReplyTeamReportBody,
+    response: TeamReportAnswer,
   }),
   act: endpoint({
     id: 'teamReports.act',
@@ -123,8 +154,8 @@ export const teamReportEndpoints = {
     summary:
       'Say a fix works, that the problem still happens, or take the report back (the team’s copy is deleted; null then).',
     params: R,
-    body: z.strictObject({ action: TeamReportAction }),
-    response: z.object({ report: TeamReport.nullable() }),
+    body: ActTeamReportBody,
+    response: z.object({ report: TeamReport.nullable(), earlier: Earlier }),
   }),
   draft: endpoint({
     id: 'teamReports.draft',

@@ -1,9 +1,10 @@
 /**
  * A new report to the Whombat Team on the phone (Whombat docs/decisions/team-reports.md): what it is about as two cards
  * (Something’s wrong, An idea), the one question it needs, What did you expect? for a problem, what is sent with it
- * (folded: the Whombat's version, this app's, the phone and its system, the language), the quiet line that the team and
- * its assistant read it, where a security problem goes instead, and Send. Sent, its page opens in its place and says
- * so once. Opened from the assistant's card (`draftId`), the form starts with its draft and sending it finishes it.
+ * (folded: the Whombat's version and update channel, this app's version, the phone and its system, the language), the
+ * quiet line that the team and its assistant read it, where a security problem goes instead, and Send. Sent, its page
+ * opens in its place and says so once. Opened from the assistant's card (`draftId`), the form starts with its draft
+ * and sending it finishes it. Where the person can't send now, it says why and Send stays off, as on the web.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
@@ -12,8 +13,15 @@ import {
   TEAM_REPORT_WORDS,
   teamReportClientContext,
   teamReportSentWith,
+  teamReportsUnavailableText,
 } from '@whombat/client';
-import { teamReportErrorText, useCreateTeamReport, useTeamReportDraft } from '@whombat/client/react';
+import { readUpdatesChannel } from '@whombat/client/managed';
+import {
+  teamReportErrorText,
+  useCreateTeamReport,
+  useTeamReportDraft,
+  useTeamReports,
+} from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
 import { TEAM_REPORT_EXPECTED_MAX, TEAM_REPORT_TEXT_MAX, type TeamReportKind } from '@whombat/core';
 import Constants from 'expo-constants';
@@ -66,11 +74,25 @@ function useRuntimeVersion(): string | null {
   return status.data?.appliance.runtimeVersion || null;
 }
 
+/** The Whombat's update channel, which the box adds too: read here only to show it. Null while unknown. */
+function useUpdateChannel() {
+  const session = useManaged()?.session ?? null;
+  const channel = useQuery({
+    queryKey: ['whombat', 'updates.channel'],
+    queryFn: () => (session ? readUpdatesChannel(session) : Promise.resolve(null)),
+    enabled: session !== null,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  return channel.data?.channel ?? null;
+}
+
 export function TeamReportNewScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const bottomRoom = useBottomRoom();
   const draftId = route.params?.draftId;
+  const list = useTeamReports(slug);
   const draft = useTeamReportDraft(slug, draftId);
   const create = useCreateTeamReport(slug);
   const [kind, setKind] = useState<TeamReportKind>('bug');
@@ -79,14 +101,19 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
   const [showSent, setShowSent] = useState(false);
   const context = useMemo(phoneContext, []);
   const runtimeVersion = useRuntimeVersion();
-  const sentWith = teamReportSentWith({ ...context, ...(runtimeVersion ? { runtimeVersion } : {}) });
+  const channel = useUpdateChannel();
+  const sentWith = teamReportSentWith({
+    ...context,
+    ...(runtimeVersion ? { runtimeVersion } : {}),
+    ...(channel ? { channel } : {}),
+  });
 
-  // The assistant's draft fills the form in once; one already sent or put aside fills in nothing.
-  const filled = useRef(false);
+  // Each of the assistant's drafts fills the form in once; one already sent or put aside fills in nothing.
+  const filled = useRef<string | null>(null);
   const drafted = draft.data?.draft;
   useEffect(() => {
-    if (!drafted || drafted.done || filled.current) return;
-    filled.current = true;
+    if (!drafted || drafted.done || filled.current === drafted.id) return;
+    filled.current = drafted.id;
     setKind(drafted.kind);
     setText(drafted.text);
     setExpected(drafted.expected);
@@ -99,7 +126,10 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
         ? TEAM_REPORT_WORDS.draftFailed
         : null;
 
-  const ready = text.trim().length > 0 && !create.isPending;
+  // As on the web: a Whombat that doesn't speak reports, or a person who can't send now, gets the reason, not Send.
+  const unavailable = list.data && !list.data.available ? teamReportsUnavailableText(list.data.reason) : null;
+  const blocked = !list.supported ? TEAM_REPORT_WORDS.updateFirst : unavailable;
+  const ready = !blocked && text.trim().length > 0 && !create.isPending;
   const send = () => {
     if (!ready) return;
     create.mutate(
@@ -144,6 +174,11 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
           >
             {TEAM_REPORT_WORDS.formTitle}
           </Text>
+          {blocked ? (
+            <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
+              {blocked}
+            </Text>
+          ) : null}
           {draftNote ? (
             <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
               {draftNote}

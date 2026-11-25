@@ -148,4 +148,41 @@ describe('reports to the Whombat Team in React', () => {
     await waitFor(() => expect(listed()?.reports.map((r) => r.id)).toEqual([NEW]));
     client.session?.close();
   });
+  it('sends every try of one send with the same request id, and the next send with a new one', async () => {
+    let fail = true;
+    const { client, wrapper, sent } = setup((method, url) => {
+      if (method === 'POST' && url.endsWith('/team-reports')) {
+        if (fail) return json({ error: { code: 'unavailable', message: 'Try again in a moment.' } }, 503);
+        return json({ report: report({ id: NEW, messages: [] }), earlier: 0 }, 201);
+      }
+      if (method === 'POST' && url.endsWith('/act')) {
+        if (fail) return json({ error: { code: 'unavailable', message: 'Try again in a moment.' } }, 503);
+        return json({ report: report({ status: 'confirmed' }), earlier: 0 });
+      }
+      return json(list());
+    });
+    act(() => client.session?.connect());
+    const create = renderHook(() => useCreateTeamReport(BURROW), { wrapper });
+    const body = { kind: 'bug' as const, text: 'The map is blank.', expected: '', context: {} };
+    await act(() => create.result.current.mutateAsync(body).catch(() => null));
+    fail = false;
+    await act(() => create.result.current.mutateAsync(body));
+    await act(() => create.result.current.mutateAsync(body));
+    const ids = sent.filter((s) => s.method === 'POST').map((s) => s.body.requestId);
+    expect(ids).toHaveLength(3);
+    expect(ids[0]).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[1]);
+
+    // It works pressed again after a failure: the same id; another button: its own.
+    fail = true;
+    const press = renderHook(() => useActTeamReport(BURROW, ID), { wrapper });
+    await act(() => press.result.current.mutateAsync('works').catch(() => null));
+    await act(() => press.result.current.mutateAsync('works').catch(() => null));
+    await act(() => press.result.current.mutateAsync('still_happening').catch(() => null));
+    const acts = sent.filter((s) => s.url.endsWith('/act')).map((s) => s.body.requestId);
+    expect(acts[1]).toBe(acts[0]);
+    expect(acts[2]).not.toBe(acts[1]);
+    client.session?.close();
+  });
 });
