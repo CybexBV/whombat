@@ -63,6 +63,11 @@ export const BURROW_ROUTES = [
   '/things/$thing',
   '/skills',
   '/done',
+  // Reports to the Whombat Team (Whombat team-reports.md): the person's list, a new report (`?draft=` the assistant's
+  // draft), and one report, which the box's Inbox item and push open.
+  '/reports',
+  '/reports/new',
+  '/reports/$reportId',
 ] as const;
 
 /** The first segments of the burrow screens: a burrow named like one of these is read as the screen (AP-362). */

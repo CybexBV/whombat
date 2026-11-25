@@ -30,14 +30,21 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
     expect(text).not.toContain('never contains your content');
   });
 
-  it('is version 2026-11-23 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
-    expect(text).toContain('Version `2026-11-23`');
+  it('is version 2026-11-25 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
+    expect(text).toContain('Version `2026-11-25`');
     expect(text).not.toMatch(/\bowners?\b|\bmembers?\b|\broles?\b/i);
     expect(text).not.toContain('no remote access');
     expect(text).toContain('no standing vendor login');
     expect(text).toContain('**Look and fix**');
     expect(text).toContain('for 90 days');
     expect(text).toContain('stop it at any time');
+  });
+
+  it('says the Whombat Team can read reports sent to it, with its AI, and how long it keeps them', () => {
+    expect(text).toContain('**Reports to the Whombat Team.**');
+    expect(text).toContain('we can read these');
+    expect(text).toContain('**OpenAI**');
+    expect(text).toContain('until 90 days after the report is closed');
   });
 
   it('names the controller and the services a Whombat talks to itself', () => {

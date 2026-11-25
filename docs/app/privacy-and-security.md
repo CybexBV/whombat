@@ -61,8 +61,9 @@ Trust boundaries:
 - An appliance sends the cloud service nothing unless its person turns on Whombat Link. The cloud service never
   receives message content, files, prompts or AI output, except a phone notification's short preview (who wrote,
   where, the start of the message), which it passes to Apple or Google without storing it and which each person can
-  turn off (Settings → Notifications, “Show message text in notifications”), and what it keeps sealed with keys it
-  doesn't have (shared links, backup details). It holds account data, each linked appliance's Link state and address,
+  turn off (Settings → Notifications, “Show message text in notifications”), what it keeps sealed with keys it
+  doesn't have (shared links, backup details), and the reports a person sends the Whombat Team, which the team reads
+  (the form says so; team-reports.md). It holds account data, each linked appliance's Link state and address,
   update progress, remote help's state, push tokens, and request logs without IP addresses (kept 14 days). A
   signed-in person can delete their cloud account.
 - The appliance holds everything in plaintext, because it is the customer's server, and a self-installed appliance

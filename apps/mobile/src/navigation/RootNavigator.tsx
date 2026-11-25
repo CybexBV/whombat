@@ -708,6 +708,29 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
             }
           />
         ) : null}
+        {/* Reports to the Whombat Team (team-reports.md): the list, a new one and one report, where its push leads. */}
+        <Stack.Screen
+          name="TeamReports"
+          getComponent={() =>
+            (require('../screens/TeamReportsScreen') as typeof import('../screens/TeamReportsScreen'))
+              .TeamReportsScreen
+          }
+        />
+        <Stack.Screen
+          name="TeamReportNew"
+          getComponent={() =>
+            (require('../screens/TeamReportNewScreen') as typeof import('../screens/TeamReportNewScreen'))
+              .TeamReportNewScreen
+          }
+        />
+        <Stack.Screen
+          name="TeamReport"
+          getId={SCREEN_IDS.TeamReport}
+          getComponent={() =>
+            (require('../screens/TeamReportScreen') as typeof import('../screens/TeamReportScreen'))
+              .TeamReportScreen
+          }
+        />
         {managed ? (
           <Stack.Screen
             name="WhombatAbout"
