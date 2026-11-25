@@ -32,6 +32,7 @@ export const TEAM_REPORT_WORDS = {
   empty: 'Tell the Whombat Team what isn’t working or what you’d like Whombat to do.',
   stale: 'This list may be out of date: the Whombat Team can’t be reached right now.',
   loading: 'Loading…',
+  updateFirst: 'Update this Whombat to send reports to the Whombat Team.',
   listFailed: 'Your reports couldn’t load. Try again.',
   tryAgain: 'Try again',
   open: 'Open',
@@ -149,6 +150,15 @@ export function teamReportGroups(rows: readonly TeamReportRow[]): TeamReportGrou
 /** How many of the person's reports have something new. */
 export function teamReportsUnread(rows: readonly Pick<TeamReportRow, 'unread'>[]): number {
   return rows.filter((r) => r.unread).length;
+}
+
+/** About's line for the person's reports: “No reports yet”, “1 report”, “3 reports · 1 new answer”. */
+export function teamReportsSummary(rows: readonly Pick<TeamReportRow, 'unread'>[]): string {
+  if (!rows.length) return 'No reports yet';
+  const count = rows.length === 1 ? '1 report' : `${rows.length} reports`;
+  const unread = teamReportsUnread(rows);
+  if (!unread) return count;
+  return `${count} · ${unread === 1 ? '1 new answer' : `${unread} new answers`}`;
 }
 
 /** A row's line under its title: “#12 · Problem · Looking into it”. */

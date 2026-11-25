@@ -87,12 +87,15 @@ function putRow(qc: QueryClient, burrow: string, report: TeamReport) {
   });
 }
 
-/** A report taken back: gone from the list and its page. */
+/**
+ * A report taken back: gone from the list at once. Its page's answer is only marked old (not removed while the page is
+ * still open, which would ask for it again): the next visit asks and hears it is gone.
+ */
 function dropReport(qc: QueryClient, burrow: string, reportId: string) {
   qc.setQueryData<TeamReportsList>(listKey(burrow), (list) =>
     list ? { ...list, reports: list.reports.filter((r) => r.id !== reportId) } : list,
   );
-  qc.removeQueries({ queryKey: reportKey(burrow, reportId), exact: true });
+  void qc.invalidateQueries({ queryKey: reportKey(burrow, reportId), exact: true, refetchType: 'none' });
 }
 
 /** What a refusal or failure says in the person's words. */

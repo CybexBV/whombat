@@ -9,6 +9,7 @@ import {
   teamReportRowLine,
   teamReportSentWithLine,
   teamReportsShown,
+  teamReportsSummary,
   teamReportsUnavailableText,
   teamReportsUnread,
   teamReportTimeline,
@@ -81,6 +82,9 @@ describe('the list', () => {
 
   it('counts the reports with something new and says a row in a line', () => {
     expect(teamReportsUnread(rows)).toBe(2);
+    expect(teamReportsSummary([])).toBe('No reports yet');
+    expect(teamReportsSummary(rows.slice(0, 1))).toBe('1 report');
+    expect(teamReportsSummary(rows)).toBe('7 reports · 2 new answers');
     expect(teamReportRowLine(row({ number: 12, kind: 'idea', status: 'investigating' }))).toBe(
       '#12 · Idea · Looking into it',
     );
