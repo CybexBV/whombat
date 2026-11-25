@@ -161,7 +161,8 @@ export function wayOutTargets(config: { targets?: string; appUrl?: string | unde
  * internet is down when no target answers, and that is the router's fault only when a gateway is known and doesn't
  * answer either (no gateway: the router isn't judged). With the internet answering, name lookups fail when none of the
  * names resolves (the targets' and `WAY_OUT_NAME`). A name target's address is the one it resolved to now, else the
- * last one it did (`known`), so a failing lookup doesn't make the internet look down.
+ * last one it did (`known`), so a failing lookup doesn't make the internet look down. With no address to try at all
+ * (only names, none ever resolved) and every lookup failing, it is name lookups: nothing showed the internet down.
  */
 export async function probeWayOut(
   probes: WayOutProbes,
@@ -187,8 +188,12 @@ export async function probeWayOut(
       r.some(Boolean),
     ),
   ]);
-  if (!reached) return routerOk === false ? 'router' : 'internet';
-  if (!resolved.some(([, a]) => a.length > 0)) return 'names';
+  const namesFail = !resolved.some(([, a]) => a.length > 0);
+  if (!reached) {
+    if (routerOk === false) return 'router';
+    return !addresses.length && namesFail ? 'names' : 'internet';
+  }
+  if (namesFail) return 'names';
   return null;
 }
 

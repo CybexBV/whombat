@@ -107,6 +107,19 @@ describe('probeWayOut', () => {
     expect(await probeWayOut(network({}), bare, new Map())).toBeNull();
   });
 
+  it('blames name lookups, not the internet, when only names were given and none ever resolved', async () => {
+    const named = [
+      { host: 'app.example.com', port: 443 },
+      { host: 'probe.example.net', port: 443 },
+    ];
+    expect(await probeWayOut(network({ names: false }), named, new Map())).toBe('names');
+    // The router not answering either is still the router.
+    expect(await probeWayOut(network({ names: false, router: false }), named, new Map())).toBe('router');
+    // An address found before is tried: one that doesn't answer is the internet.
+    const known = new Map([['app.example.com', '203.0.113.7']]);
+    expect(await probeWayOut(network({ names: false, internet: false }), named, known)).toBe('internet');
+  });
+
   it('reaches a named target at the address it last found when lookups stop', async () => {
     const known = new Map<string, string>();
     await probeWayOut(network({}), targets, known);
