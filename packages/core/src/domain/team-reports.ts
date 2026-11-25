@@ -62,13 +62,17 @@ export const TEAM_REPORTS_LIST_MAX = 100;
 /** The longest title (the team's, or the start of the description until the team names it). */
 export const TEAM_REPORT_TITLE_MAX = 200;
 
-/** Short text the person or the team wrote: no control characters but line breaks and tabs. */
+/** Control characters other than a tab and line breaks: words a person or the team wrote never carry them. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: they are what it refuses
+const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+
+/** Text the person or the team wrote: no control characters but line breaks and tabs. */
 const text = (max: number, min = 0) =>
   z
     .string()
     .min(min)
     .max(max)
-    .regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/);
+    .refine((s) => !CONTROL.test(s), { message: 'Expected text without control characters' });
 
 /** Seconds since 1970 (integer JSON, as every device op). */
 const Seconds = z.number().int().min(0).max(4_102_444_800);
