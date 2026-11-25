@@ -4,8 +4,8 @@ import {
   type ApprovalUnmetView,
 } from '@whombat/core/approvals';
 import { ChevronRight } from 'lucide-react';
-import { type ReactNode, useId } from 'react';
-import { Button } from '../../components/Button';
+import { type MouseEvent, type ReactNode, useId } from 'react';
+import { Button, ButtonLink } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import styles from './AskCard.module.css';
@@ -31,6 +31,18 @@ export interface AskCardAnswer {
   title?: string;
 }
 
+/**
+ * A way to change what the card asks before answering (the assistant's draft report: Edit opens the form with it). A
+ * link beside the answers, not one of them.
+ */
+export interface AskCardEdit {
+  label: string;
+  /** The app path it opens. */
+  href: string;
+  /** In-app navigation for a plain click; a modified click opens it the browser's way (a new tab). */
+  onNavigate: (href: string) => void;
+}
+
 export interface AskCardProps {
   facts: AskCardFacts;
   /** “What actually runs: …” when the stored wording disagrees with the action. */
@@ -39,6 +51,8 @@ export interface AskCardProps {
   why?: string | null;
   /** The answers in their one order; empty once answered. */
   answers: AskCardAnswer[];
+  /** Edit beside the answers while they show. */
+  edit?: AskCardEdit | null;
   busy?: boolean;
   /** Inside the Details fold: the target, the call, the message, the lasting yes. */
   details?: ReactNode;
@@ -66,14 +80,16 @@ export interface AskCardProps {
 /**
  * The one approval card (approval-card.md): who asks and when, the title, what happens to what, the permission it
  * uses, what it still waits for and the exact moment *Yes, tonight* means — all before the answers — then Details, and
- * the answers in their one order, outlined alike so none looks recommended. A long message or command scrolls in the
- * facts; the answers sit apart under them and never cover them.
+ * the answers in their one order, outlined alike so none looks recommended, with Edit after them where what is asked
+ * can be changed first. A long message or command scrolls in the facts; the answers sit apart under them and never
+ * cover them.
  */
 export function AskCard({
   facts,
   actionNote,
   why,
   answers,
+  edit = null,
   busy = false,
   details,
   detailsOpen = false,
@@ -90,6 +106,14 @@ export function AskCard({
   const Heading = level === 3 ? 'h3' : 'h2';
   const W = APPROVAL_CARD_WORDS;
   const unmet = facts.unmet ?? [];
+  const editing = edit && answers.length ? edit : null;
+  const openEdit = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!editing || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    event.preventDefault();
+    // While an answer is being saved the card waits, as the answers do.
+    if (!busy) editing.onNavigate(editing.href);
+  };
   return (
     <section
       className={cx(
@@ -177,7 +201,12 @@ export function AskCard({
         <div className={styles.answered}>{answered}</div>
       ) : answers.length ? (
         // biome-ignore lint/a11y/useSemanticElements: a group of buttons, named for screen readers.
-        <div className={styles.answers} role="group" aria-label={W.answersLabel} data-count={answers.length}>
+        <div
+          className={styles.answers}
+          role="group"
+          aria-label={W.answersLabel}
+          data-count={answers.length + (editing ? 1 : 0)}
+        >
           {answers.map((a) => (
             <Button
               key={a.id}
@@ -192,6 +221,19 @@ export function AskCard({
               {a.label}
             </Button>
           ))}
+          {editing ? (
+            <ButtonLink
+              variant="secondary"
+              size="lg"
+              className={styles.answer}
+              href={editing.href}
+              onClick={openEdit}
+              aria-disabled={busy || undefined}
+              data-edit=""
+            >
+              {editing.label}
+            </ButtonLink>
+          ) : null}
         </div>
       ) : null}
     </section>

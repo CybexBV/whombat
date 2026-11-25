@@ -1,4 +1,11 @@
-import { AUTOMATION_ASKING, type AutomationAsker, nextAt } from '@whombat/client';
+import {
+  AUTOMATION_ASKING,
+  type AutomationAsker,
+  nextAt,
+  TEAM_REPORT_WORDS,
+  teamReportDraftOf,
+  teamReportDraftPath,
+} from '@whombat/client';
 import { useChangeWindow } from '@whombat/client/react';
 import {
   APPROVAL_CARD_WORDS,
@@ -12,6 +19,7 @@ import {
 import type { Approval } from '@whombat/core/domain';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useNavigateHref } from '../../app/routing/navigation';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Skeleton } from '../../components/ListState';
@@ -69,14 +77,18 @@ export function AskSheet({
   asker?: AutomationAsker | null;
 }) {
   const quiet = useChangeWindow(burrow);
-  const tonight = nextAt(Date.now(), timeZone, quiet.start);
+  // The assistant's draft report (team-reports.md) goes now or not at all, and Edit opens the form with it.
+  const draftId = teamReportDraftOf(approval);
+  const navigate = useNavigateHref();
+  const tonight = draftId ? null : nextAt(Date.now(), timeZone, quiet.start);
   const pending = approval.state === 'pending';
   const card = approvalCardFacts(approval, view, { timeZone, tonight });
   const facts = asker && pending ? { ...card, status: AUTOMATION_ASKING } : card;
   const answer = approvalAnswer(approval, { names, now: Date.now(), timeZone });
   const mayHaveGoneThrough = useUnknownAnswer(burrow, approval.number);
   const check = useAskToCheck(burrow, view.title);
-  const choices = view.canApprove && view.canDecline && !refreshFailed ? approvalAnswerChoices(true) : [];
+  const choices =
+    view.canApprove && view.canDecline && !refreshFailed ? approvalAnswerChoices(draftId === null) : [];
   return (
     <div className={styles.sheet} data-screen="approval" data-phase={view.phase}>
       <SheetHead />
@@ -103,6 +115,11 @@ export function AskSheet({
             onSelect: () =>
               onAnswer(c.key, c.key === 'later' ? nextAt(Date.now(), timeZone, quiet.start) : undefined),
           }))}
+          edit={
+            draftId
+              ? { label: TEAM_REPORT_WORDS.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
+              : null
+          }
           answered={answer ? <p className={styles.answered}>{answer.text}</p> : null}
           unknown={pending && mayHaveGoneThrough ? check : null}
           details={<AskDetails approval={approval} view={view} busy={busy} onLasting={onLasting} />}

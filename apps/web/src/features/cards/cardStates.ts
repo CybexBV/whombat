@@ -281,6 +281,43 @@ export const approvalAsk: Approval = deployApproval({
   ] as ApprovalCondition[],
 } as Partial<Approval>);
 
+/**
+ * The assistant's draft report (Whombat team-reports.md): “Send this to the Whombat Team?”, Yes, do it · No, and Edit,
+ * which opens the form with the draft.
+ */
+export const approvalTeamReport: Approval = deployApproval({
+  id: 'apr_team-report' as Approval['id'],
+  number: 902,
+  keyId: 'messages.external',
+  action: {
+    type: 'custom',
+    params: {
+      name: 'report_to_whombat_team',
+      keyId: 'messages.external',
+      // The fixture world's draft (`teamReportFixtures.ts`), so Edit opens the form filled.
+      data: { draftId: 'draft_fixture_backups' },
+    },
+  },
+  title: 'Report a problem to the Whombat Team',
+  question: 'Send this to the Whombat Team?',
+  target: 'Whombat Team',
+  whatHappens: [
+    'The Whombat Team and its AI assistant read it, with this Whombat’s version.',
+    'You follow their answer under Reports, and can take it back there.',
+  ],
+  explainer:
+    'Dusty always asks before telling the Whombat Team anything. Only your yes sends it, exactly as shown. Edit changes it first.',
+  conditions: [
+    {
+      id: 'person',
+      kind: 'person_approves',
+      label: 'A person says yes',
+      met: false,
+      approverIds: ['prn_mara'],
+    },
+  ] as ApprovalCondition[],
+} as Partial<Approval>);
+
 /* Cards ------------------------------------------------------------------------------------------- */
 
 export const research = cardOf(msg_dm_dusty_dusty_0941.card, 'research');
@@ -678,6 +715,7 @@ export const CARD_STATES = {
   'approval-failed': { kind: 'approval', approval: approvalFailed },
   'approval-declined': { kind: 'approval', approval: approvalDeclined },
   'approval-ask': { kind: 'approval', approval: approvalAsk },
+  'approval-team-report': { kind: 'approval', approval: approvalTeamReport },
   commits,
   pill,
   answer: answerSearch,

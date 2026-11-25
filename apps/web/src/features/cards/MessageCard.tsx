@@ -24,8 +24,11 @@ import {
   runShowsAsLine,
   SCHEDULE_TEXT,
   scheduleLine,
+  TEAM_REPORT_WORDS,
   taskCardView,
   taskLine,
+  teamReportDraftOf,
+  teamReportDraftPath,
   theAgentOf,
   thingWatchLine,
   turnFailedLine,
@@ -1152,6 +1155,13 @@ function useApprovalActions(
     void updateSearch((prev) => ({ ...prev, approval: approval.number }));
   };
 
+  // The assistant's draft report (team-reports.md): Edit opens the form with it, and it goes now or not at all.
+  const draftId = teamReportDraftOf(approval);
+  const navigate = useNavigateHref();
+  const edit = draftId
+    ? { label: TEAM_REPORT_WORDS.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
+    : null;
+
   // “Tonight at 03:00” (ONE-10, AP-1280): in a chat with the agent, when the Whombat's quiet hours for changes start
   // (care-plan.md), read in its own time zone.
   const look = useCardLook();
@@ -1159,7 +1169,7 @@ function useApprovalActions(
   const burrowZone = boot?.burrow.timeZone ?? timeZone;
   const tonight = nextAt(now, burrowZone, quiet.start);
   const approveLater =
-    look === 'chat'
+    look === 'chat' && !draftId
       ? {
           label: `Tonight at ${formatClock(tonight, timeZone)}`,
           at: tonight,
@@ -1187,6 +1197,7 @@ function useApprovalActions(
     onDetails,
     approveLater,
     unknown,
+    edit,
   };
 }
 
@@ -1215,6 +1226,7 @@ function ApprovalCardContainer({ burrow, approval, boot, principals }: ApprovalC
       onChoose={a.onChoose}
       onDecline={a.onDecline}
       busy={a.busy}
+      edit={a.edit}
     />
   );
 }
