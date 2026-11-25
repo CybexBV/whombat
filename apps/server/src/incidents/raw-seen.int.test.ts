@@ -3,11 +3,11 @@
  * that needs a new sign-in opens an incident, stays open while kept quiet and ends as back (not as removed) once signed
  * in, while a watch on it keeps running; a server whose failing disk the person ignored keeps its incident; a
  * connection whose details couldn't be read isn't back; a pass that couldn't read a connection doesn't start its run
- * again. Postgres because each pass is a signed commit read back with the connector rows, line states and windows
- * beside it.
+ * again; a short or undone window doesn't cancel a delayed automation for good. Postgres because each pass is a signed
+ * commit read back with the connector rows, line states, windows and automation claims beside it.
  */
-import { FEEDBACK_THING_ID, newId, THING_BACK } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import { type AutomationDefinitionInput, FEEDBACK_THING_ID, newId, THING_BACK } from '@whombat/core';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sendMessage } from '../commands/messages';
 import {
@@ -23,6 +23,7 @@ import {
 } from '../db/schema/index';
 import { createFeedbackIntegration } from '../feedback/integrations';
 import { HOSTS_API } from '../hosts/client';
+import { serversPrincipal } from '../hosts/principal';
 import { hostsFor } from '../hosts/service';
 import { FakeHostsService } from '../hosts/testing/fake';
 import { IDS, useAutomationWorld } from '../test/automations';
@@ -31,6 +32,7 @@ import { integrationSettings } from '../test/feedback';
 import type { GlanceLine } from '../things/quiet/glance';
 import { thingWatchTool } from './agent';
 import type { PassBefore } from './plan';
+import { incidentsPass } from './store';
 import { watchIncidents } from './watch';
 
 const fake = new FakeHostsService();
@@ -277,5 +279,86 @@ describe('a connection Whombat couldn’t read', () => {
     await stored(thing, [NOT_ANSWERING]);
     await pass();
     expect((await open(thing))?.startedAt).toEqual(first);
+  });
+});
+
+describe('a delayed automation', () => {
+  function definition(thing: string) {
+    return {
+      version: 1,
+      conversationId: IDS.incidents,
+      triggers: [{ kind: 'thing', event: 'down', thing, forMinutes: 10 }],
+      steps: [{ id: 'note', kind: 'post_message', text: '{{trigger.name}} is still down' }],
+    } satisfies AutomationDefinitionInput;
+  }
+
+  async function opened(thing: string) {
+    const signer = await serversPrincipal(w.services, w.burrowId);
+    await w.ok(signer, incidentsPass, {
+      opened: [
+        {
+          thing,
+          kind: 'connection',
+          name: 'Radarr',
+          nature: 'down',
+          words: 'Not answering',
+          check: 'conn.answers',
+          subject: '',
+          cause: null,
+          startedAt: w.now().toISOString(),
+        },
+      ],
+      changed: [],
+      ended: [],
+    });
+    const [row] = await w.services.db
+      .select()
+      .from(incidents)
+      .where(and(eq(incidents.thingId, thing), eq(incidents.startedAt, w.now())));
+    if (!row) throw new Error('Missing incident');
+    return row.id;
+  }
+
+  async function window(id: string, thing: string, minutes: number, undoneAfter?: number) {
+    await w.services.db.insert(quietWindows).values({
+      id,
+      ownerId: w.burrowId,
+      thingId: thing,
+      startsAt: w.now(),
+      endsAt: new Date(w.now().getTime() + minutes * MINUTE),
+      ...(undoneAfter ? { endedAt: new Date(w.now().getTime() + undoneAfter * MINUTE) } : {}),
+      createdAt: w.now(),
+    });
+  }
+
+  it('starts at its deadline after a short or undone window, and not while one holds then', async () => {
+    const thing = await connection('radarr', 'Radarr');
+    const id = await w.publish(definition(thing), { name: 'Radarr stays down' });
+    await stored(thing, [NOT_ANSWERING]);
+
+    const first = await opened(thing);
+    await w.settle();
+    w.advance(2 * MINUTE);
+    await window('qw_radarr_short', thing, 2);
+    w.advance(2 * MINUTE);
+    await window('qw_radarr_undone', thing, 60, 1);
+    w.advance(7 * MINUTE);
+    await w.settle();
+    expect(await w.runs(id)).toHaveLength(1);
+    await w.ok(await serversPrincipal(w.services, w.burrowId), incidentsPass, {
+      opened: [],
+      changed: [],
+      ended: [{ id: first, endedAt: w.now().toISOString() }],
+    });
+
+    // Kept quiet over the deadline: it doesn't start.
+    w.advance(MINUTE);
+    await opened(thing);
+    await w.settle();
+    w.advance(5 * MINUTE);
+    await window('qw_radarr_over', thing, 30);
+    w.advance(6 * MINUTE);
+    await w.settle();
+    expect(await w.runs(id)).toHaveLength(1);
   });
 });

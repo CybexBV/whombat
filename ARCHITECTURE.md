@@ -847,7 +847,8 @@ published automation details read their definition and publisher from one versio
   schedules (cron in a time zone) and Run now. A `thing` trigger listens to signed starts, escalations or ends of
   incidents for one thing or selected kinds; one that names a check starts on any event carrying it (the incident's
   own, or a bad check that began counting on it later). The engine claims each incident once per automation. A delayed
-  claim survives a restart and runs only while the incident is still open, independent and unmuted, and, as the
+  claim survives a restart and runs only while the incident is still open, independent and not kept quiet at its
+  deadline (a window that came and went meanwhile doesn't count), and, as the
   incident watcher reads the thing then, a `down` one only while it still doesn't answer and a `problem` one only while
   the check it waited on (the trigger's, else the event's) is still bad; a thing it can't read then is asked again a
   minute later. Until the release a box would go back to knows them (`0027_incident_automation_watches` in
