@@ -1577,7 +1577,8 @@ Setup and operation: `docs/github.md`.
   server's machines that can't be read leave the kept causes as they are until they age out. The quiet reads bring it
   with the thing's quiet rows: its lines are
   quiet with the cause's words, its dot is grey and its page and Home's thing say “Not answering while pve-02 is down”
-  (`causedBy`), and the cause's Inbox item and desk look name what it takes with it (“Plex and 4 more are down with
+  (`causedBy`; Overview's counts take it as not answering unless it is kept quiet), and the cause's Inbox item and
+  desk look name what it takes with it (“Plex and 4 more are down with
   it”), counting only causes the job confirmed lately, as the things themselves do. Servers held by a parent stay grouped by the hosts service.
 - **Whombat's own way out** (`managed/way-out.ts`): every minute the server process checks its router (the default
   gateway from its own `/proc/self/net/route`, which the unit's `ProcSubset=pid` keeps; a TCP connect where a refusal
