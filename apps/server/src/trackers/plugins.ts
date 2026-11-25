@@ -16,7 +16,7 @@ export const PLUGIN_FILE = 'plugin.mjs';
 /** The calls every driver has (the optional ones are checked where they are used). */
 const REQUIRED_CALLS = ['check', 'health', 'poll', 'item', 'diagnostics', 'write', 'send'] as const;
 /** The calls a driver may leave out. */
-const OPTIONAL_CALLS = ['grant', 'read', 'revoke', 'prLine', 'prMatch'] as const;
+const OPTIONAL_CALLS = ['grant', 'read', 'revoke', 'prLine', 'prMatch', 'erasures'] as const;
 
 /**
  * How long a driver may take to load and start, together, before the server goes on without it. Only waiting is cut

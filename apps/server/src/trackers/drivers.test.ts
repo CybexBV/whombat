@@ -137,12 +137,32 @@ describe('a bound driver', () => {
     expect((err as Error).message).toBe('Acme Desk didn’t answer in time.');
   });
 
+  it('reads what the tracker erased when its driver says, checking the answer', async () => {
+    const asked: (string | null)[] = [];
+    const bound = bindDriver(
+      driver({
+        erasures: async (_conn, { after }) => {
+          asked.push(after);
+          return { ids: [ITEM.id], next: '7' } as never;
+        },
+      }),
+      CONN,
+    );
+    expect(await bound.erasures?.({ after: null })).toEqual({ ids: [ITEM.id], next: '7', more: false });
+    expect(asked).toEqual([null]);
+    const odd = bindDriver(driver({ erasures: async () => ({ ids: [7], next: null }) as never }), CONN);
+    const err = await odd.erasures?.({ after: '7' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SourceProblem);
+    expect((err as SourceProblem).code).toBe('invalid_answer');
+  });
+
   it('never lets an optional call break its step', async () => {
     const without = bindDriver(driver(), CONN);
     expect(without.grant).toBeNull();
     expect(without.read).toBeNull();
     expect(without.revoke).toBeNull();
     expect(without.prLine(12)).toBeNull();
+    expect(without.erasures).toBeNull();
     const odd = bindDriver(
       driver({
         revoke: async () => {

@@ -16,6 +16,8 @@ import {
   type TrackerConnection,
   type TrackerDriver,
   type TrackerDriverInfo,
+  type TrackerErasures,
+  TrackerErasures as TrackerErasuresSchema,
   TrackerFailure,
   type TrackerGrant,
   TrackerGrant as TrackerGrantSchema,
@@ -73,6 +75,8 @@ export interface BoundDriver {
   revoke: ((id: string) => Promise<boolean>) | null;
   /** The tracker's own line for a fix's pull request, or null. */
   prLine(number: number): string | null;
+  /** Null: the tracker doesn't say which items it erased. */
+  erasures: ((input: { after: string | null }) => Promise<TrackerErasures>) | null;
 }
 
 /** What a failed call is, in the workflow's terms. */
@@ -241,6 +245,17 @@ export function bindDriver(driver: TrackerDriver, conn: TrackerConnection): Boun
         return null;
       }
     },
+    erasures: driver.erasures
+      ? (input) =>
+          call(DRIVER_TIMEOUTS.call, async () =>
+            checked(
+              TrackerErasuresSchema,
+              await driver.erasures?.(conn, input),
+              product,
+              'list of deleted reports',
+            ),
+          )
+      : null,
   };
 }
 
