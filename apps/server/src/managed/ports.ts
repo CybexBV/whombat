@@ -40,6 +40,15 @@ import type {
   RuntimeSharePutResponse,
   RuntimeShareViewsRequest,
   RuntimeShareViewsResponse,
+  RuntimeTeamReportsActRequest,
+  RuntimeTeamReportsActResponse,
+  RuntimeTeamReportsCreateRequest,
+  RuntimeTeamReportsCreateResponse,
+  RuntimeTeamReportsGetRequest,
+  RuntimeTeamReportsGetResponse,
+  RuntimeTeamReportsListResponse,
+  RuntimeTeamReportsReplyRequest,
+  RuntimeTeamReportsReplyResponse,
   RuntimeTicketResponse,
   UpdateApproveRequest,
   UpdateApproveResponse,
@@ -167,6 +176,25 @@ export interface ManagerPort extends TailscalePort {
   shareViews?(
     request: z.input<typeof RuntimeShareViewsRequest>,
   ): Promise<z.output<typeof RuntimeShareViewsResponse>>;
+  /**
+   * Reports to the Whombat Team (docs/decisions/team-reports.md): the device ops `team.reports.list`, `.get`,
+   * `.create`, `.reply` and `.act`, signed and forwarded by the manager, the words inside as base64url JSON. Errors as
+   * the shared links': 503 `control_unreachable` (or status 0), 502 `control_refused` with control's code first in the
+   * message, 404/501 no control or Link here. Absent on a manager stand-in without them.
+   */
+  teamReportsList?(): Promise<z.output<typeof RuntimeTeamReportsListResponse>>;
+  teamReportsGet?(
+    request: z.input<typeof RuntimeTeamReportsGetRequest>,
+  ): Promise<z.output<typeof RuntimeTeamReportsGetResponse>>;
+  teamReportsCreate?(
+    request: z.input<typeof RuntimeTeamReportsCreateRequest>,
+  ): Promise<z.output<typeof RuntimeTeamReportsCreateResponse>>;
+  teamReportsReply?(
+    request: z.input<typeof RuntimeTeamReportsReplyRequest>,
+  ): Promise<z.output<typeof RuntimeTeamReportsReplyResponse>>;
+  teamReportsAct?(
+    request: z.input<typeof RuntimeTeamReportsActRequest>,
+  ): Promise<z.output<typeof RuntimeTeamReportsActResponse>>;
   /**
    * How the box is doing (the person's `host.metrics`, docs/decisions/box-status.md BS-06, CT-334): one range of the
    * manager's measurements, the days counted in `timeZone`. `ManagerCallError` status 404 from a manager before 0.78.

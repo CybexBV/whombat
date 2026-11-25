@@ -9,6 +9,9 @@
  *   the runtime calls (`MANAGER_PATHS`) as a box without control does: reports are taken, nothing is pushed or
  *   renewed, there are no AI client bundles (the scripted Hermes needs none), the feedback drop is unsupported and
  *   the box's measurements, hardware and network aren't there. No relay: the boot doesn't open the relay endpoint.
+ * - **The Whombat Team** (team-reports.md): a small team in memory that takes reports, numbers them and answers each new
+ *   one a few seconds later (“Looking into it”), so the reports' pages, the Inbox and the push can be tried with
+ *   `pnpm dev`. Nothing leaves the machine.
  * - **Tailscale** (hermes-engine.md HE-S236): a stand-in that turns on with a login link — on the person's own login server
  *   when one is named, else Tailscale's — and signs itself in a few seconds later as `whombat-dev.tail0000.ts.net`
  *   (no HTTPS, no certificate), so the app's setup and This Whombat can be tried against `pnpm dev`. Never the
@@ -25,6 +28,7 @@ import { LOCAL_API_VERSION, MANAGER_PATHS } from '@whombat/control-contracts/loc
 import { TAILSCALE_OFF, type TailscaleStatus } from '@whombat/protocol/session';
 import { generateIdentity, serializeIdentity } from '@whombat/secure-channel';
 import type { Config } from '../config';
+import { FakeTeam, FakeTeamRefusal } from './fake-team';
 
 /** Where development keeps the box's content key. */
 export function devIdentityFile(home: string): string {
@@ -148,11 +152,58 @@ export class StandInTailscale {
   }
 }
 
-/** What the stand-in answers for one path (POST or GET); `tailscale` keeps its Tailscale between calls. */
+/** How long the stand-in team takes to answer a new report. */
+export const STAND_IN_TEAM_REPLY_MS = 5_000;
+
+/** The stand-in team's answer to one team report path; control's refusals as the manager passes them on. */
+function teamAnswer(team: FakeTeam, path: string, body: Record<string, unknown>): Answer {
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
+  try {
+    switch (path) {
+      case MANAGER_PATHS.teamReportsList:
+        return { status: 200, body: team.list() };
+      case MANAGER_PATHS.teamReportsGet:
+        return { status: 200, body: team.get({ reportId: text(body.reportId) }) };
+      case MANAGER_PATHS.teamReportsCreate:
+        return {
+          status: 200,
+          body: team.create({ requestId: text(body.requestId), payload: text(body.payload) }),
+        };
+      case MANAGER_PATHS.teamReportsReply:
+        return {
+          status: 200,
+          body: team.reply({
+            requestId: text(body.requestId),
+            reportId: text(body.reportId),
+            payload: text(body.payload),
+          }),
+        };
+      default: {
+        const action = body.action;
+        if (action !== 'works' && action !== 'still_happening' && action !== 'withdraw')
+          return refused(400, 'bad_request', 'Not an action on a report.');
+        return {
+          status: 200,
+          body: team.act({ requestId: text(body.requestId), reportId: text(body.reportId), action }),
+        };
+      }
+    }
+  } catch (err) {
+    if (err instanceof FakeTeamRefusal)
+      return refused(502, 'control_refused', `refused ${err.code}: control refused it: ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * What the stand-in answers for one path (POST or GET); `tailscale` keeps its Tailscale between calls and `team` the
+ * reports to the Whombat Team.
+ */
 export function standInAnswer(
   path: string,
   body: Record<string, unknown> = {},
   tailscale: StandInTailscale = new StandInTailscale(),
+  team: FakeTeam = new FakeTeam({ replyAfterMs: STAND_IN_TEAM_REPLY_MS }),
 ): Answer {
   const state = (status: TailscaleStatus): Answer => ({
     status: 200,
@@ -204,6 +255,12 @@ export function standInAnswer(
       return refused(409, 'tailscale.no_https', 'The stand-in Tailscale has no HTTPS certificate.');
     case MANAGER_PATHS.tailscalePeers:
       return { status: 200, body: { v: 1, peers: tailscale.peers() } };
+    case MANAGER_PATHS.teamReportsList:
+    case MANAGER_PATHS.teamReportsGet:
+    case MANAGER_PATHS.teamReportsCreate:
+    case MANAGER_PATHS.teamReportsReply:
+    case MANAGER_PATHS.teamReportsAct:
+      return teamAnswer(team, path, body);
     default:
       return refused(404, 'not_found', 'Not on this development box.');
   }
@@ -215,6 +272,7 @@ export async function startStandInManager(path: string): Promise<StandInManager>
   rmSync(path, { force: true });
   const asked: string[] = [];
   const tailscale = new StandInTailscale();
+  const team = new FakeTeam({ replyAfterMs: STAND_IN_TEAM_REPLY_MS });
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => {
@@ -230,7 +288,7 @@ export async function startStandInManager(path: string): Promise<StandInManager>
       } catch {
         input = {};
       }
-      const answer = standInAnswer(route, input, tailscale);
+      const answer = standInAnswer(route, input, tailscale, team);
       const body = JSON.stringify(answer.body);
       res.writeHead(answer.status, {
         'content-type': 'application/json',
