@@ -110,6 +110,17 @@ async function keepQuiet(serverId: string, minutes = 60) {
   return (await keepQuietAnswer(serverId, minutes)).keptQuiet;
 }
 
+/** Keeps a server quiet until an exact time, with a note. */
+async function keepQuietUntil(serverId: string, until: Date, note: string) {
+  const res = await call('POST', thingPath(thingId('server', serverId), '/keep-quiet'), {
+    until: until.toISOString(),
+    note,
+  });
+  expect(res.status, JSON.stringify(res.body)).toBe(200);
+  hostsFor(t.services).forget();
+  return api.things.keepQuiet.response.parse(res.body);
+}
+
 /** The person's own window of a server (not Whombat's for its work), while it is open. */
 async function personsWindow(serverId: string) {
   const rows = await t.services.db
@@ -312,6 +323,99 @@ describe('End now and Whombat’s own work', () => {
     expect(await personsWindow('basalt')).toBeUndefined();
     expect((await workWindow('update:basalt/task-5'))?.endedAt).toBeNull();
     expect((await serverPage('basalt')).keptQuiet).toMatchObject({ whombat: true });
+  });
+
+  it('Undo doesn’t erase a later change of only the note', async () => {
+    const until = new Date(t.services.clock().getTime() + 2 * 3600_000);
+    const first = await keepQuietUntil('basalt', until, 'Moving it');
+    const second = await keepQuietUntil('basalt', until, 'New disks');
+    // The same end, another note: the first change can't be taken back over the second.
+    expect((await call('POST', `/changes/${first.changeId}/undo`)).status).not.toBe(200);
+    expect((await personsWindow('basalt'))?.note).toBe('New disks');
+    // Undo the later, then the earlier: the note comes back, then the window the first change made ends.
+    expect((await call('POST', `/changes/${second.changeId}/undo`)).status).toBe(200);
+    expect((await personsWindow('basalt'))?.note).toBe('Moving it');
+    expect((await call('POST', `/changes/${first.changeId}/undo`)).status).toBe(200);
+    expect(await personsWindow('basalt')).toBeUndefined();
+  });
+
+  it('a shorter window the hub can’t make a maintenance window for gives the longer one back', async () => {
+    await keepQuiet('marble', 90);
+    expect(fake.maintenance).toHaveLength(1);
+    refuseMaintenance = true;
+    await keepQuiet('marble', 30);
+    // The longer maintenance window is gone from the hub; Whombat's own window holds the server quiet by itself.
+    const mine = await personsWindow('marble');
+    expect(mine?.maintenanceId).toBeNull();
+    expect(fake.maintenance).toEqual([]);
+    expect(await t.services.db.select().from(quietMaintenanceLeft)).toEqual([]);
+    expect((await needsYou(t.services, await viewer())).map((i) => i.id)).not.toContain('hosts.alert:al_01');
+  });
+
+  it('Undo back to a shorter end the hub can’t make a maintenance window for gives the longer one back', async () => {
+    const first = await keepQuiet('marble', 30);
+    const longer = await keepQuietAnswer('marble', 90);
+    expect(endsOf()).toEqual([Date.parse(longer.keptQuiet?.until ?? '')]);
+    refuseMaintenance = true;
+    expect((await call('POST', `/changes/${longer.changeId}/undo`)).status).toBe(200);
+    const back = await personsWindow('marble');
+    expect(back?.endsAt.getTime()).toBe(Date.parse(first?.until ?? ''));
+    expect(back?.maintenanceId).toBeNull();
+    expect(fake.maintenance).toEqual([]);
+  });
+
+  it('a work window whose end moves later gets a maintenance window until then', async () => {
+    const work = 'update:basalt/task-6';
+    await keepQuietForWork(t.services, {
+      burrowId: t.burrowId,
+      serverId: 'basalt',
+      work,
+      expectedMs: 10 * 60_000,
+    });
+    const first = await workWindow(work);
+    expect(endsOf()).toEqual([first?.endsAt.getTime()]);
+    await keepQuietForWork(t.services, {
+      burrowId: t.burrowId,
+      serverId: 'basalt',
+      work,
+      expectedMs: 60 * 60_000,
+    });
+    const moved = await workWindow(work);
+    expect(moved?.endsAt.getTime()).toBeGreaterThan(first?.endsAt.getTime() ?? 0);
+    // The hub has one maintenance window, until the new end; the first went back.
+    expect(endsOf()).toEqual([moved?.endsAt.getTime()]);
+    expect(moved?.maintenanceId).not.toBe(first?.maintenanceId);
+    expect(await t.services.db.select().from(quietMaintenanceLeft)).toEqual([]);
+  });
+
+  it('a work window of another Whombat with the same work is left alone', async () => {
+    const work = 'update:basalt/task-7';
+    const at = t.services.clock();
+    const theirs = {
+      id: 'qw_other_burrow',
+      ownerId: 'burrow-other',
+      thingId: thingId('server', 'basalt'),
+      guestId: null,
+      startsAt: at,
+      endsAt: new Date(at.getTime() + 20 * 60_000),
+      note: 'Whombat is updating it',
+      byId: null,
+      work,
+      maintenanceId: null,
+      endedAt: null,
+      endedById: null,
+      createdAt: at,
+    };
+    await t.services.db.insert(quietWindows).values(theirs);
+    await keepQuietForWork(t.services, {
+      burrowId: t.burrowId,
+      serverId: 'basalt',
+      work,
+      expectedMs: 60 * 60_000,
+    });
+    expect(await workWindow(work)).toMatchObject({ ownerId: 'burrow-other', endsAt: theirs.endsAt });
+    // No maintenance window is left on the hub for a window that wasn’t written.
+    expect(fake.maintenance).toEqual([]);
   });
 
   it('a replaced maintenance window the hub didn’t remove is given back by the sweep', async () => {

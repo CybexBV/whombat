@@ -285,10 +285,22 @@ describe('One cause, one message', () => {
     expect(await watched()).toBe(false);
   });
 
-  it('while the internet is down, the connections on it that fail are listed under that one item', async () => {
+  it('while the internet is down, the connections on it that don’t answer are listed under that one item', async () => {
     await failing();
     const since = new Date(t.services.clock().getTime() - 5 * 60_000);
     await t.services.db.insert(wayOutOutages).values({ id: 'wo_test', step: 'internet', startedAt: since });
+    // Answering with an error is answering: the internet being down doesn't explain it, as for the incidents.
+    await passCauses(t.services);
+    expect(await t.services.db.select().from(thingCauses).where(eq(thingCauses.thingId, thing()))).toEqual(
+      [],
+    );
+    // Now it doesn't answer at all: nothing listens where it is dialled.
+    useVaultNetForTests(t.services, { ...stubNet, dialAddress: () => '127.0.0.2' });
+    try {
+      await pass();
+    } finally {
+      useVaultNetForTests(t.services, stubNet);
+    }
     expect(await passCauses(t.services)).toBeGreaterThanOrEqual(1);
     const [cause] = await t.services.db.select().from(thingCauses).where(eq(thingCauses.thingId, thing()));
     expect(cause).toMatchObject({ causeThing: 'box:network', words: 'while the internet is down' });

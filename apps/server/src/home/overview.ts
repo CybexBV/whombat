@@ -815,6 +815,11 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
     githubThing(services, viewer.burrow.id).catch(() => null),
     feedbackThing(services, { burrowId: viewer.burrow.id, principal: viewer.principal }).catch(() => null),
   ]);
+  // The accounts (mail, GitHub, Website feedback) say they are kept quiet as any connection does.
+  const kept = (thing: ThingSummary): ThingSummary => {
+    const window = activeWindow(book.of(thing.id).windows, now);
+    return window ? { ...thing, quietUntil: window.endsAt.toISOString() } : thing;
+  };
   return sortThings([
     ...connections.map((r) =>
       connectionThing(r, viewer.burrow.timeZone, partOf.get(r.id), {
@@ -822,9 +827,9 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
         now,
       }),
     ),
-    ...mail,
-    ...(github ? [github] : []),
-    ...(feedback ? [feedback] : []),
+    ...mail.map(kept),
+    ...(github ? [kept(github)] : []),
+    ...(feedback ? [kept(feedback)] : []),
     ...others.items,
   ]).slice(0, 200);
 }

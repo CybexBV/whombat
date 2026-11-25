@@ -201,6 +201,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "A nullable timestamp on incidents for when the thing stopped answering. Rows from earlier writers still use the incident's start when it is unknown."
+    },
+    "0032_quiet_window_revision": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Which change a quiet window is at, for Undo (docs/decisions/monitoring.md): one integer column on quiet_windows that defaults to 0. The release before it reads and writes quiet_windows past the column; a change it records carries no count, and Undo of that change compares the window's end as before."
     }
   }
 }

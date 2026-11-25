@@ -4,7 +4,14 @@
  * the internet.
  */
 import { describe, expect, it } from 'vitest';
-import { type CauseConnection, type CauseWorld, causesFor, machineThing, onInternet } from './causes';
+import {
+  answeredLast,
+  type CauseConnection,
+  type CauseWorld,
+  causesFor,
+  machineThing,
+  onInternet,
+} from './causes';
 
 const world = (over: Partial<CauseWorld> = {}): CauseWorld => ({
   servers: new Map([
@@ -47,6 +54,17 @@ describe('causesFor', () => {
   it('a connection that still answers is down because of nothing', () => {
     const down = world({ servers: new Map([['pve-02', { name: 'pve-02', down: true }]]) });
     expect(causesFor([{ ...plex, answering: true }], down).size).toBe(0);
+  });
+
+  it('answering with an error is answering, as the incidents read it', () => {
+    expect(answeredLast({ status: 'warn', outcome: 'error' })).toBe(true);
+    expect(answeredLast({ status: 'ok' })).toBe(true);
+    expect(answeredLast({ status: 'offline', outcome: 'offline' })).toBe(false);
+    expect(answeredLast({ status: 'ok', outcome: 'offline' })).toBe(false);
+    // A server that is down doesn't explain a service that answered with an error.
+    const down = world({ servers: new Map([['pve-02', { name: 'pve-02', down: true }]]) });
+    const erring = { ...plex, answering: answeredLast({ status: 'warn', outcome: 'error' }) };
+    expect(causesFor([erring], down).size).toBe(0);
   });
 
   it('a stopped machine takes what runs on it, named as people know it', () => {

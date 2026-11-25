@@ -5,6 +5,7 @@
  * are the commands in `commands.ts`; which checks start off, and whether a line is quiet by its rows alone, are
  * `defaults.ts`'s.
  */
+import { FEEDBACK_THING_ID, GITHUB_THING_ID } from '@whombat/core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../../db/client';
 import {
@@ -327,18 +328,26 @@ export async function writePass(
 
 /**
  * Rows of connections and devices that are gone (removed, or gone with their account or burrow: the rows have no foreign
- * key, a thing id names several kinds of row). Servers are the servers' part's.
+ * key, a thing id names several kinds of row). Servers are the servers' part's. GitHub and Website feedback have no
+ * connection row: theirs stay while that Whombat is connected to GitHub or has a feedback site (the health states,
+ * which have no owner, while any Whombat does).
  */
 export async function pruneGoneThings(tx: Tx | Db): Promise<void> {
-  const gone = (table: string) =>
-    sql.raw(`delete from ${table} t
+  const gone = (table: string, owned = true) => {
+    const mine = owned ? 'o.burrow_id = t.owner_id' : 'true';
+    return sql.raw(`delete from ${table} t
       where (t.thing_id like 'connection:%' or t.thing_id like 'device:%')
         and not exists (select 1 from catalog_connections c where c.id = split_part(t.thing_id, ':', 2))
-        and not exists (select 1 from connections c where c.id = split_part(t.thing_id, ':', 2))`);
+        and not exists (select 1 from connections c where c.id = split_part(t.thing_id, ':', 2))
+        and not (t.thing_id = '${GITHUB_THING_ID}'
+          and exists (select 1 from github_connections o where ${mine}))
+        and not (t.thing_id = '${FEEDBACK_THING_ID}'
+          and exists (select 1 from feedback_integrations o where ${mine}))`);
+  };
   await tx.execute(gone('notice_quiets'));
   await tx.execute(gone('watch_offs'));
   await tx.execute(gone('watch_ons'));
-  await tx.execute(gone('notice_states'));
+  await tx.execute(gone('notice_states', false));
   await tx.execute(gone('quiet_windows'));
   await tx.execute(gone('thing_causes'));
 }

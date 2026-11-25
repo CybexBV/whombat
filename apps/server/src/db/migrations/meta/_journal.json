@@ -225,6 +225,13 @@
       "when": 1795569843201,
       "tag": "0031_incident_down_since",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795570849674,
+      "tag": "0032_quiet_window_revision",
+      "breakpoints": true
     }
   ]
 }

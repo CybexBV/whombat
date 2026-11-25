@@ -4,7 +4,8 @@
  * - `quiet_windows`: a server, connection or device kept quiet until a time, by a person (with an optional note) or by
  *   Whombat for its own planned work (`work`). `thing_id` is the thing's id as `things.page` takes it; `guest_id` narrows
  *   a server's window to one of its machines (Whombat's work on one guest). A server's window is also a maintenance
- *   window in the hosts service (`maintenance_id`). Ended early: `ended_at`.
+ *   window in the hosts service (`maintenance_id`). Ended early: `ended_at`. `revision` counts the person's changes of it,
+ *   for Undo.
  * - `quiet_maintenance_left`: a hosts service maintenance window no window names any more (a newer one replaced it)
  *   that the hub hasn't confirmed removed yet; the minute's sweep tries again until it does.
  * - `thing_causes`: a thing that is down because of something else (its server offline, its machine stopped or kept
@@ -14,7 +15,7 @@
  *
  * `owner_id` is the burrow, as in `notice_quiets`. No foreign keys: a thing id names several kinds of row.
  */
-import { index, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { ts } from './common';
 
 /** A thing kept quiet until a time. */
@@ -39,6 +40,12 @@ export const quietWindows = pgTable(
     endedAt: ts('ended_at'),
     endedById: text('ended_by_id'),
     createdAt: ts('created_at').notNull(),
+    /**
+     * Which change the window is at: keeping quiet again counts it up, and Undo puts back the count of the window it
+     * restores. Undo of a change takes it back only while the window is still at that change's count, so a later change
+     * of the note alone (same end) isn't erased.
+     */
+    revision: integer('revision').notNull().default(0),
   },
   (t) => [
     index('quiet_windows_thing_idx').on(t.ownerId, t.thingId),
