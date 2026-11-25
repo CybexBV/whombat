@@ -12,9 +12,11 @@ package broker
 //	POST /v1/runtime/team-reports/reply  {requestId, reportId, payload}    runtime → 200 {report}
 //	POST /v1/runtime/team-reports/act    {requestId, reportId, action}     runtime → 200 {report | null}
 //
-// The same way and the same answers as the shared links (share.go): a Link feature, so 404 while Link isn't starting,
-// on or in grace, or on a box without control; 503 control_unreachable with Retry-After while control is out of reach;
-// 502 control_refused with control's code first in the message (team_reports_unavailable, report_unknown,
+// The same way and the same answers as the shared links (share.go), but gated like what control answers once it knows
+// the box: 404 only while Link is off, or on a box without control. A person whose Link ended can still read their
+// reports and withdraw one; control alone decides what each Link state may do (sending needs Link on or in grace) and
+// says so with its code. 503 control_unreachable with Retry-After while control is out of reach; 502 control_refused
+// with control's codes first in the message (team_reports_unavailable, not_invited, link_off, report_unknown,
 // report_closed, rate_limited …); 413 too_large above a path's limit.
 
 import (
@@ -41,10 +43,11 @@ const teamReportsTimeout = 25 * time.Second
 // larger than the payload itself, and the few fields around it.
 const teamReportsAnswerMax = (device.TeamPayloadAnswerMaxBytes*4+2)/3 + 4<<10
 
-// Every request body is the op's own: at most 64 KiB, the size of a device request.
+// Every request body is the op's own: at most 64 KiB, the size of a device request. Each route needs only that control
+// knows the box (needKnown).
 var teamReportRoutes = map[string]shareRoute{
 	PathTeamReportsList: {
-		op: device.DeviceOpNameTeamReportsList, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout,
+		op: device.DeviceOpNameTeamReportsList, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout, need: needKnown,
 		parseReq: func(b []byte) (any, error) { return local.ParseRuntimeTeamReportsListRequest(b) },
 		checkResp: func(b []byte) error {
 			_, err := local.ParseRuntimeTeamReportsListResponse(b)
@@ -52,7 +55,7 @@ var teamReportRoutes = map[string]shareRoute{
 		},
 	},
 	PathTeamReportsGet: {
-		op: device.DeviceOpNameTeamReportsGet, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout,
+		op: device.DeviceOpNameTeamReportsGet, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout, need: needKnown,
 		parseReq: func(b []byte) (any, error) { return local.ParseRuntimeTeamReportsGetRequest(b) },
 		checkResp: func(b []byte) error {
 			_, err := local.ParseRuntimeTeamReportsGetResponse(b)
@@ -60,7 +63,7 @@ var teamReportRoutes = map[string]shareRoute{
 		},
 	},
 	PathTeamReportsCreate: {
-		op: device.DeviceOpNameTeamReportsCreate, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout,
+		op: device.DeviceOpNameTeamReportsCreate, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout, need: needKnown,
 		parseReq: func(b []byte) (any, error) { return local.ParseRuntimeTeamReportsCreateRequest(b) },
 		checkResp: func(b []byte) error {
 			_, err := local.ParseRuntimeTeamReportsCreateResponse(b)
@@ -68,7 +71,7 @@ var teamReportRoutes = map[string]shareRoute{
 		},
 	},
 	PathTeamReportsReply: {
-		op: device.DeviceOpNameTeamReportsReply, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout,
+		op: device.DeviceOpNameTeamReportsReply, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout, need: needKnown,
 		parseReq: func(b []byte) (any, error) { return local.ParseRuntimeTeamReportsReplyRequest(b) },
 		checkResp: func(b []byte) error {
 			_, err := local.ParseRuntimeTeamReportsReplyResponse(b)
@@ -76,7 +79,7 @@ var teamReportRoutes = map[string]shareRoute{
 		},
 	},
 	PathTeamReportsAct: {
-		op: device.DeviceOpNameTeamReportsAct, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout,
+		op: device.DeviceOpNameTeamReportsAct, requestMax: device.DeviceRequestMaxBytes, answerMax: teamReportsAnswerMax, timeout: teamReportsTimeout, need: needKnown,
 		parseReq: func(b []byte) (any, error) { return local.ParseRuntimeTeamReportsActRequest(b) },
 		checkResp: func(b []byte) error {
 			_, err := local.ParseRuntimeTeamReportsActResponse(b)

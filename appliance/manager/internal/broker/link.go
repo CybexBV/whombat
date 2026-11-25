@@ -22,9 +22,9 @@ package broker
 // The gate: every route that goes to control asks the Link state first (gate, noControl). Link features (tickets,
 // shares, the feedback drop, kit envelope copies, remote help's ticket, the own address's label, push tokens) need Link
 // starting, on or in grace; what is never gated (claim and revocation reports, push.send — control lets only security
-// pushes through once Link ended —, forgetting a push token, and email through Link: the owner's choices and mail.send,
-// whose Link rules are control's) needs control to know the box (any state but off). A
-// box with Link off sends nothing to control (LNK-03).
+// pushes through once Link ended —, forgetting a push token, email through Link: the owner's choices and mail.send,
+// whose Link rules are control's, and reports to the Whombat Team, which stay readable and can be withdrawn once Link
+// ended) needs control to know the box (any state but off). A box with Link off sends nothing to control (LNK-03).
 
 import (
 	"context"

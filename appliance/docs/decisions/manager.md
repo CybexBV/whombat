@@ -2979,7 +2979,10 @@ with the management key; control's answer checked against the contract and answe
 | `POST /v1/runtime/team-reports/reply` | `{requestId, reportId, payload}` | `team.reports.reply` | `{report}` |
 | `POST /v1/runtime/team-reports/act` | `{requestId, reportId, action}` | `team.reports.act` | `{report}` (null after `withdraw`) |
 
-- **A Link feature.** `404` while Link isn't starting, on or in grace, and on a box without control (`noControl`).
+- **Gated like what control answers once it knows the box** (`needKnown`, the gate of `noControlKnown`): `404` only
+  while Link is off, and on a box without control. A person whose Link ended can still read their reports and withdraw
+  one; control decides what each Link state allows (sending needs Link on or in grace) and refuses the rest with its
+  code (`link_off`).
 - **Errors** as the shared links': `503 control_unreachable` with `Retry-After: 300`; `502 control_refused` with
   control's codes first in the message (`refused report_unknown: …`); `413 too_large`; `400 bad_request`.
 - **Answers** up to `device.TeamPayloadAnswerMaxBytes` (4 MiB) as base64url and a few KiB around it. Each exchange has
@@ -2987,4 +2990,4 @@ with the management key; control's answer checked against the contract and answe
 - The fake control answers the ops with small fixed shapes (`TeamCalls`, `TeamAnswer`) and refuses with a code on
   request (`TeamRefuse`).
 - Tests: broker `TestTeamReportsForwarded`, `TestTeamReportsAnswers`, `TestTeamReportsTooLarge`,
-  `TestTeamReportsControlErrors`, `TestTeamReportsGate`.
+  `TestTeamReportsControlErrors`, `TestTeamReportsGate`, `TestTeamReportsWithdrawAfterLinkEnded`.

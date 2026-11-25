@@ -141,8 +141,9 @@ func TestTeamReportsControlErrors(t *testing.T) {
 	}
 }
 
-// Only the runtime asks; a box without control, or without Link starting, on or in grace, answers 404 (the runtime
-// reads it as no reports here).
+// Only the runtime asks; a box without control, or with Link off, answers 404 (the runtime reads it as no reports
+// here). Once control knows the box every route goes through, also after Link ended: the person still reads their
+// reports and withdraws one, and control alone says what else each Link state allows.
 func TestTeamReportsGate(t *testing.T) {
 	t.Parallel()
 	me := uint32(os.Getuid())
@@ -160,16 +161,35 @@ func TestTeamReportsGate(t *testing.T) {
 	fl := &fakeLink{}
 	fc, linkSock := startLink(t, fl)
 	c := client(linkSock)
-	for _, st := range []protocol.LinkState{protocol.LinkStateOff, protocol.LinkStateEnded, protocol.LinkStateStarting,
-		protocol.LinkStateOn, protocol.LinkStateGrace} {
+	states := []protocol.LinkState{protocol.LinkStateOff, protocol.LinkStateEnded, protocol.LinkStateStarting,
+		protocol.LinkStateOn, protocol.LinkStateGrace}
+	for _, st := range states {
 		fl.set(st)
-		active := st != protocol.LinkStateOff && st != protocol.LinkStateEnded
-		resp, m := post(t, c, broker.PathTeamReportsList, `{}`)
-		if active != (resp.StatusCode == 200) || (!active && resp.StatusCode != 404) {
-			t.Fatalf("%s: %d %v", st, resp.StatusCode, m)
+		known := st != protocol.LinkStateOff
+		for path, body := range teamBodies {
+			resp, m := post(t, c, path, body)
+			if known != (resp.StatusCode == 200) || (!known && resp.StatusCode != 404) {
+				t.Fatalf("%s %s: %d %v", st, path, resp.StatusCode, m)
+			}
 		}
 	}
-	if len(fc.TeamCalls) != 3 {
+	if want := (len(states) - 1) * len(teamBodies); len(fc.TeamCalls) != want {
+		t.Fatalf("control took %d calls, want %d: %v", len(fc.TeamCalls), want, fc.TeamCalls)
+	}
+}
+
+// A withdrawal after Link ended reaches control: the person's words are theirs to take back whatever Link says.
+func TestTeamReportsWithdrawAfterLinkEnded(t *testing.T) {
+	t.Parallel()
+	fl := &fakeLink{}
+	fc, linkSock := startLink(t, fl)
+	fl.set(protocol.LinkStateEnded)
+	body := `{"requestId":"` + teamRequest + `","reportId":"` + teamReport + `","action":"withdraw"}`
+	resp, m := post(t, client(linkSock), broker.PathTeamReportsAct, body)
+	if resp.StatusCode != 200 || m["report"] != nil {
+		t.Fatalf("withdraw after Link ended: %d %v", resp.StatusCode, m)
+	}
+	if len(fc.TeamCalls) != 1 || !strings.HasPrefix(fc.TeamCalls[0], string(device.DeviceOpNameTeamReportsAct)+" ") {
 		t.Fatalf("control took %v", fc.TeamCalls)
 	}
 }

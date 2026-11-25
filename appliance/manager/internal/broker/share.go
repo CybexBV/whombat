@@ -39,6 +39,9 @@ type shareRoute struct {
 	timeout    time.Duration // the whole exchange with control
 	parseReq   func([]byte) (any, error)
 	checkResp  func([]byte) error
+	// need is what the route needs of the Link state: a Link feature (needActive, the zero value) or only that
+	// control knows the box (needKnown).
+	need linkNeed
 }
 
 // The runtime waits 60 s for every share path (its ManagerSocketClient); the manager gives up a little earlier so the
@@ -84,7 +87,7 @@ var sharePuts = make(chan struct{}, 2)
 
 func (s *Server) share(route shareRoute) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.noControl(w) {
+		if s.gate(w, route.need) {
 			return
 		}
 		if route.op == device.DeviceOpNameSharePut {

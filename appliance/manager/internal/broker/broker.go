@@ -274,7 +274,8 @@ func decode(r *http.Request, v any) error {
 func (s *Server) noControl(w http.ResponseWriter) bool { return s.gate(w, needActive) }
 
 // noControlKnown is noControl for what is never gated once control knows the box (LNK-06): claim and revocation
-// reports, push.send (control lets only security pushes through once Link ended).
+// reports, push.send (control lets only security pushes through once Link ended). The team report routes take the
+// same gate through their route (teamreports.go).
 func (s *Server) noControlKnown(w http.ResponseWriter) bool { return s.gate(w, needKnown) }
 
 func (s *Server) controlErr(w http.ResponseWriter, err error) {
