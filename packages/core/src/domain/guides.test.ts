@@ -325,6 +325,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'quiet_until',
       // What the assistant finished, for the desk's Done today (Whombat done-today.md DN-01).
       'report_done',
+      // A report to the Whombat Team, drafted for the person's press (Whombat team-reports.md).
+      'report_to_whombat_team',
       'set_chat_title',
       // Whombat's settings for the person (Whombat assistant-settings.md).
       'settings_change',
@@ -346,6 +348,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'watch_status',
       // This Whombat's own backups, on the person's yes (Whombat first-day.md).
       'whombat_backup',
+      // The person's reports to the Whombat Team, without the team's words.
+      'whombat_team_reports',
     ]);
     for (const name of PERSONAL_ONLY_TOOL_NAMES) {
       expect(mcpToolPersonalOnly(name)).toBe(true);
