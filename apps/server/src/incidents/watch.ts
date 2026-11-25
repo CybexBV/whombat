@@ -97,13 +97,13 @@ export async function watchIncidents(
         .where(
           and(eq(catalogConnections.burrowId, burrowId), isNotNull(catalogConnections.hubCheckChangedAt)),
         )
-    ).map((c) => [thingId('connection', c.id), c.at?.getTime() ?? 0] as const),
+    ).flatMap((c) => (c.at ? [[thingId('connection', c.id), c.at] as const] : [])),
   );
   const sinceOf = (look: DeskLook): Date | null => {
     const seen = look.server && look.state === 'down' ? fleet?.rows.get(look.server)?.lastSeen : null;
     const r = research.get(look.key);
     const rank = look.state === 'down' ? LOOK_RANK.down : LOOK_RANK.bad;
-    const from = changed.get(look.key) ?? Number.NEGATIVE_INFINITY;
+    const from = changed.get(look.key)?.getTime() ?? Number.NEGATIVE_INFINITY;
     const times = [
       ...(seen ? [new Date(seen)] : []),
       ...(r && r.rank <= rank ? [r.since ?? r.startedAt] : []),
@@ -167,6 +167,7 @@ export async function watchIncidents(
     seen,
     answering: answersNow,
     noneYet: !rows.length && !(await anyIncident(services.db, burrowId)),
+    changedAt: changed,
     now,
   });
   const signer = () => serversPrincipal(services, burrowId);

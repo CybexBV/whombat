@@ -113,6 +113,11 @@ export interface IncidentPassInput {
   answering?: ReadonlyMap<string, boolean>;
   /** The Whombat has no incidents yet: its first ones are what it found already bad when it started watching. */
   noneYet?: boolean;
+  /**
+   * When each thing's check was last pointed at another target (a Website or address check edited): a run of looks
+   * that began before then was about the old target and starts again.
+   */
+  changedAt?: ReadonlyMap<string, Date>;
   now: Date;
 }
 
@@ -148,7 +153,7 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
   const { now } = input;
   const byThing = new Map(input.looks.map((l) => [l.thing, l]));
   const openThings = new Set(input.open.map((o) => o.thing));
-  const before = withoutEndedElsewhere(input.before, new Set(input.open.map((o) => o.id)));
+  const before = withoutStaleRuns(input);
   const opened: IncidentPassPlan['opened'] = [];
   const changed: IncidentPassPlan['changed'] = [];
   const noted: IncidentPassPlan['noted'] = [];
@@ -287,11 +292,18 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
 
 /**
  * The pass before without the things whose incident ended outside the watcher (a Website check pointed at another
- * address ends its outage): what was counted of the old target says nothing of the new one, so its next incident
- * opens from what Whombat sees from now on.
+ * address ends its outage), nor those without an incident whose check was pointed elsewhere after their run began:
+ * what was counted of the old target says nothing of the new one, so its next incident opens from what Whombat sees
+ * from now on.
  */
-function withoutEndedElsewhere(before: PassBefore | null, openIds: ReadonlySet<string>): PassBefore | null {
+function withoutStaleRuns(input: IncidentPassInput): PassBefore | null {
+  const { before } = input;
+  const openIds = new Set(input.open.map((o) => o.id));
+  const openThings = new Set(input.open.map((o) => o.thing));
   const gone = new Set([...(before?.open ?? [])].flatMap(([id, t]) => (openIds.has(id) ? [] : [t])));
+  if (before)
+    for (const [t, at] of input.changedAt ?? [])
+      if (!openThings.has(t) && at > (before.since?.get(t) ?? before.at)) gone.add(t);
   if (!before || !gone.size) return before;
   const drop = <V>(map: ReadonlyMap<string, V> | undefined) =>
     map && new Map([...map].filter(([t]) => !gone.has(t)));

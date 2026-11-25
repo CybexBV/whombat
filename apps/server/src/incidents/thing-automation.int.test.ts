@@ -728,6 +728,34 @@ async function openIncidentsOf(thing: string) {
   );
 }
 
+it('dates a Website check’s new outage from its new address when it is edited after the first bad pass', async () => {
+  const thing = await website('dock', 'Dock');
+  await lines(thing, []);
+  let before = await watchIncidents(w.services, w.burrowId, null);
+  // One bad pass of the old address, no incident yet; then it is pointed at a new one, which fails too.
+  w.advance(MINUTE);
+  await lines(thing, [NOT_ANSWERING]);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  expect(await openIncidentsOf(thing)).toHaveLength(0);
+  w.advance(30_000);
+  await readdress(thing, 'dock');
+  // The edit's sync with the hosts service records when the check took its new address.
+  await w.services.db
+    .update(catalogConnections)
+    .set({ hubCheckChangedAt: w.now() })
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+  await lines(thing, [NOT_ANSWERING]);
+  w.advance(30_000);
+  const from = w.now();
+  before = await watchIncidents(w.services, w.burrowId, before);
+  expect(await openIncidentsOf(thing)).toHaveLength(0);
+  w.advance(MINUTE);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  const [row] = await openIncidentsOf(thing);
+  expect(row?.startedAt).toEqual(from);
+  await close(row?.id ?? '');
+});
+
 it('counts a Website check’s looks from the start again when it is edited in its outage’s first minute', async () => {
   const thing = await website('cart', 'Cart');
   await lines(thing, [NOT_ANSWERING]);

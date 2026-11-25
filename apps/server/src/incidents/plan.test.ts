@@ -719,6 +719,44 @@ describe('incidents from the looks', () => {
     expect(unsaved.opened.map((o) => o.startedAt)).toEqual([at(31)]);
   });
 
+  it('starts a thing’s run again when its check was pointed elsewhere after the run began', () => {
+    const site = look('connection:site');
+    const first = planIncidents({ looks: [site], open: [], before: null, serversRead: true, now: at(0) });
+    // Pointed at a new address half a minute after its first bad pass, before any incident.
+    const changedAt = new Map([['connection:site', new Date(at(0).getTime() + 30_000)]]);
+    const second = planIncidents({
+      looks: [site],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      changedAt,
+      now: at(1),
+    });
+    expect(second.opened).toEqual([]);
+    expect(second.seen.since?.get('connection:site')).toEqual(at(1));
+    // A run that began after the change is the new target's: it opens from its own first pass.
+    const third = planIncidents({
+      looks: [site],
+      open: [],
+      before: second.seen,
+      serversRead: true,
+      changedAt,
+      now: at(2),
+    });
+    expect(third.opened.map((o) => o.startedAt)).toEqual([at(1)]);
+    // A pass that couldn't read the new target doesn't carry the old run over either.
+    const unread = planIncidents({
+      looks: [],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      seen: seenAs('unread', 'connection:site'),
+      changedAt,
+      now: at(1),
+    });
+    expect(unread.seen.things.has('connection:site')).toBe(false);
+  });
+
   it('weighs a desk look: amber opens nothing, its cause comes along', () => {
     const base: DeskLook = { key: 'connection:plex', kind: 'connection', name: 'Plex', state: 'look' };
     expect(seenLookOf(base, null)).toBeNull();

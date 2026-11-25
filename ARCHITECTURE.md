@@ -1727,9 +1727,10 @@ Setup and operation: `docs/github.md`.
   the count again; one that couldn't read it counts neither way. A thing that was removed ends its incident at once
   without `thing.back`, and its watches stop with a short line. Saving a Website or address check's new settings ends
   its open incident the same quiet way in the edit's commit (its push withdrawn, its delayed starts dropped), and the
-  watcher counts the new target's looks from the start. A pass that can't read Home keeps only what the watcher knew
-  of the open incidents, as a pass that couldn't read their things; right after a restart it starts that from the open
-  incidents themselves.
+  watcher counts the new target's looks from the start, also a run that began before the edit without an incident
+  yet; the check keeps when its target changed (`hub_check_changed_at`) when Whombat makes the hub's check again. A
+  pass that can't read Home keeps only what the watcher knew of the open incidents, as a pass that couldn't read their
+  things; right after a restart it starts that from the open incidents themselves.
   On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
   update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
   then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,

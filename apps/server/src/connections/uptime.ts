@@ -248,11 +248,12 @@ export async function syncUptimeCheck(
   const hosts = hostsFor(services);
   let check = await findCheck(hosts, row, actor, period);
   const spec = uptimeSpec(row);
+  // When the target last changed stays when the hub's check is made again: the watcher dates a new outage from
+  // no earlier than that, so research on the old target can't backdate it.
   let configuredAt = row.hubCheckChangedAt;
   let storedAt = configuredAt;
   if (!check) {
     check = await createUptimeCheck(services, row, actor);
-    configuredAt = null;
   } else {
     const changed = sampledSpecChanged(check, spec);
     if (
@@ -293,7 +294,6 @@ export async function syncUptimeCheck(
       } catch (err) {
         if (!missing(err)) throw err;
         check = await createUptimeCheck(services, row, actor);
-        configuredAt = null;
       }
     }
   }

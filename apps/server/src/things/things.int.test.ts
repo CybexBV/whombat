@@ -809,12 +809,15 @@ describe('Website or address connections', () => {
 
     fake.checks.splice(fake.checks.indexOf(hubCheck), 1);
     const beforeRepair = await load();
+    expect(beforeRepair.hubCheckChangedAt).not.toBeNull();
     await Promise.all([
       checkConnectionHealth(t.services, beforeRepair),
       checkConnectionHealth(t.services, beforeRepair),
     ]);
     const repaired = await load();
     expect(repaired.hubCheckId).not.toBe(first.hubCheckId);
+    // Making the check again keeps when its address changed: research on the old one still can't date an outage.
+    expect(repaired.hubCheckChangedAt).toEqual(beforeRepair.hubCheckChangedAt);
     expect(fake.checks).toHaveLength(1);
     const removed = await call(mara, 'DELETE', `/connections/${connection.id}`);
     expect(removed.status, JSON.stringify(removed.body)).toBe(200);
