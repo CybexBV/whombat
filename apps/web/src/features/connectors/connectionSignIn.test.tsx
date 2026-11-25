@@ -7,6 +7,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CONNECT_FORM_TEXT } from '@whombat/client/connections';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectNotALogin } from '../../test/notALogin';
 import { fixtureServices, renderApp } from '../../test/renderApp';
 
 /** The code field's label, as the form shows it (upper case). */
@@ -146,6 +147,24 @@ describe('a code that belongs to a challenge (SG-06, SG-07)', () => {
     // Now with the challenge that came with the ask: connected.
     await user.click(screen.getByRole('button', { name: 'Sign in and connect' }));
     await waitFor(() => expect(app.location()).toMatch(/con_fixture_/));
+  });
+});
+
+describe('a service’s own username and password are not a login to this page', () => {
+  it('keeps AutoFill and password managers off UniFi’s username and password, as off its API key', async () => {
+    const user = userEvent.setup();
+    renderApp(
+      '/connections?connection=unifi_network&url=http://10.0.0.1',
+      fixtureServices({ connectors: 'connected' }),
+    );
+    const username = await screen.findByLabelText('USERNAME');
+    const password = screen.getByLabelText('PASSWORD');
+    expectNotALogin(username);
+    expectNotALogin(password);
+    expect(password.getAttribute('autocomplete')).toBe('new-password');
+
+    await user.click(screen.getByRole('radio', { name: /^API key/ }));
+    expect(screen.getByLabelText('API KEY').getAttribute('autocomplete')).toBe('new-password');
   });
 });
 

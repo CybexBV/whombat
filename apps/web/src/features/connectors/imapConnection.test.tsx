@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { expectNotALogin } from '../../test/notALogin';
 import { fixtureServices, renderApp } from '../../test/renderApp';
 
 /** Email (IMAP)'s page (connections-more-web.md AP-2764…); the fixture answers are in `app/connectorFixtures.ts`. */
@@ -54,6 +55,26 @@ describe('Email (IMAP) (Whombat CM-20…CM-22, CM-29)', () => {
     await user.type(card.getByLabelText('PASSWORD'), 'secret');
     await user.click(card.getByRole('button', { name: 'Connect email' }));
     expect((await card.findByRole('alert')).textContent).toContain('down.example.org');
+  });
+
+  it('keeps AutoFill and password managers off the account’s address, username and password', async () => {
+    const user = userEvent.setup();
+    renderApp(IMAP, fixtureServices({ connectors: 'none' }));
+    const card = await account();
+    await user.type(card.getByLabelText('EMAIL ADDRESS'), 'mara@fastmail.com');
+    await user.tab();
+    await user.click(await card.findByRole('button', { name: 'Change' }));
+    expectNotALogin(card.getByLabelText('EMAIL ADDRESS'));
+    expectNotALogin(card.getByLabelText('USERNAME'));
+    expectNotALogin(card.getByLabelText('PASSWORD'));
+  });
+
+  it('keeps AutoFill and password managers off Change password', async () => {
+    const user = userEvent.setup();
+    renderApp(IMAP, fixtureServices({ connectors: 'connected' }));
+    const card = await account();
+    await user.click(await card.findByRole('button', { name: 'Change password' }));
+    expectNotALogin(card.getByLabelText('PASSWORD'));
   });
 
   it('points Gmail at the Google connection', async () => {
