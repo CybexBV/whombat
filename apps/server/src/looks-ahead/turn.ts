@@ -659,7 +659,7 @@ export async function aheadReportSources(
     } else if ('mailId' in source) {
       const sender = seen.mails.get(source.mailId);
       if (!sender) throw forbidden('A mail you name must be one you read with mail_read in this check.');
-      named.push({ label: `${sender} (mail)` });
+      named.push({ label: sender === 'mail' ? 'mail' : `${sender} (mail)` });
     } else if ('fileId' in source) {
       const label = seen.files.get(source.fileId);
       if (!label) throw forbidden('A file you name must be one you read with files_read in this check.');

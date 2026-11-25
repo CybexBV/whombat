@@ -434,7 +434,8 @@ async function checkAgainInTheMorning(
  * silently. Its words are scrubbed like a finding's, and it is matched only by what Whombat knows of the mail it checked
  * (its thread and its sender's address, read from the whole From line when it came), never by words the model chose. A
  * date that isn't from today to a year ahead is left out. When an open matter has that title already, no second one
- * opens: the mail's thread is added to it, and the check is linked to it. Its id, or null.
+ * opens and that one stays exactly as it is: a title is the model's words, and words from a mail must not decide which
+ * later mail a matter takes, least of all one the person asked for. Its id, or null.
  */
 async function openMatterFromCheck(
   ctx: ApplyContext,
@@ -451,10 +452,8 @@ async function openMatterFromCheck(
     mail?.threadId && row.event.connectionId
       ? { connectionId: row.event.connectionId, threadId: mail.threadId }
       : null;
-  // The same title as one open already: that one goes on with this mail's thread, the person's own too; nothing else of
-  // it changes.
   const [same] = await tx
-    .select()
+    .select({ id: aheadMatters.id })
     .from(aheadMatters)
     .where(
       and(
@@ -463,25 +462,8 @@ async function openMatterFromCheck(
         sql`lower(${aheadMatters.title}) = ${title.toLowerCase()}`,
       ),
     )
-    .orderBy(desc(aheadMatters.createdAt))
-    .limit(1)
-    .for('update');
-  if (same) {
-    if (
-      mailThread &&
-      !same.match.threads.some(
-        (t) => t.connectionId === mailThread.connectionId && t.threadId === mailThread.threadId,
-      )
-    )
-      await tx
-        .update(aheadMatters)
-        .set({
-          match: { ...same.match, threads: [...same.match.threads, mailThread].slice(-10) },
-          updatedAt: ctx.now,
-        })
-        .where(eq(aheadMatters.id, same.id));
-    return same.id;
-  }
+    .limit(1);
+  if (same) return null;
   const [open] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(aheadMatters)
@@ -626,9 +608,11 @@ export const reportAhead = defineCommand({
       told && !(matterThread && matterThread.conversationId === conversationId)
         ? { rootId: row.threadRootId, conversationId }
         : null;
-    // A finding that isn't about the matter its mail matched stands on its own, with its own thread and replies.
-    let matterId = told && !about ? null : row.matterId;
-    const change = fromMail ? report.matter : undefined;
+    // A finding that isn't about the matter its mail matched stands on its own, with its own thread and replies, and
+    // its mail isn't one a later follow-up of that matter is pointed at.
+    let matterId = !about && (told || matter) ? null : row.matterId;
+    // E. With Looks ahead or incoming mail switched off meanwhile, a report opens and changes nothing.
+    const change = fromMail && settings.on && !mailOff ? report.matter : undefined;
     // A follow-up counts once it reported, whatever it found: one whose turn failed may be tried once more.
     const followed = row.source === 'matter' ? row.event.matter?.reason : undefined;
     if (followed && given && !given.followedUp.includes(followed))
@@ -665,7 +649,8 @@ export const reportAhead = defineCommand({
     await tx
       .update(aheadChecks)
       .set({
-        state: told ? 'told' : 'quiet',
+        // A mail check that got its turn at night could read nothing: it failed, and is tried once more in the morning.
+        state: told ? 'told' : row.source === 'mail' && !daytime && !report.found ? 'failed' : 'quiet',
         kind: report.found ? (report.kind ?? null) : null,
         extraKinds: report.found ? extraKinds : [],
         text: told ? words : null,

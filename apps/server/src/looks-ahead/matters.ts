@@ -305,9 +305,13 @@ export const startAheadMatter = defineCommand({
     if (!conversation || conversation.burrowId !== ctx.burrow.id) throw notFound('Conversation');
     if (same) {
       // A check already keeps an eye on it: now the person asked, it is theirs, on their terms and told where they
-      // asked. The mail threads the check found it in stay; what the mail's sender said about it doesn't.
+      // asked, and it starts afresh (no note, no follow-up behind it, its quiet time and its thirty days from now).
+      // The mail threads the check found it in stay; what the mail's sender said about it doesn't.
       const matter: AheadMatterRow = {
         ...same,
+        note: null,
+        followedUp: [],
+        lastNewsAt: ctx.now,
         origin: 'person',
         personId: input.personId,
         title,
@@ -331,6 +335,9 @@ export const startAheadMatter = defineCommand({
           conversationId: matter.conversationId,
           threadRootId: matter.threadRootId,
           match: matter.match,
+          note: null,
+          followedUp: [],
+          lastNewsAt: ctx.now,
           updatedAt: ctx.now,
         })
         .where(eq(aheadMatters.id, same.id));

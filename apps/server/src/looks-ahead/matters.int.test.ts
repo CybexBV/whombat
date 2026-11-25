@@ -1073,6 +1073,9 @@ describe('Looks ahead: nothing slips, matching, follow-ups and shared threads (l
       who: 'Kettle Shop Customer Care',
       waitingOn: 'you',
       dueAt: new Date('2026-12-30T12:00:00Z'),
+      note: 'They said to wait.',
+      followedUp: ['no_answer'],
+      lastNewsAt: new Date('2026-12-20T11:00:00Z'),
       match: {
         threads: [{ connectionId: mine.connectionId ?? '', threadId: 'thr_kettle' }],
         senders: ['service@shop.example'],
@@ -1102,7 +1105,11 @@ describe('Looks ahead: nothing slips, matching, follow-ups and shared threads (l
     await mcp.close();
     await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.id, turn.id));
     // On their terms: their who (none), waiting on and date (none), their senders and words; the check's thread stays.
+    // And afresh: no note from the mail, no follow-up behind it, its time counted from now.
     expect(await matter(kept)).toMatchObject({
+      note: null,
+      followedUp: [],
+      lastNewsAt: now,
       origin: 'person',
       conversationId: mine.dmId,
       threadRootId: messageId,
@@ -1325,7 +1332,7 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     await finishTriage(r.id);
   });
 
-  it('counts a pick only linked to the person’s matter as an ordinary finding', async () => {
+  it('checks a pick a pass linked to a matter it doesn’t match as any other mail', async () => {
     await clean();
     now = new Date('2026-12-24T12:00:00Z');
     const theirs = await asks(['plumber-co.example']);
@@ -1338,8 +1345,10 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     expect(await pass()).toBeNull();
     await t.services.db.delete(aheadChecks).where(inArray(aheadChecks.id, used));
     const r = await row(await pass());
-    expect(r).toMatchObject({ source: 'mail', matterId: theirs });
-    expect(r.event.matter?.matched).toBeUndefined();
+    expect(r).toMatchObject({ source: 'mail', matterId: null });
+    expect(r.event.matter).toBeUndefined();
+    const ctx = await buildDispatchContext(t.services, await turnOf(r.dispatchId));
+    expect(ctx.ahead?.matter).toBeUndefined();
     const mcp = await inTurn(r.dispatchId);
     await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 'u_pick' } });
     const told = await mcp.client.callTool({
@@ -1420,7 +1429,7 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     }
   });
 
-  it('adds a mail’s thread to an open matter with the same title instead of opening a second', async () => {
+  it('opens no second matter with the title of an open one, and leaves that one as it is', async () => {
     await clean();
     now = new Date('2026-12-27T09:00:00Z');
     const theirs = await asks(['shop.example'], { title: 'Refund for the kettle', who: 'the shop' });
@@ -1442,20 +1451,80 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     expect(res.structuredContent).toMatchObject({ status: 'ok', told: false });
     await mcp.close();
     await endTurns();
-    expect((await row(r.id)).matterId).toBe(theirs);
+    // The check isn't linked to it either: its mail is no mail of that matter.
+    expect((await row(r.id)).matterId).toBeNull();
     const open = await t.services.db.select().from(aheadMatters).where(eq(aheadMatters.state, 'open'));
     expect(open.map((m) => m.id)).toEqual([theirs]);
-    // Only the thread is added: the person's words stay theirs.
     expect(await matter(theirs)).toMatchObject({
       origin: 'person',
       who: 'the shop',
       waitingOn: 'them',
       dueAt: null,
-      match: {
-        threads: [{ connectionId: mine.connectionId ?? '', threadId: 'thr_second' }],
-        senders: ['shop.example'],
-      },
+      match: { threads: [], senders: ['shop.example'] },
     });
+  });
+
+  it('takes one mail a day on the sender alone for a matter a check opened', async () => {
+    await clean();
+    now = new Date('2026-12-28T09:00:00Z');
+    const kept = await insertMatter({
+      title: 'Order at the shop',
+      match: { threads: [], senders: ['info@shop.example'], words: [] },
+      createdAt: new Date(now.getTime() - HOUR),
+    });
+    mail('o_first', 'Shop <info@shop.example>', 'About your order', '2026-12-28T08:30:00Z');
+    mail('o_second', 'Shop <info@shop.example>', 'Your delivery', '2026-12-28T08:40:00Z');
+    const first = await row(await pass());
+    expect(first).toMatchObject({ source: 'mail', matterId: kept });
+    await endTurns();
+    await t.services.db.update(aheadChecks).set({ state: 'quiet' }).where(eq(aheadChecks.id, first.id));
+    // The second goes through a look at the new mail like any other.
+    const next = await row(await pass());
+    expect(next.source).toBe('triage');
+    expect(next.event.triage?.mails.map((m) => m.messageId)).toEqual(['o_second']);
+  });
+
+  it('tries a mail check again in the morning when its turn came at night', async () => {
+    await clean();
+    now = new Date('2026-12-28T20:20:00Z');
+    mail('n_pick', 'Ann <ann@example.org>', 'Can you answer by Friday?', '2026-12-28T20:00:00Z');
+    await pickRow('n_pick', 'Ann <ann@example.org>');
+    const first = await row(await pass());
+    expect(first).toMatchObject({ source: 'mail', state: 'checking' });
+    // Its turn comes after the day's hours: it may read nothing and says so.
+    now = new Date('2026-12-28T21:10:00Z');
+    const mcp = await inTurn(first.dispatchId);
+    expect(
+      (await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 'n_pick' } })).isError,
+    ).toBe(true);
+    await mcp.client.callTool({ name: 'ahead_report', arguments: { found: false } });
+    await mcp.close();
+    await endTurns();
+    expect((await row(first.id)).state).toBe('failed');
+    now = new Date('2026-12-29T08:05:00Z');
+    const again = await row(await pass());
+    expect(again).toMatchObject({ source: 'mail', eventKey: first.eventKey, state: 'checking' });
+    expect(again.id).not.toBe(first.id);
+  });
+
+  it('opens nothing once incoming mail was switched off', async () => {
+    await clean();
+    now = new Date('2026-12-28T10:00:00Z');
+    mail('s_pick', 'Shop <care@shop.example>', 'Your refund request', '2026-12-28T09:30:00Z');
+    await pickRow('s_pick', 'Shop <care@shop.example>');
+    const r = await row(await pass());
+    const mcp = await inTurn(r.dispatchId);
+    await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 's_pick' } });
+    await t.commit(IDS.mara, updateLooksAhead, { mailOn: false });
+    await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: { found: false, matter: { title: 'Refund from the shop', waitingOn: 'them' } },
+    });
+    await mcp.close();
+    await endTurns();
+    await t.commit(IDS.mara, updateLooksAhead, { mailOn: true });
+    expect(await t.services.db.select().from(aheadMatters)).toHaveLength(0);
+    expect((await row(r.id)).matterId).toBeNull();
   });
 
   it('settles a thread its own finding began, replies in it included', async () => {
@@ -1463,11 +1532,15 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     now = new Date('2026-12-29T09:00:00Z');
     await insertMatter({
       title: 'Answer from the firm',
-      match: { threads: [], senders: ['firm.example'], words: [] },
+      match: {
+        threads: [{ connectionId: mine.connectionId ?? '', threadId: 'thr_firm' }],
+        senders: ['desk@firm.example'],
+        words: [],
+      },
       createdAt: new Date(now.getTime() - HOUR),
     });
     const tell = async (id: string, at: string) => {
-      mail(id, 'Firm <desk@firm.example>', 'Re: your question', at);
+      mail(id, 'Firm <desk@firm.example>', 'Re: your question', at, { threadId: 'thr_firm' });
       const r = await row(await pass());
       const mcp = await inTurn(r.dispatchId);
       await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: id } });

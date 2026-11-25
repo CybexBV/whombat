@@ -13,7 +13,6 @@
 
 import { z } from 'zod';
 import { type DateInput, daysAgo, toDate, zonedParts } from '../text/time.js';
-import { zonedInstant } from './notify.js';
 import type { CalendarEvent } from './workspace.js';
 
 /* Limits ------------------------------------------------------------------------------------------------------------ */
@@ -105,6 +104,13 @@ export const AHEAD_MATTER_QUIET_MS = 12 * 3600_000;
  * mail that day waits for a look through new mail like any other.
  */
 export const AHEAD_MATTER_CHECKS_PER_DAY = 3;
+/**
+ * A thing a check started keeping an eye on takes this many mails a day on its sender alone (mail in its own thread
+ * still counts up to `AHEAD_MATTER_CHECKS_PER_DAY`): a shop's shared address writes about much else.
+ */
+export const AHEAD_MATTER_SENDER_CHECKS_PER_DAY = 1;
+/** A follow-up for a date whose first try failed may still be tried this long after that date's noon. */
+export const AHEAD_MATTER_DUE_RETRY_MS = 24 * 3600_000;
 /** A sender word or a subject word needs at least this many characters. */
 export const AHEAD_MATCH_WORD_MIN = 3;
 /** Waiting for an answer this long without news is worth one follow-up. */
@@ -581,9 +587,10 @@ export function mailFromAddress(from: string): string | null {
     if (/\s/.test(address)) return null;
   } else {
     if (opens !== 1 || closes !== 1) return null;
-    const m = /^[^<>]*<([^<>]*)>\s*$/.exec(line);
-    if (!m) return null;
-    address = (m[1] ?? '').trim();
+    // The name before it is plain words: an @ or a comma there is a second mailbox, and then there is no telling.
+    const m = /^([^<>]*)<([^<>]*)>\s*$/.exec(line);
+    if (!m || /[@,;]/.test(m[1] ?? '')) return null;
+    address = (m[2] ?? '').trim();
   }
   const lower = address.toLowerCase();
   return lower.length <= 254 && MAIL_ADDRESS.test(lower) ? lower : null;
@@ -923,8 +930,8 @@ export function aheadMatterExpired(
  * `AHEAD_MATTER_DUE_LEAD_MS` before that date until it (`due`). Waiting on someone else: from its date, or else from
  * `AHEAD_MATTER_NO_ANSWER_MS` after the last news, for `AHEAD_MATTER_FOLLOW_WINDOW_MS` (`no_answer`). Never a reason it
  * was already followed up for, and never within `AHEAD_MATTER_QUIET_MS` of its start or its last news, so what was just
- * told isn't told again. A `due` follow-up whose first try failed (`retry.failed`) may still start until the end of the
- * day's hours (`AHEAD_DAY_UNTIL`) on its date in `retry.timeZone`, though its first window ends at the date's noon.
+ * told isn't told again. A `due` follow-up whose first try failed (`retry.failed`) may still start for
+ * `AHEAD_MATTER_DUE_RETRY_MS` after its date's noon, where its first window ends.
  */
 export function aheadMatterDue(
   matter: {
@@ -946,15 +953,8 @@ export function aheadMatterDue(
     if (!matter.dueAt || matter.followedUp.includes('due')) return null;
     const due = matter.dueAt.getTime();
     let until = due;
-    if (retry?.failed.includes('due')) {
-      const p = zonedParts(matter.dueAt, retry.timeZone);
-      const evening = zonedInstant(
-        { year: p.year, month: p.month, day: p.day },
-        `${String(AHEAD_DAY_UNTIL).padStart(2, '0')}:00`,
-        retry.timeZone,
-      ).getTime();
-      until = Math.max(due, evening);
-    }
+    // The second try may come the morning after: one that reported at night is done again then.
+    if (retry?.failed.includes('due')) until = due + AHEAD_MATTER_DUE_RETRY_MS;
     return at >= due - AHEAD_MATTER_DUE_LEAD_MS && at < until ? 'due' : null;
   }
   if (matter.followedUp.includes('no_answer')) return null;

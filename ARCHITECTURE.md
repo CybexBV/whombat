@@ -1786,17 +1786,19 @@ Setup and operation: `docs/github.md`.
     word first; the rest wait for the next pass), beside the open matters (`k1`…, without their notes), the next 14 days
     of plans, the rules and the recent “Not useful” verdicts. Its only tool is `ahead_triage`: at most 3 picks, each a
     mail's number and perhaps a matter's ref; it reads no mail and writes no words. The picks stay on its row
-    (`event.triage.picks`) for 48 hours, and the watcher starts each as a mail check within the day's budget; one tied
-    to a matter the person asked for counts as theirs only when its mail matches it.
+    (`event.triage.picks`) for 48 hours, and the watcher starts each as a mail check within the day's budget; a pass's
+    link to a matter holds only when the mail matches that matter and came after it began, else the pick is checked as
+    any other mail. A read takes the newest 50 mails of a mailbox.
   - **A mail check** reads one mail (`mail_search`, `mail_read`, files, docs; the web is closed from the start: its
     row's `mail_read_at` is stamped) with the next 14 days of plans, and ends with `ahead_report`. The server refuses
     its finding or a change to a matter until it has read its own mail with `mail_read`, and takes `{ matter: true }` as
-    a source only from a follow-up; a failed one is tried once more. It looks for a booking missing from or differing
+    a source only from a follow-up; one whose turn failed, or came at night, is tried once more. It looks for a
+    booking missing from or differing
     with the calendar, a deadline, someone waiting on the person's answer, a problem with an account or payment, and
     news they wait for. Given a matter (`matter_id`, what earlier checks of it told and where its earlier mail is), it
     reports news on it or stays silent, and says with `ahead_report`'s `matter` whether it goes on or is done; without
-    one it may open a matter for something that goes on after today, or add the mail's thread to an open one with the
-    same title.
+    one it may open a matter for something that goes on after today (none with the title of an open one, which stays
+    as it is).
   - **Matters** (`ahead_matters`, at most 30 open): what Whombat keeps an eye on, in fixed short fields scrubbed like a
     finding's words (title, who, whom it waits on, an optional date from today to 366 days ahead, and a note only its
     own later checks see), with how mail is matched to it (`aheadMatterMatches`): one of its mail threads; or a sender
@@ -1806,22 +1808,23 @@ Setup and operation: `docs/github.md`.
     (3 or more characters) in the subject or snippet when it has any; or, without sender words, a subject word. Only
     mail that arrived after the matter began matches, a thread match wins over another matter's, and bulk mail from the
     sender matches only a matter the person asked for (or a thread). A check opens at most 3 a day, matched only by that
-    mail's thread and its sender's full address, and adds the thread to an open matter with the same title instead of
-    opening a second; the person opens one with `ahead_watch` (`start`, `list`, `stop`) in a turn their own message
+    mail's thread and its sender's full address, and none with the title of an open one; the person opens one
+    with `ahead_watch` (`start`, `list`, `stop`) in a turn their own message
     began (`dm`, `mention`), which needs Looks ahead and incoming mail on, refuses a bare word (`klm`), a fragment
     (`info@`) or a public mailbox provider's site (`gmail.com`) as a sender word, and a date outside today to 366 days
     ahead, and makes a matter a check already keeps (same title) theirs: their who, waiting on, date, sender and subject
-    words replace the check's, and its mail threads stay. Up to 3 matching mails a day per matter
-    (`AHEAD_MATTER_CHECKS_PER_DAY`) become a mail check at once, counted after the matter is chosen; the rest go through
-    the triage, never to another matter. `aheadMatterDue` starts one follow-up per reason (`source: 'matter'`): from the
-    day before the date of one that waits on the person (`due`), or at its date or after 5 days without news for one
-    that waits on someone else (`no_answer`), never within 12 hours of its start or last news (`AHEAD_MATTER_QUIET_MS`);
-    a reason is spent once its check reported, and a failed turn is tried once more (a `due` one until 21:00 on its
-    date). The follow-up is given where to look (`anchors`: the matter's sender address or site and the ids of the mails
-    its earlier checks were about) and reads those mails and that sender's newer mail; handled, it closes the matter
-    (silently for one a check opened, with a finding for one the person asked for); otherwise it tells, with `{ matter:
-    true }` as its source when there is no mail to point at. A matter closes when a check says it is done, when the
-    person removes it, or after 30 days without news and no sooner than 14 days after its date.
+    words replace the check's, it starts afresh, and its mail threads stay. Up to 3 matching mails a day per matter
+    (`AHEAD_MATTER_CHECKS_PER_DAY`; one a day on the sender alone for a matter a check opened) become a mail check at
+    once, counted after the matter is chosen; the rest go through the triage, never to another matter. `aheadMatterDue`
+    starts one follow-up per reason (`source: 'matter'`): from the day before the date of one that waits on the person
+    (`due`), or at its date or after 5 days without news for one that waits on someone else (`no_answer`), never within
+    12 hours of its start or last news (`AHEAD_MATTER_QUIET_MS`); a reason is spent once its check reported, and a
+    failed turn is tried once more (a `due` one until noon the day after its date). The follow-up is given where to look
+    (`anchors`: the matter's sender address or site and the ids of the mails its earlier checks were about) and reads
+    those mails and that sender's newer mail; handled, it closes the matter (silently for one a check opened, with a
+    finding for one the person asked for); otherwise it tells, with `{ matter: true }` as its source when there is no
+    mail to point at. A matter closes when a check says it is done, when the person removes it, or after 30 days without
+    news and no sooner than 14 days after its date.
   - **A calendar check** reads the plan and the rest of its day's accepted plans: first the web (`search_web` on Brave
     with public words only, `read_web_page` with JSON-LD event data and an incognito headless Chromium behind a local
     SSRF-checked proxy), then mail, Drive/OneDrive files and read-only Paperless-ngx and Notion docs

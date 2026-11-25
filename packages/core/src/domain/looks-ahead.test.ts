@@ -522,6 +522,9 @@ describe('keeping an eye on', () => {
     // Two bracketed addresses: which one is the sender's isn't sure, so none.
     expect(mailFromAddress('Refund <boss@company.example> <attacker@evil.example>')).toBeNull();
     expect(mailFromAddress('boss@company.example attacker@evil.example')).toBeNull();
+    // A second mailbox before the bracketed one: no telling which it is from.
+    expect(mailFromAddress('attacker@evil.example, <office@notaris.example>')).toBeNull();
+    expect(mailFromAddress('boss@company.example <attacker@evil.example>')).toBeNull();
     expect(mailFromAddress('Notaris')).toBeNull();
     expect(mailFromAddress('<not-an-address>')).toBeNull();
     expect(mailFromAddress('<x@localhost>')).toBeNull();
@@ -666,14 +669,15 @@ describe('keeping an eye on', () => {
     expect(aheadMatterDue(you, dueAt)).toBeNull();
     expect(aheadMatterDue({ ...you, followedUp: ['due'] }, new Date(dueAt.getTime() - 3600_000))).toBeNull();
     expect(aheadMatterDue({ ...you, dueAt: null }, dueAt)).toBeNull();
-    // A failed first try of a date at noon may start again until 21:00 that day in the Whombat's zone.
+    // A failed first try of a date at noon may start again until noon the day after.
     const noon = new Date('2026-12-18T12:00:00+01:00');
     const atNoon = { ...you, dueAt: noon };
     const retry = { timeZone: TZ, failed: ['due' as const] };
     expect(aheadMatterDue(atNoon, new Date('2026-12-18T15:00:00+01:00'))).toBeNull();
     expect(aheadMatterDue(atNoon, new Date('2026-12-18T15:00:00+01:00'), retry)).toBe('due');
     expect(aheadMatterDue(atNoon, new Date('2026-12-18T20:59:00+01:00'), retry)).toBe('due');
-    expect(aheadMatterDue(atNoon, new Date('2026-12-18T21:00:00+01:00'), retry)).toBeNull();
+    expect(aheadMatterDue(atNoon, new Date('2026-12-19T11:59:00+01:00'), retry)).toBe('due');
+    expect(aheadMatterDue(atNoon, new Date('2026-12-19T12:00:00+01:00'), retry)).toBeNull();
     expect(
       aheadMatterDue(atNoon, new Date('2026-12-18T15:00:00+01:00'), { timeZone: TZ, failed: ['no_answer'] }),
     ).toBeNull();

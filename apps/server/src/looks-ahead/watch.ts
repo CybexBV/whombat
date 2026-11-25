@@ -13,6 +13,7 @@ import {
   AHEAD_FINDINGS_PER_DAY,
   AHEAD_MAIL_CALENDAR_MS,
   AHEAD_MATTER_CHECKS_PER_DAY,
+  AHEAD_MATTER_SENDER_CHECKS_PER_DAY,
   AHEAD_MATTERS_MAX,
   AHEAD_PICKS_KEEP_MS,
   AHEAD_READ_MS,
@@ -692,9 +693,7 @@ async function mailFound(
         ).map((r) => [r.id, r.n] as const)
       : [],
   );
-  const left = new Map(
-    matters.map((m) => [m.id, AHEAD_MATTER_CHECKS_PER_DAY - (checkedToday.get(m.id) ?? 0)]),
-  );
+  const used = new Map(matters.map((m) => [m.id, checkedToday.get(m.id) ?? 0]));
   const matched = new Set<string>();
   // Oldest first, so the first reply takes the day's first check.
   for (const m of [...swept].reverse()) {
@@ -711,11 +710,16 @@ async function mailFound(
       bulk: m.bulk,
     });
     if (!hit) continue;
-    const { matter } = hit;
+    const { matter, by } = hit;
     // The matter is chosen first; when it used its checks today, the mail goes through a pass like other mail, never
-    // to another matter that happens to match by sender.
-    if ((left.get(matter.id) ?? 0) <= 0) continue;
-    left.set(matter.id, (left.get(matter.id) ?? 0) - 1);
+    // to another matter that happens to match by sender. A matter a check opened takes one mail a day on its sender
+    // alone: a shop's shared address writes about much else.
+    const cap =
+      matter.origin === 'check' && by !== 'thread'
+        ? AHEAD_MATTER_SENDER_CHECKS_PER_DAY
+        : AHEAD_MATTER_CHECKS_PER_DAY;
+    if ((used.get(matter.id) ?? 0) >= cap) continue;
+    used.set(matter.id, (used.get(matter.id) ?? 0) + 1);
     matched.add(m.key);
     out.set(
       m.key,
@@ -729,26 +733,29 @@ async function mailFound(
       ),
     );
   }
-  // The picks of earlier triage passes, one at a time as the budget allows. One linked to a matter is checked with it
-  // either way, but is news the person asked for only when its mail really matches their matter: a pass's say-so,
-  // steered by a stranger's subject line, isn't enough.
+  // The picks of earlier triage passes, one at a time as the budget allows. A pass's link to a matter holds only when
+  // the mail really matches that matter and came after it began: a pass's say-so, steered by a stranger's subject
+  // line, isn't enough to make a mail that matter's. Otherwise it is checked as any other mail.
   const openById = new Map(matters.map((m) => [m.id, m]));
   for (const p of picked) {
     const facts = factsOfListed(p.mail);
     if (out.has(facts.key)) continue;
     const version = versionFor(facts.key, facts.version);
     if (!version) continue;
-    const about = p.matterId ? openById.get(p.matterId) : undefined;
-    const really = about
-      ? aheadMatterMatchBy(about.match, {
-          connectionId: facts.connectionId,
-          threadId: facts.threadId,
-          from: facts.from,
-          address: facts.address,
-          subject: facts.subject,
-          snippet: facts.snippet,
-        }) !== null
-      : false;
+    const linked = p.matterId ? openById.get(p.matterId) : undefined;
+    const about =
+      linked &&
+      Date.parse(facts.start) > linked.createdAt.getTime() &&
+      aheadMatterMatchBy(linked.match, {
+        connectionId: facts.connectionId,
+        threadId: facts.threadId,
+        from: facts.from,
+        address: facts.address,
+        subject: facts.subject,
+        snippet: facts.snippet,
+      }) !== null
+        ? linked
+        : undefined;
     out.set(
       facts.key,
       mailCheck(
@@ -756,8 +763,8 @@ async function mailFound(
         timeZone,
         schedule,
         PICK_PRIORITY - p.rank,
-        about ? { id: about.id, matched: really } : undefined,
-        about?.origin === 'person' && really,
+        about ? { id: about.id, matched: true } : undefined,
+        about?.origin === 'person',
       ),
     );
   }
