@@ -91,7 +91,7 @@ object UpdateWatch {
       val version = android.optString("version").takeIf { it.isNotBlank() } ?: return null
       val code = android.optLong("versionCode", 0)
       if (code <= 0) null else Published(version, code)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
       null
     } finally {
       connection.disconnect()
