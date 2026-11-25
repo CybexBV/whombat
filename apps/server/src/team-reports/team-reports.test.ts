@@ -32,6 +32,12 @@ import {
   useTeamReports,
 } from './control';
 import { fitTeamReport, TEAM_REPORT_ANSWER_MAX_BYTES } from './fit';
+import {
+  TEAM_REPORTS_FIRST_JITTER_MS,
+  TEAM_REPORTS_FIRST_MS,
+  TEAM_REPORTS_FOLLOW_MS,
+  teamReportsFollowPeriod,
+} from './follow';
 import { teamReportItem } from './inbox';
 import { decodeTeamPayload, encodeTeamPayload, TeamPayloadError } from './payload';
 import { teamListMatchesCopies, teamReportUnread } from './service';
@@ -292,6 +298,17 @@ describe('the box’s copy', () => {
     // A copy control no longer lists goes, but only with the whole list.
     expect(teamListMatchesCopies([listed(a)], [row(a), row(b)], true)).toBe(false);
     expect(teamListMatchesCopies([listed(a)], [row(a), row(b)], false)).toBe(true);
+  });
+});
+
+describe('following the answers', () => {
+  it('looks first shortly after start, at a moment of its own, then every ten minutes', () => {
+    expect(teamReportsFollowPeriod(false, 0)).toBe(TEAM_REPORTS_FIRST_MS);
+    expect(teamReportsFollowPeriod(false, 0.999)).toBeLessThan(
+      TEAM_REPORTS_FIRST_MS + TEAM_REPORTS_FIRST_JITTER_MS,
+    );
+    expect(teamReportsFollowPeriod(false, 0.999)).toBeLessThan(TEAM_REPORTS_FOLLOW_MS / 5);
+    expect(teamReportsFollowPeriod(true)).toBe(TEAM_REPORTS_FOLLOW_MS);
   });
 });
 

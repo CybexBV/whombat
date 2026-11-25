@@ -2,7 +2,9 @@
  * Following the answers to reports to the Whombat Team (docs/decisions/team-reports.md): while the box has an
  * open report it asks control's list every 10 minutes, which marks what the team changed unread and tells the person
  * when the team asks something or a fix is ready (`team_report_seen`). Without an open report it asks now and then
- * whether the person may send one, so the assistant offers to report only where it can. Old drafts go.
+ * whether the person may send one, so the assistant offers to report only where it can. The first look comes shortly
+ * after start (once the box knows its Link state, at a moment of its own so boxes that start together don't ask
+ * together), not ten minutes later. Old drafts go.
  */
 import { TEAM_REPORT_CLOSED } from '@whombat/core/domain';
 import { asc, notInArray } from 'drizzle-orm';
@@ -14,22 +16,35 @@ import { teamPortOf } from './control';
 import { lastAvailability, listTeamReports, oldDrafts } from './service';
 
 export const TEAM_REPORTS_FOLLOW_MS = 10 * 60_000;
+/** The first look after start: this long, plus up to `TEAM_REPORTS_FIRST_JITTER_MS` more. */
+export const TEAM_REPORTS_FIRST_MS = 20_000;
+export const TEAM_REPORTS_FIRST_JITTER_MS = 40_000;
 /** How long what control said about sending holds while the box has no open report. */
 export const TEAM_REPORTS_AVAILABILITY_MS = 6 * 60 * 60_000;
 
 const rounds = new WeakMap<Services, () => void>();
 
+/** How long the round waits: shortly after start for the first look, every ten minutes after it. */
+export function teamReportsFollowPeriod(ran: boolean, random = Math.random()): number {
+  return ran
+    ? TEAM_REPORTS_FOLLOW_MS
+    : TEAM_REPORTS_FIRST_MS + Math.floor(random * TEAM_REPORTS_FIRST_JITTER_MS);
+}
+
 export function startTeamReportsFollow(services: Services): void {
   if (rounds.has(services)) return;
+  let ran = false;
+  const first = teamReportsFollowPeriod(false);
   rounds.set(
     services,
     services.housekeeping.add(
       'team-reports.follow',
-      TEAM_REPORTS_FOLLOW_MS,
-      () => followTeamReports(services),
-      {
-        first: 'tick',
+      () => (ran ? teamReportsFollowPeriod(true) : first),
+      async () => {
+        ran = true;
+        await followTeamReports(services);
       },
+      { first: 'period' },
     ),
   );
 }
