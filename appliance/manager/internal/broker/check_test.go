@@ -106,7 +106,8 @@ func TestCheckEndpointContract(t *testing.T) {
 	}
 }
 
-// MG-194: pressing Check for updates again and again checks once; the presses after it get its answer.
+// MG-194: pressing Check for updates again and again checks once; the presses after it get its answer. The
+// operator's `whombat-manager check` always looks again.
 func TestCheckEndpointReusesTheLastAnswer(t *testing.T) {
 	t.Parallel()
 	me := uint32(os.Getuid())
@@ -116,17 +117,21 @@ func TestCheckEndpointReusesTheLastAnswer(t *testing.T) {
 		time.Sleep(50 * time.Millisecond) // long enough for the presses to overlap
 		return &broker.CheckResult{Result: "unchanged", NextCheckS: 3600}, nil
 	}})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	press := func() error {
+		resp, err := client(sock).Post("http://manager"+local.ManagerPathUpdateCheck, "application/json", strings.NewReader(`{"v":1}`))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		var res broker.CheckResult
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil || res.Result != "unchanged" {
+			return fmt.Errorf("answer %d %+v %v", resp.StatusCode, res, err)
+		}
+		return nil
+	}
 	done := make(chan error, 3)
 	for range 3 {
-		go func() {
-			res, err := broker.Check(ctx, sock)
-			if err == nil && res.Result != "unchanged" {
-				err = fmt.Errorf("answer %+v", res)
-			}
-			done <- err
-		}()
+		go func() { done <- press() }()
 	}
 	for range 3 {
 		if err := <-done; err != nil {
@@ -135,5 +140,13 @@ func TestCheckEndpointReusesTheLastAnswer(t *testing.T) {
 	}
 	if n := runs.Load(); n != 1 {
 		t.Fatalf("checked %d times", n)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := broker.Check(ctx, sock); err != nil {
+		t.Fatal(err)
+	}
+	if n := runs.Load(); n != 2 {
+		t.Fatalf("the operator's check didn't look again: %d", n)
 	}
 }

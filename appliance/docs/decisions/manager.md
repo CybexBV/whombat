@@ -3005,6 +3005,6 @@ with the management key; control's answer checked against the contract and answe
   checks.
 - **One check at a time, and the last answer reused for 30 s** (`checkReuse`): a press while one runs waits for it and
   takes its answer, and a press within 30 s of the last answer gets that answer without asking the release list or
-  control again.
+  control again. The operator's `whombat-manager check` (no body) always looks again.
 - The hourly look (`tufLoop`, `RefreshSec`) and the assignment poll are unchanged.
 - Tests: broker `TestCheckEndpoint`, `TestCheckEndpointContract`, `TestCheckEndpointReusesTheLastAnswer`.

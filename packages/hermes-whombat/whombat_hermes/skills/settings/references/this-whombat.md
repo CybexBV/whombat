@@ -116,6 +116,7 @@ Versions and updates, when updates may happen, remote help and the licence.
 - Link this Whombat to your account — `account.link` · theirs: send them there
 - Look up whose account a link code is — `account.link.lookup` · theirs: send them there
 - Turn “Ask before updating” on or off — `appliance.update.ask` · theirs: send them there
+- Check for updates now — `appliance.update.check` · change
 - Install an update that waits for the owner — `appliance.update.install` · theirs: send them there
 - Read the quiet hours for updates and restarts — `changeWindow.get` · read
 - Change the quiet hours for updates and restarts — `changeWindow.set` · change, always asks

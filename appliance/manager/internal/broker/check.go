@@ -19,8 +19,9 @@ const PathCheck = local.ManagerPathUpdateCheck
 // checkTimeout bounds a check: a poll, and with an assignment its TUF refresh and the engine's decision.
 const checkTimeout = 60 * time.Second
 
-// checkReuse: a check asked within this long of the last one answers that one. An owner pressing the button again and
-// again must not turn into a request to the release list or control each time.
+// checkReuse: the owner's check asked within this long of the last check answers that one. An owner pressing the
+// button again and again must not turn into a request to the release list or control each time. `whombat-manager
+// check` is an operator's deliberate look and always looks again.
 const checkReuse = 30 * time.Second
 
 // checkMemo keeps the last check's answer, and lets one check run at a time.
@@ -58,9 +59,10 @@ func (s *Server) check(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.checks.mu.Lock() // one check at a time: a second press waits for the first and takes its answer
+	owner := len(b) > 0 // the runtime's request; the operator's command sends none
+	s.checks.mu.Lock()  // one check at a time: a second press waits for the first and takes its answer
 	defer s.checks.mu.Unlock()
-	if s.checks.res != nil && time.Since(s.checks.at) < checkReuse {
+	if owner && s.checks.res != nil && time.Since(s.checks.at) < checkReuse {
 		writeJSON(w, http.StatusOK, s.checks.res)
 		return
 	}
