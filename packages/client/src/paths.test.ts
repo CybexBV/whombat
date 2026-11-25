@@ -118,6 +118,8 @@ describe('burrow-less paths (AP-360…)', () => {
       'things',
       'skills',
       'done',
+      // Reports to the Whombat Team (Whombat team-reports.md).
+      'reports',
     ]);
   });
 
