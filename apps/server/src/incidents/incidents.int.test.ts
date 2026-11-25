@@ -616,4 +616,37 @@ describe('a thing held or unseen while it is down', () => {
     await passAt(480);
     expect((await of())?.pushedAt).toEqual(at(480));
   });
+
+  it('pushes it the same way when Home couldn’t be read right after a restart', async () => {
+    const lidarr = await insertConnection(t.services, {
+      catalogId: 'homeassistant',
+      burrowId: TEST_BURROW_ID,
+      label: 'Lidarr',
+      handle: 'lidarr',
+      fields: { url: 'http://127.0.0.1:9' },
+      secret: 'token-lidarr',
+    });
+    const of = async () =>
+      (
+        await t.services.db
+          .select()
+          .from(incidents)
+          .where(eq(incidents.thingId, `connection:${lidarr}`))
+      ).find((r) => !r.endedAt);
+    await glance('offline', lidarr);
+    await passAt(500);
+    await passAt(501);
+    expect((await of())?.startedAt).toEqual(at(500));
+    // The server restarts; Home can't be read for over an hour, its open incidents can.
+    before = null;
+    for (const minute of [505, 540, 570]) {
+      now = at(minute);
+      before = await passMemory(t.services, TEST_BURROW_ID, before, null);
+    }
+    expect([...(before?.open?.values() ?? [])]).toContain(`connection:${lidarr}`);
+    await passAt(571);
+    expect((await of())?.pushedAt).toBeNull();
+    await passAt(580);
+    expect((await of())?.pushedAt).toEqual(at(580));
+  });
 });

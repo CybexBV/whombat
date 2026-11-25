@@ -308,23 +308,23 @@ function withoutEndedElsewhere(before: PassBefore | null, openIds: ReadonlySet<s
  * What the watcher keeps over a pass that couldn't read Home at all: only what it knew of the open incidents (their
  * run of looks, the passes that saw them fine), with this pass as one that couldn't read them, so an outage Whombat
  * was blind to for a while is pushed once it can read it again instead of counting as stale; and when it last saw
- * holds. Everything else is forgotten, as is all of it when nothing is open: a look must be seen on two passes that
- * read it.
+ * holds. Right after a restart it knew nothing yet, so it starts from the open incidents alone: blind from this pass.
+ * Everything else is forgotten, as is all of it when nothing is open: a look must be seen on two passes that read it.
  */
 export function blindPass(
   before: PassBefore | null,
   open: ReadonlyMap<string, string>,
   now: Date,
 ): PassBefore | null {
-  if (!before || !open.size) return null;
+  if (!open.size) return null;
   const openThings = new Set(open.values());
-  const things = [...before.things].filter((t) => openThings.has(t));
+  const things = [...(before?.things ?? [])].filter((t) => openThings.has(t));
   return {
     at: now,
     things: new Set(things),
-    since: new Map(things.map((t) => [t, before.since?.get(t) ?? before.at] as const)),
-    fine: new Map([...(before.fine ?? [])].filter(([t]) => openThings.has(t))),
-    ...(before.held ? { held: before.held } : {}),
+    since: new Map(things.map((t) => [t, before?.since?.get(t) ?? before?.at ?? now] as const)),
+    fine: new Map([...(before?.fine ?? [])].filter(([t]) => openThings.has(t))),
+    ...(before?.held ? { held: before.held } : {}),
     unread: new Map([...openThings].map((t) => [t, now] as const)),
     open,
     first: false,

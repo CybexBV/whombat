@@ -11,7 +11,8 @@
  * back; a thing that was removed ends its incident as removed.
  *
  * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass. A
- * pass that can't read Home keeps only what it knew of the open incidents, as a pass that couldn't read their things.
+ * pass that can't read Home keeps only what it knew of the open incidents, as a pass that couldn't read their things;
+ * right after a restart it starts that memory from the open incidents themselves.
  */
 import { type IncidentNature, thingId } from '@whombat/core';
 import { and, eq, isNotNull } from 'drizzle-orm';
@@ -305,7 +306,8 @@ async function pushDue(
 /**
  * What the watcher remembers of a pass: what it saw, or after one that read nothing, only what it knew of the open
  * incidents, with the pass as one that couldn't read them (`blindPass`), so the push's clock starts again once Whombat
- * can; null forgets.
+ * can. Right after a restart that is the open incidents as read now: Home's reads failing for an hour must not leave
+ * the outage stale once they work again. Null forgets.
  */
 export async function passMemory(
   services: Services,
@@ -314,10 +316,9 @@ export async function passMemory(
   seen: PassBefore | null,
 ): Promise<PassBefore | null> {
   if (seen) return seen;
-  if (!before) return null;
   const rows = await openIncidents(services.db, burrowId).catch(() => null);
   // Not even the open incidents could be read: the last known ones are still open, and as unread as the rest.
-  const open = rows ? new Map(rows.map((r) => [r.id, r.thingId] as const)) : (before.open ?? new Map());
+  const open = rows ? new Map(rows.map((r) => [r.id, r.thingId] as const)) : (before?.open ?? new Map());
   return blindPass(before, open, services.clock());
 }
 
