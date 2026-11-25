@@ -570,9 +570,36 @@ describe('incidents from the looks', () => {
       planPush({ open: [candidate], now, pushedToday: 0, pushedTodayOf: new Map() });
     expect(push(at(75))).toEqual([]);
     expect(push(at(80))).toHaveLength(1);
-    // Nothing open, or nothing known yet: it forgets, as before.
+    // Nothing open: it forgets, as before.
     expect(blindPass(seen, new Map(), at(2))).toBeNull();
-    expect(blindPass(null, plexOpen, at(2))).toBeNull();
+    expect(blindPass(null, new Map(), at(2))).toBeNull();
+  });
+
+  it('starts the blind memory from the open incidents when Home can’t be read right after a restart', () => {
+    const plex = look('connection:plex');
+    const open = [incident('connection:plex', { startedAt: at(0) })];
+    const plexOpen = new Map([['inc_connectionplex', 'connection:plex']]);
+    // Restarted at minute 5; Home couldn't be read for over an hour.
+    let before = blindPass(null, plexOpen, at(5));
+    for (const m of [30, 70]) before = blindPass(before, plexOpen, at(m));
+    expect(before?.open).toEqual(plexOpen);
+    expect(before?.things).toEqual(new Set());
+    expect(before?.unread?.get('connection:plex')).toEqual(at(70));
+    // Reads resume with it still down: nothing new opens on that pass, and the push counts from the last blind one.
+    const resumed = planIncidents({ looks: [plex], open, before, serversRead: true, now: at(71) });
+    expect(resumed.opened).toEqual([]);
+    expect(resumed.ended).toEqual([]);
+    const blind = resumed.seen.unread?.get('connection:plex');
+    expect(blind).toEqual(at(70));
+    const push = (now: Date) =>
+      planPush({
+        open: [{ ...incident('connection:plex'), findingPushed: false, heldUntil: blind }],
+        now,
+        pushedToday: 0,
+        pushedTodayOf: new Map(),
+      });
+    expect(push(at(75))).toEqual([]);
+    expect(push(at(80))).toHaveLength(1);
   });
 
   it('counts the blind passes of an open incident no pass of its run could read yet', () => {
@@ -690,6 +717,44 @@ describe('incidents from the looks', () => {
       now: at(33),
     });
     expect(unsaved.opened.map((o) => o.startedAt)).toEqual([at(31)]);
+  });
+
+  it('starts a thing’s run again when its check was pointed elsewhere after the run began', () => {
+    const site = look('connection:site');
+    const first = planIncidents({ looks: [site], open: [], before: null, serversRead: true, now: at(0) });
+    // Pointed at a new address half a minute after its first bad pass, before any incident.
+    const changedAt = new Map([['connection:site', new Date(at(0).getTime() + 30_000)]]);
+    const second = planIncidents({
+      looks: [site],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      changedAt,
+      now: at(1),
+    });
+    expect(second.opened).toEqual([]);
+    expect(second.seen.since?.get('connection:site')).toEqual(at(1));
+    // A run that began after the change is the new target's: it opens from its own first pass.
+    const third = planIncidents({
+      looks: [site],
+      open: [],
+      before: second.seen,
+      serversRead: true,
+      changedAt,
+      now: at(2),
+    });
+    expect(third.opened.map((o) => o.startedAt)).toEqual([at(1)]);
+    // A pass that couldn't read the new target doesn't carry the old run over either.
+    const unread = planIncidents({
+      looks: [],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      seen: seenAs('unread', 'connection:site'),
+      changedAt,
+      now: at(1),
+    });
+    expect(unread.seen.things.has('connection:site')).toBe(false);
   });
 
   it('weighs a desk look: amber opens nothing, its cause comes along', () => {

@@ -1727,8 +1727,10 @@ Setup and operation: `docs/github.md`.
   the count again; one that couldn't read it counts neither way. A thing that was removed ends its incident at once
   without `thing.back`, and its watches stop with a short line. Saving a Website or address check's new settings ends
   its open incident the same quiet way in the edit's commit (its push withdrawn, its delayed starts dropped), and the
-  watcher counts the new target's looks from the start. A pass that can't read Home keeps only what the watcher knew
-  of the open incidents, as a pass that couldn't read their things.
+  watcher counts the new target's looks from the start, also a run that began before the edit without an incident
+  yet; the check keeps when its target changed (`hub_check_changed_at`) when Whombat makes the hub's check again. A
+  pass that can't read Home keeps only what the watcher knew of the open incidents, as a pass that couldn't read their
+  things; right after a restart it starts that from the open incidents themselves.
   On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
   update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
   then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,
@@ -1746,7 +1748,8 @@ Setup and operation: `docs/github.md`.
   hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold over it
   ended or the last pass that couldn't read it when that is later. A research finding that comes after its thing's
   outage pushed, while that outage is open or once it ended during the research, lands in the Inbox without a push and
-  doesn't count as pushed; while an outage of the thing that hasn't pushed is open, the finding's push stands in for it. The Inbox row and its realtime frame commit with the incidents' push marks,
+  doesn't count as pushed; while an outage of the thing that hasn't pushed is open, the finding's push stands in for it.
+  A finding's Inbox row commits with its report; an incident push's row and its realtime frame commit with the incidents' push marks,
   leaving a failed insert for a later pass to retry. The phone uses the usual background push sender.
   The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's

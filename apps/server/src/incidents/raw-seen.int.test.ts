@@ -677,6 +677,88 @@ describe('one outage, one buzz', () => {
       w.services.push.control = control;
     }
   });
+
+  it('keeps a held finding’s Inbox row with its report, so a repeat report can’t silence a newer outage', async () => {
+    const signer = await serversPrincipal(w.services, w.burrowId);
+    const thing = 'server:garnet';
+    const outage = async () => {
+      await w.ok(signer, incidentsPass, {
+        opened: [
+          {
+            thing,
+            kind: 'server',
+            name: 'garnet',
+            nature: 'down',
+            words: 'Not answering',
+            check: null,
+            subject: '',
+            cause: null,
+            startedAt: w.now().toISOString(),
+          },
+        ],
+        changed: [],
+        ended: [],
+      });
+      return (await open(thing))?.id ?? '';
+    };
+    // Each report straight through the pipeline, its after-commit work held back until both are in.
+    const background = w.services.background;
+    const run = background.run.bind(background);
+    const held: Array<() => void> = [];
+    const reportNow = async (dispatchId: string) => {
+      const res = await w.services.pipeline.commit(
+        reportLook,
+        {
+          dispatchId,
+          report: {
+            title: 'It lost power',
+            summary: 'It lost power after the storm.',
+            fixed: false,
+            fix: { label: 'Wake it', step: 'Send it a wake-on-LAN packet.' },
+          },
+        },
+        { burrowId: w.burrowId, actorId: IDS.dusty },
+      );
+      expect(res.status).toBe('ok');
+    };
+
+    const first = await outage();
+    await w.ok(signer, incidentsPush, { ids: [first] });
+    const looked = await research(thing, 'garnet');
+    background.run = (what, work) => held.push(() => run(what, work));
+    let newer = '';
+    try {
+      // Held beside the outage that buzzed; then that outage ends, a newer one opens and the research reports again.
+      w.advance(MINUTE);
+      await reportNow(looked.dispatchId);
+      w.advance(MINUTE);
+      await w.ok(signer, incidentsPass, {
+        opened: [],
+        changed: [],
+        ended: [{ id: first, endedAt: w.now().toISOString() }],
+      });
+      w.advance(MINUTE);
+      newer = await outage();
+      w.advance(MINUTE);
+      await reportNow(looked.dispatchId);
+    } finally {
+      background.run = run;
+      for (const go of held) go();
+      await background.settle();
+    }
+    const [finding] = await w.services.db
+      .select()
+      .from(lookResearches)
+      .where(eq(lookResearches.id, looked.researchId));
+    expect(finding?.pushedAt).toBeNull();
+    expect(
+      await w.services.db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.dedupKey, `look-finding:${looked.researchId}`)),
+    ).toHaveLength(1);
+    expect(await w.ok(signer, incidentsPush, { ids: [newer] })).toEqual({ pushed: 1 });
+  });
 });
 
 describe('a delayed automation', () => {

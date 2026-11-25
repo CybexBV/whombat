@@ -113,6 +113,11 @@ export interface IncidentPassInput {
   answering?: ReadonlyMap<string, boolean>;
   /** The Whombat has no incidents yet: its first ones are what it found already bad when it started watching. */
   noneYet?: boolean;
+  /**
+   * When each thing's check was last pointed at another target (a Website or address check edited): a run of looks
+   * that began before then was about the old target and starts again.
+   */
+  changedAt?: ReadonlyMap<string, Date>;
   now: Date;
 }
 
@@ -148,7 +153,7 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
   const { now } = input;
   const byThing = new Map(input.looks.map((l) => [l.thing, l]));
   const openThings = new Set(input.open.map((o) => o.thing));
-  const before = withoutEndedElsewhere(input.before, new Set(input.open.map((o) => o.id)));
+  const before = withoutStaleRuns(input);
   const opened: IncidentPassPlan['opened'] = [];
   const changed: IncidentPassPlan['changed'] = [];
   const noted: IncidentPassPlan['noted'] = [];
@@ -287,11 +292,18 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
 
 /**
  * The pass before without the things whose incident ended outside the watcher (a Website check pointed at another
- * address ends its outage): what was counted of the old target says nothing of the new one, so its next incident
- * opens from what Whombat sees from now on.
+ * address ends its outage), nor those without an incident whose check was pointed elsewhere after their run began:
+ * what was counted of the old target says nothing of the new one, so its next incident opens from what Whombat sees
+ * from now on.
  */
-function withoutEndedElsewhere(before: PassBefore | null, openIds: ReadonlySet<string>): PassBefore | null {
+function withoutStaleRuns(input: IncidentPassInput): PassBefore | null {
+  const { before } = input;
+  const openIds = new Set(input.open.map((o) => o.id));
+  const openThings = new Set(input.open.map((o) => o.thing));
   const gone = new Set([...(before?.open ?? [])].flatMap(([id, t]) => (openIds.has(id) ? [] : [t])));
+  if (before)
+    for (const [t, at] of input.changedAt ?? [])
+      if (!openThings.has(t) && at > (before.since?.get(t) ?? before.at)) gone.add(t);
   if (!before || !gone.size) return before;
   const drop = <V>(map: ReadonlyMap<string, V> | undefined) =>
     map && new Map([...map].filter(([t]) => !gone.has(t)));
@@ -308,23 +320,23 @@ function withoutEndedElsewhere(before: PassBefore | null, openIds: ReadonlySet<s
  * What the watcher keeps over a pass that couldn't read Home at all: only what it knew of the open incidents (their
  * run of looks, the passes that saw them fine), with this pass as one that couldn't read them, so an outage Whombat
  * was blind to for a while is pushed once it can read it again instead of counting as stale; and when it last saw
- * holds. Everything else is forgotten, as is all of it when nothing is open: a look must be seen on two passes that
- * read it.
+ * holds. Right after a restart it knew nothing yet, so it starts from the open incidents alone: blind from this pass.
+ * Everything else is forgotten, as is all of it when nothing is open: a look must be seen on two passes that read it.
  */
 export function blindPass(
   before: PassBefore | null,
   open: ReadonlyMap<string, string>,
   now: Date,
 ): PassBefore | null {
-  if (!before || !open.size) return null;
+  if (!open.size) return null;
   const openThings = new Set(open.values());
-  const things = [...before.things].filter((t) => openThings.has(t));
+  const things = [...(before?.things ?? [])].filter((t) => openThings.has(t));
   return {
     at: now,
     things: new Set(things),
-    since: new Map(things.map((t) => [t, before.since?.get(t) ?? before.at] as const)),
-    fine: new Map([...(before.fine ?? [])].filter(([t]) => openThings.has(t))),
-    ...(before.held ? { held: before.held } : {}),
+    since: new Map(things.map((t) => [t, before?.since?.get(t) ?? before?.at ?? now] as const)),
+    fine: new Map([...(before?.fine ?? [])].filter(([t]) => openThings.has(t))),
+    ...(before?.held ? { held: before.held } : {}),
     unread: new Map([...openThings].map((t) => [t, now] as const)),
     open,
     first: false,
