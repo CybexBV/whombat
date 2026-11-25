@@ -1,4 +1,5 @@
 import type { AheadKind } from '@whombat/core';
+import { sql } from 'drizzle-orm';
 import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { conversations } from './conversations';
 import { principals } from './principals';
@@ -61,6 +62,8 @@ export const aheadChecks = pgTable(
         connectionId: string;
         calendarId: string;
         eventId: string;
+        /** Its guests' names and addresses: never search words. */
+        guests?: string[];
       }>()
       .notNull(),
     state: text('state').$type<'checking' | 'quiet' | 'told' | 'failed'>().notNull(),
@@ -78,6 +81,9 @@ export const aheadChecks = pgTable(
     settledAt: timestamp('settled_at', { withTimezone: true }),
   },
   (t) => [
+    // One check of a version, and one going on at a time per Whombat, whatever starts them.
+    uniqueIndex('ahead_checks_version_idx').on(t.burrowId, t.eventKey, t.version),
+    uniqueIndex('ahead_checks_one_checking_idx').on(t.burrowId).where(sql`${t.state} = 'checking'`),
     index('ahead_checks_event_idx').on(t.burrowId, t.eventKey),
     index('ahead_checks_started_idx').on(t.burrowId, t.startedAt),
     uniqueIndex('ahead_checks_thread_idx').on(t.threadRootId),

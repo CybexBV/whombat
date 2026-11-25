@@ -21,6 +21,7 @@
  * Pure; the file is JSON (`hermesPolicyJson`).
  */
 import type { DispatchContext } from '@whombat/core/contracts';
+import { AHEAD_TOOL_NAMES } from '@whombat/core/domain';
 import { KEY_CATALOG, type KeyId } from '@whombat/core/keys';
 import type { ToolAsk } from '../contract';
 import { toolKeyAccess } from '../persona/access';
@@ -190,8 +191,14 @@ export interface HermesPolicyOptions {
 export const AHEAD_REFUSED =
   'While checking ahead you use only Whombat’s tools: the calendar, the mail, search_web, read_web_page and ahead_report.';
 
-/** Whombat's own MCP tools, as Claude Code and Hermes name them: not the Vault's. */
-const WHOMBAT_OWN_PATTERNS = ['mcp__whombat__*', 'mcp__editor_whombat_*'];
+/**
+ * A Looks ahead check's own tools as Claude Code and Hermes name them (`mcp__whombat__<tool>`,
+ * `mcp__editor_whombat_<tag>__<tool>`): exactly `AHEAD_TOOL_NAMES`, so this policy holds on its own as well as the server.
+ */
+const AHEAD_TOOL_PATTERNS = AHEAD_TOOL_NAMES.flatMap((tool) => [
+  `mcp__whombat__${tool}`,
+  `mcp__editor_whombat_*__${tool}`,
+]);
 
 /** The turn's policy from its context: see the file comment. */
 export function hermesPolicy(ctx: DispatchContext, options: HermesPolicyOptions = {}): HermesPolicy {
@@ -200,7 +207,7 @@ export function hermesPolicy(ctx: DispatchContext, options: HermesPolicyOptions 
       default: 'block',
       review: false,
       rules: [
-        { tools: [...WHOMBAT_OWN_PATTERNS], action: 'allow' },
+        { tools: AHEAD_TOOL_PATTERNS, action: 'allow' },
         { tools: ['*'], action: 'block', message: AHEAD_REFUSED },
       ],
     };

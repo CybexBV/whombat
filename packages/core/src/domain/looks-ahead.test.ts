@@ -7,6 +7,7 @@ import {
   aheadHours,
   aheadQueryRefusal,
   aheadSkip,
+  aheadStartHours,
   aheadVersion,
   LooksAheadUpdate,
   planAheadPass,
@@ -15,6 +16,7 @@ import {
 const TZ = 'Europe/Amsterdam';
 const event = {
   allDay: false,
+  description: '',
   location: 'Ziggo Dome, Amsterdam',
   summary: 'The Script',
   start: '2026-12-14T20:00:00+01:00',
@@ -52,6 +54,11 @@ describe('aheadVersion', () => {
 });
 
 describe('when a check may run', () => {
+  it('begins none after 20:30, so it can still tell before 21:00', () => {
+    expect(aheadStartHours('2026-12-13T20:29:00+01:00', TZ)).toBe(true);
+    expect(aheadStartHours('2026-12-13T20:30:00+01:00', TZ)).toBe(false);
+  });
+
   it('only within the day’s hours in the person’s zone', () => {
     expect(aheadHours('2026-12-13T07:59:00+01:00', TZ)).toBe(false);
     expect(aheadHours('2026-12-13T08:00:00+01:00', TZ)).toBe(true);
@@ -119,6 +126,12 @@ describe('what a search may hold', () => {
     expect(aheadQueryRefusal('call +31 6 1234 5678', [])).not.toBeNull();
     expect(aheadQueryRefusal('https://example.com/x', [])).not.toBeNull();
     expect(aheadQueryRefusal('Mara Okafor parents evening', ['Mara', 'Okafor'])).not.toBeNull();
+    // Dates, times and flight numbers are public; a booking code isn't.
+    expect(aheadQueryRefusal('The Script Ziggo Dome 2026-12-14', [])).toBeNull();
+    expect(aheadQueryRefusal('Ziggo Dome 14.12.2026 20:45', [])).toBeNull();
+    expect(aheadQueryRefusal('KL1234 Schiphol 14 12 2026', [])).toBeNull();
+    expect(aheadQueryRefusal('booking X7K2PQ', [])).not.toBeNull();
+    expect(aheadQueryRefusal('call 06-12-345678', [])).not.toBeNull();
   });
 });
 

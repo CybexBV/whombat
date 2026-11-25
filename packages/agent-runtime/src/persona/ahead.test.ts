@@ -88,8 +88,12 @@ describe('a Looks ahead check’s tool policy', () => {
     expect(policy.default).toBe('block');
     expect(policy.review).toBe(false);
     expect(policy.rules[0]).toMatchObject({ action: 'allow' });
-    expect(policy.rules[0]?.tools).toContain('mcp__whombat__*');
-    expect(policy.rules[0]?.tools).not.toContain('mcp__vault_*');
+    expect(policy.rules[0]?.tools).toContain('mcp__whombat__ahead_report');
+    expect(policy.rules[0]?.tools).toContain('mcp__editor_whombat_*__mail_read');
+    expect(policy.rules[0]?.tools).not.toContain('mcp__whombat__*');
+    expect(policy.rules[0]?.tools?.some((t) => t.includes('post_message') || t.includes('vault'))).toBe(
+      false,
+    );
     expect(policy.rules.at(-1)).toMatchObject({ tools: ['*'], action: 'block' });
     expect(policy.rules).toHaveLength(2);
   });

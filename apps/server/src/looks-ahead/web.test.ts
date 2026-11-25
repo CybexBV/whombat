@@ -167,11 +167,21 @@ describe('what a finding may show', () => {
     expect(words).toContain('It starts at 20:45.');
     expect(words).not.toMatch(/https?:|mailto:|www\.|evil/);
     expect(words).not.toMatch(/[[\]<>*]/);
+    const phishing = findingWords(
+      'Rebook at ziggodome-tickets.example.com or call 0900 123 4567, or mail help@x.example.',
+    );
+    expect(phishing).not.toMatch(/ziggodome-tickets|0900|123 4567|help@/);
+    expect(findingWords('It starts at 20:45 on 14 December, not 20:00.')).toBe(
+      'It starts at 20:45 on 14 December, not 20:00.',
+    );
   });
 
-  it('a mail is named by its sender’s plain name, never an address or a link', () => {
-    expect(senderName('"Ticketmaster" <noreply@ticketmaster.example>')).toBe('Ticketmaster');
-    expect(senderName('https://evil.example.net/x <a@b.example>')).toBe('mail');
-    expect(senderName('noreply@ticketmaster.example')).toBe('mail');
+  it('a mail is named by the site of its sender’s address, never by the name a sender chose', () => {
+    expect(senderName('"Ticketmaster" <noreply@ticketmaster.example>')).toBe('ticketmaster.example');
+    expect(senderName('"Ticketmaster – rebook at https://tm-rebook.example" <x@tm-rebook.example>')).toBe(
+      'tm-rebook.example',
+    );
+    expect(senderName('noreply@ticketmaster.example')).toBe('ticketmaster.example');
+    expect(senderName('Ticketmaster')).toBe('mail');
   });
 });

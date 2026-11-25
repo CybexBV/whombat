@@ -87,7 +87,13 @@ import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 import { holdsItsPlace, outsidersTurnsInFlight, placeKey } from './places';
 import { afterRunTurn, reconcileLiveRuns } from './run-recovery';
-import { chooseSession, resumedCacheResult, resumedEarlierSession, usesSessions } from './sessions';
+import {
+  chooseSession,
+  forgetAheadSession,
+  resumedCacheResult,
+  resumedEarlierSession,
+  usesSessions,
+} from './sessions';
 import { FollowUps } from './steering';
 import { turnProvider, turnProviderSql } from './turn-runtime';
 
@@ -894,6 +900,12 @@ export class RunnerRuntime {
       const outcome = await this.finalizeIn(tx, id, body, guard, now);
       // A mail run's turn may tell its session only now, after Whombat ended it: forgotten with the email.
       await forgetLateMailSession(session, id, body.providerSessionId);
+      // A Looks ahead check's session goes as soon as the check ended (looks-ahead.md).
+      await forgetAheadSession(
+        { tx, services: this.services, background: session.background.bind(session), now },
+        id,
+        body.providerSessionId,
+      );
       if (outcome && outcome !== 'lease_lost') {
         // What the turn was still doing is interrupted, never done (WS-15); a new state is a lifecycle frame.
         await interruptActivity(tx, session, [id], now);

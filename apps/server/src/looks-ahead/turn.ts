@@ -17,7 +17,7 @@ import {
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
-import { aheadChecks, burrows } from '../db/schema/index';
+import { aheadChecks, burrows, principals } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
@@ -43,7 +43,7 @@ import {
   takeSearch,
   webClosed,
 } from './seen';
-import { braveSearch, readPage, WebRefusal } from './web';
+import { braveSearch, httpUrl, readPage, WebRefusal } from './web';
 
 export { NOT_AN_AHEAD_CHECK, NOT_AN_AHEAD_THREAD } from './commands';
 
@@ -141,18 +141,18 @@ export async function aheadToolRefusal(
 const AHEAD_MAIL_BODY_MAX = 8000;
 
 /**
- * A sender as a finding names them: their name as plain words (“Ticketmaster”), never an address or a link; “mail” when
- * nothing of it is left.
+ * A mail as a finding names it: the site its sender's address is at (“ticketmaster.example”), never the name the sender
+ * chose for themselves; “mail” when there is no address.
  */
 export function senderName(from: unknown): string {
   const text = typeof from === 'string' ? from : '';
-  const name = text
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\S*(?:@|:\/\/|www\.)\S*/gi, ' ')
-    .replace(/[^\p{L}\p{N} &'.-]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return (name || 'mail').slice(0, 60);
+  const address = /<([^<>\s]+@[^<>\s]+)>/.exec(text)?.[1] ?? /[^\s<>"]+@[^\s<>"]+/.exec(text)?.[0] ?? '';
+  const domain =
+    address
+      .split('@')[1]
+      ?.toLowerCase()
+      .replace(/[^a-z0-9.-]/g, '') ?? '';
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain) ? domain.slice(0, 60) : 'mail';
 }
 
 /**
@@ -185,13 +185,22 @@ export async function aheadToolRan(
 
 /* The check's own tools ---------------------------------------------------------------------------------------------- */
 
-/** Words of the person's own that never go into a search: their name and addresses. */
-async function privateWords(services: Services, burrowId: string): Promise<string[]> {
+/**
+ * Words that never go into a search: the names and addresses of the people on this Whombat and of the event's guests.
+ * Venue, town and date words stay allowed.
+ */
+async function privateWords(services: Services, burrowId: string, row: AheadCheckRow): Promise<string[]> {
+  const people = await services.db
+    .select({ name: principals.name, accountId: principals.accountId })
+    .from(principals)
+    .where(and(eq(principals.burrowId, burrowId), eq(principals.kind, 'person')));
   const person = await thePerson(services.db, burrowId);
-  if (!person) return [];
-  const accounts = person.accountId ? await calendarAccounts(services.db, person.accountId) : [];
-  const addresses = accounts.flatMap((a) => [a.email, a.email.split('@')[0] ?? '']);
-  return [...person.name.split(/\s+/), ...addresses].filter((w) => w.length >= 3);
+  const accounts = person?.accountId ? await calendarAccounts(services.db, person.accountId) : [];
+  const addresses = [...accounts.map((a) => a.email), ...(row.event.guests ?? [])].flatMap((a) => [
+    a,
+    a.split('@')[0] ?? '',
+  ]);
+  return [...people.flatMap((p) => p.name.split(/\s+/)), ...addresses].filter((w) => w.length >= 3);
 }
 
 /** What a check hears when it reaches for the web after reading mail. */
@@ -199,10 +208,10 @@ const WEB_CLOSED =
   'You read mail in this check, so nothing more goes to the web: decide with what you found, then ahead_report.';
 
 export async function searchWebTool(services: Services, dispatch: DispatchRow, query: string) {
-  await liveCheck(services, dispatch);
+  const row = await liveCheck(services, dispatch);
   const seen = seenOf(services, dispatch.id);
   if (webClosed(seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
-  const refusal = aheadQueryRefusal(query, await privateWords(services, dispatch.burrowId));
+  const refusal = aheadQueryRefusal(query, await privateWords(services, dispatch.burrowId, row));
   if (refusal) throw forbidden(refusal);
   const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, dispatch.burrowId));
   if (!burrow?.webSearch || !burrow.webSearchKeyEnc)
@@ -286,7 +295,7 @@ export async function aheadReportSources(
         throw forbidden(
           `${source.url} isn’t a page you read or found in this check: name only what you saw.`,
         );
-      named.push({ label: siteOf(source.url), url: source.url });
+      named.push({ label: siteOf(source.url), url: httpUrl(source.url) ?? source.url });
     } else {
       const sender = seen.mails.get(source.mailId);
       if (!sender) throw forbidden('A mail you name must be one you read with mail_read in this check.');

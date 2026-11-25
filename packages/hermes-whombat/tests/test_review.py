@@ -99,3 +99,20 @@ def test_review_must_be_true_or_false():
     with pytest.raises(policy.PolicyError):
         policy.parse_policy({"rules": [], "review": "no"})
     assert policy.parse_policy({"rules": []}).review is True
+
+
+def test_in_a_pod_the_agents_session_says_no_review(profile: Path, monkeypatch: pytest.MonkeyPatch):
+    """In a person's pod the session's own policy decides, found by the agent's session when nothing is bound."""
+    from whombat_hermes import policy, settings
+
+    monkeypatch.setenv(settings.POD_ENV, "1")
+    folder = profile / settings.TURNS_DIR / "s-check"
+    folder.mkdir(parents=True)
+    (folder / policy.SESSION_POLICY_FILE).write_text('{"default": "block", "rules": [], "review": false}', "utf-8")
+    monkeypatch.setattr(policy, "_session_policies", policy.SessionPolicies())
+    ran = threading.Event()
+    agent = types.SimpleNamespace(session_id="s-check")
+    target, _ = review.signalled(lambda *a, **k: (ran.set, "p"))(agent, [])
+    target()
+    assert not ran.is_set()
+    assert markers(profile) == []

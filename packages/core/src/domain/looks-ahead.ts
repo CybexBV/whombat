@@ -23,6 +23,8 @@ export const AHEAD_MIN_LEAD_MS = 90 * 60_000;
 export const AHEAD_DAY_FROM = 8;
 /** …to this hour, in the person's zone: nobody gets a message at night. */
 export const AHEAD_DAY_UNTIL = 21;
+/** No check begins after this time (hour, minute) in the person's zone: one begun later couldn't tell before 21:00. */
+export const AHEAD_START_UNTIL = { hour: 20, minute: 30 } as const;
 /** Tomorrow's events are checked from this hour today: “the afternoon before”. */
 export const AHEAD_EVE_FROM = 14;
 /** How far the watcher reads ahead: up to the end of tomorrow fits in this. */
@@ -95,11 +97,19 @@ export function aheadSkip(
 }
 
 /**
- * The version of an event the check is about: what it says and where and when. Another version (the time or the place
- * changed) is checked again; the same one never twice. A short stable hash (FNV-1a, 32 bits, hex).
+ * The version of an event the check is about: what it says, where, when and its notes. Another version (the time, the
+ * place or a new door time in its notes) is checked again; the same one never twice. A short stable hash (FNV-1a, 32 bits, hex).
  */
-export function aheadVersion(event: Pick<CalendarEvent, 'summary' | 'start' | 'end' | 'location'>): string {
-  const text = [event.summary.trim(), event.start, event.end, event.location.trim()].join('\n');
+export function aheadVersion(
+  event: Pick<CalendarEvent, 'summary' | 'start' | 'end' | 'location' | 'description'>,
+): string {
+  const text = [
+    event.summary.trim(),
+    event.start,
+    event.end,
+    event.location.trim(),
+    event.description.trim(),
+  ].join('\n');
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);
@@ -108,10 +118,17 @@ export function aheadVersion(event: Pick<CalendarEvent, 'summary' | 'start' | 'e
   return hash.toString(16).padStart(8, '0');
 }
 
-/** Whether checks may run now: within the day's hours in the person's zone. */
+/** Whether a finding may be told now: within the day's hours in the person's zone. */
 export function aheadHours(now: DateInput, timeZone: string): boolean {
   const hour = zonedParts(now, timeZone).hour;
   return hour >= AHEAD_DAY_FROM && hour < AHEAD_DAY_UNTIL;
+}
+
+/** Whether a check may begin now: from the day's first hour until `AHEAD_START_UNTIL`. */
+export function aheadStartHours(now: DateInput, timeZone: string): boolean {
+  const p = zonedParts(now, timeZone);
+  const minutes = p.hour * 60 + p.minute;
+  return p.hour >= AHEAD_DAY_FROM && minutes < AHEAD_START_UNTIL.hour * 60 + AHEAD_START_UNTIL.minute;
 }
 
 /**
@@ -164,7 +181,7 @@ export interface AheadPassInput {
  */
 export function planAheadPass(input: AheadPassInput): AheadCandidate | null {
   if (input.busy || !input.ready) return null;
-  if (!aheadHours(input.now, input.timeZone)) return null;
+  if (!aheadStartHours(input.now, input.timeZone)) return null;
   if (input.checksToday >= AHEAD_CHECKS_PER_DAY || input.findingsToday >= AHEAD_FINDINGS_PER_DAY) return null;
   const found = new Set(input.checked.filter((c) => c.found).map((c) => c.key));
   const seen = new Set(input.checked.map((c) => `${c.key}\n${c.version}`));
@@ -236,8 +253,16 @@ const PRIVATE_IN_QUERY: readonly [RegExp, string][] = [
  * private word (the person's own name or address). The search engine only ever gets public words.
  */
 export function aheadQueryRefusal(query: string, privateWords: readonly string[]): string | null {
+  // Dates, times and flight numbers are public: “14-12-2026”, “20:45”, “KL1234”.
+  const plain = query
+    .replace(
+      /\b20\d{2}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[./-]\d{1,2}[./-](?:20)?\d{2}\b|\b\d{1,2}\s\d{1,2}\s20\d{2}\b/g,
+      ' ',
+    )
+    .replace(/\b\d{1,2}:\d{2}\b/g, ' ')
+    .replace(/\b[A-Z]{2}\s?\d{1,4}\b/g, ' ');
   for (const [pattern, what] of PRIVATE_IN_QUERY)
-    if (pattern.test(query)) return `The search holds ${what}: search with public words only.`;
+    if (pattern.test(plain)) return `The search holds ${what}: search with public words only.`;
   const words = new Set(query.toLowerCase().split(/[^\p{L}\p{N}]+/u));
   for (const w of privateWords)
     if (w.length >= 3 && words.has(w.toLowerCase()))
@@ -277,6 +302,19 @@ export const AheadFeedbackInput = z.strictObject({
     .enum(['not_useful', 'stop_kind'])
     .describe('not_useful: this one wasn’t worth telling. stop_kind: never check for this kind again.'),
 });
+
+/**
+ * Everything a Looks ahead check may be served (Whombat looks-ahead.md): read the calendar and the mail, search and read
+ * public web pages, and say what it found. The server serves only these, and Hermes's policy allows only these.
+ */
+export const AHEAD_TOOL_NAMES = [
+  'calendar_events',
+  'mail_search',
+  'mail_read',
+  'search_web',
+  'read_web_page',
+  'ahead_report',
+] as const;
 
 /** The quick replies under a finding: the person's own words, which the assistant acts on. */
 export const AHEAD_REPLIES = ['Not useful', 'Stop checking for this'] as const;

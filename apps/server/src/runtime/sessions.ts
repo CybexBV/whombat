@@ -234,6 +234,27 @@ export function sessionsSince(db: Queryable, conversationId: string, since: Date
 }
 
 /**
+ * A Looks ahead check's Hermes session, once its turn ended for good (looks-ahead.md): forgotten and deleted from the
+ * person's home at once, so no later turn of theirs finds what it read in its past sessions. A turn queued again keeps
+ * it (its next attempt resumes it); the watcher's pass forgets any this missed (`endedAheadSessions`).
+ */
+export async function forgetAheadSession(
+  ctx: Pick<ApplyContext, 'tx' | 'services' | 'background' | 'now'>,
+  dispatchId: string,
+  providerSessionId: string | undefined,
+): Promise<void> {
+  const [turn] = await ctx.tx.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+  if (turn?.trigger !== 'ahead' || !['done', 'failed', 'cancelled'].includes(turn.state)) return;
+  const ids = [...new Set([turn.providerSessionId, providerSessionId])].filter(
+    (s): s is string => !!s?.startsWith(HERMES_SESSION),
+  );
+  await dropSessions(
+    ctx,
+    ids.map((s) => ({ home: homeOf(turn.onBehalfOfAccountId), session: s.slice(HERMES_SESSION.length) })),
+  );
+}
+
+/**
  * The sessions of a Whombat's Looks ahead checks that ended (looks-ahead.md): what they read of mail and web pages
  * must not stay where the person's later turns search their past sessions.
  */

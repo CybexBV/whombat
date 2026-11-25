@@ -125,6 +125,37 @@ export async function currentEvent(
   }
 }
 
+/** How long a calendar's coming events are kept between the watcher's passes: no read every five minutes. */
+const EVENTS_KEEP_MS = 15 * 60_000;
+const eventReads = new WeakMap<Services, Map<string, { at: number; events: CalendarEvent[] }>>();
+
+/** The coming events on one calendar, kept `EVENTS_KEEP_MS`. Throws when the provider can't be read. */
+export async function upcomingEvents(
+  services: Services,
+  account: CalendarAccount,
+  calendarId: string,
+  now: Date,
+  aheadMs: number,
+): Promise<CalendarEvent[]> {
+  let kept = eventReads.get(services);
+  if (!kept) {
+    kept = new Map();
+    eventReads.set(services, kept);
+  }
+  const key = calendarKey(account.connectionId, calendarId);
+  const held = kept.get(key);
+  if (held && now.getTime() - held.at < EVENTS_KEEP_MS) return held.events;
+  const events = await calendarEventsBetween(
+    services,
+    account,
+    calendarId,
+    now,
+    new Date(now.getTime() + aheadMs),
+  );
+  kept.set(key, { at: now.getTime(), events });
+  return events;
+}
+
 /** The events on one calendar between two moments. Throws when the provider can't be read. */
 export function calendarEventsBetween(
   services: Services,

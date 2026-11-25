@@ -93,6 +93,8 @@ export const AheadEventInput = z.object({
   connectionId: z.string().min(1).max(64),
   calendarId: z.string().min(1).max(1024),
   eventId: z.string().min(1).max(1024),
+  /** Its guests' names and addresses: never search words. */
+  guests: z.array(z.string().max(320)).max(100).default([]),
   summary: z.string().max(300),
   location: z.string().max(500),
   description: z.string().max(2000),
@@ -180,6 +182,7 @@ export const startAheadCheck = defineCommand({
         connectionId: event.connectionId,
         calendarId: event.calendarId,
         eventId: event.eventId,
+        guests: event.guests,
       },
       state: 'checking',
       dispatchId: woken.dispatchId,
@@ -212,9 +215,9 @@ async function checkOfTurn(tx: Tx, burrowId: string, dispatchId: string) {
 }
 
 /**
- * The assistant's words as one plain paragraph that can hold no link or picture: markup characters go first, then every
- * address (`http:`, `https:`, `mailto:`, `data:`, `www.`), again until nothing changes, so no link can be put back
- * together from what is left. Its sources are Whombat's.
+ * The assistant's words as one plain paragraph that can hold no link, picture, site, address or phone number: markup
+ * characters go first, then every address (`http:`, `https:`, `mailto:`, `data:`, `www.`, e-mail), bare sites and phone
+ * numbers, again until nothing changes, so none can be put back together from what is left. Its sources are Whombat's.
  */
 export function findingWords(text: string): string {
   let words = text;
@@ -223,7 +226,10 @@ export function findingWords(text: string): string {
       .replace(/<[^>]*>/g, ' ')
       .replace(/!(?=\[)/g, '')
       .replace(/[`*_#>|~[\]]/g, '')
-      .replace(/\S*(?:https?:|mailto:|data:|www\.)\S*/gi, ' ')
+      .replace(/\S*(?:https?:|mailto:|data:|www\.|@)\S*/gi, ' ')
+      // A bare site (“tickets-rebook.example”) and a phone number aren't for it to give: its sources are.
+      .replace(/\b[\p{L}\d-]+(?:\.[\p{L}\d-]+)*\.[a-z]{2,}\b\/?\S*/giu, ' ')
+      .replace(/\+?\d[\d\s().-]{7,}\d/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     if (next === words) break;

@@ -37,6 +37,8 @@ ALTER TABLE "ahead_checks" ADD CONSTRAINT "ahead_checks_agent_id_principals_id_f
 ALTER TABLE "ahead_checks" ADD CONSTRAINT "ahead_checks_person_id_principals_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."principals"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ahead_checks" ADD CONSTRAINT "ahead_checks_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "looks_ahead_settings" ADD CONSTRAINT "looks_ahead_settings_burrow_id_burrows_id_fk" FOREIGN KEY ("burrow_id") REFERENCES "public"."burrows"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "ahead_checks_version_idx" ON "ahead_checks" USING btree ("burrow_id","event_key","version");--> statement-breakpoint
+CREATE UNIQUE INDEX "ahead_checks_one_checking_idx" ON "ahead_checks" USING btree ("burrow_id") WHERE "ahead_checks"."state" = 'checking';--> statement-breakpoint
 CREATE INDEX "ahead_checks_event_idx" ON "ahead_checks" USING btree ("burrow_id","event_key");--> statement-breakpoint
 CREATE INDEX "ahead_checks_started_idx" ON "ahead_checks" USING btree ("burrow_id","started_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "ahead_checks_thread_idx" ON "ahead_checks" USING btree ("thread_root_id");--> statement-breakpoint

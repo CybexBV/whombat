@@ -53,14 +53,17 @@ def _end(marker: Optional[Path]) -> None:
         logger.warning("whombat: the review marker couldn't be removed", exc_info=True)
 
 
-def _review_off() -> bool:
-    """Whether the turn's policy says it has no review (``review: false``: a Looks ahead check). A policy that can't be
-    read leaves the review as it was."""
+def _review_off(agent: Any = None) -> bool:
+    """Whether the turn's policy says it has no review (``review: false``: a Looks ahead check). The session is the
+    gateway's bound one, else the agent's own. A policy that can't be read leaves the review as it was: its memory and
+    skill calls still meet the same policy, which blocks them for such a turn."""
     try:
         from .policy import policy_for
 
-        policy = policy_for({}).load()
+        session = getattr(agent, "session_id", None) if agent is not None else None
+        policy = policy_for({"session_id": session} if isinstance(session, str) else {}).load()
     except Exception:
+        logger.warning("whombat: the review couldn't read the turn's policy", exc_info=True)
         return False
     return policy is not None and not policy.review
 
@@ -73,7 +76,7 @@ def signalled(spawn: Callable[..., Any]) -> Callable[..., Any]:
 
     def wrapped(*args: Any, **kwargs: Any):
         target, prompt = spawn(*args, **kwargs)
-        if _review_off():
+        if _review_off(args[0] if args else kwargs.get("agent")):
             return (lambda: None), prompt
         marker = _start()
 

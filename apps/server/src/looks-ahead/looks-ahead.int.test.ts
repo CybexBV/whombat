@@ -12,7 +12,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueDispatchToken } from '../auth/agent-tokens';
 import { sendMessage } from '../commands/messages';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
-import { aheadChecks, burrows, dispatches, messages, notifications } from '../db/schema/index';
+import {
+  aheadChecks,
+  burrows,
+  dispatches,
+  hermesSessionDrops,
+  messages,
+  notifications,
+} from '../db/schema/index';
 import { messageDedupKey } from '../domain/message-notify';
 import { AHEAD_TOOLS } from '../mcp/served';
 import { buildDispatchContext } from '../runtime/context';
@@ -371,8 +378,9 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const google = (t.services.google.workspace as FakeGoogleWorkspace).stateFor(FAKE_ACCESS_TOKEN);
     const evening = google.events.find((e) => e.id === 'evening');
     if (!evening) throw new Error('evening');
-    // Moved to another room: a new version, checked again.
+    // Moved to another room: a new version, checked again (once the calendar is read again).
     evening.location = 'School, Utrecht, room 12';
+    now = new Date(now.getTime() + 16 * 60_000);
     const moved = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
     expect((await row(moved)).summary).toBe('Parents’ evening');
     let mcp = await inTurn((await row(moved)).dispatchId ?? '');
@@ -393,6 +401,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
 
     // Changed again, then the event moves while the check works: the finding is about the old event, so quiet.
     evening.location = 'School, Utrecht, hall';
+    now = new Date(now.getTime() + 16 * 60_000);
     const third = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
     mcp = await inTurn((await row(third)).dispatchId ?? '');
     await mcp.client.callTool({ name: 'search_web', arguments: { query: 'School Utrecht' } });
@@ -437,5 +446,61 @@ describe('Looks ahead (looks-ahead.md)', () => {
     await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
     expect(await watchAhead(t.services, TEST_BURROW_ID, ready)).toBeNull();
     expect((await looksAheadView(t.services, TEST_BURROW_ID)).on).toBe(false);
+  });
+
+  it('cancels a check no runner took in two hours, forgets ended checks’ sessions, and tells nothing late', async () => {
+    await t.commit(IDS.mara, (await import('./commands')).updateLooksAhead, { on: true });
+    await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    now = new Date('2026-12-14T10:00:00Z');
+    const stale = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
+    const staleTurn = (await row(stale)).dispatchId ?? '';
+    now = new Date('2026-12-14T12:01:00Z');
+    await watchAhead(t.services, TEST_BURROW_ID, ready);
+    expect((await row(stale)).state).toBe('failed');
+    const [cancelled] = await t.services.db.select().from(dispatches).where(eq(dispatches.id, staleTurn));
+    expect(cancelled?.state).toBe('cancelled');
+
+    // An ended check's Hermes session is forgotten and handed for deletion.
+    await t.services.db
+      .update(dispatches)
+      .set({ providerSessionId: 'hermes:ahead-session-1' })
+      .where(eq(dispatches.id, staleTurn));
+    await watchAhead(t.services, TEST_BURROW_ID, ready);
+    const drops = await t.services.db
+      .select()
+      .from(hermesSessionDrops)
+      .where(eq(hermesSessionDrops.sessionId, 'ahead-session-1'));
+    expect(drops).toHaveLength(1);
+    const [forgotten] = await t.services.db.select().from(dispatches).where(eq(dispatches.id, staleTurn));
+    expect(forgotten?.providerSessionId).toBeNull();
+
+    // A finding reported after 21:00 is kept quiet, whatever it is.
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
+    now = new Date('2026-12-13T20:20:00Z');
+    const evening = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
+    expect(evening).toMatch(/^ahc_/);
+    const searching = await inTurn((await row(evening)).dispatchId ?? '');
+    await searching.client.callTool({ name: 'search_web', arguments: { query: 'Ziggo Dome' } });
+    await searching.close();
+    now = new Date('2026-12-13T21:05:00Z');
+    const mcp = await inTurn((await row(evening)).dispatchId ?? '');
+    const late = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: {
+        found: true,
+        kind: 'place',
+        text: 'It moved.',
+        sources: [{ url: 'https://venue.example.com/the-script' }],
+      },
+    });
+    expect(late.structuredContent).toMatchObject({ status: 'ok', told: false });
+    await mcp.close();
+    // And none begins after 20:30.
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
+    now = new Date('2026-12-13T20:35:00Z');
+    expect(await watchAhead(t.services, TEST_BURROW_ID, ready)).toBeNull();
   });
 });

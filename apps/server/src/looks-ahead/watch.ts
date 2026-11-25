@@ -27,10 +27,10 @@ import {
   accountCalendars,
   type CalendarAccount,
   calendarAccounts,
-  calendarEventsBetween,
   calendarIsOn,
   calendarKey,
   eventKey,
+  upcomingEvents,
 } from './calendars';
 import {
   type AheadEventInput,
@@ -105,7 +105,6 @@ async function upcoming(
   now: Date,
   timeZone: string,
 ): Promise<Found[]> {
-  const to = new Date(now.getTime() + AHEAD_READ_MS);
   const out = new Map<string, Found>();
   for (const account of accounts) {
     const calendars = await accountCalendars(services, account).catch((err) => {
@@ -117,12 +116,12 @@ async function upcoming(
     });
     for (const calendar of calendars) {
       if (!calendarIsOn(calendarKey(account.connectionId, calendar.id), calendar, settings)) continue;
-      const events: CalendarEvent[] = await calendarEventsBetween(
+      const events: CalendarEvent[] = await upcomingEvents(
         services,
         account,
         calendar.id,
         now,
-        to,
+        AHEAD_READ_MS,
       ).catch((err) => {
         services.log.warn(
           { err: String(err), connectionId: account.connectionId },
@@ -148,6 +147,10 @@ async function upcoming(
             connectionId: account.connectionId,
             calendarId: calendar.id,
             eventId: event.id,
+            guests: event.guests
+              .flatMap((g) => [g.email, ...(g.name ? g.name.split(/\s+/) : [])])
+              .filter(Boolean)
+              .slice(0, 100),
             summary: event.summary.slice(0, 300),
             location: event.location.slice(0, 500),
             description: event.description.slice(0, 2000),

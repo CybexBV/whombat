@@ -9,6 +9,7 @@
  */
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
+  AHEAD_TOOL_NAMES,
   type ApprovalActionType,
   BROWSER_PREVIEW_TOOL,
   COUNCIL_TOOL_NAMES,
@@ -369,14 +370,7 @@ export interface TurnShape {
  * other room, memory, notes, settings, Vault, connection, server, browser or command. Anything new stays out until it is
  * added here.
  */
-export const AHEAD_TOOLS = [
-  'calendar_events',
-  'mail_search',
-  'mail_read',
-  'search_web',
-  'read_web_page',
-  'ahead_report',
-] as const satisfies readonly McpToolName[];
+export const AHEAD_TOOLS: readonly McpToolName[] = AHEAD_TOOL_NAMES;
 
 /** The tools only a Looks ahead check is served. */
 const AHEAD_ONLY_TOOLS: readonly McpToolName[] = ['search_web', 'read_web_page', 'ahead_report'];
@@ -437,7 +431,7 @@ export const CODE_TOOLS = [
 
 /** Whether a turn of this shape is served the tool (PE-05); the other listing rules (keys, connectors) still apply. */
 export function toolFitsTurn(name: McpToolName, turn: TurnShape): boolean {
-  if (turn.ahead) return (AHEAD_TOOLS as readonly string[]).includes(name);
+  if (turn.ahead) return AHEAD_TOOLS.includes(name);
   if (AHEAD_ONLY_TOOLS.includes(name)) return false;
   if (turn.outside) {
     if (!(OUTSIDERS_TOOLS as readonly string[]).includes(name)) return false;

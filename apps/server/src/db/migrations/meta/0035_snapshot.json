@@ -1,5 +1,5 @@
 {
-  "id": "7731ad16-51c6-46f5-a3f1-391b16a7abb6",
+  "id": "fbee84e0-b045-4edf-82e7-eb3d60fd621e",
   "prevId": "639f92e2-65ba-4749-8b40-dfdac9e07d55",
   "version": "7",
   "dialect": "postgresql",
@@ -16868,6 +16868,49 @@
         }
       },
       "indexes": {
+        "ahead_checks_version_idx": {
+          "name": "ahead_checks_version_idx",
+          "columns": [
+            {
+              "expression": "burrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ahead_checks_one_checking_idx": {
+          "name": "ahead_checks_one_checking_idx",
+          "columns": [
+            {
+              "expression": "burrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"ahead_checks\".\"state\" = 'checking'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "ahead_checks_event_idx": {
           "name": "ahead_checks_event_idx",
           "columns": [
