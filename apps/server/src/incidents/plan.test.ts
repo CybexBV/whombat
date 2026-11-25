@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeskLook } from '../desk/shapes';
 import {
+  blindPass,
   incidentPushText,
   type OpenIncident,
   type PassBefore,
@@ -475,6 +476,146 @@ describe('incidents from the looks', () => {
       now: at(1),
     });
     expect(seenEach.opened[0]?.downSince).toBeUndefined();
+  });
+
+  it('keeps the blind stretch over a pass that saw the thing fine while its incident waits to end', () => {
+    const plex = look('connection:plex');
+    let before = planIncidents({ looks: [plex], open: [], before: null, serversRead: true, now: at(0) }).seen;
+    for (const m of [1, 180])
+      before = planIncidents({
+        looks: [],
+        open: [],
+        before,
+        serversRead: true,
+        seen: seenAs('unread', 'connection:plex'),
+        now: at(m),
+      }).seen;
+    before = planIncidents({ looks: [plex], open: [], before, serversRead: true, now: at(181) }).seen;
+    const open = [incident('connection:plex')];
+    // It answers once: the incident needs a second pass seen fine to end.
+    const flap = planIncidents({
+      looks: [],
+      open,
+      before,
+      serversRead: true,
+      seen: seenAs('fine', 'connection:plex'),
+      answering: new Map([['connection:plex', true]]),
+      now: at(182),
+    });
+    expect(flap.ended).toEqual([]);
+    expect(flap.seen.unread?.get('connection:plex')).toEqual(at(180));
+    // Down again: the same outage, pushed ten minutes after Whombat could read it, not stale.
+    const back = planIncidents({ looks: [plex], open, before: flap.seen, serversRead: true, now: at(183) });
+    const blind = back.seen.unread?.get('connection:plex');
+    expect(blind).toEqual(at(180));
+    const candidate: PushCandidate = {
+      ...incident('connection:plex'),
+      findingPushed: false,
+      heldUntil: blind,
+    };
+    expect(
+      planPush({ open: [candidate], now: at(190), pushedToday: 0, pushedTodayOf: new Map() }),
+    ).toHaveLength(1);
+    // The pass that ends it forgets it.
+    const ends = planIncidents({
+      looks: [],
+      open,
+      before: flap.seen,
+      serversRead: true,
+      seen: seenAs('fine', 'connection:plex'),
+      now: at(183),
+    });
+    expect(ends.ended).toHaveLength(1);
+    expect(ends.seen.unread?.has('connection:plex')).toBe(false);
+  });
+
+  it('keeps only the open incidents’ memory over a pass that couldn’t read Home, as a blind pass', () => {
+    const plex = look('connection:plex');
+    const nas = look('server:nas');
+    const open = [incident('connection:plex', { startedAt: at(0) })];
+    const first = planIncidents({
+      looks: [plex, nas],
+      open: [],
+      before: null,
+      serversRead: true,
+      now: at(0),
+    });
+    const seen = planIncidents({
+      looks: [plex, nas],
+      open,
+      before: first.seen,
+      serversRead: true,
+      now: at(1),
+    }).seen;
+    // An hour and more of passes that couldn't read Home.
+    const plexOpen = new Map([['inc_connectionplex', 'connection:plex']]);
+    let before = blindPass(seen, plexOpen, at(2));
+    for (const m of [30, 70]) before = blindPass(before, plexOpen, at(m));
+    expect(before?.things).toEqual(new Set(['connection:plex']));
+    expect(before?.since?.get('connection:plex')).toEqual(at(0));
+    expect(before?.unread?.get('connection:plex')).toEqual(at(70));
+    // Reads resume: still down, pushed ten minutes later instead of counting as stale.
+    const resumed = planIncidents({ looks: [plex, nas], open, before, serversRead: true, now: at(71) });
+    // What had no incident starts its run again: it must be seen on two passes that read it.
+    expect(resumed.opened).toEqual([]);
+    const blind = resumed.seen.unread?.get('connection:plex');
+    expect(blind).toEqual(at(70));
+    const candidate: PushCandidate = {
+      ...incident('connection:plex'),
+      findingPushed: false,
+      heldUntil: blind,
+    };
+    const push = (now: Date) =>
+      planPush({ open: [candidate], now, pushedToday: 0, pushedTodayOf: new Map() });
+    expect(push(at(75))).toEqual([]);
+    expect(push(at(80))).toHaveLength(1);
+    // Nothing open, or nothing known yet: it forgets, as before.
+    expect(blindPass(seen, new Map(), at(2))).toBeNull();
+    expect(blindPass(null, plexOpen, at(2))).toBeNull();
+  });
+
+  it('starts the run of looks again for a thing whose incident ended outside the watcher', () => {
+    const site = look('connection:site');
+    const open = [incident('connection:site', { startedAt: at(0) })];
+    let before = planIncidents({ looks: [site], open: [], before: null, serversRead: true, now: at(0) }).seen;
+    before = planIncidents({ looks: [site], open, before, serversRead: true, now: at(1) }).seen;
+    expect(before.open).toEqual(new Map([['inc_connectionsite', 'connection:site']]));
+    // Its address changed at minute 29, ending the incident; the new target isn't read yet.
+    const edited = planIncidents({
+      looks: [],
+      open: [],
+      before: planIncidents({ looks: [site], open, before, serversRead: true, now: at(28) }).seen,
+      serversRead: true,
+      seen: seenAs('unread', 'connection:site'),
+      now: at(30),
+    });
+    expect(edited.seen.things.has('connection:site')).toBe(false);
+    // The new target fails: it opens after the usual two passes, from the first of them.
+    const once = planIncidents({
+      looks: [site],
+      open: [],
+      before: edited.seen,
+      serversRead: true,
+      now: at(31),
+    });
+    expect(once.opened).toEqual([]);
+    const twice = planIncidents({
+      looks: [site],
+      open: [],
+      before: once.seen,
+      serversRead: true,
+      now: at(32),
+    });
+    expect(twice.opened.map((o) => o.startedAt)).toEqual([at(31)]);
+    // An opening not saved yet (past a pass's limit) keeps its run for the next pass.
+    const unsaved = planIncidents({
+      looks: [site],
+      open: [],
+      before: twice.seen,
+      serversRead: true,
+      now: at(33),
+    });
+    expect(unsaved.opened.map((o) => o.startedAt)).toEqual([at(31)]);
   });
 
   it('weighs a desk look: amber opens nothing, its cause comes along', () => {

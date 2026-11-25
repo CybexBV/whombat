@@ -104,16 +104,16 @@ export async function claimIncidentTrigger(
     .from(incidents)
     .where(and(eq(incidents.id, incident.incidentId), eq(incidents.burrowId, event.burrowId)));
   if (!row || row.cause || (delayed && row.endedAt)) return false;
-  // Keep the deadline while it is ahead. An unread thing or check gets another try.
+  // Keep the deadline while it is ahead. An unread thing or check gets another try for an hour; one Whombat can read
+  // is decided by whether it is still so, however late the scan comes to it (a restart, a release gate).
   let next: number | null = dueAt > now.getTime() ? dueAt : null;
   if (delayed && next === null) {
     const expiresAt = dueAt + CHECK_RETRY_LIMIT_MS;
-    if (now.getTime() > expiresAt) return false;
     const checks = thingTriggerChecks(triggers, facts);
     const down = facts.event === 'down';
     const look = await active(incident.thing, checks);
     if (!look) {
-      if (now.getTime() === expiresAt) return false;
+      if (now.getTime() >= expiresAt) return false;
       next = Math.min(now.getTime() + CHECK_RETRY_MS, expiresAt);
     } else {
       if (down && look.state !== 'down') return false;

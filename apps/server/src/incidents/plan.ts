@@ -8,7 +8,8 @@
  *   the first of them; one that saw it still bad (not answering, a bad line someone quieted, held quiet or down because
  *   of something else) starts the count again; one that couldn't read it counts neither way. A thing that was removed
  *   ends its incident at once, as removed: it didn't come back. A `down` incident keeps when its thing stopped and
- *   started answering, so its down time ends when it answers again while a problem keeps it open.
+ *   started answering, so its down time ends when it answers again while a problem keeps it open. One that ended
+ *   outside the watcher (its check now reads another address) takes what was counted of its thing with it.
  * - **The push.** An incident open 10 minutes, about which no research finding pushed meanwhile, is pushed once,
  *   together with the others that opened within a few minutes of it. Not one that something else took down with it
  *   (its cause), nor one older than an hour when Whombat first could push it (it was down before Whombat watched, or
@@ -87,6 +88,8 @@ export interface PassBefore {
   held?: ReadonlyMap<string, Date>;
   /** The last pass of each thing's run of looks that couldn't read it: what it was meanwhile isn't known. */
   unread?: ReadonlyMap<string, Date>;
+  /** The open incidents after it, by id, with their things: one that ended without the watcher starts its run again. */
+  open?: ReadonlyMap<string, string>;
   /** It was the watcher's first pass since it started: what it saw was bad before Whombat watched. */
   first?: boolean;
 }
@@ -142,9 +145,10 @@ export interface IncidentPassPlan {
 
 /** One pass's incidents, pure. */
 export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
-  const { now, before } = input;
+  const { now } = input;
   const byThing = new Map(input.looks.map((l) => [l.thing, l]));
   const openThings = new Set(input.open.map((o) => o.thing));
+  const before = withoutEndedElsewhere(input.before, new Set(input.open.map((o) => o.id)));
   const opened: IncidentPassPlan['opened'] = [];
   const changed: IncidentPassPlan['changed'] = [];
   const noted: IncidentPassPlan['noted'] = [];
@@ -254,22 +258,73 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
         runSince.set(t, before.since?.get(t) ?? before.at);
       }
     }
-  // The last pass of each run that couldn't read its thing: the push's clock starts again then.
+  // The last pass of each run that couldn't read its thing: the push's clock starts again then. A thing seen fine once
+  // while its incident waits to end keeps it too: bad again on the next pass, it is the same outage.
   const unread = new Map<string, Date>();
-  for (const t of things) {
+  for (const t of new Set([...things, ...fine.keys()])) {
     const blind =
       !byThing.has(t) && ((!input.serversRead && t.startsWith('server:')) || input.seen?.get(t) === 'unread');
     const was = before?.unread?.get(t);
     if (blind) unread.set(t, now);
     else if (was) unread.set(t, was);
   }
+  const endedIds = new Set(ended.map((e) => e.id));
+  const stillOpen = new Map(
+    input.open.filter((o) => !endedIds.has(o.id)).map((o) => [o.id, o.thing] as const),
+  );
   return {
     opened,
     changed,
     noted,
     stretched,
     ended,
-    seen: { at: now, things, since: runSince, fine, unread, first: before === null },
+    seen: { at: now, things, since: runSince, fine, unread, open: stillOpen, first: input.before === null },
+  };
+}
+
+/**
+ * The pass before without the things whose incident ended outside the watcher (a Website check pointed at another
+ * address ends its outage): what was counted of the old target says nothing of the new one, so its next incident
+ * opens from what Whombat sees from now on.
+ */
+function withoutEndedElsewhere(before: PassBefore | null, openIds: ReadonlySet<string>): PassBefore | null {
+  const gone = new Set([...(before?.open ?? [])].flatMap(([id, t]) => (openIds.has(id) ? [] : [t])));
+  if (!before || !gone.size) return before;
+  const drop = <V>(map: ReadonlyMap<string, V> | undefined) =>
+    map && new Map([...map].filter(([t]) => !gone.has(t)));
+  return {
+    ...before,
+    things: new Set([...before.things].filter((t) => !gone.has(t))),
+    since: drop(before.since),
+    fine: drop(before.fine),
+    unread: drop(before.unread),
+  };
+}
+
+/**
+ * What the watcher keeps over a pass that couldn't read Home at all: only what it knew of the open incidents (their
+ * run of looks, the passes that saw them fine), with this pass as one that couldn't read them, so an outage Whombat
+ * was blind to for a while is pushed once it can read it again instead of counting as stale; and when it last saw
+ * holds. Everything else is forgotten, as is all of it when nothing is open: a look must be seen on two passes that
+ * read it.
+ */
+export function blindPass(
+  before: PassBefore | null,
+  open: ReadonlyMap<string, string>,
+  now: Date,
+): PassBefore | null {
+  if (!before || !open.size) return null;
+  const openThings = new Set(open.values());
+  const things = [...before.things].filter((t) => openThings.has(t));
+  return {
+    at: now,
+    things: new Set(things),
+    since: new Map(things.map((t) => [t, before.since?.get(t) ?? before.at] as const)),
+    fine: new Map([...(before.fine ?? [])].filter(([t]) => openThings.has(t))),
+    ...(before.held ? { held: before.held } : {}),
+    unread: new Map([...openThings].map((t) => [t, now] as const)),
+    open,
+    first: false,
   };
 }
 

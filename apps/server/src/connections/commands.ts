@@ -42,6 +42,7 @@ import {
 import { thePerson } from '../domain/the-person';
 import { gatewayConnectionOf, gatewayName, isGatewayCatalogId } from '../gateway/store';
 import { publishHomeChanged } from '../home/notify';
+import { endIncidentQuietly } from '../incidents/store';
 import { forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { burrowView } from '../read/views';
@@ -254,6 +255,8 @@ export const changeConnection = defineCommand({
       await tx
         .delete(thingCauses)
         .where(and(eq(thingCauses.ownerId, ctx.burrow.id), eq(thingCauses.thingId, thing)));
+      // Nor its outage: a delayed start counting on it mustn't run on the new target's first failures.
+      await endIncidentQuietly(ctx, thing);
       publishHomeChanged(ctx, [ctx.actor.id], ['things', 'watch', 'needsYou']);
     }
     const [row] = await tx

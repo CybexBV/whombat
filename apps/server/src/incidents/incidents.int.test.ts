@@ -34,7 +34,7 @@ import { UP_KEY } from '../things/points';
 import { thingHistory } from './history';
 import type { PassBefore } from './plan';
 import { incidentsPass, incidentsPush, pushKey } from './store';
-import { watchIncidents } from './watch';
+import { passMemory, watchIncidents } from './watch';
 
 const t = useTestServer({ seed: true, listen: true });
 const MIN = 60_000;
@@ -584,5 +584,36 @@ describe('a thing held or unseen while it is down', () => {
       { burrowId: TEST_BURROW_ID, actorId: signer },
     );
     expect(held).toMatchObject({ status: 'ok', result: { pushed: 0 } });
+  });
+
+  it('pushes an outage ten minutes after Home can be read again, when it couldn’t be for an hour', async () => {
+    const radarr = await insertConnection(t.services, {
+      catalogId: 'homeassistant',
+      burrowId: TEST_BURROW_ID,
+      label: 'Radarr',
+      handle: 'radarr',
+      fields: { url: 'http://127.0.0.1:9' },
+      secret: 'token-radarr',
+    });
+    const of = async () =>
+      (
+        await t.services.db
+          .select()
+          .from(incidents)
+          .where(eq(incidents.thingId, `connection:${radarr}`))
+      ).find((r) => !r.endedAt);
+    await glance('offline', radarr);
+    await passAt(400);
+    await passAt(401);
+    expect((await of())?.startedAt).toEqual(at(400));
+    // Passes that couldn't read Home for over an hour, before its push was due.
+    for (const minute of [405, 440, 470]) {
+      now = at(minute);
+      before = await passMemory(t.services, TEST_BURROW_ID, before, null);
+    }
+    await passAt(471);
+    expect((await of())?.pushedAt).toBeNull();
+    await passAt(480);
+    expect((await of())?.pushedAt).toEqual(at(480));
   });
 });

@@ -16,12 +16,14 @@ import { expect, it } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { NewerAutomationsGate, THING_AUTOMATIONS_LATER } from '../automations/release-gate';
 import { sendMessage } from '../commands/messages';
+import { changeConnection } from '../connections/commands';
 import {
   catalogConnections,
   dispatches,
   events,
   incidents,
   incidentTriggers,
+  notifications,
   quietWindows,
   thingCauses,
   thingWatches,
@@ -34,7 +36,7 @@ import { insertConnection } from '../test/connections';
 import type { GlanceLine } from '../things/quiet/glance';
 import { thingWatchTool } from './agent';
 import { periodUptime } from './history';
-import { incidentsPass } from './store';
+import { incidentsPass, incidentsPush, pushKey } from './store';
 import { cancelThingWatch, deliverThingWatches } from './thing-watch';
 import { watchIncidents } from './watch';
 
@@ -607,4 +609,89 @@ it('expires an unread delayed start an hour after its deadline', async () => {
   await w.settle();
   expect(await w.runs(automation)).toHaveLength(0);
   await close(incidentId);
+});
+
+it('starts a delayed start it can read however late the scan reaches it, also after its last retry', async () => {
+  const thing = await connection('late');
+  const automation = await w.publish(definition([{ kind: 'thing', event: 'down', thing, forMinutes: 5 }]), {
+    name: 'Media is down',
+  });
+  await lines(thing, [NOT_ANSWERING]);
+  const first = await open(thing, 'down');
+  await w.settle();
+  // Nothing scanned for two hours (a long restart): still down when it is read, it starts.
+  w.advance(120 * MINUTE);
+  await lines(thing, [NOT_ANSWERING]);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(1);
+  await close(first);
+
+  // Unread at its deadline it asks again; the scan reaches the last try just after the hour, and reads it down.
+  const second = await open(thing, 'down');
+  await w.settle();
+  await w.services.db
+    .update(catalogConnections)
+    .set({ glance: { status: 'unknown', facts: [] }, glanceAt: w.now() })
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+  w.advance(5 * MINUTE);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(1);
+  w.advance(60 * MINUTE + 30_000);
+  await lines(thing, [NOT_ANSWERING]);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(2);
+  await close(second);
+});
+
+it('ends a Website check’s outage quietly when its address changes, so its delayed start can’t run on the new one', async () => {
+  const thing = await connection('shop', 'Shop');
+  const id = thing.slice('connection:'.length);
+  // A Website check, as the connect side stores one (the test helper makes only services with a base address).
+  await w.services.db
+    .update(catalogConnections)
+    .set({
+      catalogId: 'uptime',
+      signIn: 'none',
+      fields: { kind: 'http', address: 'https://shop.example.com/', runner: 'hub', every: '1' },
+    })
+    .where(eq(catalogConnections.id, id));
+  const automation = await w.publish(definition([{ kind: 'thing', event: 'down', thing, forMinutes: 30 }]), {
+    name: 'Shop is down',
+  });
+  await lines(thing, [NOT_ANSWERING]);
+  const incidentId = await open(thing, 'down');
+  await w.settle();
+  const pending = () =>
+    w.services.db.select().from(incidentTriggers).where(eq(incidentTriggers.incidentId, incidentId));
+  expect(await pending()).toHaveLength(1);
+  w.advance(10 * MINUTE);
+  await w.ok(await serversPrincipal(w.services, w.burrowId), incidentsPush, { ids: [incidentId] });
+
+  // Down 29 minutes, the person points it at another address.
+  w.advance(19 * MINUTE);
+  await w.ok(IDS.mara, changeConnection, {
+    connectionId: id,
+    set: { fields: { kind: 'http', address: 'https://shop.example.com/new', runner: 'hub', every: '1' } },
+    what: ['fields'],
+  });
+  const [row] = await w.services.db.select().from(incidents).where(eq(incidents.id, incidentId));
+  expect(row?.endedAt).toEqual(w.now());
+  expect(row?.withdrawnAt).toEqual(w.now());
+  const [push] = await w.services.db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.dedupKey, pushKey(row?.pushGroup ?? '')));
+  expect(push?.readAt).not.toBeNull();
+  expect(await pending()).toHaveLength(0);
+
+  // The new address fails its first checks: the old outage's deadline passes without a run, and nothing says it is back.
+  w.advance(2 * MINUTE);
+  await lines(thing, [NOT_ANSWERING]);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(0);
+  const back = await w.services.db
+    .select()
+    .from(events)
+    .where(and(eq(events.type, THING_BACK), eq(events.burrowId, w.burrowId)));
+  expect(back.filter((e) => e.payload.incidentId === incidentId)).toHaveLength(0);
 });
