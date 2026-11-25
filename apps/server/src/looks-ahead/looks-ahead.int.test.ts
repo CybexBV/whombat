@@ -173,6 +173,30 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect(byName.get('Holidays')).toBe(false);
   });
 
+  it('searches no web while “Browse the web” isn’t Allowed', async () => {
+    await grantKey(t, mine.agentId, 'web.browse', 'ask');
+    await t.services.db
+      .update(burrows)
+      .set({
+        webSearch: { provider: 'brave', check: null, updatedAt: now.toISOString() },
+        webSearchKeyEnc: sealWebSearchKey(t.services.custody, TEST_BURROW_ID, 'brave-test-key'),
+      })
+      .where(eq(burrows.id, TEST_BURROW_ID));
+    const id = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
+    const mcp = await inTurn((await row(id)).dispatchId ?? '');
+    const search = await mcp.client.callTool({ name: 'search_web', arguments: { query: 'School Utrecht' } });
+    expect(search.isError).toBe(true);
+    await mcp.client.callTool({ name: 'ahead_report', arguments: { found: false } });
+    await mcp.close();
+    await grantKey(t, mine.agentId, 'web.browse', 'can');
+    await t.services.db
+      .update(burrows)
+      .set({ webSearch: null, webSearchKeyEnc: null })
+      .where(eq(burrows.id, TEST_BURROW_ID));
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
+  });
+
   it('reads no calendar when its key asks first', async () => {
     await grantKey(t, mine.agentId, 'calendar.read', 'ask');
     expect(await watchAhead(t.services, TEST_BURROW_ID, ready)).toBeNull();
@@ -291,7 +315,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect(late.isError).toBe(true);
     // Kept on the row, so a restart or a later claim keeps the web closed too.
     expect((await row(second)).mailReadAt).not.toBeNull();
-    // Only the event's own calendar is read.
+    // The calendar isn't one of its tools: the event is in its request.
     const other = await mcp.client.callTool({
       name: 'calendar_events',
       arguments: { calendarId: 'family' },

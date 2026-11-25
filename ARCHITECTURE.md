@@ -1720,9 +1720,9 @@ Setup and operation: `docs/github.md`.
   quiet `ahead` turn of the person's on the background model in their Chat, in a thread whose root is a message id the
   row holds until a finding gets it: no “is thinking”, no busy assistant on Home, its final text never posted, no
   failure card or Try again, no follow-ups, no other turn merging with it; one no runner took within two hours is
-  cancelled. It is served only `AHEAD_TOOLS` (`mcp/served.ts`): the event's own calendar and the mail where their keys
-  are Allowed (each mail cut to 8 000 characters), `search_web` (Brave on the person's key; a search with an address, a
-  link, a phone number, a code or the person's own name is refused) and `read_web_page` (a public https page through
+  cancelled. It is served only `AHEAD_TOOLS` (`mcp/served.ts`), not the calendar (the event is in its request): the mail
+  where its key is Allowed (each mail cut to 8 000 characters), `search_web` (Brave on the person's key, while “Browse the web” is Allowed; a search
+  with an address, a link, a phone number, a code or a person's name is refused) and `read_web_page` (a public https page through
   `lib/outbound.ts`, only a link the check found: a search result or a link on a page it read; `looks-ahead/seen.ts`),
   and `ahead_report`; the web comes first, and once it read mail nothing more goes to the web (kept on the row,
   `mail_read_at`); switched off or running late, only `ahead_report` is left. Hermes's policy blocks everything else, its memory among them, and says `review: false`, so the

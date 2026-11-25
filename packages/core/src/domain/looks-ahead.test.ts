@@ -132,6 +132,8 @@ describe('what a search may hold', () => {
     expect(aheadQueryRefusal('KL1234 Schiphol 14 12 2026', [])).toBeNull();
     expect(aheadQueryRefusal('booking X7K2PQ', [])).not.toBeNull();
     expect(aheadQueryRefusal('call 06-12-345678', [])).not.toBeNull();
+    expect(aheadQueryRefusal('Ziggo Dome 14 december 2026 20.45', [])).toBeNull();
+    expect(aheadQueryRefusal('Ziggo Dome 20.45 - 23.00', [])).toBeNull();
   });
 });
 

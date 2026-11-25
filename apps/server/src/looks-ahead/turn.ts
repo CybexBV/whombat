@@ -103,8 +103,8 @@ export async function keyAllowed(services: Services, agentId: string, key: KeyId
 /**
  * Before any tool runs in a check: only while the check goes on and Looks ahead is on (else only `ahead_report`, to end
  * it); the person's own tools (the calendar, the mail) only when their key is Allowed — nobody is there to say yes, and
- * a card would land in a thread that isn't there — and the calendar only the check's own calendar. Null when it may
- * run, else what the check hears.
+ * a card would land in a thread that isn't there — and the web only while “Browse the web” is Allowed. Null when it
+ * may run, else what the check hears.
  */
 export async function aheadToolRefusal(
   services: Services,
@@ -132,17 +132,9 @@ export async function aheadToolRefusal(
     settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId))
   )
     return 'Looks ahead or this calendar was switched off: end with ahead_report, found false.';
-  if (name === 'calendar_events') {
-    const asked = input as { calendarId?: unknown; provider?: unknown } | null;
-    const [account] = await services.db
-      .select({ provider: connections.provider })
-      .from(connections)
-      .where(eq(connections.id, row.event.connectionId));
-    if ((asked?.calendarId ?? 'primary') !== row.event.calendarId || asked?.provider !== account?.provider)
-      return `Read only the calendar this event is on: provider ${account?.provider ?? 'google'}, calendarId ${row.event.calendarId}.`;
-  }
-  const key = MCP_TOOLS[name].requiredKey;
-  // A key that depends on the input is never one of a check's tools (calendar and mail read have fixed keys).
+  // The web tools need no key of their own elsewhere; here they are “Browse the web”, as Hermes's own web search is.
+  const key = name === 'search_web' || name === 'read_web_page' ? 'web.browse' : MCP_TOOLS[name].requiredKey;
+  // A key that depends on the input is never one of a check's tools (mail read has a fixed key).
   if (key && key !== 'by_input' && !(await keyAllowed(services, dispatch.agentId, key)))
     return 'This needs the person’s yes, and nobody is there to ask while you check ahead: go on without it.';
   // Mail is about to reach the model: the check's web closes now, kept on its row.

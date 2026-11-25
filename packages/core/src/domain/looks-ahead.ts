@@ -239,6 +239,20 @@ export const AheadReportInput = z
   });
 export type AheadReportInput = z.infer<typeof AheadReportInput>;
 
+/** A time, a date or a year: “20:45”, “20.45”, “14-12-2026”, “2026-12-14”, “14 12 2026”, “2026”. */
+const DATE_OR_TIME =
+  /\b\d{1,2}[.:]\d{2}\b|\b20\d{2}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[./-]\d{1,2}[./-](?:20)?\d{2}\b|\b\d{1,2}\s\d{1,2}\s20\d{2}\b|\b20\d{2}\b/g;
+
+/**
+ * A change to a text that leaves its times, dates and years as they are (“20.45 - 23.00”, “14-12-2026”): they are set
+ * aside while `change` runs (so a phone number's rule can't take them) and put back after.
+ */
+export function keepingDatesAndTimes(text: string, change: (text: string) => string): string {
+  const kept: string[] = [];
+  const hidden = text.replace(DATE_OR_TIME, (m) => `\u0000${kept.push(m) - 1}\u0000`);
+  return change(hidden).replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? '');
+}
+
 /** Words that never go into a search: an address, a link, a phone number, a code or number from a booking. */
 const PRIVATE_IN_QUERY: readonly [RegExp, string][] = [
   [/[^\s@]+@[^\s@]+\.[^\s@]+/, 'an e-mail address'],
@@ -253,14 +267,8 @@ const PRIVATE_IN_QUERY: readonly [RegExp, string][] = [
  * private word (the person's own name or address). The search engine only ever gets public words.
  */
 export function aheadQueryRefusal(query: string, privateWords: readonly string[]): string | null {
-  // Dates, times and flight numbers are public: “14-12-2026”, “20:45”, “KL1234”.
-  const plain = query
-    .replace(
-      /\b20\d{2}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[./-]\d{1,2}[./-](?:20)?\d{2}\b|\b\d{1,2}\s\d{1,2}\s20\d{2}\b/g,
-      ' ',
-    )
-    .replace(/\b\d{1,2}:\d{2}\b/g, ' ')
-    .replace(/\b[A-Z]{2}\s?\d{1,4}\b/g, ' ');
+  // Dates, times and flight numbers are public: “14-12-2026”, “20:45”, “20.45”, “KL1234”.
+  const plain = query.replace(DATE_OR_TIME, ' ').replace(/\b[A-Z]{2}\s?\d{1,4}\b/g, ' ');
   for (const [pattern, what] of PRIVATE_IN_QUERY)
     if (pattern.test(plain)) return `The search holds ${what}: search with public words only.`;
   const words = new Set(query.toLowerCase().split(/[^\p{L}\p{N}]+/u));
@@ -304,11 +312,11 @@ export const AheadFeedbackInput = z.strictObject({
 });
 
 /**
- * Everything a Looks ahead check may be served (Whombat looks-ahead.md): read the calendar and the mail, search and read
- * public web pages, and say what it found. The server serves only these, and Hermes's policy allows only these.
+ * Everything a Looks ahead check may be served (Whombat looks-ahead.md): read the mail, search and read public web pages,
+ * and say what it found. Not the calendar: the event is in its request, and other events (invites a stranger sent among
+ * them) would bring their words in while its web is open. The server serves only these, and Hermes's policy allows only these.
  */
 export const AHEAD_TOOL_NAMES = [
-  'calendar_events',
   'mail_search',
   'mail_read',
   'search_web',

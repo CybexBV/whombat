@@ -43,8 +43,8 @@ export interface VisibleConnection {
 }
 
 /**
- * A turn that never uses connections (CX-30): an outsiders' turn (OP-17), a Feedback assessment, a search answer, a
- * Looks ahead check (looks-ahead.md).
+ * A turn that never uses connections: an outsiders' turn, a Feedback assessment, a search answer, a Looks ahead check
+ * (looks-ahead.md).
  */
 export function connectionless(
   d: Pick<ConnectionDispatch, 'trigger' | 'mode' | 'search' | 'onBehalfOfAccountId'>,

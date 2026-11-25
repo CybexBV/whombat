@@ -14,6 +14,7 @@ import {
   type AheadKind,
   AheadReportInput,
   aheadHours,
+  keepingDatesAndTimes,
   LooksAheadUpdate,
   newId,
 } from '@whombat/core';
@@ -241,16 +242,18 @@ async function checkOfTurn(tx: Tx, burrowId: string, dispatchId: string) {
 export function findingWords(text: string): string {
   let words = text;
   for (let i = 0; i < 5; i++) {
-    const next = words
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/!(?=\[)/g, '')
-      .replace(/[`*_#>|~[\]]/g, '')
-      .replace(/\S*(?:https?:|mailto:|data:|www\.|@)\S*/gi, ' ')
-      // A bare site (“tickets-rebook.example”) and a phone number aren't for it to give: its sources are.
-      .replace(/\b[\p{L}\d-]+(?:\.[\p{L}\d-]+)*\.[a-z]{2,}\b\/?\S*/giu, ' ')
-      .replace(/\+?\d[\d\s().-]{7,}\d/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const next = keepingDatesAndTimes(words, (text) =>
+      text
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/!(?=\[)/g, '')
+        .replace(/[`*_#>|~[\]]/g, '')
+        .replace(/\S*(?:https?:|mailto:|data:|www\.|@)\S*/gi, ' ')
+        // A bare site (“tickets-rebook.example”) and a phone number aren't for it to give: its sources are.
+        .replace(/\b[\p{L}\d-]+(?:\.[\p{L}\d-]+)*\.[a-z]{2,}\b\/?\S*/giu, ' ')
+        .replace(/\+?\d[\d\s().-]{7,}\d/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    );
     if (next === words) break;
     words = next;
   }

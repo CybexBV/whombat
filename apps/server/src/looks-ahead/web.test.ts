@@ -159,6 +159,13 @@ describe('what a finding may show', () => {
     expect(findingWords('It starts at 20:45 on 14 December, not 20:00.')).toBe(
       'It starts at 20:45 on 14 December, not 20:00.',
     );
+    // Dutch times and numeric dates are kept.
+    expect(findingWords('Het concert duurt nu van 20.45 - 23.00 uur, niet 20.00.')).toBe(
+      'Het concert duurt nu van 20.45 - 23.00 uur, niet 20.00.',
+    );
+    expect(findingWords('The concert on 14-12-2026 starts at 20:45 (18.45 - 20.45)')).toBe(
+      'The concert on 14-12-2026 starts at 20:45 (18.45 - 20.45)',
+    );
   });
 
   it('a mail is named by the site of its sender’s address, never by the name a sender chose', () => {

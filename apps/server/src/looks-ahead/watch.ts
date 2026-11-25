@@ -16,7 +16,7 @@ import {
   type CalendarEvent,
   planAheadPass,
 } from '@whombat/core';
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, like, lt, or, sql } from 'drizzle-orm';
 import { aheadChecks, burrows, dispatches } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { startOfLocalDay } from '../home/time';
@@ -90,7 +90,7 @@ async function tidyDue(services: Services, burrowId: string, now: Date): Promise
         eq(dispatches.burrowId, burrowId),
         eq(dispatches.trigger, 'ahead'),
         inArray(dispatches.state, ['done', 'failed', 'cancelled']),
-        isNotNull(dispatches.providerSessionId),
+        like(dispatches.providerSessionId, 'hermes:%'),
       ),
     )
     .limit(1);

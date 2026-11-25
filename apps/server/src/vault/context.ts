@@ -44,8 +44,7 @@ type DispatchBits = Pick<
 >;
 
 /**
- * A dispatch that never uses the Vault: a search answer (VT-22), a Feedback assessment (FB-D) or a Looks ahead check
- * (looks-ahead.md).
+ * A dispatch that never uses the Vault: a search answer, a Feedback assessment or a Looks ahead check (looks-ahead.md).
  */
 export function vaultless(d: Pick<DispatchBits, 'trigger' | 'mode' | 'search'>): boolean {
   return (
