@@ -151,7 +151,7 @@ that website only, and signing out removes it.
 
 **Reports to the Whombat Team.** If you send us a problem or an idea from inside Whombat, we keep what you wrote,
 the Whombat and app versions, your Whombat's update channel, your device and system in a few words and your language,
-with the answers in the report's conversation. Unlike everything else above, we can read these: the form says so.
+with the answers in the report's conversation. The Whombat Team sees your name with it, never your email address. Unlike everything else above, we can read these: the form says so.
 The Whombat Team reads them with the help of its own AI assistant, and may fix what you reported in Whombat's
 public source code, in its own words, never yours and never naming you.
 

@@ -2,7 +2,7 @@
 
 John, 2026-11-25: Whombat Link people tell the team behind Whombat about a problem or an idea from inside Whombat,
 seamlessly, the way a product's customers send reports to a report tracker; the reports arrive on the team's own
-Whombat (“Home”) and take the same flow as such reports (report-trackers.md): the assistant checks whether it is a real
+Whombat and take the same flow as such reports (report-trackers.md): the assistant checks whether it is a real
 bug, T3 Code fixes it, another model reviews, Whombat merges on its checks and tells the person when the fix reaches
 them. Planned with the Council (three rounds); John's decisions the same day: no encryption (a quiet warning on the form
 is enough), a pilot for two invited people, replies signed “Whombat Team (AI assistant)”, 90 days after closing, the
