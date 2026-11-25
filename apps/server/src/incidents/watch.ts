@@ -4,7 +4,9 @@
  * ends incidents from them (`plan.ts`) and pushes once for what has been down a while. A look's line is one that counts
  * already (watched, not quiet, confirmed): what the person quieted makes no look. A look something else took down with it
  * (`causedBy`) records its cause and never pushes, nor does an incident while its thing is kept quiet or down because of
- * something else. A thing held or not seen keeps its incident open: only seeing it fine again ends it.
+ * something else. Whether an outage is over is read from the thing itself (`observeThings`), not from its dot: a server's
+ * row online, a connection's or device's own last check, made after any hold over it ended. Quieting a line, a hold, or
+ * a pass that couldn't read the thing never says it is back; a thing that was removed ends its incident as removed.
  *
  * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass.
  */
@@ -16,14 +18,16 @@ import { serversPrincipal } from '../hosts/principal';
 import { LOOK_RANK, liveRows } from '../looks/research';
 import type { Services } from '../services';
 import { holdsIncident } from './holds';
-import { type LiveLooks, readLiveLooks, seenFine } from './looks';
+import { lookNow, observeThings, type RawSeen, readLiveLooks } from './looks';
 import {
   type OpenIncident,
   type PassBefore,
+  PUSH_MAX,
   type PushCandidate,
   planIncidents,
   planPush,
   type SeenLook,
+  type ThingSeen,
 } from './plan';
 import {
   anyIncident,
@@ -35,7 +39,7 @@ import {
   pruneIncidents,
   pushesSince,
 } from './store';
-import { deliverThingWatches, settleSeenBack } from './thing-watch';
+import { deliverThingWatches, settleRemoved, settleSeenBack, watchedThings } from './thing-watch';
 
 /** How often the watcher looks: as the look watcher. */
 export const INCIDENTS_WATCH_MS = 60_000;
@@ -88,70 +92,87 @@ export async function watchIncidents(
     ].filter((d) => !Number.isNaN(d.getTime()));
     return times.length ? new Date(Math.min(...times.map((d) => d.getTime()))) : null;
   };
-  const looks = live.looks.map((l) => seenLookOf(l, sinceOf(l))).filter((l): l is SeenLook => l !== null);
+  const looks = live.looks
+    .map((l) => seenLookOf(l, sinceOf(l)))
+    .filter((l): l is SeenLook => l !== null)
+    .map((l) => ({
+      ...l,
+      problems: [...(lookNow(live, l.thing)?.bad ?? [])].map(([check, words]) => ({
+        check: check.slice(0, 80),
+        words: words.slice(0, 200),
+      })),
+    }));
   const rows = await openIncidents(services.db, burrowId);
   const open = rows.map(openIncidentOf);
+  // What Whombat sees of the things themselves: the open incidents' (are they over?), the looks' (did a hold over them
+  // end?) and those running watches wait on.
+  const watches = await watchedThings(services.db, burrowId, now);
+  const observed = await observeThings(
+    services,
+    burrowId,
+    live,
+    [...open.map((o) => o.thing), ...looks.map((l) => l.thing), ...watches.map((w) => w.thing)],
+    before?.held ?? new Map(),
+    now,
+  );
+  const withLook = new Set(looks.map((l) => l.thing));
+  const seen = new Map<string, ThingSeen>();
+  for (const inc of open)
+    if (!withLook.has(inc.thing)) seen.set(inc.thing, seenOf(observed.raw.get(inc.thing) ?? 'unread'));
   const plan = planIncidents({
     looks,
     open,
     before,
     serversRead,
-    blind: await blindThings(services, burrowId, live, open, looks, now),
+    seen,
     noneYet: !rows.length && !(await anyIncident(services.db, burrowId)),
     now,
   });
   const signer = () => serversPrincipal(services, burrowId);
-  if (plan.opened.length || plan.changed.length || plan.ended.length)
+  if (plan.opened.length || plan.changed.length || plan.noted.length || plan.ended.length)
     await services.pipeline.commit(
       incidentsPass,
       {
         opened: plan.opened.slice(0, 200).map(({ since: _since, startedAt, ...o }) => ({
           ...o,
+          problems: o.problems?.slice(0, 30),
           startedAt: startedAt.toISOString(),
         })),
         changed: plan.changed.slice(0, 200),
-        ended: plan.ended.slice(0, 200).map((e) => ({ id: e.id, endedAt: e.endedAt.toISOString() })),
+        noted: plan.noted.slice(0, 200),
+        ended: plan.ended.slice(0, 200).map((e) => ({
+          id: e.id,
+          endedAt: e.endedAt.toISOString(),
+          ...(e.removed ? { removed: true } : {}),
+        })),
       },
       { burrowId, actorId: await signer() },
     );
-  await pushDue(services, burrowId, burrow.timeZone, now, signer, new Set(looks.map((l) => l.thing)));
+  await pushDue(services, burrowId, burrow.timeZone, now, signer, withLook, observed.heldUntil);
   // “Tell me when Plex is back” while Plex had no outage of its own (it was down because of its server): seeing it
-  // answer again is what it waits for.
-  await settleSeenBack(services, burrowId, seenFine(live)).catch((err) =>
+  // answer again is what it waits for. A watch on something removed stops and says so.
+  const raw = observed.raw;
+  const answering = new Set([...raw].filter(([, r]) => r === 'fine' || r === 'answering').map(([t]) => t));
+  const gone = new Set([...raw].filter(([, r]) => r === 'gone').map(([t]) => t));
+  await settleSeenBack(services, burrowId, answering).catch((err) =>
     services.log.warn(
       { err: String(err), burrowId },
       'incidents: watches waiting for a return could not be read',
     ),
   );
-  return plan.seen;
+  await settleRemoved(services, burrowId, gone).catch((err) =>
+    services.log.warn(
+      { err: String(err), burrowId },
+      'incidents: watches of removed things could not be read',
+    ),
+  );
+  return { ...plan.seen, held: observed.held };
 }
 
-/**
- * The open incidents' things that have no look now but that Whombat didn't see fine either: held (kept quiet, or down
- * because of something else) or not seen (a check that couldn't run, a thing not checked yet).
- */
-async function blindThings(
-  services: Services,
-  burrowId: string,
-  live: LiveLooks,
-  open: readonly OpenIncident[],
-  looks: readonly SeenLook[],
-  now: Date,
-): Promise<Set<string>> {
-  const withLook = new Set(looks.map((l) => l.thing));
-  // A server is seen through its card (a server not read is the plan's own case), the rest through Home's things.
-  const listed = new Map(live.thingList.filter((t) => t.kind !== 'server').map((t) => [t.id, t] as const));
-  const blind = new Set<string>();
-  for (const inc of open) {
-    if (withLook.has(inc.thing)) continue;
-    const t = listed.get(inc.thing);
-    if (
-      (t && (t.status === 'unknown' || t.causedBy || t.quietUntil)) ||
-      (await holdsIncident(services.db, burrowId, inc.thing, now))
-    )
-      blind.add(inc.thing);
-  }
-  return blind;
+/** What a thing's own state says of its open incident: only seeing it fine counts towards its end. */
+function seenOf(raw: RawSeen): ThingSeen {
+  if (raw === 'fine' || raw === 'unread' || raw === 'gone') return raw;
+  return 'bad';
 }
 
 /**
@@ -165,6 +186,7 @@ async function pushDue(
   now: Date,
   signer: () => Promise<string>,
   bad: ReadonlySet<string>,
+  heldUntil: ReadonlyMap<string, Date>,
 ): Promise<void> {
   const open = (await openIncidents(services.db, burrowId)).map(openIncidentOf);
   const waiting: OpenIncident[] = [];
@@ -185,13 +207,15 @@ async function pushDue(
   const candidates: PushCandidate[] = waiting.map((i) => ({
     ...i,
     findingPushed: (findings.get(i.thing) ?? 0) >= i.startedAt.getTime(),
+    // A hold over it that ended after it started: the push waits and stays fresh from then.
+    heldUntil: heldUntil.get(i.thing) ?? null,
   }));
   const group = planPush({ open: candidates, pushedToday: pushes.total, pushedTodayOf: pushes.of, now });
   if (!group.length) return;
   // The words are made in the push's own commit, from what is still open and not held then.
   await services.pipeline.commit(
     incidentsPush,
-    { ids: group.map((i) => i.id) },
+    { ids: group.slice(0, PUSH_MAX).map((i) => i.id) },
     { burrowId, actorId: await signer() },
   );
 }

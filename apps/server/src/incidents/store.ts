@@ -3,11 +3,13 @@
  * burrow's Servers signer (“Whombat”: what its monitoring does by itself):
  *
  * - **`incidents.pass`** (the watcher, `watch.ts`): opens, worsens and ends incidents as a pass planned (`plan.ts`).
- *   Opening signs `thing.down` or `thing.problem`, a problem going down `thing.down`, ending `thing.back`
- *   (`ThingIncidentEvent`, no text: they show in no feed), and automations are nudged. When the last incident a push
- *   named ends, its push is withdrawn quietly: its inbox row is read, and on a managed Whombat the phone's notification
- *   goes (a content-free clear). Nothing says it's back. Home's `things` hears of each opening, worsening and end, so
- *   an open page's “What happened” reads again.
+ *   Opening signs `thing.down` or `thing.problem`, a problem going down `thing.down`, each other bad check counting
+ *   on it (at the start or later) `thing.problem` once, carrying that check, and ending `thing.back`
+ *   (`ThingIncidentEvent`, no text: they show in no feed); automations are nudged. An incident whose thing was removed
+ *   ends without `thing.back`: it didn't come back. When the last incident a push named ends, its push is withdrawn
+ *   quietly: its inbox row is read, and on a managed Whombat the phone's notification goes (a content-free clear).
+ *   Nothing says it's back. Home's `things` hears of each opening, worsening and end, so an open page's “What happened”
+ *   reads again.
  * - **`incidents.push`** (the watcher): marks the incidents one push names as pushed, then sends it through the
  *   notifications (Do not disturb and quiet hours hold it as any other). Whether each is still open and not kept quiet
  *   or down because of something else is checked again in its commit, and its words name only those left.
@@ -46,7 +48,7 @@ import { forbidden } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { loadPrincipalRow } from '../read/principals';
 import { holdsIncident } from './holds';
-import { incidentPushText, type OpenIncident, pushOrder } from './plan';
+import { incidentPushText, type OpenIncident, PUSH_MAX, pushOrder } from './plan';
 import { claimThingWatches, deliverThingWatches } from './thing-watch';
 
 /** Incidents are kept this long after they ended. */
@@ -58,6 +60,8 @@ export const pushKey = (group: string) => `incident:${group}`;
 const Kind = z.enum(['server', 'connection', 'device']);
 const Nature = z.enum(['down', 'problem']);
 const Cause = z.object({ thing: z.string().min(3).max(220), name: z.string().min(1).max(120) }).nullable();
+/** A bad check counting on a thing, with its line's words. */
+const Problem = z.object({ check: z.string().min(1).max(80), words: z.string().max(200) });
 
 const Opened = z.object({
   thing: z.string().min(3).max(220),
@@ -71,6 +75,8 @@ const Opened = z.object({
   startedAt: z.iso.datetime({ offset: true }),
   /** Bad before Whombat watched: kept as told, so it never pushes. */
   pushed: z.boolean().optional(),
+  /** The bad checks counting on it as it opens: each other than `check` signs `thing.problem` too. */
+  problems: z.array(Problem).max(30).optional(),
 });
 const Changed = z.object({
   id: z.string().min(1).max(80),
@@ -81,15 +87,30 @@ const Changed = z.object({
   check: z.string().max(80).nullable().optional(),
   subject: z.string().max(160).optional(),
 });
-const Ended = z.object({ id: z.string().min(1).max(80), endedAt: z.iso.datetime({ offset: true }) });
+/** A bad check that began counting on an open incident. */
+const Noted = Problem.extend({ id: z.string().min(1).max(80) });
+const Ended = z.object({
+  id: z.string().min(1).max(80),
+  endedAt: z.iso.datetime({ offset: true }),
+  /** Its thing was removed: it ends without coming back. */
+  removed: z.boolean().optional(),
+});
 
 async function requireSigner(tx: Tx, actorId: string): Promise<void> {
   const row = await loadPrincipalRow(tx, actorId);
   if (row?.system !== SYSTEM_SERVERS) throw forbidden('Only Whombat’s monitoring keeps outages.');
 }
 
-/** The event an incident signs, its payload checked. */
-async function sign(ctx: ApplyContext, type: string, row: IncidentRow): Promise<void> {
+/**
+ * The event an incident signs, its payload checked. `about`: a check other than its own that is bad on it, with its
+ * words and since when it counts; an automation that names that check starts on it, counting its delay from then.
+ */
+async function sign(
+  ctx: ApplyContext,
+  type: string,
+  row: IncidentRow,
+  about?: { check: string; words: string; since: Date },
+): Promise<void> {
   const target = parseThingId(row.thingId);
   const [connection] =
     target?.kind === 'connection'
@@ -104,10 +125,10 @@ async function sign(ctx: ApplyContext, type: string, row: IncidentRow): Promise<
     kind: row.kind,
     name: row.name.slice(0, 120),
     nature: row.nature,
-    words: row.words.slice(0, 200),
+    words: (about?.words || row.words).slice(0, 200),
     ...(connection ? { catalogId: connection.catalogId } : {}),
-    ...(row.checkId ? { check: row.checkId } : {}),
-    startedAt: row.startedAt.toISOString(),
+    ...(about ? { check: about.check } : row.checkId ? { check: row.checkId } : {}),
+    startedAt: (about?.since ?? row.startedAt).toISOString(),
     ...(row.endedAt ? { endedAt: row.endedAt.toISOString() } : {}),
     ...(row.causeThing && row.causeName ? { cause: { thing: row.causeThing, name: row.causeName } } : {}),
   });
@@ -184,18 +205,25 @@ async function withdrawPushes(ctx: ApplyContext, groups: readonly string[]): Pro
   });
 }
 
+/** A list of checks with one more, once. */
+const withCheck = (checks: readonly string[], check: string | null | undefined): string[] =>
+  check && !checks.includes(check) ? [...checks, check] : [...checks];
+
 /** Opens, worsens and ends incidents as the watcher's pass planned. */
 export const incidentsPass = defineCommand({
   name: 'incidents.pass',
   schema: z.object({
     opened: z.array(Opened).max(200),
     changed: z.array(Changed).max(200),
+    noted: z.array(Noted).max(200).optional(),
     ended: z.array(Ended).max(200),
   }),
   async apply(tx, ctx, input) {
     await requireSigner(tx, ctx.actor.id);
     let signed = 0;
     for (const o of input.opened) {
+      const others = (o.problems ?? []).filter((p) => p.check !== o.check);
+      const checks = others.reduce((list, p) => withCheck(list, p.check), withCheck([], o.check));
       const [row] = await tx
         .insert(incidents)
         .values({
@@ -211,6 +239,7 @@ export const incidentsPass = defineCommand({
           startedAt: new Date(o.startedAt),
           causeThing: o.cause?.thing ?? null,
           causeName: o.cause?.name ?? null,
+          checks,
           // Told without a push of its own: no group, so it counts in no day's pushes and nothing is withdrawn.
           ...(o.pushed ? { pushedAt: ctx.now } : {}),
         })
@@ -220,14 +249,30 @@ export const incidentsPass = defineCommand({
       if (!row) continue;
       await sign(ctx, row.nature === 'down' ? THING_DOWN : THING_PROBLEM, row);
       signed++;
+      // Something else took it down: it starts nothing, as its own event doesn't.
+      if (row.causeThing) continue;
+      for (const p of others) {
+        await sign(ctx, THING_PROBLEM, row, { ...p, since: row.startedAt });
+        signed++;
+      }
     }
     for (const c of input.changed) {
+      const [was] = await tx
+        .select({ checks: incidents.checks, checkId: incidents.checkId })
+        .from(incidents)
+        .where(and(eq(incidents.id, c.id), eq(incidents.burrowId, ctx.burrow.id)));
       const [row] = await tx
         .update(incidents)
         .set({
           nature: c.nature,
           words: c.words,
-          ...(c.check === undefined ? {} : { checkId: c.check, subject: c.subject ?? '' }),
+          ...(c.check === undefined
+            ? {}
+            : {
+                checkId: c.check,
+                subject: c.subject ?? '',
+                checks: withCheck(withCheck(was?.checks ?? [], was?.checkId), c.check),
+              }),
           ...(c.cause ? { causeThing: c.cause.thing, causeName: c.cause.name } : {}),
         })
         .where(and(eq(incidents.id, c.id), eq(incidents.burrowId, ctx.burrow.id), isNull(incidents.endedAt)))
@@ -236,6 +281,23 @@ export const incidentsPass = defineCommand({
         await sign(ctx, THING_DOWN, row);
         signed++;
       }
+    }
+    // A bad check that began counting on an open incident: `thing.problem` once for it, from now.
+    for (const n of input.noted ?? []) {
+      const [was] = await tx
+        .select()
+        .from(incidents)
+        .where(and(eq(incidents.id, n.id), eq(incidents.burrowId, ctx.burrow.id), isNull(incidents.endedAt)))
+        .for('update');
+      if (!was || was.causeThing || was.checkId === n.check || was.checks.includes(n.check)) continue;
+      const [row] = await tx
+        .update(incidents)
+        .set({ checks: withCheck(withCheck(was.checks, was.checkId), n.check) })
+        .where(eq(incidents.id, was.id))
+        .returning();
+      if (!row) continue;
+      await sign(ctx, THING_PROBLEM, row, { check: n.check, words: n.words, since: ctx.now });
+      signed++;
     }
     let moved = signed > 0;
     const groups: string[] = [];
@@ -246,9 +308,12 @@ export const incidentsPass = defineCommand({
         .where(and(eq(incidents.id, e.id), eq(incidents.burrowId, ctx.burrow.id), isNull(incidents.endedAt)))
         .returning();
       if (!row) continue;
-      await sign(ctx, THING_BACK, row);
-      signed++;
       moved = true;
+      // Removed isn't back: nothing starts and no watch hears that it came back.
+      if (!e.removed) {
+        await sign(ctx, THING_BACK, row);
+        signed++;
+      }
       if (row.pushGroup && !row.withdrawnAt) groups.push(row.pushGroup);
     }
     await withdrawPushes(ctx, [...new Set(groups)]);
@@ -301,7 +366,7 @@ async function pushLink(ctx: ApplyContext, group: readonly IncidentRow[]) {
  */
 export const incidentsPush = defineCommand({
   name: 'incidents.push',
-  schema: z.object({ ids: z.array(z.string().min(1).max(80)).min(1).max(50) }),
+  schema: z.object({ ids: z.array(z.string().min(1).max(80)).min(1).max(PUSH_MAX) }),
   async apply(tx, ctx, input) {
     await requireSigner(tx, ctx.actor.id);
     const candidates = await tx
@@ -387,6 +452,7 @@ export function openIncidentOf(row: IncidentRow): OpenIncident {
     startedAt: row.startedAt,
     cause: row.causeThing && row.causeName ? { thing: row.causeThing, name: row.causeName } : null,
     pushedAt: row.pushedAt,
+    checks: withCheck(row.checks ?? [], row.checkId),
   };
 }
 

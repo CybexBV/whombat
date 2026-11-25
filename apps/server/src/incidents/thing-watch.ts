@@ -12,11 +12,12 @@ import {
   ThingWatchMinutes,
   thingWatchExpiredText,
   thingWatchMatches,
+  thingWatchRemovedText,
   thingWatchResultText,
   thingWatchStartText,
   topics,
 } from '@whombat/core';
-import { and, desc, eq, gt, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ApplyContext, defineCommand } from '../commit/types';
 import type { Db } from '../db/client';
@@ -271,15 +272,93 @@ export const seenThingWatch = defineCommand({
   },
 });
 
-export const THING_WATCH_COMMANDS = [startThingWatch, endThingWatch, cancelThingWatch, seenThingWatch];
+/**
+ * A watch whose thing was removed while it waited: it stops, and says so in its thread without a notification. Nothing
+ * says the thing went down or came back.
+ */
+export const removedThingWatch = defineCommand({
+  name: 'thing.watch_removed',
+  schema: z.object({ watchId: ThingWatchId }),
+  async apply(tx, ctx, input) {
+    const row = await watchIn(ctx, input.watchId);
+    if (ctx.actor.id !== row.agentId) throw forbidden('Only the assistant that started a watch ends it.');
+    if (row.status !== 'watching' || row.eventId) return;
+    await settleWatch(ctx, row, 'cancelled');
+    const conversation = await loadConversationRow(tx, row.conversationId);
+    if (!conversation) return;
+    await postMessage(ctx, {
+      conversation,
+      text: thingWatchRemovedText(row),
+      threadRootId:
+        row.threadRootId && (await loadMessageRow(tx, row.threadRootId)) ? row.threadRootId : row.messageId,
+      mentions: [],
+      dispatch: false,
+      notify: false,
+    });
+  },
+});
 
-/** Settles the `back` watches whose thing is in `fine` (seen answering now, `seenFine`), as `thing.watch_seen` decides. */
+export const THING_WATCH_COMMANDS = [
+  startThingWatch,
+  endThingWatch,
+  cancelThingWatch,
+  seenThingWatch,
+  removedThingWatch,
+];
+
+/** The things running watches wait on, with what they wait for. */
+export async function watchedThings(
+  db: Db,
+  burrowId: string,
+  now: Date,
+): Promise<{ thing: string; event: string }[]> {
+  return db
+    .selectDistinct({ thing: thingWatches.thing, event: thingWatches.event })
+    .from(thingWatches)
+    .where(
+      and(
+        eq(thingWatches.burrowId, burrowId),
+        eq(thingWatches.status, 'watching'),
+        isNull(thingWatches.eventId),
+        gt(thingWatches.endsAt, now),
+      ),
+    );
+}
+
+/** Stops the running watches whose thing was removed (`gone`), as `thing.watch_removed` decides. */
+export async function settleRemoved(
+  services: Services,
+  burrowId: string,
+  gone: ReadonlySet<string>,
+): Promise<void> {
+  if (!gone.size) return;
+  const rows = await services.db
+    .select()
+    .from(thingWatches)
+    .where(
+      and(
+        eq(thingWatches.burrowId, burrowId),
+        eq(thingWatches.status, 'watching'),
+        isNull(thingWatches.eventId),
+        inArray(thingWatches.thing, [...gone]),
+      ),
+    );
+  for (const row of rows)
+    await services.pipeline
+      .commit(removedThingWatch, { watchId: row.id }, { burrowId, actorId: row.agentId })
+      .catch((err: unknown) => services.log.warn({ err, watchId: row.id }, 'A thing watch will be retried'));
+}
+
+/**
+ * Settles the `back` watches whose thing is in `answering` (Whombat sees it answering itself now, also with an error
+ * or a bad line, after any hold ended: `observeThings`), as `thing.watch_seen` decides.
+ */
 export async function settleSeenBack(
   services: Services,
   burrowId: string,
-  fine: ReadonlySet<string>,
+  answering: ReadonlySet<string>,
 ): Promise<void> {
-  if (!fine.size) return;
+  if (!answering.size) return;
   const now = services.clock();
   const rows = await services.db
     .select()
@@ -293,7 +372,7 @@ export async function settleSeenBack(
         gt(thingWatches.endsAt, now),
       ),
     );
-  for (const row of rows.filter((r) => fine.has(r.thing)))
+  for (const row of rows.filter((r) => answering.has(r.thing)))
     await services.pipeline
       .commit(seenThingWatch, { watchId: row.id }, { burrowId, actorId: row.agentId })
       .catch((err: unknown) => services.log.warn({ err, watchId: row.id }, 'A thing watch will be retried'));

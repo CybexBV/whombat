@@ -5,7 +5,7 @@
  */
 import type { IncidentNature, ThingWatchEvent, ThingWatchStatus } from '@whombat/core';
 import { sql } from 'drizzle-orm';
-import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { automations } from './automations';
 import { ts } from './common';
 import { conversations, messages } from './conversations';
@@ -33,6 +33,11 @@ export const incidents = pgTable(
     /** The check and item of the worst line, when known ('' the thing as a whole). */
     checkId: text('check_id'),
     subject: text('subject').notNull().default(''),
+    /**
+     * Every check it signed an event for while it lasted: the one that opened or worsened it, and each bad check that
+     * began counting on it later (`thing.problem` once each), so an automation naming a check starts on it.
+     */
+    checks: jsonb('checks').$type<string[]>().notNull().default([]),
     startedAt: ts('started_at').notNull(),
     endedAt: ts('ended_at'),
     /** Down because what it runs on was down: that thing's id and name. Such an incident never pushes. */

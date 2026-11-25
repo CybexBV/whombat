@@ -189,6 +189,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Maintenance windows still to give back to the hosts service after a quiet window got a new one (docs/decisions/monitoring.md): one new table, quiet_maintenance_left. The release before it never reads or writes it."
+    },
+    "0030_incident_checks": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The checks an incident signed an event for (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column, and a row it opens reads as one that signed only its own check."
     }
   }
 }

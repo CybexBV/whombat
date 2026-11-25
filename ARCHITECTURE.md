@@ -845,12 +845,13 @@ published automation details read their definition and publisher from one versio
 - **Triggers** read the signed `events` table after a durable cursor (messages, reactions, mirrored pull requests
   and issues of watched repositories, report trackers' reports, matched incoming emails of watched mailboxes), plus
   schedules (cron in a time zone) and Run now. A `thing` trigger listens to signed starts, escalations or ends of
-  incidents for one thing or selected kinds. The engine claims each incident once per automation. A delayed claim
-  survives a restart and runs only while the incident is still open, independent and unmuted, and while the check it
-  waited on (the trigger's, else the one that opened the incident) still counts on the thing as the incident watcher
-  reads it; a thing it can't read then is asked again a minute later. Until the release a box would go back to knows
-  them (`0027_incident_automation_watches` in `runtime_releases`), such automations aren't made and their runs wait, as
-  Find My's do. Webhook triggers are refused: nothing from outside reaches the box. Runs
+  incidents for one thing or selected kinds; one that names a check starts on any event carrying it (the incident's
+  own, or a bad check that began counting on it later). The engine claims each incident once per automation. A delayed
+  claim survives a restart and runs only while the incident is still open, independent and unmuted, and, as the
+  incident watcher reads the thing then, a `down` one only while it still doesn't answer and a `problem` one only while
+  the check it waited on (the trigger's, else the event's) is still bad; a thing it can't read then is asked again a
+  minute later. Until the release a box would go back to knows them (`0027_incident_automation_watches` in
+  `runtime_releases`), such automations aren't made, events claim no incident and start no run, and their runs wait. Webhook triggers are refused: nothing from outside reaches the box. Runs
   are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
   start nothing.
   Cron catch-up parses once per call, reuses at most three days' computed instants and searches them by position,
@@ -1699,22 +1700,28 @@ Setup and operation: `docs/github.md`.
   back at once, without a message or a turn.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
-  for each thing whose look is bad (`problem`) or down, opened on the second pass in a row and ended after two passes
-  without, at the first of them; amber opens none, a problem that goes down becomes a `down` one. A thing that left
-  the looks because it is held (kept quiet, or down because of something else) or not seen (its check couldn't run, or
-  it isn't checked) keeps its incident: only two passes that see it fine end it. On a Whombat's first incidents, what
-  the watcher's first pass after its start already saw opens as told, so the update itself pushes nothing. Opening
-  signs `thing.down` or `thing.problem`, ending `thing.back` (`ThingIncidentEvent`, by the Servers signer, no text), for
-  automations and one-time watches, and tells Home's `things` (an open page's “What happened” reads again). In the
+  for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;
+  amber opens none, a problem that goes down becomes a `down` one. Whether it is over is read from the thing itself,
+  not its dot (`observeThings`): a server's fleet row online, a connection's last check (its outcome and lines, before
+  the quiet rows) or a device's last read, made after any hold over it ended. Two passes in a row that see it fine end
+  it, at the first of them; one that sees it still bad underneath (not answering, a line someone quieted or switched
+  off, kept quiet, down because of something else) starts the count again; one that couldn't read it counts neither
+  way. A thing that was removed ends its incident at once without `thing.back`, and its watches stop with a short line.
+  On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
+  update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
+  then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,
+  by the Servers signer, no text), for automations and one-time watches, and tells Home's `things` (an open page's
+  “What happened” reads again). In the
   person's Chat, `thing_watch` adds a Cancel card and stores a watch for one thing to go down or come back. Matching
   incidents claim it in the same commit as the event. A `back` watch of a thing without an outage of its own (down
   because of its server, or not seen) happens when the watcher sees it answering again. Whombat replies once in the same
   thread, also when a watch expires, without starting an agent turn. A watch of a state already seen answers
   immediately. An incident open 10 minutes about which no research finding pushed is pushed once as the person's
-  “Needs you” row (“Plex is down”, “3 things are down: …”), with the others that started within 5 minutes of it; only
-  while its thing is still bad on that pass, never while it is kept quiet or down because of something else
-  (`DeskLook.causedBy`, checked again in the push's commit, whose words name only what is left), nor one more than an
-  hour old, nor past 6 pushes a day and 2 of a thing. The tap opens the thing's look thread, else its page (the Inbox
+  “Needs you” row (“Plex is down”, “3 things are down: …”), with the others that started within 5 minutes of it (up to
+  200 in one push); only while its thing is still bad on that pass, never while it is kept quiet or down because of
+  something else (`DeskLook.causedBy`, checked again in the push's commit, whose words name only what is left), nor one
+  more than an hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold
+  over it ended when that is later. The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's
   notification. The connection health pass and device reader store whether each check answered (`up`, 1 or 0).
   Fresh account reads from the page, desk and mail count, and GitHub's own repository sync, keep one sample
