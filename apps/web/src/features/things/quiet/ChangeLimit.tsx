@@ -71,14 +71,16 @@ export function ChangeLimitDialog({
   const [problem, setProblem] = useState<string | null>(null);
   const send = async (limit: number | null) => {
     setProblem(null);
-    const ok = await actions.set({
+    const done = await actions.set({
       check: view.check,
       subject: view.subject,
       name: view.name,
       unit: view.unit,
       limit,
     });
-    if (ok) onClose();
+    // A refusal (a warning at or above the critical limit) stays in the sheet, under the field.
+    if (done === true) onClose();
+    else setProblem(done.problem);
   };
   return (
     <Modal open onOpenChange={(o) => !o && !actions.busy && onClose()}>

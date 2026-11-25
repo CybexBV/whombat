@@ -173,4 +173,23 @@ describe('change the limit', () => {
     await user.click(within(sheet).getByRole('button', { name: 'Save' }));
     expect(await screen.findByText(/warns above 95 % now/)).toBeTruthy();
   });
+
+  it('says a refused limit in the open sheet, which stays open, and toasts nothing', async () => {
+    const user = userEvent.setup();
+    renderApp(PVE02, seeded());
+    await user.click(await screen.findByRole('tab', { name: 'System' }, T));
+    await user.click(await screen.findByRole('button', { name: 'Change the limit: Running hot' }, T));
+    const sheet = await screen.findByRole('dialog');
+    const field = within(sheet).getByLabelText('WARN ABOVE');
+    await user.clear(field);
+    // Within the check's range, but at the sensor's critical limit: only the hub can refuse it.
+    await user.type(field, '95');
+    await user.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(within(sheet).getByRole('alert').textContent).toContain('below the critical limit of 95 °C'),
+    );
+    expect(screen.getByRole('dialog')).toBe(sheet);
+    expect(screen.queryByText(/warns above/)).toBeNull();
+    expect(screen.getAllByText(/below the critical limit/)).toHaveLength(1);
+  });
 });

@@ -99,6 +99,14 @@ function refused(status: number, code: string, message: string): Response {
   return json({ error: { code, message } }, status);
 }
 
+/** The checks whose warning and critical limits go together, each to its pair. */
+const LIMIT_PAIRS: Record<string, readonly [warning: string, critical: string]> = {
+  'host.sensor.temp_high': ['host.sensor.temp_high', 'host.sensor.temp_critical'],
+  'host.sensor.temp_critical': ['host.sensor.temp_high', 'host.sensor.temp_critical'],
+  'host.disk.wear_high': ['host.disk.wear_high', 'host.disk.wear_critical'],
+  'host.disk.wear_critical': ['host.disk.wear_high', 'host.disk.wear_critical'],
+};
+
 /** “Up **98.9 %** this week” as a fact's parts: the bold bits between `**`. */
 function marked(text: string): ThingTextPart[] {
   return text
@@ -493,6 +501,28 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
     };
   }
 
+  /**
+   * Like the hub: a warning limit stays below its critical one, which is the server's own or else the default (the
+   * fixture sensors say 95 °C, as a real sensor says its own). Null when the new limit is fine.
+   */
+  function pairProblem(thing: string, body: SetThingWatchLimitBody): string | null {
+    const pair = LIMIT_PAIRS[body.check];
+    if (!pair || body.limit === null) return null;
+    const [warning, critical] = pair;
+    const unit = body.check.startsWith('host.sensor.') ? '°C' : '%';
+    const own = (check: string) =>
+      (body.subject ? limits.get(`${thing}|${check}|${body.subject.id}`) : undefined) ??
+      limits.get(`${thing}|${check}|`) ??
+      null;
+    if (body.check === warning) {
+      const range = hostWatchLimit(ruleOf(critical));
+      const serious = own(critical) ?? (range && 'defaultValue' in range ? range.defaultValue : 95);
+      return body.limit >= serious ? `Set it below the critical limit of ${serious} ${unit}.` : null;
+    }
+    const high = own(warning);
+    return high !== null && body.limit <= high ? `Set it above the warning limit of ${high} ${unit}.` : null;
+  }
+
   function setLimit(
     thing: string,
     body: SetThingWatchLimitBody,
@@ -508,6 +538,8 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
         'invalid_request',
         `Choose a limit from ${range.min} to ${range.max} ${range.unit}.`,
       );
+    const pair = pairProblem(thing, body);
+    if (pair) return refused(400, 'invalid_request', pair);
     const key = `${thing}|${body.check}|${body.subject?.id ?? ''}`;
     const previous = limits.get(key) ?? null;
     if (body.limit === null) limits.delete(key);

@@ -7,6 +7,7 @@ import { keepQuietBody } from '@whombat/client';
 import type { ThingPage, ThingPagePanel } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  daysEdges,
   factsWithoutUptime,
   firstPick,
   parseMonitoringPick,
@@ -66,6 +67,16 @@ describe('Pick a time', () => {
       day: '2026-09-24',
       clock: '09:00',
     });
+  });
+
+  it('fades the days where more are past an edge, so a cut-off day never shows as a sliver beside the clock', () => {
+    // A week of days on a 402 pt iPhone: about three fit before the clock.
+    expect(daysEdges(228, 560, 0)).toEqual({ left: false, right: true });
+    expect(daysEdges(228, 560, 120)).toEqual({ left: true, right: true });
+    expect(daysEdges(228, 560, 332)).toEqual({ left: true, right: false });
+    // All the days fit (a wide phone), or a pixel of rounding: nothing fades.
+    expect(daysEdges(400, 360, 0)).toEqual({ left: false, right: false });
+    expect(daysEdges(228, 228.5, 0.5)).toEqual({ left: false, right: false });
   });
 
   it('gives the shared rules a value they read as a time in the Whombat’s zone', () => {

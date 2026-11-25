@@ -176,4 +176,22 @@ describe('monitoring in the demo world', () => {
       }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
   });
+
+  it('refuses a warning at or above the critical limit, as the hub does, in words the sheet can show', async () => {
+    const { client } = setup();
+    const thing = MONITORING_THINGS.pve02;
+    const set = (check: string, limit: number) =>
+      client.request(api.things.setWatchLimit, { params: { burrow, thing }, body: { check, limit } });
+    await expect(set('host.sensor.temp_high', 100)).rejects.toMatchObject({
+      message: expect.stringContaining('below the critical limit of 95 °C'),
+    });
+    await expect(set('host.disk.wear_high', 90)).rejects.toMatchObject({
+      message: expect.stringContaining('below the critical limit of 90 %'),
+    });
+    await ok(set('host.disk.wear_high', 80));
+    await expect(set('host.disk.wear_critical', 80)).rejects.toMatchObject({
+      message: expect.stringContaining('above the warning limit of 80 %'),
+    });
+    await ok(set('host.sensor.temp_high', 85));
+  });
 });

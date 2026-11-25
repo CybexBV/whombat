@@ -61,6 +61,14 @@ const refusal = (status: number, code: string, message: string): Answer => ({
   body: { error: { code, message } },
 });
 
+/** The checks whose warning and critical limits go together, each to its pair. */
+const LIMIT_PAIRS: Record<string, readonly [warning: string, critical: string]> = {
+  'sensor.temp_high': ['sensor.temp_high', 'sensor.temp_critical'],
+  'sensor.temp_critical': ['sensor.temp_high', 'sensor.temp_critical'],
+  'disk.wear_high': ['disk.wear_high', 'disk.wear_critical'],
+  'disk.wear_critical': ['disk.wear_high', 'disk.wear_critical'],
+};
+
 export interface MonitoringFixtureOptions {
   now: () => Date;
   timeZone: string;
@@ -406,6 +414,29 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
   >();
   const SUBJECT_NAMES: Record<string, string> = { 'fs:/mnt/backup': '/mnt/backup' };
 
+  /**
+   * Like the hub: a warning limit stays below its critical one, which is the server's own or else the default (the
+   * demo's sensors say 95 °C, as a real sensor says its own). Null when the new limit is fine.
+   */
+  function pairProblem(server: string, rule: string, body: SetThingWatchLimitBody): string | null {
+    const pair = LIMIT_PAIRS[rule];
+    if (!pair || body.limit === null) return null;
+    const [warning, critical] = pair;
+    const unit = rule.startsWith('sensor.') ? '°C' : '%';
+    const own = (r: string) =>
+      (body.subject ? limits.get(`${server}|${r}|${body.subject.id}`) : undefined) ??
+      limits.get(`${server}|${r}`) ??
+      null;
+    if (rule === warning) {
+      const serious =
+        own(critical) ??
+        (rule.startsWith('sensor.') ? 95 : HOST_WATCH_LIMITS['disk.wear_critical'].defaultValue);
+      return body.limit >= serious ? `Set it below the critical limit of ${serious} ${unit}.` : null;
+    }
+    const high = own(warning);
+    return high !== null && body.limit <= high ? `Set it above the warning limit of ${high} ${unit}.` : null;
+  }
+
   /** What Whombat watches on a server, with the limits of the checks that have one. */
   function withLimits(thing: string, watch: ThingWatch): ThingWatch {
     if (!thing.startsWith('server:')) return watch;
@@ -459,6 +490,8 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
         'validation_failed',
         `Choose a limit from ${range.min} to ${range.max} ${range.unit}.`,
       );
+    const pair = pairProblem(server, rule, body);
+    if (pair) return refusal(400, 'validation_failed', pair);
     const key = `${server}|${rule}${body.subject ? `|${body.subject.id}` : ''}`;
     if (body.subject) SUBJECT_NAMES[body.subject.id] = body.subject.name;
     const before = limits.get(key) ?? null;
