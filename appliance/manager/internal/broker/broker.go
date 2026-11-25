@@ -206,6 +206,10 @@ func (s *Server) Handler() http.Handler {
 	for path, route := range shareRoutes {
 		mux.HandleFunc("POST "+path, s.onlyN(rt, route.requestMax, s.share(route)))
 	}
+	// Reports to the Whombat Team (teamreports.go): the person's words and the team's answers, forwarded unread.
+	for path, route := range teamReportRoutes {
+		mux.HandleFunc("POST "+path, s.onlyN(rt, route.requestMax, s.share(route)))
+	}
 	// The own address (ownaddress.go, MG-166): the runtime's only.
 	mux.HandleFunc("POST "+local.ManagerPathLinkState, s.onlyN(rt, linkBodyMax, s.linkState))
 	mux.HandleFunc("POST "+local.ManagerPathLinkOn, s.onlyN(rt, linkBodyMax, s.linkOn))
