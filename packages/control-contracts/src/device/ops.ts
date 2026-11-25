@@ -13,6 +13,7 @@ import { DeviceLinkStatus, LINK_DEVICE_OPS } from './link.js';
 import { PushRequest, PushResult } from './push.js';
 import { SHARE_DEVICE_OPS } from './share.js';
 import { DeviceStatusReport, RevocationReport, UpdateProgressReport } from './status.js';
+import { TEAM_REPORTS_DEVICE_OPS } from './team-reports.js';
 
 /** Where a connection should go: the assigned worker's URL (control assigns; the relay enforces `wrk`). */
 export const RelayAssignment = z.object({
@@ -180,6 +181,15 @@ export const DEVICE_OPS = {
   'push.register': LINK_DEVICE_OPS['push.register'],
   'push.unregister': LINK_DEVICE_OPS['push.unregister'],
   'support.heartbeat': LINK_DEVICE_OPS['support.heartbeat'],
+  /**
+   * Reports to the Whombat Team (4.18; Whombat team-reports.md): the person's reports and the team's answers, kept at
+   * control: `team.reports.list`, `.get`, `.create`, `.reply`, `.act`.
+   */
+  'team.reports.list': TEAM_REPORTS_DEVICE_OPS['team.reports.list'],
+  'team.reports.get': TEAM_REPORTS_DEVICE_OPS['team.reports.get'],
+  'team.reports.create': TEAM_REPORTS_DEVICE_OPS['team.reports.create'],
+  'team.reports.reply': TEAM_REPORTS_DEVICE_OPS['team.reports.reply'],
+  'team.reports.act': TEAM_REPORTS_DEVICE_OPS['team.reports.act'],
 } as const;
 
 export type DeviceOp = keyof typeof DEVICE_OPS;

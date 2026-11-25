@@ -156,6 +156,17 @@ const LOCAL_SCHEMAS = [
   'RuntimeShareDeleteResponse',
   'RuntimeShareViewsRequest',
   'RuntimeShareViewsResponse',
+  // Reports to the Whombat Team (4.18, team-reports.md).
+  'RuntimeTeamReportsListRequest',
+  'RuntimeTeamReportsListResponse',
+  'RuntimeTeamReportsGetRequest',
+  'RuntimeTeamReportsGetResponse',
+  'RuntimeTeamReportsCreateRequest',
+  'RuntimeTeamReportsCreateResponse',
+  'RuntimeTeamReportsReplyRequest',
+  'RuntimeTeamReportsReplyResponse',
+  'RuntimeTeamReportsActRequest',
+  'RuntimeTeamReportsActResponse',
   'HostMetricsRequest',
   'HostMetricsResponse',
   // The desk socket (0.100, CT-528…CT-531).

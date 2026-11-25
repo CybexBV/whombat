@@ -169,6 +169,18 @@ export const MANAGER_PATHS = {
   shareDelete: '/v1/runtime/shares/delete',
   shareViews: '/v1/runtime/shares/views',
   /**
+   * Runtime (Whombat team-reports.md): the device ops `team.reports.list`, `.get`, `.create`, `.reply` and `.act`,
+   * bodies and answers exactly theirs; the manager signs and forwards them and answers control's body. It accepts
+   * request bodies up to 64 KiB and control's answers up to `TEAM_PAYLOAD_ANSWER_MAX_BYTES` and a little. While control
+   * is unreachable: 503 `LocalError{code: 'control_unreachable'}`; control's refusals as for shares (502
+   * `control_refused`, its code first in the message).
+   */
+  teamReportsList: '/v1/runtime/team-reports/list',
+  teamReportsGet: '/v1/runtime/team-reports/get',
+  teamReportsCreate: '/v1/runtime/team-reports/create',
+  teamReportsReply: '/v1/runtime/team-reports/reply',
+  teamReportsAct: '/v1/runtime/team-reports/act',
+  /**
    * Runtime (`host.metrics`, CT-334): `HostMetricsRequest` → `HostMetricsResponse`, the manager's processor,
    * memory, disk and network measurements. A read: at most a few a second, answered from memory.
    */
@@ -370,6 +382,18 @@ export const RuntimeShareDeleteRequest = DEVICE_OPS['share.delete'].body;
 export const RuntimeShareDeleteResponse = DEVICE_OPS['share.delete'].response;
 export const RuntimeShareViewsRequest = DEVICE_OPS['share.views'].body;
 export const RuntimeShareViewsResponse = DEVICE_OPS['share.views'].response;
+
+/** Reports to the Whombat Team through the manager (team-reports.md): the device ops' own schemas. */
+export const RuntimeTeamReportsListRequest = DEVICE_OPS['team.reports.list'].body;
+export const RuntimeTeamReportsListResponse = DEVICE_OPS['team.reports.list'].response;
+export const RuntimeTeamReportsGetRequest = DEVICE_OPS['team.reports.get'].body;
+export const RuntimeTeamReportsGetResponse = DEVICE_OPS['team.reports.get'].response;
+export const RuntimeTeamReportsCreateRequest = DEVICE_OPS['team.reports.create'].body;
+export const RuntimeTeamReportsCreateResponse = DEVICE_OPS['team.reports.create'].response;
+export const RuntimeTeamReportsReplyRequest = DEVICE_OPS['team.reports.reply'].body;
+export const RuntimeTeamReportsReplyResponse = DEVICE_OPS['team.reports.reply'].response;
+export const RuntimeTeamReportsActRequest = DEVICE_OPS['team.reports.act'].body;
+export const RuntimeTeamReportsActResponse = DEVICE_OPS['team.reports.act'].response;
 /** Reporter statuses through the manager (CT-164). */
 export const RuntimeFeedbackReportersRequest = DEVICE_OPS['feedback.reporters.publish'].body;
 export const RuntimeFeedbackReportersResponse = DEVICE_OPS['feedback.reporters.publish'].response;

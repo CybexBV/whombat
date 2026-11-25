@@ -28,7 +28,13 @@ type MailSendResponse = LinkMailSetResponse
 // PushUnregisterResponse is the same schema as LinkMailSetResponse.
 type PushUnregisterResponse = LinkMailSetResponse
 
-// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "address.check", "address.rename", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "link.mail.set", "mail.send", "push.register", "push.unregister", "support.heartbeat".
+// TeamReportsCreateResponse is the same schema as TeamReportsGetResponse.
+type TeamReportsCreateResponse = TeamReportsGetResponse
+
+// TeamReportsReplyResponse is the same schema as TeamReportsGetResponse.
+type TeamReportsReplyResponse = TeamReportsGetResponse
+
+// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "address.check", "address.rename", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "link.mail.set", "mail.send", "push.register", "push.unregister", "support.heartbeat", "team.reports.list", "team.reports.get", "team.reports.create", "team.reports.reply", "team.reports.act".
 type DeviceOpName string
 
 const (
@@ -65,10 +71,15 @@ const (
 	DeviceOpNamePushRegister             DeviceOpName = "push.register"
 	DeviceOpNamePushUnregister           DeviceOpName = "push.unregister"
 	DeviceOpNameSupportHeartbeat         DeviceOpName = "support.heartbeat"
+	DeviceOpNameTeamReportsList          DeviceOpName = "team.reports.list"
+	DeviceOpNameTeamReportsGet           DeviceOpName = "team.reports.get"
+	DeviceOpNameTeamReportsCreate        DeviceOpName = "team.reports.create"
+	DeviceOpNameTeamReportsReply         DeviceOpName = "team.reports.reply"
+	DeviceOpNameTeamReportsAct           DeviceOpName = "team.reports.act"
 )
 
 // DeviceOpNameValues lists every DeviceOpName.
-var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAddressCheck, DeviceOpNameAddressRename, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
+var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAddressCheck, DeviceOpNameAddressRename, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat, DeviceOpNameTeamReportsList, DeviceOpNameTeamReportsGet, DeviceOpNameTeamReportsCreate, DeviceOpNameTeamReportsReply, DeviceOpNameTeamReportsAct}
 
 type DeviceRequestEnvelope struct {
 	V      int64           `json:"v"` // always 1
@@ -444,6 +455,44 @@ type SupportHeartbeatRequest struct {
 type SupportHeartbeatResponse struct {
 	Ok    bool  `json:"ok"` // always true
 	NextS int64 `json:"nextS"`
+}
+
+type TeamReportsListRequest struct {
+}
+
+type TeamReportsListResponse struct {
+	Available bool    `json:"available"`
+	Reason    *string `json:"reason"`
+	Reports   string  `json:"reports"`
+}
+
+type TeamReportsGetRequest struct {
+	ReportID string `json:"reportId"`
+}
+
+type TeamReportsGetResponse struct {
+	Report string `json:"report"`
+}
+
+type TeamReportsCreateRequest struct {
+	RequestID string `json:"requestId"`
+	Payload   string `json:"payload"`
+}
+
+type TeamReportsReplyRequest struct {
+	RequestID string `json:"requestId"`
+	ReportID  string `json:"reportId"`
+	Payload   string `json:"payload"`
+}
+
+type TeamReportsActRequest struct {
+	RequestID string `json:"requestId"`
+	ReportID  string `json:"reportId"`
+	Action    string `json:"action"`
+}
+
+type TeamReportsActResponse struct {
+	Report *string `json:"report"`
 }
 
 type WebPushRegistrationSubscription struct {
@@ -1782,6 +1831,156 @@ func (v *SupportHeartbeatResponse) Validate() error {
 }
 
 var _ = register("SupportHeartbeatResponse", func(data []byte) (any, error) { return ParseSupportHeartbeatResponse(data) })
+
+// ParseTeamReportsListRequest validates data against the TeamReportsListRequest JSON Schema and decodes it.
+func ParseTeamReportsListRequest(data []byte) (*TeamReportsListRequest, error) {
+	v := new(TeamReportsListRequest)
+	if err := schemas.Decode("TeamReportsListRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsListRequest JSON Schema (as it would be sent).
+func (v *TeamReportsListRequest) Validate() error {
+	return schemas.ValidateValue("TeamReportsListRequest", v)
+}
+
+var _ = register("TeamReportsListRequest", func(data []byte) (any, error) { return ParseTeamReportsListRequest(data) })
+
+// ParseTeamReportsListResponse validates data against the TeamReportsListResponse JSON Schema and decodes it.
+func ParseTeamReportsListResponse(data []byte) (*TeamReportsListResponse, error) {
+	v := new(TeamReportsListResponse)
+	if err := schemas.Decode("TeamReportsListResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsListResponse JSON Schema (as it would be sent).
+func (v *TeamReportsListResponse) Validate() error {
+	return schemas.ValidateValue("TeamReportsListResponse", v)
+}
+
+var _ = register("TeamReportsListResponse", func(data []byte) (any, error) { return ParseTeamReportsListResponse(data) })
+
+// ParseTeamReportsGetRequest validates data against the TeamReportsGetRequest JSON Schema and decodes it.
+func ParseTeamReportsGetRequest(data []byte) (*TeamReportsGetRequest, error) {
+	v := new(TeamReportsGetRequest)
+	if err := schemas.Decode("TeamReportsGetRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsGetRequest JSON Schema (as it would be sent).
+func (v *TeamReportsGetRequest) Validate() error {
+	return schemas.ValidateValue("TeamReportsGetRequest", v)
+}
+
+var _ = register("TeamReportsGetRequest", func(data []byte) (any, error) { return ParseTeamReportsGetRequest(data) })
+
+// ParseTeamReportsGetResponse validates data against the TeamReportsGetResponse JSON Schema and decodes it.
+func ParseTeamReportsGetResponse(data []byte) (*TeamReportsGetResponse, error) {
+	v := new(TeamReportsGetResponse)
+	if err := schemas.Decode("TeamReportsGetResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsGetResponse JSON Schema (as it would be sent).
+func (v *TeamReportsGetResponse) Validate() error {
+	return schemas.ValidateValue("TeamReportsGetResponse", v)
+}
+
+var _ = register("TeamReportsGetResponse", func(data []byte) (any, error) { return ParseTeamReportsGetResponse(data) })
+
+// ParseTeamReportsCreateRequest validates data against the TeamReportsCreateRequest JSON Schema and decodes it.
+func ParseTeamReportsCreateRequest(data []byte) (*TeamReportsCreateRequest, error) {
+	v := new(TeamReportsCreateRequest)
+	if err := schemas.Decode("TeamReportsCreateRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsCreateRequest JSON Schema (as it would be sent).
+func (v *TeamReportsCreateRequest) Validate() error {
+	return schemas.ValidateValue("TeamReportsCreateRequest", v)
+}
+
+var _ = register("TeamReportsCreateRequest", func(data []byte) (any, error) { return ParseTeamReportsCreateRequest(data) })
+
+// ParseTeamReportsCreateResponse validates data against the TeamReportsCreateResponse JSON Schema and decodes it.
+func ParseTeamReportsCreateResponse(data []byte) (*TeamReportsCreateResponse, error) {
+	v := new(TeamReportsCreateResponse)
+	if err := schemas.Decode("TeamReportsCreateResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("TeamReportsCreateResponse", func(data []byte) (any, error) { return ParseTeamReportsCreateResponse(data) })
+
+// ParseTeamReportsReplyRequest validates data against the TeamReportsReplyRequest JSON Schema and decodes it.
+func ParseTeamReportsReplyRequest(data []byte) (*TeamReportsReplyRequest, error) {
+	v := new(TeamReportsReplyRequest)
+	if err := schemas.Decode("TeamReportsReplyRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsReplyRequest JSON Schema (as it would be sent).
+func (v *TeamReportsReplyRequest) Validate() error {
+	return schemas.ValidateValue("TeamReportsReplyRequest", v)
+}
+
+var _ = register("TeamReportsReplyRequest", func(data []byte) (any, error) { return ParseTeamReportsReplyRequest(data) })
+
+// ParseTeamReportsReplyResponse validates data against the TeamReportsReplyResponse JSON Schema and decodes it.
+func ParseTeamReportsReplyResponse(data []byte) (*TeamReportsReplyResponse, error) {
+	v := new(TeamReportsReplyResponse)
+	if err := schemas.Decode("TeamReportsReplyResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("TeamReportsReplyResponse", func(data []byte) (any, error) { return ParseTeamReportsReplyResponse(data) })
+
+// ParseTeamReportsActRequest validates data against the TeamReportsActRequest JSON Schema and decodes it.
+func ParseTeamReportsActRequest(data []byte) (*TeamReportsActRequest, error) {
+	v := new(TeamReportsActRequest)
+	if err := schemas.Decode("TeamReportsActRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsActRequest JSON Schema (as it would be sent).
+func (v *TeamReportsActRequest) Validate() error {
+	return schemas.ValidateValue("TeamReportsActRequest", v)
+}
+
+var _ = register("TeamReportsActRequest", func(data []byte) (any, error) { return ParseTeamReportsActRequest(data) })
+
+// ParseTeamReportsActResponse validates data against the TeamReportsActResponse JSON Schema and decodes it.
+func ParseTeamReportsActResponse(data []byte) (*TeamReportsActResponse, error) {
+	v := new(TeamReportsActResponse)
+	if err := schemas.Decode("TeamReportsActResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the TeamReportsActResponse JSON Schema (as it would be sent).
+func (v *TeamReportsActResponse) Validate() error {
+	return schemas.ValidateValue("TeamReportsActResponse", v)
+}
+
+var _ = register("TeamReportsActResponse", func(data []byte) (any, error) { return ParseTeamReportsActResponse(data) })
 
 // Parsers maps every schema name of this package to its parse function (used by the conformance tests).
 var Parsers = map[string]func([]byte) (any, error){}

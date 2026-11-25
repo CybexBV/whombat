@@ -33,15 +33,16 @@ const (
 	FeedbackReportersPublishMax = 100
 
 	// Shared links (Whombat share-links.md).
-	ShareMaxEnvelopeBytes = 8388608
-	SharePutMaxBytes      = 11250347
-	ShareMaxLifetimeS     = 34560000
-	SharesPerDeviceMax    = 500
-	ShareIdsMax           = 200
+	ShareMaxEnvelopeBytes     = 8388608
+	SharePutMaxBytes          = 11250347
+	TeamPayloadAnswerMaxBytes = 4194304
+	ShareMaxLifetimeS         = 34560000
+	SharesPerDeviceMax        = 500
+	ShareIdsMax               = 200
 
 	// The own address (4.3; Whombat own-address.md).
 	KitCredentialsDeclareMax = 64
 )
 
 // DeviceOps lists the device API operations (POST /v1/device/<op>).
-var DeviceOps = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAddressCheck, DeviceOpNameAddressRename, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
+var DeviceOps = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAddressCheck, DeviceOpNameAddressRename, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat, DeviceOpNameTeamReportsList, DeviceOpNameTeamReportsGet, DeviceOpNameTeamReportsCreate, DeviceOpNameTeamReportsReply, DeviceOpNameTeamReportsAct}

@@ -73,9 +73,14 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * later (Whombat connection-dashboards.md); minor 8 is a 1Password vault kept in step with the Vault: the catalog's
  * `onepassword` entry (the use `vault`, the check kind `onepassword`), the `connections.onePassword…` operations,
  * `connections.disconnect`'s `vaultEntries`, a Vault entry's `source` and the Inbox's `onepassword_removals` button,
- * which a box offers only to a session at minor 8 or later (Whombat onepassword-sync.md).
+ * which a box offers only to a session at minor 8 or later (Whombat onepassword-sync.md); minor 9 is monitoring:
+ * incidents, a thing's history and week, keeping things quiet and server alert limits (Whombat monitoring.md); minor 10
+ * is reports to the Whombat Team (`teamReports.*`, Whombat team-reports.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 9 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 10 };
+
+/** Session protocol minor (major 5) that sends reports to the Whombat Team (`teamReports.*`); an app checks it first. */
+export const TEAM_REPORTS_MINOR = 10;
 
 /**
  * Session protocol minor (major 5) that reads a thing's history (`things.history`) and its week in one line (a page's

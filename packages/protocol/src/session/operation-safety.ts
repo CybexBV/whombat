@@ -492,6 +492,13 @@ const TABLE = {
   'shares.create': NEVER,
   'shares.stop': DESTRUCTIVE,
   'shares.stopAll': DESTRUCTIVE,
+  // Reports to the Whombat Team: reads, and calls to control outside the receipt's transaction.
+  'teamReports.list': READ,
+  'teamReports.get': READ,
+  'teamReports.draft': READ,
+  'teamReports.create': NEVER,
+  'teamReports.reply': NEVER,
+  'teamReports.act': DESTRUCTIVE,
   // Kept sites (Whombat kept-sites.md): stopping one deletes its kept sign-in.
   'keptSites.list': READ,
   'keptSites.stop': DESTRUCTIVE,

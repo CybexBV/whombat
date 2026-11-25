@@ -75,6 +75,7 @@ export * from './signins.js';
 export * from './skills.js';
 export * from './spend.js';
 export * from './task-card.js';
+export * from './team-reports.js';
 export * from './thing-logo.js';
 export * from './thing-page.js';
 export * from './thing-watch.js';

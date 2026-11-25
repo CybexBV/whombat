@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RuntimeTeamReportsReplyRequest.json",
+  "title": "RuntimeTeamReportsReplyRequest",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{16,64}$"
+    },
+    "reportId": {
+      "type": "string",
+      "pattern": "^tr_[A-Za-z0-9_-]{20}$"
+    },
+    "payload": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 54614,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    }
+  },
+  "required": [
+    "requestId",
+    "reportId",
+    "payload"
+  ],
+  "additionalProperties": false
+}

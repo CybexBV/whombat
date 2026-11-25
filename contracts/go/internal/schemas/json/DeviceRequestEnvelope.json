@@ -54,7 +54,12 @@
         "mail.send",
         "push.register",
         "push.unregister",
-        "support.heartbeat"
+        "support.heartbeat",
+        "team.reports.list",
+        "team.reports.get",
+        "team.reports.create",
+        "team.reports.reply",
+        "team.reports.act"
       ]
     },
     "ts": {
