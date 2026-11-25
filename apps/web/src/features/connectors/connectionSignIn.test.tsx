@@ -7,6 +7,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CONNECT_FORM_TEXT } from '@whombat/client/connections';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectNotALogin } from '../../test/notALogin';
 import { fixtureServices, renderApp } from '../../test/renderApp';
 
 /** The code field's label, as the form shows it (upper case). */
@@ -148,15 +149,6 @@ describe('a code that belongs to a challenge (SG-06, SG-07)', () => {
     await waitFor(() => expect(app.location()).toMatch(/con_fixture_/));
   });
 });
-
-/** What keeps Safari's AutoFill and password managers' fill menus, which take the focus, off a field. */
-function expectNotALogin(field: HTMLElement) {
-  expect(field.getAttribute('autocomplete')).not.toMatch(/^(username|current-password|email|on)?$/);
-  expect(field.hasAttribute('data-1p-ignore')).toBe(true);
-  expect(field.getAttribute('data-lpignore')).toBe('true');
-  expect(field.hasAttribute('data-bwignore')).toBe(true);
-  expect(field.getAttribute('data-form-type')).toBe('other');
-}
 
 describe('a service’s own username and password are not a login to this page', () => {
   it('keeps AutoFill and password managers off UniFi’s username and password, as off its API key', async () => {

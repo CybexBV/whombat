@@ -53,6 +53,7 @@ import styles from '../settings/SettingsScreen.module.css';
 import k from './Catalog.module.css';
 import { ExternalLink } from './CatalogParts';
 import c from './Connectors.module.css';
+import { NOT_A_LOGIN } from './notALogin';
 
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -223,7 +224,8 @@ function ImapConnectForm() {
             id={`${ids}-email`}
             type="email"
             size="lg"
-            autoComplete="email"
+            autoComplete="off"
+            {...NOT_A_LOGIN}
             spellCheck={false}
             placeholder="you@example.com"
             value={email}
@@ -246,7 +248,8 @@ function ImapConnectForm() {
             id={`${ids}-password`}
             type="password"
             size="lg"
-            autoComplete="current-password"
+            autoComplete="new-password"
+            {...NOT_A_LOGIN}
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
@@ -408,7 +411,8 @@ function ServerFields({
         <Input
           id={`${ids}-username`}
           spellCheck={false}
-          autoComplete="username"
+          autoComplete="off"
+          {...NOT_A_LOGIN}
           placeholder={email.trim() || 'you@example.com'}
           value={draft.username}
           onChange={(e) => onChange({ ...draft, username: e.target.value })}
@@ -545,7 +549,8 @@ function MailAccount({ connection }: { connection: Connection }) {
                 id={`${ids}-password`}
                 type="password"
                 size="lg"
-                autoComplete="current-password"
+                autoComplete="new-password"
+                {...NOT_A_LOGIN}
                 autoFocus
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
