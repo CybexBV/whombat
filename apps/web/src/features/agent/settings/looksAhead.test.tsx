@@ -1,17 +1,18 @@
 /**
  * Settings → the assistant → Looks ahead (Whombat looks-ahead.md) against the fixture world: Mara's switch with Check
  * now and the week, her calendars, incoming mail toggle, standing rules (“What to watch for”), stopped kinds with Check
- * again, and recent checks. Facts (requests, names, the shared words), not sentences.
+ * again, what it keeps an eye on (“Keeping an eye on”, each with Remove), and recent checks with a look through new mail
+ * and a follow-up. Facts (requests, names, the shared words), not sentences.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { LOOKS_AHEAD_TEXT as T } from '@whombat/client';
+import { looksAheadCheckMeta, matterLine, LOOKS_AHEAD_TEXT as T } from '@whombat/client';
 import { AHEAD_KIND_WORDS } from '@whombat/core';
 import { burrow } from '@whombat/fixtures';
-import { describe, expect, it } from 'vitest';
-import type { WebFixtureOptions } from '../../../app/fixtureFetch';
+import { describe, expect, it, vi } from 'vitest';
+import { createWebFixtureFetch, type WebFixtureOptions } from '../../../app/fixtureFetch';
 import { ASSISTANT_NAME } from '../../../app/oneFixtures';
-import { recordingWorld } from '../../../test/recordingWorld';
+import { jsonAnswer, type RecordedCall, recordingWorld } from '../../../test/recordingWorld';
 import { mockedServices, renderApp } from '../../../test/renderApp';
 
 const PATH = `/burrows/${burrow.slug}/looks-ahead`;
@@ -21,6 +22,28 @@ const AHEAD = '/settings?tab=agent&part=ahead';
 function open(options: WebFixtureOptions = {}, protocolMinor?: number) {
   const { fetch, calls } = recordingWorld(options);
   renderApp(AHEAD, mockedServices(fetch, protocolMinor === undefined ? {} : { protocolMinor }));
+  return world(calls);
+}
+
+/** The fixture world whose Looks ahead refuses every change before it makes it. */
+function openRefusing() {
+  const inner = createWebFixtureFetch({});
+  const calls: RecordedCall[] = [];
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const req =
+      input instanceof Request ? input : new Request(new URL(String(input), 'http://whombat.test'), init);
+    const path = new URL(req.url).pathname.replace('/api/v1', '');
+    if (req.method === 'PUT' && path === PATH) {
+      calls.push({ method: req.method, path, body: await req.clone().json() });
+      return jsonAnswer({ error: { code: 'internal', message: '' } }, 500);
+    }
+    return inner(req);
+  });
+  renderApp(AHEAD, mockedServices(fetch));
+  return world(calls);
+}
+
+function world(calls: RecordedCall[]) {
   return {
     calls,
     updates: () => calls.filter((c) => c.method === 'PUT' && c.path === PATH),
@@ -53,7 +76,87 @@ describe('Settings → the assistant → Looks ahead', () => {
     expect(within(stopped).getByText(AHEAD_KIND_WORDS.crowds)).toBeTruthy();
     const recent = screen.getByRole('region', { name: T.recent });
     expect(within(recent).getByText('The Script')).toBeTruthy();
-    expect(within(recent).getByRole('link', { name: T.openThread })).toBeTruthy();
+    expect(within(recent).getAllByRole('link', { name: T.openThread })).toHaveLength(2);
+  });
+
+  it('lists what it keeps an eye on, after incoming mail and before what to watch for', async () => {
+    open();
+    const matters = await screen.findByRole('region', { name: T.matters });
+    const sections = [...document.querySelectorAll('[data-ahead]')].map((s) => s.getAttribute('data-ahead'));
+    expect(sections.indexOf('matters')).toBe(sections.indexOf('mail') + 1);
+    expect(sections.indexOf('rules')).toBe(sections.indexOf('matters') + 1);
+    const rows = within(matters).getAllByRole('listitem');
+    expect(rows).toHaveLength(3);
+    const notary = rows[0] as HTMLElement;
+    expect(within(notary).getByText('Answer the notary about the deed')).toBeTruthy();
+    // The quieter line: who, whom it waits on, its date.
+    expect(within(notary).getByText(/The notary/).textContent).toContain(T.matterWaiting.you);
+    expect(within(notary).getByText(/The notary/).textContent).toContain('16 Dec');
+    expect(
+      within(rows[1] as HTMLElement).getByText(matterLine({ who: 'The airline', waitingOn: 'them' })),
+    ).toBeTruthy();
+    expect(
+      within(notary).getByRole('button', { name: T.removeMatterLabel('Answer the notary about the deed') }),
+    ).toBeTruthy();
+  });
+
+  it('stops keeping an eye on one with Remove', async () => {
+    const user = userEvent.setup();
+    const { updates } = open();
+    const matters = await screen.findByRole('region', { name: T.matters });
+    await user.click(
+      within(matters).getByRole('button', { name: T.removeMatterLabel('Refund for the cancelled flight') }),
+    );
+    await waitFor(() => expect(updates()).toHaveLength(1));
+    expect(updates()[0]?.body).toEqual({ removeMatter: 'ahm_2' });
+    expect(await screen.findByText(T.matterRemoved)).toBeTruthy();
+    await waitFor(() => expect(within(matters).getAllByRole('listitem')).toHaveLength(2));
+    expect(within(matters).queryByText('Refund for the cancelled flight')).toBeNull();
+  });
+
+  it('puts a removed one back when the change doesn’t go through', async () => {
+    const user = userEvent.setup();
+    const { updates } = openRefusing();
+    const matters = await screen.findByRole('region', { name: T.matters });
+    await user.click(
+      within(matters).getByRole('button', { name: T.removeMatterLabel('Refund for the cancelled flight') }),
+    );
+    await waitFor(() => expect(updates()).toHaveLength(1));
+    await waitFor(() => expect(within(matters).getAllByRole('listitem')).toHaveLength(3));
+    expect(within(matters).getByText('Refund for the cancelled flight')).toBeTruthy();
+  });
+
+  it('says so in one quiet line when it keeps an eye on nothing', async () => {
+    open({ looksAhead: { matters: [] } });
+    const matters = await screen.findByRole('region', { name: T.matters });
+    expect(within(matters).getByText(T.mattersEmpty(ASSISTANT_NAME))).toBeTruthy();
+    expect(within(matters).queryByRole('listitem')).toBeNull();
+  });
+
+  it('leaves out what it keeps an eye on without a mailbox', async () => {
+    open({ looksAhead: { hasMail: false } });
+    await screen.findByRole('region', { name: T.rules });
+    expect(screen.queryByRole('region', { name: T.matters })).toBeNull();
+  });
+
+  it('leaves out what it keeps an eye on below its minor', async () => {
+    open({}, 13);
+    await screen.findByRole('region', { name: T.rules });
+    expect(screen.queryByRole('region', { name: T.matters })).toBeNull();
+    expect(screen.queryByText('Answer the notary about the deed')).toBeNull();
+  });
+
+  it('labels a look through new mail and a follow-up with the shared words', async () => {
+    open();
+    const recent = await screen.findByRole('region', { name: T.recent });
+    const triage = recent.querySelector('[data-check="ahc_4"]') as HTMLElement;
+    expect(within(triage).getByText(T.recentTriage(42, 2))).toBeTruthy();
+    expect(within(triage).queryByRole('link')).toBeNull();
+    const followUp = recent.querySelector('[data-check="ahc_3"]') as HTMLElement;
+    const meta = looksAheadCheckMeta({ stage: 'mail', state: 'told', kind: 'deadline', of: 'matter' });
+    expect(meta.startsWith(T.recentMatter)).toBe(true);
+    expect(within(followUp).getByText(meta)).toBeTruthy();
+    expect(within(followUp).getByRole('link', { name: T.openThread })).toBeTruthy();
   });
 
   it('saves each change at once, manages standing rules and triggers Check now', async () => {
