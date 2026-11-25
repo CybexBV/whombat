@@ -3736,6 +3736,13 @@ export const SCHEMA_CASES: Case[] = [
   ...cases('UpdateApproveResponse', { v: 1, release: 'pve-20260929.4' }, [
     ['without a release', { v: 1 }, false],
   ]),
+  ...cases('UpdateCheckRequest', { v: 1 }, [['with a member', { v: 1, now: true }, false]]),
+  ...cases('UpdateCheckResponse', { v: 1, result: 'assigned', decision: 'started', nextCheckS: 3600 }, [
+    ['nothing new', { v: 1, result: 'none', nextCheckS: 3600 }, true],
+    ['an unknown result', { v: 1, result: 'maybe', nextCheckS: 3600 }, false],
+    ['an unknown decision', { v: 1, result: 'assigned', decision: 'later', nextCheckS: 3600 }, false],
+    ['without the next look', { v: 1, result: 'none' }, false],
+  ]),
   ...cases('CableSetRequest', { v: 1, use: 'wifi', confirmTimeoutSec: 120 }, [
     ['the cable again', { v: 1, use: 'cable', confirmTimeoutSec: 120 }, true],
     ['without a confirm time', { v: 1, use: 'wifi' }, false],

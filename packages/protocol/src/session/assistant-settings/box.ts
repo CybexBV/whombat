@@ -35,6 +35,8 @@ export const BOX_SETTINGS = {
   // Whether updates wait for the owner, and the owner's yes to one: theirs alone, so nobody acting for them turns it off.
   'appliance.update.ask': never('appliance.about', 'Turn “Ask before updating” on or off'),
   'appliance.update.install': never('appliance.about', 'Install an update that waits for the owner'),
+  // Looking for a newer version now only does sooner what the box does each hour; what waits for the owner still waits.
+  'appliance.update.check': change('appliance.about', 'Check for updates now'),
 
   'audit.export': never('advanced.audit', 'Export the signed audit log'),
   'audit.get': read('advanced.audit', 'Read one entry of the audit log'),

@@ -51,6 +51,7 @@ import {
   ApplianceStatusOutput,
   ApplianceUpdateAskInput,
   ApplianceUpdateAskOutput,
+  ApplianceUpdateCheckOutput,
   ApplianceUpdateInstallInput,
   ApplianceUpdateInstallOutput,
   BACKUP_LIST_PAGE,
@@ -475,6 +476,12 @@ export const sessionOps = {
   /** “Ask before updating” on or off (Whombat ask-before-updating.md): the setting the box's manager now keeps. */
   applianceUpdateAsk: (s: ApplianceSession, askFirst: boolean, o?: CallOptions) =>
     run(s, 'appliance.update.ask', ApplianceUpdateAskInput.parse({ askFirst }), ApplianceUpdateAskOutput, o),
+  /**
+   * “Check for updates” (Whombat check-for-updates.md): the box looks for a newer release now. `not_implemented` from a
+   * box that can't yet, `unavailable` when it couldn't reach the release list. Up to a minute.
+   */
+  applianceUpdateCheck: (s: ApplianceSession, o?: CallOptions) =>
+    run(s, 'appliance.update.check', {}, ApplianceUpdateCheckOutput, { deadlineMs: 75_000, ...o }),
   /** The owner's yes to the update waiting for them (`update.candidate`); `conflict` when it no longer waits. */
   applianceUpdateInstall: (s: ApplianceSession, release: string, o?: CallOptions) =>
     run(

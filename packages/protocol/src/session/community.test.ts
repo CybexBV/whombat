@@ -77,7 +77,7 @@ describe('the edition (CT-1300, CT-1301)', () => {
   });
 
   it('counts the additions in the session minor: 1 is the local claim’s proof round, 2 the hello’s claim link, 3 mail automations, 4 Find My, 5 its timeline, 6 own names, 7 account pages, 8 the 1Password sync', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 12 });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 13 });
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

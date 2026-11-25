@@ -6,8 +6,10 @@ import { ACCOUNTS_TEXT } from './status-copy';
 import {
   askFirstView,
   backupBlocksText,
+  hasUpdateCheck,
   sinceText,
   type UpdateStatus,
+  updateCheckNotice,
   updatePollMs,
   updateView,
 } from './updates';
@@ -357,5 +359,21 @@ describe('Paused update channel', () => {
     expect(v.rows[0]?.dot).toBe('bad');
     expect(v.rows[1]).toEqual({ dot: 'mut', title: 'Updates are paused for now.' });
     expect(v.pollMs).toBeNull();
+  });
+});
+
+describe('Check for updates (check-for-updates.md)', () => {
+  it('is offered by a box at session minor 13 or later', () => {
+    expect(hasUpdateCheck({ major: 5, minor: 12 })).toBe(false);
+    expect(hasUpdateCheck({ major: 5, minor: 13 })).toBe(true);
+    expect(hasUpdateCheck(null)).toBe(false);
+  });
+
+  it('says what came of it; a version found waits for the owner’s yes where they asked for that', () => {
+    expect(updateCheckNotice('upToDate', false)).toMatch(/up to date/);
+    expect(updateCheckNotice('found', false)).toMatch(/on its way/);
+    expect(updateCheckNotice('found', true)).toMatch(/your yes/);
+    expect(updateCheckNotice('nothingNewer', undefined)).toMatch(/already on its way/);
+    expect(updateCheckNotice('refused', undefined)).toMatch(/won’t install/);
   });
 });

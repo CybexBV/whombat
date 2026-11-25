@@ -36,6 +36,7 @@ import {
   type DiagnosticScope,
   DiagnosticsIntegrityError,
   downloadDiagnostics,
+  hasUpdateCheck,
   keepOnlyLivePasskeys,
   LINK_TEXT,
   linkErrorText,
@@ -57,10 +58,11 @@ import {
   SCOPE_LABELS,
   THIS_WHOMBAT_TEXT,
   UPDATE_TEXT,
+  updateCheckNotice,
   updatePollMs,
   updateView,
 } from '@whombat/client/managed';
-import { useBackupCheckpoints } from '@whombat/client/react';
+import { useBackupCheckpoints, useSessionProtocol } from '@whombat/client/react';
 import {
   type ApplianceStatus,
   type DeviceLinkCreated,
@@ -400,7 +402,9 @@ function BringBackLater({ onBringBack }: { onBringBack: () => void }) {
  * This Whombat → About (AP-1231), a managed Whombat's: UPDATES (waiting for what and since when, failed and why, the
  * last update and what it brought, AP-258; the oldest app builds let in), with “Updates from” (Production or Development), and CONNECTION. An
  * update that waits for a backup destination offers “Set up backups”, which opens Backups with the form open. UPDATES
- * ends with “Keep server agents up to date” where the hosts service keeps it (agent-updates-app.md AP-2986).
+ * ends with “Keep server agents up to date” where the hosts service keeps it (agent-updates-app.md AP-2986). Its first
+ * row offers “Check for updates” where the box looks on demand and nothing else is to be pressed there
+ * (check-for-updates.md).
  */
 export function ManagedAbout({
   burrow,
@@ -422,7 +426,23 @@ export function ManagedAbout({
   const updates = updateView(status);
   const summary = useReleaseSummary(updates.summaryOf);
   const [installing, setInstalling] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const canCheck = hasUpdateCheck(useSessionProtocol());
   if (!managed) return null;
+  // The owner's “Check for updates”: the box looks now instead of at its next hourly look (check-for-updates.md).
+  const check = () => {
+    setChecking(true);
+    sessionOps
+      .applianceUpdateCheck(session)
+      .then(
+        ({ outcome }) => toast.show(updateCheckNotice(outcome, status.update?.askFirst)),
+        (e) => toast.show(e instanceof OperationError ? e.message : UPDATE_TEXT.failed),
+      )
+      .finally(() => {
+        setChecking(false);
+        onChanged?.();
+      });
+  };
   // The owner's yes to the update waiting for them (ask-before-updating.md ABU-03).
   const install = (release: string) => {
     setInstalling(release);
@@ -442,7 +462,7 @@ export function ManagedAbout({
     <>
       {status.update && (
         <Section label={MANAGED_TEXT.updates}>
-          {updates.rows.map((row) => (
+          {updates.rows.map((row, i) => (
             <Row
               key={row.title}
               dot={row.dot}
@@ -461,6 +481,11 @@ export function ManagedAbout({
                     onClick={() => row.release && install(row.release)}
                   >
                     {UPDATE_TEXT.install}
+                  </Button>
+                ) : i === 0 && canCheck ? (
+                  // The label says it is checking: a spinner would change the button’s width under the pointer.
+                  <Button variant="secondary" size="sm" disabled={checking} onClick={check}>
+                    {checking ? UPDATE_TEXT.checking : UPDATE_TEXT.check}
                   </Button>
                 ) : undefined
               }

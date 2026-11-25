@@ -6,20 +6,35 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/CybexBV/whombat/contracts/go/local"
 )
 
-// PathCheck asks the manager to poll control for an assignment now (MG-67): `whombat-manager check`, for root and the
-// manager's own user. Not a contract path: the runtime doesn't call it.
-const PathCheck = "/v1/update/check"
+// PathCheck asks the manager to look for a newer release now (MG-67): `whombat-manager check` for root and the
+// manager's own user, and the owner's “Check for updates” through the runtime (contracts 4.19, MG-194).
+const PathCheck = local.ManagerPathUpdateCheck
 
 // checkTimeout bounds a check: a poll, and with an assignment its TUF refresh and the engine's decision.
 const checkTimeout = 60 * time.Second
 
-// CheckResult is what control answered to a poll made for a check (MG-67).
+// checkReuse: the owner's check asked within this long of the last check answers that one. An owner pressing the
+// button again and again must not turn into a request to the release list or control each time. `whombat-manager
+// check` is an operator's deliberate look and always looks again.
+const checkReuse = 30 * time.Second
+
+// checkMemo keeps the last check's answer, and lets one check run at a time.
+type checkMemo struct {
+	mu  sync.Mutex
+	at  time.Time
+	res *CheckResult
+}
+
+// CheckResult is what control or the release list answered to a check (MG-67), as `UpdateCheckResponse` has it.
 type CheckResult struct {
+	// V is the local API's version (the contract's `v`).
+	V int64 `json:"v"`
 	// Result is control's: assigned, unchanged or none.
 	Result string `json:"result"`
 	// Decision is the engine's on an assignment (started, queued, noop, hold, refused); empty without one.
@@ -33,6 +48,24 @@ func (s *Server) check(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "unavailable", "this manager doesn't poll on demand")
 		return
 	}
+	// The runtime sends `UpdateCheckRequest`; `whombat-manager check` sends nothing.
+	b, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	if len(b) > 0 {
+		if _, err := local.ParseUpdateCheckRequest(b); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+	}
+	owner := len(b) > 0 // the runtime's request; the operator's command sends none
+	s.checks.mu.Lock()  // one check at a time: a second press waits for the first and takes its answer
+	defer s.checks.mu.Unlock()
+	if owner && s.checks.res != nil && time.Since(s.checks.at) < checkReuse {
+		writeJSON(w, http.StatusOK, s.checks.res)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), checkTimeout)
 	defer cancel()
 	res, err := s.CheckNow(ctx)
@@ -40,7 +73,10 @@ func (s *Server) check(w http.ResponseWriter, r *http.Request) {
 		s.controlErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	out := *res
+	out.V = local.LocalAPIVersion
+	s.checks.at, s.checks.res = time.Now(), &out
+	writeJSON(w, http.StatusOK, &out)
 }
 
 // Check asks the manager serving socket to poll control now and returns control's answer (`whombat-manager check`).

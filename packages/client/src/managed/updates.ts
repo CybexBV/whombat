@@ -4,6 +4,12 @@
  * Pure and shared by the web and the phone. Plain, calm words; curly quotes and the middle dot as in the mocks.
  */
 import { describeUpdateFailure } from '@whombat/control-contracts';
+import {
+  type ApplianceUpdateCheckOutput,
+  type ProtocolVersion,
+  protocolAtLeast,
+  UPDATE_CHECK_MINOR,
+} from '@whombat/protocol/session';
 import type { ApplianceStatus } from '../session/managed-ops';
 import { MANAGED_TEXT } from './status-copy';
 
@@ -57,7 +63,31 @@ export const UPDATE_TEXT = {
   askSwitched: (on: boolean) =>
     on ? 'Updates now wait for your yes.' : 'Updates install by themselves again.',
   paused: 'Updates are paused for now.',
+  /* Check for updates (Whombat check-for-updates.md). */
+  check: 'Check for updates',
+  checking: 'Checking…',
+  checked: {
+    found: 'Found a new version. It’s on its way.',
+    foundAsk: 'Found a new version. It waits for your yes.',
+    upToDate: 'You’re up to date.',
+    nothingNewer: 'Nothing newer than the update already on its way.',
+    refused: 'Found a version this Whombat won’t install.',
+  },
 } as const;
+
+/** Whether this Whombat checks for updates when asked (`appliance.update.check`; an older one looks only each hour). */
+export function hasUpdateCheck(protocol: ProtocolVersion | null | undefined): boolean {
+  return protocolAtLeast(protocol, UPDATE_CHECK_MINOR);
+}
+
+/** What the person is told after “Check for updates”: a version found waits for their yes where they asked for that. */
+export function updateCheckNotice(
+  outcome: ApplianceUpdateCheckOutput['outcome'],
+  askFirst: boolean | undefined,
+): string {
+  if (outcome === 'found') return askFirst ? UPDATE_TEXT.checked.foundAsk : UPDATE_TEXT.checked.found;
+  return UPDATE_TEXT.checked[outcome];
+}
 
 /** States in which an update is on its way (the status is asked again every few seconds). */
 const MOVING: ReadonlySet<string> = new Set([

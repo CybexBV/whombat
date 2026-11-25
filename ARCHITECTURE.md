@@ -202,6 +202,10 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   `/v1/update/approve`). Its facts say whether it keeps the switch (`update.askFirst`) and when an update waits for the
   owner (`waiting.reason` `owner`), which is one Inbox item (`managed/update-inbox.ts`) until it installs. When the apps
   can't take the yes, the box's recovery menu turns the switch off in the manager's journal.
+- **Check for updates** (`managed/update-check.ts`, [check-for-updates.md](docs/decisions/check-for-updates.md)): the
+  manager looks for a newer release once an hour by itself; `appliance.update.check` has it look now (the manager's
+  `/v1/update/check`, also `whombat-manager check`), which offers what it finds as its hourly look does. A check within
+  30 s of the last answers that one.
 - **The box's network** (`managed/host-network.ts`, [network-move-server.md](docs/decisions/network-move-server.md)):
   owners join Wi-Fi and choose Wi-Fi only or the cable again through the manager's guard (`host.wifi.*`,
   `host.cable.set`), each change signed in the appliance's audit log. Before Wi-Fi only the hosts service is asked to

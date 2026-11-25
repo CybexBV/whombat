@@ -44,6 +44,7 @@ import {
   UpdateApproveRequest,
   UpdateAskRequest,
   UpdateChannelSetRequest,
+  type UpdateCheckResponse,
   WifiChangeResponse,
   WifiForgetRequest,
   WifiJoinRequest,
@@ -556,6 +557,9 @@ export class FakeManager implements ManagerPort {
    */
   askFirst = false;
   ownerWaits: string | null = null;
+  /** What the owner's “Check for updates” finds (check-for-updates.md), or the error the manager answers. */
+  checkAnswer: UpdateCheckResponse | Error = { v: 1, result: 'none', nextCheckS: 3600 };
+  checks = 0;
   approved: string[] = [];
   async updateAsk(request: z.input<typeof UpdateAskRequest>) {
     this.askFirst = UpdateAskRequest.parse(request).askFirst;
@@ -703,6 +707,11 @@ export class FakeManager implements ManagerPort {
     this.approved.push(release);
     this.ownerWaits = null;
     return { v: 1 as const, release };
+  }
+  async updateCheck() {
+    this.checks += 1;
+    if (this.checkAnswer instanceof Error) throw this.checkAnswer;
+    return this.checkAnswer;
   }
   /** The box's Tailscale behind the manager (direct-connection.md DC-16): never this machine's own. */
   tailscale = new FakeTailscale();

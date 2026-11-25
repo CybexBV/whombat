@@ -22,6 +22,7 @@ import {
   type DiagnosticScope,
   DiagnosticsIntegrityError,
   downloadDiagnostics,
+  hasUpdateCheck,
   OWN_ADDRESS_TEXT,
   OWN_NAME_TEXT,
   ownAddressCloudflareLine,
@@ -34,10 +35,11 @@ import {
   previewDiagnostics,
   THIS_WHOMBAT_TEXT,
   UPDATE_TEXT,
+  updateCheckNotice,
   updateView,
 } from '@whombat/client/managed';
 import { useOwnNameCheck } from '@whombat/client/managed/react';
-import { useTeamReportsEntry } from '@whombat/client/react';
+import { useSessionProtocol, useTeamReportsEntry } from '@whombat/client/react';
 import {
   type ApplianceStatus,
   type DiagnosticBundleSummary,
@@ -105,6 +107,22 @@ export function WhombatAboutScreen() {
       },
     );
   };
+  // “Check for updates” (check-for-updates.md): the box looks now instead of at its next hourly look.
+  const [checking, setChecking] = useState(false);
+  const canCheck = hasUpdateCheck(useSessionProtocol());
+  const check = () => {
+    setChecking(true);
+    sessionOps
+      .applianceUpdateCheck(managed.session)
+      .then(
+        ({ outcome }) => showNotice(updateCheckNotice(outcome, status?.update?.askFirst)),
+        (e) => showNotice(e instanceof OperationError ? e.message : UPDATE_TEXT.failed),
+      )
+      .finally(() => {
+        setChecking(false);
+        reload();
+      });
+  };
   // HARDWARE (AP-3259), and opened at it by NETWORK's See hardware (AP-3255); the param goes once read.
   const machine = useMachineHere();
   // REMOTE HELP (AP-4470): above DIAGNOSTICS as on the web (AP-4448).
@@ -164,7 +182,7 @@ export function WhombatAboutScreen() {
             label={VERSION_TEXT.labelWithUpdates}
           >
             {status.update
-              ? updates.rows.map((row) => (
+              ? updates.rows.map((row, i) => (
                   <Row
                     key={row.title}
                     {...(row.dot ? { dot: row.dot } : {})}
@@ -178,6 +196,15 @@ export function WhombatAboutScreen() {
                           label={UPDATE_TEXT.install}
                           busy={installing === row.release}
                           onPress={() => row.release && install(row.release)}
+                        />
+                      ) : i === 0 && canCheck ? (
+                        <Button
+                          label={VERSION_TEXT.check}
+                          accessibilityLabel={UPDATE_TEXT.check}
+                          variant="secondary"
+                          // Not `busy`: a spinner for the label would narrow the button under the finger.
+                          disabled={checking}
+                          onPress={check}
                         />
                       ) : undefined
                     }

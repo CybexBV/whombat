@@ -44723,6 +44723,74 @@
       }
     },
     {
+      "schema": "UpdateCheckRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1
+      }
+    },
+    {
+      "schema": "UpdateCheckRequest",
+      "name": "with a member",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "now": true
+      }
+    },
+    {
+      "schema": "UpdateCheckResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "result": "assigned",
+        "decision": "started",
+        "nextCheckS": 3600
+      }
+    },
+    {
+      "schema": "UpdateCheckResponse",
+      "name": "nothing new",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "result": "none",
+        "nextCheckS": 3600
+      }
+    },
+    {
+      "schema": "UpdateCheckResponse",
+      "name": "an unknown result",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "result": "maybe",
+        "nextCheckS": 3600
+      }
+    },
+    {
+      "schema": "UpdateCheckResponse",
+      "name": "an unknown decision",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "result": "assigned",
+        "decision": "later",
+        "nextCheckS": 3600
+      }
+    },
+    {
+      "schema": "UpdateCheckResponse",
+      "name": "without the next look",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "result": "none"
+      }
+    },
+    {
       "schema": "CableSetRequest",
       "name": "base",
       "valid": true,

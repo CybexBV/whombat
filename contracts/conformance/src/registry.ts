@@ -106,6 +106,9 @@ const LOCAL_SCHEMAS = [
   'UpdateAskResponse',
   'UpdateApproveRequest',
   'UpdateApproveResponse',
+  // Check for updates on the manager socket (4.19).
+  'UpdateCheckRequest',
+  'UpdateCheckResponse',
   'MaintenanceLockRequest',
   'MaintenanceLock',
   'MaintenanceUnlockRequest',

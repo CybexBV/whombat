@@ -115,6 +115,7 @@ import { REMOTE_HELP_SESSION_HANDLERS, type RemoteHelpService } from './remote-h
 import { SessionOpError } from './session-error';
 import { assistantPrincipal, isScreenSession, type SessionPrincipal, type TrustService } from './trust';
 import { UPDATE_ASK_SESSION_HANDLERS } from './update-ask';
+import { UPDATE_CHECK_SESSION_HANDLERS } from './update-check';
 
 /**
  * Contract `api` ops that never run over a session, with the explanation (docs/managed/parity-inventory.md §4).
@@ -993,6 +994,7 @@ export class SessionDispatcher {
       REMOTE_HELP_SESSION_HANDLERS[spec.op] ??
       (DIRECT_SESSION_HANDLERS as Readonly<Record<string, SessionHandler>>)[spec.op] ??
       (UPDATE_ASK_SESSION_HANDLERS as Readonly<Record<string, SessionHandler>>)[spec.op] ??
+      (UPDATE_CHECK_SESSION_HANDLERS as Readonly<Record<string, SessionHandler>>)[spec.op] ??
       (LOCAL_SESSION_HANDLERS as Readonly<Record<string, SessionHandler>>)[spec.op] ??
       (OWN_ADDRESS_SESSION_HANDLERS as Readonly<Record<string, SessionHandler>>)[spec.op] ??
       (LINK_SESSION_HANDLERS as Readonly<Record<string, SessionHandler>>)[spec.op] ??

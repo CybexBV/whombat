@@ -118,6 +118,13 @@ export const MANAGER_PATHS = {
    * release waiting for it. 409 `not_waiting` when no update waits for the owner or another release does.
    */
   updateApprove: '/v1/update/approve',
+  /**
+   * Runtime (the owner's “Check for updates”, 4.19; Whombat check-for-updates.md), and root and the manager's own user
+   * (`whombat-manager check`): `UpdateCheckRequest` → `UpdateCheckResponse`. The manager looks for a newer release now
+   * instead of at its next hourly look, and offers one it finds as any. 502 `control_refused` / 503 `unavailable` when
+   * the release list or control can't be read; an older manager answers 404.
+   */
+  updateCheck: '/v1/update/check',
   /** Lock holders (the backup service). */
   lock: '/v1/maintenance/lock',
   unlock: '/v1/maintenance/unlock',
@@ -1104,6 +1111,29 @@ export const UpdateApproveRequest = z.strictObject({ v: V, release: ReleaseId })
 export type UpdateApproveRequest = z.infer<typeof UpdateApproveRequest>;
 export const UpdateApproveResponse = z.object({ v: V, release: ReleaseId });
 export type UpdateApproveResponse = z.infer<typeof UpdateApproveResponse>;
+
+/**
+ * `POST /v1/update/check` (4.19): look for a newer release now. `result`: what the release list or control answered —
+ * `assigned` (a release to offer), `unchanged` (the same as last time), `none` (nothing to offer). `decision`: what the
+ * box did with a release it was offered — `started`, `queued` (after the work that runs), `noop` (it runs it already),
+ * `hold` (updates are paused), `refused` (it won't take it); absent without one. `nextCheckS`: when the manager looks
+ * again by itself. A check right after another answers the one before.
+ */
+export const UpdateCheckRequest = z.strictObject({ v: V });
+export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequest>;
+export const UPDATE_CHECK_RESULTS = ['assigned', 'unchanged', 'none'] as const;
+export const UPDATE_CHECK_DECISIONS = ['started', 'queued', 'noop', 'hold', 'refused'] as const;
+export const UpdateCheckResponse = z.object({
+  v: V,
+  result: z.enum(UPDATE_CHECK_RESULTS),
+  decision: z.enum(UPDATE_CHECK_DECISIONS).optional(),
+  nextCheckS: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 3600),
+});
+export type UpdateCheckResponse = z.infer<typeof UpdateCheckResponse>;
 
 /**
  * What only the manager knows, pushed to the runtime whenever it changes (and at runtime start): the backup

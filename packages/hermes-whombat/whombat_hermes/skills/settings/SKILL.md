@@ -86,7 +86,7 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 - `connections` Settings → Connections: your accounts (Google, Microsoft, mail), apps and services, and what needs you there
 - `overview` Overview: every server and service with its own page: how it is doing, what Whombat watches, its settings
 
-### This Whombat (the box) — `references/this-whombat.md` (118 settings)
+### This Whombat (the box) — `references/this-whombat.md` (119 settings)
 - `appliance.overview` Settings → This Whombat → Overview: how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail
 - `appliance.backups` Settings → This Whombat → Backups: where the box backs up, when, and backup files
 - `appliance.screen` Settings → This Whombat → Screen: the box’s screen and other screens: what they show, the lock, night and Talk
