@@ -252,9 +252,18 @@ function backupWords(backup: MachineBackup | null, now: Date): string | null {
   return backup?.backupJob ? 'No backup seen yet' : null;
 }
 
+/** A failed read can't confirm whether a failed attempt has a usable backup behind it. */
+export function backupReadMissing(backup: MachineBackup | null): boolean {
+  return (
+    !!backup?.backupJob &&
+    backup.lastBackup?.result === 'error' &&
+    backup.lastSuccessfulBackupAt === undefined
+  );
+}
+
 /** A machine covered by a job with an old backup or a failure and no known successful backup. */
 export function backupNotice(backup: MachineBackup | null, now: Date): KindNotice | null {
-  if (!backup?.backupJob) return null;
+  if (!backup?.backupJob || backupReadMissing(backup)) return null;
   const failed = backup.lastBackup?.result === 'error';
   const age = backupAge(failed ? backup.lastSuccessfulBackupAt : backup.lastBackup?.at, now);
   const limit = backup.backupRhythmMs ? 2 * backup.backupRhythmMs : 8 * DAY_MS;

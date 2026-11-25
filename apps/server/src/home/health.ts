@@ -46,7 +46,7 @@ import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
 import { uptimeSeen } from '../things/kinds/infra/uptime';
 import type { KindSeen } from '../things/kinds/registry';
-import { backupNotice, diskNotice, diskNow, type MachineNow } from '../things/machine';
+import { backupNotice, backupReadMissing, diskNotice, diskNow, type MachineNow } from '../things/machine';
 import { answerCheckOf, genericNotices, readFailedNotice, signinNotice } from '../things/panels';
 import { within } from '../things/part-of';
 import {
@@ -109,6 +109,15 @@ export function diskPoints(m: MachineNow | null): Record<string, number> {
   };
 }
 
+/** A lookup that ran out of time leaves the previous mapping usable. */
+async function lookupMachine(
+  services: Services,
+  row: CatalogConnectionRow,
+): Promise<ResolvedMachine | null | undefined> {
+  if (!row.burrowId) return null;
+  return within(resolveRunsOn(services, row.burrowId, row), 5_000, undefined);
+}
+
 /**
  * The disk of the machine a connection runs on, when Whombat knows it (a few seconds at most; nothing otherwise), or of
  * the machine as its kind sees it (Home Assistant OS's Supervisor's): its points, and the line its page shows about it
@@ -123,12 +132,13 @@ async function machineDisk(
   points: Record<string, number>;
   lines: LooseNotice[];
   read: boolean;
-  at: ResolvedMachine | null;
+  backupRead: boolean;
+  at: ResolvedMachine | null | undefined;
 }> {
-  const at = row.burrowId ? await within(resolveRunsOn(services, row.burrowId, row), 5_000, null) : null;
+  const at = await lookupMachine(services, row);
   const figures = at ? await within(readMachine(services, at, null), 5_000, null) : null;
   const m = seen ? seen(figures) : figures;
-  if (!m) return { points: {}, lines: [], read: false, at };
+  if (!m) return { points: {}, lines: [], read: false, backupRead: false, at };
   const pct =
     (await readPoints(services.db, row.id, [DISK_PCT_KEY], now, POINTS_KEEP_MS)).get(DISK_PCT_KEY) ?? [];
   const name = figures?.name ?? null;
@@ -141,7 +151,13 @@ async function machineDisk(
       : `The disk ${row.label} runs on is filling up. What takes the space, and what can go?`,
   });
   const backup = backupNotice(figures, now);
-  return { points: diskPoints(m), lines: [line, backup].filter((item) => item !== null), read: true, at };
+  return {
+    points: diskPoints(m),
+    lines: [line, backup].filter((item) => item !== null),
+    read: true,
+    backupRead: at === null || (figures !== null && !backupReadMissing(figures)),
+    at,
+  };
 }
 
 /**
@@ -322,9 +338,10 @@ export async function checkConnectionHealth(
       if (down) glance.outcome = 'offline';
       // What it runs on, as for any connection; kept while it doesn't answer or can't be checked, since a stopped
       // machine isn't found by its address.
-      const at = row.burrowId ? await within(resolveRunsOn(services, row.burrowId, row), 5_000, null) : null;
+      const at = await lookupMachine(services, row);
       if (at) glance.machine = { serverId: at.serverId, guestId: at.guestId, name: at.runsOn.name };
-      else if ((down || outcome.unseen) && previous?.machine) glance.machine = previous.machine;
+      else if ((at === undefined || down || outcome.unseen) && previous?.machine)
+        glance.machine = previous.machine;
       lines = seen.notices ?? [];
       skipped = seen.skipped ?? [];
     } else if (outcome.refused) {
@@ -390,13 +407,16 @@ export async function checkConnectionHealth(
       Object.assign(points, disk?.points ?? {});
       if (disk?.at)
         glance.machine = { serverId: disk.at.serverId, guestId: disk.at.guestId, name: disk.at.runsOn.name };
-      else if (!disk && previous?.machine) glance.machine = previous.machine;
+      else if (disk?.at === undefined && previous?.machine) glance.machine = previous.machine;
       // A kind that draws its machine says its disk itself (Home Assistant's Supervisor); one line per check.
       const own = new Set(lines.map((l) => l.check).filter(Boolean));
       for (const line of disk?.lines ?? []) if (!own.has(line.check)) lines.push(line);
       if (!disk?.read) {
         const before = skipped;
         skipped = (check) => check.startsWith('machine.') || isSkipped(before, check);
+      } else if (!disk.backupRead) {
+        const before = skipped;
+        skipped = (check) => check === 'machine.backup_old' || isSkipped(before, check);
       }
     }
   } catch (err) {

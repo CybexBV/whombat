@@ -36,7 +36,17 @@ import { sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
 import { kindOf } from './kinds/index';
 import { forgetKindReads } from './kinds/read';
-import { DB_MB_KEY, LOG_ERR_KEY, LOG_ERR_TOP_KEY, RTT_KEY, rollUpPoints, UP_KEY } from './points';
+import { backupNotice } from './machine';
+import {
+  DB_MB_KEY,
+  LOG_ERR_KEY,
+  LOG_ERR_TOP_KEY,
+  RTT_KEY,
+  rollUpPoints,
+  UP_COUNT_KEY,
+  UP_KEY,
+} from './points';
+import { readMachine } from './runs-on';
 import { fakeHaState, fakeHomeAssistant } from './testing/fake-ha';
 
 const fake = new FakeHostsService();
@@ -350,6 +360,86 @@ describe('what it runs on (CP-08)', () => {
     const auto = await call(mara, 'POST', path(), { mode: 'auto' });
     expect(auto.body.runsOn).toMatchObject({ guestId: 'pve:200', how: 'address' });
   });
+
+  it('keeps a known machine when the lookup times out and clears it after a completed unmapped lookup', async () => {
+    const load = async () => {
+      const [row] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, haId));
+      if (!row) throw new Error('Missing Home Assistant fixture.');
+      return row;
+    };
+    const before = await checkConnectionHealth(t.services, await load());
+    expect(before?.machine).toMatchObject({ serverId: 'shale', guestId: 'pve:200' });
+    const row = await load();
+    let lookupStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      lookupStarted = resolve;
+    });
+    let finishLookup!: (mapped: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => {
+      finishLookup = resolve;
+    });
+    const serves = vi.spyOn(hostsFor(t.services), 'serves').mockImplementationOnce(() => {
+      lookupStarted();
+      return pending;
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const checked = checkConnectionHealth(t.services, row);
+      await started;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect((await checked)?.machine).toEqual(before?.machine);
+      expect((await load()).glance).toMatchObject({ machine: before?.machine });
+    } finally {
+      finishLookup(false);
+      vi.useRealTimers();
+      serves.mockRestore();
+    }
+    expect(
+      (
+        await checkConnectionHealth(
+          t.services,
+          await load().then((r) => ({
+            ...r,
+            runsOn: { mode: 'none' as const },
+          })),
+        )
+      )?.machine,
+    ).toBeUndefined();
+  });
+
+  it('waits for a successful backup inventory read before raising an overdue warning', async () => {
+    const guest = fake.guest('shale', 'pve:200');
+    if (!guest) throw new Error('Missing fixture guest.');
+    const now = t.services.clock();
+    const before = { backup_job: guest.backup_job, last_backup: guest.last_backup };
+    Object.assign(guest, { backup_job: true, last_backup: { at: now.toISOString(), result: 'error' } });
+    const hosts = hostsFor(t.services);
+    hosts.forget('guests:shale');
+    let status = 503;
+    let active = true;
+    fake.on('GET', '/api/v1/servers/shale/guests/pve:200/backups', () =>
+      active ? { status, body: { items: [] } } : null,
+    );
+    const machine = (name: string) =>
+      readMachine(t.services, { serverId: 'shale', guestId: 'pve:200', runsOn: { name } }, null);
+    try {
+      const unread = await machine('Backup inventory unavailable');
+      expect(unread).toMatchObject({ backupJob: true, lastBackup: { result: 'error' } });
+      expect(unread?.lastSuccessfulBackupAt).toBeUndefined();
+      expect(backupNotice(unread, now)).toBeNull();
+      status = 200;
+      const empty = await machine('Backup inventory empty');
+      expect(empty?.lastSuccessfulBackupAt).toBeNull();
+      expect(backupNotice(empty, now)?.check).toBe('machine.backup_old');
+    } finally {
+      active = false;
+      Object.assign(guest, before);
+      hosts.forget('guests:shale');
+    }
+  });
 });
 
 describe('every connection gets a page (CP-06, CP-10)', () => {
@@ -533,6 +623,11 @@ describe('the range and the points (DS-03, DS-11)', () => {
       // A day ago: kept as it is.
       { connectionId: grafanaId, key: 'r_test', at: at(24, 5), value: 3 },
       { connectionId: grafanaId, key: 'r_test', at: at(24, 10), value: 4 },
+      // A single down reading on the hour and a partly covered hour.
+      { connectionId: grafanaId, key: UP_KEY, at: at(61, 0), value: 0 },
+      { connectionId: grafanaId, key: UP_KEY, at: at(60, 5), value: 0 },
+      { connectionId: grafanaId, key: UP_KEY, at: at(60, 15), value: 1 },
+      { connectionId: grafanaId, key: UP_KEY, at: at(60, 45), value: null },
     ]);
     await rollUpPoints(t.services, now);
     await rollUpPoints(t.services, now);
@@ -548,6 +643,19 @@ describe('the range and the points (DS-03, DS-11)', () => {
       [at(24, 5).toISOString(), 3],
       [at(24, 10).toISOString(), 4],
     ]);
+    const points = await t.services.db
+      .select()
+      .from(connectionPoints)
+      .where(and(eq(connectionPoints.connectionId, grafanaId), eq(connectionPoints.key, UP_COUNT_KEY)))
+      .orderBy(asc(connectionPoints.at));
+    expect(points.map((p) => [p.at, p.value])).toEqual([
+      [at(61, 0), 1],
+      [at(60, 0), 2],
+    ]);
+    const read = await page(mara, thingId('connection', grafanaId));
+    expect(read.uptime?.upPct).toBe(33.3);
+    const answers = read.tabs[0]?.panels.find((p) => p.id === 'answers');
+    expect(answers?.kind === 'list' && answers.items[0]?.figure?.note).toContain('10 min');
   });
 });
 

@@ -197,6 +197,13 @@
       "when": 1795555175475,
       "tag": "0027_incident_automation_watches",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795566870959,
+      "tag": "0028_account_uptime",
+      "breakpoints": true
     }
   ]
 }

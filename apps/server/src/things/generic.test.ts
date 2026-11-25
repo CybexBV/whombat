@@ -21,14 +21,13 @@ function checks(hours: number, ms: (h: number) => number | null) {
 
 describe('the page of a connection without a kind', () => {
   it('says how it answers and its answer time per day, in slots', () => {
-    // This week about 200 ms with two checks unanswered; the week before about 100 ms. Both misses are in the last two
-    // days, where a reading stands for one five-minute pass and the hour around it is no reading at all.
+    // Both misses are live points. The older hourly points have no counts and each weighs one reading.
     const rtt = checks(14 * 24, (h) => (h === 5 || h === 30 ? null : h < 7 * 24 ? 200 : 100));
     const view = genericSlots({ status: 'active', glance: null }, rtt, NOW, TZ);
     expect(slotProblems(view)).toEqual([]);
     const [answers, week] = view.panels;
     expect(answers?.kind === 'list' && answers.items.map((i) => [i.title, i.figure])).toEqual([
-      ['Answers', { value: '99.8 %', note: 'Didn’t answer for 15 min', tone: 'warn' }],
+      ['Answers', { value: '98.4 %', note: 'Didn’t answer for 15 min', tone: 'warn' }],
       ['Answers in', { value: '200 ms', note: '+100 % on last week' }],
     ]);
     expect(week?.kind === 'chart' && week.series[0]?.values).toEqual([200, 200, 200, 200, 200, 200, 200]);
@@ -36,14 +35,13 @@ describe('the page of a connection without a kind', () => {
   });
 
   it('takes whether its checks answered from `up` once there are such points', () => {
-    // Older hours by their response time; the last day by `up`, where two readings answered half the time (each
-    // counting as one five-minute pass, since the last two days are kept at that grain).
+    // Older hours fall back to response times. The last day uses its own readings.
     const rtt = checks(7 * 24, () => 200);
     const up = checks(24, (h) => (h === 3 || h === 4 ? 0.5 : 1));
     const view = genericSlots({ status: 'active', glance: null }, rtt, NOW, TZ, up);
     const [answers] = view.panels;
     expect(answers?.kind === 'list' && answers.items[0]?.figure).toMatchObject({
-      value: '99.9 %',
+      value: '99.2 %',
       tone: 'warn',
     });
   });
