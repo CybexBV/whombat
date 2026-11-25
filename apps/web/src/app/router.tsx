@@ -36,6 +36,9 @@
  *   /files/dm/chat|feedback  /files/direct/:id  /files/pr/:number[?repo=]
  *                                   one conversation's Files, ?folder=A/B (AP-774)
  *   /automation-runs/:number
+ *   /reports                        Your reports to the Whombat Team (Whombat team-reports.md); ?draft= → /reports/new
+ *   /reports/new                    a new report, ?draft=<id> the assistant's draft (its card's Edit)
+ *   /reports/:reportId              one report (`tr_…`), ?sent=1 right after Send; the box's Inbox item and push open it
  *   /settings/agent                 → /settings?tab=agent, `?part=` and `?key=` kept (the agent's link, AgentLink;
  *                                   AP-4922); its old Skills part → /settings?tab=skills (AP-5530)
  *   /settings                       the home (Often used, the five groups) · ?part=profile|notifications|… (You) ·
@@ -90,6 +93,11 @@ import type { ReactNode } from 'react';
 import { validateAgentKey, validateAgentPart } from '../features/agent/parts';
 import { validateScreenPart } from '../features/desk/screenTab';
 import { validateFeedbackIntegrationSearch, validateFeedbackNewSearch } from '../features/feedback/search';
+import {
+  isTeamReportId,
+  validateTeamReportFormSearch,
+  validateTeamReportSearch,
+} from '../features/teamReports/search';
 import { AuthLayout } from './auth/AuthLayout';
 import loginStyles from './auth/AuthLayout.module.css';
 import { fixtureMode } from './fixtureMode';
@@ -186,6 +194,18 @@ const AutomationRunScreen = lazyRouteComponent(
   'AutomationRunScreen',
 );
 const HomeScreen = lazyRouteComponent(() => import('../features/home/HomeScreen'), 'HomeScreen');
+const TeamReportsScreen = lazyRouteComponent(
+  () => import('../features/teamReports/TeamReportsScreen'),
+  'TeamReportsScreen',
+);
+const NewTeamReportScreen = lazyRouteComponent(
+  () => import('../features/teamReports/NewTeamReportScreen'),
+  'NewTeamReportScreen',
+);
+const TeamReportScreen = lazyRouteComponent(
+  () => import('../features/teamReports/TeamReportScreen'),
+  'TeamReportScreen',
+);
 const NeedsYouScreen = lazyRouteComponent(
   () => import('../features/needsYou/NeedsYouScreen'),
   'NeedsYouScreen',
@@ -1081,6 +1101,47 @@ const automationRunRoute = createRoute({
   }),
 });
 
+// Reports to the Whombat Team (Whombat team-reports.md): the list, a new report, one report.
+const teamReportsRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'reports',
+  validateSearch: validateTeamReportFormSearch,
+  // The assistant's draft may be linked here (`?draft=`): it opens in the form.
+  beforeLoad: ({ search }) => {
+    if (search.draft) throw redirect({ to: '/reports/new', search: { draft: search.draft }, replace: true });
+  },
+  component: withScreens([TeamReportsScreen], function TeamReportsRoute() {
+    const burrow = useOpenBurrow();
+    return <TeamReportsScreen burrow={burrow} />;
+  }),
+});
+
+const newTeamReportRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'reports/new',
+  validateSearch: validateTeamReportFormSearch,
+  component: withScreens([NewTeamReportScreen], function NewTeamReportRoute() {
+    const burrow = useOpenBurrow();
+    const { draft } = newTeamReportRoute.useSearch();
+    return <NewTeamReportScreen key={draft ?? ''} burrow={burrow} draftId={draft} />;
+  }),
+});
+
+const teamReportRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'reports/$reportId',
+  validateSearch: validateTeamReportSearch,
+  beforeLoad: ({ params }) => {
+    if (!isTeamReportId(params.reportId)) throw notFound();
+  },
+  component: withScreens([TeamReportScreen], function TeamReportRoute() {
+    const burrow = useOpenBurrow();
+    const { reportId } = teamReportRoute.useParams();
+    const { sent } = teamReportRoute.useSearch();
+    return <TeamReportScreen key={reportId} burrow={burrow} reportId={reportId} sent={sent === 1} />;
+  }),
+});
+
 export const routeTree = rootRoute.addChildren([
   onboardingRoute,
   connectAiRoute,
@@ -1124,6 +1185,9 @@ export const routeTree = rootRoute.addChildren([
     filesDmRoute,
     filesDirectRoute,
     filesPrRoute,
+    teamReportsRoute,
+    newTeamReportRoute,
+    teamReportRoute,
   ]),
   oldFormRoute,
 ]);
