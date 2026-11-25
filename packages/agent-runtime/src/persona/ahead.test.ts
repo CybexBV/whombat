@@ -260,6 +260,74 @@ describe('a Looks ahead check’s request', () => {
     expect(noAnswerText).not.toContain('Draft a reply');
   });
 
+  it('a follow-up with anchors reads those mails and that sender, not the title’s words', () => {
+    const opened = { ...matter, asked: false, reason: 'no_answer' as const };
+    const anchors = { senders: ['refunds@klm.example'], messageIds: ['msg_7', 'msg_3'] };
+    const parsed = DispatchContext.parse({
+      ...check,
+      ahead: { ...ahead, source: 'matter', stage: 'matter', matter: opened },
+    });
+    const anchored = DispatchContext.parse({
+      ...check,
+      ahead: { ...ahead, source: 'matter', stage: 'matter', matter: { ...opened, anchors } },
+    });
+    const lines = aheadTurnLines(anchored);
+    const end = lines.indexOf('[[end of kept an eye on]]');
+    const block = lines.slice(0, end).join('\n');
+    const after = lines.slice(end).join('\n');
+    expect(block).toContain('refunds@klm.example');
+    expect(block).toContain('msg_7, msg_3');
+    expect(after).not.toContain('refunds@klm.example');
+    expect(after).toContain('mail_read');
+    expect(after).toContain('mail_search');
+    expect(after).toContain('address or site');
+    expect(after).not.toContain('Search the mail (mail_search, mail_read)');
+
+    // Without anchors it searches the mail as before.
+    expect(aheadTurnLines(parsed).join('\n')).toContain('Search the mail (mail_search, mail_read)');
+    expect(aheadTurnLines(parsed).join('\n')).not.toContain('Where to look');
+
+    // A mail check about the matter is told where its earlier mail is, as data.
+    const mailLines = aheadTurnLines(
+      DispatchContext.parse({
+        ...check,
+        ahead: { ...ahead, source: 'mail', stage: 'mail', mail, matter: { ...matter, anchors } },
+      }),
+    );
+    const mailEnd = mailLines.indexOf('[[end of what it may be news on]]');
+    expect(mailLines.slice(0, mailEnd).join('\n')).toContain('msg_7');
+    expect(mailLines.slice(mailEnd).join('\n')).toContain('went before');
+  });
+
+  it('shows recent “Not useful” verdicts as data, one line each, a mail finding’s without a title', () => {
+    const tuned = DispatchContext.parse({
+      ...check,
+      ahead: {
+        ...ahead,
+        recentDismissed: [
+          { title: 'Dentist', kind: 'travel', reason: 'I walk\nthere' },
+          { title: '', kind: 'deadline', reason: 'Not mine' },
+          { title: '', kind: 'other' },
+        ],
+      },
+    });
+    const lines = aheadTurnLines(tuned);
+    const start = lines.findIndex((l) => l.startsWith('[[recent “Not useful”'));
+    const end = lines.findIndex((l) => l.startsWith('[[end of recent “Not useful”'));
+    expect(start).toBeGreaterThan(-1);
+    expect(end - start).toBe(4);
+    const rows = lines.slice(start + 1, end);
+    expect(rows[0]).toContain('Dentist');
+    expect(rows[0]).toContain('I walk there');
+    expect(rows[1]).toContain('Not mine');
+    for (const row of rows.slice(1)) {
+      expect(row).toMatch(/^- [a-z]/);
+      expect(row).not.toContain('""');
+      expect(row).not.toContain('· ·');
+      expect(row).not.toMatch(/·\s*$/);
+    }
+  });
+
   it('names the other side of a matter a check opened only inside its data block', () => {
     const opened = DispatchContext.parse({
       ...check,
@@ -411,6 +479,7 @@ describe('a watch on the person’s mail in their own turns', () => {
     expect(text).toContain('Looks ahead');
     // Senders are an address or a site, looked up in the mail when unknown.
     expect(text).toContain('address');
+    expect(text).toContain('site');
     expect(text).toContain('mail_search');
     expect(turnPrompt(personal)).toContain('ahead_watch');
   });
