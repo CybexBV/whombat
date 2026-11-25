@@ -2,14 +2,18 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"rackoon/internal/checks"
+	"rackoon/internal/proto"
 	"rackoon/internal/rules"
 )
 
@@ -521,6 +525,83 @@ func TestAdditiveMigrationsAllowRollback(t *testing.T) {
 	if got := checks[1]; got.ID != "ck_1" || got.Name != "Website renamed" || got.Owner != check.Owner ||
 		got.ProbeRev != check.ProbeRev || !got.ProbeChangedAt.Equal(changedAt) {
 		t.Fatalf("check updated during rollback: %+v", got)
+	}
+}
+
+func TestAddressLookupSurvivesHubRollback(t *testing.T) {
+	const previousVersion = 14
+	path := filepath.Join(t.TempDir(), "hub.db")
+	previousHub := func() *Store {
+		t.Helper()
+		s, err := open(path, migrations[:previousVersion], nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { s.Close() })
+		return s
+	}
+
+	// Include a row saved with the original address-lookup encoding.
+	previous := previousHub()
+	if _, err := previous.w.ExecContext(ctx, `INSERT INTO checks(id, name, kind, target, runner, interval_s, timeout_s, options, created_by, created_at)
+		VALUES ('ck_existing', 'Existing lookup', 'dns', 'localhost.', 'hub', 60, 2, '{"dns_type":"any"}', 'john', ?)`, ms(time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	previous.Close()
+
+	current, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { current.Close() })
+	if err := current.PutCheck(ctx, Check{
+		ID: "ck_new", Name: "New lookup", Kind: proto.CheckDNS, Target: "localhost.", Runner: "hub",
+		IntervalS: 60, TimeoutS: 2, Options: CheckOptions{DNSType: "any"}, Enabled: true, CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := current.ListChecks(ctx)
+	if err != nil || len(saved) != 2 {
+		t.Fatalf("saved checks: %+v, %v", saved, err)
+	}
+	for _, c := range saved {
+		if c.Options.DNSType != "any" {
+			t.Fatalf("current hub lost the dual-family lookup: %+v", c)
+		}
+	}
+	current.Close()
+
+	rolledBack := previousHub()
+	for _, c := range saved {
+		// Read only the columns and DNS options the previous hub knew.
+		var raw string
+		var spec proto.CheckSpec
+		if err := rolledBack.r.QueryRowContext(ctx, `SELECT id, kind, target, interval_s, timeout_s, options FROM checks WHERE id = ?`, c.ID).
+			Scan(&spec.ID, &spec.Kind, &spec.Target, &spec.IntervalS, &spec.TimeoutS, &raw); err != nil {
+			t.Fatal(err)
+		}
+		var options struct {
+			DNSType   string `json:"dns_type"`
+			DNSServer string `json:"dns_server"`
+			Expect    string `json:"expect"`
+		}
+		if err := json.Unmarshal([]byte(raw), &options); err != nil {
+			t.Fatal(err)
+		}
+		spec.DNSType, spec.DNSServer, spec.Expect = options.DNSType, options.DNSServer, options.Expect
+		if spec.DNSType != "" && spec.DNSType != "A" {
+			t.Errorf("%s: old hub would send record type %q", c.ID, spec.DNSType)
+		}
+		// Run validates the same spec a deployed agent receives.
+		result := checks.Run(ctx, spec)
+		if !result.OK || len(result.Answer) == 0 {
+			t.Fatalf("%s: old lookup failed: %+v", c.ID, result)
+		}
+		for _, answer := range result.Answer {
+			if address, err := netip.ParseAddr(answer); err != nil || !address.Is4() {
+				t.Fatalf("%s: got a non-A answer %q", c.ID, answer)
+			}
+		}
 	}
 }
 

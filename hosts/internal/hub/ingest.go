@@ -138,7 +138,8 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 	for gid := range s.guestStops {
 		platform, _, _ := strings.Cut(gid, ":")
 		observed := (platform == proto.PlatformDocker && dockerSeen) || (platform == proto.PlatformLibvirt && libvirtSeen)
-		if observed && !seen[gid] {
+		// Once the guest is running again, the next stop has its own cause.
+		if observed && (!seen[gid] || s.guestStates[gid] == proto.StateRunning) {
 			delete(s.guestStops, gid)
 		}
 	}

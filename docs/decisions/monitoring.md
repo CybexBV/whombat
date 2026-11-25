@@ -135,6 +135,8 @@ built.
 | MON-89c | The banner and detail use the same effective temperature warning limit, including when it scales with a lower critical limit. | Both describe the measured rule. |
 | MON-89d | Whombat's server history asks for `overlaps_since` on the hub's alert list. Alerts still open or resolved at or after the start count. The `since` filter continues to select by opening time. | An alert can last into the period even if it started earlier. |
 | MON-89e | A “Website or address” name lookup sets `dns_type: any`. The hub pairs fresh A and AAAA results from the chosen runner, and either family can make the lookup succeed. An unset type means A. | IPv6-only names work with agents already installed. |
+| MON-89f | The hub stores dual-family DNS checks with `dns_type: A` in the options and keeps the dual-family setting in the additive `dns_any_address` column. It converts saved `any` options on opening the database. | A hub rolled back to the previous version can read the same check and run it as an A lookup. |
+| MON-89g | A successful platform report showing a guest running clears its planned-stop note. | A crash shortly after the guest comes back from a planned restart can open its own alert. |
 
 ## Automations and one-time watches (MON-90…MON-99)
 
