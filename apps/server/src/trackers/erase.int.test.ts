@@ -4,11 +4,13 @@
  * the commit pipeline in one transaction —, with the FakeTracker behind a home-network address and FAKE AGENTS: a driver
  * without `erasures` keeps its reports as before; one with it has an erased report forgotten (its row and answers gone,
  * its run stopped with its waiting approval withdrawn, the run's words blanked) while an erasure of a report never
- * mirrored here touches nothing, the cursor moves on, and a connection nothing listens to any more still forgets.
+ * mirrored here touches nothing, the cursor moves on, and a connection nothing listens to any more still forgets. An
+ * idea's feature request card keeps none of its words (nor does its notification, nor a frame a device could replay),
+ * and a connection that keeps only runs about a report, nothing mirrored, still follows its erasures.
  */
 import type { AutomationRecipeInput, AutomationRun, ReportAssessmentInput } from '@whombat/core';
 import { recipeInstructions } from '@whombat/core';
-import { and, eq, like } from 'drizzle-orm';
+import { and, eq, inArray, like } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAutomation, deleteAutomation, setAutomationKeys } from '../automations/commands';
 import {
@@ -17,7 +19,10 @@ import {
   automationRuns,
   dispatches,
   events,
+  featureRequests,
   messages,
+  notifications,
+  sessionEvents,
   trackerCursors,
   trackerItems,
   trackerReplies,
@@ -31,7 +36,7 @@ import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
 import { fakeTrackerDriver } from '../test/tracker-driver';
 import { useVaultNetForTests } from '../vault/net';
 import type { TrackerDriver } from './driver';
-import { REPORT_ERASED } from './erase';
+import { FEATURE_REQUEST_ERASED, keepingConnections, REPORT_ERASED } from './erase';
 
 const w = useAutomationWorld();
 const tracker = new FakeTracker();
@@ -145,7 +150,7 @@ const bug: ReportAssessmentInput = {
 };
 
 /** The FAKE AGENT assesses: its turn is claimed, it reports, answers, and the engine moves on to the write's card. */
-async function assess(runId: string): Promise<AutomationRun> {
+async function assess(runId: string, assessment: ReportAssessmentInput = bug): Promise<AutomationRun> {
   const dispatchId = step(await w.run(runId), 'ask').dispatchId as string;
   await w.services.db.update(dispatches).set({ state: 'running' }).where(eq(dispatches.id, dispatchId));
   const [row] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
@@ -155,7 +160,7 @@ async function assess(runId: string): Promise<AutomationRun> {
     w.services,
     { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
     'report_assessment',
-    { ...bug },
+    { ...assessment },
   );
   expect(res.isError).not.toBe(true);
   await w.fakeAgentReply(dispatchId, 'A real bug in saving.');
@@ -308,5 +313,117 @@ describe('a tracker that erases reports (TA-161)', () => {
     expect(await poll()).toMatchObject({ skipped: 'not_listened', erased: 1 });
     expect(await mirrored(stays.id)).toBeNull();
     expect((await cursor())?.erasedAfter).toBe('3');
+  });
+
+  it('forgets an idea’s card words, and follows erasures of a connection that keeps only runs', async () => {
+    const port = Number(new URL(tracker.url).port);
+    const ideasId = await insertConnection(w.services, {
+      catalogId: 'tracker',
+      burrowId: w.burrowId,
+      label: 'Acme ideas',
+      handle: 'tracker-ideas',
+      fields: { url: `http://${HOST}:${port}` },
+      secret: tracker.token,
+    });
+    const pollIdeas = async () => {
+      const result = await w.services.tracker.pollNow(ideasId);
+      await w.settle();
+      await w.services.tracker.settled();
+      return result;
+    };
+    const when = {
+      kind: 'tracker' as const,
+      connectionId: ideasId,
+      itemKinds: ['bug', 'feature'] as ('bug' | 'feature')[],
+    };
+    const { automationId } = await w.ok(IDS.mara, createAutomation, {
+      source: {
+        kind: 'recipe',
+        recipe: {
+          when,
+          job: 'assess',
+          instructions: recipeInstructions('assess', when),
+          conversationId: IDS.billing,
+          replyToCustomer: true,
+          decideFeatures: true,
+        },
+      },
+      publish: true,
+    });
+    await pollIdeas();
+    const idea = file({ kind: 'feature', title: 'Dark mode for the kiosk', description: 'Please add it.' });
+    await pollIdeas();
+    const run = (await w.runs(automationId)).find((r) =>
+      r.trigger.summary.includes('kiosk'),
+    ) as AutomationRun;
+    expect(run).toBeTruthy();
+    const after = await assess(run.id, {
+      kind: 'feature',
+      importance: 'medium',
+      confidence: 'high',
+      size: 'small',
+      summary: 'A darker look for the kiosk.',
+      recommends: 'change',
+      reply: 'Thanks for the idea. We will let you know once we have decided.',
+      replyAsks: false,
+      language: 'en',
+      value: 6,
+      valueWhy: 'Kiosks stand in dark halls.',
+      approvedReply: 'We will add it.',
+      declineReason: 'Few would use it.',
+      declinedReply: 'We won’t add it.',
+    });
+    const requestId = String((step(after, 'decide').output as { requestId?: unknown }).requestId ?? '');
+    const [request] = await w.services.db
+      .select()
+      .from(featureRequests)
+      .where(eq(featureRequests.id, requestId));
+    const cardId = request?.messageId as string;
+    const [card] = await w.services.db.select().from(messages).where(eq(messages.id, cardId));
+    expect(card?.text).toContain('Dark mode for the kiosk');
+    // Frames a device could still replay with the idea's words.
+    const at = w.now().toISOString();
+    await w.services.db.insert(sessionEvents).values([
+      {
+        burrowId: w.burrowId,
+        topic: `conv:${card?.conversationId}`,
+        event: { type: 'message.created', message: { id: cardId, text: card?.text } },
+        at,
+      },
+      {
+        burrowId: w.burrowId,
+        topic: `burrow:${w.burrowId}`,
+        event: { type: 'automation.run.updated', run: { id: run.id, title: 'Dark mode for the kiosk' } },
+        at,
+      },
+    ]);
+
+    // Nothing listens any more, and nothing of it is mirrored (a test run on a report keeps only its run).
+    await w.ok(IDS.mara, deleteAutomation, { automationId });
+    await w.services.db.delete(trackerItems).where(eq(trackerItems.connectionId, ideasId));
+    expect(await keepingConnections(w.services.db, [])).toContain(ideasId);
+    tracker.reports.delete(idea.id);
+    erased.push(idea.id);
+    expect(await pollIdeas()).toMatchObject({ skipped: 'not_listened', erased: 1 });
+
+    // The card is gone and its message says so in plain words, as does its notification.
+    expect(
+      await w.services.db.select().from(featureRequests).where(eq(featureRequests.id, requestId)),
+    ).toEqual([]);
+    const [plain] = await w.services.db.select().from(messages).where(eq(messages.id, cardId));
+    expect(plain?.text).toBe(FEATURE_REQUEST_ERASED);
+    const told = await w.services.db
+      .select({ text: notifications.text })
+      .from(notifications)
+      .where(eq(notifications.dedupKey, `feature_request:${requestId}`));
+    expect(told).toHaveLength(1);
+    expect(JSON.stringify(told)).not.toContain('kiosk');
+    const frames = await w.services.db
+      .select()
+      .from(sessionEvents)
+      .where(inArray(sessionEvents.topic, [`conv:${card?.conversationId}`, `burrow:${w.burrowId}`]));
+    expect(JSON.stringify(frames)).not.toContain('Dark mode for the kiosk');
+    const [stored] = await w.services.db.select().from(automationRuns).where(eq(automationRuns.id, run.id));
+    expect(JSON.stringify(stored?.scope)).not.toContain('kiosk');
   });
 });
