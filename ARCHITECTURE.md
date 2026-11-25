@@ -1046,28 +1046,33 @@ but off). The box reads the list and a report and withdraws one whenever control
 or It works / Still happening only while Link is on or in grace (`team-reports/control.ts`), and control refuses with
 its own code (`not_invited`, `link_off`, `too_many_open`, …), which the box puts in plain words. Each send carries one
 request id for every try of the same words: the app's, made anew when the words changed, or the draft's, from the card
-and the form alike; a form send of a draft already sent, or whose card's yes is sending it, is refused. A new report carries what the app said about itself
+and the form alike. A send of a draft first reserves it through the pipeline (`sending`, with the words it sends), so
+the card's yes and the form never send it at once and neither sends it twice; a send that didn't go gives it back. A new report carries what the app said about itself
 and the box's version and update channel. An answer with a whole report fits one session message: the report's own
-words and the newest messages within three quarters of 64 KiB, with the count of those left out (`earlier`,
-`team-reports/fit.ts`); the list fits the same budget with long titles cut shorter. The send ops are secret ops, so the person's and the team's words stay out of session receipts.
+words and the newest messages within three quarters of 64 KiB (the newest cut to fit when even it doesn't), with the
+count of those left out (`earlier`, `team-reports/fit.ts`); the list fits the same budget with long titles cut shorter. The send ops are secret ops, so the person's and the team's words stay out of session receipts.
 The box keeps a copy of each report in `team_report_copies` (the whole report as last read, control's latest revision
 and the revision the person read) through the pipeline: `team_report_keep` after a get, reply or new report (an answer
 older than the copy leaves it), `team_report_seen` after control's list when it says something new,
 `team_report_forget` when it is gone or withdrawn (an answer that left before a withdrawal keeps nothing of it: the box
-holds recent withdrawals in memory, `team-reports/withdrawn.ts`), `team_reports_drop` for every copy when the manager
+holds recent withdrawals in memory, `team-reports/withdrawn.ts`, and a call that started before every copy was dropped
+keeps nothing either, by the generation in `team-reports/in-flight.ts`), `team_reports_drop` for every copy when the manager
 says the box is out of Link (tried again in each follow round while copies remain) and, with the drafts not sent and
 their cards, before a backup restored onto new hardware takes the new device id, which waits until the drop went
 through. A report
 is unread while control's revision is past the one read; while control can't be reached the list shows the copies
 (`stale`). Shortly after start, and while a report is open every ten minutes, a job
-(`team-reports.follow`) asks control's list; a status entering a question (`needs_information`) or a fix to try
-(`available`) by the team's change becomes a needs-you notification and push in fixed words, and the Inbox shows an
-item while the report waits for the person, both opening `/reports/<id>` by its path, wherever the app runs. The team's words show only on the report's
+(`team-reports.follow`) asks control's list (the first look tried again a few times while the box doesn't know whether
+the person may send); a report waiting for the person, a question (`needs_information`) or a fix to try (`available`),
+that the team changed (or the box first sees so) becomes a needs-you notification and push in fixed words, once per
+revision, and the Inbox shows an item while the report waits for the person, both opening `/reports/<id>` by its path,
+wherever the app runs. Reading the report reads its notifications; withdrawn or dropped, they go. The team's words show only on the report's
 page: never in Chat, the assistant's context, Search or automations. The assistant's `report_to_whombat_team` keeps a
 draft (`team_report_drafts`) and always asks on a card that quotes it (its approval carries the words, so its details
 and its Inbox item show them too); the person's yes, never for later, sends it as theirs, and the
-card's Edit opens the form with the draft (`teamReports.draft`); sent from the form, the draft is done and its waiting
-card withdrawn (`team_report_draft_done`). `whombat_team_reports` reads numbers, the start of the person's own words
+card's Edit opens the form with the draft (`teamReports.draft`); the card's yes waits for its send, so a send that
+didn't go fails its execution and the card says so; sent from the form, the draft is done and its waiting card
+withdrawn (`team_report_draft_done`). `whombat_team_reports` reads numbers, the start of the person's own words
 as titles (never control's title, which the team may rename), statuses in words and dates. Both are served only in the person's own turns where they can send reports or have some. A tracker
 connection may sign its replies with its own `signature` instead of “<assistant> - AI Assistant”. Development's manager
 stand-in has a small team in memory (`managed/fake-team.ts`) that answers each new report a few seconds later and
