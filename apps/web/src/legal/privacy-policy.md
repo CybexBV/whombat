@@ -1,4 +1,4 @@
-> Version `2026-11-23`.
+> Version `2026-11-25`.
 
 # Whombat Privacy Policy
 
@@ -16,7 +16,7 @@ described under Notifications below, which you can turn off.
 ## 1. The short version
 
 - Your workspace content stays on your Whombat. We can't read it, apart from the short preview a notification shows
-  (which you can turn off). There is no standing vendor login: we only get into your Whombat when you turn on remote
+  (which you can turn off) and what you send us yourself, such as a report to the Whombat Team. There is no standing vendor login: we only get into your Whombat when you turn on remote
   help, for the time you choose.
 - Our cloud keeps only what it needs to run your account and Whombat Link: your email address, your Whombats with
   their names, addresses and Link state, and your subscription.
@@ -149,12 +149,19 @@ sign-in. For the visitor's list of reports we keep each report's reference, type
 a report. Codes expire after 10 minutes and sign-ins after 30 days; a sign-in is kept in the visitor's browser, for
 that website only, and signing out removes it.
 
+**Reports to the Whombat Team.** If you send us a problem or an idea from inside Whombat, we keep what you wrote,
+the Whombat and app versions, your Whombat's update channel, your device and system in a few words and your language,
+with the answers in the report's conversation. Unlike everything else above, we can read these: the form says so.
+The Whombat Team reads them with the help of its own AI assistant, and may fix what you reported in Whombat's
+public source code, in its own words, never yours and never naming you.
+
 **Support.** If you email us, we use what you send to help you.
 
 ## 5. Our legal grounds
 
 - **To provide the service you signed up for** (performance of a contract): your account, your Whombats, Whombat
-  Link, connections, notifications, shared links, emails and billing, and remote help when you turn it on.
+  Link, connections, notifications, shared links, emails and billing, remote help when you turn it on, and the
+  reports you send to the Whombat Team.
 - **Our legitimate interest** in keeping Whombat secure and fair: the audit log, request logs, rate limits, network
   hashes, the server login log and the one-free-month-per-account check. We've kept each of these to the minimum that
   does the job.
@@ -199,6 +206,8 @@ We use a small number of service providers, under agreements that only let them 
 - **Mailgun** (Sinch) sends our emails, including the ones your Whombat sends through Whombat Link when you chose it.
 - **Stripe** handles payments. For fraud prevention and its own legal obligations, Stripe is also a controller in its
   own right; see Stripe's privacy policy.
+- **Anthropic** and **OpenAI** provide the AI the Whombat Team's assistant uses to read, assess and answer the
+  reports you send to the Whombat Team.
 - **Push services** deliver notifications: Apple Push Notification service for the iPhone app, Google Firebase Cloud
   Messaging for the Android app, and the push service your browser uses (from Google, Mozilla or Apple, for example)
   on the web; they receive a notification’s preview while delivering it, unless you turned previews off.
@@ -244,6 +253,8 @@ provider is certified, and otherwise on the European Commission's Standard Contr
   long as your Whombat is in your account.
 - **Shared links:** until you remove them or they expire.
 - **Feedback reports:** until your Whombat collects them, and never longer than 7 days.
+- **Reports to the Whombat Team:** until 90 days after the report is closed; at once when you withdraw it, delete
+  your account or take the Whombat out of Whombat Link.
 - **Remote help:** what support did stays on your Whombat for 90 days (at most 500 MB), not with us. Our record of
   each key we gave support is part of the audit log.
 - **Feedback sign-ins:** codes for 10 minutes, sign-ins for 30 days. The entries of a visitor's list of reports: until
