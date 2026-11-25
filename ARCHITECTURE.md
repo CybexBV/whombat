@@ -991,9 +991,10 @@ published automation details read their definition and publisher from one versio
   each poll from a cursor kept on the connection, and also for a connection nothing listens to any more while it keeps
   mirrored reports): for each one mirrored or run for here, `trackers/erase.ts` deletes the mirrored report, its
   customer's answers and its feature request cards, blanks the words its runs kept (their trigger's summary and
-  scope), forgets their agents' Hermes sessions, stops the runs still working on it (turns, waiting cards and
-  approvals, a line in their thread) and stops following its fixes, so the customer hears nothing more. The run's
-  thread in Chat, step outputs, approvals already answered, T3 Code threads and pull requests keep what they said.
+  scope, their agent steps' instructions, the report's title in their requests to the agents in the thread), forgets
+  their agents' Hermes sessions, stops the runs still working on it (turns, waiting cards and approvals, a line in
+  their thread) and stops following its fixes, so the customer hears nothing more. The rest of the run's thread in Chat
+  and of its step outputs, approvals already answered, T3 Code threads and pull requests keep what they said.
 - **Telling**: a run tells the person as it posts, like any message in its room; a failed run, an approval and a
   review always notify. A saved definition's `tell` is accepted and ignored
   ([brief-removed.md](docs/decisions/brief-removed.md)).
@@ -1043,21 +1044,24 @@ forwards them unread (`appliance/manager/internal/broker/teamreports.go`) whenev
 but off). The box reads the list and a report and withdraws one whenever control knows it; it sends a report, a reply
 or It works / Still happening only while Link is on or in grace (`team-reports/control.ts`), and control refuses with
 its own code (`not_invited`, `link_off`, `too_many_open`, …), which the box puts in plain words. Each send carries one
-request id for every try of it: the app's, made when its form or reply box opened, or the draft's, from the card and
-the form alike; a form send of a draft already sent is refused. A new report carries what the app said about itself
+request id for every try of the same words: the app's, made anew when the words changed, or the draft's, from the card
+and the form alike; a form send of a draft already sent, or whose card's yes is sending it, is refused. A new report carries what the app said about itself
 and the box's version and update channel. An answer with a whole report fits one session message: the report's own
 words and the newest messages within three quarters of 64 KiB, with the count of those left out (`earlier`,
-`team-reports/fit.ts`). The send ops are secret ops, so the person's and the team's words stay out of session receipts.
+`team-reports/fit.ts`); the list fits the same budget with long titles cut shorter. The send ops are secret ops, so the person's and the team's words stay out of session receipts.
 The box keeps a copy of each report in `team_report_copies` (the whole report as last read, control's latest revision
 and the revision the person read) through the pipeline: `team_report_keep` after a get, reply or new report (an answer
 older than the copy leaves it), `team_report_seen` after control's list when it says something new,
-`team_report_forget` when it is gone or withdrawn, `team_reports_drop` for every copy when the manager says the box is
-out of Link and, with the drafts not sent, before a backup restored onto new hardware takes the new device id. A report
+`team_report_forget` when it is gone or withdrawn (an answer that left before a withdrawal keeps nothing of it: the box
+holds recent withdrawals in memory, `team-reports/withdrawn.ts`), `team_reports_drop` for every copy when the manager
+says the box is out of Link (tried again in each follow round while copies remain) and, with the drafts not sent and
+their cards, before a backup restored onto new hardware takes the new device id, which waits until the drop went
+through. A report
 is unread while control's revision is past the one read; while control can't be reached the list shows the copies
 (`stale`). Shortly after start, and while a report is open every ten minutes, a job
 (`team-reports.follow`) asks control's list; a status entering a question (`needs_information`) or a fix to try
 (`available`) by the team's change becomes a needs-you notification and push in fixed words, and the Inbox shows an
-item while the report waits for the person, both opening `/reports/<id>`. The team's words show only on the report's
+item while the report waits for the person, both opening `/reports/<id>` by its path, wherever the app runs. The team's words show only on the report's
 page: never in Chat, the assistant's context, Search or automations. The assistant's `report_to_whombat_team` keeps a
 draft (`team_report_drafts`) and always asks on a card that quotes it (its approval carries the words, so its details
 and its Inbox item show them too); the person's yes, never for later, sends it as theirs, and the
@@ -1065,7 +1069,8 @@ card's Edit opens the form with the draft (`teamReports.draft`); sent from the f
 card withdrawn (`team_report_draft_done`). `whombat_team_reports` reads numbers, the start of the person's own words
 as titles (never control's title, which the team may rename), statuses in words and dates. Both are served only in the person's own turns where they can send reports or have some. A tracker
 connection may sign its replies with its own `signature` instead of “<assistant> - AI Assistant”. Development's manager
-stand-in has a small team in memory (`managed/fake-team.ts`) that answers each new report a few seconds later. Reasons:
+stand-in has a small team in memory (`managed/fake-team.ts`) that answers each new report a few seconds later and
+otherwise does as control does. Reasons:
 [team-reports.md](docs/decisions/team-reports.md).
 
 ## The person's prompts (`apps/server/src/prompts/`)
