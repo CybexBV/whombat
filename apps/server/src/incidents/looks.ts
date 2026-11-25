@@ -254,6 +254,7 @@ export interface Observed {
  * the windows and the causes) and when a hold last ended, from the windows and from `heldBefore`, the last pass that saw
  * each held (a cause leaves no row once it lifts). `checks`: the checks open incidents are about, by thing, to know
  * which of them a connection's last check didn't read.
+ * A delayed start uses only holds at its deadline, so it can read past an ended hold.
  */
 export async function observeThings(
   services: Services,
@@ -263,6 +264,7 @@ export async function observeThings(
   heldBefore: ReadonlyMap<string, Date>,
   now: Date,
   checks: ReadonlyMap<string, readonly string[]> = new Map(),
+  options: { useEndedHolds?: boolean } = {},
 ): Promise<Observed> {
   const ids = [...new Set(list)].slice(0, 500);
   const inner = (kind: string) =>
@@ -376,7 +378,7 @@ export async function observeThings(
       devices.flatMap((d) => (d.connectionId ? [[`device:${d.connectionId}`, d] as const] : [])),
     ),
     held,
-    heldUntil,
+    heldUntil: options.useEndedHolds === false ? new Map() : heldUntil,
   };
   const unread = new Map<string, Set<string>>();
   for (const thing of asked) {

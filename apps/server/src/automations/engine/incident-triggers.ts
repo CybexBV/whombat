@@ -36,6 +36,7 @@ export function liveChecks(services: Services, burrowId: string, now: Date): Act
       new Map(),
       now,
       new Map([[thing, checks]]),
+      { useEndedHolds: false },
     ).catch(() => null);
     if (!seen || seen.raw.get(thing) === 'unread' || seen.unread.get(thing)?.size) return null;
     return lookNow(live, thing);
