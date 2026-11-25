@@ -362,6 +362,11 @@ export interface TurnShape {
    * `AHEAD_TOOLS`. Absent: no.
    */
   ahead?: boolean;
+  /**
+   * A Looks ahead triage pass (a check whose source is `triage`): it only picks from the new mail it was shown, so it
+   * is served `ahead_triage` alone, which no other check is served. Absent: no.
+   */
+  aheadTriage?: boolean;
 }
 
 /**
@@ -378,6 +383,7 @@ const AHEAD_ONLY_TOOLS: readonly McpToolName[] = [
   'read_web_page',
   'ahead_read_docs',
   'ahead_report',
+  'ahead_triage',
 ];
 
 /**
@@ -436,7 +442,9 @@ export const CODE_TOOLS = [
 
 /** Whether a turn of this shape is served the tool (PE-05); the other listing rules (keys, connectors) still apply. */
 export function toolFitsTurn(name: McpToolName, turn: TurnShape): boolean {
-  if (turn.ahead) return AHEAD_TOOLS.includes(name);
+  // A triage pass reads nothing but what Whombat gave it: it only picks.
+  if (turn.ahead)
+    return turn.aheadTriage ? name === 'ahead_triage' : AHEAD_TOOLS.includes(name) && name !== 'ahead_triage';
   if (AHEAD_ONLY_TOOLS.includes(name)) return false;
   if (turn.outside) {
     if (!(OUTSIDERS_TOOLS as readonly string[]).includes(name)) return false;
@@ -548,6 +556,11 @@ export interface ServedSelection {
   aheadThread?: boolean;
   /** The burrow has an active Paperless-ngx or Notion connection for read-only Looks ahead doc searches. Absent: no. */
   aheadDocs?: boolean;
+  /**
+   * A turn the person began themselves, in their own words (docs/decisions/looks-ahead.md): `ahead_watch`, to keep an
+   * eye on something in their mail. Never a Looks ahead check, an automation's step or an outsiders' turn. Absent: no.
+   */
+  aheadWatch?: boolean;
 }
 
 /** Reports to the Whombat Team (team-reports.md): the person's own turns, where they can send reports or have some. */
@@ -604,6 +617,8 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   if (name === 'ahead_feedback' && !sel.aheadThread) return false;
   // Read-only Paperless/Notion search in a Looks ahead check: only when one is connected.
   if (name === 'ahead_read_docs' && !sel.aheadDocs) return false;
+  // Only the person's own words make a watch: never a turn something else began.
+  if (name === 'ahead_watch' && (!sel.aheadWatch || sel.automationStep)) return false;
   // Automations change only when the person asks in Chat, never from inside an automation's own step, and a step
   // finishes its work in its own turn.
   if ((AUTOMATION_CHAT_TOOLS as readonly string[]).includes(name) && sel.automationStep) return false;

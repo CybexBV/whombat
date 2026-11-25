@@ -1,14 +1,17 @@
 /**
  * Settings → the assistant → **Looks ahead** (Whombat looks-ahead.md; `looksAhead.get`, `looksAhead.update`,
  * `looksAhead.checkNow`): checks upcoming plans (up to a week ahead and again before they start) and incoming mail
- * against connected files, docs and the web, and tells the person only when something needs attention.
+ * against connected files, docs and the web, and tells the person only when something needs attention. “Keeping an
+ * eye on” lists what it follows over days (a refund, an answer from the notary), each removable.
  */
 import { Link } from '@tanstack/react-router';
 import {
+  hasLooksAheadMatters,
   hasLooksAheadV2,
   looksAheadCalendarMeta,
   looksAheadCheckMeta,
   looksAheadSavedText,
+  matterLine,
   LOOKS_AHEAD_TEXT as T,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
@@ -28,13 +31,17 @@ import { SkeletonRows } from '../../../components/ListState';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { useToast } from '../../../components/Toast';
 import { Toggle } from '../../../components/Toggle';
+import { useBurrowViewer } from '../../runs/useBurrowViewer';
 import styles from '../../settings/SettingsScreen.module.css';
 import own from './LooksAhead.module.css';
 
 export function LooksAheadPart({ burrow }: { burrow: string }) {
   const ids = useId();
   const toast = useToast();
-  const v2 = hasLooksAheadV2(useSessionProtocol());
+  const protocol = useSessionProtocol();
+  const v2 = hasLooksAheadV2(protocol);
+  const hasMatters = hasLooksAheadMatters(protocol);
+  const { timeZone } = useBurrowViewer(burrow);
   const { words } = useTheAgent(burrow);
   const query = useLooksAhead({ params: { burrow } }, { retry: false });
   const update = useUpdateLooksAhead(burrow);
@@ -75,6 +82,7 @@ export function LooksAheadPart({ burrow }: { burrow: string }) {
   const week = T.week(view.week.checked, view.week.told);
   const rules = view.rules ?? [];
   const recent = view.recent ?? [];
+  const matters = view.matters ?? [];
   const trimmedRule = draftRule.trim();
   const canAddRule = trimmedRule.length >= 2 && rules.length < AHEAD_RULES_MAX && !busy;
 
@@ -182,6 +190,41 @@ export function LooksAheadPart({ burrow }: { burrow: string }) {
         </section>
       ) : null}
 
+      {hasMatters && (view.hasMail || matters.length > 0) ? (
+        <section className={styles.section} aria-labelledby={`${ids}-matters`} data-ahead="matters">
+          <SectionLabel as="h2" id={`${ids}-matters`}>
+            {T.matters}
+          </SectionLabel>
+          {matters.length ? (
+            <ul className={cx(styles.card, own.list)}>
+              {matters.map((matter, i) => (
+                <li
+                  key={matter.id}
+                  className={cx(styles.row, i === matters.length - 1 && styles.lastRow)}
+                  data-matter={matter.id}
+                >
+                  <span className={styles.rowMain}>
+                    <span className={styles.rowTitle}>{matter.title}</span>
+                    <span className={styles.rowMeta}>{matterLine(matter, timeZone)}</span>
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    aria-label={T.removeMatterLabel(matter.title)}
+                    onClick={() => save({ removeMatter: matter.id })}
+                  >
+                    {T.removeMatter}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={own.note}>{T.mattersEmpty(words.Name)}</p>
+          )}
+        </section>
+      ) : null}
+
       {v2 ? (
         <section className={styles.section} aria-labelledby={`${ids}-rules`} data-ahead="rules">
           <SectionLabel as="h2" id={`${ids}-rules`}>
@@ -276,7 +319,7 @@ export function LooksAheadPart({ burrow }: { burrow: string }) {
                   <span className={styles.rowTitle}>{item.title}</span>
                   <span className={styles.rowMeta}>{looksAheadCheckMeta(item)}</span>
                 </span>
-                {item.threadRootId ? (
+                {item.threadRootId && item.of !== 'triage' ? (
                   <Link to="/chat" search={{ thread: item.threadRootId }} className={own.threadLink}>
                     {T.openThread}
                   </Link>

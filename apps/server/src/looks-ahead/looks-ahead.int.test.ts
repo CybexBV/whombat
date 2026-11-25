@@ -5,7 +5,7 @@
  *   on private reads (mail, Drive files, Paperless/Notion docs);
  * - posts findings with verified sources and optional one-tap action chips, replies into the same event thread on a
  *   later check stage with prior-stage notes;
- * - checks incoming mail on its own (web closed from start, 14-day schedule context);
+ * - looks through incoming mail and checks its pick on its own (web closed from start, 14-day schedule context);
  * - records “Not useful” feedback with reason into future calibration, stops kinds, settles threads, and supports
  *   `checkAheadNow`.
  * Postgres because every step is a signed commit and a queued turn.
@@ -301,7 +301,8 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const check = await row(first);
     const mcp = await inTurn(check.dispatchId ?? '');
     const names = (await mcp.client.listTools()).tools.map((x) => x.name).sort();
-    expect(names).toEqual([...AHEAD_TOOLS].sort());
+    // A calendar check: everything but the triage pass's own end.
+    expect(names).toEqual(AHEAD_TOOLS.filter((n) => n !== 'ahead_triage').sort());
     const posting = await mcp.client.callTool({
       name: 'post_message',
       arguments: { conversationId: mine.dmId, text: 'hi' },
@@ -489,7 +490,15 @@ describe('Looks ahead (looks-ahead.md)', () => {
       attachments: [],
     });
 
-    second = (await watchAhead(t.services, TEST_BURROW_ID, { ...ready, fresh: true })) ?? '';
+    // New mail is looked through as a whole first; its pick is checked on its own on the next pass.
+    const look = await row((await watchAhead(t.services, TEST_BURROW_ID, { ...ready, fresh: true })) ?? '');
+    expect(look).toMatchObject({ source: 'triage', state: 'checking' });
+    expect(look.event.triage?.mails.map((m) => m.messageId)).toEqual(['msg_hotel_booking']);
+    const triage = await inTurn(look.dispatchId ?? '');
+    await triage.client.callTool({ name: 'ahead_triage', arguments: { picks: [{ mail: 'm1' }] } });
+    await triage.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    second = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
     expect(second).toMatch(/^ahc_/);
     const mailRow = await row(second);
     expect(mailRow).toMatchObject({ source: 'mail', stage: 'mail', state: 'checking' });
@@ -525,16 +534,23 @@ describe('Looks ahead (looks-ahead.md)', () => {
     await mcp.close();
     await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
 
-    // Recent checks in Settings view shows the mail check and its thread link.
+    // Recent checks in Settings view shows the mail check and its thread link, and the look as a mail row.
     const view = await looksAheadView(t.services, TEST_BURROW_ID);
-    expect(view.recent?.[0]).toMatchObject({
-      id: second,
+    const shown = view.recent?.find((r) => r.id === second);
+    expect(shown).toMatchObject({
       source: 'mail',
       stage: 'mail',
       state: 'told',
       kind: 'missing_event',
     });
-    expect(view.recent?.[0]?.threadRootId).toBeTruthy();
+    expect(shown?.threadRootId).toBeTruthy();
+    expect(view.recent?.find((r) => r.id === look.id)).toMatchObject({
+      source: 'mail',
+      stage: 'mail',
+      of: 'triage',
+      count: 1,
+      picked: 1,
+    });
 
     // checkAheadNow returns false when nothing more is due, and respects switching mailOn off.
     expect(await checkAheadNow(t.services, TEST_BURROW_ID, ready)).toBe(false);

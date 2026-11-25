@@ -289,16 +289,53 @@ describe('the list a turn is served (turn-efficiency.md TE-05)', () => {
       aheadDocs: true,
       turn: { ...personal.turn, ahead: true },
     };
-    expect(servedToolNames(check).sort()).toEqual([...AHEAD_TOOLS].sort());
+    expect(servedToolNames(check).sort()).toEqual(AHEAD_TOOLS.filter((n) => n !== 'ahead_triage').sort());
     // Without Paperless/Notion connected, ahead_read_docs stays unlisted.
     expect(servedToolNames({ ...check, aheadDocs: false })).not.toContain('ahead_read_docs');
     // Without the mail connected, no mail tools.
     expect(servedToolNames({ ...check, usable: ['calendar'] })).not.toContain('mail_read');
     // Its own tools nowhere else.
-    for (const name of ['search_web', 'read_web_page', 'ahead_read_docs', 'ahead_report'] as const) {
+    for (const name of [
+      'search_web',
+      'read_web_page',
+      'ahead_read_docs',
+      'ahead_report',
+      'ahead_triage',
+    ] as const) {
       expect(servedToolNames({ ...personal, usable: [...CONNECTOR_SERVICES] })).not.toContain(name);
       expect(toolFitsTurn(name, { ...personal.turn, outside: true })).toBe(false);
     }
+  });
+
+  it('serves a triage pass only ahead_triage, and no other check ahead_triage (looks-ahead.md)', () => {
+    const personal = { ...team, turn: { ...team.turn, personal: true } };
+    const check: ServedSelection = {
+      ...personal,
+      usable: [...CONNECTOR_SERVICES],
+      browser: 'preview',
+      connections: true,
+      aheadDocs: true,
+      turn: { ...personal.turn, ahead: true },
+    };
+    expect(servedToolNames({ ...check, turn: { ...check.turn, aheadTriage: true } })).toEqual([
+      'ahead_triage',
+    ]);
+    expect(servedToolNames(check)).not.toContain('ahead_triage');
+  });
+
+  it('lists ahead_watch only in a turn the person began themselves (looks-ahead.md)', () => {
+    const personal = { ...team, turn: { ...team.turn, personal: true } };
+    expect(servedToolNames(personal)).not.toContain('ahead_watch');
+    expect(servedToolNames({ ...personal, aheadWatch: true })).toContain('ahead_watch');
+    expect(servedToolNames({ ...personal, aheadWatch: true, automationStep: true })).not.toContain(
+      'ahead_watch',
+    );
+    expect(
+      servedToolNames({ ...personal, aheadWatch: true, turn: { ...personal.turn, ahead: true } }),
+    ).not.toContain('ahead_watch');
+    expect(
+      servedToolNames({ ...personal, aheadWatch: true, turn: { ...personal.turn, outside: true } }),
+    ).not.toContain('ahead_watch');
   });
 
   it('lists ahead_feedback only in the person’s turn in a finding’s thread', () => {

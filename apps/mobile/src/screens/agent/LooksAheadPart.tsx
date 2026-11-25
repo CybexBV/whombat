@@ -1,14 +1,16 @@
 /**
  * Settings → the assistant → **Looks ahead** on the phone (Whombat looks-ahead.md; the web's LooksAheadPart): switch
- * with Check now and week count, calendars, incoming mail switch, standing rules (“What to watch for”), stopped kinds,
- * and recent checks. Every change saves at once with a note; one that didn't go through says why. Pulling down reads
+ * with Check now and week count, calendars, incoming mail switch, what it keeps an eye on (“Keeping an eye on”, each
+ * with Remove), standing rules (“What to watch for”), stopped kinds, and recent checks. Every change saves at once with a note; one that didn't go through says why. Pulling down reads
  * it again. Only on a Whombat that has it (`hasLooksAhead`).
  */
 import {
+  hasLooksAheadMatters,
   hasLooksAheadV2,
   looksAheadCalendarMeta,
   looksAheadCheckMeta,
   looksAheadSavedText,
+  matterLine,
   LOOKS_AHEAD_TEXT as T,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
@@ -31,8 +33,10 @@ import { Note, type PartProps, PartScroll } from './parts';
 
 export function LooksAheadPart({ profile }: PartProps) {
   const theme = useTheme();
-  const { slug } = useBurrowBase();
-  const v2 = hasLooksAheadV2(useSessionProtocol());
+  const { slug, timeZone } = useBurrowBase();
+  const protocol = useSessionProtocol();
+  const v2 = hasLooksAheadV2(protocol);
+  const hasMatters = hasLooksAheadMatters(protocol);
   const query = useLooksAhead({ params: { burrow: slug } }, { retry: false });
   const update = useUpdateLooksAhead(slug);
   const checkNow = useCheckLooksAheadNow(slug);
@@ -74,6 +78,7 @@ export function LooksAheadPart({ profile }: PartProps) {
   };
   const rules = view.rules ?? [];
   const recent = view.recent ?? [];
+  const matters = view.matters ?? [];
   const trimmedRule = draftRule.trim();
   const canAddRule = trimmedRule.length >= 2 && rules.length < AHEAD_RULES_MAX && !busy;
 
@@ -151,6 +156,46 @@ export function LooksAheadPart({ profile }: PartProps) {
               disabled={busy || !view.on}
               onChange={(mailOn) => save({ mailOn })}
             />
+          )}
+        </Section>
+      ) : null}
+
+      {hasMatters && (view.hasMail || matters.length > 0) ? (
+        <Section title={T.matters}>
+          {matters.length ? (
+            matters.map((matter, i) => (
+              <View
+                key={matter.id}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  minHeight: 56,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderTopWidth: i === 0 ? 0 : 1,
+                  borderTopColor: theme.colors.line,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text size={15} weight={600}>
+                    {matter.title}
+                  </Text>
+                  <Text size={13} lh={1.4} color={theme.colors.mut}>
+                    {matterLine(matter, timeZone)}
+                  </Text>
+                </View>
+                <Button
+                  label={T.removeMatter}
+                  variant="secondary"
+                  disabled={busy}
+                  onPress={() => save({ removeMatter: matter.id })}
+                  accessibilityLabel={T.removeMatterLabel(matter.title)}
+                />
+              </View>
+            ))
+          ) : (
+            <Note>{T.mattersEmpty(profile.agent.name)}</Note>
           )}
         </Section>
       ) : null}

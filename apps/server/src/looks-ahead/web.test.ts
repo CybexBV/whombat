@@ -227,5 +227,11 @@ describe('what a finding may show', () => {
     );
     expect(senderName('noreply@ticketmaster.example')).toBe('ticketmaster.example');
     expect(senderName('Ticketmaster')).toBe('mail');
+    // A display name holding another address can't pass for the sender's.
+    expect(senderName('"Refund <boss@company.example>" <attacker@evil.example>')).toBe('evil.example');
+    // Two bracketed addresses: which is the sender's isn't sure, so it is named plainly.
+    expect(senderName('Refund <boss@company.example> <attacker@evil.example>')).toBe('mail');
+    expect(senderName('<attacker@evil.example> (x (y) <boss@company.example>)')).toBe('evil.example');
+    expect(senderName('"Bank" <not-an-address>')).toBe('mail');
   });
 });

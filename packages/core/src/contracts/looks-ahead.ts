@@ -1,6 +1,6 @@
 /**
  * Looks ahead (Whombat looks-ahead.md): its switch, calendars, incoming mail switch, standing rules, stopped kinds,
- * recent checks and an on-demand check, in Settings under the assistant. Session ops `looksAhead.get`,
+ * what it keeps an eye on, recent checks and an on-demand check, in Settings under the assistant. Session ops `looksAhead.get`,
  * `looksAhead.update` and `looksAhead.checkNow`; the person's own.
  */
 import { z } from 'zod';
@@ -15,7 +15,7 @@ export const looksAheadEndpoints = {
     method: 'GET',
     path: '/burrows/:burrow/looks-ahead',
     summary:
-      'Looks ahead: whether the assistant checks upcoming plans and incoming mail, which calendars, standing rules, stopped kinds, the last week and recent checks.',
+      'Looks ahead: whether the assistant checks upcoming plans and incoming mail, which calendars, standing rules, stopped kinds, what it keeps an eye on, the last week and recent checks.',
     params: B,
     response: LooksAheadView,
   }),
@@ -24,7 +24,7 @@ export const looksAheadEndpoints = {
     method: 'PUT',
     path: '/burrows/:burrow/looks-ahead',
     summary:
-      'Switch Looks ahead, incoming mail, a calendar or a kind of finding on or off, or add/remove a standing rule. The person’s own.',
+      'Switch Looks ahead, incoming mail, a calendar or a kind of finding on or off, add/remove a standing rule, or stop keeping an eye on something. The person’s own.',
     params: B,
     body: LooksAheadUpdate,
     response: LooksAheadView,

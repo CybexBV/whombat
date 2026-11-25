@@ -53,11 +53,16 @@ import { looksInTurn, NOT_A_LOOK } from '../looks/research';
 import { aheadDocSources } from '../looks-ahead/docs';
 import {
   AHEAD_TOOL_REFUSED,
+  aheadCheckOfTurn,
   aheadThreadOf,
   aheadToolRan,
   aheadToolRefusal,
+  aheadWatchServed,
+  NOT_A_TRIAGE,
   NOT_AN_AHEAD_CHECK,
   NOT_AN_AHEAD_THREAD,
+  NOT_THE_PERSONS_ASK,
+  TRIAGE_ONLY,
 } from '../looks-ahead/turn';
 import { loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import { withToolActivity } from '../runtime/activity-mcp';
@@ -122,6 +127,9 @@ async function turnShape(
     code: canCode || run,
     outside: outsidersTurn(dispatch),
     ...(dispatch.trigger === 'ahead' ? { ahead: true } : {}),
+    ...(dispatch.trigger === 'ahead' && (await aheadCheckOfTurn(services.db, dispatch))?.source === 'triage'
+      ? { aheadTriage: true }
+      : {}),
   };
 }
 
@@ -248,6 +256,10 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
         row?.trigger === 'ahead' && !!agentRow && (await aheadDocSources(db, agentRow.burrowId)).length > 0
       );
     }),
+    aheadWatch: once(async () => {
+      const row = await dispatch();
+      return !!row && row.agentId === agentId && (await aheadWatchServed(db, row));
+    }),
     tracker,
     unavailableActions: async () =>
       OPTIONAL_EXECUTOR_ACTION_TYPES.filter((t) => !services.approvals.hasExecutor(t)),
@@ -278,6 +290,7 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
   return {
     dispatch,
     account,
+    turn,
     tracker,
     /** A Whombat Feedback assessment's tools (feedback.md FB-21), or null for any other turn. */
     assessment,
@@ -325,12 +338,17 @@ async function notServed(
   auth: AgentAuth,
   name: McpToolName,
   row: DispatchRow | undefined,
+  shape: TurnShape,
 ): Promise<CallToolResult> {
   if (name === 'report_assessment') return errorResult('forbidden', NOT_AN_ASSESSMENT);
   if (name === 'propose_connection_actions') return errorResult('forbidden', NOT_PROPOSING_ACTIONS);
   if (name === 'look_report') return errorResult('forbidden', NOT_A_LOOK);
+  // A triage pass only picks; any other check ends with ahead_report.
+  if (shape.ahead && shape.aheadTriage) return errorResult('forbidden', TRIAGE_ONLY);
+  if (shape.ahead && name === 'ahead_triage') return errorResult('forbidden', NOT_A_TRIAGE);
   if (
     name === 'ahead_report' ||
+    name === 'ahead_triage' ||
     name === 'search_web' ||
     name === 'read_web_page' ||
     name === 'ahead_read_docs'
@@ -338,6 +356,7 @@ async function notServed(
     return errorResult('forbidden', NOT_AN_AHEAD_CHECK);
   if (name === 'ahead_feedback') return errorResult('forbidden', NOT_AN_AHEAD_THREAD);
   if (row?.trigger === 'ahead') return errorResult('forbidden', AHEAD_TOOL_REFUSED);
+  if (name === 'ahead_watch') return errorResult('forbidden', NOT_THE_PERSONS_ASK);
   const account = row?.onBehalfOfAccountId ?? null;
   const connector = mcpToolConnector(name);
   if (connector) {
@@ -452,7 +471,8 @@ export async function callTool(
   }
   // Only what the turn is served runs in it: a tool left out of its list (an outsiders' turn's above all) can't be
   // called by name instead. Decided by the rules the list is made with (`servesTool`).
-  if (!(await facts.serves(name))) return notServed(services, auth, name, await facts.dispatch());
+  if (!(await facts.serves(name)))
+    return notServed(services, auth, name, await facts.dispatch(), await facts.turn());
   const def = MCP_TOOLS[name];
   const parsed = def.input.safeParse(args ?? {});
   if (!parsed.success) {

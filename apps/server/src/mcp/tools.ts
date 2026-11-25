@@ -67,12 +67,14 @@ import {
   aheadFeedback,
   aheadReportSources,
   aheadThreadOf,
+  aheadWatchTool,
   forgetSeen,
   NOT_AN_AHEAD_THREAD,
   readDocsTool,
   readWebPageTool,
   reportAhead,
   searchWebTool,
+  triageAhead,
 } from '../looks-ahead/turn';
 import { whombatBackupTool } from '../managed/backup-tool';
 import { tailnetDevicesTool } from '../managed/tailnet-tool';
@@ -693,7 +695,8 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     if (!(await looksInTurn(ctx.services.db, ctx.agentId, ctx.dispatch.id))) throw forbidden(NOT_A_LOOK);
     return run(ctx, reportLook, { dispatchId: ctx.dispatch.id, report: input }, () => ({}));
   },
-  // Looks ahead (looks-ahead.md): a check's own tools, and the person's word on a finding in its thread.
+  // Looks ahead (looks-ahead.md): a check's own tools, a triage pass's end, what the person asks to keep an eye on, and
+  // their word on a finding in its thread.
   search_web: (ctx, input) => searchWebTool(ctx.services, ctx.dispatch, input.query),
   read_web_page: (ctx, input) => readWebPageTool(ctx.services, ctx.dispatch, input.url),
   ahead_read_docs: (ctx, input) => readDocsTool(ctx.services, ctx.dispatch, input.query),
@@ -710,6 +713,16 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     forgetSeen(ctx.services, ctx.dispatch.id);
     return out;
   },
+  // A triage pass's end: its picks by number, nothing else.
+  ahead_triage: async (ctx, input) => {
+    const out = await run(ctx, triageAhead, { dispatchId: ctx.dispatch.id, picks: input.picks }, (r) => ({
+      picked: r.picked,
+    }));
+    forgetSeen(ctx.services, ctx.dispatch.id);
+    return out;
+  },
+  // What the person asks Whombat to keep an eye on in their mail, only in a turn they began themselves.
+  ahead_watch: (ctx, input) => aheadWatchTool(ctx.services, ctx.dispatch, input),
   ahead_feedback: async (ctx, input) => {
     if (!(await aheadThreadOf(ctx.services.db, ctx.dispatch))) throw forbidden(NOT_AN_AHEAD_THREAD);
     return run(

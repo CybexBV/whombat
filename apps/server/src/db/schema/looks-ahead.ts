@@ -1,4 +1,11 @@
-import type { AheadKind, AheadStage, AheadTriggerSource } from '@whombat/core';
+import type {
+  AheadKind,
+  AheadMatterMatch,
+  AheadMatterReason,
+  AheadStage,
+  AheadTriggerSource,
+  AheadWaitingOn,
+} from '@whombat/core';
 import { sql } from 'drizzle-orm';
 import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { conversations } from './conversations';
@@ -30,10 +37,57 @@ export const looksAheadSettings = pgTable('looks_ahead_settings', {
 });
 
 /**
- * One check of one stage/version of an event or one incoming email (docs/decisions/looks-ahead.md): what the calendar
- * or mailbox said when it began, the turn that checks it, and how it ended. `quiet`: nothing to tell; `told`: a
- * finding posted in its thread (`thread_root_id`, a unique message id the check holds before it exists, so the quiet
- * turn has a place of its own); `failed`: the turn ended without a report. Rows go 30 days after the event.
+ * One thing Looks ahead keeps an eye on (“Keeping an eye on”, docs/decisions/looks-ahead.md): what it is, who it is with,
+ * whom it waits on, an optional date and a short note, and how mail is matched to it. Fixed short fields Whombat scrubs,
+ * shown and removable in Settings, so nothing a stranger wrote settles here unseen. The person opens one in Chat
+ * (`origin` `person`, matched by their own words) or a mail check does (`check`, matched only by that mail's thread and
+ * sender). `closed`: done, removed by the person, or expired after 30 days without news.
+ */
+export const aheadMatters = pgTable(
+  'ahead_matters',
+  {
+    id: text('id').primaryKey(),
+    burrowId: text('burrow_id')
+      .notNull()
+      .references(() => burrows.id, { onDelete: 'cascade' }),
+    personId: text('person_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    /** Who opened it: the person in their own words, or a mail check. */
+    origin: text('origin').$type<'person' | 'check'>().notNull(),
+    title: text('title').notNull(),
+    who: text('who').notNull().default(''),
+    waitingOn: text('waiting_on').$type<AheadWaitingOn>().notNull(),
+    /** Its date, when it has one: what a follow-up is timed by. */
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    /** A short factual note on where it stands, for the next check about it. */
+    note: text('note'),
+    /** How new mail is matched to it: its threads, sender words and (only the person's own) subject words. */
+    match: jsonb('match').$type<AheadMatterMatch>().notNull(),
+    state: text('state').$type<'open' | 'closed'>().notNull(),
+    closedReason: text('closed_reason').$type<'done' | 'removed' | 'expired'>(),
+    /** The Chat its findings go in. */
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+    /** The Chat thread its findings go in: for one the person asked for, the thread they asked in. */
+    threadRootId: text('thread_root_id'),
+    /** The reasons it was followed up for already, each once. */
+    followedUp: jsonb('followed_up').$type<AheadMatterReason[]>().notNull().default([]),
+    /** The last mail about it, or when it began: a follow-up for no answer and the expiry count from here. */
+    lastNewsAt: timestamp('last_news_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (t) => [index('ahead_matters_state_idx').on(t.burrowId, t.state)],
+);
+
+/**
+ * One check of one stage/version of an event, one incoming email, one follow-up of a thing kept an eye on
+ * (`matter_id`), or one look through new mail (`triage`) (docs/decisions/looks-ahead.md): what the calendar or mailbox
+ * said when it began, the turn that checks it, and how it ended. `quiet`: nothing to tell (for a look: it picked, and
+ * its picks wait in `event.triage.picks`); `told`: a finding posted in its thread (`thread_root_id`, a unique message id
+ * the check holds before it exists, so the quiet turn has a place of its own); `failed`: the turn ended without a
+ * report. Rows go 30 days after `end_at`.
  */
 export const aheadChecks = pgTable(
   'ahead_checks',
@@ -48,11 +102,14 @@ export const aheadChecks = pgTable(
     personId: text('person_id')
       .notNull()
       .references(() => principals.id, { onDelete: 'cascade' }),
-    /** What triggered this check: a calendar event or an incoming email. */
+    /** What started this check: a calendar event, an incoming email, a look through new mail, or a thing kept an eye on. */
     source: text('source').$type<AheadTriggerSource>().notNull().default('calendar'),
-    /** Check stage: early (2–7d), eve (afternoon before), morning (2–4h), or mail. */
+    /** Check stage: early (2–7d), eve (afternoon before), morning (2–4h), mail, triage or matter. */
     stage: text('stage').$type<AheadStage>().notNull().default('eve'),
-    /** `uid:...` / `<connection id>:<calendar id>:<event id>`, or `mail:<connection id>:<message id>`. */
+    /**
+     * `uid:...` / `<connection id>:<calendar id>:<event id>`, `mail:<connection id>:<message id>`, `matter:<id>` or
+     * `triage:<start>`.
+     */
     eventKey: text('event_key').notNull(),
     /** Event version hash (`eve` keeps bare hash; other stages suffix `:stage` for unique indexing). */
     version: text('version').notNull(),
@@ -69,7 +126,7 @@ export const aheadChecks = pgTable(
         description: string;
         timeZone: string;
         allDay?: boolean;
-        /** Where a calendar event is read again before a finding is told. */
+        /** Where a calendar event is read again before a finding is told, or the mailbox of a mail check. */
         connectionId: string;
         calendarId: string;
         eventId: string;
@@ -92,7 +149,48 @@ export const aheadChecks = pgTable(
           subject: string;
           date: string;
           snippet: string;
+          /** The thread it is in: what a thing kept an eye on is matched by. */
+          threadId?: string;
+          /** The sender's address, read from the whole From line when it came: what a matter is opened by. */
+          address?: string;
         };
+        /** A look through new mail: what it covered, the mails it listed (by number) and what it picked. */
+        triage?: {
+          /** The mail it covers came after this (ISO). */
+          since: string;
+          /**
+           * When the inboxes it lists were read (ISO; the oldest read among them): once it finished, the next pass
+           * covers mail from here, less an overlap. Absent on passes from before it was kept: their start stands in.
+           */
+          sweptAt?: string;
+          /** How many mails it looked through. */
+          count: number;
+          mails: {
+            ref: string;
+            connectionId: string;
+            provider: 'google' | 'microsoft' | 'imap';
+            account: string;
+            messageId: string;
+            threadId: string;
+            from: string;
+            subject: string;
+            date: string;
+            snippet: string;
+            unread?: boolean;
+            /** The sender's address, read from the whole From line when it came. */
+            address?: string;
+          }[];
+          /** The things kept an eye on it was shown (`k1`…), so a pick's matter maps back to its id. */
+          matters?: { ref: string; id: string }[];
+          /** Its picks, which wait here as mail checks for 48 hours. */
+          picks?: { ref: string; matterId?: string }[];
+        };
+        /**
+         * The thing kept an eye on a mail check or a follow-up is about, and why a follow-up runs. `matched`: a mail
+         * check's mail really matches it (by its thread, sender or words), not only a triage pass's say-so: only then
+         * is news on a matter the person asked for told beyond the day's findings.
+         */
+        matter?: { id: string; reason?: AheadMatterReason; matched?: boolean };
       }>()
       .notNull(),
     state: text('state').$type<'checking' | 'quiet' | 'told' | 'failed'>().notNull(),
@@ -118,6 +216,8 @@ export const aheadChecks = pgTable(
     mailReadAt: timestamp('mail_read_at', { withTimezone: true }),
     reportedAt: timestamp('reported_at', { withTimezone: true }),
     settledAt: timestamp('settled_at', { withTimezone: true }),
+    /** The thing kept an eye on this check is about; its checks stay when it goes. */
+    matterId: text('matter_id').references(() => aheadMatters.id, { onDelete: 'set null' }),
   },
   (t) => [
     // One check of a version+stage, and one going on at a time per Whombat, whatever starts them.
@@ -127,8 +227,10 @@ export const aheadChecks = pgTable(
     index('ahead_checks_started_idx').on(t.burrowId, t.startedAt),
     uniqueIndex('ahead_checks_thread_idx').on(t.threadRootId),
     index('ahead_checks_dispatch_idx').on(t.dispatchId),
+    index('ahead_checks_matter_idx').on(t.burrowId, t.matterId),
   ],
 );
 
 export type AheadCheckRow = typeof aheadChecks.$inferSelect;
 export type LooksAheadSettingsRow = typeof looksAheadSettings.$inferSelect;
+export type AheadMatterRow = typeof aheadMatters.$inferSelect;

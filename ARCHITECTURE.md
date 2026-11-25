@@ -595,8 +595,8 @@ Automations. Code finds it by kind
   question, a yes or no on its approval, a schedule, Whombat's own signers (GitHub's checks, automations,
   Feedback, the report trackers), a server task or a T3 Code thread it handed work to that finished or asks something, a member of
   a council it started whose lead thread is done, a task of a delegation that needs a decision, a look
-  Whombat sees on a server, connection or device, and something on the person's calendar Whombat has it check ahead
-  (below). The agent never wakes itself.
+  Whombat sees on a server, connection or device, and a plan, a mail or a matter of the person's Whombat has it check
+  ahead (below). The agent never wakes itself.
 - **The person's turns** (everything except below) read every room of the burrow, the memory, the notes, every
   connection and the Vault entries switched on for the agent.
 - **An outsiders' turn** — a Feedback assessment, what a tracker customer's report or reply starts, incoming mail —
@@ -1766,28 +1766,85 @@ Setup and operation: `docs/github.md`.
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
   back at once, without a message or a turn.
 - **Looks ahead** (`apps/server/src/looks-ahead/`, [looks-ahead.md](docs/decisions/looks-ahead.md)): every five minutes
-  a home job reads, while the assistant's calendar and/or mail keys are Allowed, the calendars of the person's Google
-  and Microsoft 365 accounts that are on (up to 7 days ahead, or 14 days when incoming mail checks run) and recent
-  inbox messages across Google, Microsoft 365 and Email/IMAP (`looks-ahead/mail.ts`, pre-filtered deterministically
-  before any AI turn; `looks_ahead_settings` keeps the switch, `mail_on`, calendar overrides, user-owned standing
-  `rules` and stopped kinds). From 08:00 until 20:30, one at a time, at most 8 checks and 4 findings a day, it starts
-  the highest-priority due check (`planAheadPass`: `morning` > `eve` > `mail` > `early`, then signal priority, then
-  start time): timed and real all-day plans (including events without a location field and modified repeating
-  occurrences) plus actionable incoming emails. Calendar checks carry the rest of that day's accepted schedule; mail
-  checks carry the next 14 days of accepted plans and start with `mail_read_at` stamped so the web is permanently
-  closed. A check (`ahead_checks`, unique per version+stage, never repeated; later stages carry structured per-event
-  prior `note`s, never Hermes memory) runs quietly on the background model (`review: false`; ended Hermes sessions are
-  dropped via `hermes_session_drops`). It is served only `AHEAD_TOOLS` (`mcp/served.ts`): `search_web` (Brave with
-  `extra_snippets`, public words only), `read_web_page` (extracting JSON-LD event data and falling back to an
-  ephemeral incognito headless Chromium through a local SSRF-checked public-IP proxy on JS shells or bot-blocks),
-  `mail_search`/`mail_read`, `files_search`/`files_read`, strictly read-only `ahead_read_docs` (Paperless-ngx and
-  Notion when connected), and `ahead_report`; reading any private source closes the web for the check. `ahead_report`
-  posts sourced findings (pages read or attempted-and-blocked search fallbacks, mails, Drive/OneDrive files,
-  Paperless/Notion docs, or `{ calendar: true }` conflicts) in one thread per event (later stages reply in the same
-  thread) with an optional one-tap action chip plus “Not useful” (with optional reason calibrating future checks) and
-  “Stop checking for this”. Threads settle after the event (or 48 hours for mail findings) when the person didn't write
-  in them. Settings → {assistant} → Looks ahead (`looksAhead.get`, `looksAhead.update`, `looksAhead.checkNow`) manages
-  switches, standing rules, stopped kinds, recent checks and on-demand passes.
+  a home job (`looks-ahead/watch.ts`) reads, while the assistant's keys allow it, the person's calendars that are on (up
+  to 7 days ahead, 14 for a mail turn's plans) and, when incoming mail is on, the newest 50 inbox mails of every Google,
+  Microsoft 365 and Email/IMAP mailbox (`looks-ahead/mail.ts`); `looks_ahead_settings` keeps the switch, `mail_on`,
+  calendar overrides, the person's standing `rules` and stopped kinds. From 08:00 until 20:30, one at a time, while a
+  turn of the person's could run, it starts the one most urgent thing due (`planAheadPass`): a calendar check in its
+  stage (`morning`, then `eve`), a mail check (one that matches a matter first), a matter's follow-up, a triage pass,
+  then an `early` calendar check. At most 12 checks and 4 findings a day; at most 3 triage passes, 4.5 hours apart,
+  which aren't counted as checks. Each is one `ahead_checks` row, unique per thing and version, never repeated, and one
+  quiet turn (trigger `ahead`) on the background model with no conversation, no visible activity, `review: false` and
+  its Hermes session dropped when it ends (`hermes_session_drops`). Its lines
+  (`packages/agent-runtime/src/persona/ahead.ts`) give every stranger's word delimited and defused; the Hermes policy
+  and the server's served tools (`mcp/served.ts`) both hold each kind of turn to its own tools.
+  - **A triage pass** (`aheadTriageDue`, `aheadTriageSince`) runs when new mail came after the inbox read of the last
+    pass that finished (with 10 minutes of overlap, at most 48 hours back, the first 24 hours); a failed pass doesn't
+    move that point and may be retried at once, though it counts as one of the day's three. Mail a recent pass already
+    listed, the person's own mail and plain bulk mail are left out before the turn (`aheadMailNoise`), and the rest is a
+    numbered list (`m1`…: sender, subject, date, a short snippet, at most 60, those with a booking, deadline or rule
+    word first; the rest wait for the next pass), beside the open matters (`k1`…, without their notes), the next 14 days
+    of plans, the rules and the recent “Not useful” verdicts. Its only tool is `ahead_triage`: at most 3 picks, each a
+    mail's number and perhaps a matter's ref; it reads no mail and writes no words. The picks stay on its row
+    (`event.triage.picks`) for 48 hours, and the watcher starts each as a mail check within the day's budget; a pass's
+    link to a matter holds only when the mail matches that matter and came after it began, else the pick is checked as
+    any other mail. A read takes the newest 50 mails of a mailbox.
+  - **A mail check** reads one mail (`mail_search`, `mail_read`, files, docs; the web is closed from the start: its
+    row's `mail_read_at` is stamped) with the next 14 days of plans, and ends with `ahead_report`. The server refuses
+    its finding or a change to a matter until it has read its own mail with `mail_read`, and takes `{ matter: true }` as
+    a source only from a follow-up; one whose turn failed, or came at night, is tried once more. It looks for a
+    booking missing from or differing
+    with the calendar, a deadline, someone waiting on the person's answer, a problem with an account or payment, and
+    news they wait for. Given a matter (`matter_id`, what earlier checks of it told and where its earlier mail is), it
+    reports news on it or stays silent, and says with `ahead_report`'s `matter` whether it goes on or is done; without
+    one it may open a matter for something that goes on after today (none with the title of an open one, which stays
+    as it is).
+  - **Matters** (`ahead_matters`, at most 30 open): what Whombat keeps an eye on, in fixed short fields scrubbed like a
+    finding's words (title, who, whom it waits on, an optional date from today to 366 days ahead, and a note only its
+    own later checks see), with how mail is matched to it (`aheadMatterMatches`): one of its mail threads; or a sender
+    word on the boundaries of the sender's address (a full address equal to it, or a site its domain equals or ends in
+    after a dot), the address read strictly from the From line (quoted names and comments dropped; more than one
+    bracketed address or anything unbalanced means none) and never from the display name, plus one of its subject words
+    (3 or more characters) in the subject or snippet when it has any; or, without sender words, a subject word. Only
+    mail that arrived after the matter began matches, a thread match wins over another matter's, and bulk mail from the
+    sender matches only a matter the person asked for (or a thread). A check opens at most 3 a day, matched only by that
+    mail's thread and its sender's full address, and none with the title of an open one; the person opens one
+    with `ahead_watch` (`start`, `list`, `stop`) in a turn their own message
+    began (`dm`, `mention`), which needs Looks ahead and incoming mail on, refuses a bare word (`klm`), a fragment
+    (`info@`) or a public mailbox provider's site (`gmail.com`) as a sender word, and a date outside today to 366 days
+    ahead, and makes a matter a check already keeps (same title) theirs: their who, waiting on, date, sender and subject
+    words replace the check's, it starts afresh, and its mail threads stay. Up to 3 matching mails a day per matter
+    (`AHEAD_MATTER_CHECKS_PER_DAY`; one a day on the sender alone for a matter a check opened) become a mail check at
+    once, counted after the matter is chosen; the rest go through the triage, never to another matter. `aheadMatterDue`
+    starts one follow-up per reason (`source: 'matter'`): from the day before the date of one that waits on the person
+    (`due`), or at its date or after 5 days without news for one that waits on someone else (`no_answer`), never within
+    12 hours of its start or last news (`AHEAD_MATTER_QUIET_MS`); a reason is spent once its check reported, and a
+    failed turn is tried once more (a `due` one until noon the day after its date). The follow-up is given where to look
+    (`anchors`: the matter's sender address or site and the ids of the mails its earlier checks were about) and reads
+    those mails and that sender's newer mail; handled, it closes the matter (silently for one a check opened, with a
+    finding for one the person asked for); otherwise it tells, with `{ matter: true }` as its source when there is no
+    mail to point at. A matter closes when a check says it is done, when the person removes it, or after 30 days without
+    news and no sooner than 14 days after its date.
+  - **A calendar check** reads the plan and the rest of its day's accepted plans: first the web (`search_web` on Brave
+    with public words only, `read_web_page` with JSON-LD event data and an incognito headless Chromium behind a local
+    SSRF-checked proxy), then mail, Drive/OneDrive files and read-only Paperless-ngx and Notion docs
+    (`ahead_read_docs`); reading any private source closes the web for the check. Later stages of the same event get
+    the earlier stages' scrubbed `note`s.
+  - **Findings**: `ahead_report` posts a sourced finding (Whombat names each source itself) in the person's Chat with a
+    push, in one thread per event, mail or matter (news on one the person asked for goes in the thread they asked in),
+    with an optional one-tap action chip, “Not useful” (with an optional reason later checks read) and “Stop checking
+    for this”, which stops the finding's kind or, under a finding about a matter, that matter (`ahead_feedback`); both
+    act on the newest finding in their thread (quick replies show only under the last message). What the person asked
+    for (its matched mail, linked picks whose mail matches it, and follow-ups) is never held back by the day's findings,
+    and its news is told whatever kinds are stopped, never at night. Threads settle 2 hours after the event or 48 hours
+    after a mail finding when the person didn't write in them, by their newest finding; Looks ahead settles only threads
+    its own finding started. What lasts is only the notes of an event's stages, the matters, the person's rules and
+    their recent verdicts (a mail finding's without its title).
+  - Settings → {assistant} → Looks ahead (`looksAhead.get`, `looksAhead.update`, `looksAhead.checkNow`) shows the switch
+    with “Check now”, calendars, the incoming mail switch, “Keeping an eye on” (each matter with Remove, while a mailbox
+    is connected or any matter is kept), standing rules, stopped kinds, the week's count and the 15 most recent checks
+    (a told one's “Open thread” opens the thread its finding is in); the assistant reads and changes it as the person
+    asks.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;

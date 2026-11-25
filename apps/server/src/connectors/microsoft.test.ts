@@ -155,6 +155,29 @@ describe('Microsoft unread mail', () => {
     expect(urls[1]?.searchParams.get('$top')).toBe('3');
   });
 
+  it('reads the Inbox folder alone for in:inbox, newest first, and searches every folder otherwise', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ value: [] }))
+      .mockResolvedValueOnce(response({ value: [] }));
+    const ws = new MicrosoftWorkspace(fetcher);
+    await ws.mailSearch('tok', { query: 'in:inbox', limit: 50 });
+    await ws.mailSearch('tok', { query: 'invoice', limit: 5 });
+    const urls = fetcher.mock.calls.map(([u]) => new URL(String(u)));
+    expect(urls[0]?.pathname).toBe('/v1.0/me/mailFolders/inbox/messages');
+    expect(urls[0]?.searchParams.get('$orderby')).toBe('receivedDateTime desc');
+    expect(urls[0]?.searchParams.get('$search')).toBeNull();
+    expect(urls[0]?.searchParams.get('$top')).toBe('50');
+    // Only the fields a summary holds, never the bodies.
+    const fields = urls[0]?.searchParams.get('$select')?.split(',') ?? [];
+    expect(fields).toEqual(
+      expect.arrayContaining(['id', 'conversationId', 'from', 'subject', 'bodyPreview']),
+    );
+    expect(fields).not.toContain('body');
+    expect(urls[1]?.pathname).toBe('/v1.0/me/messages');
+    expect(urls[1]?.searchParams.get('$search')).toBe('"invoice"');
+  });
+
   it('reads only the count when nothing is unread', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ unreadItemCount: 0 }));
     expect(await new MicrosoftWorkspace(fetcher).inboxUnread('tok', { newest: 3 })).toEqual({

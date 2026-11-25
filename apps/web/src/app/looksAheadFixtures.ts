@@ -1,7 +1,8 @@
 /**
  * Looks ahead in fixture mode (Whombat looks-ahead.md): Settings → the assistant → Looks ahead over the real REST
  * contract, kept in memory. Mara's Google account has two calendars (her own on, Family off), incoming mail checks on,
- * one standing rule, one stopped kind, four checks in the last week and two recent checks.
+ * one standing rule, one stopped kind, four checks in the last week, four recent checks (a look through new mail and a
+ * follow-up among them) and three things kept an eye on.
  */
 import { AHEAD_KINDS, AHEAD_RULES_MAX, LooksAheadUpdate, type LooksAheadView } from '@whombat/core';
 import { burrow } from '@whombat/fixtures';
@@ -34,6 +35,32 @@ export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
     week: { checked: 4, told: 1 },
     recent: [
       {
+        id: 'ahc_4',
+        source: 'mail',
+        stage: 'mail',
+        title: 'New mail',
+        at: '2026-12-13T16:00:00Z',
+        state: 'quiet',
+        kind: null,
+        threadRootId: null,
+        feedback: null,
+        of: 'triage',
+        count: 42,
+        picked: 2,
+      },
+      {
+        id: 'ahc_3',
+        source: 'mail',
+        stage: 'mail',
+        title: 'Refund for the cancelled flight',
+        at: '2026-12-13T15:30:00Z',
+        state: 'told',
+        kind: 'deadline',
+        threadRootId: 'msg_ahead_2',
+        feedback: null,
+        of: 'matter',
+      },
+      {
         id: 'ahc_1',
         source: 'calendar',
         stage: 'eve',
@@ -54,6 +81,33 @@ export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
         kind: null,
         threadRootId: null,
         feedback: null,
+      },
+    ],
+    matters: [
+      {
+        id: 'ahm_1',
+        title: 'Answer the notary about the deed',
+        who: 'The notary',
+        waitingOn: 'you',
+        due: '2026-12-16',
+        since: '2026-12-10T09:12:00Z',
+        asked: false,
+      },
+      {
+        id: 'ahm_2',
+        title: 'Refund for the cancelled flight',
+        who: 'The airline',
+        waitingOn: 'them',
+        since: '2026-12-08T17:40:00Z',
+        asked: false,
+      },
+      {
+        id: 'ahm_3',
+        title: 'Reply from the plumber about the boiler',
+        who: 'The plumber',
+        waitingOn: 'them',
+        since: '2026-12-12T08:05:00Z',
+        asked: true,
       },
     ],
     ...seed,
@@ -113,6 +167,8 @@ export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
     } else if ('removeRule' in u) {
       const target = u.removeRule.trim().toLowerCase();
       view = { ...view, rules: (view.rules ?? []).filter((r) => r.toLowerCase() !== target) };
+    } else if ('removeMatter' in u) {
+      view = { ...view, matters: (view.matters ?? []).filter((m) => m.id !== u.removeMatter) };
     } else view = { ...view, on: u.on };
     return json(view);
   }

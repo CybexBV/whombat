@@ -192,25 +192,36 @@ export const AHEAD_REFUSED =
   'While checking ahead you use only Whombat’s tools: search_web, read_web_page, mail, files, connected docs and ahead_report.';
 
 /**
- * A Looks ahead check's own tools as Claude Code and Hermes name them (`mcp__whombat__<tool>`,
- * `mcp__editor_whombat_<tag>__<tool>`): exactly `AHEAD_TOOL_NAMES`, so this policy holds on its own as well as the server.
+ * A look through new mail (looks-ahead.md, the triage) sees the most strangers' words of any turn and only picks: its one
+ * tool is `ahead_triage`.
  */
-const AHEAD_TOOL_PATTERNS = AHEAD_TOOL_NAMES.flatMap((tool) => [
-  `mcp__whombat__${tool}`,
-  `mcp__editor_whombat_*__${tool}`,
-]);
+export const AHEAD_TRIAGE_REFUSED =
+  'While looking through new mail you only pick: end with ahead_triage, the mails’ numbers and a matter’s ref where one fits.';
+
+/** A Looks ahead tool as Claude Code and Hermes name it (`mcp__whombat__<tool>`, `mcp__editor_whombat_<tag>__<tool>`). */
+const aheadToolPatterns = (tools: readonly string[]) =>
+  tools.flatMap((tool) => [`mcp__whombat__${tool}`, `mcp__editor_whombat_*__${tool}`]);
+
+/**
+ * A Looks ahead turn's own tools, so this policy holds on its own as well as the server: a triage pass only
+ * `ahead_triage`; every other check `AHEAD_TOOL_NAMES` but that one.
+ */
+const AHEAD_TRIAGE_PATTERNS = aheadToolPatterns(['ahead_triage']);
+const AHEAD_TOOL_PATTERNS = aheadToolPatterns(AHEAD_TOOL_NAMES.filter((t) => t !== 'ahead_triage'));
 
 /** The turn's policy from its context: see the file comment. */
 export function hermesPolicy(ctx: DispatchContext, options: HermesPolicyOptions = {}): HermesPolicy {
-  if (ctx.dispatch.trigger === 'ahead' && !options.replyOnly)
+  if (ctx.dispatch.trigger === 'ahead' && !options.replyOnly) {
+    const triage = ctx.ahead?.source === 'triage';
     return {
       default: 'block',
       review: false,
       rules: [
-        { tools: AHEAD_TOOL_PATTERNS, action: 'allow' },
-        { tools: ['*'], action: 'block', message: AHEAD_REFUSED },
+        { tools: triage ? AHEAD_TRIAGE_PATTERNS : AHEAD_TOOL_PATTERNS, action: 'allow' },
+        { tools: ['*'], action: 'block', message: triage ? AHEAD_TRIAGE_REFUSED : AHEAD_REFUSED },
       ],
     };
+  }
   if (options.replyOnly)
     return {
       default: 'block',

@@ -129,10 +129,13 @@ export const PEOPLE_SETTINGS = {
   'me.updateProfile': change('you.profile', 'Change your name and title'),
 
   // Looks ahead (looks-ahead.md): what the assistant checks ahead is the person's to switch, as they ask.
-  'looksAhead.get': read('agent.ahead', 'Read what Looks ahead checks, its rules and recent checks'),
+  'looksAhead.get': read(
+    'agent.ahead',
+    'Read what Looks ahead checks and keeps an eye on, its rules and recent checks',
+  ),
   'looksAhead.update': change(
     'agent.ahead',
-    'Change Looks ahead switches, calendars, kinds or standing rules',
+    'Change Looks ahead switches, calendars, rules or what it keeps an eye on',
   ),
   'looksAhead.checkNow': change('agent.ahead', 'Check upcoming plans and incoming mail now'),
 
