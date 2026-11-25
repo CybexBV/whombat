@@ -20,6 +20,7 @@ import {
   OnePasswordDisconnectChoice,
   thingId,
   topics,
+  UPTIME_ID,
 } from '@whombat/core';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -34,11 +35,13 @@ import {
   connectionTools,
   noticeQuiets,
   noticeStates,
+  thingCauses,
   watchOffs,
   watchOns,
 } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { gatewayConnectionOf, gatewayName, isGatewayCatalogId } from '../gateway/store';
+import { publishHomeChanged } from '../home/notify';
 import { forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { burrowView } from '../read/views';
@@ -242,6 +245,17 @@ export const changeConnection = defineCommand({
     requirePerson(ctx);
     const before = await lockedRow(tx, ctx.burrow.id, input.connectionId);
     const set: ConnectionChanges = { ...input.set };
+    if (before.catalogId === UPTIME_ID && input.what.includes('fields')) {
+      // The previous target's result and confirmation counts say nothing about the saved check.
+      set.glance = null;
+      set.glanceAt = null;
+      const thing = thingId('connection', before.id);
+      await tx.delete(noticeStates).where(eq(noticeStates.thingId, thing));
+      await tx
+        .delete(thingCauses)
+        .where(and(eq(thingCauses.ownerId, ctx.burrow.id), eq(thingCauses.thingId, thing)));
+      publishHomeChanged(ctx, [ctx.actor.id], ['things', 'watch', 'needsYou']);
+    }
     const [row] = await tx
       .update(catalogConnections)
       .set({ ...set, updatedAt: ctx.now })

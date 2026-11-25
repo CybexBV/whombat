@@ -39,8 +39,8 @@ func warningThreshold(find LimitLookup, rule, entity string, fallback, critical 
 	if value, ok := find.threshold(rule, entity, fallback); value < critical {
 		return value, ok
 	}
-	// A sensor's own limit can change after a custom warning was set.
-	if fallback >= critical {
+	// Temperature warnings follow their sensor. Wear keeps its fixed default.
+	if rule == RuleTempHigh && fallback >= critical {
 		fallback = TempWarnThreshold(critical)
 	}
 	return fallback, false

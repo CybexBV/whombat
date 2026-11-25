@@ -93,3 +93,18 @@ func TestTemperatureBannerUsesEffectiveWarningLimit(t *testing.T) {
 		t.Fatalf("warning text: %+v", warning)
 	}
 }
+
+func TestWearWarningDoesNotScaleWithAnOlderLowCriticalLimit(t *testing.T) {
+	wear := 55.0
+	report := &proto.Report{Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme", WearPct: &wear}}}
+	limits := func(rule, entity string) (float64, bool) {
+		return 60, rule == RuleWearCritical
+	}
+	if conditions := HostConditionsWithLimits(report, limits); len(conditions) != 0 {
+		t.Fatalf("wear warning below the fixed default: %+v", conditions)
+	}
+	wear = 60
+	if conditions := HostConditionsWithLimits(report, limits); len(conditions) != 1 || conditions[0].Rule != RuleWearCritical {
+		t.Fatalf("expected critical wear condition: %+v", conditions)
+	}
+}

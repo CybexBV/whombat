@@ -8,25 +8,38 @@ import { and, asc, eq, gt, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { events, incidents, incidentTriggers } from '../../db/schema/index';
 import { holdsIncident } from '../../incidents/holds';
-import { type LiveLooks, type LookNow, lookNow, readLiveLooks } from '../../incidents/looks';
+import { type LiveLooks, type LookNow, lookNow, observeThings, readLiveLooks } from '../../incidents/looks';
 import type { Services } from '../../services';
 
 type Pending = typeof incidentTriggers.$inferSelect;
 type Event = typeof events.$inferSelect;
 
 /** A thing's look now (its state and the checks that count and are bad on it); null when Whombat can't read it. */
-export type ActiveChecks = (thing: string) => Promise<LookNow | null>;
+export type ActiveChecks = (thing: string, checks: readonly string[]) => Promise<LookNow | null>;
 
-/** A delayed start whose thing couldn't be read at its deadline asks again this much later. */
-export const CHECK_RETRY_MS = 60_000;
+/** How often and how long a delayed start asks again when its thing or check couldn't be read. */
+const CHECK_RETRY_MS = 60_000;
+const CHECK_RETRY_LIMIT_MS = 60 * CHECK_RETRY_MS;
 
-/** Each thing's look now, read as the incident watcher reads them, once for a scan and only if asked. */
+/** Reads looks once per scan on demand, then checks what the watcher could read for each delayed start. */
 export function liveChecks(services: Services, burrowId: string, now: Date): ActiveChecks {
   let read: Promise<LiveLooks | null> | null = null;
-  return async (thing) => {
+  return async (thing, checks) => {
     read ??= readLiveLooks(services, burrowId, now).catch(() => null);
     const live = await read;
-    return live ? lookNow(live, thing) : null;
+    if (!live) return null;
+    const seen = await observeThings(
+      services,
+      burrowId,
+      live,
+      [thing],
+      new Map(),
+      now,
+      new Map([[thing, checks]]),
+      { useEndedHolds: false },
+    ).catch(() => null);
+    if (!seen || seen.raw.get(thing) === 'unread' || seen.unread.get(thing)?.size) return null;
+    return lookNow(live, thing);
   };
 }
 
@@ -91,14 +104,18 @@ export async function claimIncidentTrigger(
     .from(incidents)
     .where(and(eq(incidents.id, incident.incidentId), eq(incidents.burrowId, event.burrowId)));
   if (!row || row.cause || (delayed && row.endedAt)) return false;
-  // When to look again: the deadline while it is ahead; a minute on when the thing couldn't be read at it.
+  // Keep the deadline while it is ahead. An unread thing or check gets another try.
   let next: number | null = dueAt > now.getTime() ? dueAt : null;
   if (delayed && next === null) {
+    const expiresAt = dueAt + CHECK_RETRY_LIMIT_MS;
+    if (now.getTime() > expiresAt) return false;
     const checks = thingTriggerChecks(triggers, facts);
     const down = facts.event === 'down';
-    const look = down || checks.length ? await active(incident.thing) : null;
-    if ((down || checks.length) && look === null) next = now.getTime() + CHECK_RETRY_MS;
-    else if (look) {
+    const look = await active(incident.thing, checks);
+    if (!look) {
+      if (now.getTime() === expiresAt) return false;
+      next = Math.min(now.getTime() + CHECK_RETRY_MS, expiresAt);
+    } else {
       if (down && look.state !== 'down') return false;
       const still = down ? look.checks : look.bad;
       if (checks.length && !checks.some((c) => still.has(c))) return false;

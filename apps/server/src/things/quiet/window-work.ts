@@ -244,21 +244,25 @@ export async function keepQuietForWork(
  * Whombat's work ended at `at`: its window holds 15 minutes more, then ends by itself. Written as every write is, and
  * Home told, so an open page says the new end. Never throws.
  */
-export async function workEnded(services: Services, work: string, at = services.clock()): Promise<void> {
+export async function workEnded(
+  services: Services,
+  burrowId: string,
+  work: string,
+  at = services.clock(),
+): Promise<void> {
   try {
     const endsAt = new Date(at.getTime() + AFTER_WORK_MS);
-    const open = await services.db
-      .select({ id: quietWindows.id, ownerId: quietWindows.ownerId })
-      .from(quietWindows)
-      .where(and(eq(quietWindows.work, work), isNull(quietWindows.endedAt)));
-    for (const w of open)
-      await services.pipeline.transact(w.ownerId, async (session) => {
-        await session.tx
-          .update(quietWindows)
-          .set({ endsAt })
-          .where(and(eq(quietWindows.id, w.id), isNull(quietWindows.endedAt)));
-        publishHomeChanged(session, await homeAudience(session, w.ownerId), ['things', 'watch', 'needsYou']);
-      });
+    await services.pipeline.transact(burrowId, async (session) => {
+      const [updated] = await session.tx
+        .update(quietWindows)
+        .set({ endsAt })
+        .where(
+          and(eq(quietWindows.ownerId, burrowId), eq(quietWindows.work, work), isNull(quietWindows.endedAt)),
+        )
+        .returning({ id: quietWindows.id });
+      if (updated)
+        publishHomeChanged(session, await homeAudience(session, burrowId), ['things', 'watch', 'needsYou']);
+    });
   } catch (err) {
     services.log.warn({ err: err instanceof Error ? err.name : 'error' }, 'quiet window: work end not noted');
   }

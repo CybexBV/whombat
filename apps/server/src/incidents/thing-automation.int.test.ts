@@ -539,3 +539,72 @@ it('neither claims an incident nor runs a thing automation while the release to 
   await w.settle();
   expect((await w.run(run?.id as string)).status).toBe('succeeded');
 });
+
+it.each(['thing', 'check'] as const)(
+  'keeps a delayed start when the %s is unread at its deadline',
+  async (unread) => {
+    const thing = await connection(`shop-unread-${unread}`, 'Shop');
+    const check = 'homeassistant.integration';
+    const problem = line(check, 'An integration failed');
+    const automation = await w.publish(
+      definition([{ kind: 'thing', event: 'problem', thing, check, forMinutes: 5 }]),
+      { name: 'Shop has a problem' },
+    );
+    await lines(thing, [problem]);
+    const incidentId = await open(thing, 'problem', null, check);
+    await w.settle();
+
+    w.advance(5 * MINUTE);
+    await w.services.db
+      .update(catalogConnections)
+      .set({
+        glance:
+          unread === 'thing'
+            ? { status: 'unknown', facts: [] }
+            : { status: 'ok', facts: [], lines: [], readFailedSince: w.now().toISOString() },
+        glanceAt: w.now(),
+      })
+      .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+    await w.settle();
+    expect(await w.runs(automation)).toHaveLength(0);
+    const [pending] = await w.services.db
+      .select()
+      .from(incidentTriggers)
+      .where(and(eq(incidentTriggers.automationId, automation), eq(incidentTriggers.incidentId, incidentId)));
+    expect(pending?.dueAt).toEqual(new Date(w.now().getTime() + MINUTE));
+
+    w.advance(MINUTE);
+    await lines(thing, [problem]);
+    await w.settle();
+    expect(await w.runs(automation)).toHaveLength(1);
+    await close(incidentId);
+  },
+);
+
+it('expires an unread delayed start an hour after its deadline', async () => {
+  const thing = await connection('unread');
+  const automation = await w.publish(definition([{ kind: 'thing', event: 'down', thing, forMinutes: 5 }]), {
+    name: 'Media is down',
+  });
+  await lines(thing, [NOT_ANSWERING]);
+  const incidentId = await open(thing, 'down');
+  await w.settle();
+  await w.services.db
+    .update(catalogConnections)
+    .set({ glance: { status: 'unknown', facts: [] }, glanceAt: w.now() })
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+  w.advance(5 * MINUTE);
+  await w.settle();
+  w.advance(60 * MINUTE);
+  await w.settle();
+  const pending = await w.services.db
+    .select()
+    .from(incidentTriggers)
+    .where(and(eq(incidentTriggers.automationId, automation), eq(incidentTriggers.incidentId, incidentId)));
+  expect(pending).toHaveLength(0);
+  w.advance(MINUTE);
+  await lines(thing, [NOT_ANSWERING]);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(0);
+  await close(incidentId);
+});

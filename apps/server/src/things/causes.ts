@@ -315,6 +315,21 @@ export async function keepCauses(
 ): Promise<void> {
   await services.pipeline.transact(burrowId, async (session) => {
     const tx = session.tx;
+    // A health pass can get an answer while the causes job is reading the fleet.
+    const down = [...found].flatMap(([thing, cause]) =>
+      cause.kind === 'down' ? [thing.slice('connection:'.length)] : [],
+    );
+    const current = down.length
+      ? await tx
+          .select({ id: catalogConnections.id, glance: catalogConnections.glance })
+          .from(catalogConnections)
+          .where(and(eq(catalogConnections.burrowId, burrowId), inArray(catalogConnections.id, down)))
+      : [];
+    const answered = new Set(
+      current
+        .filter((row) => answeredLast(row.glance as ConnectionGlance | null))
+        .map((row) => thingId('connection', row.id)),
+    );
     const kept = await tx.select().from(thingCauses).where(eq(thingCauses.ownerId, burrowId));
     const keptBy = new Map(kept.map((k) => [k.thingId, k]));
     const gone = complete ? kept.filter((k) => !found.has(k.thingId)).map((k) => k.thingId) : [];
@@ -324,6 +339,7 @@ export async function keepCauses(
         .delete(thingCauses)
         .where(and(eq(thingCauses.ownerId, burrowId), inArray(thingCauses.thingId, gone)));
     for (const [thing, cause] of found) {
+      if (cause.kind === 'down' && answered.has(thing)) continue;
       if (!complete && keptBy.has(thing)) continue;
       const was = keptBy.get(thing);
       const same =

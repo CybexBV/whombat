@@ -750,6 +750,9 @@ describe('Website or address connections', () => {
     hubCheck.stale = false;
     const down = await checkConnectionHealth(t.services, await load(), new Date(at.getTime() + 600_000));
     expect(down).toMatchObject({ status: 'offline', lines: [{ check: 'uptime.down' }] });
+    const thing = thingId('connection', connection.id);
+    const lineStates = () => t.services.db.select().from(noticeStates).where(eq(noticeStates.thingId, thing));
+    expect(await lineStates()).toMatchObject([{ checkId: 'uptime.down' }]);
 
     const addAlert = (id: string, checkId: unknown) =>
       fake.openAlert({
@@ -784,11 +787,25 @@ describe('Website or address connections', () => {
     });
     const edited = await call(mara, 'PATCH', `/connections/${connection.id}`, {
       label: 'Example website',
-      fields: { keyword: '', every: '5' },
+      fields: { address: 'https://example.com/status', keyword: '', every: '5' },
     });
     expect(edited.status, JSON.stringify(edited.body)).toBe(200);
-    expect(hubCheck).toMatchObject({ name: 'Example website', interval_s: 300, options: {} });
-    expect((await load()).hubCheckId).toBe(first.hubCheckId);
+    expect(hubCheck).toMatchObject({
+      name: 'Example website',
+      target: 'https://example.com/status',
+      interval_s: 300,
+      options: {},
+    });
+    expect(await load()).toMatchObject({ hubCheckId: first.hubCheckId, glanceAt: null, glance: null });
+    expect(await lineStates()).toEqual([]);
+    const home = await call(mara, 'GET', '/home');
+    expect(home.status).toBe(200);
+    expect(
+      api.home.overview.response.parse(home.body).things.find((item) => item.id === thing),
+    ).toMatchObject({
+      status: 'unknown',
+      line: 'Not checked yet',
+    });
 
     fake.checks.splice(fake.checks.indexOf(hubCheck), 1);
     const beforeRepair = await load();
