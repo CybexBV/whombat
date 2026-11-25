@@ -109,6 +109,14 @@ export function percentWords(share: number): string {
   return `${Math.round(p)} %`;
 }
 
+/**
+ * The share a line says: below 1 when it was down at some point, also when every reading it had said it answered (an
+ * outage between two checks, or of a thing whose checks don't tell).
+ */
+function shownShare(share: number, downs: number): number {
+  return downs > 0 && share >= 1 ? 0.999 : share;
+}
+
 /** “once”, “twice”, “3 times”. */
 export function timesWords(n: number): string {
   return n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
@@ -161,7 +169,7 @@ export function uptimeLine(input: UptimeInput): { text: string; parts: ThingText
   let marked: string;
   if (share === null) marked = `Down **${timesWords(downs)}** ${period}, **${durationWords(downMinutes)}**`;
   else if (share >= 1 && !downs) marked = whole ? `Up **${all}**` : `Up ${period}`;
-  else marked = `Up **${percentWords(share)}** ${period}${down ? ` · ${down}` : ''}`;
+  else marked = `Up **${percentWords(shownShare(share, downs))}** ${period}${down ? ` · ${down}` : ''}`;
   return { text: marked.replace(/\*\*/g, ''), parts: line(marked) };
 }
 
@@ -175,7 +183,7 @@ export function thingUptime(input: UptimeInput): { uptime: ThingUptime; parts: T
       upPct:
         input.share === null
           ? null
-          : input.share >= 1
+          : input.share >= 1 && !input.downs
             ? 100
             : Math.min(99.9, Math.floor(input.share * 1000) / 10),
       downs: input.downs,

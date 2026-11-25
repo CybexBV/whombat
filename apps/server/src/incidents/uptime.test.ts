@@ -108,4 +108,11 @@ describe('the page’s line', () => {
     expect(durationWords(27 * 60)).toBe('1 d 3 h');
     expect(thingUptime({ share: 0.99999, downs: 0, downMinutes: 0, ...week })?.uptime.upPct).toBe(99.9);
   });
+
+  it('never says 100 % beside an outage, also when every reading said it answered', () => {
+    const said = thingUptime({ share: 1, downs: 1, downMinutes: 12, ...week });
+    expect(said?.uptime.text).toContain('99.9 %');
+    expect(said?.uptime.text).not.toContain('100');
+    expect(said?.uptime.upPct).toBe(99.9);
+  });
 });
