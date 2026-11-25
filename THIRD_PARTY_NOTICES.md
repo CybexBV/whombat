@@ -317,7 +317,7 @@ Fetched by the Go toolchain; each module's own licence applies.
 
 ### Hermes Agent and agent-browser
 
-`pnpm hermes:install` installs, for development, Hermes Agent 0.23.3 (Nous Research,
+`pnpm hermes:install` installs, for development, Hermes Agent 0.23.4 (Nous Research,
 <https://github.com/NousResearch/hermes-agent>, MIT, below) from its git tag with the Python packages its `uv.lock`
 pins, each under its own licence, and agent-browser 0.26.0 (Vercel, <https://github.com/vercel-labs/agent-browser>,
 Apache-2.0) from the npm registry (`packages/hermes-whombat/agent-browser.json`). The appliance image builds both in
