@@ -77,3 +77,53 @@ def test_through_hermes_spawn_path(profile: Path, monkeypatch: pytest.MonkeyPatc
     release.set()
     assert done.wait(5)
     assert markers(profile) == []
+
+
+def test_a_turn_whose_policy_says_no_review_gets_none(profile: Path, monkeypatch: pytest.MonkeyPatch):
+    """A Looks ahead check (Whombat looks-ahead.md): its policy's ``review: false`` makes the review do nothing."""
+    from whombat_hermes import policy
+
+    (profile / policy.POLICY_FILE).write_text('{"default": "block", "rules": [], "review": false}', encoding="utf-8")
+    monkeypatch.setattr(policy, "_policy_file", policy.PolicyFile())
+    ran = threading.Event()
+    target, prompt = review.signalled(lambda *a, **k: (ran.set, "p"))()
+    assert prompt == "p"
+    assert markers(profile) == []
+    target()
+    assert not ran.is_set()
+
+
+def test_review_must_be_true_or_false():
+    from whombat_hermes import policy
+
+    with pytest.raises(policy.PolicyError):
+        policy.parse_policy({"rules": [], "review": "no"})
+    assert policy.parse_policy({"rules": []}).review is True
+
+
+def test_in_a_pod_the_agents_session_says_no_review(profile: Path, monkeypatch: pytest.MonkeyPatch):
+    """In a person's pod the session's own policy decides, found by the agent's session when nothing is bound."""
+    from whombat_hermes import policy, settings
+
+    monkeypatch.setenv(settings.POD_ENV, "1")
+    folder = profile / settings.TURNS_DIR / "s-check"
+    folder.mkdir(parents=True)
+    (folder / policy.SESSION_POLICY_FILE).write_text('{"default": "block", "rules": [], "review": false}', "utf-8")
+    monkeypatch.setattr(policy, "_session_policies", policy.SessionPolicies())
+    ran = threading.Event()
+    agent = types.SimpleNamespace(session_id="s-check")
+    target, _ = review.signalled(lambda *a, **k: (ran.set, "p"))(agent, [])
+    target()
+    assert not ran.is_set()
+    assert markers(profile) == []
+
+
+def test_in_a_pod_a_session_without_a_readable_policy_gets_no_review(profile: Path, monkeypatch: pytest.MonkeyPatch):
+    from whombat_hermes import policy, settings
+
+    monkeypatch.setenv(settings.POD_ENV, "1")
+    monkeypatch.setattr(policy, "_session_policies", policy.SessionPolicies())
+    ran = threading.Event()
+    target, _ = review.signalled(lambda *a, **k: (ran.set, "p"))(types.SimpleNamespace(session_id="s-none"), [])
+    target()
+    assert not ran.is_set()

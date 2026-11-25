@@ -43,6 +43,7 @@ const PARITY_FILES = [
   'screens/agent/NotesSection.tsx',
   'screens/agent/KeysPart.tsx',
   'screens/agent/MayPart.tsx',
+  'screens/agent/LooksAheadPart.tsx',
   'settings/AdvancedScreens.tsx',
   'screens/SpendScreen.tsx',
   'screens/AuditLogScreen.tsx',

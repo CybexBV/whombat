@@ -24,8 +24,20 @@ export type YouPart = 'profile' | 'notifications' | 'devices' | 'links' | 'promp
 export const YOU_PARTS: readonly YouPart[] = ['profile', 'notifications', 'devices', 'links', 'prompts'];
 
 /** The assistant's group: its name and face by default. */
-export type AgentGroupPart = 'profile' | 'ai' | 'memory' | 'may' | 'council';
-export const AGENT_GROUP_PARTS: readonly AgentGroupPart[] = ['profile', 'ai', 'memory', 'may', 'council'];
+export type AgentGroupPart = 'profile' | 'ai' | 'memory' | 'may' | 'ahead' | 'council';
+export const AGENT_GROUP_PARTS: readonly AgentGroupPart[] = [
+  'profile',
+  'ai',
+  'memory',
+  'may',
+  'ahead',
+  'council',
+];
+
+/** The assistant's parts this Whombat has: Looks ahead only where it answers `looksAhead.*` (`hasLooksAhead`). */
+export function agentGroupParts(here: Pick<SettingsHere, 'looksAhead'>): AgentGroupPart[] {
+  return AGENT_GROUP_PARTS.filter((p) => p !== 'ahead' || here.looksAhead !== false);
+}
 
 /** Advanced's pages; without one, the list. */
 export type AdvancedPart = 'model' | 'ai' | 'spend' | 'running' | 'skills' | 'audit' | 'diagnostics';
@@ -99,6 +111,7 @@ export const SETTINGS_GROUP_TEXT = {
     ai: 'AI sign-in',
     memory: 'Memory',
     may: `What ${agentWords(agent).Name} may do`,
+    ahead: 'Looks ahead',
     council: 'Council',
   }),
   /** The parts' group, for screen readers. */
@@ -174,13 +187,20 @@ export interface SettingsHomeRow {
   line: string;
 }
 
-/** The home's groups with what each holds (You's parts as they show here: Devices on a box). */
-export function settingsHomeRows(agent: string, you: readonly YouPart[]): SettingsHomeRow[] {
+/**
+ * The home's groups with what each holds (You's parts as they show here: Devices on a box; the assistant's as this
+ * Whombat has them).
+ */
+export function settingsHomeRows(
+  agent: string,
+  you: readonly YouPart[],
+  agentParts: readonly AgentGroupPart[] = AGENT_GROUP_PARTS,
+): SettingsHomeRow[] {
   const N = agentWords(agent).Name;
   const rows: Record<SettingsHomeGroup, Omit<SettingsHomeRow, 'key'>> = {
     you: { title: 'You', line: you.map((p) => SETTINGS_GROUP_TEXT.you[p]).join(' · ') },
     // Every part the assistant's page has, as You's line names its parts.
-    agent: { title: N, line: AGENT_GROUP_PARTS.map((p) => SETTINGS_GROUP_TEXT.agent(agent)[p]).join(' · ') },
+    agent: { title: N, line: agentParts.map((p) => SETTINGS_GROUP_TEXT.agent(agent)[p]).join(' · ') },
     // What This Whombat's parts hold: the Overview is how it's doing and its network; Screen has a row of its own.
     connections: { title: 'Connections', line: 'Accounts and services this Whombat uses' },
     appliance: { title: 'This Whombat', line: 'How it’s doing · Network · Backups · About' },
@@ -230,6 +250,8 @@ export interface SettingsHere {
   services?: boolean;
   /** The viewer may see the spend (`spend.overview` answered). */
   spend?: boolean;
+  /** The Whombat has Looks ahead's setting (`hasLooksAhead`); false leaves its part out. */
+  looksAhead?: boolean;
 }
 
 /** You's parts that show: Devices and Shared links only on a box (a link needs Whombat's servers). */

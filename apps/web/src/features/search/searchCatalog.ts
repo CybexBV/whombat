@@ -5,10 +5,10 @@
  */
 import type { MarkLike } from '@whombat/brand';
 import {
-  AGENT_GROUP_PARTS,
   APP_PLACES,
   type AppPlace,
   advancedRowsHere,
+  agentGroupParts,
   agentKeysText,
   appPlaceWords,
   SEARCH_WORDS,
@@ -122,7 +122,7 @@ export function searchCatalog({ things, agent, here }: CatalogInput): CatalogEnt
     terms: `${SETTINGS_GROUP_TEXT.title} ${SETTINGS_HOME_TEXT.phoneApp.terms}`,
   });
   const parts = SETTINGS_GROUP_TEXT.agent(agent);
-  for (const part of AGENT_GROUP_PARTS)
+  for (const part of agentGroupParts(here))
     setting(
       `agent:${part}`,
       'agent',

@@ -43,9 +43,17 @@ type DispatchBits = Pick<
   | 'threadRootId'
 >;
 
-/** A dispatch that never uses the Vault: a search answer (VT-22) or a Feedback assessment (FB-D). */
+/**
+ * A dispatch that never uses the Vault: a search answer, a Feedback assessment or a Looks ahead check (looks-ahead.md).
+ */
 export function vaultless(d: Pick<DispatchBits, 'trigger' | 'mode' | 'search'>): boolean {
-  return d.trigger === 'feedback' || d.trigger === 'search' || d.mode === 'answer' || d.search !== null;
+  return (
+    d.trigger === 'feedback' ||
+    d.trigger === 'search' ||
+    d.trigger === 'ahead' ||
+    d.mode === 'answer' ||
+    d.search !== null
+  );
 }
 
 /** Whether a turn may use the person's Vault: theirs (`dispatchPerson`), not one of `vaultless`'s (OP-17, OP-S60). */

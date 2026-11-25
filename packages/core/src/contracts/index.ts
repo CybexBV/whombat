@@ -41,6 +41,7 @@ import {
 import { hostEndpoints } from './host.js';
 import { hostsEndpoints } from './hosts.js';
 import { keptSiteEndpoints, keptSiteRunnerEndpoints } from './kept-sites.js';
+import { looksAheadEndpoints } from './looks-ahead.js';
 import { meEndpoints } from './me.js';
 import { memoryEndpoints } from './memory.js';
 import { deviceEndpoints, notificationEndpoints } from './notifications.js';
@@ -202,6 +203,7 @@ export interface Api {
   needsYou: typeof needsYouEndpoints;
   looks: typeof lookEndpoints;
   changeWindow: typeof changeWindowEndpoints;
+  looksAhead: typeof looksAheadEndpoints;
   changes: typeof changeEndpoints;
   widgets: typeof widgetEndpoints;
   chats: typeof chatEndpoints;
@@ -315,6 +317,8 @@ export const api: Api = {
   looks: lookEndpoints,
   /** The quiet hours for changes (care-plan.md). */
   changeWindow: changeWindowEndpoints,
+  /** Looks ahead: its switch, calendars and stopped kinds (looks-ahead.md). */
+  looksAhead: looksAheadEndpoints,
   /** Done recently and Undo (ONE-08). */
   changes: changeEndpoints,
   /** Pinned widgets (ONE-09). */

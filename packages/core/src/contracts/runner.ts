@@ -73,6 +73,7 @@ import {
   LOOK_SUMMARY_MAX,
   LOOK_TITLE_MAX,
 } from '../domain/look-research.js';
+import { AheadDispatchContext } from '../domain/looks-ahead.js';
 import { AGENT_NOTES_MAX } from '../domain/memory.js';
 import { Message } from '../domain/message.js';
 import { ModelFallbackReport, ModelId, TurnRanReport } from '../domain/models.js';
@@ -1093,6 +1094,11 @@ export const DispatchContext = z.object({
    * `look_fix`, LR-08). Null or absent otherwise.
    */
   look: LookDispatchContext.nullable().optional(),
+  /**
+   * The event a Looks ahead turn checks (trigger `ahead`; Whombat looks-ahead.md), or, in the person's own turn in the
+   * thread of something it found, what it found. Null or absent otherwise.
+   */
+  ahead: AheadDispatchContext.nullable().optional(),
   /**
    * The T3 Code threads that moved on (trigger `t3_thread`; Whombat t3code.md): 1…`T3_THREADS_MAX`, in the
    * order they did, all in this turn's thread and for its person. Null or absent otherwise.

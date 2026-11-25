@@ -9,6 +9,7 @@ import {
 } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  AHEAD_TOOLS,
   CODE_TOOLS,
   hiddenActionTypes,
   hiddenVariants,
@@ -275,6 +276,35 @@ describe('the list a turn is served (turn-efficiency.md TE-05)', () => {
     expect(
       servedToolNames({ ...personal, looks: true, turn: { ...personal.turn, outside: true } }),
     ).not.toContain('look_report');
+  });
+
+  it('serves a Looks ahead check only the calendar, the mail, its web tools and its report (looks-ahead.md)', () => {
+    const personal = { ...team, turn: { ...team.turn, personal: true } };
+    const check: ServedSelection = {
+      ...personal,
+      usable: [...CONNECTOR_SERVICES],
+      browser: 'preview',
+      connections: true,
+      looks: true,
+      turn: { ...personal.turn, ahead: true },
+    };
+    expect(servedToolNames(check).sort()).toEqual([...AHEAD_TOOLS].sort());
+    // Without the mail connected, no mail tools.
+    expect(servedToolNames({ ...check, usable: ['calendar'] })).not.toContain('mail_read');
+    // Its own tools nowhere else.
+    for (const name of ['search_web', 'read_web_page', 'ahead_report'] as const) {
+      expect(servedToolNames({ ...personal, usable: [...CONNECTOR_SERVICES] })).not.toContain(name);
+      expect(toolFitsTurn(name, { ...personal.turn, outside: true })).toBe(false);
+    }
+  });
+
+  it('lists ahead_feedback only in the person’s turn in a finding’s thread', () => {
+    const personal = { ...team, turn: { ...team.turn, personal: true } };
+    expect(servedToolNames(personal)).not.toContain('ahead_feedback');
+    expect(servedToolNames({ ...personal, aheadThread: true })).toContain('ahead_feedback');
+    expect(
+      servedToolNames({ ...personal, aheadThread: true, turn: { ...personal.turn, ahead: true } }),
+    ).not.toContain('ahead_feedback');
   });
 
   it('serves an automation’s step neither the automation tools nor schedule', () => {

@@ -39,6 +39,7 @@ import {
 import { WHOMBAT_MD_MAX } from '../hermes/config';
 import { isOutsideTurn } from '../outside';
 import { isCommandsTurn, isWorkFolderTurn, sandboxFor } from './access';
+import { aheadThreadLines, aheadTurnLines } from './ahead';
 import { grantedApprovalLine, retryLine, undoRequestLines } from './approvals';
 import { attachmentNote } from './attachments';
 import { cardNote } from './cards';
@@ -642,7 +643,8 @@ function requestLines(ctx: DispatchContext): string[] {
     trigger === 'council' ||
     trigger === 'delegation' ||
     trigger === 'look' ||
-    trigger === 'look_fix'
+    trigger === 'look_fix' ||
+    trigger === 'ahead'
   ) {
     // The schedule's, the job's, the tasks', the T3 Code threads' or the look's lines say what to do (RA-30, RA-31,
     // TF-12, t3code.md, look-research.md).
@@ -698,6 +700,8 @@ export function turnPrompt(ctx: DispatchContext, options: TurnPromptOptions = {}
   if (ctx.dispatch.trigger === 'feedback') return `${feedbackSystemPrompt(ctx)}\n\n${feedbackPrompt(ctx)}`;
   const preface = prefaceLines(ctx, options);
   if (ctx.dispatch.mode === 'answer' && ctx.search) return joined([...preface, '', ...answerLines(ctx)]);
+  // A Looks ahead check: no conversation, no reply; its lines are the whole request (looks-ahead.md).
+  if (ctx.dispatch.trigger === 'ahead') return joined([...preface, '', ...aheadTurnLines(ctx)]);
   return joined([
     ...preface,
     '',
@@ -719,6 +723,8 @@ export function turnPrompt(ctx: DispatchContext, options: TurnPromptOptions = {}
     ...undoRequestLines(ctx),
     // Something needs a look, or the step the person let the assistant take on it (look-research.md LR-05, LR-08).
     ...lookTurnLines(ctx),
+    // The person writes in the thread of something Looks ahead told them (looks-ahead.md).
+    ...aheadThreadLines(ctx),
     '',
     ...requestLines(ctx),
     ...replyLengthLines(ctx),

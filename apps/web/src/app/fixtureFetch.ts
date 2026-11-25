@@ -18,6 +18,7 @@ import {
   type HandoffState,
   type HomeOverview,
   type HomeRef,
+  type LooksAheadView,
   type Membership,
   type Preferences,
 } from '@whombat/core';
@@ -50,6 +51,7 @@ import { createInboxFixtures } from './inboxFixtures';
 import { createKeptSiteFixtures } from './keptSiteFixtures';
 import { createLocalModelFixtures } from './localModelFixtures';
 import { createLookFixtures, looksSeeded } from './lookFixtures';
+import { createLooksAheadFixtures } from './looksAheadFixtures';
 import { createModelFixtures } from './modelFixtures';
 import { createMonitoringFixtures, monitoringSeeded } from './monitoringFixtures';
 import { ASSISTANT_NAME, createOneFixtures, DEFAULT_CHAT_ID } from './oneFixtures';
@@ -301,6 +303,8 @@ export interface WebFixtureOptions {
    * own), and what T3 Code runs. Default: set, T3 Code ready.
    */
   councilSetups?: CouncilSetupWorldOptions;
+  /** Settings → the assistant → Looks ahead (`looksAheadFixtures.ts`): what differs from Mara's (on, two calendars). */
+  looksAhead?: Partial<LooksAheadView>;
   /**
    * The person's prompts (`promptFixtures.ts`, Whombat prompts.md): the six Whombat ships and one of Mara's own, T3 Code's
    * projects. Default: known, T3 Code ready (`VITE_FIXTURE_PROMPTS_T3` says otherwise).
@@ -954,6 +958,19 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
       const req = input instanceof Request ? input : new Request(input, init);
       if (signedIn) {
         const own = await kept.handle(req.clone());
+        if (own) return own;
+      }
+      return inner(req);
+    };
+  }
+  {
+    // Looks ahead (Whombat looks-ahead.md): Settings → the assistant → Looks ahead.
+    const inner = out;
+    const ahead = createLooksAheadFixtures(options.looksAhead);
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const own = await ahead.handle(req.clone());
         if (own) return own;
       }
       return inner(req);

@@ -92,6 +92,8 @@ const TRIGGER_WORDS: Record<DispatchTrigger, string> = {
   // Contracts 3.5 (look-research.md LR-05, LR-08).
   look: 'looking into something that needs a look',
   look_fix: 'taking the step you let it take',
+  // Looks ahead (looks-ahead.md).
+  ahead: 'looking ahead at something on your calendar',
 };
 
 const PROVIDER_NAMES: Record<string, string> = {

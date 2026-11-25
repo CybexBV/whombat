@@ -82,12 +82,19 @@ export const DispatchTrigger = z.enum([
    * see it as `notify` (`summaryTrigger`).
    */
   'delegation',
+  /**
+   * Looks ahead (Whombat looks-ahead.md): Whombat has the assistant check something on the person's calendar the
+   * afternoon before, quietly, with `DispatchContext.ahead`. It reads only the calendar, the mail and public web pages,
+   * says nothing unless it found something, and ends with `ahead_report`. Server and runner only: clients see it as
+   * `notify` (`summaryTrigger`).
+   */
+  'ahead',
 ]);
 export type DispatchTrigger = z.infer<typeof DispatchTrigger>;
 
 /**
  * The triggers clients read in a `DispatchSummary` (0.91, CT-406). `undo_requested`, `task_finished`, `look`,
- * `look_fix`, `t3_thread`, `council` and `delegation` stay between the server and the runner; `summaryTrigger` names them for clients.
+ * `look_fix`, `t3_thread`, `council`, `delegation` and `ahead` stay between the server and the runner; `summaryTrigger` names them for clients.
  */
 export const SummaryTrigger = DispatchTrigger.exclude([
   'undo_requested',
@@ -97,6 +104,7 @@ export const SummaryTrigger = DispatchTrigger.exclude([
   't3_thread',
   'council',
   'delegation',
+  'ahead',
 ]);
 export type SummaryTrigger = z.infer<typeof SummaryTrigger>;
 
@@ -112,7 +120,8 @@ export function summaryTrigger(trigger: DispatchTrigger): SummaryTrigger {
     trigger === 'look' ||
     trigger === 't3_thread' ||
     trigger === 'council' ||
-    trigger === 'delegation'
+    trigger === 'delegation' ||
+    trigger === 'ahead'
   )
     return 'notify';
   return trigger;

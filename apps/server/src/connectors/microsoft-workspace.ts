@@ -138,7 +138,28 @@ function event(e: Obj, calendarId: string) {
     organizer: address(e.organizer) || null,
     webUrl: e.webLink ?? null,
     meetUrl: obj(e.onlineMeeting).joinUrl ?? null,
+    ...(str(e.iCalUId) ? { uid: str(e.iCalUId).slice(0, 1024) } : {}),
+    // One occurrence of a series, or a changed one (looks-ahead.md).
+    ...(e.type === 'occurrence' || e.type === 'exception' || e.seriesMasterId ? { recurring: true } : {}),
+    ...ownResponse(e),
+    ...(e.isCancelled ? { cancelled: true } : {}),
   });
+}
+
+/** The person's own answer (looks-ahead.md): they organise it, or what they answered; none when not invited. */
+function ownResponse(e: Obj): { response?: 'accepted' | 'tentative' | 'declined' | 'needs_action' } {
+  if (e.isOrganizer) return { response: 'accepted' };
+  const answer = str(obj(e.responseStatus).response);
+  const mapped = (
+    {
+      organizer: 'accepted',
+      accepted: 'accepted',
+      tentativelyAccepted: 'tentative',
+      declined: 'declined',
+      notResponded: 'needs_action',
+    } as const
+  )[answer as 'accepted'];
+  return mapped ? { response: mapped } : {};
 }
 function eventBody(input: CalendarEventPatch): Obj {
   const body: Obj = {};
@@ -677,6 +698,22 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     return values
       .filter((e) => !input.query || str(e.subject).toLowerCase().includes(input.query.toLowerCase()))
       .map((e) => event(e, input.calendarId));
+  }
+  async calendarList(token: string) {
+    const values = arr((await this.call(token, `/me/calendars?${query({ $top: '100' })}`)).value);
+    return values.flatMap((c) =>
+      str(c.id)
+        ? [
+            {
+              id: c.isDefaultCalendar ? 'primary' : str(c.id).slice(0, 1024),
+              name: (str(c.name) || str(c.id)).slice(0, 200),
+              primary: !!c.isDefaultCalendar,
+              writable: c.canEdit !== false,
+              hidden: false,
+            },
+          ]
+        : [],
+    );
   }
   async calendarGetEvent(token: string, input: { calendarId: string; eventId: string }) {
     return event(

@@ -79,9 +79,10 @@ export async function personBehind(
 
 /**
  * Turns that never merge with another queued turn, nor take one in (AG-10, concise-replies.md): a scheduled turn
- * carries its own prompt (RA-30).
+ * carries its own prompt (RA-30); a person's message never joins a Looks ahead check, which reads strangers' text
+ * (looks-ahead.md).
  */
-const OWN_TURNS: readonly DispatchTrigger[] = ['expand', 'schedule'];
+const OWN_TURNS: readonly DispatchTrigger[] = ['expand', 'schedule', 'ahead'];
 
 export interface QueuedDispatch {
   dispatchId: string;

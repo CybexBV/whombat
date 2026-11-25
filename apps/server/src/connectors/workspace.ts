@@ -21,6 +21,7 @@ const METHODS = [
   'mailOrganize',
   'mailTrash',
   'calendarEvents',
+  'calendarList',
   'calendarGetEvent',
   'calendarCreateEvent',
   'calendarUpdateEvent',

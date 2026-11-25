@@ -9,6 +9,8 @@
  *   (connection-pages.md CP-15, dashboards.md DS-11).
  * - **Looks**, every minute: the assistant looks into what needs a look by itself (look-research.md LR-01…LR-03,
  *   `looks/watch.ts`).
+ * - **Looks ahead**, every five minutes: the assistant checks what is on the person's calendar the afternoon before
+ *   (looks-ahead.md, `looks-ahead/watch.ts`).
  * - **Incidents**, every minute: outages kept from the same looks, and one push when something important went wrong
  *   (`incidents/watch.ts`).
  * - **Causes** and **the way out**, every minute: what each thing is down because of
@@ -21,6 +23,7 @@ import { CareWatcher } from '../care/watch';
 import { approvals } from '../db/schema/index';
 import { INCIDENTS_WATCH_MS, IncidentWatcher } from '../incidents/watch';
 import { LookWatcher, WATCH_MS } from '../looks/watch';
+import { AHEAD_WATCH_MS, AheadWatcher } from '../looks-ahead/watch';
 import { WAY_OUT_CHECK_MS, WayOutWatch } from '../managed/way-out';
 import type { Services } from '../services';
 import { CAUSES_MS, passCauses } from '../things/causes';
@@ -60,12 +63,14 @@ class HomeJobs {
   #stops: (() => void)[] = [];
   #running = new Set<Promise<unknown>>();
   readonly #looks: LookWatcher;
+  readonly #ahead: AheadWatcher;
   readonly #care: CareWatcher;
   readonly #incidents: IncidentWatcher;
   readonly #wayOut: WayOutWatch;
 
   constructor(private readonly services: Services) {
     this.#looks = new LookWatcher(services);
+    this.#ahead = new AheadWatcher(services);
     this.#care = new CareWatcher(services);
     this.#incidents = new IncidentWatcher(services);
     this.#wayOut = new WayOutWatch(services);
@@ -91,6 +96,7 @@ class HomeJobs {
       }),
       job('home.connection-points-prune', POINTS_PRUNE_MS, () => rollUpPoints(this.services)),
       job('home.looks', WATCH_MS, () => this.#looks.pass()),
+      job('home.looks-ahead', AHEAD_WATCH_MS, () => this.#ahead.pass()),
       // A care plan for a server that was just added (care-plan.md).
       job('home.care', WATCH_MS, () => this.#care.pass()),
       job('home.incidents', INCIDENTS_WATCH_MS, () => this.#incidents.pass()),

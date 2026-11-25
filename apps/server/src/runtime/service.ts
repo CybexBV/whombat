@@ -87,7 +87,13 @@ import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 import { holdsItsPlace, outsidersTurnsInFlight, placeKey } from './places';
 import { afterRunTurn, reconcileLiveRuns } from './run-recovery';
-import { chooseSession, resumedCacheResult, resumedEarlierSession, usesSessions } from './sessions';
+import {
+  chooseSession,
+  forgetAheadSession,
+  resumedCacheResult,
+  resumedEarlierSession,
+  usesSessions,
+} from './sessions';
 import { FollowUps } from './steering';
 import { turnProvider, turnProviderSql } from './turn-runtime';
 
@@ -624,8 +630,9 @@ export class RunnerRuntime {
         // reply's first claim chooses its thread's session once the claim lock is released (`chooseClaimedSession`,
         // TE-12).
         // A Whombat Feedback assessment always starts a fresh session (feedback.md FB-21), even on its retry.
+        // A Looks ahead check never resumes an earlier attempt's session either (looks-ahead.md).
         const session =
-          d.trigger === 'feedback'
+          d.trigger === 'feedback' || d.trigger === 'ahead'
             ? null
             : d.providerSessionId
               ? { providerSessionId: d.providerSessionId }
@@ -704,9 +711,20 @@ export class RunnerRuntime {
   /** A session a beat tells for a turn that no longer runs (`forgetLateMailSession`). */
   private async forgetLateSession(id: string, body: ProgressBody): Promise<void> {
     if (!body.providerSessionId) return;
-    await this.services.pipeline.transactAccount((_tx, session) =>
-      forgetLateMailSession(session, id, body.providerSessionId),
-    );
+    await this.services.pipeline.transactAccount(async (tx, session) => {
+      await forgetLateMailSession(session, id, body.providerSessionId);
+      // A Looks ahead check that ended and tells its session late: forgotten too (looks-ahead.md).
+      await forgetAheadSession(
+        {
+          tx,
+          services: this.services,
+          background: session.background.bind(session),
+          now: this.services.clock(),
+        },
+        id,
+        body.providerSessionId,
+      );
+    });
   }
 
   /** Why the dispatch's turn must stop, if it must. */
@@ -894,6 +912,12 @@ export class RunnerRuntime {
       const outcome = await this.finalizeIn(tx, id, body, guard, now);
       // A mail run's turn may tell its session only now, after Whombat ended it: forgotten with the email.
       await forgetLateMailSession(session, id, body.providerSessionId);
+      // A Looks ahead check's session goes as soon as the check ended (looks-ahead.md).
+      await forgetAheadSession(
+        { tx, services: this.services, background: session.background.bind(session), now },
+        id,
+        body.providerSessionId,
+      );
       if (outcome && outcome !== 'lease_lost') {
         // What the turn was still doing is interrupted, never done (WS-15); a new state is a lifecycle frame.
         await interruptActivity(tx, session, [id], now);

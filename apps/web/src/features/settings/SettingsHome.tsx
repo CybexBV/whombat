@@ -9,10 +9,16 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { SETTINGS_HOME_TEXT, type SettingsHomeGroup, settingsHomeRows } from '@whombat/client';
+import {
+  agentGroupParts,
+  hasLooksAhead,
+  SETTINGS_HOME_TEXT,
+  type SettingsHomeGroup,
+  settingsHomeRows,
+} from '@whombat/client';
 import { DESK_TEXT } from '@whombat/client/desk';
 import { whombatOverview } from '@whombat/client/managed';
-import { usePreferences, useTheAgent } from '@whombat/client/react';
+import { usePreferences, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
 import type { ThemeName } from '@whombat/tokens';
 import {
@@ -73,7 +79,10 @@ export function SettingsHome({ burrow }: { burrow: string }) {
   const prefs = usePreferences({}, { staleTime: 0 });
   const screen = useScreenPart(burrow, false);
   const you = useYouParts(burrow);
-  const rows = settingsHomeRows(words.name, you).filter((r) => r.key !== 'screens' || screen.shown);
+  const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(useSessionProtocol()) });
+  const rows = settingsHomeRows(words.name, you, agentParts).filter(
+    (r) => r.key !== 'screens' || screen.shown,
+  );
   const needs = useApplianceNeeds(burrow, words.name);
   const phones = useSignedInPhones(burrow);
   const oftenId = useId();

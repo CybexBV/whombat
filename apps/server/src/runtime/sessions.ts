@@ -35,9 +35,15 @@ export function usesSessions(
   d: Pick<DispatchRow, 'mode' | 'runId' | 'search'> & { trigger?: string },
 ): boolean {
   // A Feedback assessment never resumes or records a session, nor does an automation's step: each is a fresh turn of
-  // the agent.
+  // the agent. Nor does a Looks ahead check (looks-ahead.md): it read mail and web pages, and the person's reply in its
+  // thread starts fresh from what it posted, so what those said can't steer a turn that may act.
   return (
-    d.mode === 'reply' && !d.runId && !d.search && d.trigger !== 'feedback' && d.trigger !== 'automation'
+    d.mode === 'reply' &&
+    !d.runId &&
+    !d.search &&
+    d.trigger !== 'feedback' &&
+    d.trigger !== 'automation' &&
+    d.trigger !== 'ahead'
   );
 }
 
@@ -60,7 +66,7 @@ const sessionTurn = and(
   eq(dispatches.mode, 'reply'),
   isNull(dispatches.runId),
   isNull(dispatches.search),
-  sql`${dispatches.trigger} not in ('feedback', 'automation')`,
+  sql`${dispatches.trigger} not in ('feedback', 'automation', 'ahead')`,
   like(dispatches.providerSessionId, `${HERMES_SESSION}%`),
 );
 
@@ -224,6 +230,44 @@ export function sessionsSince(db: Queryable, conversationId: string, since: Date
   return sessionsWhere(
     db,
     and(eq(dispatches.conversationId, conversationId), gte(dispatches.claimedAt, since)),
+  );
+}
+
+/**
+ * A Looks ahead check's Hermes session, once its turn ended for good (looks-ahead.md): forgotten and deleted from the
+ * person's home at once, so no later turn of theirs finds what it read in its past sessions; an attempt queued again
+ * loses it too (the next starts fresh). The watcher's pass forgets any this missed (`endedAheadSessions`).
+ */
+export async function forgetAheadSession(
+  ctx: Pick<ApplyContext, 'tx' | 'services' | 'background' | 'now'>,
+  dispatchId: string,
+  providerSessionId: string | undefined,
+): Promise<void> {
+  const [turn] = await ctx.tx.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+  // Ended, or queued again after a failed attempt: that attempt's session (it read mail and pages) goes too, and the
+  // next attempt starts a fresh one.
+  if (turn?.trigger !== 'ahead' || !['done', 'failed', 'cancelled', 'queued'].includes(turn.state)) return;
+  const ids = [...new Set([turn.providerSessionId, providerSessionId])].filter(
+    (s): s is string => !!s?.startsWith(HERMES_SESSION),
+  );
+  await dropSessions(
+    ctx,
+    ids.map((s) => ({ home: homeOf(turn.onBehalfOfAccountId), session: s.slice(HERMES_SESSION.length) })),
+  );
+}
+
+/**
+ * The sessions of a Whombat's Looks ahead checks that ended (looks-ahead.md): what they read of mail and web pages
+ * must not stay where the person's later turns search their past sessions.
+ */
+export function endedAheadSessions(db: Queryable, burrowId: string) {
+  return sessionsWhere(
+    db,
+    and(
+      eq(dispatches.burrowId, burrowId),
+      eq(dispatches.trigger, 'ahead'),
+      inArray(dispatches.state, ['done', 'failed', 'cancelled']),
+    ),
   );
 }
 

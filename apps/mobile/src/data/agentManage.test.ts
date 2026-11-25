@@ -111,8 +111,20 @@ describe('keys (AP-713, AP-4969)', () => {
 
 describe('the assistant’s parts', () => {
   it('lists the shared parts in order, What it may do by its name, Council last', () => {
-    expect(agentParts('Dusty').map((p) => p.key)).toEqual(['profile', 'ai', 'memory', 'may', 'council']);
+    expect(agentParts('Dusty').map((p) => p.key)).toEqual([
+      'profile',
+      'ai',
+      'memory',
+      'may',
+      'ahead',
+      'council',
+    ]);
     expect(agentParts('Dusty').find((p) => p.key === 'may')?.label).toBe('What Dusty may do');
+    expect(agentParts('Dusty').find((p) => p.key === 'ahead')?.label).toBe('Looks ahead');
+  });
+
+  it('leaves Looks ahead out on a Whombat that doesn’t have it', () => {
+    expect(agentParts('Dusty', { looksAhead: false }).map((p) => p.key)).not.toContain('ahead');
   });
 
   it('keeps a key that looks like one', () => {

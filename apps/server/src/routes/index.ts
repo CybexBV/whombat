@@ -26,6 +26,7 @@ import { oneWhombatRoutes } from '../home/routes';
 import { findMyTimelineRoutes } from '../hosts/findmy-timeline-routes';
 import { hostsRoutes } from '../hosts/routes';
 import { isApplianceLocalPath } from '../lib/local-paths';
+import { looksAheadRoutes } from '../looks-ahead/settings';
 import { signInRoutes } from '../managed/providers/routes';
 import { signInApiRoutes } from '../managed/providers/signin-routes';
 import { memoryRoutes } from '../memory/routes';
@@ -109,6 +110,7 @@ export const ROUTES: RouteDef[] = [
   // One Whombat: task chats, Home, Watch, changes and widgets (one-whombat-assistant.md).
   ...oneWhombatRoutes,
   ...careRoutes,
+  ...looksAheadRoutes,
   // Servers through the hosts service (docs/decisions/one-whombat-servers.md).
   ...hostsRoutes,
   // Device skills: the person's choice on the card (docs/decisions/one-whombat-devices.md).
