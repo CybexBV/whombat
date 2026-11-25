@@ -129,8 +129,12 @@ export const PEOPLE_SETTINGS = {
   'me.updateProfile': change('you.profile', 'Change your name and title'),
 
   // Looks ahead (looks-ahead.md): what the assistant checks ahead is the person's to switch, as they ask.
-  'looksAhead.get': read('agent.ahead', 'Read what Looks ahead checks'),
-  'looksAhead.update': change('agent.ahead', 'Turn Looks ahead, a calendar or a kind of finding on or off'),
+  'looksAhead.get': read('agent.ahead', 'Read what Looks ahead checks, its rules and recent checks'),
+  'looksAhead.update': change(
+    'agent.ahead',
+    'Change Looks ahead switches, calendars, kinds or standing rules',
+  ),
+  'looksAhead.checkNow': change('agent.ahead', 'Check upcoming plans and incoming mail now'),
 
   // Replacing the notes or a memory file loses the old text, so it asks.
   'memory.clear': never('agent.memory', 'Make the assistant forget what it remembers about you'),

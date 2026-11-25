@@ -50,6 +50,7 @@ import { beforeTool } from '../github/visibility';
 import { NOT_PERSONAL_GUIDE_TEXT } from '../guides/commands';
 import { ApiError, zodFields } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK } from '../looks/research';
+import { aheadDocSources } from '../looks-ahead/docs';
 import {
   AHEAD_TOOL_REFUSED,
   aheadThreadOf,
@@ -241,6 +242,12 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
       const row = await dispatch();
       return !!row && row.agentId === agentId && (await aheadThreadOf(db, row)) !== null;
     }),
+    aheadDocs: once(async () => {
+      const [row, agentRow] = await Promise.all([dispatch(), agent()]);
+      return (
+        row?.trigger === 'ahead' && !!agentRow && (await aheadDocSources(db, agentRow.burrowId)).length > 0
+      );
+    }),
     tracker,
     unavailableActions: async () =>
       OPTIONAL_EXECUTOR_ACTION_TYPES.filter((t) => !services.approvals.hasExecutor(t)),
@@ -322,7 +329,12 @@ async function notServed(
   if (name === 'report_assessment') return errorResult('forbidden', NOT_AN_ASSESSMENT);
   if (name === 'propose_connection_actions') return errorResult('forbidden', NOT_PROPOSING_ACTIONS);
   if (name === 'look_report') return errorResult('forbidden', NOT_A_LOOK);
-  if (name === 'ahead_report' || name === 'search_web' || name === 'read_web_page')
+  if (
+    name === 'ahead_report' ||
+    name === 'search_web' ||
+    name === 'read_web_page' ||
+    name === 'ahead_read_docs'
+  )
     return errorResult('forbidden', NOT_AN_AHEAD_CHECK);
   if (name === 'ahead_feedback') return errorResult('forbidden', NOT_AN_AHEAD_THREAD);
   if (row?.trigger === 'ahead') return errorResult('forbidden', AHEAD_TOOL_REFUSED);

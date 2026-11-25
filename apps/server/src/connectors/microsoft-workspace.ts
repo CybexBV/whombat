@@ -141,6 +141,7 @@ function event(e: Obj, calendarId: string) {
     ...(str(e.iCalUId) ? { uid: str(e.iCalUId).slice(0, 1024) } : {}),
     // One occurrence of a series, or a changed one (looks-ahead.md).
     ...(e.type === 'occurrence' || e.type === 'exception' || e.seriesMasterId ? { recurring: true } : {}),
+    ...(e.type === 'exception' ? { recurringException: true } : {}),
     ...ownResponse(e),
     ...(e.isCancelled ? { cancelled: true } : {}),
   });

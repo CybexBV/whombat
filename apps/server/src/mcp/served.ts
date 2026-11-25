@@ -373,7 +373,12 @@ export interface TurnShape {
 export const AHEAD_TOOLS: readonly McpToolName[] = AHEAD_TOOL_NAMES;
 
 /** The tools only a Looks ahead check is served. */
-const AHEAD_ONLY_TOOLS: readonly McpToolName[] = ['search_web', 'read_web_page', 'ahead_report'];
+const AHEAD_ONLY_TOOLS: readonly McpToolName[] = [
+  'search_web',
+  'read_web_page',
+  'ahead_read_docs',
+  'ahead_report',
+];
 
 /**
  * Everything an outsiders' turn may be served (docs/decisions/outsiders-turns.md). What strangers send may shape only
@@ -541,6 +546,8 @@ export interface ServedSelection {
    * `ahead_feedback`, their word on it. No other turn lists it. Absent: no.
    */
   aheadThread?: boolean;
+  /** The burrow has an active Paperless-ngx or Notion connection for read-only Looks ahead doc searches. Absent: no. */
+  aheadDocs?: boolean;
 }
 
 /** Reports to the Whombat Team (team-reports.md): the person's own turns, where they can send reports or have some. */
@@ -595,6 +602,8 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   if (name === 'look_report' && !sel.looks) return false;
   // The person's word on what Looks ahead told them: only in their turn in its thread (looks-ahead.md).
   if (name === 'ahead_feedback' && !sel.aheadThread) return false;
+  // Read-only Paperless/Notion search in a Looks ahead check: only when one is connected.
+  if (name === 'ahead_read_docs' && !sel.aheadDocs) return false;
   // Automations change only when the person asks in Chat, never from inside an automation's own step, and a step
   // finishes its work in its own turn.
   if ((AUTOMATION_CHAT_TOOLS as readonly string[]).includes(name) && sel.automationStep) return false;

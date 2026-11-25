@@ -1762,31 +1762,28 @@ Setup and operation: `docs/github.md`.
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
   back at once, without a message or a turn.
 - **Looks ahead** (`apps/server/src/looks-ahead/`, [looks-ahead.md](docs/decisions/looks-ahead.md)): every five minutes
-  a home job reads, while the assistant's calendar key is Allowed, the calendars of the person's Google and Microsoft
-  365 accounts that are on (by default the ones they can add to and show: their own and a shared Family calendar;
-  `looks_ahead_settings` keeps the switch, the changes from that default and the kinds of finding they stopped) and,
-  from 08:00 until 20:30, one at a time, at most 4 a day and none after 2 findings that day, begins the check of the
-  soonest due event: a timed, one-off event with a real place (one event on two calendars by its iCalendar id),
-  tomorrow's from 14:00, today's at once. A check (`ahead_checks`, one row per event version, never checked twice) is a
-  quiet `ahead` turn of the person's on the background model in their Chat, in a thread whose root is a message id the
-  row holds until a finding gets it: no “is thinking”, no busy assistant on Home, its final text never posted, no
-  failure card or Try again, no follow-ups, no other turn merging with it; one no runner took within two hours is
-  cancelled. It is served only `AHEAD_TOOLS` (`mcp/served.ts`), not the calendar (the event is in its request): the mail
-  where its key is Allowed (each mail cut to 8 000 characters), `search_web` (Brave on the person's key, while “Browse the web” is Allowed; a search
-  with an address, a link, a phone number, a code or a person's name is refused) and `read_web_page` (a public https page through
-  `lib/outbound.ts`, only a link the check found: a search result or a link on a page it read; `looks-ahead/seen.ts`),
-  and `ahead_report`; the web comes first, and once it read mail nothing more goes to the web (kept on the row,
-  `mail_read_at`); switched off or running late, only `ahead_report` is left. Hermes's policy blocks everything else, its memory among them, and says `review: false`, so the
-  plugin's post-answer review does nothing; when the check's turn ends, its Hermes session is deleted from the person's
-  home (`hermes_session_drops`). `ahead_report` ends it: nothing found keeps only the row; a finding whose sources the check
-  read (pages it read, mails it read; search results are only leads) is posted by the assistant as the thread's first message — its words without links or markup, then the
-  sources as Whombat names them (a page's site, a mail's sender's site), no link previews — with the quick replies “Not useful” and
-  “Stop checking for this”, and the person's Chat tells them (inbox and push). It stays quiet instead when its kind was
-  stopped, two were told that day, Looks ahead or the calendar went off, it is night or the event is about to begin, or
-  the event changed or went (read again just before). In the person's own turn in that thread the assistant is told
-  the finding came from mail and web pages and keeps their word with `ahead_feedback`. The thread settles two hours
-  after the event when the person didn't write in it; rows go a month after it. Settings → {assistant} → Looks ahead
-  (`looksAhead.get`, `looksAhead.update`) shows and switches it.
+  a home job reads, while the assistant's calendar and/or mail keys are Allowed, the calendars of the person's Google
+  and Microsoft 365 accounts that are on (up to 7 days ahead, or 14 days when incoming mail checks run) and recent
+  inbox messages across Google, Microsoft 365 and Email/IMAP (`looks-ahead/mail.ts`, pre-filtered deterministically
+  before any AI turn; `looks_ahead_settings` keeps the switch, `mail_on`, calendar overrides, user-owned standing
+  `rules` and stopped kinds). From 08:00 until 20:30, one at a time, at most 8 checks and 4 findings a day, it starts
+  the highest-priority due check (`planAheadPass`: `morning` > `eve` > `mail` > `early`, then signal priority, then
+  start time): timed and real all-day plans (including events without a location field and modified repeating
+  occurrences) plus actionable incoming emails. Calendar checks carry the rest of that day's accepted schedule; mail
+  checks carry the next 14 days of accepted plans and start with `mail_read_at` stamped so the web is permanently
+  closed. A check (`ahead_checks`, unique per version+stage, never repeated; later stages carry structured per-event
+  prior `note`s, never Hermes memory) runs quietly on the background model (`review: false`; ended Hermes sessions are
+  dropped via `hermes_session_drops`). It is served only `AHEAD_TOOLS` (`mcp/served.ts`): `search_web` (Brave with
+  `extra_snippets`, public words only), `read_web_page` (extracting JSON-LD event data and falling back to an
+  ephemeral incognito headless Chromium through a local SSRF-checked public-IP proxy on JS shells or bot-blocks),
+  `mail_search`/`mail_read`, `files_search`/`files_read`, strictly read-only `ahead_read_docs` (Paperless-ngx and
+  Notion when connected), and `ahead_report`; reading any private source closes the web for the check. `ahead_report`
+  posts sourced findings (pages read or attempted-and-blocked search fallbacks, mails, Drive/OneDrive files,
+  Paperless/Notion docs, or `{ calendar: true }` conflicts) in one thread per event (later stages reply in the same
+  thread) with an optional one-tap action chip plus “Not useful” (with optional reason calibrating future checks) and
+  “Stop checking for this”. Threads settle after the event (or 48 hours for mail findings) when the person didn't write
+  in them. Settings → {assistant} → Looks ahead (`looksAhead.get`, `looksAhead.update`, `looksAhead.checkNow`) manages
+  switches, standing rules, stopped kinds, recent checks and on-demand passes.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;

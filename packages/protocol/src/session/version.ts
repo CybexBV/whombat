@@ -76,12 +76,16 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * which a box offers only to a session at minor 8 or later (Whombat onepassword-sync.md); minor 9 is monitoring:
  * incidents, a thing's history and week, keeping things quiet and server alert limits (Whombat monitoring.md); minor 10
  * is Looks ahead: `looksAhead.get` and `looksAhead.update`, which an app asks only of a box at minor 10 or later (Whombat
- * looks-ahead.md); minor 11 is reports to the Whombat Team (`teamReports.*`, Whombat team-reports.md).
+ * looks-ahead.md); minor 11 is reports to the Whombat Team (`teamReports.*`, Whombat team-reports.md); minor 12 expands
+ * Looks ahead with `looksAhead.checkNow`, incoming mail checks, standing rules and recent checks (Whombat looks-ahead.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 11 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 12 };
 
 /** Session protocol minor (major 5) that has Looks ahead's setting (`looksAhead.*`); an app checks it before it asks. */
 export const LOOKS_AHEAD_MINOR = 10;
+
+/** Session protocol minor (major 5) that adds `looksAhead.checkNow`, incoming mail, standing rules and recent checks. */
+export const LOOKS_AHEAD_V2_MINOR = 12;
 
 /** Session protocol minor (major 5) that sends reports to the Whombat Team (`teamReports.*`); an app checks it first. */
 export const TEAM_REPORTS_MINOR = 11;

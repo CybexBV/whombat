@@ -21,11 +21,13 @@ export interface CalendarAccount {
   email: string;
 }
 
-/** The person's setting, as it bears on calendars and kinds. */
+/** The person's setting, as it bears on calendars, mail, rules and kinds. */
 export interface AheadSettings {
   on: boolean;
+  mailOn: boolean;
   calendarsOff: readonly string[];
   calendarsOn: readonly string[];
+  rules: readonly string[];
   stopped: readonly string[];
 }
 
@@ -129,22 +131,23 @@ export async function currentEvent(
 const EVENTS_KEEP_MS = 15 * 60_000;
 const eventReads = new WeakMap<Services, Map<string, { at: number; events: CalendarEvent[] }>>();
 
-/** The coming events on one calendar, kept `EVENTS_KEEP_MS`. Throws when the provider can't be read. */
+/** The coming events on one calendar, kept `EVENTS_KEEP_MS` unless `fresh` is set. Throws when the provider can't be read. */
 export async function upcomingEvents(
   services: Services,
   account: CalendarAccount,
   calendarId: string,
   now: Date,
   aheadMs: number,
+  fresh = false,
 ): Promise<CalendarEvent[]> {
   let kept = eventReads.get(services);
   if (!kept) {
     kept = new Map();
     eventReads.set(services, kept);
   }
-  const key = calendarKey(account.connectionId, calendarId);
+  const key = `${calendarKey(account.connectionId, calendarId)}:${aheadMs}`;
   const held = kept.get(key);
-  if (held && now.getTime() - held.at < EVENTS_KEEP_MS) return held.events;
+  if (!fresh && held && now.getTime() - held.at < EVENTS_KEEP_MS) return held.events;
   const events = await calendarEventsBetween(
     services,
     account,

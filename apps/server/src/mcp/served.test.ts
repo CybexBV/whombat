@@ -278,7 +278,7 @@ describe('the list a turn is served (turn-efficiency.md TE-05)', () => {
     ).not.toContain('look_report');
   });
 
-  it('serves a Looks ahead check only the calendar, the mail, its web tools and its report (looks-ahead.md)', () => {
+  it('serves a Looks ahead check only its mail, file, doc, web and report tools (looks-ahead.md)', () => {
     const personal = { ...team, turn: { ...team.turn, personal: true } };
     const check: ServedSelection = {
       ...personal,
@@ -286,13 +286,16 @@ describe('the list a turn is served (turn-efficiency.md TE-05)', () => {
       browser: 'preview',
       connections: true,
       looks: true,
+      aheadDocs: true,
       turn: { ...personal.turn, ahead: true },
     };
     expect(servedToolNames(check).sort()).toEqual([...AHEAD_TOOLS].sort());
+    // Without Paperless/Notion connected, ahead_read_docs stays unlisted.
+    expect(servedToolNames({ ...check, aheadDocs: false })).not.toContain('ahead_read_docs');
     // Without the mail connected, no mail tools.
     expect(servedToolNames({ ...check, usable: ['calendar'] })).not.toContain('mail_read');
     // Its own tools nowhere else.
-    for (const name of ['search_web', 'read_web_page', 'ahead_report'] as const) {
+    for (const name of ['search_web', 'read_web_page', 'ahead_read_docs', 'ahead_report'] as const) {
       expect(servedToolNames({ ...personal, usable: [...CONNECTOR_SERVICES] })).not.toContain(name);
       expect(toolFitsTurn(name, { ...personal.turn, outside: true })).toBe(false);
     }

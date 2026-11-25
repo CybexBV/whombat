@@ -74,12 +74,12 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 - `you.devices` Settings → You → Devices: the phones and computers signed in, and your passkeys
 - `you.prompts` Settings → You → Prompts: the prompts you keep to use again, offered after / in Chat
 
-### You, the assistant — `references/assistant.md` (25 settings)
+### You, the assistant — `references/assistant.md` (26 settings)
 - `agent.profile` Settings → (your name) → Name and face: (your name)’s name, face and voice
 - `agent.ai` Settings → (your name) → AI sign-in: what (your name) runs on, and your Claude and ChatGPT sign-ins
 - `agent.memory` Settings → (your name) → Memory: what (your name) remembers about you, and the notes it reads in every chat
 - `agent.may` Settings → (your name) → What (your name) may do: every permission: servers, connections, the Vault, the local network and the risky keys
-- `agent.ahead` Settings → (your name) → Looks ahead: whether (your name) checks what is on your calendar the afternoon before, which calendars, and what it no longer checks for
+- `agent.ahead` Settings → (your name) → Looks ahead: whether (your name) checks your upcoming plans and incoming mail, which calendars, what to watch for, recent checks, and what it no longer checks for
 - `agent.council` Settings → (your name) → Council: the councils (your name) can ask: which AIs sit on each, with which model and effort, and the default
 
 ### Connections, servers and services — `references/connections.md` (67 settings)

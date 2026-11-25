@@ -1,16 +1,26 @@
 /**
- * Settings → the assistant → **Looks ahead** on the phone (Whombat looks-ahead.md; the web's LooksAheadPart): the
- * afternoon before something on the person's calendar, the assistant checks it against their mail and the web and says
- * something only when it doesn't match. Its switch with how the last week went, the calendars it reads (each its own
- * switch, resting while Looks ahead is off) and the kinds of finding the person stopped, each with Check again. Every
- * change saves at once with a note; one that didn't go through says why. Pulling down reads it again. Only on a Whombat
- * that has it (`hasLooksAhead`; the screen leaves the part out elsewhere).
+ * Settings → the assistant → **Looks ahead** on the phone (Whombat looks-ahead.md; the web's LooksAheadPart): switch
+ * with Check now and week count, calendars, incoming mail switch, standing rules (“What to watch for”), stopped kinds,
+ * and recent checks. Every change saves at once with a note; one that didn't go through says why. Pulling down reads
+ * it again. Only on a Whombat that has it (`hasLooksAhead`).
  */
-import { looksAheadCalendarMeta, looksAheadSavedText, LOOKS_AHEAD_TEXT as T } from '@whombat/client';
+import {
+  hasLooksAheadV2,
+  looksAheadCalendarMeta,
+  looksAheadCheckMeta,
+  looksAheadSavedText,
+  LOOKS_AHEAD_TEXT as T,
+} from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
-import { useLooksAhead, useUpdateLooksAhead } from '@whombat/client/react';
-import { AHEAD_KIND_WORDS, type LooksAheadUpdate } from '@whombat/core';
-import { Alert, Switch, View } from 'react-native';
+import {
+  useCheckLooksAheadNow,
+  useLooksAhead,
+  useSessionProtocol,
+  useUpdateLooksAhead,
+} from '@whombat/client/react';
+import { AHEAD_KIND_WORDS, AHEAD_RULE_MAX, AHEAD_RULES_MAX, type LooksAheadUpdate } from '@whombat/core';
+import { useState } from 'react';
+import { Alert, Switch, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -22,8 +32,11 @@ import { Note, type PartProps, PartScroll } from './parts';
 export function LooksAheadPart({ profile }: PartProps) {
   const theme = useTheme();
   const { slug } = useBurrowBase();
+  const v2 = hasLooksAheadV2(useSessionProtocol());
   const query = useLooksAhead({ params: { burrow: slug } }, { retry: false });
   const update = useUpdateLooksAhead(slug);
+  const checkNow = useCheckLooksAheadNow(slug);
+  const [draftRule, setDraftRule] = useState('');
   const view = query.data;
 
   if (!view) {
@@ -38,13 +51,31 @@ export function LooksAheadPart({ profile }: PartProps) {
 
   const busy = update.isPending;
   const failed = (text: string) => Alert.alert(T.notSaved, text);
-  const save = (change: LooksAheadUpdate) => {
+  const save = (change: LooksAheadUpdate, onDone?: () => void) => {
     const said = looksAheadSavedText(view, change);
     update.mutate(change, {
-      onSuccess: (r) => (r.status === 'ok' ? showNotice(said) : failed(commitOutcomeText(r) ?? '')),
+      onSuccess: (r) => {
+        if (r.status === 'ok') {
+          showNotice(said);
+          onDone?.();
+        } else failed(commitOutcomeText(r) ?? '');
+      },
       onError: (error) => failed(hostErrorInfo(error).message),
     });
   };
+  const runCheckNow = () => {
+    checkNow.mutate(undefined, {
+      onSuccess: (r) => {
+        if (r.status === 'ok') showNotice(r.data.started ? T.checkStarted : T.nothingDue);
+        else failed(commitOutcomeText(r) ?? '');
+      },
+      onError: (error) => failed(hostErrorInfo(error).message),
+    });
+  };
+  const rules = view.rules ?? [];
+  const recent = view.recent ?? [];
+  const trimmedRule = draftRule.trim();
+  const canAddRule = trimmedRule.length >= 2 && rules.length < AHEAD_RULES_MAX && !busy;
 
   return (
     <PartScroll refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
@@ -63,6 +94,26 @@ export function LooksAheadPart({ profile }: PartProps) {
           disabled={busy}
           onChange={(on) => save({ on })}
         />
+        {v2 ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderTopWidth: 1,
+              borderTopColor: theme.colors.line,
+            }}
+          >
+            <Button
+              label={checkNow.isPending ? T.checkingNow : T.checkNow}
+              variant="secondary"
+              disabled={!view.on || checkNow.isPending}
+              onPress={runCheckNow}
+            />
+          </View>
+        ) : null}
       </Section>
 
       <Section title={T.calendars}>
@@ -85,6 +136,97 @@ export function LooksAheadPart({ profile }: PartProps) {
           ))
         )}
       </Section>
+
+      {v2 ? (
+        <Section title={T.mail}>
+          {view.hasMail === false ? (
+            <Note>{T.noMail}</Note>
+          ) : (
+            <SwitchRow
+              first
+              title={T.mail}
+              line={T.mailLine}
+              on={view.mailOn ?? true}
+              resting={!view.on}
+              disabled={busy || !view.on}
+              onChange={(mailOn) => save({ mailOn })}
+            />
+          )}
+        </Section>
+      ) : null}
+
+      {v2 ? (
+        <Section title={T.rules}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
+            <Text size={13} lh={1.45} color={theme.colors.mut}>
+              {T.rulesHint}
+            </Text>
+          </View>
+          {rules.map((rule) => (
+            <View
+              key={rule}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                minHeight: 52,
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderTopWidth: 1,
+                borderTopColor: theme.colors.line,
+              }}
+            >
+              <Text size={14} lh={1.4} style={{ flex: 1, minWidth: 0 }}>
+                {rule}
+              </Text>
+              <Button
+                label={T.removeRule}
+                variant="secondary"
+                disabled={busy}
+                onPress={() => save({ removeRule: rule })}
+                accessibilityLabel={T.removeRuleLabel(rule)}
+              />
+            </View>
+          ))}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderTopWidth: 1,
+              borderTopColor: theme.colors.line,
+            }}
+          >
+            <TextInput
+              value={draftRule}
+              onChangeText={setDraftRule}
+              placeholder={T.rulesPlaceholder}
+              placeholderTextColor={theme.colors.mut}
+              maxLength={AHEAD_RULE_MAX}
+              accessibilityLabel={T.rules}
+              style={{
+                flex: 1,
+                minHeight: 44,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: theme.colors.line,
+                borderRadius: theme.radii.button,
+                color: theme.colors.ink,
+                fontSize: 14,
+              }}
+            />
+            <Button
+              label={T.addRule}
+              variant="secondary"
+              disabled={!canAddRule}
+              onPress={() => save({ addRule: trimmedRule }, () => setDraftRule(''))}
+            />
+          </View>
+        </Section>
+      ) : null}
 
       {view.stopped.length ? (
         <Section title={T.stopped}>
@@ -112,6 +254,30 @@ export function LooksAheadPart({ profile }: PartProps) {
                 onPress={() => save({ kind, on: true })}
                 accessibilityLabel={T.turnBackOnLabel(kind)}
               />
+            </View>
+          ))}
+        </Section>
+      ) : null}
+
+      {v2 && recent.length ? (
+        <Section title={T.recent}>
+          {recent.map((item, i) => (
+            <View
+              key={item.id}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                gap: 2,
+                borderTopWidth: i === 0 ? 0 : 1,
+                borderTopColor: theme.colors.line,
+              }}
+            >
+              <Text size={14} weight={600} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text size={13} lh={1.4} color={theme.colors.mut}>
+                {looksAheadCheckMeta(item)}
+              </Text>
             </View>
           ))}
         </Section>

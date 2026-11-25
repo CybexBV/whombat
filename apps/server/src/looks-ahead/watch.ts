@@ -2,20 +2,29 @@
  * Looks ahead's watcher (docs/decisions/looks-ahead.md): a home job every five minutes, per Whombat with a person. It
  * tidies (checks that failed, threads of events that passed, old rows), then — while Looks ahead is on, within the
  * day's hours and budgets, with a turn of the person's ready to run and no check going on — reads the calendars that
- * are on and begins the check of the soonest due event (`planAheadPass`). Whombat wakes the assistant: it never wakes
- * itself.
+ * are on (up to 7 days ahead across early / eve / morning stages, carrying same-day schedule context) and incoming
+ * mail across Google, Microsoft 365 and Email/IMAP (when mailOn is on), then begins the highest-priority due check
+ * (`planAheadPass`). Also exposes `checkAheadNow` for an on-demand fresh pass from Settings.
  */
 import {
   AHEAD_CHECKS_PER_DAY,
   AHEAD_FINDINGS_PER_DAY,
+  AHEAD_MAIL_CALENDAR_MS,
   AHEAD_READ_MS,
+  type AheadCandidate,
   type AheadChecked,
+  type AheadScheduleEntry,
+  type AheadStage,
+  aheadPriority,
   aheadSkip,
+  aheadStage,
+  aheadStageVersion,
   aheadStartHours,
   aheadVersion,
   type CalendarEvent,
   planAheadPass,
 } from '@whombat/core';
+import { zonedParts } from '@whombat/core/text';
 import { and, eq, gte, inArray, isNull, like, lt, or, sql } from 'drizzle-orm';
 import { aheadChecks, burrows, dispatches } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
@@ -42,6 +51,7 @@ import {
   startAheadCheck,
   tidyAhead,
 } from './commands';
+import { mailAccounts, upcomingMailCandidates } from './mail';
 import { keyAllowed } from './turn';
 
 /** How often the watcher looks. */
@@ -50,14 +60,25 @@ export const AHEAD_WATCH_MS = 5 * 60_000;
 export interface AheadWatchOptions {
   /** Tests: whether a turn of the person's could run now (else the provider's readiness). */
   ready?: (agent: PrincipalRow, person: PrincipalRow) => Promise<boolean>;
+  /** Bypass the 15-minute calendar/mail caches (`looksAhead.checkNow`). */
+  fresh?: boolean;
 }
 
-/** An event the watcher may check, with what the check is told. */
+/** An item the watcher may check, with what the check is told. */
 interface Found {
-  key: string;
-  version: string;
-  start: string;
+  candidate: AheadCandidate;
   event: AheadEventInput;
+}
+
+/** Local YYYY-MM-DD key for grouping same-day schedule context. */
+function localDateKey(start: string, allDay: boolean, timeZone: string): string {
+  if (allDay && /^\d{4}-\d{2}-\d{2}/.test(start)) return start.slice(0, 10);
+  try {
+    const p = zonedParts(start, timeZone);
+    return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+  } catch {
+    return start.slice(0, 10);
+  }
 }
 
 /** Whether there is anything to tidy, read cheaply so a quiet Whombat commits nothing. */
@@ -97,16 +118,31 @@ async function tidyDue(services: Services, burrowId: string, now: Date): Promise
   return !!ended;
 }
 
-/** The events on the calendars that are on, from now to `AHEAD_READ_MS` ahead, that are ones to check. */
-async function upcoming(
+/** One raw accepted event collected from enabled calendars (used both as check candidate and for same-day schedule). */
+interface TrustedEvent {
+  same: string;
+  key: string;
+  calendarName: string;
+  account: CalendarAccount;
+  calendarId: string;
+  event: CalendarEvent;
+  dayKey: string;
+}
+
+/** Reads all enabled calendars once, returning both eligible check candidates and trusted schedule summaries. */
+async function upcomingCalendar(
   services: Services,
   accounts: readonly CalendarAccount[],
   settings: Awaited<ReturnType<typeof aheadSettingsOf>>,
   now: Date,
   timeZone: string,
-): Promise<Found[]> {
-  const out = new Map<string, Found>();
-  const skipped = new Set<string>();
+  aheadMs: number,
+  fresh = false,
+): Promise<{ found: Found[]; schedule: AheadScheduleEntry[] }> {
+  const trusted = new Map<string, TrustedEvent>();
+  const rejected = new Set<string>();
+  const skipCheck = new Set<string>();
+
   for (const account of accounts) {
     const calendars = await accountCalendars(services, account).catch((err) => {
       services.log.warn(
@@ -122,7 +158,8 @@ async function upcoming(
         account,
         calendar.id,
         now,
-        AHEAD_READ_MS,
+        aheadMs,
+        fresh,
       ).catch((err) => {
         services.log.warn(
           { err: String(err), connectionId: account.connectionId },
@@ -130,47 +167,113 @@ async function upcoming(
         );
         return [];
       });
+      const calendarName = (calendar.primary ? 'Your calendar' : calendar.name).slice(0, 120);
       for (const event of events) {
         const key = eventKey(account.connectionId, { ...event, calendarId: calendar.id });
-        // One event on two calendars (the person's and the family's) is checked once: by its iCalendar id, else by
-        // its provider id and the moment it starts. A copy the person declined or didn't answer anywhere is never
-        // checked through another calendar's copy.
         const same = event.uid ? key : `${event.id}\n${Date.parse(event.start)}`;
-        if (skipped.has(same)) continue;
-        if (aheadSkip(event)) {
-          skipped.add(same);
-          out.delete(same);
+        if (rejected.has(same)) continue;
+        // Never trust declined, unanswered (stranger invites) or cancelled events anywhere — not even in daySchedule.
+        if (event.cancelled || event.response === 'declined' || event.response === 'needs_action') {
+          rejected.add(same);
+          trusted.delete(same);
           continue;
         }
-        if (out.has(same)) continue;
-        const version = aheadVersion(event);
-        out.set(same, {
+        if (aheadSkip(event)) skipCheck.add(same);
+        if (trusted.has(same)) continue;
+        trusted.set(same, {
+          same,
           key,
-          version,
-          start: event.start,
-          event: {
-            key,
-            version,
-            connectionId: account.connectionId,
-            calendarId: calendar.id,
-            eventId: event.id,
-            guests: event.guests
-              .flatMap((g) => [g.email, ...(g.name ? g.name.split(/\s+/) : [])])
-              .filter(Boolean)
-              .slice(0, 100),
-            summary: event.summary.slice(0, 300),
-            location: event.location.slice(0, 500),
-            description: event.description.slice(0, 2000),
-            calendar: (calendar.primary ? 'Your calendar' : calendar.name).slice(0, 120),
-            start: event.start,
-            end: event.end,
-            timeZone,
-          },
+          calendarName,
+          account,
+          calendarId: calendar.id,
+          event,
+          dayKey: localDateKey(event.start, event.allDay, timeZone),
         });
       }
     }
   }
-  return [...out.values()];
+
+  // Group trusted events by local day so each check sees the rest of that day's trusted schedule.
+  const byDay = new Map<string, TrustedEvent[]>();
+  const allSchedule: AheadScheduleEntry[] = [];
+  for (const item of trusted.values()) {
+    const list = byDay.get(item.dayKey) ?? [];
+    list.push(item);
+    byDay.set(item.dayKey, list);
+    allSchedule.push({
+      summary: item.event.summary.slice(0, 300),
+      start: item.event.start,
+      end: item.event.end,
+      location: item.event.location.slice(0, 300),
+      calendar: item.calendarName,
+      ...(item.event.allDay ? { allDay: true } : {}),
+    });
+  }
+  allSchedule.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+
+  const found: Found[] = [];
+  for (const item of trusted.values()) {
+    if (skipCheck.has(item.same)) continue;
+    const stage = aheadStage({ start: item.event.start, allDay: item.event.allDay }, now, timeZone);
+    if (!stage) continue;
+    const rawVersion = aheadVersion(item.event);
+    const stageVer = aheadStageVersion(rawVersion, stage);
+    const daySchedule = (byDay.get(item.dayKey) ?? [])
+      .filter((other) => other.same !== item.same)
+      .sort((a, b) => Date.parse(a.event.start) - Date.parse(b.event.start))
+      .slice(0, 15)
+      .map((other) => ({
+        summary: other.event.summary.slice(0, 300),
+        start: other.event.start,
+        end: other.event.end,
+        location: other.event.location.slice(0, 300),
+        calendar: other.calendarName,
+        ...(other.event.allDay ? { allDay: true } : {}),
+      }));
+    const priority = aheadPriority({
+      stage,
+      summary: item.event.summary,
+      location: item.event.location,
+      allDay: item.event.allDay,
+      recurringException: item.event.recurringException,
+      hasDescription: Boolean(item.event.description.trim()),
+    });
+    found.push({
+      candidate: {
+        key: item.key,
+        version: rawVersion,
+        start: item.event.start,
+        stage,
+        source: 'calendar',
+        allDay: item.event.allDay,
+        priority,
+      },
+      event: {
+        source: 'calendar',
+        stage,
+        key: item.key,
+        version: stageVer,
+        connectionId: item.account.connectionId,
+        calendarId: item.calendarId,
+        eventId: item.event.id,
+        guests: item.event.guests
+          .flatMap((g) => [g.email, ...(g.name ? g.name.split(/\s+/) : [])])
+          .filter(Boolean)
+          .slice(0, 100),
+        summary: item.event.summary.slice(0, 300),
+        location: item.event.location.slice(0, 500),
+        description: item.event.description.slice(0, 2000),
+        calendar: item.calendarName,
+        start: item.event.start,
+        end: item.event.end,
+        timeZone,
+        ...(item.event.allDay ? { allDay: true } : {}),
+        ...(daySchedule.length ? { daySchedule } : {}),
+      },
+    });
+  }
+
+  return { found, schedule: allSchedule.slice(0, 30) };
 }
 
 /** One pass for one Whombat. The check it began, or null. */
@@ -219,33 +322,98 @@ export async function watchAhead(
     )
     .limit(1);
   if (working) return null;
-  // The calendar is read only where its key is Allowed: an assistant that must ask first doesn't read it by itself.
-  if (!(await keyAllowed(services, agent.id, 'calendar.read'))) return null;
-  const accounts = await calendarAccounts(services.db, person.accountId);
-  if (!accounts.length) return null;
+
+  const [canReadCal, canReadMail] = await Promise.all([
+    keyAllowed(services, agent.id, 'calendar.read'),
+    keyAllowed(services, agent.id, 'mail.read'),
+  ]);
+  const calAccounts = canReadCal ? await calendarAccounts(services.db, person.accountId) : [];
+  const mailboxes =
+    settings.mailOn && canReadMail ? await mailAccounts(services, services.db, person.accountId) : [];
+  if (!calAccounts.length && !mailboxes.length) return null;
+
   const ready = options.ready
     ? await options.ready(agent, person)
     : (await providerReadiness(services, agent, agentRuntimeOf(agent.runtime).provider, person)).ok;
   if (!ready) return null;
-  const found = await upcoming(services, accounts, settings, now, timeZone);
-  if (!found.length) return null;
+
+  const fresh = Boolean(options.fresh);
+  // When mail checks are active, read 14 days of calendar once so mail checks can spot missing events cleanly.
+  const calWindow = mailboxes.length ? AHEAD_MAIL_CALENDAR_MS : AHEAD_READ_MS;
+  const calData = calAccounts.length
+    ? await upcomingCalendar(services, calAccounts, settings, now, timeZone, calWindow, fresh)
+    : { found: [], schedule: [] };
+
+  const mailFound: Found[] = [];
+  if (mailboxes.length) {
+    const mailCandidates = await upcomingMailCandidates(services, mailboxes, settings.rules, now, fresh);
+    for (const m of mailCandidates) {
+      const stage: AheadStage = 'mail';
+      mailFound.push({
+        candidate: {
+          key: m.key,
+          version: m.version,
+          start: m.start,
+          stage,
+          source: 'mail',
+          priority: 2,
+        },
+        event: {
+          source: 'mail',
+          stage,
+          key: m.key,
+          version: aheadStageVersion(m.version, stage),
+          connectionId: m.account.connectionId,
+          calendarId: '',
+          eventId: m.message.id,
+          guests: [],
+          summary: (m.message.subject || '(no subject)').slice(0, 300),
+          location: '',
+          description: m.message.snippet.slice(0, 2000),
+          calendar: m.account.email.slice(0, 120),
+          start: m.start,
+          end: m.start,
+          timeZone,
+          ...(calData.schedule.length ? { daySchedule: calData.schedule } : {}),
+          mail: {
+            provider: m.account.provider,
+            messageId: m.message.id,
+            from: m.message.from.slice(0, 320),
+            subject: (m.message.subject || '(no subject)').slice(0, 300),
+            date: m.message.date.slice(0, 64),
+            snippet: m.message.snippet.slice(0, 600),
+          },
+        },
+      });
+    }
+  }
+
+  const allFound = [...calData.found, ...mailFound];
+  if (!allFound.length) return null;
+
   const checked: AheadChecked[] = (
     await services.db
-      .select({ key: aheadChecks.eventKey, version: aheadChecks.version, state: aheadChecks.state })
+      .select({
+        key: aheadChecks.eventKey,
+        version: aheadChecks.version,
+        stage: aheadChecks.stage,
+        state: aheadChecks.state,
+      })
       .from(aheadChecks)
       .where(
         and(
           eq(aheadChecks.burrowId, burrowId),
           inArray(
             aheadChecks.eventKey,
-            found.map((f) => f.key),
+            allFound.map((f) => f.candidate.key),
           ),
           gte(aheadChecks.startedAt, new Date(now.getTime() - CHECKS_KEEP_MS)),
         ),
       )
-  ).map((r) => ({ key: r.key, version: r.version, found: r.state === 'told' }));
+  ).map((r) => ({ key: r.key, version: r.version, stage: r.stage, found: r.state === 'told' }));
+
   const next = planAheadPass({
-    candidates: found.map((f) => ({ key: f.key, version: f.version, start: f.start })),
+    candidates: allFound.map((f) => f.candidate),
     checked,
     checksToday,
     findingsToday,
@@ -254,10 +422,27 @@ export async function watchAhead(
     now,
     timeZone,
   });
-  const pick = next ? found.find((f) => f.key === next.key && f.version === next.version) : null;
+  const pick = next
+    ? allFound.find(
+        (f) =>
+          f.candidate.key === next.key &&
+          f.candidate.version === next.version &&
+          (f.candidate.stage ?? 'eve') === (next.stage ?? 'eve'),
+      )
+    : null;
   if (!pick) return null;
   const res = await services.pipeline.commit(startAheadCheck, { event: pick.event, personId: person.id }, as);
   return res.status === 'ok' ? (res.result?.checkId ?? null) : null;
+}
+
+/** Runs one fresh pass right now (`looksAhead.checkNow`). Returns whether a check began. */
+export async function checkAheadNow(
+  services: Services,
+  burrowId: string,
+  options: Omit<AheadWatchOptions, 'fresh'> = {},
+): Promise<boolean> {
+  const started = await watchAhead(services, burrowId, { ...options, fresh: true });
+  return started !== null;
 }
 
 /** The job: every Whombat with a person, one after another. */
