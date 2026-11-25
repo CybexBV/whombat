@@ -39,7 +39,7 @@ import {
 import { WHOMBAT_MD_MAX } from '../hermes/config';
 import { isOutsideTurn } from '../outside';
 import { isCommandsTurn, isWorkFolderTurn, sandboxFor } from './access';
-import { aheadThreadLines, aheadTurnLines } from './ahead';
+import { aheadThreadLines, aheadTurnLines, aheadWatchLines } from './ahead';
 import { grantedApprovalLine, retryLine, undoRequestLines } from './approvals';
 import { attachmentNote } from './attachments';
 import { cardNote } from './cards';
@@ -466,6 +466,8 @@ export function prefaceLines(ctx: DispatchContext, options: TurnPromptOptions = 
   return [
     nowLine(ctx),
     ...(ctx.onBehalfOf && !isOutsideTurn(ctx) ? personalLines(ctx.onBehalfOf) : []),
+    // Their own turn may start a watch on their mail (looks-ahead.md).
+    ...aheadWatchLines(ctx),
     ...outsideLines(ctx),
     `Conversation: ${where(ctx)} (conversationId ${c.id})${c.topic ? ` — ${c.topic}` : ''}`,
     ...connectionLines(ctx),
