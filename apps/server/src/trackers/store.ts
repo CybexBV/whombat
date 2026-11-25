@@ -14,7 +14,11 @@ import {
 } from '../db/schema/index';
 import { addressHost, itemKindOf, type TrackerRunItem } from './items';
 
-/** A mirrored report as a run's item (TA-08), with its connection's label and handle; null when it is gone. */
+/**
+ * A mirrored report as a run's item (TA-08), with its connection's label and handle; null when it is gone. Read for
+ * share: an erasure deleting it at the same moment either comes first (no run starts) or waits for the run this starts,
+ * and then finds and stops it.
+ */
 export async function mirroredItem(db: Db | Tx, rowId: string): Promise<TrackerRunItem | null> {
   const [found] = await db
     .select({
@@ -25,7 +29,8 @@ export async function mirroredItem(db: Db | Tx, rowId: string): Promise<TrackerR
     })
     .from(trackerItems)
     .innerJoin(catalogConnections, eq(catalogConnections.id, trackerItems.connectionId))
-    .where(eq(trackerItems.id, rowId));
+    .where(eq(trackerItems.id, rowId))
+    .for('share', { of: trackerItems });
   if (!found) return null;
   const r = found.r;
   return {
