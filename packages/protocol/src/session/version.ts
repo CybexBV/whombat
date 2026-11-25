@@ -78,9 +78,11 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * is Looks ahead: `looksAhead.get` and `looksAhead.update`, which an app asks only of a box at minor 10 or later (Whombat
  * looks-ahead.md); minor 11 is reports to the Whombat Team (`teamReports.*`, Whombat team-reports.md); minor 12 expands
  * Looks ahead with `looksAhead.checkNow`, incoming mail checks, standing rules and recent checks (Whombat looks-ahead.md);
- * minor 13 is the owner's “Check for updates” (`appliance.update.check`, Whombat check-for-updates.md).
+ * minor 13 is the owner's “Check for updates” (`appliance.update.check`, Whombat check-for-updates.md); minor 14 is
+ * Looks ahead's “Keeping an eye on”: the view's `matters`, `looksAhead.update`'s `removeMatter`, and a recent check's
+ * `of`, `count` and `picked` (Whombat looks-ahead.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 13 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 14 };
 
 /** Session protocol minor (major 5) that checks for updates on demand (`appliance.update.check`); an app checks it first. */
 export const UPDATE_CHECK_MINOR = 13;
@@ -90,6 +92,12 @@ export const LOOKS_AHEAD_MINOR = 10;
 
 /** Session protocol minor (major 5) that adds `looksAhead.checkNow`, incoming mail, standing rules and recent checks. */
 export const LOOKS_AHEAD_V2_MINOR = 12;
+
+/**
+ * Session protocol minor (major 5) that shows and removes what Looks ahead keeps an eye on (`matters`,
+ * `removeMatter`); an app checks it before it offers Remove.
+ */
+export const LOOKS_AHEAD_MATTERS_MINOR = 14;
 
 /** Session protocol minor (major 5) that sends reports to the Whombat Team (`teamReports.*`); an app checks it first. */
 export const TEAM_REPORTS_MINOR = 11;

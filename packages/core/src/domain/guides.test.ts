@@ -299,10 +299,13 @@ describe('connections.finishGoogle (AG-14)', () => {
 describe('the assistant’s tools (AG-18)', () => {
   it('are personal-agent tools that need no key', () => {
     expect([...PERSONAL_ONLY_TOOL_NAMES].sort()).toEqual([
-      // Looks ahead's own: a check's report, connected docs, and the person's word on a finding (Whombat looks-ahead.md).
+      // Looks ahead's own: a check's report, connected docs, a look's picks, the person's word on a finding and what
+      // they asked it to keep an eye on (Whombat looks-ahead.md).
       'ahead_feedback',
       'ahead_read_docs',
       'ahead_report',
+      'ahead_triage',
+      'ahead_watch',
       // One thing back from a backup, on the person's yes (Whombat backup-look.md).
       'backup_bring_back',
       // Setting up from the chat with cards (Whombat connect-in-chat.md).

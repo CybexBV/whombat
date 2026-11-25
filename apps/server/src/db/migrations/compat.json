@@ -237,6 +237,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Looks ahead v2 (docs/decisions/looks-ahead.md): additive defaulted/nullable columns on looks_ahead_settings (mail_on, rules) and ahead_checks (source, stage, extra_kinds, action_label, note, feedback_note). The release before it reads and writes both tables past these columns."
+    },
+    "0038_looks_ahead_matters": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Looks ahead keeps an eye on matters (docs/decisions/looks-ahead.md): a new table ahead_matters cascading with the burrow, the person and the conversation, and one nullable text column on ahead_checks (matter_id, set null when its matter goes) with an index. The release before it never reads or writes the table and reads and writes ahead_checks past the column."
     }
   }
 }

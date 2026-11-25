@@ -19,7 +19,10 @@ import { queryHook } from './queries';
 /** Looks ahead as the Whombat has it. */
 export const useLooksAhead = queryHook(api.looksAhead.get);
 
-/** Change Looks ahead: its switch, incoming mail, one calendar, one kind of finding, or a standing rule. */
+/**
+ * Change Looks ahead: its switch, incoming mail, one calendar, one kind of finding, a standing rule, or stop keeping an
+ * eye on something.
+ */
 export function useUpdateLooksAhead(burrow: string) {
   const { client } = useWhombat();
   const qc = useQueryClient();

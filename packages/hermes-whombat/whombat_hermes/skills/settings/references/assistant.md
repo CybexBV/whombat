@@ -42,11 +42,11 @@ Every permission: servers, connections, the Vault, the local network and the ris
 
 ## Settings → (your name) → Looks ahead (`agent.ahead`)
 
-Whether (your name) checks your upcoming plans and incoming mail, which calendars, what to watch for, recent checks, and what it no longer checks for.
+Whether (your name) checks your upcoming plans and incoming mail, which calendars, what to watch for, what it keeps an eye on, recent checks, and what it no longer checks for.
 
 - Check upcoming plans and incoming mail now — `looksAhead.checkNow` · change
-- Read what Looks ahead checks, its rules and recent checks — `looksAhead.get` · read
-- Change Looks ahead switches, calendars, kinds or standing rules — `looksAhead.update` · change
+- Read what Looks ahead checks and keeps an eye on, its rules and recent checks — `looksAhead.get` · read
+- Change Looks ahead switches, calendars, rules or what it keeps an eye on — `looksAhead.update` · change
 
 ## Settings → (your name) → Council (`agent.council`)
 

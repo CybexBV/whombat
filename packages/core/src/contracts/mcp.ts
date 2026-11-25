@@ -47,6 +47,9 @@ import {
   AheadReportInput,
   AheadSearchInput,
   AheadSearchResult,
+  AheadTriageInput,
+  AheadWatchInput,
+  AheadWatchResult,
 } from '../domain/looks-ahead.js';
 import { Message, MessageMore, MessageTextInput, SUGGESTIONS_MAX, Suggestion } from '../domain/message.js';
 import { PLAN_MAX_STEPS, Plan, PlanStepNote, PlanStepState } from '../domain/plan.js';
@@ -801,7 +804,7 @@ export const MCP_TOOLS = {
     personal: true,
   }),
   // Looks ahead (Whombat looks-ahead.md): only in an `ahead` turn, but `ahead_feedback`, which the person's own turn in a
-  // finding's thread has.
+  // finding's thread has, and `ahead_watch`, which only a turn the person began themselves has.
   search_web: tool({
     name: 'search_web',
     title: 'Search the web',
@@ -843,9 +846,31 @@ export const MCP_TOOLS = {
     name: 'ahead_report',
     title: 'Say what you found',
     description:
-      'Only while you check ahead, once, at the end. found false: everything matches or nothing you can show with a source (you may still pass a brief factual note for later check stages of this event). found true: a sourced finding (kind, optional extraKinds if the same plan has a second issue, plain text without links, verified sources from read_web_page / mail_read / files_read / ahead_read_docs / calendar, optional short one-tap action chip label like “Update event to 20:45”, and optional note). Whombat names sources and posts it in its own thread with a push.',
+      'Only while you check ahead, once, at the end. found false: everything matches or nothing you can show with a source (you may still pass a brief factual note for later check stages of this event). found true: a sourced finding (kind, optional extraKinds if the same plan has a second issue, plain text without links, verified sources from read_web_page / mail_read / files_read / ahead_read_docs / calendar, or matter in a follow-up, optional short one-tap action chip label like “Update event to 20:45”, and optional note). In a mail check or a follow-up, with found true or false, matter starts keeping an eye on something that goes on after today (no ref: title, who, waitingOn, due), or updates or closes the one you were given (ref, note, close when it is done). Whombat names sources and posts it in its own thread with a push.',
     input: AheadReportInput,
     output: commitOutcome({ told: z.boolean() }),
+    requiredKey: null,
+    readOnly: false,
+    personal: true,
+  }),
+  ahead_triage: tool({
+    name: 'ahead_triage',
+    title: 'Pick mail to check',
+    description:
+      'Only while you look through new mail ahead, once, at the end: the mails that need the person (someone waiting for their answer or decision, a deadline, a payment or choice, a booking or change of plan, a problem with an account, news on something kept an eye on), by their numbers (m3), most important first, each with the number of the thing kept an eye on it belongs to (k1) if any. Nothing else: an empty list when none needs them. Whombat checks each pick closely later.',
+    input: AheadTriageInput,
+    output: commitOutcome({ picked: z.number().int().nonnegative() }),
+    requiredKey: null,
+    readOnly: false,
+    personal: true,
+  }),
+  ahead_watch: tool({
+    name: 'ahead_watch',
+    title: 'Keep an eye on mail',
+    description:
+      'Only when the person asks you themselves to tell them when something arrives in their mail (“tell me when the notary replies”): start with title, who, senders (words of the sender’s name or address) or words (of the subject), waitingOn and an optional due date; Whombat tells them in this thread when matching mail comes, and follows up when no answer comes. list shows what is kept an eye on; stop takes one off by its id. Needs Looks ahead and incoming mail on. Say in one line that you will tell them here.',
+    input: AheadWatchInput,
+    output: commitOutcome(AheadWatchResult.shape),
     requiredKey: null,
     readOnly: false,
     personal: true,

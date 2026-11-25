@@ -143,6 +143,8 @@ export const ID_PREFIXES = {
   findMyWatch: 'fmw',
   /** One Looks ahead check of an event (Whombat looks-ahead.md). */
   aheadCheck: 'ahc',
+  /** One thing Looks ahead keeps an eye on (“Keeping an eye on”, Whombat looks-ahead.md). */
+  aheadMatter: 'ahm',
   thingWatch: 'thw',
 } as const;
 
