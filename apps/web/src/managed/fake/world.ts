@@ -360,6 +360,8 @@ interface ApplianceState {
     finishes: { code: string | null; state: string; error: string | null }[];
     connected: boolean;
   };
+  /** A service's sign-in finished over the session (`connections.finishOAuth`): what came back, in order. */
+  oauthFinishes?: { code: string | null; state: string; iss: string | null }[];
   /** Accounts a development box let in (`enroll.dev`); Mara's own otherwise. */
   accounts?: Record<string, { name: string; email: string }>;
   /**
@@ -1055,6 +1057,8 @@ export interface FakeFaults {
   connects(): { device: string; peerId: string; channel: string }[];
   /** What `connections.finishGoogle` received on this Whombat (AG-14). */
   googleFinishes(device: string): { code: string | null; state: string; error: string | null }[];
+  /** What `connections.finishOAuth` received on this Whombat (a service's sign-in). */
+  oauthFinishes(device: string): { code: string | null; state: string; iss: string | null }[];
   /** Website feedback through the drop: available, unsupported by the cloud, or a runtime without it (FD-25). */
   feedbackDrop(device: string, value: FakeFeedbackDrop): void;
   /** Control's signup settings from now on (BL-25): mode, billing provider, trial days. */
@@ -3182,6 +3186,21 @@ export async function createFakeWorld(): Promise<FakeWorld> {
           const back = pending?.returnTo ?? '/';
           return json(200, { returnPath: `${back}${back.includes('?') ? '&' : '?'}${result}` });
         }
+        case 'connections.finishOAuth': {
+          const body = input.body as { code?: string; state: string; iss?: string };
+          a.oauthFinishes = [
+            ...(a.oauthFinishes ?? []),
+            { code: body.code ?? null, state: body.state, iss: body.iss ?? null },
+          ];
+          save();
+          // Any sign-in this fake started is Cloudflare's; a state it never made is refused, as the box does.
+          return json(200, {
+            returnPath: body.state.startsWith('oas_')
+              ? '/settings?tab=connections&connection=cloudflare&connected=cloudflare'
+              : '/connections?connect_error=invalid_state',
+            connectionId: null,
+          });
+        }
         case 'agent.get': {
           // Settings → Agent carries the credential source (CT-39): what this fake appliance stored for the agent.
           const r = await viaFixtures(api.agent.get, input);
@@ -4775,6 +4794,7 @@ export async function createFakeWorld(): Promise<FakeWorld> {
       impostorPeer: () => impostorPeer,
       connects: () => [...connects],
       googleFinishes: (device) => state.appliances[device]?.google?.finishes ?? [],
+      oauthFinishes: (device) => state.appliances[device]?.oauthFinishes ?? [],
       feedbackDrop(device, value) {
         const a = state.appliances[device];
         if (a) a.feedbackDrop = value;

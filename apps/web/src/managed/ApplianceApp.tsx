@@ -16,13 +16,19 @@ import {
 import {
   COPY,
   fingerprintOf,
+  finishGoogleConnection,
   type GoneReason,
+  type GoogleReturn,
   goneOf,
+  googleFinishStep,
+  heldGoogleConnect,
+  holdGoogleConnect,
   type KnownAppliance,
   type ManagedWhombats,
   pushKindOf,
   pushTarget,
   resolvePushRef,
+  withConnectError,
 } from '@whombat/client/managed';
 import {
   type ApplianceSession,
@@ -91,6 +97,12 @@ export interface ApplianceAppProps {
    * `welcome.edition` says it too (AP-5400, AP-5429).
    */
   edition?: Edition;
+  /**
+   * A service's sign-in that came back to the box's own page (`/connect/<service>` at its own address): finished over
+   * this session before the app shows, then `onConnectReturned` with the address set to where the box answered.
+   */
+  connectReturn?: GoogleReturn | null;
+  onConnectReturned?: () => void;
 }
 
 export function ApplianceApp({
@@ -114,6 +126,8 @@ export function ApplianceApp({
   whombats,
   page,
   edition,
+  connectReturn,
+  onConnectReturned,
 }: ApplianceAppProps) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [state, setState] = useState<ConnectionState>({ status: 'idle' });
@@ -232,6 +246,37 @@ export function ApplianceApp({
     return () => clearTimeout(t);
   }, [pushNote]);
 
+  // A sign-in that came back here: its code is single use, so it is sent once, whatever StrictMode or a reconnect does.
+  const returnSent = useRef(false);
+  const returnedCb = useRef(onConnectReturned);
+  returnedCb.current = onConnectReturned;
+  useEffect(() => {
+    if (!connectReturn || !setup) return;
+    const fallback = heldGoogleConnect(tabStorage)?.returnTo ?? '/connections';
+    const done = (to: string) => {
+      holdGoogleConnect(tabStorage, null);
+      window.history.replaceState(null, '', to);
+      returnedCb.current?.();
+    };
+    if (!connectReturn.state) {
+      if (!returnSent.current) done(withConnectError(fallback, 'invalid_state'));
+      returnSent.current = true;
+      return;
+    }
+    const step = (s: ConnectionState) => {
+      const next = googleFinishStep(s, returnSent.current);
+      if (next === 'wait') return;
+      returnSent.current = true;
+      if (next === 'give_up') done(withConnectError(fallback, 'exchange_failed'));
+      else
+        finishGoogleConnection(setup.raw, connectReturn).then(done, () =>
+          done(withConnectError(fallback, 'exchange_failed')),
+        );
+    };
+    step(setup.raw.state());
+    return setup.raw.onState(step);
+  }, [connectReturn, setup]);
+
   if (state.status === 'closed')
     return (
       <Gate
@@ -244,6 +289,14 @@ export function ApplianceApp({
       />
     );
   if (!setup) return null;
+  if (connectReturn)
+    return (
+      <ConnectionGate
+        title="Connecting…"
+        text={`Finishing on ${appliance.name ?? 'your Whombat'}. This takes a moment.`}
+        actions={null}
+      />
+    );
   return (
     <>
       <div className={styles.strips}>
@@ -339,6 +392,9 @@ interface Setup {
 }
 
 let setups = 0;
+
+/** This tab's storage, where a sign-in's start is held (reaching it may throw). */
+const tabStorage = () => window.sessionStorage;
 
 function createSetup(input: {
   opening?: Opening;

@@ -18,6 +18,7 @@ import {
   claimSecretOfPath,
   claimSecretOfTyped,
   createRegistry,
+  type GoogleReturn,
   isCommunity,
   joinWithBoxPasskey,
   type KnownAppliance,
@@ -33,6 +34,7 @@ import {
   passkeyErrorOf,
   pinnedRecord,
   probeOwnClaim,
+  readGoogleReturn,
   readLocalLink,
   readOwnClaimPrefill,
   recoveryEnrollRequest,
@@ -149,6 +151,15 @@ function setupWay(): SetupWay {
   }
 }
 
+/**
+ * A service's sign-in that came back to this page (`/connect/<service>?code=…&state=…`): a box at its own address is
+ * where the service sends the browser back to. Google and Microsoft come back to the hosted app, never here.
+ */
+function connectReturnOnThisPage(): GoogleReturn | null {
+  const back = readGoogleReturn(window.location);
+  return back?.provider === 'connection' ? back : null;
+}
+
 /** Leaves the claim link's page once it is spent (the secret changes after a claim). */
 function leaveClaimLinkPage() {
   if (claimLinkOnThisPage()) window.history.replaceState(null, '', '/');
@@ -177,6 +188,11 @@ export function BoxRoot({ env }: { env: BoxEnvironment }) {
   const [claimNotice, setClaimNotice] = useState<string | null>(null);
   // Out of the address before anything else reads it, whether or not the box still needs claiming.
   useState(takeClaimPrefill);
+  const [connectReturn, setConnectReturn] = useState(connectReturnOnThisPage);
+  // The code and state leave the address bar and its history at once: they go only to this box, over its session.
+  useEffect(() => {
+    if (connectReturnOnThisPage()) window.history.replaceState(null, '', '/');
+  }, []);
 
   const clearEnrollment = useCallback(() => {
     const r = registry();
@@ -410,6 +426,8 @@ export function BoxRoot({ env }: { env: BoxEnvironment }) {
         ...setupWay(),
       }}
       edition={box.edition ?? 'commercial'}
+      connectReturn={connectReturn}
+      onConnectReturned={() => setConnectReturn(null)}
     />
   );
 }
