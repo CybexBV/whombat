@@ -2962,3 +2962,34 @@ POST /v1/own-address/rename {v:1, label}  → 200 OwnAddressStateResponse | 404 
   (`Keeper.AddressFresh`): the journal's copy may be older than the own address's own state (a stop between the two
   saves).
 - Tests: link `TestAnAnswerOlderThanTheBoxsRenameKeepsTheNewAddress`; broker `TestALateMoveNeverUndoesARename`.
+
+## MG-193 Reports to the Whombat Team go to control through the manager (2026-11-25; Whombat team-reports.md, contracts 4.18)
+
+The person tells the team behind Whombat about a problem or an idea and follows the answers; control keeps the
+reports. The person's words and the team's answers travel as base64url JSON inside the device ops' bodies, so the
+manager forwards them without reading them. Five broker routes, the runtime only, the same way as the shared links
+(MG-154): each body checked strictly against the contract and sent unchanged as the device op of the same name, signed
+with the management key; control's answer checked against the contract and answered as control sent it (200).
+
+| Route | Body (runtime), up to 64 KiB | Device op | Answer |
+|---|---|---|---|
+| `POST /v1/runtime/team-reports/list` | `{}` | `team.reports.list` | `{available, reason, reports}` |
+| `POST /v1/runtime/team-reports/get` | `{reportId}` | `team.reports.get` | `{report}` |
+| `POST /v1/runtime/team-reports/create` | `{requestId, payload}` | `team.reports.create` | `{report}` |
+| `POST /v1/runtime/team-reports/reply` | `{requestId, reportId, payload}` | `team.reports.reply` | `{report}` |
+| `POST /v1/runtime/team-reports/act` | `{requestId, reportId, action}` | `team.reports.act` | `{report}` (null after `withdraw`) |
+
+- **Gated like what control answers once it knows the box** (`needKnown`, the gate of `noControlKnown`): `404` only
+  while Link is off, and on a box without control. A person whose Link ended can still read their reports and withdraw
+  one; control decides what each Link state allows (sending needs Link on or in grace) and refuses the rest with its
+  code (`link_off`).
+- **Errors** as the shared links': `503 control_unreachable` with `Retry-After: 300`; `502 control_refused` with
+  control's codes first in the message: its error code and its `details.code` (`not_found report_unknown: …`), once
+  when they are the same (control's `validation_failed` is both: `validation_failed: …`), the one there is, or
+  `refused` without either; `413 too_large`; `400 bad_request`.
+- **Answers** up to `device.TeamPayloadAnswerMaxBytes` (4 MiB) as base64url and a few KiB around it. Each exchange has
+  25 s; the runtime waits 30 s.
+- The fake control answers the ops with small fixed shapes (`TeamCalls`, `TeamAnswer`) and refuses with a code on
+  request (`TeamRefuse`, in `details.code`; `TeamRefuseAs` the error's own code, `refused` by default).
+- Tests: broker `TestTeamReportsForwarded`, `TestTeamReportsAnswers`, `TestTeamReportsTooLarge`,
+  `TestTeamReportsControlErrors`, `TestTeamReportsGate`, `TestTeamReportsWithdrawAfterLinkEnded`.

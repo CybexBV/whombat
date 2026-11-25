@@ -91,6 +91,7 @@ import { scheduleTool } from '../schedules/tool';
 import type { Services } from '../services';
 import { SETTINGS_TOOL_HANDLERS } from '../settings/tools';
 import { shareLinkTool } from '../shares/tool';
+import { reportToWhombatTeamTool, whombatTeamReportsTool } from '../team-reports/tool';
 import { watchChecksTool } from '../things/quiet/agent';
 import { quietUntilTool } from '../things/quiet/window-service';
 import { trackerItemTool, trackerReadTool } from '../trackers/access';
@@ -631,6 +632,9 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   backup_bring_back: (ctx, input) => backupBringBackTool(ctx, input),
   // A thread by link (share-links.md): always a card first.
   share_link: (ctx, input) => shareLinkTool(ctx, input),
+  // Reports to the Whombat Team (team-reports.md): a draft becomes a card; the reports read without the team's words.
+  report_to_whombat_team: (ctx, input) => reportToWhombatTeamTool(ctx, input),
+  whombat_team_reports: (ctx) => whombatTeamReportsTool(ctx),
   // The council the agent leads (council.md): its members run as T3 Code threads.
   ...COUNCIL_TOOL_HANDLERS,
   // Tasks the agent hands to T3 Code from a checklist card (delegate.md).

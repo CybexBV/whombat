@@ -322,7 +322,13 @@ export async function executeTrackerDecision({
       ? trigger.organization
       : (mirrored?.organization ?? null);
   await replaceWaitingRequests(ctx, connection.id, reportId, run.id);
-  const { agent, signature } = await replyAgent(tx, run.burrowId, run.definition.steps, step.from);
+  const { agent, signature } = await replyAgent(
+    tx,
+    run.burrowId,
+    run.definition.steps,
+    step.from,
+    connection.fields,
+  );
   const request = await openFeatureRequest(ctx, {
     run,
     stepId: step.id,

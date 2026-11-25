@@ -83,6 +83,36 @@ type RuntimeShareViewsRequest = device.ShareDeleteRequest
 // RuntimeShareViewsResponse is the same schema as device.ShareViewsResponse.
 type RuntimeShareViewsResponse = device.ShareViewsResponse
 
+// RuntimeTeamReportsListRequest is the same schema as device.TeamReportsListRequest.
+type RuntimeTeamReportsListRequest = device.TeamReportsListRequest
+
+// RuntimeTeamReportsListResponse is the same schema as device.TeamReportsListResponse.
+type RuntimeTeamReportsListResponse = device.TeamReportsListResponse
+
+// RuntimeTeamReportsGetRequest is the same schema as device.TeamReportsGetRequest.
+type RuntimeTeamReportsGetRequest = device.TeamReportsGetRequest
+
+// RuntimeTeamReportsGetResponse is the same schema as device.TeamReportsGetResponse.
+type RuntimeTeamReportsGetResponse = device.TeamReportsGetResponse
+
+// RuntimeTeamReportsCreateRequest is the same schema as device.TeamReportsCreateRequest.
+type RuntimeTeamReportsCreateRequest = device.TeamReportsCreateRequest
+
+// RuntimeTeamReportsCreateResponse is the same schema as device.TeamReportsGetResponse.
+type RuntimeTeamReportsCreateResponse = device.TeamReportsGetResponse
+
+// RuntimeTeamReportsReplyRequest is the same schema as device.TeamReportsReplyRequest.
+type RuntimeTeamReportsReplyRequest = device.TeamReportsReplyRequest
+
+// RuntimeTeamReportsReplyResponse is the same schema as device.TeamReportsGetResponse.
+type RuntimeTeamReportsReplyResponse = device.TeamReportsGetResponse
+
+// RuntimeTeamReportsActRequest is the same schema as device.TeamReportsActRequest.
+type RuntimeTeamReportsActRequest = device.TeamReportsActRequest
+
+// RuntimeTeamReportsActResponse is the same schema as device.TeamReportsActResponse.
+type RuntimeTeamReportsActResponse = device.TeamReportsActResponse
+
 // RuntimeLinkWhombatsRequest is the same schema as device.LinkWhombatsRequest.
 type RuntimeLinkWhombatsRequest = device.LinkWhombatsRequest
 
@@ -3376,6 +3406,116 @@ func ParseRuntimeShareViewsResponse(data []byte) (*RuntimeShareViewsResponse, er
 }
 
 var _ = register("RuntimeShareViewsResponse", func(data []byte) (any, error) { return ParseRuntimeShareViewsResponse(data) })
+
+// ParseRuntimeTeamReportsListRequest validates data against the RuntimeTeamReportsListRequest JSON Schema and decodes it.
+func ParseRuntimeTeamReportsListRequest(data []byte) (*RuntimeTeamReportsListRequest, error) {
+	v := new(RuntimeTeamReportsListRequest)
+	if err := schemas.Decode("RuntimeTeamReportsListRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsListRequest", func(data []byte) (any, error) { return ParseRuntimeTeamReportsListRequest(data) })
+
+// ParseRuntimeTeamReportsListResponse validates data against the RuntimeTeamReportsListResponse JSON Schema and decodes it.
+func ParseRuntimeTeamReportsListResponse(data []byte) (*RuntimeTeamReportsListResponse, error) {
+	v := new(RuntimeTeamReportsListResponse)
+	if err := schemas.Decode("RuntimeTeamReportsListResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsListResponse", func(data []byte) (any, error) { return ParseRuntimeTeamReportsListResponse(data) })
+
+// ParseRuntimeTeamReportsGetRequest validates data against the RuntimeTeamReportsGetRequest JSON Schema and decodes it.
+func ParseRuntimeTeamReportsGetRequest(data []byte) (*RuntimeTeamReportsGetRequest, error) {
+	v := new(RuntimeTeamReportsGetRequest)
+	if err := schemas.Decode("RuntimeTeamReportsGetRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsGetRequest", func(data []byte) (any, error) { return ParseRuntimeTeamReportsGetRequest(data) })
+
+// ParseRuntimeTeamReportsGetResponse validates data against the RuntimeTeamReportsGetResponse JSON Schema and decodes it.
+func ParseRuntimeTeamReportsGetResponse(data []byte) (*RuntimeTeamReportsGetResponse, error) {
+	v := new(RuntimeTeamReportsGetResponse)
+	if err := schemas.Decode("RuntimeTeamReportsGetResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsGetResponse", func(data []byte) (any, error) { return ParseRuntimeTeamReportsGetResponse(data) })
+
+// ParseRuntimeTeamReportsCreateRequest validates data against the RuntimeTeamReportsCreateRequest JSON Schema and decodes it.
+func ParseRuntimeTeamReportsCreateRequest(data []byte) (*RuntimeTeamReportsCreateRequest, error) {
+	v := new(RuntimeTeamReportsCreateRequest)
+	if err := schemas.Decode("RuntimeTeamReportsCreateRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsCreateRequest", func(data []byte) (any, error) { return ParseRuntimeTeamReportsCreateRequest(data) })
+
+// ParseRuntimeTeamReportsCreateResponse validates data against the RuntimeTeamReportsCreateResponse JSON Schema and decodes it.
+func ParseRuntimeTeamReportsCreateResponse(data []byte) (*RuntimeTeamReportsCreateResponse, error) {
+	v := new(RuntimeTeamReportsCreateResponse)
+	if err := schemas.Decode("RuntimeTeamReportsCreateResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsCreateResponse", func(data []byte) (any, error) { return ParseRuntimeTeamReportsCreateResponse(data) })
+
+// ParseRuntimeTeamReportsReplyRequest validates data against the RuntimeTeamReportsReplyRequest JSON Schema and decodes it.
+func ParseRuntimeTeamReportsReplyRequest(data []byte) (*RuntimeTeamReportsReplyRequest, error) {
+	v := new(RuntimeTeamReportsReplyRequest)
+	if err := schemas.Decode("RuntimeTeamReportsReplyRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsReplyRequest", func(data []byte) (any, error) { return ParseRuntimeTeamReportsReplyRequest(data) })
+
+// ParseRuntimeTeamReportsReplyResponse validates data against the RuntimeTeamReportsReplyResponse JSON Schema and decodes it.
+func ParseRuntimeTeamReportsReplyResponse(data []byte) (*RuntimeTeamReportsReplyResponse, error) {
+	v := new(RuntimeTeamReportsReplyResponse)
+	if err := schemas.Decode("RuntimeTeamReportsReplyResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsReplyResponse", func(data []byte) (any, error) { return ParseRuntimeTeamReportsReplyResponse(data) })
+
+// ParseRuntimeTeamReportsActRequest validates data against the RuntimeTeamReportsActRequest JSON Schema and decodes it.
+func ParseRuntimeTeamReportsActRequest(data []byte) (*RuntimeTeamReportsActRequest, error) {
+	v := new(RuntimeTeamReportsActRequest)
+	if err := schemas.Decode("RuntimeTeamReportsActRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsActRequest", func(data []byte) (any, error) { return ParseRuntimeTeamReportsActRequest(data) })
+
+// ParseRuntimeTeamReportsActResponse validates data against the RuntimeTeamReportsActResponse JSON Schema and decodes it.
+func ParseRuntimeTeamReportsActResponse(data []byte) (*RuntimeTeamReportsActResponse, error) {
+	v := new(RuntimeTeamReportsActResponse)
+	if err := schemas.Decode("RuntimeTeamReportsActResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeTeamReportsActResponse", func(data []byte) (any, error) { return ParseRuntimeTeamReportsActResponse(data) })
 
 // ParseHostMetricsRequest validates data against the HostMetricsRequest JSON Schema and decodes it.
 func ParseHostMetricsRequest(data []byte) (*HostMetricsRequest, error) {

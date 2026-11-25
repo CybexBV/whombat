@@ -12,6 +12,7 @@
  */
 
 import { type RouteProp, useRoute } from '@react-navigation/native';
+import { TEAM_REPORT_WORDS } from '@whombat/client';
 import {
   ACCOUNTS_TEXT,
   ago,
@@ -35,6 +36,7 @@ import {
   updateView,
 } from '@whombat/client/managed';
 import { useOwnNameCheck } from '@whombat/client/managed/react';
+import { useTeamReportsEntry } from '@whombat/client/react';
 import {
   type ApplianceStatus,
   type DiagnosticBundleSummary,
@@ -68,7 +70,7 @@ import { HardwareSection } from './HardwareSection';
 import { ChannelRow, ReachCard } from './ReachCard';
 import { RemoteHelpSection } from './RemoteHelpSection';
 import { diagnosticScopeLine } from './thisWhombat';
-import { Card, ErrorLine, Note, Row } from './ui';
+import { Card, ErrorLine, LinkRow, Note, Row } from './ui';
 import { useApplianceStatus, useReleaseSummary } from './useApplianceStatus';
 import { useMachineHere, useScrollToCard } from './useMachine';
 import { usePhoneReach } from './useReach';
@@ -80,7 +82,9 @@ export function WhombatAboutScreen() {
   const navigation = useAppNavigation();
   const managed = useManagedOrThrow();
   const { status, error, reload } = useApplianceStatus();
-  const { timeZone } = useBurrowBase();
+  const { timeZone, slug } = useBurrowBase();
+  // Reports to the Whombat Team (team-reports.md): only where one can be sent or the person has some.
+  const reports = useTeamReportsEntry(slug);
   const updates = status ? updateView(status, { timeZone }) : { rows: [], summaryOf: null, pollMs: null };
   const summary = useReleaseSummary(updates.summaryOf);
   // The owner's yes to the update waiting for them (ask-before-updating.md ABU-03).
@@ -223,6 +227,17 @@ export function WhombatAboutScreen() {
           />
           {/* Remote help is a Whombat Link feature (LNK-07); a box before Link keeps the old rule (HE-58, AP-5470). */}
           {remoteHelpShown ? <RemoteHelpSection here={remoteHelp} /> : null}
+          {reports ? (
+            <Card>
+              <LinkRow
+                first
+                title={TEAM_REPORT_WORDS.entry}
+                body={TEAM_REPORT_WORDS.intro}
+                label={`${TEAM_REPORT_WORDS.entry}. ${TEAM_REPORT_WORDS.intro}`}
+                onPress={() => navigation.navigate('TeamReports', { back: THIS_WHOMBAT_TEXT.parts.about })}
+              />
+            </Card>
+          ) : null}
           <Diagnostics />
 
           <Text size={12} mono color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>

@@ -28,6 +28,7 @@ export { default as BookOpen } from 'lucide-react-native/icons/book-open';
 export { default as BookmarkPlus } from 'lucide-react-native/icons/bookmark-plus';
 export { default as Bot } from 'lucide-react-native/icons/bot';
 export { default as Box } from 'lucide-react-native/icons/box';
+export { default as Bug } from 'lucide-react-native/icons/bug';
 export { default as Calendar } from 'lucide-react-native/icons/calendar';
 export { default as CalendarClock } from 'lucide-react-native/icons/calendar-clock';
 export { default as Camera } from 'lucide-react-native/icons/camera';

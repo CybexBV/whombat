@@ -532,11 +532,22 @@ export interface ServedSelection {
   /** The burrow has a Custom connection (an MCP server or API set up by hand): `connection_look`. Absent: no. */
   customConnections?: boolean;
   /**
+   * The person can send reports to the Whombat Team, or has some (team-reports.md):
+   * `report_to_whombat_team` and `whombat_team_reports`. Absent: no.
+   */
+  teamReports?: boolean;
+  /**
    * The person's own turn in the thread of something Looks ahead told them (docs/decisions/looks-ahead.md):
    * `ahead_feedback`, their word on it. No other turn lists it. Absent: no.
    */
   aheadThread?: boolean;
 }
+
+/** Reports to the Whombat Team (team-reports.md): the person's own turns, where they can send reports or have some. */
+export const TEAM_REPORT_TOOL_NAMES = [
+  'report_to_whombat_team',
+  'whombat_team_reports',
+] as const satisfies readonly McpToolName[];
 
 /**
  * The action types an approval can carry out only when something is set up for them (turn-overhead.md TO-04): a deploy
@@ -602,6 +613,13 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   if (name === 'connection_look' && (!sel.customConnections || sel.automationStep)) return false;
   // A link is made when the person asks for one in Chat: never from an automation's step (share-links.md).
   if (name === 'share_link' && sel.automationStep) return false;
+  // A report to the Whombat Team is the person's, drafted when they say so in Chat, and the team's words stay out of
+  // automations: never from an automation's step, and only where the person can send reports or has some.
+  if (
+    (TEAM_REPORT_TOOL_NAMES as readonly string[]).includes(name) &&
+    (!sel.teamReports || sel.automationStep)
+  )
+    return false;
   // Settings are the person's to change, when they ask: never from an automation's own step (assistant-settings.md).
   if ((SETTINGS_TOOL_NAMES as readonly string[]).includes(name) && sel.automationStep) return false;
   // A tracker run's own tools (TA-09, TA-10): the report in its turns, the organization only in a granted one.

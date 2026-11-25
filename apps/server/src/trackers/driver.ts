@@ -187,6 +187,19 @@ export const TrackerHealth = z.object({
 });
 export type TrackerHealth = z.infer<typeof TrackerHealth>;
 
+/**
+ * What a read of the items a tracker erased answers (`erasures`): their ids past the cursor, oldest first, and where to
+ * read on. An id is the tracker's id of an item (as `TrackerItem.id`); one this Whombat never mirrored is passed over.
+ */
+export const TrackerErasures = z.object({
+  ids: z.array(z.string().min(1).max(100)).max(1000),
+  /** The cursor to read on from next time: past the last id answered. Null: nothing new, the same cursor again. */
+  next: z.string().min(1).max(200).nullable(),
+  /** More are erased past `next` already: read on now. */
+  more: z.boolean().default(false),
+});
+export type TrackerErasures = z.infer<typeof TrackerErasures>;
+
 /** The connection's check: whether its token works. */
 export const TrackerCheck = z.object({
   ok: z.boolean(),
@@ -322,6 +335,13 @@ export interface TrackerDriver {
   prLine?(conn: TrackerConnection, number: number): string | null;
   /** The items a pull request's description names by `prLine`: the tracker's host and the item's number. */
   prMatch?(body: string): { host: string; number: number }[];
+  /**
+   * The items the tracker erased past `after` (null: from the start of what it keeps), oldest first, a page at a time
+   * (`TrackerErasures`). Whombat reads it every poll and deletes what it keeps of each item it mirrored: the report, its
+   * customer's answers, and the words of the runs about it, whose unfinished work stops. Absent: the tracker erases
+   * nothing, or doesn't say, and Whombat keeps its reports as before.
+   */
+  erasures?(conn: TrackerConnection, input: { after: string | null }): Promise<TrackerErasures>;
 }
 
 /** Why a call failed, as a driver says it. */

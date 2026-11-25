@@ -52,6 +52,11 @@ export const trackerCursors = pgTable('tracker_cursors', {
   /** What it offers of the part released on its own (null: it didn't say), as its health said last. */
   healthSeparate: jsonb('health_separate').$type<{ version: string | null; revision: string | null }>(),
   healthCheckedAt: ts('health_checked_at'),
+  /**
+   * Where the poller is in the tracker's list of erased items (its driver's `erasures` cursor; null: from the start of
+   * what the tracker keeps). Kept when nothing listens, unlike the baseline: erasures are read on regardless.
+   */
+  erasedAfter: text('erased_after'),
   updatedAt: ts('updated_at').notNull(),
 });
 

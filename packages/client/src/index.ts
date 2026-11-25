@@ -69,6 +69,7 @@ export * from './settingsGroups';
 export * from './shares';
 export { isStrictEndpoint, isStrictSessionOp } from './strict';
 export * from './svg';
+export * from './teamReports';
 export * from './threads';
 export {
   isUnsupportedCard,

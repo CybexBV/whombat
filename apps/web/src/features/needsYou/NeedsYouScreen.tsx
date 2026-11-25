@@ -18,6 +18,9 @@ import {
   needsYouMore,
   needsYouSettledText,
   startedChatPath,
+  TEAM_REPORT_WORDS,
+  teamReportDraftOfHref,
+  teamReportDraftPath,
   threadToOpen,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
@@ -510,6 +513,18 @@ function ApprovalRow({
   const mayHaveGoneThrough = useUnknownAnswer(burrow, number);
   const check = useAskToCheck(burrow, row.title);
   const updateSearch = useSearchUpdate();
+  // The assistant's draft report: Edit opens the form with it, as on its card in Chat. Too long to read here, it
+  // offers no yes: Open approval shows all of it, where it can be sent, beside the answers (as on the phone).
+  const draftId = teamReportDraftOfHref(row.item.href);
+  const navigate = useNavigateHref();
+  const openApproval =
+    draftId && number && !row.buttons.some((b) => b.action?.kind === 'approve')
+      ? {
+          id: 'open_approval',
+          label: NEEDS_YOU_WORDS.openApproval,
+          onSelect: () => void updateSearch((prev) => ({ ...prev, approval: number })),
+        }
+      : null;
   return (
     <article
       ref={ref}
@@ -523,13 +538,21 @@ function ApprovalRow({
         facts={card}
         pending
         busy={busy}
-        answers={row.buttons
-          .filter((b) => !b.more)
-          .map((b) => ({ id: b.id, label: b.label, onSelect: () => onPress(b) }))}
+        answers={[
+          ...row.buttons
+            .filter((b) => !b.more)
+            .map((b) => ({ id: b.id, label: b.label, onSelect: () => onPress(b) })),
+          ...(openApproval ? [openApproval] : []),
+        ]}
         unknown={mayHaveGoneThrough ? check : null}
         className={styles.approvalCard}
+        edit={
+          draftId
+            ? { label: TEAM_REPORT_WORDS.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
+            : undefined
+        }
         details={
-          number ? (
+          number && !openApproval ? (
             <div>
               <button
                 type="button"

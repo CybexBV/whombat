@@ -1253,6 +1253,39 @@ async function stopRunTail(ctx: ApplyContext, run: AutomationRunRow, reason: str
 }
 
 /**
+ * Cancels a run still in progress for a reason of Whombat's own, as Cancel does: its agents' turns stop, its unfinished
+ * steps are cancelled, its thread hears why (`reason`), and it is signed and published. `payload` adds to the signed
+ * event's. The caller checked the run is active and locked it.
+ */
+export async function cancelRunFor(
+  ctx: ApplyContext,
+  run: AutomationRunRow,
+  reason: string,
+  payload: Record<string, string | number | boolean> = {},
+): Promise<void> {
+  await ctx.tx
+    .update(automationRuns)
+    .set({
+      status: 'cancelled',
+      finishedAt: ctx.now,
+      error: reason,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      updatedAt: ctx.now,
+    })
+    .where(eq(automationRuns.id, run.id));
+  await stopRunTail(ctx, run, reason);
+  await ctx.emit({
+    type: 'automation.run.cancelled',
+    kind: 'System',
+    text: `Cancelled automation run #${run.number}`,
+    where: null,
+    payload: { automationId: run.automationId, runId: run.id, number: run.number, ...payload },
+  });
+  await publishRun(ctx, run.id);
+}
+
+/**
  * Deletes an automation (automation-recipes.md, contracts `automations.delete`): it stops at once — runs in progress are
  * cancelled as Cancel does (their agents' turns stop), it is switched off, its webhook goes off and its secret and keys
  * go — and it leaves every list (`automation.deleted`). Its runs and everything it signed stay; it never runs again.
@@ -1275,28 +1308,7 @@ export async function removeAutomation(
     .where(
       and(eq(automationRuns.automationId, row.id), inArray(automationRuns.status, [...ACTIVE_RUN_STATUSES])),
     );
-  for (const run of active) {
-    await tx
-      .update(automationRuns)
-      .set({
-        status: 'cancelled',
-        finishedAt: ctx.now,
-        error: reason,
-        leaseOwner: null,
-        leaseExpiresAt: null,
-        updatedAt: ctx.now,
-      })
-      .where(eq(automationRuns.id, run.id));
-    await stopRunTail(ctx, run, reason);
-    await ctx.emit({
-      type: 'automation.run.cancelled',
-      kind: 'System',
-      text: `Cancelled automation run #${run.number}`,
-      where: null,
-      payload: { automationId: row.id, runId: run.id, number: run.number, deleted: true },
-    });
-    await publishRun(ctx, run.id);
-  }
+  for (const run of active) await cancelRunFor(ctx, run, reason, { deleted: true });
   await tx
     .update(automations)
     .set({

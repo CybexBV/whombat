@@ -180,6 +180,8 @@ How the split was made: `docs.md`.
 - `feedback.md` — the embeddable bug-report widget and its assessments (*in part*).
 - `feedback-drop.md` — reports reach the box through the encrypted drop.
 - `share-links.md` — a thread of Chat shared by link: a sealed copy at control, the key in the link, 7 days by default.
+- `team-reports.md` — reports to the Whombat Team: a Link person's problems and ideas, kept at control, followed on
+  the box, drafted by the assistant only for the person's press.
 - `kept-sites.md` — a website the agent asked to stay signed in to between its turns: its cookies sealed for a few
   hours, put back into each fresh browser, stopped in What it may do.
 - `feedback-reporters.md` — the navigation trail and reporter sign-in (*in part*: the self-hosted routes are gone).

@@ -12492,3 +12492,27 @@ Names that pass for a sign-in or payment page, or that devices look up by themse
   `OWN_ADDRESS_LOOKALIKE_WORDS` refuses a name that is a company's name or has one as a hyphen-part (`apple-support`),
   except a drawn label. A name already given stays its box's. Control's own list of operator-reserved names comes on
   top and is control's alone.
+
+## CT-1801…CT-1804 Reports to the Whombat Team — contracts 4.18.0 (2026-11-25)
+
+A Whombat Link person tells the team behind Whombat about a problem or an idea from inside Whombat and follows the
+answer there (Whombat team-reports.md). A minor: new device ops, manager paths and session operations.
+
+- **CT-1801** `@whombat/core/domain` `team-reports.ts`: the shapes the box, the apps and control share (`TeamReport`,
+  `TeamReportSummary`, `TeamReportDraft`, `TeamReportReply`, `TeamReportList`, `TeamReportContext`), the tracker's
+  status vocabulary (`TeamReportStatus`), the limits (6 000 characters a description or reply, 1 500 for what the
+  person expected, 200 messages a report) and the person's words (`TEAM_REPORT_STATUS_WORDS`, the four-step track).
+- **CT-1802** Device ops `team.reports.list`, `.get`, `.create`, `.reply`, `.act`: the first ops that carry what the
+  person wrote, readable at control (John, 2026-11-25: the form says the Whombat Team reads it). The words travel as
+  base64url JSON (`TeamRequestPayload`, at most 40 KiB; `TeamAnswerPayload`, at most 4 MiB), checked on both ends with
+  the core shapes, so the cross-language schemas stay ASCII and the manager forwards them unread. Refusal codes
+  `TeamReportRefusalCode` in control's `details.code` (`team_reports_unavailable` for the team's switch,
+  `not_invited`, `link_off`, `too_many_open`, `report_unknown`, `report_closed`, `validation_failed`, `rate_limited`).
+- **CT-1803** Manager paths `/v1/runtime/team-reports/{list,get,create,reply,act}` (`MANAGER_PATHS.teamReports*`), the
+  device ops' bodies and answers exactly. An older manager answers 404.
+- **CT-1804** The session, minor 11 (`TEAM_REPORTS_MINOR`): `teamReports.list`, `.get`, `.draft` (reads),
+  `teamReports.create` and `.reply` (never resent: they act at control first) and `teamReports.act` (destructive and
+  never resent: a withdrawn report is deleted). The three are secret ops, so the person's and the team's words stay
+  out of receipts and logs. Their bodies take an optional `requestId` (`TeamRequestId`) the app keeps for every try of
+  one send; an answer with a whole report says how many of its oldest messages it left out (`earlier`), so it fits one
+  CONTROL message. People only; the assistant reaches none of them.

@@ -57,6 +57,7 @@ import { APP_ORIGINS, navigationRef, openAppUrl } from './hooks';
 import { PageBoundary } from './PageBoundary';
 import { useLastTab } from './panes';
 import {
+  appScreenOfLink,
   appUrlForPath,
   burrowOfPath,
   LINKING_PREFIXES,
@@ -71,7 +72,6 @@ import {
   SCREEN_IDS,
   stripLinkedActionParams,
   type TabParamList,
-  urlTarget,
 } from './routes';
 import { ScreenFocusLayout } from './ScreenFocus';
 import { ShareIntentBridge } from './ShareIntentBridge';
@@ -331,11 +331,11 @@ function usePushTaps(navRef: typeof navigationRef) {
         (navRef.navigate as (name: string, params?: object) => void)(route.name, route.params);
         return;
       }
-      // A link to the web app (`/needs-you?item=…`, `/things/…`, `/chats/…` as an external link, AP-1376): its screen
-      // here, the item itself where it names one (NYL-09).
-      if (open.to === 'link' && open.burrow === slug && open.link.type === 'external') {
-        const target = urlTarget(open.link.url, APP_ORIGINS);
-        if (target?.kind === 'app' && openAppUrl(target.url)) return;
+      // A page of the app as an external link (`/reports/…` by its path, `/needs-you?item=…`, `/things/…`, `/chats/…` on
+      // the web app, AP-1376): its screen here, the item itself where it names one (NYL-09).
+      if (open.to === 'link' && open.burrow === slug) {
+        const screen = appScreenOfLink(open.link, APP_ORIGINS);
+        if (screen && openAppUrl(screen)) return;
       }
       // No screen of its own: a push about the Whombat itself This Whombat (the desk screen asking to unlock,
       // desk-display-android.md AP-3055), the rest the inbox, Needs you.
@@ -708,6 +708,29 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
             }
           />
         ) : null}
+        {/* Reports to the Whombat Team (team-reports.md): the list, a new one and one report, where its push leads. */}
+        <Stack.Screen
+          name="TeamReports"
+          getComponent={() =>
+            (require('../screens/TeamReportsScreen') as typeof import('../screens/TeamReportsScreen'))
+              .TeamReportsScreen
+          }
+        />
+        <Stack.Screen
+          name="TeamReportNew"
+          getComponent={() =>
+            (require('../screens/TeamReportNewScreen') as typeof import('../screens/TeamReportNewScreen'))
+              .TeamReportNewScreen
+          }
+        />
+        <Stack.Screen
+          name="TeamReport"
+          getId={SCREEN_IDS.TeamReport}
+          getComponent={() =>
+            (require('../screens/TeamReportScreen') as typeof import('../screens/TeamReportScreen'))
+              .TeamReportScreen
+          }
+        />
         {managed ? (
           <Stack.Screen
             name="WhombatAbout"

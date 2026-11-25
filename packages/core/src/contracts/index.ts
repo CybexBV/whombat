@@ -55,6 +55,7 @@ import { serviceEndpoints } from './services.js';
 import { shareEndpoints } from './shares.js';
 import { skillLibraryEndpoints } from './skills-library.js';
 import { spendEndpoints } from './spend.js';
+import { teamReportEndpoints } from './team-reports.js';
 import { trackerEndpoints } from './tracker.js';
 import { usageEndpoints } from './usage.js';
 import { vaultEndpoints, vaultNetworkEndpoints } from './vault.js';
@@ -119,6 +120,7 @@ export * from './mcp-settings.js';
 export * from './mcp-setup.js';
 export * from './mcp-shares.js';
 export * from './mcp-tailnet.js';
+export * from './mcp-team-reports.js';
 export * from './mcp-tracker.js';
 export * from './mcp-vault.js';
 export * from './me.js';
@@ -135,6 +137,7 @@ export * from './services.js';
 export * from './shares.js';
 export * from './skills-library.js';
 export * from './spend.js';
+export * from './team-reports.js';
 export * from './tracker.js';
 export * from './usage.js';
 export * from './vault.js';
@@ -193,6 +196,7 @@ export interface Api {
   tracker: typeof trackerEndpoints;
   backups: typeof backupEndpoints;
   shares: typeof shareEndpoints;
+  teamReports: typeof teamReportEndpoints;
   keptSites: typeof keptSiteEndpoints;
   prompts: typeof promptEndpoints;
   councils: typeof councilEndpoints;
@@ -296,6 +300,8 @@ export const api: Api = {
   backups: backupEndpoints,
   /** Shared links (Whombat share-links.md): share a thread of Chat by link, the caller's links. */
   shares: shareEndpoints,
+  /** Reports to the Whombat Team (Whombat team-reports.md): problems and ideas, and the team's answers. */
+  teamReports: teamReportEndpoints,
   /** Websites the agent keeps signed in between its turns (Whombat kept-sites.md KS-06): the list, stopping one. */
   keptSites: keptSiteEndpoints,
   /** The person's prompts (Whombat prompts.md): the list after `/` in Chat, keeping one, using one on a project. */

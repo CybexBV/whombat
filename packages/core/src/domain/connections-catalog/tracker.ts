@@ -55,6 +55,20 @@ export const entry = {
         message: 'Email addresses, separated by commas.',
       },
     },
+    {
+      // The connection's own words end every reply instead of “<assistant> - AI Assistant”, so a team's replies can be
+      // signed as the team (Whombat team-reports.md).
+      id: 'signature',
+      label: 'Reply signature',
+      placeholder: 'Support team (AI assistant)',
+      help: 'How replies to customers end. Leave it empty to sign with your assistant’s name, like “Dusty - AI Assistant”.',
+      kind: 'text',
+      required: false,
+      validation: {
+        pattern: '[^\\n]{1,60}',
+        message: 'Up to 60 characters, on one line.',
+      },
+    },
   ],
   transport: 'rest',
   baseUrl: '{url}',

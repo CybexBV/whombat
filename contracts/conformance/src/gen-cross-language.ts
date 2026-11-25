@@ -287,6 +287,7 @@ function constants(pkg: GoPackage): string {
     block('Shared links (Whombat share-links.md).');
     num('ShareMaxEnvelopeBytes', device.SHARE_MAX_ENVELOPE_BYTES);
     num('SharePutMaxBytes', device.SHARE_PUT_MAX_BYTES);
+    num('TeamPayloadAnswerMaxBytes', device.TEAM_PAYLOAD_ANSWER_MAX_BYTES);
     num('ShareMaxLifetimeS', device.SHARE_MAX_LIFETIME_S);
     num('SharesPerDeviceMax', device.SHARES_PER_DEVICE_MAX);
     num('ShareIdsMax', device.SHARE_IDS_MAX);

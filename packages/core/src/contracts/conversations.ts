@@ -333,100 +333,137 @@ export const DeleteMessageResponse = z.object({
 });
 export type DeleteMessageResponse = z.infer<typeof DeleteMessageResponse>;
 
-export const messageEndpoints = {
-  list: endpoint({
-    id: 'messages.list',
-    method: 'GET',
-    path: '/burrows/:burrow/conversations/:conversationId/messages',
-    summary: 'Top-level messages (no thread replies), newest page first, each page oldest first.',
-    params: BC,
-    query: z.object({ before: Cursor.optional(), limit: limitQuery(50) }),
-    response: MessagePage,
-  }),
-  send: endpoint({
-    id: 'messages.send',
-    method: 'POST',
-    path: '/burrows/:burrow/conversations/:conversationId/messages',
-    summary: 'Post a message or thread reply. `@Agent` mentions (or any DM message) dispatch to the agent.',
-    params: BC,
-    body: SendMessageBody,
-    response: SendMessageResponse,
-    status: 201,
-  }),
-  get: endpoint({
-    id: 'messages.get',
-    method: 'GET',
-    path: '/burrows/:burrow/messages/:messageId',
-    summary: 'One message (deep links, receipts).',
-    params: BM,
-    response: z.object({ message: Message }),
-  }),
-  thread: endpoint({
-    id: 'messages.thread',
-    method: 'GET',
-    path: '/burrows/:burrow/messages/:messageId/thread',
-    summary:
-      'Thread pane: the root and its replies. With `limit` (0.55, feature `messages.thread_paging`): the newest page, `before` a reply for the page before it, `more` where the earlier ones start.',
-    params: BM,
-    query: ThreadQuery,
-    response: ThreadView,
-  }),
-  react: endpoint({
-    id: 'messages.react',
-    method: 'POST',
-    path: '/burrows/:burrow/messages/:messageId/reactions',
-    summary: 'Add or remove the viewer’s reaction.',
-    params: BM,
-    body: z.object({ value: ReactionValue, on: z.boolean() }),
-    response: z.object({ reactions: z.array(Reaction) }),
-  }),
-  more: endpoint({
-    id: 'messages.more',
-    method: 'POST',
-    path: '/burrows/:burrow/messages/:messageId/more',
-    summary:
-      '“More detail” under an agent’s short reply: the agent posts the detail it left out in the same place. Asking twice changes nothing.',
-    params: BM,
-    response: z.object({ message: Message }),
-  }),
-  edit: endpoint({
-    id: 'messages.edit',
-    method: 'PATCH',
-    path: '/burrows/:burrow/messages/:messageId',
-    summary:
-      'Edit your own message’s text (people; not cards). Sets `editedAt`; a newly added mention wakes or notifies once.',
-    params: BM,
-    body: EditMessageBody,
-    response: z.object({ message: Message }),
-  }),
-  jobAnswers: endpoint({
-    id: 'messages.jobAnswers',
-    method: 'POST',
-    path: '/burrows/:burrow/messages/:messageId/job-answers',
-    summary:
-      'Send T3 Code the person’s answers to what a job’s result message left for them, together: it carries them out in one run and the message is updated when that ends. Answers with the message.',
-    params: BM,
-    body: JobAnswersBody,
-    response: z.object({ message: Message }),
-  }),
-  delete: endpoint({
-    id: 'messages.delete',
-    method: 'DELETE',
-    path: '/burrows/:burrow/messages/:messageId',
-    summary:
-      'Delete a message (the person may delete any). Without replies it is removed; a thread root with replies becomes “This message was deleted.”.',
-    params: BM,
-    response: DeleteMessageResponse,
-  }),
-  pin: endpoint({
-    id: 'messages.pin',
-    method: 'PUT',
-    path: '/burrows/:burrow/messages/:messageId/pin',
-    summary: 'Pin or unpin a message in its conversation (people in it).',
-    params: BM,
-    body: z.object({ pinned: z.boolean() }),
-    response: z.object({ message: Message }),
-  }),
+const messageListEndpoint = endpoint({
+  id: 'messages.list',
+  method: 'GET',
+  path: '/burrows/:burrow/conversations/:conversationId/messages',
+  summary: 'Top-level messages (no thread replies), newest page first, each page oldest first.',
+  params: BC,
+  query: z.object({ before: Cursor.optional(), limit: limitQuery(50) }),
+  response: MessagePage,
+});
+
+const messageSendEndpoint = endpoint({
+  id: 'messages.send',
+  method: 'POST',
+  path: '/burrows/:burrow/conversations/:conversationId/messages',
+  summary: 'Post a message or thread reply. `@Agent` mentions (or any DM message) dispatch to the agent.',
+  params: BC,
+  body: SendMessageBody,
+  response: SendMessageResponse,
+  status: 201,
+});
+
+const messageGetEndpoint = endpoint({
+  id: 'messages.get',
+  method: 'GET',
+  path: '/burrows/:burrow/messages/:messageId',
+  summary: 'One message (deep links, receipts).',
+  params: BM,
+  response: z.object({ message: Message }),
+});
+
+const messageThreadEndpoint = endpoint({
+  id: 'messages.thread',
+  method: 'GET',
+  path: '/burrows/:burrow/messages/:messageId/thread',
+  summary:
+    'Thread pane: the root and its replies. With `limit` (0.55, feature `messages.thread_paging`): the newest page, `before` a reply for the page before it, `more` where the earlier ones start.',
+  params: BM,
+  query: ThreadQuery,
+  response: ThreadView,
+});
+
+const messageReactEndpoint = endpoint({
+  id: 'messages.react',
+  method: 'POST',
+  path: '/burrows/:burrow/messages/:messageId/reactions',
+  summary: 'Add or remove the viewer’s reaction.',
+  params: BM,
+  body: z.object({ value: ReactionValue, on: z.boolean() }),
+  response: z.object({ reactions: z.array(Reaction) }),
+});
+
+const messageMoreEndpoint = endpoint({
+  id: 'messages.more',
+  method: 'POST',
+  path: '/burrows/:burrow/messages/:messageId/more',
+  summary:
+    '“More detail” under an agent’s short reply: the agent posts the detail it left out in the same place. Asking twice changes nothing.',
+  params: BM,
+  response: z.object({ message: Message }),
+});
+
+const messageEditEndpoint = endpoint({
+  id: 'messages.edit',
+  method: 'PATCH',
+  path: '/burrows/:burrow/messages/:messageId',
+  summary:
+    'Edit your own message’s text (people; not cards). Sets `editedAt`; a newly added mention wakes or notifies once.',
+  params: BM,
+  body: EditMessageBody,
+  response: z.object({ message: Message }),
+});
+
+const messageJobAnswersEndpoint = endpoint({
+  id: 'messages.jobAnswers',
+  method: 'POST',
+  path: '/burrows/:burrow/messages/:messageId/job-answers',
+  summary:
+    'Send T3 Code the person’s answers to what a job’s result message left for them, together: it carries them out in one run and the message is updated when that ends. Answers with the message.',
+  params: BM,
+  body: JobAnswersBody,
+  response: z.object({ message: Message }),
+});
+
+const messageDeleteEndpoint = endpoint({
+  id: 'messages.delete',
+  method: 'DELETE',
+  path: '/burrows/:burrow/messages/:messageId',
+  summary:
+    'Delete a message (the person may delete any). Without replies it is removed; a thread root with replies becomes “This message was deleted.”.',
+  params: BM,
+  response: DeleteMessageResponse,
+});
+
+const messagePinEndpoint = endpoint({
+  id: 'messages.pin',
+  method: 'PUT',
+  path: '/burrows/:burrow/messages/:messageId/pin',
+  summary: 'Pin or unpin a message in its conversation (people in it).',
+  params: BM,
+  body: z.object({ pinned: z.boolean() }),
+  response: z.object({ message: Message }),
+});
+
+/**
+ * The messages' endpoints, spelled out by name so declaration emit refers to each one's type instead of expanding them
+ * all in one declaration (TS7056 once the message types grew past the compiler's limit).
+ */
+export interface MessageEndpoints {
+  list: typeof messageListEndpoint;
+  send: typeof messageSendEndpoint;
+  get: typeof messageGetEndpoint;
+  thread: typeof messageThreadEndpoint;
+  react: typeof messageReactEndpoint;
+  more: typeof messageMoreEndpoint;
+  edit: typeof messageEditEndpoint;
+  jobAnswers: typeof messageJobAnswersEndpoint;
+  delete: typeof messageDeleteEndpoint;
+  pin: typeof messagePinEndpoint;
+}
+
+export const messageEndpoints: MessageEndpoints = {
+  list: messageListEndpoint,
+  send: messageSendEndpoint,
+  get: messageGetEndpoint,
+  thread: messageThreadEndpoint,
+  react: messageReactEndpoint,
+  more: messageMoreEndpoint,
+  edit: messageEditEndpoint,
+  jobAnswers: messageJobAnswersEndpoint,
+  delete: messageDeleteEndpoint,
+  pin: messagePinEndpoint,
 };
 
 export const uploadEndpoints = {

@@ -8,8 +8,15 @@
  * `AgentSettingsScreen`, Advanced's `AdvancedScreens`. The AI sign-in's old page opens the assistant's.
  */
 import { type RouteProp, StackActions, useRoute } from '@react-navigation/native';
-import { type HostMetricsLoader, type HostSpend, PROMPT_WORDS, SETTINGS_GROUP_TEXT } from '@whombat/client';
+import {
+  type HostMetricsLoader,
+  type HostSpend,
+  PROMPT_WORDS,
+  SETTINGS_GROUP_TEXT,
+  TEAM_REPORT_WORDS,
+} from '@whombat/client';
 import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
+import { useTeamReportsEntry } from '@whombat/client/react';
 import type { HostMetrics } from '@whombat/protocol/session';
 import { type ReactNode, useCallback, useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -120,13 +127,15 @@ const LINKS_LINE = 'Links to copies of your threads, and stopping them';
  * and on a Whombat a row to Devices. What the assistant remembers is its own page's (Memory).
  */
 export function SettingsProfileScreen() {
-  const { bootstrap, mode } = useBurrow();
+  const { bootstrap, mode, slug } = useBurrow();
   const managed = useManaged();
   const navigation = useAppNavigation();
   const theme = useTheme();
   const prompts = usePrompts();
   const parts = youPartsHere({ mode, prompts: prompts.shown });
   const devices = SETTINGS_GROUP_TEXT.you.devices;
+  // Reports to the Whombat Team (team-reports.md): only where one can be sent or the person has some.
+  const reports = useTeamReportsEntry(slug);
   return (
     <SettingsPage title={SETTINGS_GROUP_TEXT.groups('').you}>
       <ProfileRow me={bootstrap.me} demo={mode === 'fixtures'} />
@@ -193,6 +202,25 @@ export function SettingsProfileScreen() {
             trailing="›"
             onPress={() => navigation.navigate('SettingsPrompts')}
             accessibilityLabel={`${SETTINGS_GROUP_TEXT.you.prompts}. ${PROMPT_WORDS.intro}`}
+          />
+        </View>
+      ) : null}
+      {reports ? (
+        <View
+          style={{
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: theme.colors.line,
+            backgroundColor: theme.colors.sf,
+            overflow: 'hidden',
+          }}
+        >
+          <ListRow
+            title={TEAM_REPORT_WORDS.entry}
+            body={TEAM_REPORT_WORDS.intro}
+            trailing="›"
+            onPress={() => navigation.navigate('TeamReports', { back: SETTINGS_GROUP_TEXT.groups('').you })}
+            accessibilityLabel={`${TEAM_REPORT_WORDS.entry}. ${TEAM_REPORT_WORDS.intro}`}
           />
         </View>
       ) : null}

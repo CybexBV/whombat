@@ -122,8 +122,24 @@ export function requestLine(step: { name?: string | undefined }, scope: Record<s
   if (typeof t.number !== 'number' || typeof t.title !== 'string') return name;
   const ref =
     typeof t.url === 'string' && /^https:\/\//.test(t.url) ? `[#${t.number}](${t.url})` : `#${t.number}`;
-  const title = t.title.replace(/\s+/g, ' ').trim().slice(0, 160);
-  return `${name}: ${ref} “${title}”`;
+  return `${name}: ${ref} “${shownTitle(t.title)}”`;
+}
+
+/** The title as a request line quotes it: on one line, at most 160 characters. */
+function shownTitle(title: string): string {
+  return title.replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+/**
+ * A request line without the title `requestLine` quoted in it (“@Dusty Assess it: #5”): what stays once the report or
+ * issue it named was deleted. Text that doesn't quote that title stays as it is.
+ */
+export function requestLineWithoutTitle(text: string, title: string): string {
+  const shown = shownTitle(title);
+  if (!shown) return text;
+  const quoted = ` “${shown}”`;
+  const at = text.lastIndexOf(quoted);
+  return at < 0 ? text : `${text.slice(0, at)}${text.slice(at + quoted.length)}`;
 }
 
 /**

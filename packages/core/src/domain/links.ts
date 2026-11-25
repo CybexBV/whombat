@@ -59,7 +59,16 @@ export const SearchLink = z.object({
   q: z.string(),
   filter: z.string().optional(),
 });
-export const ExternalLink = z.object({ type: z.literal('external'), url: z.url() });
+/**
+ * A page of the app by its path (`/reports/<id>`): it opens wherever the person uses Whombat (the hosted app, a box's own
+ * address, the phone), where an address would name one of them.
+ */
+export const AppPagePath = z
+  .string()
+  .max(2048)
+  .regex(/^\/(?![/\\])\S*$/, 'A path of the app, starting with one /');
+/** A web page by its address, or a page of the app by its path (`AppPagePath`). */
+export const ExternalLink = z.object({ type: z.literal('external'), url: z.union([z.url(), AppPagePath]) });
 /** A plan in its conversation's plan pane (`?plan=`), optionally one step (`&step=`); work-supervision WS-09. */
 export const PlanLink = z.object({
   type: z.literal('plan'),

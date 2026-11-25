@@ -37,6 +37,10 @@ import {
   RuntimeShareDeleteRequest,
   RuntimeSharePutRequest,
   RuntimeShareViewsRequest,
+  RuntimeTeamReportsActRequest,
+  RuntimeTeamReportsCreateRequest,
+  RuntimeTeamReportsGetRequest,
+  RuntimeTeamReportsReplyRequest,
   UpdateApproveRequest,
   UpdateAskRequest,
   UpdateChannelSetRequest,
@@ -80,6 +84,7 @@ import type { z } from 'zod';
 import { FakeTailscale } from './direct/tailscale';
 import type { SessionTransport } from './direct/transport';
 import { FakeHost } from './fake-host';
+import { FakeTeam, FakeTeamRefusal } from './fake-team';
 import { peerIdFromEd25519PublicKey } from './identity';
 import {
   type AdmissionTicket,
@@ -318,6 +323,45 @@ export class FakeManager implements ManagerPort {
       ];
     });
     return { shares };
+  }
+  /**
+   * Reports to the Whombat Team kept as control would (team-reports.md): `team` is control's side (tests make the team
+   * answer with `team.teamSays`); `teamFails` answers every team call with that error instead.
+   */
+  readonly team = new FakeTeam();
+  teamFails: ManagerCallError | null = null;
+  #teamCall<T>(path: string, call: () => T): T {
+    if (this.teamFails) throw this.teamFails;
+    try {
+      return call();
+    } catch (err) {
+      if (!(err instanceof FakeTeamRefusal)) throw err;
+      throw new ManagerCallError(
+        path,
+        502,
+        'control_refused',
+        `manager ${path}: 502 {"error":{"code":"control_refused","message":"refused ${err.code}: ${err.message}"}}`,
+      );
+    }
+  }
+  async teamReportsList() {
+    return this.#teamCall(MANAGER_PATHS.teamReportsList, () => this.team.list());
+  }
+  async teamReportsGet(request: z.input<typeof RuntimeTeamReportsGetRequest>) {
+    const body = RuntimeTeamReportsGetRequest.parse(request);
+    return this.#teamCall(MANAGER_PATHS.teamReportsGet, () => this.team.get(body));
+  }
+  async teamReportsCreate(request: z.input<typeof RuntimeTeamReportsCreateRequest>) {
+    const body = RuntimeTeamReportsCreateRequest.parse(request);
+    return this.#teamCall(MANAGER_PATHS.teamReportsCreate, () => this.team.create(body));
+  }
+  async teamReportsReply(request: z.input<typeof RuntimeTeamReportsReplyRequest>) {
+    const body = RuntimeTeamReportsReplyRequest.parse(request);
+    return this.#teamCall(MANAGER_PATHS.teamReportsReply, () => this.team.reply(body));
+  }
+  async teamReportsAct(request: z.input<typeof RuntimeTeamReportsActRequest>) {
+    const body = RuntimeTeamReportsActRequest.parse(request);
+    return this.#teamCall(MANAGER_PATHS.teamReportsAct, () => this.team.act(body));
   }
   claimed: { claimId: string; claimedAt: string }[] = [];
   revocations: { peerId: string; revokedAt: string }[] = [];

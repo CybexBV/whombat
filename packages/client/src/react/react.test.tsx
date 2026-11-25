@@ -504,7 +504,7 @@ describe('useSessionProtocol', () => {
     expect(result.current).toBeNull();
 
     act(() => session.connect());
-    await waitFor(() => expect(result.current).toEqual({ major: 5, minor: 10 }));
+    await waitFor(() => expect(result.current).toEqual({ major: 5, minor: 11 }));
 
     // Simulate a rollback to minor 2: reconnect picks up the older welcome version.
     appliance.faults.protocolMinor(2);

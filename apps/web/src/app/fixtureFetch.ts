@@ -67,6 +67,7 @@ import { createRichFixtures } from './richFixtures';
 import { createSettleFixtures } from './settleFixtures';
 import { createShareFixtures } from './shareFixtures';
 import { type StatusFixture, statusFixture, statusFixtureLayer } from './statusFixtures';
+import { createTeamReportFixtures, type TeamReportFixtureKind } from './teamReportFixtures';
 import { createThingPageFixtures, HOME_ASSISTANT_THING } from './thingPageFixtures';
 import { createUnreadFixtures } from './unreadFixtures';
 import { createVaultAssistantFixtures } from './vaultAssistantFixtures';
@@ -332,6 +333,12 @@ export interface WebFixtureOptions {
    * today. Default: `VITE_FIXTURE_STATUS`, `VITE_FIXTURE_DONE` or their `whombat:fixture-*` keys.
    */
   status?: Partial<StatusFixture>;
+  /**
+   * Reports to the Whombat Team (`teamReportFixtures.ts`, Whombat team-reports.md): `seeded`, `empty`, `stale` or `off`.
+   * Default: `VITE_FIXTURE_TEAM_REPORTS` or the visual suite's `whombat:fixture-team-reports`, else off, so the entry
+   * stays out of every other screen.
+   */
+  teamReports?: TeamReportFixtureKind;
 }
 
 /** The box's battery in fixture mode (AP-3021): `power`, `VITE_FIXTURE_POWER`, else plugged in with a desk. */
@@ -945,6 +952,21 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
       const req = input instanceof Request ? input : new Request(input, init);
       if (signedIn) {
         const own = await shareLinks.handle(req.clone());
+        if (own) return own;
+      }
+      return inner(req);
+    };
+  }
+  {
+    // Reports to the Whombat Team (Whombat team-reports.md): Your reports, a report, the form and the assistant's draft.
+    const inner = out;
+    const teamReports = createTeamReportFixtures(
+      options.teamReports === undefined ? {} : { kind: options.teamReports },
+    );
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const own = await teamReports.handle(req.clone());
         if (own) return own;
       }
       return inner(req);

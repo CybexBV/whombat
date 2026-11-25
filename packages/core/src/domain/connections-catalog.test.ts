@@ -1119,7 +1119,15 @@ describe('a report tracker (report-trackers.md, TA-01, TA-02)', () => {
     const token = catalogSignIn(e, 'token');
     if (token?.kind !== 'token') throw new Error('token');
     expect(token.auth).toEqual({ type: 'bearer' });
-    expect(fieldsFor(e, 'token').map((f) => f.id)).toEqual(['url', 'driver', 'releaseFor']);
+    expect(fieldsFor(e, 'token').map((f) => f.id)).toEqual(['url', 'driver', 'releaseFor', 'signature']);
+    // The connection's own reply signature: optional, one line of up to 60 characters.
+    const signature = e.fields.find((f) => f.id === 'signature');
+    if (!signature) throw new Error('signature');
+    expect(signature.required).toBe(false);
+    expect(fieldProblem(signature, '')).toBeNull();
+    expect(fieldProblem(signature, 'Whombat Team (AI assistant)')).toBeNull();
+    expect(fieldProblem(signature, 'x'.repeat(61))).not.toBeNull();
+    expect(fieldProblem(signature, 'two\nlines')).not.toBeNull();
     // Reporters whose bug fixes go straight to production (TA-135): optional, email addresses only.
     const releaseFor = e.fields.find((f) => f.id === 'releaseFor');
     if (!releaseFor) throw new Error('releaseFor');

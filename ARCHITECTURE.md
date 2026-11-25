@@ -988,7 +988,14 @@ published automation details read their definition and publisher from one versio
   closed in the tracker meanwhile ends at the next poll (“The report was closed.”) and its run goes on. Each poll also fills in
   the tracker's organization id on reports mirrored before Whombat kept it, so a repeat is told by it; an intake that can't
   go on by itself — more new reports than a poll reads, or an hour of failed polls — is said once in the person's Chat
-  and Inbox (`trackers/stuck.ts`).
+  and Inbox (`trackers/stuck.ts`). A driver may say which reports its tracker erased (its optional `erasures`, read
+  each poll from a cursor kept on the connection, and also for a connection nothing listens to any more while it keeps
+  mirrored reports): for each one mirrored or run for here, `trackers/erase.ts` deletes the mirrored report, its
+  customer's answers and its feature request cards, blanks the words its runs kept (their trigger's summary and
+  scope, their agent steps' instructions, the report's title in their requests to the agents in the thread), forgets
+  their agents' Hermes sessions, stops the runs still working on it (turns, waiting cards and approvals, a line in
+  their thread) and stops following its fixes, so the customer hears nothing more. The rest of the run's thread in Chat
+  and of its step outputs, approvals already answered, T3 Code threads and pull requests keep what they said.
 - **Telling**: a run tells the person as it posts, like any message in its room; a failed run, an approval and a
   review always notify. A saved definition's `tell` is accepted and ignored
   ([brief-removed.md](docs/decisions/brief-removed.md)).
@@ -1027,6 +1034,50 @@ then `share_published` (or `share_discard`); stopping is `share_stop` and, once 
 drops rows whose copy never reached control. Links work 7 days unless the person picks otherwise; Settings → You →
 Shared links lists them with how often control served each. The assistant's `share_link` always asks first. Reasons:
 [share-links.md](docs/decisions/share-links.md).
+
+## Reports to the Whombat Team (`apps/server/src/team-reports/`)
+
+A person whose Whombat runs Link tells the team behind Whombat about a problem or an idea from the apps' Reports pages
+(`api.teamReports.*`, people only). Control keeps the reports for the team; the box passes each call on through the
+manager (`team.reports.list`, `.get`, `.create`, `.reply`, `.act`), the person's words and the team's answers as
+base64url JSON of `@whombat/core`'s team report shapes, checked on both ends (`team-reports/payload.ts`); the manager
+forwards them unread (`appliance/manager/internal/broker/teamreports.go`) whenever control knows the box (any Link state
+but off). The box reads the list and a report and withdraws one whenever control knows it; it sends a report, a reply
+or It works / Still happening only while Link is on or in grace (`team-reports/control.ts`), and control refuses with
+its own code (`not_invited`, `link_off`, `too_many_open`, …), which the box puts in plain words. Each send carries one
+request id for every try of the same words: the app's, made anew when the words changed, or the draft's, from the card
+and the form alike. A send of a draft first reserves it through the pipeline (`sending`, with the words it sends), so
+the card's yes and the form never send it at once and neither sends it twice; a send that didn't go gives it back. A new report carries what the app said about itself
+and the box's version and update channel. An answer with a whole report fits one session message: the report's own
+words and the newest messages within three quarters of 64 KiB (the newest cut to fit when even it doesn't), with the
+count of those left out (`earlier`, `team-reports/fit.ts`); the list fits the same budget with long titles cut shorter. The send ops are secret ops, so the person's and the team's words stay out of session receipts.
+The box keeps a copy of each report in `team_report_copies` (the whole report as last read, control's latest revision
+and the revision the person read) through the pipeline: `team_report_keep` after a get, reply or new report (an answer
+older than the copy leaves it), `team_report_seen` after control's list when it says something new,
+`team_report_forget` when it is gone or withdrawn (an answer that left before a withdrawal keeps nothing of it: the box
+holds recent withdrawals in memory, `team-reports/withdrawn.ts`, and a call that started before every copy was dropped
+keeps nothing either, by the generation in `team-reports/in-flight.ts`), `team_reports_drop` for every copy when the manager
+says the box is out of Link (tried again in each follow round while copies remain) and, with the drafts not sent and
+their cards, before a backup restored onto new hardware takes the new device id, which waits until the drop went
+through. A report
+is unread while control's revision is past the one read; while control can't be reached the list shows the copies
+(`stale`). Shortly after start, and while a report is open every ten minutes, a job
+(`team-reports.follow`) asks control's list (the first look tried again a few times while the box doesn't know whether
+the person may send); a report waiting for the person, a question (`needs_information`) or a fix to try (`available`),
+that the team changed (or the box first sees so) becomes a needs-you notification and push in fixed words, once per
+revision, and the Inbox shows an item while the report waits for the person, both opening `/reports/<id>` by its path,
+wherever the app runs. Reading the report reads its notifications; withdrawn or dropped, they go. The team's words show only on the report's
+page: never in Chat, the assistant's context, Search or automations. The assistant's `report_to_whombat_team` keeps a
+draft (`team_report_drafts`) and always asks on a card that quotes it (its approval carries the words, so its details
+and its Inbox item show them too); the person's yes, never for later, sends it as theirs, and the
+card's Edit opens the form with the draft (`teamReports.draft`); the card's yes waits for its send, so a send that
+didn't go fails its execution and the card says so; sent from the form, the draft is done and its waiting card
+withdrawn (`team_report_draft_done`). `whombat_team_reports` reads numbers, the start of the person's own words
+as titles (never control's title, which the team may rename), statuses in words and dates. Both are served only in the person's own turns where they can send reports or have some. A tracker
+connection may sign its replies with its own `signature` instead of “<assistant> - AI Assistant”. Development's manager
+stand-in has a small team in memory (`managed/fake-team.ts`) that answers each new report a few seconds later and
+otherwise does as control does. Reasons:
+[team-reports.md](docs/decisions/team-reports.md).
 
 ## The person's prompts (`apps/server/src/prompts/`)
 

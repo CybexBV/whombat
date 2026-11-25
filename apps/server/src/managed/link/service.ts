@@ -258,6 +258,14 @@ export class LinkService {
   }
 
   /**
+   * Whether Link is on or in grace, as the manager said it: what a Link account's own features need (reports to the
+   * Whombat Team), where `active()` also counts a Link still starting.
+   */
+  running(): boolean {
+    return this.runs();
+  }
+
+  /**
    * Gives control the box's name while Link runs, so the account site shows it rather than “Your Whombat”: an Easy box
    * links at its first start, before its setup asks for a name. Through the manager's `link.on`, which sends a name
    * control wasn't given yet only after control says Link still runs (the manager's `Keeper.On`). Called when the box

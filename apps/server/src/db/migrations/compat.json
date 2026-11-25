@@ -225,6 +225,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Looks ahead (docs/decisions/looks-ahead.md): two new tables, looks_ahead_settings and ahead_checks. The release before it never reads or writes them."
+    },
+    "0036_team_reports": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Reports to the Whombat Team (docs/decisions/team-reports.md): two new tables, team_report_copies (the box's copy of each of its reports and the revision the person read) and team_report_drafts (reports the assistant drafted for the person to send), cascading with the burrow; and one nullable text column on tracker_cursors, where the poller is in a tracker's list of erased items (docs/decisions/report-trackers.md). The release before it never reads or writes the tables and reads and writes tracker_cursors past the column."
     }
   }
 }

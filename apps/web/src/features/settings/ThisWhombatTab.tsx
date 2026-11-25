@@ -39,6 +39,7 @@ import { OwnAddressSection } from '../machine/OwnAddressSection';
 import { ReachSection } from '../machine/ReachSection';
 import { useReach } from '../machine/useReach';
 import { ScreensTab } from '../screens/ScreensTab';
+import { TeamReportsAbout } from '../teamReports/TeamReportsAbout';
 import { VoiceSection } from '../voice/VoiceSection';
 import { AgentUpdatesSection } from './AgentUpdatesSwitch';
 import { BackupFileSection } from './BackupFileSection';
@@ -77,7 +78,8 @@ export type GoToPart = (part: WhombatTabPart, hash?: string) => void;
  *   (backup-options.md AP-6800), ON YOUR NETWORK, RECOVERY KIT, BACKUP FILE; a box from before as it was.
  * - **Screen**, where the box has a screen (or one paired) or the runtime has screens of widgets: the box's screen as a
  *   desk display, or every screen (`&part=`, `&screen=`).
- * - **About**: which Whombat this is and whether it is up to date, the versions under Technical details, then on a
+ * - **About**: which Whombat this is and whether it is up to date, the versions under Technical details, WHOMBAT TEAM
+ *   (Report a problem or idea, where the person may send one or has some), then on a
  *   managed Whombat UPDATES (with “Keep server agents up to date” where servers are), PLAN, HARDWARE (every part folded),
  *   REMOTE HELP and TURNED OFF HERE (what this Whombat doesn't do, with why). The audit log, the signing keys and the
  *   diagnostics file are Advanced's.
@@ -198,6 +200,8 @@ export function ThisWhombatTab({
       ) : (
         <PartBody>
           <AboutHead status={appliance.status} />
+          {/* Telling the Whombat Team about a problem or an idea (Whombat team-reports.md), where that is open. */}
+          <TeamReportsAbout burrow={burrow} />
           {/* When the assistant may install updates and restart things (care-plan.md), before the updates themselves. */}
           <QuietHoursSection burrow={burrow} />
           {managed ? <ApplianceSections appliance={appliance} /> : null}

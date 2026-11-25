@@ -452,6 +452,11 @@ export const SECRET_API_OPS: readonly string[] = [
   'burrows.testLocalModel',
   // The Brave Search key for the agent's web search (Whombat web-search.md).
   'burrows.setWebSearch',
+  // Reports to the Whombat Team (Whombat team-reports.md): what the person and the team wrote isn't a secret, but it is
+  // theirs to take back, so it stays out of receipts and logs like one.
+  'teamReports.create',
+  'teamReports.reply',
+  'teamReports.act',
 ];
 
 /**

@@ -40,11 +40,17 @@
  *   POST /v1/update/channel[/set]  {v, channel?}            → {v, channel, staysOn?} (4.4; 404 update.channel_unavailable)
  *   POST /v1/runtime/push/register|unregister {token|handle} → {handle} | {ok} (4.4; push through the box)
  *   POST /v1/link/mail {offline, notifications} → {ok}; POST /v1/runtime/mail LinkMail → {ok} (4.15; email through Link)
+ *   POST /v1/runtime/team-reports/list|get|create|reply|act  the device ops' bodies → their answers (4.18;
+ *                                                              team-reports.md; 404 without Link)
  *
  * The manager answers 503 `unavailable` while control is unreachable; the runtime keeps claims and revocations
  * pending and retries them.
  */
-import { FEEDBACK_PULL_RESPONSE_MAX_BYTES, type PushResult } from '@whombat/control-contracts/device';
+import {
+  FEEDBACK_PULL_RESPONSE_MAX_BYTES,
+  type PushResult,
+  TEAM_PAYLOAD_ANSWER_MAX_BYTES,
+} from '@whombat/control-contracts/device';
 import {
   CableChangeResponse,
   CableSetRequest,
@@ -107,6 +113,16 @@ import {
   RuntimeSharePutResponse,
   RuntimeShareViewsRequest,
   RuntimeShareViewsResponse,
+  RuntimeTeamReportsActRequest,
+  RuntimeTeamReportsActResponse,
+  RuntimeTeamReportsCreateRequest,
+  RuntimeTeamReportsCreateResponse,
+  RuntimeTeamReportsGetRequest,
+  RuntimeTeamReportsGetResponse,
+  RuntimeTeamReportsListRequest,
+  RuntimeTeamReportsListResponse,
+  RuntimeTeamReportsReplyRequest,
+  RuntimeTeamReportsReplyResponse,
   RuntimeTicketRequest,
   RuntimeTicketResponse,
   TailscaleCertRequest,
@@ -160,6 +176,13 @@ const HOST_ANSWER_MAX_BYTES = 256 * 1024;
 const KIT_ENVELOPES_TIMEOUT_MS = 30_000;
 /** A shared link's copy goes on to control (up to 11 MiB): the manager answers once control kept it. */
 const SHARE_TIMEOUT_MS = 60_000;
+/**
+ * Reports to the Whombat Team: one exchange with control through the manager (which gives up after 25 s), and an answer
+ * of up to a whole report with its longest conversation (`TEAM_PAYLOAD_ANSWER_MAX_BYTES` as base64url, and the fields
+ * around it).
+ */
+const TEAM_REPORTS_TIMEOUT_MS = 30_000;
+const TEAM_REPORTS_ANSWER_MAX_BYTES = Math.ceil((TEAM_PAYLOAD_ANSWER_MAX_BYTES * 4) / 3) + 8 * 1024;
 /** Tailscale's changes answer once tailscaled took them. */
 const TAILSCALE_TIMEOUT_MS = 30_000;
 /**
@@ -403,6 +426,40 @@ export class ManagerSocketClient implements ManagerPort {
   async shareViews(body: z.input<typeof RuntimeShareViewsRequest>) {
     return RuntimeShareViewsResponse.parse(
       await this.call(MANAGER_PATHS.shareViews, RuntimeShareViewsRequest.parse(body), SHARE_TIMEOUT_MS),
+    );
+  }
+
+  private teamCall(path: string, body: unknown) {
+    return this.call(path, body, TEAM_REPORTS_TIMEOUT_MS, TEAM_REPORTS_ANSWER_MAX_BYTES);
+  }
+
+  async teamReportsList() {
+    return RuntimeTeamReportsListResponse.parse(
+      await this.teamCall(MANAGER_PATHS.teamReportsList, RuntimeTeamReportsListRequest.parse({})),
+    );
+  }
+
+  async teamReportsGet(body: z.input<typeof RuntimeTeamReportsGetRequest>) {
+    return RuntimeTeamReportsGetResponse.parse(
+      await this.teamCall(MANAGER_PATHS.teamReportsGet, RuntimeTeamReportsGetRequest.parse(body)),
+    );
+  }
+
+  async teamReportsCreate(body: z.input<typeof RuntimeTeamReportsCreateRequest>) {
+    return RuntimeTeamReportsCreateResponse.parse(
+      await this.teamCall(MANAGER_PATHS.teamReportsCreate, RuntimeTeamReportsCreateRequest.parse(body)),
+    );
+  }
+
+  async teamReportsReply(body: z.input<typeof RuntimeTeamReportsReplyRequest>) {
+    return RuntimeTeamReportsReplyResponse.parse(
+      await this.teamCall(MANAGER_PATHS.teamReportsReply, RuntimeTeamReportsReplyRequest.parse(body)),
+    );
+  }
+
+  async teamReportsAct(body: z.input<typeof RuntimeTeamReportsActRequest>) {
+    return RuntimeTeamReportsActResponse.parse(
+      await this.teamCall(MANAGER_PATHS.teamReportsAct, RuntimeTeamReportsActRequest.parse(body)),
     );
   }
 

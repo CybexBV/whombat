@@ -68,6 +68,14 @@ export const WORK_SETTINGS = {
   'shares.preview': NONE,
   'shares.stop': NONE,
   'shares.stopAll': NONE,
+  // Reports to the Whombat Team: the assistant drafts one with its own tool and the person sends it; it never reads the
+  // team's words through these.
+  'teamReports.act': NONE,
+  'teamReports.create': NONE,
+  'teamReports.draft': NONE,
+  'teamReports.get': NONE,
+  'teamReports.list': NONE,
+  'teamReports.reply': NONE,
 
   // The person's prompts (Whombat prompts.md): the assistant keeps and changes them on the person's word; using one is
   // the person's own press, and removing asks first.

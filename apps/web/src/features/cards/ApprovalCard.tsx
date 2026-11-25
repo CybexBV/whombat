@@ -20,7 +20,7 @@ import { useMemo } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
-import { AskCard } from '../approvals/AskCard';
+import { AskCard, type AskCardEdit } from '../approvals/AskCard';
 import { AskDetails } from '../approvals/AskDetails';
 import { connectionCallView } from '../approvals/connectionCall';
 import { CodeBlock } from '../messaging/CodeBlock';
@@ -58,6 +58,8 @@ export interface ApprovalCardProps {
   onDecline?: () => void;
   /** A decision is being saved: the buttons wait. */
   busy?: boolean;
+  /** The assistant's draft report: Edit beside the answers opens the form with it. */
+  edit?: AskCardEdit | null;
 }
 
 /**
@@ -90,6 +92,7 @@ export function ApprovalCard({
   onDecline,
   unknown = null,
   busy = false,
+  edit = null,
 }: ApprovalCardProps) {
   const view: ApprovalView = useMemo(
     () => approvalView(approval, { names, viewer, now, timeZone }),
@@ -132,6 +135,7 @@ export function ApprovalCard({
           onSelect: () => run[c.key]?.(),
           ...(c.key === 'later' && later ? { title: later.label } : {}),
         }))}
+        edit={edit}
         answered={answer ? <AnswerState answer={answer} /> : null}
         unknown={pending ? unknown : null}
         details={

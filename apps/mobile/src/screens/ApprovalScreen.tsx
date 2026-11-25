@@ -6,14 +6,15 @@
  * conditions of code, a command's why and exact command, an email's whole body (IN-16). All of it scrolls in one region
  * above a separate answer bar that never covers it, holding only the one-time answers in the card's order and all of
  * equal weight: Yes, now · Yes, tonight · No (Yes, do it · No without a later time), code's Decline / Approve, a
- * command's scopes stacked (agent-computer.md AC-42), Undo once decided. The lasting yes asks first in the platform's own
- * alert, naming where it changes back. An answer whose outcome is unknown says it may have gone through and offers only
- * to ask the assistant to check (command-safety.md). Above a font scale of 1.3 the answers stack and wrap. An automation
- * asking (automation-recipes.md AP-999) shows its mark instead of a wombat.
+ * command's scopes stacked (agent-computer.md AC-42), Undo once decided; the assistant's draft report adds Edit, which
+ * opens the form with it (team-reports.md). The lasting yes asks first in the platform's own alert, naming where it
+ * changes back. An answer whose outcome is unknown says it may have gone through and offers only to ask the assistant
+ * to check (command-safety.md). Above a font scale of 1.3 the answers stack and wrap. An automation asking
+ * (automation-recipes.md AP-999) shows its mark instead of a wombat.
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { NEEDS_YOU_WORDS, nextAt } from '@whombat/client';
+import { NEEDS_YOU_WORDS, nextAt, TEAM_REPORT_WORDS } from '@whombat/client';
 import {
   useApproval,
   useChangeWindow,
@@ -132,6 +133,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
     else feedback.onText(NEEDS_YOU_WORDS.failed);
   };
   const answers = model.footer.kind === 'answers' ? model.footer : null;
+  const editDraft = model.editDraft;
   // A command's yes goes as far as the button said (AC-42), and the note says so: “Allowed for this task. …”.
   const allow = (scope: CommandScope) => {
     haptic('approve');
@@ -464,6 +466,18 @@ export function ApprovalScreen({ route, navigation }: Props) {
               onPress={() => answer(a.id)}
             />
           ))}
+          {editDraft ? (
+            // The assistant's draft report: the form takes the card's place, so back returns where it was opened.
+            <Button
+              label={TEAM_REPORT_WORDS.edit}
+              variant="secondary"
+              size="lg"
+              wrap={large}
+              disabled={decide.isPending}
+              accessibilityHint="Opens the report form with this draft"
+              onPress={() => navigation.replace('TeamReportNew', { draftId: editDraft, back })}
+            />
+          ) : null}
         </View>
       ) : model.footer.kind === 'decide' ? (
         // Approve first, Decline after it, as on the card; the same outlined style, so neither looks recommended.

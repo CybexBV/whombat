@@ -28,6 +28,7 @@ import {
   needsYouCount,
   needsYouGroupOf,
   type ThingSummary,
+  teamReportDraftWords,
   thingHref,
   thingId,
   type WatchItem,
@@ -55,6 +56,7 @@ import { liveResearches } from '../looks/research';
 import type { PrincipalRow } from '../read/principals';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
+import { TEAM_REPORT_ACTION, teamReportDraftHref } from '../team-reports/commands';
 import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
@@ -153,8 +155,12 @@ async function decidableApprovals(db: Db, burrowId: string, viewer: PrincipalRow
     summary: string;
     conversation_id: string;
     created_at: string;
+    action_name: string | null;
+    action_data: unknown;
   }>(sql`
-    select a.id, a.number, a.title, a.question, a.explainer, a.summary, a.conversation_id, a.created_at
+    select a.id, a.number, a.title, a.question, a.explainer, a.summary, a.conversation_id, a.created_at,
+           case when a.action->>'type' = 'custom' then a.action->'params'->>'name' end as action_name,
+           case when a.action->>'type' = 'custom' then a.action->'params'->'data' end as action_data
       from approvals a
      where a.burrow_id = ${burrowId} and a.state = 'pending'
      order by a.created_at desc
@@ -164,42 +170,83 @@ async function decidableApprovals(db: Db, burrowId: string, viewer: PrincipalRow
 /**
  * An approval's buttons in Needs you, in the words and order of the card in its thread: Yes, now · Yes, tonight · No.
  * Yes, tonight runs it when the quiet hours for changes next start (care-plan.md; 03:00 unless the person moved them).
+ * The assistant's draft report goes now or not at all (team-reports.md): Yes, do it · No.
  */
 export const APPROVAL_WORDS = {
   yes: APPROVAL_ASK_WORDS.now,
+  yesOnly: APPROVAL_ASK_WORDS.yes,
   tonight: APPROVAL_ASK_WORDS.later,
   no: APPROVAL_ASK_WORDS.no,
 } as const;
+
+/** The most an Inbox item's body holds (`NeedsYouItem.body`). */
+const BODY_MAX = 600;
 
 async function approvalItems(ctx: SourceCtx, viewer: PrincipalRow, burrow: BurrowRow): Promise<Sourced[]> {
   const rows = await decidableApprovals(ctx.db, burrow.id, viewer);
   const start = windowStartOf(burrow);
   const later = nextLocalTime(ctx.now, burrow.timeZone, start.hour, start.minute);
-  return rows.map((r) => ({
-    conversationId: r.conversation_id,
-    item: {
+  return rows.map((r) => {
+    const item: NeedsYouItem = {
       id: `approval:${r.number}`,
       ref: { kind: 'approval', id: String(r.number) },
       kind: 'approval',
       severity: 'warn',
       title: clip(r.question || r.title, 200),
-      body: clip(r.explainer || r.summary || '', 600),
+      body: clip(r.explainer || r.summary || '', BODY_MAX),
       at: new Date(r.created_at).toISOString(),
       approvalNumber: r.number,
-      // The approval's words everywhere (needs-you-list.md NYL-08): a yes, a yes for tonight, a no.
-      actions: [
-        { id: 'approve', label: APPROVAL_WORDS.yes, style: 'primary', kind: 'approve' },
-        {
-          id: 'later',
-          label: APPROVAL_WORDS.tonight,
-          style: 'secondary',
-          kind: 'approve_later',
-          at: later.toISOString(),
-        },
-        { id: 'decline', label: APPROVAL_WORDS.no, style: 'secondary', kind: 'decline' },
-      ],
+      actions: approvalActions(later),
+    };
+    return {
+      conversationId: r.conversation_id,
+      item: r.action_name === TEAM_REPORT_ACTION ? draftItem(item, r.action_data) : item,
+    };
+  });
+}
+
+/**
+ * The assistant's draft report in the Inbox (team-reports.md): it goes now or not at all, its body is exactly what would
+ * be sent, and its form is where the person changes it (Edit). A draft too long for the item can't be read there in
+ * full, so it isn't sent from there either: its card, which holds all of it, takes the yes.
+ */
+function draftItem(item: NeedsYouItem, data: unknown): NeedsYouItem {
+  const words = teamReportDraftWords(data);
+  const draftId = (data as { draftId?: unknown } | null)?.draftId;
+  const fits = words !== null && words.length <= BODY_MAX;
+  return {
+    ...item,
+    ...(words ? { body: fits ? words : clip(words, BODY_MAX) } : {}),
+    ...(typeof draftId === 'string' ? { href: teamReportDraftHref(draftId) } : {}),
+    actions: approvalActions(null).filter((a) => fits || a.kind !== 'approve'),
+  };
+}
+
+/**
+ * The approval's words everywhere (needs-you-list.md): a yes, a yes for `later` (tonight), a no; without a later
+ * time a yes and a no.
+ */
+function approvalActions(later: Date | null): NeedsYouItem['actions'] {
+  return [
+    {
+      id: 'approve',
+      label: later ? APPROVAL_WORDS.yes : APPROVAL_WORDS.yesOnly,
+      style: 'primary',
+      kind: 'approve',
     },
-  }));
+    ...(later
+      ? [
+          {
+            id: 'later',
+            label: APPROVAL_WORDS.tonight,
+            style: 'secondary',
+            kind: 'approve_later',
+            at: later.toISOString(),
+          } as const,
+        ]
+      : []),
+    { id: 'decline', label: APPROVAL_WORDS.no, style: 'secondary', kind: 'decline' },
+  ];
 }
 
 /**

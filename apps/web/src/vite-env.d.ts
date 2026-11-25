@@ -82,6 +82,8 @@ interface ImportMetaEnv {
   /** `1`: looks Neo looked into, on Home, their pages and in Chat (`lookFixtures.ts`, AP-5909). */
   readonly VITE_FIXTURE_LOOKS?: string;
   readonly VITE_FIXTURE_MONITORING?: string;
+  /** Reports to the Whombat Team: `seeded`, `empty`, `stale` or `off` (`teamReportFixtures.ts`). */
+  readonly VITE_FIXTURE_TEAM_REPORTS?: string;
   /** `good`: nothing open and every thing fine, for the status sentence (`statusFixtures.ts`, status-line.md). */
   readonly VITE_FIXTURE_STATUS?: string;
   /** `0`: Neo finished nothing today, so nothing was fixed today (`statusFixtures.ts`). */

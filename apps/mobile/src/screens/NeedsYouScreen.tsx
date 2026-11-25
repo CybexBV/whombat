@@ -10,7 +10,7 @@
  * a heads-up its place. Live through `home.changed`; pull to refresh.
  */
 import type { NeedsYouButton, NeedsYouGlyph, NeedsYouListGroupView, NeedsYouListRow } from '@whombat/client';
-import { NEEDS_YOU_WORDS, needsYouApprovalCard, needsYouListView } from '@whombat/client';
+import { NEEDS_YOU_WORDS, needsYouApprovalCard, needsYouListView, TEAM_REPORT_WORDS } from '@whombat/client';
 import { useHomeOverview, useStartChat } from '@whombat/client/react';
 import type { NeedsYouItem } from '@whombat/core';
 import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
@@ -20,6 +20,7 @@ import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import { startedChatRoute } from '../data/chatRoom';
 import { inboxMoreMenu } from '../data/nativeMenu';
 import {
+  approvalRowDoors,
   groupHeading,
   NEEDS_YOU_TAB,
   type PhoneRowInline,
@@ -722,9 +723,12 @@ function ApprovalRow({
   onMenu: (buttons: NeedsYouButton[]) => void;
 }) {
   const theme = useTheme();
+  const navigation = useAppNavigation();
   const { timeZone } = useBurrowBase();
   const words = useAgentWords();
   const card = needsYouApprovalCard(row, { timeZone, assistant: words.name });
+  // The assistant's draft report: Edit opens the form with it; too long for its yes here, its own screen takes it.
+  const doors = approvalRowDoors(row);
   if (!card) return null;
   return (
     <View
@@ -788,6 +792,38 @@ function ApprovalRow({
               onPress={() => onPress(b.id)}
             />
           ))}
+          {doors.approvalNumber ? (
+            <Button
+              label={NEEDS_YOU_WORDS.openApproval}
+              variant="secondary"
+              size="lg"
+              wrap
+              disabled={busy !== null}
+              accessibilityHint="Shows all of it, where you can send it"
+              onPress={() =>
+                navigation.navigate('Approval', {
+                  number: doors.approvalNumber as number,
+                  back: NEEDS_YOU_TAB.title,
+                })
+              }
+            />
+          ) : null}
+          {doors.draftId ? (
+            <Button
+              label={TEAM_REPORT_WORDS.edit}
+              variant="secondary"
+              size="lg"
+              wrap
+              disabled={busy !== null}
+              accessibilityHint="Opens the report form with this draft"
+              onPress={() =>
+                navigation.navigate('TeamReportNew', {
+                  draftId: doors.draftId as string,
+                  back: NEEDS_YOU_TAB.title,
+                })
+              }
+            />
+          ) : null}
         </View>
       </View>
       {inline.more.length ? (

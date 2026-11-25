@@ -206,6 +206,10 @@ func (s *Server) Handler() http.Handler {
 	for path, route := range shareRoutes {
 		mux.HandleFunc("POST "+path, s.onlyN(rt, route.requestMax, s.share(route)))
 	}
+	// Reports to the Whombat Team (teamreports.go): the person's words and the team's answers, forwarded unread.
+	for path, route := range teamReportRoutes {
+		mux.HandleFunc("POST "+path, s.onlyN(rt, route.requestMax, s.share(route)))
+	}
 	// The own address (ownaddress.go, MG-166): the runtime's only.
 	mux.HandleFunc("POST "+local.ManagerPathLinkState, s.onlyN(rt, linkBodyMax, s.linkState))
 	mux.HandleFunc("POST "+local.ManagerPathLinkOn, s.onlyN(rt, linkBodyMax, s.linkOn))
@@ -270,7 +274,8 @@ func decode(r *http.Request, v any) error {
 func (s *Server) noControl(w http.ResponseWriter) bool { return s.gate(w, needActive) }
 
 // noControlKnown is noControl for what is never gated once control knows the box (LNK-06): claim and revocation
-// reports, push.send (control lets only security pushes through once Link ended).
+// reports, push.send (control lets only security pushes through once Link ended). The team report routes take the
+// same gate through their route (teamreports.go).
 func (s *Server) noControlKnown(w http.ResponseWriter) bool { return s.gate(w, needKnown) }
 
 func (s *Server) controlErr(w http.ResponseWriter, err error) {

@@ -9,7 +9,8 @@
  * organization access of steps that have settled. Each cycle also fills in the tracker's organization id of mirrored
  * reports that have none and ends the feature request cards of reports closed in the tracker; an intake that can't go
  * on by itself — a backlog past what a cycle reads, or an hour of failed polls — tells the person once per streak
- * (`stuck.ts`).
+ * (`stuck.ts`). Before all that, a cycle forgets the reports the tracker erased (`erase.ts`, its driver's `erasures`), and
+ * a connection nothing listens to that still keeps mirrored reports is read for that alone.
  */
 import { and, eq, inArray, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import { outsideCommandScope } from '../commit/scope';
@@ -20,6 +21,7 @@ import { revokeSettledGrants } from './access';
 import { tokenRefused, trackerConnectionRow, trackerDriver } from './connection';
 import type { TrackerItem } from './driver';
 import { type BoundDriver, TrackerDrivers } from './drivers';
+import { ERASE_PER_COMMIT, eraseTrackerItems, keepingBurrow, keepingConnections, keptReports } from './erase';
 import { SourceProblem, TrackerNotFound } from './errors';
 import { closedReportRequests, endClosedReportRequests } from './features';
 import { customerSaid, followFixes, healthOf } from './fixes';
@@ -73,6 +75,8 @@ export const DEEPER_PER_CYCLE = 10;
 export const DEEPER_MISSES = 3;
 /** How long before the baseline a report's creation may lie and still be new (clocks differ). */
 export const CLOCK_SLACK_MS = 60 * 60_000;
+/** Pages of the tracker's erased reports one cycle reads at most; the rest come next time. */
+export const ERASURE_PAGES = 5;
 
 /** What one cycle did (tests, logs). */
 export interface PollResult {
@@ -88,6 +92,8 @@ export interface PollResult {
   organizations?: number;
   /** Feature request cards ended because their report was closed in the tracker. */
   closedRequests?: number;
+  /** Mirrored reports forgotten because the tracker erased them. */
+  erased?: number;
   problem?: string;
 }
 
@@ -174,6 +180,8 @@ export class TrackerService {
     const listened = await listenedConnections(this.services.db);
     // Nothing listens any more: the next listener starts with a new baseline (TA-06).
     const ids = [...listened.keys()];
+    // A connection nothing listens to that still keeps mirrored reports is read for its tracker's erasures only.
+    const keeping = await keepingConnections(this.services.db, ids);
     await this.services.db
       .update(trackerCursors)
       .set({ since: null, after: null, updatedAt: this.services.clock() })
@@ -184,7 +192,7 @@ export class TrackerService {
         ),
       );
     const now = this.services.clock().getTime();
-    for (const id of ids) {
+    for (const id of [...ids, ...keeping]) {
       if (this.#closed || this.#paused()) return;
       if (this.#running.has(id) || now < (this.#next.get(id) ?? 0)) continue;
       void this.pollNow(id).catch(() => {});
@@ -293,7 +301,10 @@ export class TrackerService {
     const result: PollResult = { mirrored: 0, invalid: 0 };
     if (this.#paused()) return { ...result, skipped: 'paused' };
     const listened = (await listenedConnections(this.services.db)).get(connectionId);
-    if (!listened) return { ...result, skipped: 'not_listened' };
+    if (!listened) {
+      const erased = await this.#unlistenedErasures(connectionId);
+      return { ...result, skipped: 'not_listened', ...(erased ? { erased } : {}) };
+    }
     const row = await trackerConnectionRow(this.services.db, listened.burrowId, connectionId);
     if (!row?.burrowId) return { ...result, skipped: 'not_connected' };
     const cursor = await this.#cursor(row);
@@ -311,6 +322,9 @@ export class TrackerService {
     }
     try {
       const driver = this.driverFor(row);
+      // What the tracker erased since the last look is forgotten first (never fails the cycle).
+      const erased = await this.#erasures(row, driver, cursor);
+      if (erased) result.erased = erased;
       if (cursor.since === null || cursor.after === null) {
         // The baseline (TA-06): nothing that exists now is new.
         const page = await driver.poll({ after: null, watch: [] });
@@ -551,6 +565,66 @@ export class TrackerService {
       );
       return 0;
     }
+  }
+
+  /**
+   * The reports the tracker erased since the cursor (the driver's `erasures`, absent: nothing), forgotten: each one this
+   * Whombat mirrored or ran for (`tracker.items_erased`), in pages of `ERASE_PER_COMMIT`; the others were never here. The
+   * cursor moves past a page only once all of it is forgotten. Answers how many mirrored reports went; never fails the
+   * cycle (the next one tries again from the same place).
+   */
+  async #erasures(row: CatalogConnectionRow, driver: BoundDriver, cursor: CursorRow): Promise<number> {
+    if (!driver.erasures) return 0;
+    const burrowId = row.burrowId as string;
+    let after = cursor.erasedAfter;
+    let erased = 0;
+    try {
+      for (let page = 0; page < ERASURE_PAGES; page++) {
+        const read = await driver.erasures({ after });
+        const kept = await keptReports(this.services.db, burrowId, row.id, [...new Set(read.ids)]);
+        for (let i = 0; i < kept.length; i += ERASE_PER_COMMIT) {
+          const res = await this.services.pipeline.commit(
+            eraseTrackerItems,
+            { connectionId: row.id, reportIds: kept.slice(i, i + ERASE_PER_COMMIT) },
+            { burrowId, actorId: await this.#signer(burrowId) },
+          );
+          if (res.status !== 'ok') throw new Error(`tracker.items_erased: ${res.status}`);
+          erased += res.result.erased;
+        }
+        if (read.next !== null && read.next !== after) {
+          after = read.next;
+          await this.#set(row.id, { erasedAfter: after });
+        }
+        if (!read.more || read.next === null) break;
+      }
+    } catch (err) {
+      this.services.log.warn(
+        { connectionId: row.id, err: String(err).slice(0, 200) },
+        'tracker: reports the tracker deleted couldn’t be forgotten yet',
+      );
+    }
+    if (erased)
+      this.services.log.info(
+        { connectionId: row.id, erased },
+        'tracker: reports the tracker deleted forgotten',
+      );
+    return erased;
+  }
+
+  /** A connection nothing listens to that keeps mirrored reports: only its tracker's erasures are read. */
+  async #unlistenedErasures(connectionId: string): Promise<number> {
+    const burrowId = await keepingBurrow(this.services.db, connectionId);
+    if (!burrowId) return 0;
+    const row = await trackerConnectionRow(this.services.db, burrowId, connectionId);
+    if (!row?.burrowId || row.status === 'needs_reauth') return 0;
+    let driver: BoundDriver;
+    try {
+      driver = this.driverFor(row);
+    } catch {
+      return 0;
+    }
+    if (!driver.erasures) return 0;
+    return this.#erasures(row, driver, await this.#cursor(row));
   }
 
   /**

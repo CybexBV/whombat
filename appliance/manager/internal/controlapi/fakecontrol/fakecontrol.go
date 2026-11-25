@@ -116,6 +116,16 @@ type Control struct {
 	SharePuts   int
 	ShareRefuse string
 
+	// team.reports.*: TeamCalls records "<op> <body>" for each op control took. TeamAnswer, when set, is the answer to
+	// every team op instead of the small default (an empty list, a report payload of "{}", a withdrawal's null).
+	// TeamRefuse answers every team op with that refusal code instead (report_unknown: 404, team_reports_unavailable:
+	// 403, others 409), the code in details.code like control. TeamRefuseAs is the error's own code then ("refused"
+	// when empty): control's validation_failed is both.
+	TeamCalls    []string
+	TeamAnswer   json.RawMessage
+	TeamRefuse   string
+	TeamRefuseAs string
+
 	// The own address (4.3): address.register keeps one label per device (Addresses), under Zone (default
 	// dev.whombat.app); a label in Taken is answered 409 label_taken; AddressHost, when set, is answered as the host
 	// whatever the label (a control that disagrees with the box). AddressCalls counts the registrations control saw.
@@ -631,6 +641,9 @@ func (c *Control) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(device.KitEnvelopesPutResponse{Stored: int64(len(p.Envelopes))})
 	case device.DeviceOpNameSharePut, device.DeviceOpNameShareDelete, device.DeviceOpNameShareViews:
 		c.share(w, env)
+	case device.DeviceOpNameTeamReportsList, device.DeviceOpNameTeamReportsGet, device.DeviceOpNameTeamReportsCreate,
+		device.DeviceOpNameTeamReportsReply, device.DeviceOpNameTeamReportsAct:
+		c.teamReports(w, env)
 	case device.DeviceOpNameAddressRegister:
 		c.addressRegister(w, env)
 	case device.DeviceOpNameAddressCheck:
@@ -800,6 +813,48 @@ func (c *Control) share(w http.ResponseWriter, env *device.DeviceRequestEnvelope
 			}
 		}
 		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
+// teamReports answers the team report ops as control would, without keeping reports: the manager forwards them
+// unread, so only the shapes matter here.
+func (c *Control) teamReports(w http.ResponseWriter, env *device.DeviceRequestEnvelope) {
+	if code := c.TeamRefuse; code != "" {
+		status := map[string]int{"report_unknown": http.StatusNotFound, "team_reports_unavailable": http.StatusForbidden}[code]
+		if status == 0 {
+			status = http.StatusConflict
+		}
+		as := c.TeamRefuseAs
+		if as == "" {
+			as = "refused"
+		}
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, `{"error":{"code":%q,"message":"Refused.","details":{"code":%q}}}`, as, code)
+		return
+	}
+	c.TeamCalls = append(c.TeamCalls, string(env.Op)+" "+string(env.Body))
+	if c.TeamAnswer != nil {
+		_, _ = w.Write(c.TeamAnswer)
+		return
+	}
+	switch env.Op {
+	case device.DeviceOpNameTeamReportsList:
+		// base64url of {"reports":[]}
+		_, _ = w.Write([]byte(`{"available":true,"reason":null,"reports":"eyJyZXBvcnRzIjpbXX0"}`))
+	case device.DeviceOpNameTeamReportsAct:
+		req, err := device.ParseTeamReportsActRequest(env.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.Action == "withdraw" {
+			_, _ = w.Write([]byte(`{"report":null}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"report":"e30"}`))
+	default:
+		// base64url of {}
+		_, _ = w.Write([]byte(`{"report":"e30"}`))
 	}
 }
 
