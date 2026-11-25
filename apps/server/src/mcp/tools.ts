@@ -69,6 +69,7 @@ import {
   aheadThreadOf,
   forgetSeen,
   NOT_AN_AHEAD_THREAD,
+  readDocsTool,
   readWebPageTool,
   reportAhead,
   searchWebTool,
@@ -695,9 +696,10 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   // Looks ahead (looks-ahead.md): a check's own tools, and the person's word on a finding in its thread.
   search_web: (ctx, input) => searchWebTool(ctx.services, ctx.dispatch, input.query),
   read_web_page: (ctx, input) => readWebPageTool(ctx.services, ctx.dispatch, input.url),
+  ahead_read_docs: (ctx, input) => readDocsTool(ctx.services, ctx.dispatch, input.query),
   ahead_report: async (ctx, input) => {
     const sources = await aheadReportSources(ctx.services, ctx.dispatch, input);
-    // A finding is told only about the event as it still is (read again just before).
+    // A finding is told only about the event as it still is (read again just before; mail checks check mailOn).
     const current = input.found ? await aheadEventCurrent(ctx.services, ctx.dispatch) : true;
     const out = await run(
       ctx,
@@ -710,9 +712,16 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   },
   ahead_feedback: async (ctx, input) => {
     if (!(await aheadThreadOf(ctx.services.db, ctx.dispatch))) throw forbidden(NOT_AN_AHEAD_THREAD);
-    return run(ctx, aheadFeedback, { dispatchId: ctx.dispatch.id, verdict: input.verdict }, (r) => ({
-      kind: r.kind,
-    }));
+    return run(
+      ctx,
+      aheadFeedback,
+      {
+        dispatchId: ctx.dispatch.id,
+        verdict: input.verdict,
+        ...(input.reason ? { reason: input.reason } : {}),
+      },
+      (r) => ({ kind: r.kind }),
+    );
   },
 };
 

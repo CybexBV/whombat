@@ -10,9 +10,11 @@ import { forgetSeen, sawLink, sawLinks, sawSource, sawSourceOf, seenOf, takePage
 import { senderName } from './turn';
 import {
   braveSearch,
+  extractJsonLdSummary,
   httpUrl,
   pageLinks,
   readPage,
+  useAheadBrowserForTests,
   useAheadWebForTests,
   type WebAnswer,
   WebRefusal,
@@ -141,6 +143,51 @@ describe('the search and the page', () => {
     await expect(readPage(services, 'https://example.com/a.png', () => true)).rejects.toBeInstanceOf(
       WebRefusal,
     );
+  });
+
+  it('extracts JSON-LD event details even before scripts are stripped', async () => {
+    const jsonLd = JSON.stringify({
+      '@type': 'MusicEvent',
+      name: 'The Script',
+      startDate: '2026-12-14T20:45:00+01:00',
+      doorTime: '2026-12-14T19:30:00+01:00',
+      eventStatus: 'https://schema.org/EventScheduled',
+      location: { '@type': 'Place', name: 'Ziggo Dome', address: { addressLocality: 'Amsterdam' } },
+      offers: { availability: 'https://schema.org/SoldOut' },
+    });
+    const body = `<html><head><script type="application/ld+json">${jsonLd}</script></head><body><div id="root"></div></body></html>`;
+    expect(extractJsonLdSummary(body)).toContain('2026-12-14T20:45:00+01:00');
+    const { services } = fakeServices(() => html(body));
+    const page = await readPage(services, 'https://example.com/event', () => true);
+    expect(page.text).toContain('The Script');
+    expect(page.text).toContain('2026-12-14T20:45:00+01:00');
+    expect(page.text).toContain('SoldOut');
+  });
+
+  it('falls back to headless rendering on JS-only shells and 403 bot blocks, and marks blocked sites', async () => {
+    const { services } = fakeServices(() =>
+      html(
+        '<html><head><title>Venue</title></head><body><div id="app"></div><script src="/app.js"></script></body></html>',
+      ),
+    );
+    useAheadBrowserForTests(
+      services,
+      async () =>
+        '<html><head><title>The Script</title></head><body><p>Doors open at 19:30, concert starts at 20:45 at Ziggo Dome Amsterdam. Check parking closures nearby.</p></body></html>',
+    );
+    const rendered = await readPage(services, 'https://example.com/spa', () => true);
+    expect(rendered.text).toContain('20:45');
+
+    const blocked = fakeServices(() => html('Access denied', 403));
+    useAheadBrowserForTests(blocked.services, null);
+    let caught: unknown;
+    try {
+      await readPage(blocked.services, 'https://example.com/blocked', () => true);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(WebRefusal);
+    expect((caught as WebRefusal).blocked).toBe(true);
   });
 });
 

@@ -433,8 +433,8 @@ export async function buildDispatchContext(
     outside ? null : side(async () => undoRequestOf(db, services, row, trigger)),
     // What needs a look, or the step the person let it take on one.
     outside ? null : side(async () => lookContextOf(db, row)),
-    // Something on the person's calendar to check ahead, or what such a check told them (looks-ahead.md).
-    outside ? null : side(async () => aheadContextOf(db, row)),
+    // Something on the person's calendar or inbox to check ahead, or what such a check told them (looks-ahead.md).
+    outside ? null : side(async () => aheadContextOf(services, db, row)),
     outside ? [] : side(async () => burrowFacts(services, row.burrowId, principalRows)),
     // A task chat tells the turn its title and what it is about (“This chat is about the server pve-02.”), a person's
     // Chat whose it is and what the thread is about; for the agent only.

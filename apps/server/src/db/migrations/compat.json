@@ -231,6 +231,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Reports to the Whombat Team (docs/decisions/team-reports.md): two new tables, team_report_copies (the box's copy of each of its reports and the revision the person read) and team_report_drafts (reports the assistant drafted for the person to send), cascading with the burrow; and one nullable text column on tracker_cursors, where the poller is in a tracker's list of erased items (docs/decisions/report-trackers.md). The release before it never reads or writes the tables and reads and writes tracker_cursors past the column."
+    },
+    "0037_looks_ahead_v2": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Looks ahead v2 (docs/decisions/looks-ahead.md): additive defaulted/nullable columns on looks_ahead_settings (mail_on, rules) and ahead_checks (source, stage, extra_kinds, action_label, note, feedback_note). The release before it reads and writes both tables past these columns."
     }
   }
 }

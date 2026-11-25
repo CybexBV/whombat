@@ -1,9 +1,10 @@
 /**
  * What one Looks ahead check has seen so far (docs/decisions/looks-ahead.md), by its dispatch, in this server's memory:
  * the links it may read (search results and links on pages it read, never one it made up, so nothing private leaves in
- * an address), the pages it may name as sources (pages it read), the mails it read (by their
- * sender), and whether it read mail (also kept on the check's row, `mail_read_at`, which outlasts a restart): after
- * that nothing more goes to the web, so a stranger's mail can't steer what leaves the Whombat.
+ * an address), the pages it may name as sources (pages it read, plus search results whose fetch was attempted and
+ * blocked by the site), the mails, Drive/OneDrive files and Paperless/Notion docs it read, and whether it touched any
+ * private source (also kept on the check's row, `mail_read_at`, which outlasts a restart): after that nothing more goes
+ * to the web, so private text can't steer what leaves the Whombat.
  */
 import { AHEAD_PAGES_MAX, AHEAD_SEARCHES_MAX } from '@whombat/core';
 import type { Services } from '../services';
@@ -12,11 +13,19 @@ import { httpUrl } from './web';
 export interface CheckSeen {
   /** Links it may read: a search result, or a link on a page it read. */
   urls: Set<string>;
-  /** Pages it may name as a source: pages it read (a search result is only a lead). */
+  /** Links returned by Brave search, so a blocked-fetch fallback is allowed only for search results actually tried. */
+  searchUrls: Set<string>;
+  /** Pages it may name as a full-page source: pages it successfully read. */
   sources: Set<string>;
-  /** The mails it read, by id, with the sender's name a finding names them by. */
+  /** Search result links that the check actually tried with `read_web_page` and the site blocked (403/429/503/timeout). */
+  blockedFallbacks: Set<string>;
+  /** The mails it read, by id, with the sender's site name a finding names them by. */
   mails: Map<string, string>;
-  /** It searched or read mail: the web is closed for the rest of the check. */
+  /** The Drive / OneDrive files it read, by id, with the provider label (“Google Drive” / “OneDrive”). */
+  files: Map<string, string>;
+  /** The Paperless / Notion documents it read, by docId, with the source label (“Paperless” / “Notion”). */
+  docs: Map<string, string>;
+  /** It searched or read mail, files or docs: the web is closed for the rest of the check. */
   mailRead: boolean;
   searches: number;
   pages: number;
@@ -42,8 +51,12 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
   if (!seen) {
     seen = {
       urls: new Set(),
+      searchUrls: new Set(),
       sources: new Set(),
+      blockedFallbacks: new Set(),
       mails: new Map(),
+      files: new Map(),
+      docs: new Map(),
       mailRead: false,
       searches: 0,
       pages: 0,
@@ -54,12 +67,15 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
   return seen;
 }
 
-/** Remembers links the check may now read. */
-export function sawLinks(seen: CheckSeen, links: readonly string[]): void {
+/** Remembers links the check may now read (optionally marking them as Brave search hits). */
+export function sawLinks(seen: CheckSeen, links: readonly string[], fromSearch = false): void {
   for (const raw of links) {
     if (seen.urls.size >= URLS_MAX) return;
     const link = httpUrl(raw);
-    if (link) seen.urls.add(link);
+    if (link) {
+      seen.urls.add(link);
+      if (fromSearch) seen.searchUrls.add(link);
+    }
   }
 }
 
@@ -81,9 +97,22 @@ export function sawSource(seen: CheckSeen, url: string): void {
   if (link) seen.sources.add(link);
 }
 
-/** Whether the check may name this page as a source. */
+/** Remembers a search-result link whose page fetch was attempted and blocked by the site. */
+export function sawBlockedFallback(seen: CheckSeen, url: string): void {
+  const link = httpUrl(url);
+  if (link && holds(seen.searchUrls, link)) seen.blockedFallbacks.add(link);
+}
+
+/** Whether the check may name this link as a full-page source (`page`), a blocked search fallback (`search`), or not (`null`). */
+export function sawSourceKind(seen: CheckSeen, url: string): 'page' | 'search' | null {
+  if (holds(seen.sources, url)) return 'page';
+  if (holds(seen.blockedFallbacks, url)) return 'search';
+  return null;
+}
+
+/** Whether the check may name this page as a source (full page or blocked-fetch search fallback). */
 export function sawSourceOf(seen: CheckSeen, url: string): boolean {
-  return holds(seen.sources, url);
+  return sawSourceKind(seen, url) !== null;
 }
 
 /** One more search, or false when the check used its searches. */

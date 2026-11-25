@@ -190,6 +190,8 @@ export const CalendarEvent = z.object({
   uid: z.string().min(1).max(1024).optional(),
   /** One occurrence of a repeating event (Whombat looks-ahead.md). Absent: not known, or not one. */
   recurring: z.boolean().optional(),
+  /** One changed occurrence of a repeating event (moved time/place or edited notes; Whombat looks-ahead.md). */
+  recurringException: z.boolean().optional(),
   /**
    * The person's own answer to it: `accepted` when they organise it; absent when they aren't on its guest list (an
    * event on a calendar they share, like a family's).

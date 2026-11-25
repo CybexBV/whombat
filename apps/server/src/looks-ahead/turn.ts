@@ -1,7 +1,8 @@
 /**
  * A Looks ahead check's turn (docs/decisions/looks-ahead.md): what it is told (`DispatchContext.ahead`), its own tools
- * (`search_web`, `read_web_page`, `ahead_report`), what it may read of the person's (calendar and mail, only where the
- * keys say Allowed: nobody is there to ask), and the person's word on a finding afterwards (`ahead_feedback`).
+ * (`search_web`, `read_web_page`, `ahead_read_docs`, `ahead_report`), what it may read of the person's (mail, Drive /
+ * OneDrive files, Paperless / Notion docs — only where Allowed: nobody is there to ask), and the person's word on a
+ * finding afterwards (`ahead_feedback`).
  */
 import {
   type AheadDispatchContext,
@@ -10,13 +11,14 @@ import {
   aheadHours,
   aheadQueryRefusal,
   aheadSkip,
+  aheadStageVersion,
   aheadVersion,
   decide,
   type KeyId,
   MCP_TOOLS,
   type McpToolName,
 } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
 import { aheadChecks, burrows, connections, principals } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
@@ -35,14 +37,26 @@ import {
   reportAhead,
   toldCheckOfThread,
 } from './commands';
-import { forgetSeen, sawLink, sawLinks, sawSource, sawSourceOf, seenOf, takePage, takeSearch } from './seen';
+import { aheadDocSources, searchAheadDocs } from './docs';
+import { mailAccounts } from './mail';
+import {
+  forgetSeen,
+  sawBlockedFallback,
+  sawLink,
+  sawLinks,
+  sawSource,
+  sawSourceKind,
+  seenOf,
+  takePage,
+  takeSearch,
+} from './seen';
 import { braveSearch, httpUrl, readPage, WebRefusal } from './web';
 
 export { NOT_AN_AHEAD_CHECK, NOT_AN_AHEAD_THREAD } from './commands';
 
 /** What a check hears when it calls anything it isn't served. */
 export const AHEAD_TOOL_REFUSED =
-  'While checking ahead you only search and read public pages, then read the mail, and end with ahead_report.';
+  'While checking ahead you only search and read public pages, then read mail, files or connected docs, and end with ahead_report.';
 
 type AheadCheckRow = typeof aheadChecks.$inferSelect;
 
@@ -68,12 +82,101 @@ export async function aheadThreadOf(
   return toldCheckOfThread(db, dispatch.burrowId, dispatch.threadRootId);
 }
 
-/** `DispatchContext.ahead`: the event a check is about, or what a finding told in the thread the person writes in. */
-export async function aheadContextOf(db: Db, dispatch: DispatchRow): Promise<AheadDispatchContext | null> {
+/** `DispatchContext.ahead`: the plan or email a check is about (plus schedule, rules, dismissals, prior notes), or what was told in a finding's thread. */
+export async function aheadContextOf(
+  services: Services,
+  db: Db,
+  dispatch: DispatchRow,
+): Promise<AheadDispatchContext | null> {
   const row = (await aheadCheckOfTurn(db, dispatch)) ?? (await aheadThreadOf(db, dispatch));
   if (!row) return null;
   const settings = await aheadSettingsOf(db, dispatch.burrowId);
+  const isCheck = dispatch.trigger === 'ahead';
+
+  let mailProviders: ('google' | 'microsoft' | 'imap')[] | undefined;
+  let hasFiles: boolean | undefined;
+  let docSources: string[] | undefined;
+  let recentDismissed: AheadDispatchContext['recentDismissed'];
+  let priorChecks: AheadDispatchContext['priorChecks'];
+
+  if (isCheck) {
+    const person = await thePerson(db, dispatch.burrowId);
+    if (person?.accountId) {
+      const mails = await mailAccounts(services, db, person.accountId);
+      mailProviders = [...new Set(mails.map((m) => m.provider))];
+      const fileConns = await db
+        .select({ services: connections.services, status: connections.status })
+        .from(connections)
+        .where(eq(connections.accountId, person.accountId));
+      hasFiles = fileConns.some((c) => c.status === 'active' && c.services.includes('files'));
+    }
+    const docs = await aheadDocSources(db, dispatch.burrowId);
+    if (docs.length) docSources = docs;
+
+    // Last 10 “Not useful” findings for calibration.
+    const dismissed = await db
+      .select({
+        summary: aheadChecks.summary,
+        kind: aheadChecks.kind,
+        feedbackNote: aheadChecks.feedbackNote,
+      })
+      .from(aheadChecks)
+      .where(
+        and(
+          eq(aheadChecks.burrowId, dispatch.burrowId),
+          eq(aheadChecks.feedback, 'not_useful'),
+          isNotNull(aheadChecks.kind),
+        ),
+      )
+      .orderBy(desc(aheadChecks.reportedAt))
+      .limit(10);
+    if (dismissed.length) {
+      recentDismissed = dismissed
+        .filter((d): d is typeof d & { kind: AheadKind } => d.kind !== null)
+        .map((d) => ({
+          title: d.summary.slice(0, 300),
+          kind: d.kind,
+          ...(d.feedbackNote ? { reason: d.feedbackNote } : {}),
+        }));
+    }
+
+    // Earlier check stages of THIS same event only (never general memory).
+    if (row.source === 'calendar') {
+      const prior = await db
+        .select({
+          stage: aheadChecks.stage,
+          state: aheadChecks.state,
+          kind: aheadChecks.kind,
+          note: aheadChecks.note,
+          text: aheadChecks.text,
+        })
+        .from(aheadChecks)
+        .where(
+          and(
+            eq(aheadChecks.burrowId, dispatch.burrowId),
+            eq(aheadChecks.eventKey, row.eventKey),
+            ne(aheadChecks.id, row.id),
+          ),
+        )
+        .orderBy(desc(aheadChecks.startedAt))
+        .limit(6);
+      if (prior.length) {
+        priorChecks = prior
+          .filter((p): p is typeof p & { state: 'quiet' | 'told' | 'failed' } => p.state !== 'checking')
+          .map((p) => ({
+            stage: p.stage,
+            state: p.state,
+            ...(p.kind ? { kind: p.kind } : {}),
+            ...(p.note ? { note: p.note } : {}),
+            ...(p.state === 'told' && p.text ? { text: p.text } : {}),
+          }));
+      }
+    }
+  }
+
   return {
+    source: row.source,
+    stage: row.stage,
     summary: row.summary.slice(0, 300),
     start: row.event.start,
     end: row.event.end,
@@ -81,8 +184,19 @@ export async function aheadContextOf(db: Db, dispatch: DispatchRow): Promise<Ahe
     description: row.event.description.slice(0, 2000),
     calendar: row.calendar.slice(0, 120),
     timeZone: row.event.timeZone,
+    ...(row.event.allDay ? { allDay: true } : {}),
     stopped: settings.stopped.filter((k): k is AheadKind => typeof k === 'string') as AheadKind[],
-    ...(row.state === 'told' && row.kind && row.text ? { found: { kind: row.kind, text: row.text } } : {}),
+    ...(row.event.daySchedule?.length ? { daySchedule: row.event.daySchedule } : {}),
+    ...(row.event.mail ? { mail: row.event.mail } : {}),
+    ...(mailProviders?.length ? { mailProviders } : {}),
+    ...(hasFiles ? { hasFiles: true } : {}),
+    ...(docSources?.length ? { docSources } : {}),
+    ...(settings.rules.length ? { rules: [...settings.rules] } : {}),
+    ...(recentDismissed?.length ? { recentDismissed } : {}),
+    ...(priorChecks?.length ? { priorChecks } : {}),
+    ...(row.state === 'told' && row.kind && row.text
+      ? { found: { kind: row.kind, text: row.text, ...(row.actionLabel ? { action: row.actionLabel } : {}) } }
+      : {}),
   };
 }
 
@@ -100,11 +214,18 @@ export async function keyAllowed(services: Services, agentId: string, key: KeyId
   return decide({ id: agentId, kind: 'agent' }, grants, key).outcome === 'allow';
 }
 
+const PRIVATE_READ_TOOLS = new Set<McpToolName>([
+  'mail_search',
+  'mail_read',
+  'files_search',
+  'files_read',
+  'ahead_read_docs',
+]);
+
 /**
  * Before any tool runs in a check: only while the check goes on and Looks ahead is on (else only `ahead_report`, to end
- * it); the person's own tools (the calendar, the mail) only when their key is Allowed — nobody is there to say yes, and
- * a card would land in a thread that isn't there — and the web only while “Browse the web” is Allowed. Null when it
- * may run, else what the check hears.
+ * it); private tools (mail, files) only when their key is Allowed — nobody is there to say yes — and the web only while
+ * “Browse the web” is Allowed and before any private data was read. Null when it may run, else what the check hears.
  */
 export async function aheadToolRefusal(
   services: Services,
@@ -126,31 +247,31 @@ export async function aheadToolRefusal(
   )
     return 'This check is over: end with ahead_report, found false.';
   const settings = await aheadSettingsOf(services.db, dispatch.burrowId);
-  if (
-    !settings.on ||
-    settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId))
-  )
-    return 'Looks ahead or this calendar was switched off: end with ahead_report, found false.';
+  const calendarOff =
+    row.source === 'calendar' &&
+    settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId));
+  const mailOff = row.source === 'mail' && !settings.mailOn;
+  if (!settings.on || calendarOff || mailOff)
+    return 'Looks ahead or this source was switched off: end with ahead_report, found false.';
   // The web tools need no key of their own elsewhere; here they are “Browse the web”, as Hermes's own web search is.
   const key = name === 'search_web' || name === 'read_web_page' ? 'web.browse' : MCP_TOOLS[name].requiredKey;
-  // A key that depends on the input is never one of a check's tools (mail read has a fixed key).
   if (key && key !== 'by_input' && !(await keyAllowed(services, dispatch.agentId, key)))
     return 'This needs the person’s yes, and nobody is there to ask while you check ahead: go on without it.';
-  // Mail is about to reach the model: the check's web closes now, kept on its row.
-  if (name === 'mail_search' || name === 'mail_read') {
+  // Private data (mail, Drive/OneDrive files, Paperless/Notion docs) is about to reach the model: close the web now.
+  if (PRIVATE_READ_TOOLS.has(name)) {
     seenOf(services, dispatch.id).mailRead = true;
     const res = await services.pipeline.commit(
       markAheadMailRead,
       { dispatchId: dispatch.id },
       { burrowId: dispatch.burrowId, actorId: dispatch.agentId },
     );
-    if (res.status !== 'ok') return 'The mail can’t be read in this check now.';
+    if (res.status !== 'ok') return 'Private sources can’t be read in this check now.';
   }
   return null;
 }
 
-/** The most of one mail's text a check reads. */
-const AHEAD_MAIL_BODY_MAX = 8000;
+/** The most of one mail's or file's text a check reads. */
+const AHEAD_PRIVATE_BODY_MAX = 8000;
 
 /**
  * A mail as a finding names it: the site its sender's address is at (“ticketmaster.example”), never the name the sender
@@ -168,8 +289,8 @@ export function senderName(from: unknown): string {
 }
 
 /**
- * After one of the person's tools ran in a check: once it read mail, its web is closed; the mails it read may be named
- * as sources, by their sender, and each mail's text it gets is cut to `AHEAD_MAIL_BODY_MAX`.
+ * After one of the person's tools ran in a check: mails and files it read may be named as sources, and their text is
+ * cut to `AHEAD_PRIVATE_BODY_MAX`.
  */
 export async function aheadToolRan(
   services: Services,
@@ -177,18 +298,39 @@ export async function aheadToolRan(
   name: McpToolName,
   out: unknown,
 ): Promise<void> {
-  if (dispatch.trigger !== 'ahead' || (name !== 'mail_read' && name !== 'mail_search')) return;
-  if (name !== 'mail_read') return;
+  if (dispatch.trigger !== 'ahead') return;
   const seen = seenOf(services, dispatch.id);
-  const found =
-    (out as { messages?: { id?: unknown; from?: unknown; body?: unknown; bodyTruncated?: unknown }[] } | null)
-      ?.messages ?? [];
-  for (const m of found) {
-    if (typeof m.id === 'string') seen.mails.set(m.id, senderName(m.from));
-    // A check needs the gist of a mail, not all of a newsletter: what it reads stays small.
-    if (typeof m.body === 'string' && m.body.length > AHEAD_MAIL_BODY_MAX) {
-      m.body = `${m.body.slice(0, AHEAD_MAIL_BODY_MAX)}…`;
-      m.bodyTruncated = true;
+  if (name === 'mail_read') {
+    const found =
+      (
+        out as {
+          messages?: { id?: unknown; from?: unknown; body?: unknown; bodyTruncated?: unknown }[];
+        } | null
+      )?.messages ?? [];
+    for (const m of found) {
+      if (typeof m.id === 'string') seen.mails.set(m.id, senderName(m.from));
+      if (typeof m.body === 'string' && m.body.length > AHEAD_PRIVATE_BODY_MAX) {
+        m.body = `${m.body.slice(0, AHEAD_PRIVATE_BODY_MAX)}…`;
+        m.bodyTruncated = true;
+      }
+    }
+    return;
+  }
+  if (name === 'files_read') {
+    const file = out as {
+      file?: { id?: unknown; webUrl?: unknown };
+      content?: unknown;
+      truncated?: unknown;
+    } | null;
+    const id = file?.file?.id;
+    if (typeof id === 'string') {
+      const url = typeof file?.file?.webUrl === 'string' ? file.file.webUrl : '';
+      const label = /onedrive|sharepoint|1drv/i.test(url) ? 'OneDrive' : 'Google Drive';
+      seen.files.set(id, label);
+    }
+    if (typeof file?.content === 'string' && file.content.length > AHEAD_PRIVATE_BODY_MAX) {
+      file.content = `${file.content.slice(0, AHEAD_PRIVATE_BODY_MAX)}…`;
+      file.truncated = true;
     }
   }
 }
@@ -233,9 +375,9 @@ const COMMON_WORDS = new Set([
   'example',
 ]);
 
-/** What a check hears when it reaches for the web after reading mail. */
+/** What a check hears when it reaches for the web after reading private sources (or in a mail-triggered check). */
 const WEB_CLOSED =
-  'You read mail in this check, so nothing more goes to the web: decide with what you found, then ahead_report.';
+  'The web is closed in this check (private mail, files or docs were read): decide with what you found, then ahead_report.';
 
 export async function searchWebTool(services: Services, dispatch: DispatchRow, query: string) {
   const row = await liveCheck(services, dispatch);
@@ -259,6 +401,7 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
     sawLinks(
       seen,
       results.map((r) => r.url),
+      true,
     );
     return { status: 'ok' as const, results };
   } catch (err) {
@@ -283,12 +426,23 @@ export async function readWebPageTool(services: Services, dispatch: DispatchRow,
     sawSource(seen, page.url);
     return { status: 'ok' as const, title: page.title, text: page.text, links: page.links };
   } catch (err) {
-    if (err instanceof WebRefusal) throw forbidden(err.message);
+    if (err instanceof WebRefusal) {
+      if (err.blocked) sawBlockedFallback(seen, url);
+      throw forbidden(err.message);
+    }
     throw err;
   }
 }
 
-/** A source as Whombat names it on the finding: the site, or the mail's sender. */
+export async function readDocsTool(services: Services, dispatch: DispatchRow, query: string) {
+  await liveCheck(services, dispatch);
+  const docs = await searchAheadDocs(services, dispatch.burrowId, query);
+  const seen = seenOf(services, dispatch.id);
+  for (const d of docs) seen.docs.set(d.docId, d.source);
+  return { status: 'ok' as const, docs };
+}
+
+/** A source as Whombat names it on the finding: the site, mail sender, Drive/OneDrive, Paperless/Notion or calendar. */
 export interface NamedSource {
   label: string;
   url?: string;
@@ -304,8 +458,9 @@ function siteOf(url: string): string {
 }
 
 /**
- * Before `ahead_report` commits: the check is going on, and every source of a finding is something it really read or
- * found — a page it read or a search result, a mail it read — named by Whombat. Throws what the check hears otherwise.
+ * Before `ahead_report` commits: the check is going on, and every source of a finding is something it really read —
+ * a page it read (or tried to read when the site blocked fetching), a mail, Drive/OneDrive file, Paperless/Notion
+ * doc, or the person's own calendar schedule — named by Whombat. Throws what the check hears otherwise.
  */
 export async function aheadReportSources(
   services: Services,
@@ -318,29 +473,50 @@ export async function aheadReportSources(
   const named: NamedSource[] = [];
   for (const source of report.sources ?? []) {
     if ('url' in source) {
-      if (!sawSourceOf(seen, source.url))
+      const kind = sawSourceKind(seen, source.url);
+      if (!kind)
         throw forbidden(
           `${source.url} isn’t a page you read in this check: read it with read_web_page first (a search result is only a lead).`,
         );
       // Pages are read over https: the link is the page as Whombat read it.
       const link = (httpUrl(source.url) ?? source.url).replace(/^http:/, 'https:');
-      named.push({ label: siteOf(source.url), url: link });
-    } else {
+      named.push({
+        label: kind === 'search' ? `${siteOf(source.url)} (search)` : siteOf(source.url),
+        url: link,
+      });
+    } else if ('mailId' in source) {
       const sender = seen.mails.get(source.mailId);
       if (!sender) throw forbidden('A mail you name must be one you read with mail_read in this check.');
       named.push({ label: `${sender} (mail)` });
+    } else if ('fileId' in source) {
+      const label = seen.files.get(source.fileId);
+      if (!label) throw forbidden('A file you name must be one you read with files_read in this check.');
+      named.push({ label });
+    } else if ('docId' in source) {
+      const label = seen.docs.get(source.docId);
+      if (!label)
+        throw forbidden('A document you name must be one you read with ahead_read_docs in this check.');
+      named.push({ label });
+    } else if ('calendar' in source) {
+      named.push({ label: 'Your calendar' });
     }
   }
   return named;
 }
 
 /**
- * Whether the event is still as the check began it, read from the calendar just before a finding is told: gone,
- * changed, unreadable or no longer the assistant's to read (its key), the finding is kept quiet.
+ * Whether a calendar event is still as the check began it, read from the calendar just before a finding is told: gone,
+ * changed, unreadable or no longer the assistant's to read (its key), the finding is kept quiet. Mail checks return
+ * true (they are anchored to the email, not a calendar version).
  */
 export async function aheadEventCurrent(services: Services, dispatch: DispatchRow): Promise<boolean> {
   const row = await aheadCheckOfTurn(services.db, dispatch);
-  if (!row?.event.connectionId) return false;
+  if (!row) return false;
+  if (row.source === 'mail') {
+    const settings = await aheadSettingsOf(services.db, dispatch.burrowId);
+    return settings.on && settings.mailOn;
+  }
+  if (!row.event.connectionId) return false;
   const settings = await aheadSettingsOf(services.db, dispatch.burrowId);
   if (
     !settings.on ||
@@ -357,7 +533,7 @@ export async function aheadEventCurrent(services: Services, dispatch: DispatchRo
   if (!account) return false;
   try {
     const event = await currentEvent(services, account, row.event.calendarId, row.event.eventId);
-    return !!event && !aheadSkip(event) && aheadVersion(event) === row.version;
+    return !!event && !aheadSkip(event) && aheadStageVersion(aheadVersion(event), row.stage) === row.version;
   } catch {
     return false;
   }

@@ -1,12 +1,13 @@
 /**
  * Looks ahead in fixture mode (Whombat looks-ahead.md): Settings → the assistant → Looks ahead over the real REST
- * contract, kept in memory. Mara's Google account has two calendars, her own on, Family off; she stopped one kind of
- * finding, and the last week had four checks and one finding told.
+ * contract, kept in memory. Mara's Google account has two calendars (her own on, Family off), incoming mail checks on,
+ * one standing rule, one stopped kind, four checks in the last week and two recent checks.
  */
-import { AHEAD_KINDS, LooksAheadUpdate, type LooksAheadView } from '@whombat/core';
+import { AHEAD_KINDS, AHEAD_RULES_MAX, LooksAheadUpdate, type LooksAheadView } from '@whombat/core';
 import { burrow } from '@whombat/fixtures';
 
 const PATH = `/api/v1/burrows/${burrow.slug}/looks-ahead`;
+const CHECK_PATH = `${PATH}/check`;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -26,13 +27,64 @@ export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
     ],
     calendarsRead: true,
     hasCalendar: true,
+    mailOn: true,
+    hasMail: true,
+    rules: ['I live in Utrecht and usually drive to venues'],
     stopped: ['crowds'],
     week: { checked: 4, told: 1 },
+    recent: [
+      {
+        id: 'ahc_1',
+        source: 'calendar',
+        stage: 'eve',
+        title: 'The Script',
+        at: '2026-12-13T14:15:00Z',
+        state: 'told',
+        kind: 'time',
+        threadRootId: 'msg_ahead_1',
+        feedback: null,
+      },
+      {
+        id: 'ahc_2',
+        source: 'mail',
+        stage: 'mail',
+        title: 'Flight KL1234 confirmation',
+        at: '2026-12-13T11:00:00Z',
+        state: 'quiet',
+        kind: null,
+        threadRootId: null,
+        feedback: null,
+      },
+    ],
     ...seed,
   };
 
   async function handle(req: Request): Promise<Response | null> {
-    if (new URL(req.url, 'http://fixtures.local').pathname !== PATH) return null;
+    const pathname = new URL(req.url, 'http://fixtures.local').pathname;
+    if (pathname === CHECK_PATH && req.method === 'POST') {
+      const started = view.on;
+      if (started) {
+        view = {
+          ...view,
+          recent: [
+            {
+              id: `ahc_now_${(view.recent?.length ?? 0) + 1}`,
+              source: 'calendar',
+              stage: 'early',
+              title: 'Weekend Rome',
+              at: '2026-12-13T15:00:00Z',
+              state: 'checking',
+              kind: null,
+              threadRootId: null,
+              feedback: null,
+            },
+            ...(view.recent ?? []),
+          ],
+        };
+      }
+      return json({ started, view });
+    }
+    if (pathname !== PATH) return null;
     if (req.method === 'GET') return json(view);
     if (req.method !== 'PUT') return null;
     const parsed = LooksAheadUpdate.safeParse(await req.json().catch(() => null));
@@ -51,6 +103,16 @@ export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
       if (u.on) stopped.delete(u.kind);
       else stopped.add(u.kind);
       view = { ...view, stopped: AHEAD_KINDS.filter((k) => stopped.has(k)) };
+    } else if ('mailOn' in u) {
+      view = { ...view, mailOn: u.mailOn };
+    } else if ('addRule' in u) {
+      const rule = u.addRule.trim();
+      const prev = view.rules ?? [];
+      const exists = prev.some((r) => r.toLowerCase() === rule.toLowerCase());
+      view = { ...view, rules: exists ? prev : [...prev, rule].slice(-AHEAD_RULES_MAX) };
+    } else if ('removeRule' in u) {
+      const target = u.removeRule.trim().toLowerCase();
+      view = { ...view, rules: (view.rules ?? []).filter((r) => r.toLowerCase() !== target) };
     } else view = { ...view, on: u.on };
     return json(view);
   }
