@@ -30,7 +30,6 @@ import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { publishApproval, syncPlanSteps } from '../approvals/engine';
 import { type ApplyContext, defineCommand, type KeyRequirement } from '../commit/types';
-import { managedAppOrigin } from '../config';
 import type { Db, Tx } from '../db/client';
 import { approvals, notifications, teamReportCopies, teamReportDrafts } from '../db/schema/index';
 import { notifyInCommit } from '../domain/notify';
@@ -41,6 +40,7 @@ import { loadConversationRow } from '../read/conversations';
 import { toApproval } from '../read/work';
 import { quoted } from '../trackers/reply';
 import { sendDraftForAssistant } from './service';
+import { teamReportWithdrawnLately } from './withdrawn';
 
 export const TEAM_REPORT_SENT_EVENT = 'team_report.sent';
 export const TEAM_REPORT_WITHDRAWN_EVENT = 'team_report.withdrawn';
@@ -147,13 +147,16 @@ async function inboxChanged(ctx: ApplyContext): Promise<void> {
 
 /**
  * The person's report as the box keeps it now: the whole report, and whether they read it. An answer older than the
- * copy (`older`) leaves the copy as it is; the person has still read what it shows.
+ * copy (`older`) leaves the copy as it is; the person has still read what it shows. A report the person took back a
+ * moment ago (an answer that left before the withdrawal) is kept no more (`withdrawn`).
  */
 export const keepTeamReport = defineCommand({
   name: 'team_report_keep',
   schema: z.object({ report: TeamReport, read: z.boolean(), sent: z.boolean().default(false) }),
   async apply(tx, ctx, input) {
     const r = input.report;
+    if (teamReportWithdrawnLately(ctx.services, ctx.burrow.id, r.id))
+      return { reportId: r.id, older: false, withdrawn: true };
     const [had] = await tx
       .select()
       .from(teamReportCopies)
@@ -166,7 +169,7 @@ export const keepTeamReport = defineCommand({
           .update(teamReportCopies)
           .set({ readRevision })
           .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)));
-      return { reportId: r.id, older: true };
+      return { reportId: r.id, older: true, withdrawn: false };
     }
     // Control's revision only grows: an answer that crossed a newer list doesn't move it back.
     const revision = Math.max(had?.revision ?? 0, r.revision);
@@ -196,27 +199,23 @@ export const keepTeamReport = defineCommand({
       });
     if (teamReportNeedsYou(r.status) !== (had ? teamReportNeedsYou(had.status as TeamReportStatus) : false))
       await inboxChanged(ctx);
-    return { reportId: r.id, older: false };
+    return { reportId: r.id, older: false, withdrawn: false };
   },
 });
 
-/** The link a notification about a report opens: the report's page in the app. */
-function reportLink(ctx: ApplyContext, reportId: string) {
-  try {
-    return {
-      type: 'external' as const,
-      url: `${managedAppOrigin(ctx.services.config)}${teamReportHref(reportId)}`,
-    };
-  } catch {
-    // No app address configured (a development box): the person's Chat.
-    return { type: 'dm' as const };
-  }
+/**
+ * The link a notification about a report opens: the report's page by its path, so it opens wherever the person uses
+ * Whombat (the hosted app, the box's own address, the phone) and never names an address the phone doesn't know.
+ */
+export function teamReportLink(reportId: string) {
+  return { type: 'external' as const, url: teamReportHref(reportId) };
 }
 
 /**
  * Control's list of the box's reports: the copies take its summaries (a report the box didn't know comes in unread
  * when the team changed it), and with the whole list (`complete`) copies of reports control no longer keeps go. A
- * report that now waits for the person is told to them once, in fixed words.
+ * report that now waits for the person is told to them once, in fixed words. A report the person took back a moment
+ * ago (a list that left before the withdrawal) comes back neither as a copy nor as a notification.
  */
 export const seeTeamReports = defineCommand({
   name: 'team_report_seen',
@@ -234,7 +233,8 @@ export const seeTeamReports = defineCommand({
     const byId = new Map(rows.map((r) => [r.reportId, r]));
     const tell: Summary[] = [];
     let changed = false;
-    for (const s of input.reports) {
+    const listed = input.reports.filter((s) => !teamReportWithdrawnLately(ctx.services, burrowId, s.id));
+    for (const s of listed) {
       const had = byId.get(s.id);
       if (!had) {
         await tx.insert(teamReportCopies).values({
@@ -260,7 +260,7 @@ export const seeTeamReports = defineCommand({
     }
     let gone = 0;
     if (input.complete) {
-      const kept = input.reports.map((s) => s.id);
+      const kept = listed.map((s) => s.id);
       const left = await tx
         .delete(teamReportCopies)
         .where(
@@ -286,7 +286,7 @@ export const seeTeamReports = defineCommand({
         actorId: ctx.actor.id,
         where: `Report #${s.number}`,
         text: words.title,
-        link: reportLink(ctx, s.id),
+        link: teamReportLink(s.id),
         createdAt: ctx.now,
         dedupKey,
         group: `team-report:${s.id}`,
@@ -330,7 +330,8 @@ export const forgetTeamReport = defineCommand({
 
 /**
  * Every copy of the burrow's reports goes, and with `drafts` the assistant's drafts not sent yet: a backup restored onto
- * new hardware starts without the earlier box's reports, and a box taken out of Link keeps none.
+ * new hardware starts without the earlier box's reports, and a box taken out of Link keeps none. The cards still asking
+ * about those drafts are withdrawn with them, so no yes is left that would send nothing.
  */
 export const dropTeamReports = defineCommand({
   name: 'team_reports_drop',
@@ -344,10 +345,14 @@ export const dropTeamReports = defineCommand({
       ? await tx
           .delete(teamReportDrafts)
           .where(and(eq(teamReportDrafts.burrowId, ctx.burrow.id), eq(teamReportDrafts.state, 'waiting')))
-          .returning({ id: teamReportDrafts.id })
+          .returning({ id: teamReportDrafts.id, approvalId: teamReportDrafts.approvalId })
       : [];
+    let withdrawn = 0;
+    for (const d of drafts)
+      if (d.approvalId && (await withdrawDraftCard(ctx, d.approvalId, DRAFT_CARD_WITHDRAWN.dropped)))
+        withdrawn += 1;
     if (copies.some((c) => teamReportNeedsYou(c.status as TeamReportStatus))) await inboxChanged(ctx);
-    return { copies: copies.length, drafts: drafts.length };
+    return { copies: copies.length, drafts: drafts.length, withdrawn };
   },
 });
 
@@ -473,12 +478,19 @@ export const askedTeamReportDraft = defineCommand({
   },
 });
 
+/** Why a draft's card asks no more, in the log's words after “Withdrew request #N: ”. */
+const DRAFT_CARD_WITHDRAWN = {
+  sent: 'the report was sent from the form instead',
+  dropped: 'the draft stayed with the earlier Whombat',
+} as const;
+
 /**
- * The card that still asks about a draft the person sent from the form: it waits no more. It reads as declined by
- * them, with a signed `approval.declined` saying why, and nobody is woken: the report went already. A card answered
- * yes is the one sending it, and stays as it is.
+ * The card that still asks about a draft the person sent from the form (or that went with the earlier box's reports):
+ * it waits no more. It reads as declined by them, with a signed `approval.declined` saying why, and nobody is woken:
+ * the report went already, or there is nothing left to send. A card answered yes is the one sending it, and stays as it
+ * is.
  */
-async function withdrawDraftCard(ctx: ApplyContext, approvalId: string): Promise<boolean> {
+async function withdrawDraftCard(ctx: ApplyContext, approvalId: string, why: string): Promise<boolean> {
   const [row] = await ctx.tx
     .select()
     .from(approvals)
@@ -500,7 +512,7 @@ async function withdrawDraftCard(ctx: ApplyContext, approvalId: string): Promise
   const event = await ctx.emit({
     type: 'approval.declined',
     kind: 'Asks',
-    text: `Withdrew request #${row.number}: the report was sent from the form instead`,
+    text: `Withdrew request #${row.number}: ${why}`,
     where: conversation ? conversationLabel(conversation) : null,
     aboutId: row.requesterId,
     approvalId: row.id,
@@ -537,7 +549,9 @@ export const doneTeamReportDraft = defineCommand({
       .returning({ id: teamReportDrafts.id, approvalId: teamReportDrafts.approvalId });
     const approvalId = done[0]?.approvalId ?? null;
     const withdrawn =
-      input.state === 'sent' && approvalId !== null ? await withdrawDraftCard(ctx, approvalId) : false;
+      input.state === 'sent' && approvalId !== null
+        ? await withdrawDraftCard(ctx, approvalId, DRAFT_CARD_WITHDRAWN.sent)
+        : false;
     return { done: done.length > 0, withdrawn };
   },
 });

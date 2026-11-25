@@ -12,8 +12,8 @@ import { burrows, teamReportCopies } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import type { Services } from '../services';
 import { sweepTeamReportDrafts, TEAM_REPORT_DRAFT_KEEP_DAYS } from './commands';
-import { teamPortOf } from './control';
-import { lastAvailability, listTeamReports, oldDrafts } from './service';
+import { teamPortOf, teamReportsOutOfLink } from './control';
+import { forgetAllTeamReports, lastAvailability, listTeamReports, oldDrafts } from './service';
 
 export const TEAM_REPORTS_FOLLOW_MS = 10 * 60_000;
 /** The first look after start: this long, plus up to `TEAM_REPORTS_FIRST_JITTER_MS` more. */
@@ -49,7 +49,10 @@ export function startTeamReportsFollow(services: Services): void {
   );
 }
 
-/** One round: old drafts go; each burrow with an open report asks control's list. */
+/**
+ * One round: old drafts go; out of Link the copies go (a drop that failed when the box left is tried again); each burrow
+ * with an open report asks control's list.
+ */
 export async function followTeamReports(services: Services, now = services.clock()): Promise<void> {
   if (services.maintenance.held || services.maintenance.paused) return;
   const old = await oldDrafts(services, new Date(now.getTime() - TEAM_REPORT_DRAFT_KEEP_DAYS * 86_400_000));
@@ -61,6 +64,17 @@ export async function followTeamReports(services: Services, now = services.clock
       await services.pipeline.commit(sweepTeamReportDrafts, { ids }, { burrowId, actorId: person.id });
   }
 
+  if (teamReportsOutOfLink(services)) {
+    const [left] = await services.db
+      .select({ id: teamReportCopies.reportId })
+      .from(teamReportCopies)
+      .limit(1);
+    if (left)
+      await forgetAllTeamReports(services, { drafts: false }).catch((err) =>
+        services.log.warn({ err: err instanceof Error ? err.name : 'error' }, 'team reports: not dropped'),
+      );
+    return;
+  }
   if (!teamPortOf(services, 'read')) return;
   const open = await services.db
     .selectDistinct({ burrowId: teamReportCopies.burrowId })

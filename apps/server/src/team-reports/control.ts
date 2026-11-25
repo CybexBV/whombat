@@ -29,6 +29,8 @@ export interface TeamLink {
   on: () => boolean;
   /** Control knows the box (any Link state but off): the person may read and withdraw. */
   known: () => boolean;
+  /** The manager says the box is out of Link (`teamReportsLeftLink`): control keeps none of its reports. */
+  left?: () => boolean;
 }
 
 /** What a call needs: reading or withdrawing (`read`), or sending words or answers to the team (`send`). */
@@ -104,6 +106,11 @@ export function teamReportsLeftLink(view: {
   return !view.assumed && (!view.enabled || view.link.state === 'off');
 }
 
+/** Whether the box is out of Link now, as the manager says it: its copies have nothing left to follow at control. */
+export function teamReportsOutOfLink(services: Services): boolean {
+  return setups.get(services)?.link.left?.() ?? false;
+}
+
 /** Whether this Whombat can reach the team at all (Link aside). */
 export function teamReportsHere(services: Services): boolean {
   return setups.has(services);
@@ -125,6 +132,8 @@ export const TEAM_REPORT_WORDS = {
   rateLimited: 'That’s a lot for one day. Try again tomorrow.',
   invalid: 'Whombat’s servers didn’t accept those words. Shorten them and try again.',
   draftSent: 'This report was sent already. You’ll find it under Reports.',
+  /** The card's yes is sending the draft: the form's words would be lost. */
+  draftSending: 'This report is being sent already.',
 } as const;
 
 const CODES: ReadonlySet<string> = new Set(TeamReportRefusalCode.options);
@@ -155,8 +164,11 @@ export function managerSaysNoLink(err: unknown): boolean {
   return err instanceof ManagerCallError && (err.status === 404 || err.status === 501);
 }
 
-/** A failed call to control, in the person's words. */
-export function controlFailure(err: unknown): ApiError {
+/**
+ * A failed call to control, in the person's words. `use` is what the call did: control's `link_off` on a read (or a
+ * withdrawal) means the person has no Link to read with, on a send that they can still read but not send.
+ */
+export function controlFailure(err: unknown, use: TeamUse = 'send'): ApiError {
   if (err instanceof ApiError) return err;
   if (err instanceof ManagerCallError) {
     if (managerSaysNoLink(err)) return new ApiError('unavailable', TEAM_REPORT_WORDS.linkOff);
@@ -167,7 +179,9 @@ export function controlFailure(err: unknown): ApiError {
       case 'not_invited':
         return new ApiError('not_allowed', TEAM_REPORT_WORDS.notInvited);
       case 'link_off':
-        return new ApiError('not_allowed', TEAM_REPORT_WORDS.sendNeedsLink);
+        return use === 'read'
+          ? new ApiError('unavailable', TEAM_REPORT_WORDS.linkOff)
+          : new ApiError('not_allowed', TEAM_REPORT_WORDS.sendNeedsLink);
       case 'too_many_open':
         return new ApiError('conflict', TEAM_REPORT_WORDS.tooManyOpen);
       case 'report_unknown':

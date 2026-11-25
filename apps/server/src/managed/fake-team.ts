@@ -1,8 +1,9 @@
 /**
  * A stand-in for control's side of the reports to the Whombat Team (docs/decisions/team-reports.md), in memory: the
  * development box's manager stand-in answers the team report paths with it, so `pnpm dev` shows the whole way, and tests
- * use it as the fake manager's control. It keeps reports as control would (numbered, the team's changes counted in
- * `revision`, a request done once per request id) and refuses as control does, with its codes. With `replyAfterMs` the
+ * use it as the fake manager's control. It keeps reports as control would (numbered, only the team's changes counted in
+ * `revision`, a request done once per request id, Still happening opening it again as new) and refuses as control
+ * does, with its codes. With `replyAfterMs` the
  * team answers each new report once, that long after it came, the next time it is asked about: no timers to stop.
  */
 import { randomBytes } from 'node:crypto';
@@ -184,13 +185,13 @@ export class FakeTeam {
     if (!teamReportCanConfirm(report.status))
       throw new FakeTeamRefusal('report_closed', 'There is no fix to say anything about yet.');
     const now = this.#seconds();
-    // As control: the person's press is an entry of theirs with the status it gave, and counts as a change.
-    const status: TeamReportStatus = input.action === 'works' ? 'confirmed' : 'investigating';
+    // As control: the person's press is an entry of theirs with the status it gave; Still happening opens it again as
+    // new. The revision the box reads counts the team's changes only, so the person's own press moves none.
+    const status: TeamReportStatus = input.action === 'works' ? 'confirmed' : 'new';
     const next: TeamReport = {
       ...report,
       status,
       updatedAt: now,
-      revision: report.revision + 1,
       messages: [
         ...report.messages,
         { id: this.#messageId(), author: 'reporter', text: '', at: now, status },

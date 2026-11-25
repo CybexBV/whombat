@@ -2,8 +2,10 @@
  * Reports to the Whombat Team on the phone (Whombat team-reports.md): the web's `/reports` addresses open the phone's
  * screens, in either path form, from a link, an Inbox item's link or a tapped notification.
  */
+import { LinkRef } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  appScreenOfLink,
   appScreenUrlForPath,
   appUrlForPath,
   LINKING_SCREENS,
@@ -60,5 +62,18 @@ describe('report addresses', () => {
         url: `whombat://reports/${REPORT}`,
       },
     );
+  });
+
+  it('opens a report from the push its Whombat sends, wherever that Whombat lives', () => {
+    // The Whombat names the report's page by its path, never by an address of its own.
+    const link = LinkRef.parse({ type: 'external', url: `/reports/${REPORT}` });
+    const hosted = ['https://app.whombat.com'];
+    expect(appScreenOfLink(link, hosted)).toBe(`whombat://reports/${REPORT}`);
+    expect(appScreenOfLink(link, [])).toBe(`whombat://reports/${REPORT}`);
+    // A box's own address isn't one the phone knows as the app's: such a link would open the Inbox instead.
+    expect(
+      appScreenOfLink({ type: 'external', url: `https://box.example.com/reports/${REPORT}` }, hosted),
+    ).toBeNull();
+    expect(appScreenOfLink({ type: 'dm' }, hosted)).toBeNull();
   });
 });

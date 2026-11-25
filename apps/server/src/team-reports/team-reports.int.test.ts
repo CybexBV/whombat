@@ -5,7 +5,10 @@
  * back deletes it at control and here; the assistant's draft becomes a card whose yes sends it as the person, and
  * sending it from the form instead withdraws the card. A retry sends nothing twice, a long conversation fits one answer,
  * a person whose Link ended can still read and withdraw, and the copies go when the box leaves Link or moves to new
- * hardware. Needs Postgres: the copies, the drafts, the notification and the approval go through the commit pipeline.
+ * hardware (with the cards of the drafts that go, and again in the next round when a drop failed). A read that answers
+ * after a withdrawal brings nothing back, the form doesn't send a draft its card is sending, and It works answered
+ * with no report is a refusal. Needs Postgres: the copies, the drafts, the notification and the approval go through
+ * the commit pipeline.
  */
 import { TeamReport } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
@@ -21,7 +24,7 @@ import {
   teamReportDrafts,
 } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
-import { ManagerCallError } from '../managed/ports';
+import { ManagerCallError, type ManagerPort } from '../managed/ports';
 import { FakeManager } from '../managed/testing';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
@@ -37,7 +40,12 @@ import {
 import { TEAM_REPORT_WORDS, useTeamReports } from './control';
 import { TEAM_REPORT_ANSWER_MAX_BYTES } from './fit';
 import { followTeamReports } from './follow';
-import { draftRequestId, forgetAllTeamReports } from './service';
+import {
+  draftRequestId,
+  dropTeamReportsForNewHardware,
+  forgetAllTeamReports,
+  lastAvailability,
+} from './service';
 import { whombatTeamReportsTool } from './tool';
 
 const t = useTestServer({ seed: true, app: true });
@@ -46,6 +54,9 @@ const manager = new FakeManager();
 let linkOn = false;
 /** Control knows the box (Link ended, say) while Link isn't on. */
 let linkKnown = false;
+/** The manager says the box is out of Link. */
+let linkLeft = false;
+const link = { on: () => linkOn, known: () => linkOn || linkKnown, left: () => linkLeft };
 let mine: PersonalSetup;
 let cookie: string;
 
@@ -56,8 +67,33 @@ beforeAll(async () => {
     grants: [],
   });
   ({ cookie } = await sessionFor(t.services, IDS.mara));
-  useTeamReports(t.services, manager, { on: () => linkOn, known: () => linkOn || linkKnown });
+  useTeamReports(t.services, manager, link);
 });
+
+/** A call to control that is answered only once `release` is called; `reached` says it got there. */
+function held() {
+  let release = () => {};
+  let reached = () => {};
+  const open = new Promise<void>((r) => {
+    release = r;
+  });
+  const arrived = new Promise<void>((r) => {
+    reached = r;
+  });
+  return { open, arrived, release: () => release(), reached: () => reached() };
+}
+
+/** Control behind the manager, with some of its answers held back or changed for one test. */
+function slowManager(over: Partial<ManagerPort>): Partial<ManagerPort> {
+  return {
+    teamReportsList: () => manager.teamReportsList(),
+    teamReportsGet: (r) => manager.teamReportsGet(r),
+    teamReportsCreate: (r) => manager.teamReportsCreate(r),
+    teamReportsReply: (r) => manager.teamReportsReply(r),
+    teamReportsAct: (r) => manager.teamReportsAct(r),
+    ...over,
+  };
+}
 
 const req = (method: 'GET' | 'POST', url: string, payload?: unknown) =>
   t.api.inject({
@@ -544,5 +580,180 @@ describe('reports to the Whombat Team', () => {
     );
     expect(longItem.body.length).toBeLessThanOrEqual(600);
     expect(longItem.actions.map((x: { kind: string }) => x.kind)).toEqual(['decline']);
+  });
+
+  it('bring back no report the person took back while a read was on its way', async () => {
+    linkOn = true;
+    const made = await req('POST', '/team-reports', { kind: 'bug', text: 'Late read', requestId: rid('j') });
+    const id = made.json().report.id as string;
+    const list = held();
+    const get = held();
+    useTeamReports(
+      t.services,
+      slowManager({
+        teamReportsList: async () => {
+          const answer = await manager.teamReportsList();
+          list.reached();
+          await list.open;
+          return answer;
+        },
+        teamReportsGet: async (r) => {
+          const answer = await manager.teamReportsGet(r);
+          get.reached();
+          await get.open;
+          return answer;
+        },
+      }),
+      link,
+    );
+    try {
+      // Both reads have the report from control; then the person takes it back.
+      const listing = req('GET', '/team-reports');
+      const opening = req('GET', `/team-reports/${id}`);
+      await Promise.all([list.arrived, get.arrived]);
+      const back = await req('POST', `/team-reports/${id}/act`, { action: 'withdraw' });
+      expect(back.statusCode, back.body).toBe(200);
+      list.release();
+      get.release();
+      const [listed, opened] = await Promise.all([listing, opening]);
+      expect(listed.json().reports.map((r: { id: string }) => r.id)).not.toContain(id);
+      expect(opened.statusCode).toBe(404);
+      expect(await copyOf(id)).toBeUndefined();
+    } finally {
+      list.release();
+      get.release();
+      useTeamReports(t.services, manager, link);
+    }
+  });
+
+  it('refuse the form’s send of a draft whose card said yes and is sending it, and send the card’s words once', async () => {
+    linkOn = true;
+    const { draftId, approvalId } = await draftWithCard('The fan is loud at night');
+    const create = held();
+    useTeamReports(
+      t.services,
+      slowManager({
+        teamReportsCreate: async (r) => {
+          create.reached();
+          await create.open;
+          return manager.teamReportsCreate(r);
+        },
+      }),
+      link,
+    );
+    try {
+      const [a] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+      // The yes is given, and its send is on its way to control.
+      const yes = t.commit(IDS.mara, decideApproval, { number: a?.number, decision: 'approve' });
+      await create.arrived;
+      const form = await req('POST', '/team-reports', {
+        kind: 'bug',
+        text: 'The fan is loud at night, every night',
+        draftId,
+      });
+      expect(form.statusCode, form.body).toBe(409);
+      expect(form.json().error.message).toBe(TEAM_REPORT_WORDS.draftSending);
+      create.release();
+      expect((await yes).status).toBe('ok');
+      await t.services.background.settle();
+      const sent = [...manager.team.reports.values()].filter((r) => r.text.startsWith('The fan is loud'));
+      expect(sent.map((r) => r.text)).toEqual(['The fan is loud at night']);
+    } finally {
+      create.release();
+      useTeamReports(t.services, manager, link);
+    }
+  });
+
+  it('take It works answered with no report as a refusal, never as a withdrawal', async () => {
+    linkOn = true;
+    const made = await req('POST', '/team-reports', { kind: 'bug', text: 'Fixed?', requestId: rid('k') });
+    const id = made.json().report.id as string;
+    manager.team.teamSays(id, 'Try the next update', 'available');
+    useTeamReports(t.services, slowManager({ teamReportsAct: async () => ({ report: null }) }), link);
+    try {
+      const works = await req('POST', `/team-reports/${id}/act`, { action: 'works', requestId: rid('l') });
+      expect(works.statusCode).toBe(503);
+      expect(works.json().error.message).toBe(TEAM_REPORT_WORDS.refused);
+      expect(await copyOf(id)).toBeTruthy();
+      const withdrawn = await t.services.db
+        .select()
+        .from(events)
+        .where(eq(events.type, 'team_report.withdrawn'));
+      expect(withdrawn.some((e) => (e.payload as { reportId?: string }).reportId === id)).toBe(false);
+    } finally {
+      useTeamReports(t.services, manager, link);
+    }
+  });
+
+  it('say a read refused for Link needs Link, not that sending does', async () => {
+    linkOn = true;
+    const made = await req('POST', '/team-reports', { kind: 'bug', text: 'Read me', requestId: rid('m') });
+    const id = made.json().report.id as string;
+    manager.teamFails = new ManagerCallError(
+      '/v1/runtime/team-reports/get',
+      502,
+      'control_refused',
+      'manager /v1/runtime/team-reports/get: 502 {"error":{"code":"control_refused","message":"forbidden link_off: control refused team.reports.get"}}',
+    );
+    try {
+      const opened = await req('GET', `/team-reports/${id}`);
+      expect(opened.json().error.message).toBe(TEAM_REPORT_WORDS.linkOff);
+      const reply = await req('POST', `/team-reports/${id}/replies`, { text: 'Hello?' });
+      expect(reply.json().error.message).toBe(TEAM_REPORT_WORDS.sendNeedsLink);
+    } finally {
+      manager.teamFails = null;
+    }
+  });
+
+  it('drop the drafts’ cards with them on new hardware, forget what control said, and stop there on a failure', async () => {
+    linkOn = true;
+    await req('GET', '/team-reports');
+    expect(lastAvailability(t.services)).not.toBeNull();
+    await req('POST', '/team-reports', { kind: 'bug', text: 'Before moving', requestId: rid('n') });
+    const { approvalId } = await draftWithCard('Not sent before moving');
+    // A failed drop is thrown, so the new device id isn't taken.
+    const commit = vi.spyOn(t.services.pipeline, 'commit').mockRejectedValueOnce(new Error('busy'));
+    try {
+      await expect(dropTeamReportsForNewHardware(t.services)).rejects.toThrow('busy');
+    } finally {
+      commit.mockRestore();
+    }
+    expect(
+      (await t.services.db.select().from(teamReportCopies).where(eq(teamReportCopies.burrowId, t.burrowId)))
+        .length,
+    ).toBeGreaterThan(0);
+    await dropTeamReportsForNewHardware(t.services);
+    expect(
+      await t.services.db.select().from(teamReportCopies).where(eq(teamReportCopies.burrowId, t.burrowId)),
+    ).toEqual([]);
+    expect(lastAvailability(t.services)).toBeNull();
+    // The card asks no more: there is nothing left for its yes to send.
+    const [card] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+    expect(card?.state).toBe('declined');
+    const [why] = await t.services.db
+      .select()
+      .from(events)
+      .where(and(eq(events.type, 'approval.declined'), eq(events.approvalId, approvalId)));
+    expect(why?.payload).toMatchObject({ withdrawn: true });
+  });
+
+  it('drop the copies in the next round when the drop on leaving Link failed', async () => {
+    linkOn = true;
+    await req('POST', '/team-reports', { kind: 'bug', text: 'Left behind', requestId: rid('o') });
+    linkOn = false;
+    linkLeft = true;
+    try {
+      expect(
+        (await t.services.db.select().from(teamReportCopies).where(eq(teamReportCopies.burrowId, t.burrowId)))
+          .length,
+      ).toBeGreaterThan(0);
+      await followTeamReports(t.services);
+      expect(
+        await t.services.db.select().from(teamReportCopies).where(eq(teamReportCopies.burrowId, t.burrowId)),
+      ).toEqual([]);
+    } finally {
+      linkOn = true;
+      linkLeft = false;
+    }
   });
 });

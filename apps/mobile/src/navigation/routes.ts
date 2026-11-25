@@ -1198,6 +1198,16 @@ export function urlTarget(href: string, origins: readonly string[]): UrlTarget {
 }
 
 /**
+ * The app screen an external link opens (a tapped push's, an Inbox notification's): a page of the app by its path,
+ * wherever the person's Whombat lives, or by its address on the web app; null for any other link or page.
+ */
+export function appScreenOfLink(link: LinkRef, origins: readonly string[]): string | null {
+  if (link.type !== 'external') return null;
+  const target = urlTarget(link.url, origins);
+  return target?.kind === 'app' ? target.url : null;
+}
+
+/**
  * The web page of a link (AP-709): a canvas or the audit log on the web app, in the burrow it belongs to (`?burrow=`),
  * and an external link's own URL; null for the rest. Only links `routeForLink` has no screen for are opened with it.
  */

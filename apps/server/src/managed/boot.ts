@@ -30,7 +30,7 @@ import { startShareRound } from '../shares/round';
 import { teamReportsLeftLink, useTeamReports } from '../team-reports/control';
 import { startTeamReportsFollow } from '../team-reports/follow';
 import { registerTeamReportsSource } from '../team-reports/inbox';
-import { forgetAllTeamReports } from '../team-reports/service';
+import { dropTeamReportsForNewHardware, forgetAllTeamReports } from '../team-reports/service';
 import { AdminSocket } from './admin-socket';
 import { BackupSocketClient } from './backup';
 import { startBackupKeys } from './backup-key';
@@ -154,6 +154,8 @@ export async function startManaged(
   useTeamReports(services, manager, {
     on: () => link.running() || devTeam(),
     known: () => link.known() || devTeam(),
+    // Out of Link: the follow round drops copies a failed drop left behind.
+    left: () => teamReportsLeftLink(link.view()),
   });
   link.onChange((after) => {
     if (teamReportsLeftLink(after))
@@ -185,15 +187,12 @@ export async function startManaged(
     }
   }
   // A backup restored onto a new box takes this box's device id before the licence loads. The earlier box's reports to
-  // the Whombat Team stay with it: control knows them by its device id.
+  // the Whombat Team stay with it: control knows them by its device id. Until they are dropped here the new id isn't
+  // taken, so the next start tries again.
   if (claimRecord) {
     try {
       const old = await runtime.trust.adoptDeviceId(claimRecord, {
-        beforeAdopt: () =>
-          forgetAllTeamReports(services, { drafts: true }).then(
-            () => undefined,
-            (err) => services.log.warn({ err: String(err) }, 'team reports: the copies weren’t dropped'),
-          ),
+        beforeAdopt: () => dropTeamReportsForNewHardware(services),
       });
       if (old)
         services.log.warn({ from: old, to: claimRecord.deviceId }, 'restored onto a new box: new device id');

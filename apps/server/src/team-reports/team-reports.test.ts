@@ -31,7 +31,7 @@ import {
   teamReportsLeftLink,
   useTeamReports,
 } from './control';
-import { fitTeamReport, TEAM_REPORT_ANSWER_MAX_BYTES } from './fit';
+import { fitTeamReport, fitTeamReportsList, TEAM_REPORT_ANSWER_MAX_BYTES } from './fit';
 import {
   TEAM_REPORTS_FIRST_JITTER_MS,
   TEAM_REPORTS_FIRST_MS,
@@ -137,6 +137,49 @@ describe('control’s answers in plain words', () => {
     );
     expect(refusalCode(answer('refused device_revoked: control refused: report_unknown'))).toBeNull();
     expect(refusalCode(refused('device_revoked: report_unknown'))).toBeNull();
+  });
+
+  it('reads control’s code from the message the manager really writes', () => {
+    // As the manager's client puts it: its path, the status and the start of the manager's JSON answer, whose message
+    // leads with control's error code and details.code (once when they are the same), then control's own answer.
+    const manager = (codes: string, control: object) => {
+      const message = `${codes}: control refused team.reports.create: control HTTP 400: ${JSON.stringify(control)}`;
+      const body = JSON.stringify({ error: { code: 'control_refused', message } });
+      return new ManagerCallError(
+        '/v1/runtime/team-reports/create',
+        502,
+        'control_refused',
+        `manager /v1/runtime/team-reports/create: 502 ${body.slice(0, 200)}`,
+      );
+    };
+    const invalid = manager('validation_failed', {
+      error: {
+        code: 'validation_failed',
+        message: 'What was sent isn’t a report the Whombat Team takes.',
+        details: { code: 'validation_failed' },
+      },
+    });
+    expect(refusalCode(invalid)).toBe('validation_failed');
+    expect(controlFailure(invalid).message).toBe(TEAM_REPORT_WORDS.invalid);
+    const unknown = manager('not_found report_unknown', {
+      error: {
+        code: 'not_found',
+        message: 'This Whombat has no such report.',
+        details: { code: 'report_unknown' },
+      },
+    });
+    expect(refusalCode(unknown)).toBe('report_unknown');
+    const notInvited = manager('forbidden not_invited', {
+      error: { code: 'forbidden', message: 'Only invited accounts.', details: { code: 'not_invited' } },
+    });
+    expect(controlFailure(notInvited).message).toBe(TEAM_REPORT_WORDS.notInvited);
+  });
+
+  it('says Link is needed to read, and that sending needs Link on, for control’s link_off', () => {
+    const linkOff = refused('forbidden link_off');
+    expect(controlFailure(linkOff, 'read').message).toBe(TEAM_REPORT_WORDS.linkOff);
+    expect(controlFailure(linkOff, 'send').message).toBe(TEAM_REPORT_WORDS.sendNeedsLink);
+    expect(controlFailure(linkOff).message).toBe(TEAM_REPORT_WORDS.sendNeedsLink);
   });
 
   it('says what the person can do about each', () => {
@@ -250,6 +293,52 @@ describe('a whole report in one answer', () => {
     expect(TeamReport.safeParse(fitted.report).success).toBe(true);
   });
 
+  it('fits a list of 100 reports with the longest titles the contract allows, cutting titles first', () => {
+    const row = (i: number) => ({
+      id: `tr_${String(i).padStart(20, 'A')}`,
+      number: i + 1,
+      kind: 'bug' as const,
+      // Three bytes a letter, and a quote JSON escapes.
+      title: `"${'地'.repeat(199)}`,
+      status: (i % 2 ? 'closed' : 'investigating') as TeamReportStatus,
+      createdAt: 1_790_000_000 - i,
+      updatedAt: 1_790_000_000 - i,
+      revision: 0,
+      unread: false,
+    });
+    const list = {
+      available: true,
+      reason: null,
+      stale: false,
+      reports: Array.from({ length: 100 }, (_, i) => row(i)),
+    };
+    expect(size(list)).toBeGreaterThan(64 * 1024);
+    const fitted = fitTeamReportsList(list);
+    expect(size(fitted)).toBeLessThanOrEqual(TEAM_REPORT_ANSWER_MAX_BYTES);
+    expect(fitted.reports).toHaveLength(100);
+    expect(fitted.reports[0]?.title.endsWith('…')).toBe(true);
+    expect(fitted.reports.every((r) => r.title.length <= 200)).toBe(true);
+    // A short list stays as it is.
+    const short = { ...list, reports: list.reports.slice(0, 3) };
+    expect(fitTeamReportsList(short)).toBe(short);
+    // Too little room even for short titles: the oldest closed reports are left out first, then the oldest others.
+    const tight = fitTeamReportsList(list, 20_000);
+    expect(size(tight)).toBeLessThanOrEqual(20_000);
+    expect(tight.reports.length).toBeLessThan(100);
+    expect(tight.reports.filter((r) => r.status !== 'closed')).toHaveLength(50);
+    const closed = tight.reports.filter((r) => r.status === 'closed').map((r) => r.number);
+    expect(closed).toEqual(
+      list.reports
+        .filter((r) => r.status === 'closed')
+        .slice(0, closed.length)
+        .map((r) => r.number),
+    );
+    const tighter = fitTeamReportsList(list, 12_000);
+    expect(size(tighter)).toBeLessThanOrEqual(12_000);
+    expect(tighter.reports.every((r) => r.status !== 'closed')).toBe(true);
+    expect(tighter.reports[0]?.id).toBe(list.reports[0]?.id);
+  });
+
   it('fits a session message with room to spare for any report the contract allows', () => {
     for (const n of [1, 2, 5, 200]) {
       const fitted = fitTeamReport(longReport(n));
@@ -339,6 +428,15 @@ describe('the stand-in team', () => {
     expect(() => team.act({ requestId: 't'.repeat(16), reportId: id, action: 'works' })).toThrow(
       FakeTeamRefusal,
     );
+    // As control: Still happening opens the report again as new, and the person's own press moves no revision (it
+    // counts the team's changes only).
+    team.teamSays(id, 'Try the next update', 'available');
+    const offered = team.reports.get(id)?.revision as number;
+    const again2 = decodeTeamPayload(
+      TeamReport,
+      team.act({ requestId: 'w'.repeat(16), reportId: id, action: 'still_happening' }).report as string,
+    );
+    expect(again2).toMatchObject({ status: 'new', revision: offered });
     // Sending isn't open: refused with control's own reason.
     team.available = false;
     team.reason = 'not_invited';

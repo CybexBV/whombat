@@ -286,4 +286,19 @@ describe('claim, pairing, recovery, revocation', () => {
     ).toBe(null);
     expect(order).toHaveLength(1);
   });
+  it('keeps the earlier id while what belonged to the earlier box couldn’t go, and takes it at the next start', async () => {
+    const deviceId = async () => (await m.t.services.db.select().from(applianceState))[0]?.claimDeviceId;
+    const before = await deviceId();
+    const next = { deviceId: 'dev-test-3', secretHash: null };
+    await expect(
+      m.runtime.trust.adoptDeviceId(next, {
+        beforeAdopt: async () => {
+          throw new Error('the database is busy');
+        },
+      }),
+    ).rejects.toThrow('busy');
+    expect(await deviceId()).toBe(before);
+    expect(await m.runtime.trust.adoptDeviceId(next, { beforeAdopt: async () => {} })).toBe(before);
+    expect(await deviceId()).toBe('dev-test-3');
+  });
 });
