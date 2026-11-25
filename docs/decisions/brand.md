@@ -26,9 +26,10 @@ usage rules).
   `logo` (ink on light, paper on dark) live in `@whombat/tokens`; the components always draw in `logo`
   (`--logo` on web). The package forbids recoloring with accents, so there is no color prop.
 - **BR-05 The Ink tile is the app icon.** Of the package's Ink, Cocoa and Paper tiles, Ink (paper face on
-  burrow ink) is the icon everywhere: iOS/Expo `icon.png`, the Android adaptive icon (paper face as the
-  foreground inside the 66/108 safe circle, `#2b221d` background, the same image as the Android 13
-  monochrome), the web `apple-touch-icon.png`, `icon-192/512.png` (manifest, `any` and `maskable`: the face
+  burrow ink) is the icon everywhere: iOS/Expo `icon.png` (rendered, the face 60% of the tile: the package's
+  two-thirds face looked too big on a home screen, John 2026-11-25), the Android adaptive icon (paper face 48 of
+  108 dp wide, two thirds of the 72 dp launchers show, `#2b221d` background, the same image as the Android 13
+  monochrome; it was 61 dp, nearly touching the mask's edge), the web `apple-touch-icon.png`, `icon-192/512.png` (manifest, `any` and `maskable`: the face
   fits the maskable safe zone) and the package's `favicon.ico`.
 - **BR-06 favicon.svg follows the color scheme.** The package's README says its `favicon.svg` switches ink/paper
   with the browser's scheme, but the file has no style rule; ours is generated from the small symbol with a

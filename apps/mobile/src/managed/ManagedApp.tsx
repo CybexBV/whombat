@@ -10,6 +10,7 @@ import {
   APPLIANCE_TERMS_VERSION,
   type ApplianceRegistry,
   type ApplianceSummary,
+  androidDownloadUrl,
   type ClaimCard,
   type ClaimRequest,
   type ControlSession,
@@ -59,6 +60,7 @@ import * as Sharing from 'expo-sharing';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, BackHandler, Linking } from 'react-native';
 import { WhombatLive } from '../../modules/whombat-live';
+import { WhombatUpdater } from '../../modules/whombat-updater';
 import { QUERY_CACHE_NAME } from '../data/queryPersist';
 import { deviceBox } from '../data/secureBoxNative';
 import { LookAround } from '../demo/LookAround';
@@ -74,6 +76,7 @@ import { Screen } from '../ui/headers';
 import { Button, Loading } from '../ui/primitives';
 import { StartHold } from '../ui/StartHold';
 import { ApplianceRoot, storageScopeOf } from './ApplianceRoot';
+import { AppUpdatePrompt } from './AppUpdatePrompt';
 import { BringBackFlow } from './BringBack';
 import {
   CommunityApp,
@@ -85,7 +88,7 @@ import {
 import { ConnectAiScreen } from './ConnectAi';
 import { awaitSession, type CloudSessionStore, cloudSessionStore } from './cloudSession';
 import { COMMUNITY_REGISTRY, PHONE_COMMUNITY_TEXT } from './community';
-import { APP_BUILD, UI_ORIGINS } from './config';
+import { APP_BUILD, CONTROL_URL, UI_ORIGINS } from './config';
 import { asStarted, finishingDevice, pushConnectReturn, takeHeldConnect } from './connectReturn';
 import { createLinkBus, createPushTaps, sendLink } from './context';
 import { COPY } from './copy';
@@ -264,6 +267,8 @@ let started: ManagedStart | null = null;
 export function startManagedApp(): ManagedStart {
   if (started) return started;
   const env = createMobileEnvironment();
+  // A newer app is looked for while the app isn't open too, and notified (update-check.md).
+  if (PHONE_PLATFORM === 'android') WhombatUpdater.watchUpdates(androidDownloadUrl(CONTROL_URL));
   const kept = cloudSessionStore(secureStore);
   const check = env.control.session();
   const key = loadEndpointKey();
@@ -300,6 +305,11 @@ function readAhead(cloud: ControlSession) {
   } catch {
     // Read when the Whombat opens.
   }
+}
+
+/** The pop-up for a newer app, over whatever screen is open (App.tsx draws it beside the app). */
+export function ManagedUpdatePrompt() {
+  return <AppUpdatePrompt control={startManagedApp().env.control} />;
 }
 
 export function ManagedApp() {

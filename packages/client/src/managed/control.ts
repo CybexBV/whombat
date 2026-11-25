@@ -652,6 +652,14 @@ function parsed<T>(
   return r.data;
 }
 
+/**
+ * Where control names the Android app it hands out (`downloads.android`, public), for a reader outside this client: the
+ * phone's update check that runs while the app isn't open.
+ */
+export function androidDownloadUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}/v1${downloadsApi.android.path}`;
+}
+
 /** control over HTTPS. */
 export function createHttpControl(
   baseUrl: string,

@@ -1,7 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- The app installs its own updates (android-self-update.md AP-813): Android still asks the person each time. -->
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+  <!-- The update check scheduled while the app isn't open (update-check.md) stays scheduled after the phone restarts. -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <application>
+    <service
+      android:name="com.whombat.updater.UpdateCheckJob"
+      android:exported="false"
+      android:permission="android.permission.BIND_JOB_SERVICE" />
     <provider
       android:name="com.whombat.updater.WhombatUpdateFileProvider"
       android:authorities="${applicationId}.whombat-updates"

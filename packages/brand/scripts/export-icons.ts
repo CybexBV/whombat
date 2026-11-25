@@ -3,7 +3,7 @@
  *
  * - apps/web/public: favicon.ico, favicon.svg, apple-touch-icon.png, icon-192/512.png (+ manifest),
  *   badge-96.png (web push badge), whombat-og-1200x630.png (link previews);
- * - apps/mobile/assets: icon.png (Ink tile), adaptive-icon.png (Android foreground and monochrome),
+ * - apps/mobile/assets: icon.png (the Ink tile, its face smaller than the package's), adaptive-icon.png (Android foreground and monochrome),
  *   splash-icon.png / splash-icon-dark.png, notification-icon.png;
  * - the Android status-bar vector drawable of modules/whombat-live.
  *
@@ -45,7 +45,6 @@ copy('social/whombat-og-1200x630.png', join(web, 'whombat-og-1200x630.png'));
 write(join(web, 'manifest.webmanifest'), webManifest({ background: themeColors.light.bg }));
 
 // Mobile -------------------------------------------------------------------------------------------------
-copy('app-icon/whombat-app-icon-ink-1024.png', join(mobile, 'assets/icon.png'));
 write(
   join(mobile, 'modules/whombat-live/android/src/main/res/drawable/whombat_live_small.xml'),
   androidSmallIconXml(),
@@ -65,12 +64,24 @@ interface Render {
   /** Symbol width as a share of the canvas. */
   width: number;
   svg: string;
+  /** A solid ground (the iPhone's icon has no transparency); transparent without. */
+  ground?: string;
 }
 
 const renders: Render[] = [
-  // Android adaptive foreground (also the themed-icon monochrome): paper on the Ink background colour, the
-  // face inside the 66/108 safe circle (its farthest point, an ear, is 61 of 114 units from the centre).
-  { file: join(mobile, 'assets/adaptive-icon.png'), size: 1024, width: 0.57, svg: packageSymbol('paper') },
+  // The app icon (the iPhone's, and Android's before adaptive icons): the Ink tile, the face 60% of its width. The
+  // package's tile fills two thirds of it, which looked too big beside other apps on a home screen.
+  {
+    file: join(mobile, 'assets/icon.png'),
+    size: 1024,
+    width: 0.6,
+    svg: packageSymbol('paper'),
+    ground: brandColors.ink,
+  },
+  // Android adaptive foreground (also the themed-icon monochrome): paper on the Ink background colour. Launchers show
+  // the middle 72 of its 108 dp, cut to their own shape: the face is 48 dp wide, two thirds of that circle, as on the
+  // iPhone. It was 61 dp, nearly touching the edge, and looked too big beside other apps.
+  { file: join(mobile, 'assets/adaptive-icon.png'), size: 1024, width: 0.445, svg: packageSymbol('paper') },
   // Splash: ink on the light `bg`, paper on the dark one.
   { file: join(mobile, 'assets/splash-icon.png'), size: 1024, width: 0.56, svg: packageSymbol('ink') },
   { file: join(mobile, 'assets/splash-icon-dark.png'), size: 1024, width: 0.56, svg: packageSymbol('paper') },
@@ -90,10 +101,10 @@ try {
     await page.setViewportSize({ width: r.size, height: r.size });
     const svg = r.svg.replace(/ width="[\d.]+" height="[\d.]+"/, '').replace('<svg ', '<svg width="100%" ');
     await page.setContent(
-      `<!doctype html><html><body style="margin:0;width:${r.size}px;height:${r.size}px;display:flex;align-items:center;justify-content:center;background:transparent">
+      `<!doctype html><html><body style="margin:0;width:${r.size}px;height:${r.size}px;display:flex;align-items:center;justify-content:center;background:${r.ground ?? 'transparent'}">
 <div style="width:${Math.round(r.size * r.width)}px;line-height:0">${svg}</div></body></html>`,
     );
-    await page.screenshot({ path: r.file, omitBackground: true });
+    await page.screenshot({ path: r.file, omitBackground: !r.ground });
     say(r.file);
   }
 } finally {

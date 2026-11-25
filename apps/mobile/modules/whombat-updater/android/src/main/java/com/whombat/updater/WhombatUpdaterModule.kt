@@ -57,6 +57,18 @@ class WhombatUpdaterModule : Module() {
 
     Function("isSupported") { true }
 
+    /**
+     * Asks control at `url` every few hours while the app isn't open and notifies once per newer version
+     * (`UpdateWatch`). The app hands the address over at every start.
+     */
+    Function("watchUpdates") { url: String -> UpdateWatch.watch(context, url) }
+
+    /** The newest version the in-app pop-up showed (0: none). */
+    Function("updateSeen") { UpdateWatch.seen(context).toDouble() }
+
+    /** The pop-up showed this version: not notified any more, a notification already up goes. */
+    Function("markUpdateSeen") { versionCode: Long -> UpdateWatch.markSeen(context, versionCode) }
+
     /** Android 8+ asks per app whether it may install apps (“Install unknown apps”). */
     Function("canInstall") {
       Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
