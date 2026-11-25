@@ -2,7 +2,8 @@
  * Account pages on a real database: Postgres is the point. A Google account's page is only its own person's (another
  * account's person gets not_found), what Whombat watches on it reads the connector row, GitHub's page comes from the
  * mirror's tables, Website feedback's from the burrow's report rows (by the reporter's name, never their email), and
- * Home's account things open their pages.
+ * Home's account things open their pages. Accounts kept quiet say so on Home, and GitHub's and Website feedback's quiet
+ * rows outlast the hourly sweep while they stay connected.
  */
 import {
   FEEDBACK_THING_ID,
@@ -13,11 +14,20 @@ import {
   thingHref,
   thingId,
 } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ConnectionViewer } from '../../connections/store';
 import { storeGoogleConnection } from '../../connectors/store';
-import { accounts, feedbackReports, principals, prReviewers } from '../../db/schema/index';
+import {
+  accounts,
+  feedbackReports,
+  githubConnections,
+  noticeStates,
+  principals,
+  prReviewers,
+  quietWindows,
+  watchOffs,
+} from '../../db/schema/index';
 import { syncOwnedRepos } from '../../github/owned-repos';
 import { pollMailGlances } from '../../home/mail-glance';
 import { homeOverview } from '../../home/overview';
@@ -30,6 +40,9 @@ import { FAKE_ACCESS_TOKEN, FAKE_REFRESH_TOKEN } from '../../test/personal';
 import { thingPage, thingVisible } from '../page';
 import { readAccountUptime, rollUpPoints } from '../points';
 import { thingWatch } from '../quiet/service';
+import { pruneGoneThings } from '../quiet/store';
+import { keepThingQuiet } from '../quiet/window-service';
+import { feedbackShown } from './feedback';
 
 const t = useTestServer({ seed: true });
 const TZ = 'Europe/Amsterdam';
@@ -176,5 +189,60 @@ describe('Website feedback’s page and Home', () => {
     expect(href(GITHUB_THING_ID)).toBe(thingHref('connection', 'github'));
     expect(href(FEEDBACK_THING_ID)).toBe(thingHref('connection', 'feedback'));
     expect(home.things.find((x) => x.id === FEEDBACK_THING_ID)?.line).toBe('1 new report · 1 site');
+  });
+});
+
+describe('accounts kept quiet', () => {
+  const kept = [() => google, () => GITHUB_THING_ID, () => FEEDBACK_THING_ID];
+
+  it('say so on Home, mail, GitHub and Website feedback alike', async () => {
+    if (!(await feedbackShown(t.services, mara))) await createIntegration(t);
+    const burrow = await t.services.db.query.burrows.findFirst();
+    if (!burrow) throw new Error('burrow');
+    for (const id of kept) await keepThingQuiet(t.services, mara, id(), { minutes: 60 }, TZ);
+    const home = await homeOverview(t.services, { principal: mara.principal, burrow });
+    for (const id of kept) {
+      const [w] = await t.services.db
+        .select()
+        .from(quietWindows)
+        .where(and(eq(quietWindows.ownerId, t.burrowId), eq(quietWindows.thingId, id())));
+      expect(home.things.find((x) => x.id === id())?.quietUntil).toBe(w?.endsAt.toISOString());
+    }
+  });
+
+  it('keep GitHub’s and Website feedback’s quiet rows through the hourly sweep while connected', async () => {
+    await t.services.db
+      .insert(githubConnections)
+      .values({ burrowId: t.burrowId, login: 'mara', connectedById: IDS.mara })
+      .onConflictDoNothing();
+    const at = t.services.clock();
+    for (const thingId of [GITHUB_THING_ID, FEEDBACK_THING_ID]) {
+      await t.services.db
+        .insert(watchOffs)
+        .values({ ownerId: t.burrowId, thingId, checkId: 'conn.check', byId: IDS.mara, at })
+        .onConflictDoNothing();
+      await t.services.db
+        .insert(noticeStates)
+        .values({ thingId, checkId: 'conn.check', firstSeen: at, lastSeen: at, seenPasses: 1, tone: 'bad' })
+        .onConflictDoNothing();
+    }
+    const rows = async (thingId: string) => ({
+      windows: (await t.services.db.select().from(quietWindows).where(eq(quietWindows.thingId, thingId)))
+        .length,
+      offs: (await t.services.db.select().from(watchOffs).where(eq(watchOffs.thingId, thingId))).length,
+      states: (await t.services.db.select().from(noticeStates).where(eq(noticeStates.thingId, thingId)))
+        .length,
+    });
+    // The window kept by the test before, a check switched off and a health state each.
+    const all = { windows: 1, offs: 1, states: 1 };
+    await pruneGoneThings(t.services.db);
+    expect(await rows(GITHUB_THING_ID)).toEqual(all);
+    expect(await rows(FEEDBACK_THING_ID)).toEqual(all);
+
+    // GitHub disconnected: its rows go with the next sweep; Website feedback's stay.
+    await t.services.db.delete(githubConnections).where(eq(githubConnections.burrowId, t.burrowId));
+    await pruneGoneThings(t.services.db);
+    expect(await rows(GITHUB_THING_ID)).toEqual({ windows: 0, offs: 0, states: 0 });
+    expect(await rows(FEEDBACK_THING_ID)).toEqual(all);
   });
 });
