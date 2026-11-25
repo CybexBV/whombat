@@ -17,6 +17,9 @@
  * (server-asks.md SA-07) — approves this time and stops asking. It isn't one of the answers: a quiet text button at the
  * content's end that asks first, naming where it changes back.
  *
+ * The assistant's draft report (Whombat team-reports.md) is sent now or not at all, never tonight, and Edit after the
+ * answers opens the form with the draft (`editDraft`).
+ *
  * An automation asking (“Approve the fix”; automation-recipes.md AP-999) is not the agent: its mark instead of a
  * wombat, “AN AUTOMATION IS ASKING” while it waits, its name on the context line and “The automation” in the sentences.
  * The agent asking wears its face, labelled with its name (Whombat one-agent.md OA-08; AP-4995).
@@ -30,6 +33,7 @@ import {
   canManageAgent,
   OutcomeRedactedError,
   OutcomeUnknownError,
+  teamReportDraftOf,
 } from '@whombat/client';
 import {
   type AgentFace,
@@ -146,6 +150,8 @@ export interface ApprovalScreenModel {
   } | null;
   message: string;
   footer: ApprovalFooter;
+  /** The assistant's draft report the answers' Edit opens in the form (`TeamReportNew`); null for any other approval. */
+  editDraft: string | null;
   /**
    * The lasting yes apart from the answers: its text button (`link`) and the confirmation's words, naming where it
    * changes back; null when it isn't offered (not an owner, not a risk row or a server that may stop asking, decided).
@@ -196,7 +202,8 @@ export function approvalScreen(
     (riskRow && always ? alwaysAllowConfirm(agentName, keyRiskRow(riskRow).verb, always) : null);
   const lasting = always && words ? lastingWordsAt(words, lastingWhere(server)) : null;
   const W = APPROVAL_ASK_WORDS;
-  const later = Boolean(view.ask && tonight && view.canApprove);
+  const editDraft = view.ask && view.canApprove ? teamReportDraftOf(approval) : null;
+  const later = Boolean(view.ask && tonight && view.canApprove && !editDraft);
   const answers: ApprovalAnswerButton[] = [
     { id: 'now', label: later ? W.now : W.yes, filled: false },
     ...(later ? [{ id: 'later' as const, label: W.later, filled: false as const }] : []),
@@ -275,6 +282,7 @@ export function approvalScreen(
             : command
               ? { kind: 'none' }
               : { kind: 'undo', canUndo: view.canUndo },
+    editDraft,
     lasting,
     toasts: view.toasts,
   };
