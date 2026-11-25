@@ -149,6 +149,33 @@ describe('a code that belongs to a challenge (SG-06, SG-07)', () => {
   });
 });
 
+/** What keeps Safari's AutoFill and password managers' fill menus, which take the focus, off a field. */
+function expectNotALogin(field: HTMLElement) {
+  expect(field.getAttribute('autocomplete')).not.toMatch(/^(username|current-password|email|on)?$/);
+  expect(field.hasAttribute('data-1p-ignore')).toBe(true);
+  expect(field.getAttribute('data-lpignore')).toBe('true');
+  expect(field.hasAttribute('data-bwignore')).toBe(true);
+  expect(field.getAttribute('data-form-type')).toBe('other');
+}
+
+describe('a service’s own username and password are not a login to this page', () => {
+  it('keeps AutoFill and password managers off UniFi’s username and password, as off its API key', async () => {
+    const user = userEvent.setup();
+    renderApp(
+      '/connections?connection=unifi_network&url=http://10.0.0.1',
+      fixtureServices({ connectors: 'connected' }),
+    );
+    const username = await screen.findByLabelText('USERNAME');
+    const password = screen.getByLabelText('PASSWORD');
+    expectNotALogin(username);
+    expectNotALogin(password);
+    expect(password.getAttribute('autocomplete')).toBe('new-password');
+
+    await user.click(screen.getByRole('radio', { name: /^API key/ }));
+    expect(screen.getByLabelText('API KEY').getAttribute('autocomplete')).toBe('new-password');
+  });
+});
+
 describe('a session’s two-step code, asked once (SG-09)', () => {
   it('asks Synology’s code on connect and on Replace password, and says when a code didn’t work', async () => {
     const user = userEvent.setup();

@@ -101,6 +101,7 @@ import {
   switchText,
   visibleFields,
 } from './catalog';
+import { NOT_A_LOGIN } from './notALogin';
 import { useAutomaticLabel } from './useAutomaticLabel';
 import { useConnectionWords } from './useConnectionWords';
 import { useOpenConnection } from './useOpenConnection';
@@ -630,6 +631,7 @@ export function SetupForm({
                     size="md"
                     spellCheck={false}
                     autoComplete="off"
+                    {...NOT_A_LOGIN}
                     autoCapitalize="none"
                     placeholder={method.account.placeholder}
                     value={account}
@@ -658,7 +660,8 @@ export function SetupForm({
                   size="md"
                   type="password"
                   spellCheck={false}
-                  autoComplete="off"
+                  autoComplete="new-password"
+                  {...NOT_A_LOGIN}
                   placeholder={method.secret?.placeholder}
                   value={password}
                   onChange={(e) => {
