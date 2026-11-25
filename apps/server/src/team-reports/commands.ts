@@ -5,7 +5,8 @@
  * - `team_report_keep`: a whole report as control answered it, and whether the person has read it now;
  * - `team_report_seen`: control's list. A team change shows as unread; a status entering a question or a fix to try is
  *   an Inbox item and a notification in fixed words, never the team's;
- * - `team_report_forget`: a report that is gone (withdrawn, or no longer at control) leaves the box at once.
+ * - `team_report_forget`: a report that is gone (withdrawn, or no longer at control) leaves the box at once;
+ * - `team_reports_drop`: every copy goes (a backup restored onto new hardware, a box taken out of Link).
  *
  * The assistant drafts: `team_report_draft_save` keeps its draft and `team_report_draft_send` always asks the
  * person on a card that quotes exactly what goes, whatever the assistant's keys say; their yes sends it as them
@@ -95,6 +96,31 @@ function summaryColumns(s: Summary) {
 }
 
 /**
+ * Whether what control answered is older than the copy: answers can cross (a reply's answer, then a read that left
+ * before it), and a lower revision, or the same one changed earlier, would move the copy back.
+ */
+export function teamReportOlderThanCopy(
+  had: Pick<CopyRow, 'revision' | 'updatedAt'>,
+  s: Pick<Summary, 'revision' | 'updatedAt'>,
+): boolean {
+  return s.revision < had.revision || (s.revision === had.revision && at(s.updatedAt) < had.updatedAt);
+}
+
+/** Whether a copy already says what control's summary says (or more: the summary is older). */
+export function sameTeamReportSummary(
+  had: Pick<CopyRow, 'status' | 'revision' | 'title' | 'updatedAt'>,
+  s: Pick<Summary, 'status' | 'revision' | 'title' | 'updatedAt'>,
+): boolean {
+  if (teamReportOlderThanCopy(had, s)) return true;
+  return (
+    had.status === s.status &&
+    had.revision >= s.revision &&
+    had.title === s.title &&
+    had.updatedAt.getTime() === at(s.updatedAt).getTime()
+  );
+}
+
+/**
  * Whether control's newer summary entered a status that waits for the person by a change of the team's (its revision
  * moved): the person's own reply moves no revision, so it never notifies them.
  */
@@ -112,7 +138,10 @@ async function inboxChanged(ctx: ApplyContext): Promise<void> {
   publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['needsYou']);
 }
 
-/** The person's report as the box keeps it now: the whole report, and whether they read it. */
+/**
+ * The person's report as the box keeps it now: the whole report, and whether they read it. An answer older than the
+ * copy (`older`) leaves the copy as it is; the person has still read what it shows.
+ */
 export const keepTeamReport = defineCommand({
   name: 'team_report_keep',
   schema: z.object({ report: TeamReport, read: z.boolean(), sent: z.boolean().default(false) }),
@@ -123,9 +152,17 @@ export const keepTeamReport = defineCommand({
       .from(teamReportCopies)
       .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)))
       .for('update');
+    const readRevision = input.read ? Math.max(had?.readRevision ?? 0, r.revision) : (had?.readRevision ?? 0);
+    if (had && teamReportOlderThanCopy(had, r)) {
+      if (readRevision !== had.readRevision)
+        await tx
+          .update(teamReportCopies)
+          .set({ readRevision })
+          .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)));
+      return { reportId: r.id, older: true };
+    }
     // Control's revision only grows: an answer that crossed a newer list doesn't move it back.
     const revision = Math.max(had?.revision ?? 0, r.revision);
-    const readRevision = input.read ? Math.max(had?.readRevision ?? 0, r.revision) : (had?.readRevision ?? 0);
     const values = { ...summaryColumns(r), revision, readRevision, report: r, copiedAt: ctx.now };
     if (had)
       await tx
@@ -151,7 +188,7 @@ export const keepTeamReport = defineCommand({
       });
     if (teamReportNeedsYou(r.status) !== (had ? teamReportNeedsYou(had.status as TeamReportStatus) : false))
       await inboxChanged(ctx);
-    return { reportId: r.id };
+    return { reportId: r.id, older: false };
   },
 });
 
@@ -205,12 +242,7 @@ export const seeTeamReports = defineCommand({
         changed ||= teamReportNeedsYou(s.status);
         continue;
       }
-      const same =
-        had.status === s.status &&
-        had.revision >= s.revision &&
-        had.title === s.title &&
-        had.updatedAt.getTime() === at(s.updatedAt).getTime();
-      if (same) continue;
+      if (sameTeamReportSummary(had, s)) continue;
       await tx
         .update(teamReportCopies)
         .set({ ...summaryColumns(s), revision: Math.max(had.revision, s.revision), copiedAt: ctx.now })
@@ -285,6 +317,29 @@ export const forgetTeamReport = defineCommand({
       });
     if (gone && teamReportNeedsYou(gone.status as TeamReportStatus)) await inboxChanged(ctx);
     return { reportId: input.reportId, gone: !!gone };
+  },
+});
+
+/**
+ * Every copy of the burrow's reports goes, and with `drafts` the assistant's drafts not sent yet: a backup restored onto
+ * new hardware starts without the earlier box's reports, and a box taken out of Link keeps none.
+ */
+export const dropTeamReports = defineCommand({
+  name: 'team_reports_drop',
+  schema: z.object({ drafts: z.boolean() }),
+  async apply(tx, ctx, input) {
+    const copies = await tx
+      .delete(teamReportCopies)
+      .where(eq(teamReportCopies.burrowId, ctx.burrow.id))
+      .returning({ status: teamReportCopies.status });
+    const drafts = input.drafts
+      ? await tx
+          .delete(teamReportDrafts)
+          .where(and(eq(teamReportDrafts.burrowId, ctx.burrow.id), eq(teamReportDrafts.state, 'waiting')))
+          .returning({ id: teamReportDrafts.id })
+      : [];
+    if (copies.some((c) => teamReportNeedsYou(c.status as TeamReportStatus))) await inboxChanged(ctx);
+    return { copies: copies.length, drafts: drafts.length };
   },
 });
 
@@ -493,6 +548,7 @@ export const TEAM_REPORT_COMMANDS = [
   keepTeamReport,
   seeTeamReports,
   forgetTeamReport,
+  dropTeamReports,
   saveTeamReportDraft,
   sendTeamReportDraft,
   askedTeamReportDraft,

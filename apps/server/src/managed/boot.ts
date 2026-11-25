@@ -27,9 +27,10 @@ import { registerBoxBackupSource } from '../home/box-backup';
 import type { Services } from '../services';
 import { useShares } from '../shares/publish';
 import { startShareRound } from '../shares/round';
-import { useTeamReports } from '../team-reports/control';
+import { teamReportsLeftLink, useTeamReports } from '../team-reports/control';
 import { startTeamReportsFollow } from '../team-reports/follow';
 import { registerTeamReportsSource } from '../team-reports/inbox';
+import { forgetAllTeamReports } from '../team-reports/service';
 import { AdminSocket } from './admin-socket';
 import { BackupSocketClient } from './backup';
 import { startBackupKeys } from './backup-key';
@@ -145,14 +146,21 @@ export async function startManaged(
   // Shared links (share-links.md): the manager's share routes, and the round that keeps the links right.
   useShares(services, manager);
   startShareRound(services);
-  // Reports to the Whombat Team (team-reports.md): a Link account's, so only while Link is on or in grace. A
-  // development box has no Link: its manager stand-in has no Link routes and its stand-in team answers instead.
+  // Reports to the Whombat Team (team-reports.md): a Link account's. Sending needs Link on or in grace; reading and
+  // withdrawing work while control knows the box. A development box has no Link: its manager stand-in has no Link
+  // routes and its stand-in team answers instead. A box taken out of Link keeps no copies: control keeps none either.
   const link = runtime.link;
-  useTeamReports(
-    services,
-    manager,
-    () => link.running() || (config.NODE_ENV === 'development' && link.view().assumed),
-  );
+  const devTeam = () => config.NODE_ENV === 'development' && link.view().assumed;
+  useTeamReports(services, manager, {
+    on: () => link.running() || devTeam(),
+    known: () => link.known() || devTeam(),
+  });
+  link.onChange((after) => {
+    if (teamReportsLeftLink(after))
+      void forgetAllTeamReports(services, { drafts: false }).catch((err) =>
+        services.log.warn({ err: String(err) }, 'team reports: the copies weren’t dropped'),
+      );
+  });
   registerTeamReportsSource();
   startTeamReportsFollow(services);
   // A backup opened to bring one thing back closes when unused for two hours and when the box stops (backup-look.md).
@@ -176,10 +184,17 @@ export async function startManaged(
       services.log.warn({ err: String(err) }, 'the claim record could not be read');
     }
   }
-  // A backup restored onto a new box takes this box's device id before the licence loads.
+  // A backup restored onto a new box takes this box's device id before the licence loads. The earlier box's reports to
+  // the Whombat Team stay with it: control knows them by its device id.
   if (claimRecord) {
     try {
-      const old = await runtime.trust.adoptDeviceId(claimRecord);
+      const old = await runtime.trust.adoptDeviceId(claimRecord, {
+        beforeAdopt: () =>
+          forgetAllTeamReports(services, { drafts: true }).then(
+            () => undefined,
+            (err) => services.log.warn({ err: String(err) }, 'team reports: the copies weren’t dropped'),
+          ),
+      });
       if (old)
         services.log.warn({ from: old, to: claimRecord.deviceId }, 'restored onto a new box: new device id');
     } catch (err) {

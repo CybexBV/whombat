@@ -18,6 +18,7 @@ import {
   signRecoveryStatement,
 } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
+import { applianceState } from '../db/schema/index';
 import { useManagedRuntime } from '../test/managed';
 import { verifyApplianceChain } from './audit';
 import { pakeClaim, testIdentity } from './testing';
@@ -264,5 +265,25 @@ describe('claim, pairing, recovery, revocation', () => {
       appliance: { peerId: m.appliance.peerId, protocol: { major: SESSION_PROTOCOL.major } },
       providers: expect.any(Array),
     });
+  });
+  it('takes a restored backup’s new device id once, after what belonged to the earlier box went', async () => {
+    const order: string[] = [];
+    const deviceId = async () => (await m.t.services.db.select().from(applianceState))[0]?.claimDeviceId;
+    const beforeAdopt = async (old: string) => {
+      // The id still names the earlier box while its things go.
+      order.push(`before ${old} ${await deviceId()}`);
+    };
+    const old = await m.runtime.trust.adoptDeviceId(
+      { deviceId: 'dev-test-2', secretHash: null },
+      { beforeAdopt },
+    );
+    expect(old).toBe(DEVICE);
+    expect(order).toEqual([`before ${DEVICE} ${DEVICE}`]);
+    expect(await deviceId()).toBe('dev-test-2');
+    // The same id again changes nothing, and nothing goes.
+    expect(
+      await m.runtime.trust.adoptDeviceId({ deviceId: 'dev-test-2', secretHash: null }, { beforeAdopt }),
+    ).toBe(null);
+    expect(order).toHaveLength(1);
   });
 });

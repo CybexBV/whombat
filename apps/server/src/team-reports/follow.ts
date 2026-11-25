@@ -46,7 +46,7 @@ export async function followTeamReports(services: Services, now = services.clock
       await services.pipeline.commit(sweepTeamReportDrafts, { ids }, { burrowId, actorId: person.id });
   }
 
-  if (!teamPortOf(services)) return;
+  if (!teamPortOf(services, 'read')) return;
   const open = await services.db
     .selectDistinct({ burrowId: teamReportCopies.burrowId })
     .from(teamReportCopies)

@@ -9,17 +9,32 @@ import {
   TeamReport,
   TeamReportDraft,
   TeamReportList,
+  type TeamReportStatus,
 } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { standInAnswer } from '../managed/dev-standins';
 import { FAKE_TEAM_FIRST_ANSWER, FakeTeam, FakeTeamRefusal } from '../managed/fake-team';
 import { ManagerCallError, type ManagerPort } from '../managed/ports';
 import type { Services } from '../services';
-import { TEAM_REPORT_NOTICE_WORDS, teamReportEnteredNeedsYou, teamReportNoticeTitle } from './commands';
-import { controlFailure, refusalCode, teamPortOf, useTeamReports } from './control';
+import {
+  sameTeamReportSummary,
+  TEAM_REPORT_NOTICE_WORDS,
+  teamReportEnteredNeedsYou,
+  teamReportNoticeTitle,
+  teamReportOlderThanCopy,
+} from './commands';
+import {
+  controlFailure,
+  refusalCode,
+  TEAM_REPORT_WORDS,
+  teamPortOf,
+  teamReportsLeftLink,
+  useTeamReports,
+} from './control';
+import { fitTeamReport, TEAM_REPORT_ANSWER_MAX_BYTES } from './fit';
 import { teamReportItem } from './inbox';
 import { decodeTeamPayload, encodeTeamPayload, TeamPayloadError } from './payload';
-import { teamReportUnread } from './service';
+import { teamListMatchesCopies, teamReportUnread } from './service';
 
 const draft = {
   kind: 'bug' as const,
@@ -98,13 +113,38 @@ describe('control’s answers in plain words', () => {
     expect(refusalCode(refused('report_unknown'))).toBe('report_unknown');
     expect(refusalCode(refused('rate_limited'))).toBe('rate_limited');
     expect(refusalCode(new ManagerCallError('/x', 503, 'control_unreachable', 'report_unknown'))).toBeNull();
+    // Control's error code and its details.code, as the manager puts them first.
+    expect(refusalCode(refused('forbidden not_invited'))).toBe('not_invited');
+    expect(refusalCode(refused('conflict too_many_open'))).toBe('too_many_open');
+  });
+
+  it('takes the code the manager put first, never one in control’s words after it', () => {
+    const answer = (message: string) =>
+      new ManagerCallError(
+        '/v1/runtime/team-reports/create',
+        502,
+        'control_refused',
+        `manager /v1/runtime/team-reports/create: 502 ${JSON.stringify({ error: { code: 'control_refused', message } })}`,
+      );
+    expect(refusalCode(answer('refused link_off: control refused team.reports.create: rate_limited'))).toBe(
+      'link_off',
+    );
+    expect(refusalCode(answer('refused device_revoked: control refused: report_unknown'))).toBeNull();
+    expect(refusalCode(refused('device_revoked: report_unknown'))).toBeNull();
   });
 
   it('says what the person can do about each', () => {
     expect(controlFailure(refused('report_unknown')).code).toBe('not_found');
     expect(controlFailure(refused('report_closed')).code).toBe('conflict');
     expect(controlFailure(refused('rate_limited')).code).toBe('rate_limited');
-    expect(controlFailure(refused('team_reports_unavailable')).code).toBe('not_allowed');
+    expect(controlFailure(refused('team_reports_unavailable')).message).toBe(TEAM_REPORT_WORDS.off);
+    expect(controlFailure(refused('forbidden not_invited')).message).toBe(TEAM_REPORT_WORDS.notInvited);
+    expect(controlFailure(refused('forbidden link_off')).message).toBe(TEAM_REPORT_WORDS.sendNeedsLink);
+    const full = controlFailure(refused('conflict too_many_open'));
+    expect(full.code).toBe('conflict');
+    expect(full.message).toContain('20 open reports');
+    // A refusal the box doesn't know: Whombat's servers didn't take it, never that Link is off.
+    expect(controlFailure(refused('refused something_new')).message).toBe(TEAM_REPORT_WORDS.refused);
     expect(controlFailure(new ManagerCallError('/x', 0, 'unreachable', 'no socket'))).toMatchObject({
       code: 'unavailable',
     });
@@ -115,9 +155,11 @@ describe('control’s answers in plain words', () => {
 });
 
 describe('the Link gate', () => {
-  it('reaches the team only while Link runs, and not at all without the manager’s routes', () => {
+  it('sends while Link runs, reads and withdraws while control knows the box, and nothing without the routes', () => {
     const services = {} as Services;
     let on = false;
+    let known = false;
+    const link = { on: () => on, known: () => known };
     const manager = new FakeTeam();
     const port: Partial<ManagerPort> = {
       teamReportsList: async () => manager.list(),
@@ -126,12 +168,130 @@ describe('the Link gate', () => {
       teamReportsReply: async (r) => manager.reply(r),
       teamReportsAct: async (r) => manager.act(r),
     };
-    useTeamReports(services, { teamReportsList: port.teamReportsList }, () => true);
-    expect(teamPortOf(services)).toBeNull();
-    useTeamReports(services, port, () => on);
-    expect(teamPortOf(services)).toBeNull();
+    useTeamReports(
+      services,
+      { teamReportsList: port.teamReportsList },
+      { on: () => true, known: () => true },
+    );
+    expect(teamPortOf(services, 'read')).toBeNull();
+    useTeamReports(services, port, link);
+    expect(teamPortOf(services, 'read')).toBeNull();
+    // Link ended: control still knows the box.
+    known = true;
+    expect(teamPortOf(services, 'read')).not.toBeNull();
+    expect(teamPortOf(services, 'send')).toBeNull();
     on = true;
-    expect(teamPortOf(services)).not.toBeNull();
+    expect(teamPortOf(services, 'send')).not.toBeNull();
+  });
+
+  it('drops the copies once the manager says the box is out of Link, never on a view it only assumed', () => {
+    const view = (state: string, over: { enabled?: boolean; assumed?: boolean } = {}) => ({
+      enabled: true,
+      assumed: false,
+      link: { state },
+      ...over,
+    });
+    expect(teamReportsLeftLink(view('off'))).toBe(true);
+    expect(teamReportsLeftLink(view('on', { enabled: false }))).toBe(true);
+    for (const state of ['starting', 'on', 'grace', 'ended'])
+      expect(teamReportsLeftLink(view(state))).toBe(false);
+    expect(teamReportsLeftLink(view('off', { assumed: true }))).toBe(false);
+  });
+});
+
+/** A whole report with `n` messages of `size` characters each (multi-byte: 3 bytes in UTF-8 each). */
+function longReport(n: number, size = 6000) {
+  return TeamReport.parse({
+    id: 'tr_AAAAAAAAAAAAAAAAAAAA',
+    number: 7,
+    kind: 'bug',
+    title: 'The map is blank',
+    status: 'investigating',
+    createdAt: 1_790_000_000,
+    updatedAt: 1_790_000_000 + n,
+    revision: n,
+    text: '地'.repeat(6000),
+    expected: '図'.repeat(1500),
+    context: { client: 'web', device: 'Firefox 146 · Linux' },
+    messages: Array.from({ length: n }, (_, i) => ({
+      id: `m${i}`,
+      author: i % 2 ? 'team' : 'reporter',
+      text: `${i}:${'返'.repeat(size - String(i).length - 1)}`,
+      at: 1_790_000_000 + i,
+    })),
+  });
+}
+
+describe('a whole report in one answer', () => {
+  const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+
+  it('keeps a short conversation whole', () => {
+    const report = longReport(3, 200);
+    expect(fitTeamReport(report)).toEqual({ report, earlier: 0 });
+  });
+
+  it('keeps the report’s own words and the newest messages, and counts the oldest it left out', () => {
+    const report = longReport(200);
+    const fitted = fitTeamReport(report);
+    expect(size(fitted)).toBeLessThanOrEqual(TEAM_REPORT_ANSWER_MAX_BYTES);
+    expect(fitted.earlier).toBeGreaterThan(0);
+    expect(fitted.report.messages.length + fitted.earlier).toBe(200);
+    expect(fitted.report.text).toBe(report.text);
+    expect(fitted.report.expected).toBe(report.expected);
+    expect(fitted.report.messages.at(-1)?.id).toBe('m199');
+    expect(fitted.report.messages[0]?.id).toBe(`m${fitted.earlier}`);
+    // Still the contract's shape.
+    expect(TeamReport.safeParse(fitted.report).success).toBe(true);
+  });
+
+  it('fits a session message with room to spare for any report the contract allows', () => {
+    for (const n of [1, 2, 5, 200]) {
+      const fitted = fitTeamReport(longReport(n));
+      expect(size(fitted)).toBeLessThan(64 * 1024 - 8 * 1024);
+      // The newest message always fits beside the report's own words.
+      expect(fitted.report.messages.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('the box’s copy', () => {
+  const copy = { status: 'investigating', revision: 3, title: 'Map', updatedAt: new Date(1_790_000_100_000) };
+  const summary = (
+    over: Partial<{ status: TeamReportStatus; revision: number; title: string; updatedAt: number }>,
+  ) => ({
+    status: 'investigating' as TeamReportStatus,
+    revision: 3,
+    title: 'Map',
+    updatedAt: 1_790_000_100,
+    ...over,
+  });
+
+  it('isn’t moved back by an answer that crossed a newer one', () => {
+    expect(teamReportOlderThanCopy(copy, summary({ revision: 2 }))).toBe(true);
+    expect(teamReportOlderThanCopy(copy, summary({ updatedAt: 1_790_000_050 }))).toBe(true);
+    expect(teamReportOlderThanCopy(copy, summary({}))).toBe(false);
+    expect(teamReportOlderThanCopy(copy, summary({ revision: 4, updatedAt: 1_790_000_050 }))).toBe(false);
+    expect(sameTeamReportSummary(copy, summary({ revision: 2, status: 'new' }))).toBe(true);
+  });
+
+  it('needs no write when control’s list says what the copies say', () => {
+    const row = (id: string) =>
+      ({ reportId: id, ...copy }) as unknown as Parameters<typeof teamListMatchesCopies>[1][number];
+    const listed = (id: string, over = {}) => ({
+      id,
+      number: 1,
+      kind: 'bug' as const,
+      createdAt: 1_790_000_000,
+      ...summary(over),
+    });
+    const a = 'tr_AAAAAAAAAAAAAAAAAAAA';
+    const b = 'tr_BBBBBBBBBBBBBBBBBBBB';
+    expect(teamListMatchesCopies([listed(a)], [row(a)], true)).toBe(true);
+    expect(teamListMatchesCopies([listed(a, { revision: 4 })], [row(a)], true)).toBe(false);
+    expect(teamListMatchesCopies([listed(a), listed(b)], [row(a)], true)).toBe(false);
+    // A copy control no longer lists goes, but only with the whole list.
+    expect(teamListMatchesCopies([listed(a)], [row(a), row(b)], true)).toBe(false);
+    expect(teamListMatchesCopies([listed(a)], [row(a), row(b)], false)).toBe(true);
   });
 });
 
@@ -161,6 +321,16 @@ describe('the stand-in team', () => {
     ]);
     expect(() => team.act({ requestId: 't'.repeat(16), reportId: id, action: 'works' })).toThrow(
       FakeTeamRefusal,
+    );
+    // Sending isn't open: refused with control's own reason.
+    team.available = false;
+    team.reason = 'not_invited';
+    expect(() => team.create({ requestId: 'v'.repeat(16), payload })).toThrow(
+      expect.objectContaining({ code: 'not_invited' }),
+    );
+    team.reason = 'off';
+    expect(() => team.create({ requestId: 'v'.repeat(16), payload })).toThrow(
+      expect.objectContaining({ code: 'team_reports_unavailable' }),
     );
     expect(team.act({ requestId: 'u'.repeat(16), reportId: id, action: 'withdraw' })).toEqual({
       report: null,

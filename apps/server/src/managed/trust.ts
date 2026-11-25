@@ -463,12 +463,17 @@ export class TrustService {
    * names the old box's device id. The box takes its own id, so the licences control issues for it verify and links
    * name its page. The old box's token goes, since it never verifies for this id, and the claim time becomes now:
    * the no-licence grace starts afresh until the manager pushes this box's first token. Runs before the licence
-   * loads. Returns the old device id when it changed, else null.
+   * loads. Returns the old device id when it changed, else null. `beforeAdopt` runs first, each time the id is about
+   * to change: what belonged to the old box goes before this one takes its id, so a stop in between does it again.
    */
-  async adoptDeviceId(record: { deviceId: string; secretHash: string | null }): Promise<string | null> {
+  async adoptDeviceId(
+    record: { deviceId: string; secretHash: string | null },
+    options: { beforeAdopt?: (old: string) => Promise<void> } = {},
+  ): Promise<string | null> {
     const state = await this.state();
     if (!state.claimConsumedAt || !state.claimDeviceId || state.claimDeviceId === record.deviceId)
       return null;
+    await options.beforeAdopt?.(state.claimDeviceId);
     const now = this.now();
     await this.db
       .update(applianceState)

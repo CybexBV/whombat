@@ -105,7 +105,12 @@ export class FakeTeam {
     this.asked.push('create');
     const again = this.#done.get(input.requestId);
     if (again) return { report: encodeTeamPayload(this.reports.get(again.id) ?? again) };
-    if (!this.available) throw new FakeTeamRefusal('team_reports_unavailable', 'Reports are off.');
+    // Control says why in its code: the team's switch is `team_reports_unavailable`, the others their own reason.
+    if (!this.available)
+      throw new FakeTeamRefusal(
+        this.reason && this.reason !== 'off' ? this.reason : 'team_reports_unavailable',
+        'Reports can’t be sent now.',
+      );
     let draft: TeamReportDraft;
     try {
       draft = decodeTeamPayload(TeamReportDraft, input.payload);
@@ -179,10 +184,17 @@ export class FakeTeam {
     if (!teamReportCanConfirm(report.status))
       throw new FakeTeamRefusal('report_closed', 'There is no fix to say anything about yet.');
     const now = this.#seconds();
+    // As control: the person's press is an entry of theirs with the status it gave, and counts as a change.
+    const status: TeamReportStatus = input.action === 'works' ? 'confirmed' : 'investigating';
     const next: TeamReport = {
       ...report,
-      status: input.action === 'works' ? 'confirmed' : 'investigating',
+      status,
       updatedAt: now,
+      revision: report.revision + 1,
+      messages: [
+        ...report.messages,
+        { id: this.#messageId(), author: 'reporter', text: '', at: now, status },
+      ],
     };
     this.reports.set(next.id, next);
     this.#done.set(input.requestId, next);

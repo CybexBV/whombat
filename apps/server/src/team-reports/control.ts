@@ -1,10 +1,16 @@
 /**
  * The way to control for reports to the Whombat Team (docs/decisions/team-reports.md): the manager's
- * `team.reports.*` routes, which boot hands over, only while Whombat Link is on or in grace. The plain words a
- * person reads when that isn't so, or when control refused, and what the box adds to a new report about itself.
+ * `team.reports.*` routes, which boot hands over. Reading the reports and withdrawing one work whenever control knows
+ * the box (Link in any state but off): a person whose Link ended can still read and take back what they sent. Sending a
+ * report, a reply or an answer to a fix needs Link on or in grace. The plain words a person reads when that isn't so,
+ * or when control refused, and what the box adds to a new report about itself.
  */
-import type { TeamReportRefusalCode } from '@whombat/control-contracts/device';
-import { type TeamReportContext, TeamReportContext as TeamReportContextSchema } from '@whombat/core/domain';
+import { TeamReportRefusalCode } from '@whombat/control-contracts/device';
+import {
+  TEAM_REPORTS_OPEN_MAX,
+  type TeamReportContext,
+  TeamReportContext as TeamReportContextSchema,
+} from '@whombat/core/domain';
 import { ApiError } from '../lib/errors';
 import { ManagerCallError, type ManagerPort } from '../managed/ports';
 import type { Services } from '../services';
@@ -17,10 +23,20 @@ export type TeamPort = Required<
   >
 >;
 
+/** Where the box stands with Link, as reports need it. */
+export interface TeamLink {
+  /** Link is on or in grace: the person may send. */
+  on: () => boolean;
+  /** Control knows the box (any Link state but off): the person may read and withdraw. */
+  known: () => boolean;
+}
+
+/** What a call needs: reading or withdrawing (`read`), or sending words or answers to the team (`send`). */
+export type TeamUse = 'read' | 'send';
+
 interface TeamSetup {
   port: TeamPort;
-  /** Whether Link runs now (on or grace): reports are a Link account's. */
-  linkOn: () => boolean;
+  link: TeamLink;
   /** The box's update channel, when the manager says it. */
   channel: () => Promise<TeamReportContext['channel'] | null>;
 }
@@ -28,13 +44,13 @@ interface TeamSetup {
 const setups = new WeakMap<Services, TeamSetup>();
 
 /**
- * The manager's team report routes for this runtime, and how to tell whether Link runs (boot hands them over); none on
+ * The manager's team report routes for this runtime, and where the box stands with Link (boot hands them over); none on
  * a Whombat without control.
  */
 export function useTeamReports(
   services: Services,
   manager: Partial<ManagerPort> | null | undefined,
-  linkOn: () => boolean,
+  link: TeamLink,
 ): void {
   if (
     !manager?.teamReportsList ||
@@ -53,7 +69,7 @@ export function useTeamReports(
       teamReportsReply: manager.teamReportsReply.bind(manager),
       teamReportsAct: manager.teamReportsAct.bind(manager),
     },
-    linkOn,
+    link,
     channel: async () => {
       if (!updateChannel) return null;
       try {
@@ -66,10 +82,26 @@ export function useTeamReports(
   });
 }
 
-/** The way to control, while Link runs; null otherwise (and on a Whombat without control). */
-export function teamPortOf(services: Services): TeamPort | null {
+/**
+ * The way to control for `use`: reading and withdrawing while control knows the box, sending while Link is on or in
+ * grace; null otherwise (and on a Whombat without control).
+ */
+export function teamPortOf(services: Services, use: TeamUse = 'send'): TeamPort | null {
   const setup = setups.get(services);
-  return setup?.linkOn() ? setup.port : null;
+  if (!setup) return null;
+  return (use === 'read' ? setup.link.known() : setup.link.on()) ? setup.port : null;
+}
+
+/**
+ * Whether the box is out of Link as the manager says it (off, or no Link at all): control deleted the box's reports,
+ * so the box drops its copies too. A view only assumed (a manager without Link routes) says nothing.
+ */
+export function teamReportsLeftLink(view: {
+  enabled: boolean;
+  assumed: boolean;
+  link: { state: string };
+}): boolean {
+  return !view.assumed && (!view.enabled || view.link.state === 'off');
 }
 
 /** Whether this Whombat can reach the team at all (Link aside). */
@@ -80,23 +112,34 @@ export function teamReportsHere(services: Services): boolean {
 /** The plain words for what a person can't do now, or what went wrong. */
 export const TEAM_REPORT_WORDS = {
   linkOff: 'Reports to the Whombat Team need Whombat Link. Turn it on in Settings first.',
+  /** Link ended: what was sent stays readable, but nothing new goes. */
+  sendNeedsLink:
+    'Sending to the Whombat Team needs Whombat Link on. You can still read and withdraw your reports.',
   off: 'The Whombat Team isn’t taking new reports for a little while. Try again later.',
+  notInvited: 'Sending reports to the Whombat Team isn’t open to you yet.',
+  tooManyOpen: `You have ${TEAM_REPORTS_OPEN_MAX} open reports. A new one can go once one of them is closed.`,
   unreachable: 'Couldn’t reach Whombat’s servers. Try again in a moment.',
   refused: 'Whombat’s servers didn’t take it. Try again in a moment.',
   unknown: 'That report isn’t there any more.',
   closed: 'This report can’t take that now.',
   rateLimited: 'That’s a lot for one day. Try again tomorrow.',
   invalid: 'Whombat’s servers didn’t accept those words. Shorten them and try again.',
+  draftSent: 'This report was sent already. You’ll find it under Reports.',
 } as const;
 
-/** Control's own code in a manager's refusal (first in its message, “refused report_unknown: …”). */
+const CODES: ReadonlySet<string> = new Set(TeamReportRefusalCode.options);
+
+/**
+ * Control's own code in a manager's refusal. The manager's message starts with control's codes (“refused
+ * report_unknown: control refused …”; on the way here inside the manager's JSON answer): the earliest code there
+ * counts, never one that only shows up later in control's words.
+ */
 export function refusalCode(err: unknown): TeamReportRefusalCode | null {
   if (!(err instanceof ManagerCallError) || err.status !== 502) return null;
-  const hit =
-    /\b(team_reports_unavailable|report_unknown|report_closed|validation_failed|rate_limited)\b/.exec(
-      err.message,
-    );
-  return (hit?.[1] as TeamReportRefusalCode | undefined) ?? null;
+  const message = /"message":"([^"]*)/.exec(err.message)?.[1] ?? err.message;
+  const head = message.split(':', 1)[0] ?? '';
+  const code = head.split(/\s+/).find((word) => CODES.has(word));
+  return (code as TeamReportRefusalCode | undefined) ?? null;
 }
 
 /** Whether a call failed only because control (or the manager) can't be reached now. */
@@ -104,16 +147,29 @@ export function controlUnreachable(err: unknown): boolean {
   return err instanceof ManagerCallError && (err.status === 0 || err.status === 503);
 }
 
+/**
+ * Whether the manager says this box has no way to control for reports now: no team report routes (an older manager),
+ * or Link off, which it answers 404.
+ */
+export function managerSaysNoLink(err: unknown): boolean {
+  return err instanceof ManagerCallError && (err.status === 404 || err.status === 501);
+}
+
 /** A failed call to control, in the person's words. */
 export function controlFailure(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
   if (err instanceof ManagerCallError) {
-    if (err.status === 404 || err.status === 501)
-      return new ApiError('unavailable', TEAM_REPORT_WORDS.linkOff);
+    if (managerSaysNoLink(err)) return new ApiError('unavailable', TEAM_REPORT_WORDS.linkOff);
     if (controlUnreachable(err)) return new ApiError('unavailable', TEAM_REPORT_WORDS.unreachable);
     switch (refusalCode(err)) {
       case 'team_reports_unavailable':
         return new ApiError('not_allowed', TEAM_REPORT_WORDS.off);
+      case 'not_invited':
+        return new ApiError('not_allowed', TEAM_REPORT_WORDS.notInvited);
+      case 'link_off':
+        return new ApiError('not_allowed', TEAM_REPORT_WORDS.sendNeedsLink);
+      case 'too_many_open':
+        return new ApiError('conflict', TEAM_REPORT_WORDS.tooManyOpen);
       case 'report_unknown':
         return new ApiError('not_found', TEAM_REPORT_WORDS.unknown);
       case 'report_closed':
