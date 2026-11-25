@@ -55,6 +55,7 @@ import { liveResearches } from '../looks/research';
 import type { PrincipalRow } from '../read/principals';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
+import { TEAM_REPORT_ACTION } from '../team-reports/commands';
 import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
@@ -153,8 +154,10 @@ async function decidableApprovals(db: Db, burrowId: string, viewer: PrincipalRow
     summary: string;
     conversation_id: string;
     created_at: string;
+    action_name: string | null;
   }>(sql`
-    select a.id, a.number, a.title, a.question, a.explainer, a.summary, a.conversation_id, a.created_at
+    select a.id, a.number, a.title, a.question, a.explainer, a.summary, a.conversation_id, a.created_at,
+           case when a.action->>'type' = 'custom' then a.action->'params'->>'name' end as action_name
       from approvals a
      where a.burrow_id = ${burrowId} and a.state = 'pending'
      order by a.created_at desc
@@ -164,9 +167,11 @@ async function decidableApprovals(db: Db, burrowId: string, viewer: PrincipalRow
 /**
  * An approval's buttons in Needs you, in the words and order of the card in its thread: Yes, now · Yes, tonight · No.
  * Yes, tonight runs it when the quiet hours for changes next start (care-plan.md; 03:00 unless the person moved them).
+ * The assistant's draft report goes now or not at all (team-reports.md): Yes, do it · No.
  */
 export const APPROVAL_WORDS = {
   yes: APPROVAL_ASK_WORDS.now,
+  yesOnly: APPROVAL_ASK_WORDS.yes,
   tonight: APPROVAL_ASK_WORDS.later,
   no: APPROVAL_ASK_WORDS.no,
 } as const;
@@ -186,20 +191,36 @@ async function approvalItems(ctx: SourceCtx, viewer: PrincipalRow, burrow: Burro
       body: clip(r.explainer || r.summary || '', 600),
       at: new Date(r.created_at).toISOString(),
       approvalNumber: r.number,
-      // The approval's words everywhere (needs-you-list.md NYL-08): a yes, a yes for tonight, a no.
-      actions: [
-        { id: 'approve', label: APPROVAL_WORDS.yes, style: 'primary', kind: 'approve' },
-        {
-          id: 'later',
-          label: APPROVAL_WORDS.tonight,
-          style: 'secondary',
-          kind: 'approve_later',
-          at: later.toISOString(),
-        },
-        { id: 'decline', label: APPROVAL_WORDS.no, style: 'secondary', kind: 'decline' },
-      ],
+      actions: approvalActions(r.action_name === TEAM_REPORT_ACTION ? null : later),
     },
   }));
+}
+
+/**
+ * The approval's words everywhere (needs-you-list.md): a yes, a yes for `later` (tonight), a no; without a later
+ * time a yes and a no.
+ */
+function approvalActions(later: Date | null): NeedsYouItem['actions'] {
+  return [
+    {
+      id: 'approve',
+      label: later ? APPROVAL_WORDS.yes : APPROVAL_WORDS.yesOnly,
+      style: 'primary',
+      kind: 'approve',
+    },
+    ...(later
+      ? [
+          {
+            id: 'later',
+            label: APPROVAL_WORDS.tonight,
+            style: 'secondary',
+            kind: 'approve_later',
+            at: later.toISOString(),
+          } as const,
+        ]
+      : []),
+    { id: 'decline', label: APPROVAL_WORDS.no, style: 'secondary', kind: 'decline' },
+  ];
 }
 
 /**

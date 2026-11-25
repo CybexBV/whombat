@@ -9,10 +9,12 @@
  *
  * The assistant drafts: `team_report_draft_save` keeps its draft and `team_report_draft_send` always asks the
  * person on a card that quotes exactly what goes, whatever the assistant's keys say; their yes sends it as them
- * (`sendDraftForAssistant`), and the card's Edit opens the form with the draft.
+ * (`sendDraftForAssistant`), and the card's Edit opens the form with the draft. Sent from the form, the card that
+ * still asks about it is withdrawn (`team_report_draft_done`).
  */
 import { randomBytes } from 'node:crypto';
 import {
+  conversationLabel,
   TEAM_REPORT_EXPECTED_MAX,
   TEAM_REPORT_TEXT_MAX,
   TEAM_REPORTS_LIST_MAX,
@@ -24,14 +26,17 @@ import {
 } from '@whombat/core/domain';
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
+import { publishApproval, syncPlanSteps } from '../approvals/engine';
 import { type ApplyContext, defineCommand, type KeyRequirement } from '../commit/types';
 import { managedAppOrigin } from '../config';
 import type { Db, Tx } from '../db/client';
-import { notifications, teamReportCopies, teamReportDrafts } from '../db/schema/index';
+import { approvals, notifications, teamReportCopies, teamReportDrafts } from '../db/schema/index';
 import { notifyInCommit } from '../domain/notify';
 import { thePerson } from '../domain/the-person';
 import { homeAudience, publishHomeChanged } from '../home/notify';
 import { conflict, forbidden, notFound } from '../lib/errors';
+import { loadConversationRow } from '../read/conversations';
+import { toApproval } from '../read/work';
 import { quoted } from '../trackers/reply';
 import { sendDraftForAssistant } from './service';
 
@@ -400,7 +405,49 @@ export const askedTeamReportDraft = defineCommand({
   },
 });
 
-/** The draft is done: sent (as which report), or no longer wanted. */
+/**
+ * The card that still asks about a draft the person sent from the form: it waits no more. It reads as declined by
+ * them, with a signed `approval.declined` saying why, and nobody is woken: the report went already. A card answered
+ * yes is the one sending it, and stays as it is.
+ */
+async function withdrawDraftCard(ctx: ApplyContext, approvalId: string): Promise<boolean> {
+  const [row] = await ctx.tx
+    .select()
+    .from(approvals)
+    .where(
+      and(
+        eq(approvals.id, approvalId),
+        eq(approvals.burrowId, ctx.burrow.id),
+        eq(approvals.state, 'pending'),
+      ),
+    )
+    .for('update');
+  if (!row) return false;
+  const [fresh] = await ctx.tx
+    .update(approvals)
+    .set({ state: 'declined', decidedById: ctx.actor.id, decidedAt: ctx.now, updatedAt: ctx.now })
+    .where(eq(approvals.id, row.id))
+    .returning();
+  const conversation = await loadConversationRow(ctx.tx, row.conversationId);
+  const event = await ctx.emit({
+    type: 'approval.declined',
+    kind: 'Asks',
+    text: `Withdrew request #${row.number}: the report was sent from the form instead`,
+    where: conversation ? conversationLabel(conversation) : null,
+    aboutId: row.requesterId,
+    approvalId: row.id,
+    ref: { type: 'approval', number: row.number },
+    payload: { approvalId: row.id, decision: 'decline', withdrawn: true, note: null },
+  });
+  if (fresh) {
+    const approval = toApproval(fresh);
+    publishApproval(ctx, approval, event.id);
+    await syncPlanSteps(ctx, approval);
+  }
+  return true;
+}
+
+/** The draft is done: sent (as which report), or no longer wanted. Sent from the form, its card is withdrawn. */
 export const doneTeamReportDraft = defineCommand({
   name: 'team_report_draft_done',
   schema: z.object({
@@ -419,8 +466,11 @@ export const doneTeamReportDraft = defineCommand({
           eq(teamReportDrafts.state, 'waiting'),
         ),
       )
-      .returning({ id: teamReportDrafts.id });
-    return { done: done.length > 0 };
+      .returning({ id: teamReportDrafts.id, approvalId: teamReportDrafts.approvalId });
+    const approvalId = done[0]?.approvalId ?? null;
+    const withdrawn =
+      input.state === 'sent' && approvalId !== null ? await withdrawDraftCard(ctx, approvalId) : false;
+    return { done: done.length > 0, withdrawn };
   },
 });
 

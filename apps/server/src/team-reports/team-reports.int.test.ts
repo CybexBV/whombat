@@ -2,8 +2,9 @@
  * Reports to the Whombat Team (docs/decisions/team-reports.md), end to end on the box with control faked behind the
  * manager: nothing goes without Link; a report goes with the box's version; the team's change shows as unread and is
  * told in fixed words; reading marks it read; a reply goes; the kept copy shows while control is out of reach; taking it
- * back deletes it at control and here; the assistant's draft becomes a card whose yes sends it as the person. Needs
- * Postgres: the copies, the drafts, the notification and the approval go through the commit pipeline.
+ * back deletes it at control and here; the assistant's draft becomes a card whose yes sends it as the person, and
+ * sending it from the form instead withdraws the card. Needs Postgres: the copies, the drafts, the notification and the
+ * approval go through the commit pipeline.
  */
 import { and, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -210,5 +211,51 @@ describe('reports to the Whombat Team', () => {
     await t.services.background.settle();
     expect(manager.team.reports.size).toBe(before);
     expect((await req('GET', `/team-report-drafts/${draftId}`)).json().draft.done).toBe(true);
+  });
+
+  it('withdraw the card when the draft is sent from the form instead, and offer no later time before', async () => {
+    linkOn = true;
+    const before = manager.team.reports.size;
+    const saved = await t.commit(mine.agentId, saveTeamReportDraft, {
+      kind: 'bug',
+      text: 'The calendar shows yesterday',
+      expected: '',
+      personId: IDS.mara,
+      conversationId: mine.dmId,
+    });
+    if (saved.status !== 'ok') throw new Error('draft');
+    const draftId = (saved.result as { id: string }).id;
+    const asked = await t.commit(mine.agentId, sendTeamReportDraft, { draftId });
+    if (asked.status !== 'pending_approval') throw new Error('no card');
+    await t.commit(mine.agentId, askedTeamReportDraft, { draftId, approvalId: asked.approvalId });
+    const [a] = await t.services.db.select().from(approvals).where(eq(approvals.id, asked.approvalId));
+    // The Inbox asks now or not at all, as the card does.
+    const home = await req('GET', '/home');
+    expect(home.statusCode, home.body).toBe(200);
+    const item = home
+      .json()
+      .needsYouList.find((i: { approvalNumber?: number }) => i.approvalNumber === a?.number);
+    expect(item.actions.map((x: { kind: string }) => x.kind)).toEqual(['approve', 'decline']);
+
+    // The person changes it in the form and sends it there.
+    const made = await req('POST', '/team-reports', {
+      kind: 'bug',
+      text: 'The calendar shows yesterday after midnight',
+      draftId,
+    });
+    expect(made.statusCode, made.body).toBe(201);
+    expect(manager.team.reports.size).toBe(before + 1);
+    expect(manager.team.reports.get(made.json().report.id)?.text).toContain('after midnight');
+    // The card asks no more: declined by the person, signed as withdrawn.
+    const [card] = await t.services.db.select().from(approvals).where(eq(approvals.id, asked.approvalId));
+    expect(card).toMatchObject({ state: 'declined', decidedById: IDS.mara });
+    const [why] = await t.services.db
+      .select()
+      .from(events)
+      .where(and(eq(events.type, 'approval.declined'), eq(events.approvalId, asked.approvalId)));
+    expect(why?.payload).toMatchObject({ approvalId: asked.approvalId, withdrawn: true });
+    expect((await req('GET', `/team-report-drafts/${draftId}`)).json().draft.done).toBe(true);
+    await t.services.background.settle();
+    expect(manager.team.reports.size).toBe(before + 1);
   });
 });
