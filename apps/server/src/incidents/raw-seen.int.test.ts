@@ -600,6 +600,83 @@ describe('one outage, one buzz', () => {
       w.services.push.control = control;
     }
   });
+
+  it('lets a newer outage buzz after a finding held beside an older one', async () => {
+    const control = w.services.push.control;
+    const deliver = vi.fn(async () => {});
+    w.services.push.control = deliver;
+    try {
+      const signer = await serversPrincipal(w.services, w.burrowId);
+      const findingOf = async (researchId: string) =>
+        (
+          await w.services.db
+            .select()
+            .from(notifications)
+            .where(eq(notifications.dedupKey, `look-finding:${researchId}`))
+        )[0];
+      const buzzed = (id: string | undefined) =>
+        deliver.mock.calls.some(
+          (c) => ((c as unknown[])[1] as { notificationId?: string } | undefined)?.notificationId === id,
+        );
+      const outage = async (thing: string, startedAt = w.now()) => {
+        await w.ok(signer, incidentsPass, {
+          opened: [
+            {
+              thing,
+              kind: 'server',
+              name: thing.slice('server:'.length),
+              nature: 'down',
+              words: 'Not answering',
+              check: null,
+              subject: '',
+              cause: null,
+              startedAt: startedAt.toISOString(),
+            },
+          ],
+          changed: [],
+          ended: [],
+        });
+        return (await open(thing))?.id ?? '';
+      };
+      const end = (id: string) =>
+        w.ok(signer, incidentsPass, {
+          opened: [],
+          changed: [],
+          ended: [{ id, endedAt: w.now().toISOString() }],
+        });
+
+      // Jasper's first outage buzzed and ended while the research looked; the finding stays quiet beside it.
+      const first = await outage('server:jasper');
+      await w.ok(signer, incidentsPush, { ids: [first] });
+      const looked = await research('server:jasper', 'jasper');
+      w.advance(MINUTE);
+      await end(first);
+      w.advance(MINUTE);
+      const badFrom = w.now();
+      w.advance(MINUTE);
+      deliver.mockClear();
+      await report(looked.dispatchId);
+      expect(buzzed((await findingOf(looked.researchId))?.id)).toBe(false);
+      // Its next outage, bad from before the finding came, still pushes.
+      const second = await outage('server:jasper', badFrom);
+      expect(await w.ok(signer, incidentsPush, { ids: [second] })).toEqual({ pushed: 1 });
+
+      // Agate's next outage opened before the finding came and hasn't buzzed: the finding buzzes for it, once.
+      const earlier = await outage('server:agate');
+      await w.ok(signer, incidentsPush, { ids: [earlier] });
+      const asked = await research('server:agate', 'agate');
+      w.advance(MINUTE);
+      await end(earlier);
+      w.advance(MINUTE);
+      const next = await outage('server:agate');
+      deliver.mockClear();
+      await report(asked.dispatchId);
+      expect(buzzed((await findingOf(asked.researchId))?.id)).toBe(true);
+      expect(await w.ok(signer, incidentsPush, { ids: [next] })).toEqual({ pushed: 0 });
+    } finally {
+      w.services.push.control = control;
+    }
+  });
 });
 
 describe('a delayed automation', () => {

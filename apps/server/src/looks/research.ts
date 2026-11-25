@@ -63,6 +63,7 @@ import {
   type LookResearchRow,
   lookResearches,
   messages,
+  notifications,
 } from '../db/schema/index';
 import { linkOfMessage } from '../domain/links';
 import { postMessage } from '../domain/messages';
@@ -258,7 +259,8 @@ async function republishPlanCard(
 /**
  * Pushes a finding the person has to say yes to, once per research (handle-it.md): a found step or plan. A fixed
  * problem never pushes (it is in Done today); the thread itself stays quiet. Opens the plan's card, else the thread.
- * When the thing's outage was pushed already, the finding waits in the Inbox without a second buzz.
+ * When the thing's outage was pushed already, the finding waits in the Inbox without a second buzz, and only a finding
+ * that buzzed is marked pushed: a held one mustn't keep a later outage of the thing from pushing.
  */
 async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<void> {
   if (row.pushedAt || row.state !== 'found' || !row.personId || !row.conversationId) return;
@@ -266,7 +268,17 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
   const messageId = row.planMessageId ?? row.threadRootId;
   const conversation = await loadConversationRow(ctx.tx, row.conversationId);
   if (!text || !messageId || !conversation) return;
-  await ctx.tx.update(lookResearches).set({ pushedAt: ctx.now }).where(eq(lookResearches.id, row.id));
+  const dedupKey = `look-finding:${row.id}`;
+  // Held on an earlier report: its Inbox row stands, and a later report neither buzzes nor counts as a buzz.
+  const [had] = await ctx.tx
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(and(eq(notifications.principalId, row.personId), eq(notifications.dedupKey, dedupKey)))
+    .limit(1);
+  if (had) return;
+  const quiet = await outagePushed(ctx.tx, ctx.burrow.id, row.lookKey, row.startedAt);
+  if (!quiet)
+    await ctx.tx.update(lookResearches).set({ pushedAt: ctx.now }).where(eq(lookResearches.id, row.id));
   const link = await linkOfMessage(ctx.tx, conversation, messageId, row.threadRootId);
   const [burrow] = await ctx.tx
     .select({ slug: burrows.slug })
@@ -282,10 +294,10 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
     text,
     link,
     createdAt: ctx.now,
-    dedupKey: `look-finding:${row.id}`,
+    dedupKey,
     messageId,
     group: threadPushGroup(row.conversationId, row.threadRootId),
-    ...((await outagePushed(ctx.tx, ctx.burrow.id, row.lookKey, row.startedAt)) ? { pushHeld: true } : {}),
+    ...(quiet ? { pushHeld: true } : {}),
   };
   const services = ctx.services;
   ctx.background('look finding push', () => notify(services, [draft]));
@@ -293,22 +305,22 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
 
 /**
  * Whether an outage of the thing buzzed already during the research (one Whombat found bad before it watched never
- * did): one still open, or one that ended after the research began, as the thing came back while it looked.
+ * did): one still open, or one that ended after the research began, as the thing came back while it looked. Not while
+ * an open outage of the thing hasn't buzzed: the finding's buzz stands in for that one's push.
  */
 async function outagePushed(tx: Tx, burrowId: string, thing: string, researchFrom: Date): Promise<boolean> {
-  const [row] = await tx
-    .select({ id: incidents.id })
+  const rows = await tx
+    .select({ endedAt: incidents.endedAt, pushedAt: incidents.pushedAt, group: incidents.pushGroup })
     .from(incidents)
     .where(
       and(
         eq(incidents.burrowId, burrowId),
         eq(incidents.thingId, thing),
         or(isNull(incidents.endedAt), gt(incidents.endedAt, researchFrom)),
-        isNotNull(incidents.pushGroup),
       ),
-    )
-    .limit(1);
-  return !!row;
+    );
+  if (rows.some((r) => !r.endedAt && !r.pushedAt)) return false;
+  return rows.some((r) => r.group !== null);
 }
 
 /** The burrow's research of every look that is still there, by the look's key. */

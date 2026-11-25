@@ -258,20 +258,23 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
         runSince.set(t, before.since?.get(t) ?? before.at);
       }
     }
-  // The last pass of each run that couldn't read its thing: the push's clock starts again then. A thing seen fine once
-  // while its incident waits to end keeps it too: bad again on the next pass, it is the same outage.
-  const unread = new Map<string, Date>();
-  for (const t of new Set([...things, ...fine.keys()])) {
-    const blind =
-      !byThing.has(t) && ((!input.serversRead && t.startsWith('server:')) || input.seen?.get(t) === 'unread');
-    const was = before?.unread?.get(t);
-    if (blind) unread.set(t, now);
-    else if (was) unread.set(t, was);
-  }
   const endedIds = new Set(ended.map((e) => e.id));
   const stillOpen = new Map(
     input.open.filter((o) => !endedIds.has(o.id)).map((o) => [o.id, o.thing] as const),
   );
+  // The last pass of each run that couldn't read its thing: the push's clock starts again then. A thing seen fine once
+  // while its incident waits to end keeps it too: bad again on the next pass, it is the same outage. So does every
+  // thing whose incident stays open, also one no pass of this run could read yet (after a restart, or a pass that
+  // couldn't read Home); one Whombat has no reading of is unread.
+  const openNow = new Set(stillOpen.values());
+  const unread = new Map<string, Date>();
+  for (const t of new Set([...things, ...fine.keys(), ...openNow])) {
+    const seen = input.seen?.get(t) ?? (openNow.has(t) ? 'unread' : undefined);
+    const blind = !byThing.has(t) && ((!input.serversRead && t.startsWith('server:')) || seen === 'unread');
+    const was = before?.unread?.get(t);
+    if (blind) unread.set(t, now);
+    else if (was) unread.set(t, was);
+  }
   return {
     opened,
     changed,

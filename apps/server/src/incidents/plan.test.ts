@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { DeskLook } from '../desk/shapes';
+import type { Services } from '../services';
 import {
   blindPass,
   incidentPushText,
@@ -19,7 +20,7 @@ import {
   type SeenLook,
   type ThingSeen,
 } from './plan';
-import { seenLookOf } from './watch';
+import { passMemory, seenLookOf } from './watch';
 
 const T0 = new Date('2026-11-24T14:00:00Z');
 const MIN = 60_000;
@@ -572,6 +573,79 @@ describe('incidents from the looks', () => {
     // Nothing open, or nothing known yet: it forgets, as before.
     expect(blindPass(seen, new Map(), at(2))).toBeNull();
     expect(blindPass(null, plexOpen, at(2))).toBeNull();
+  });
+
+  it('counts the blind passes of an open incident no pass of its run could read yet', () => {
+    const plex = 'connection:plex';
+    const open = [incident(plex, { startedAt: at(0) })];
+    const unread = seenAs('unread', plex);
+    // After a restart, its thing reads unread on every pass.
+    const first = planIncidents({
+      looks: [],
+      open,
+      before: null,
+      serversRead: true,
+      seen: unread,
+      now: at(30),
+    });
+    expect(first.seen.unread?.get(plex)).toEqual(at(30));
+    const second = planIncidents({
+      looks: [],
+      open,
+      before: first.seen,
+      serversRead: true,
+      seen: unread,
+      now: at(31),
+    });
+    expect(second.seen.unread?.get(plex)).toEqual(at(31));
+    // Nothing known of it at all is unread too.
+    const unsaid = planIncidents({ looks: [], open, before: second.seen, serversRead: true, now: at(32) });
+    expect(unsaid.seen.unread?.get(plex)).toEqual(at(32));
+    // A pass that couldn't read Home, then one that reads it unread, then bad: the push counts from the last blind one.
+    const home = blindPass(unsaid.seen, new Map([['inc_connectionplex', plex]]), at(40));
+    const after = planIncidents({
+      looks: [],
+      open,
+      before: home,
+      serversRead: true,
+      seen: unread,
+      now: at(41),
+    });
+    expect(after.seen.unread?.get(plex)).toEqual(at(41));
+    const bad = planIncidents({
+      looks: [look(plex)],
+      open,
+      before: after.seen,
+      serversRead: true,
+      now: at(42),
+    });
+    expect(bad.seen.unread?.get(plex)).toEqual(at(41));
+  });
+
+  it('keeps the last known open incidents over a pass that couldn’t read them either', async () => {
+    const plex = look('connection:plex');
+    const open = [incident('connection:plex', { startedAt: at(0) })];
+    const first = planIncidents({ looks: [plex], open: [], before: null, serversRead: true, now: at(0) });
+    const before = planIncidents({
+      looks: [plex],
+      open,
+      before: first.seen,
+      serversRead: true,
+      now: at(1),
+    }).seen;
+    // Home couldn't be read, nor its open incidents.
+    const services = {
+      db: {
+        select: () => {
+          throw new Error('The database is unreachable');
+        },
+      },
+      clock: () => at(2),
+    } as unknown as Services;
+    const kept = await passMemory(services, 'brw_test', before, null);
+    expect(kept?.open).toEqual(before.open);
+    expect(kept?.since?.get('connection:plex')).toEqual(at(0));
+    expect(kept?.unread?.get('connection:plex')).toEqual(at(2));
   });
 
   it('starts the run of looks again for a thing whose incident ended outside the watcher', () => {
