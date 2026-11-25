@@ -1027,6 +1027,30 @@ drops rows whose copy never reached control. Links work 7 days unless the person
 Shared links lists them with how often control served each. The assistant's `share_link` always asks first. Reasons:
 [share-links.md](docs/decisions/share-links.md).
 
+## Reports to the Whombat Team (`apps/server/src/team-reports/`)
+
+A person whose Whombat runs Link tells the team behind Whombat about a problem or an idea from the apps' Reports pages
+(`api.teamReports.*`, people only). Control keeps the reports for the team; the box passes each call on through the
+manager (`team.reports.list`, `.get`, `.create`, `.reply`, `.act`), the person's words and the team's answers as
+base64url JSON of `@whombat/core`'s team report shapes, checked on both ends (`team-reports/payload.ts`); the manager
+forwards them unread (`appliance/manager/internal/broker/teamreports.go`) and only while Link is starting, on or in
+grace; the box itself asks only while Link is on or in grace (`team-reports/control.ts`). A new report carries what the
+app said about itself and the box's version and update channel. The box keeps a copy of each report in
+`team_report_copies` (the whole report as last read, control's latest revision and the revision the person read)
+through the pipeline: `team_report_keep` after a get, reply or new report, `team_report_seen` after control's list,
+`team_report_forget` when it is gone or withdrawn. A report is unread while control's revision is past the one read;
+while control can't be reached the list shows the copies (`stale`). While a report is open a ten-minute job
+(`team-reports.follow`) asks control's list; a status entering a question (`needs_information`) or a fix to try
+(`available`) by the team's change becomes a needs-you notification and push in fixed words, and the Inbox shows an
+item while the report waits for the person, both opening `/reports/<id>`. The team's words show only on the report's
+page: never in Chat, the assistant's context, Search or automations. The assistant's `report_to_whombat_team` keeps a
+draft (`team_report_drafts`) and always asks on a card that quotes it; the person's yes sends it as theirs, and the
+card's Edit opens the form with the draft (`teamReports.draft`). `whombat_team_reports` reads numbers, titles, statuses
+in words and dates. Both are served only in the person's own turns where they can send reports or have some. A tracker
+connection may sign its replies with its own `signature` instead of “<assistant> - AI Assistant”. Development's manager
+stand-in has a small team in memory (`managed/fake-team.ts`) that answers each new report a few seconds later. Reasons:
+[team-reports.md](docs/decisions/team-reports.md).
+
 ## The person's prompts (`apps/server/src/prompts/`)
 
 The person keeps words they use again and again under a title; Chat offers them after `/` and Settings → You → Prompts

@@ -2,10 +2,11 @@
 
 John, 2026-11-25: Whombat Link people tell the team behind Whombat about a problem or an idea from inside Whombat,
 seamlessly, the way a product's customers send reports to a report tracker; the reports arrive on the team's own
-Whombat and take the same flow as such reports (report-trackers.md): the assistant checks whether it is a real bug, T3 Code fixes it, another model
-reviews, Whombat merges on its checks and tells the person when the fix reaches them. Planned with the Council
-(three rounds); John's decisions the same day: no encryption (a quiet warning on the form is enough), a pilot for two
-invited people, replies signed “Whombat Team (AI assistant)”, 90 days after closing, the assistant drafts reports.
+Whombat (“Home”) and take the same flow as such reports (report-trackers.md): the assistant checks whether it is a real
+bug, T3 Code fixes it, another model reviews, Whombat merges on its checks and tells the person when the fix reaches
+them. Planned with the Council (three rounds); John's decisions the same day: no encryption (a quiet warning on the form
+is enough), a pilot for two invited people, replies signed “Whombat Team (AI assistant)”, 90 days after closing, the
+assistant drafts reports.
 
 Code: `packages/core/src/domain/team-reports.ts` (shapes, vocabulary, words), `packages/core/src/contracts/team-reports.ts`
 (the apps' REST), `packages/control-contracts/src/device/team-reports.ts` (device ops), `apps/server/src/team-reports/`
@@ -25,5 +26,5 @@ the team's tracker plugin are Cybex's own (whombat-cloud `control/docs/decisions
 | TR-09 | **Withdraw** deletes the report at control at once (control tells the team's tracker) and its copy on the box. | The person's words are theirs to take back. |
 | TR-10 | **Kept** until 90 days after the report closes; when the Link account is erased or the box leaves Link, control deletes its reports. A Whombat restored onto new hardware starts without its earlier reports. | John, 2026-11-25. |
 | TR-11 | **Not in the pilot**: screenshots, diagnostics and logs (a report is text and versions), email about reports (Link's own notification email covers the Inbox item for those who chose it). | Small first; size limits and privacy each need their own decision. |
-| TR-12 | **The team's side** is Cybex's: control keeps and serves the reports to the team's Whombat through an API of its own, and a private tracker plugin there feeds the report-tracker automations, a Beta and a Production connection by the reporter's channel, replies signed “Whombat Team (AI assistant)” (a connection's own signature, TR-13). Nothing in this repository names the team's Whombat. | The report-tracker flow as it is (report-trackers.md). |
+| TR-12 | **The team's side** is Cybex's: control keeps and serves the reports to the team's Whombat through an API of its own, and a private tracker plugin there feeds the report-tracker automations, a Beta and a Production connection by the reporter's channel, replies signed “Whombat Team (AI assistant)” (a connection's own signature, TR-13). Nothing in this repository names the team's Whombat. | The tracker flow is the one every report tracker's reports take (report-trackers.md). |
 | TR-13 | **A tracker connection may sign its replies itself** (`signature`, the connection's own words, up to 60 characters): Whombat adds it after a blank line instead of “<agent> - AI Assistant”. Without one it signs as before (TA-26). | John: “Whombat Team (AI assistant)”; a reporter's own assistant may be called Dusty too. |
