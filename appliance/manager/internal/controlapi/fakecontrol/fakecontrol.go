@@ -119,10 +119,12 @@ type Control struct {
 	// team.reports.*: TeamCalls records "<op> <body>" for each op control took. TeamAnswer, when set, is the answer to
 	// every team op instead of the small default (an empty list, a report payload of "{}", a withdrawal's null).
 	// TeamRefuse answers every team op with that refusal code instead (report_unknown: 404, team_reports_unavailable:
-	// 403, others 409), the code in details.code like control.
-	TeamCalls  []string
-	TeamAnswer json.RawMessage
-	TeamRefuse string
+	// 403, others 409), the code in details.code like control. TeamRefuseAs is the error's own code then ("refused"
+	// when empty): control's validation_failed is both.
+	TeamCalls    []string
+	TeamAnswer   json.RawMessage
+	TeamRefuse   string
+	TeamRefuseAs string
 
 	// The own address (4.3): address.register keeps one label per device (Addresses), under Zone (default
 	// dev.whombat.app); a label in Taken is answered 409 label_taken; AddressHost, when set, is answered as the host
@@ -822,8 +824,12 @@ func (c *Control) teamReports(w http.ResponseWriter, env *device.DeviceRequestEn
 		if status == 0 {
 			status = http.StatusConflict
 		}
+		as := c.TeamRefuseAs
+		if as == "" {
+			as = "refused"
+		}
 		w.WriteHeader(status)
-		_, _ = fmt.Fprintf(w, `{"error":{"code":"refused","message":"Refused.","details":{"code":%q}}}`, code)
+		_, _ = fmt.Fprintf(w, `{"error":{"code":%q,"message":"Refused.","details":{"code":%q}}}`, as, code)
 		return
 	}
 	c.TeamCalls = append(c.TeamCalls, string(env.Op)+" "+string(env.Body))

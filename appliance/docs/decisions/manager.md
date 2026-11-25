@@ -2984,10 +2984,12 @@ with the management key; control's answer checked against the contract and answe
   one; control decides what each Link state allows (sending needs Link on or in grace) and refuses the rest with its
   code (`link_off`).
 - **Errors** as the shared links': `503 control_unreachable` with `Retry-After: 300`; `502 control_refused` with
-  control's codes first in the message (`refused report_unknown: …`); `413 too_large`; `400 bad_request`.
+  control's codes first in the message: its error code and its `details.code` (`not_found report_unknown: …`), once
+  when they are the same (control's `validation_failed` is both: `validation_failed: …`), the one there is, or
+  `refused` without either; `413 too_large`; `400 bad_request`.
 - **Answers** up to `device.TeamPayloadAnswerMaxBytes` (4 MiB) as base64url and a few KiB around it. Each exchange has
   25 s; the runtime waits 30 s.
 - The fake control answers the ops with small fixed shapes (`TeamCalls`, `TeamAnswer`) and refuses with a code on
-  request (`TeamRefuse`).
+  request (`TeamRefuse`, in `details.code`; `TeamRefuseAs` the error's own code, `refused` by default).
 - Tests: broker `TestTeamReportsForwarded`, `TestTeamReportsAnswers`, `TestTeamReportsTooLarge`,
   `TestTeamReportsControlErrors`, `TestTeamReportsGate`, `TestTeamReportsWithdrawAfterLinkEnded`.

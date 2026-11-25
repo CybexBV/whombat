@@ -131,7 +131,17 @@ func TestTeamReportsControlErrors(t *testing.T) {
 			}
 		}
 	}
-	fc.TeamRefuse = ""
+	// Control's error code and its details.code lead the message, once when they are the same.
+	for as, want := range map[string]string{"validation_failed": "validation_failed:", "not_found": "not_found validation_failed:"} {
+		fc.TeamRefuse, fc.TeamRefuseAs = "validation_failed", as
+		resp, m := post(t, c, broker.PathTeamReportsCreate, teamBodies[broker.PathTeamReportsCreate])
+		e, _ := m["error"].(map[string]any)
+		msg, _ := e["message"].(string)
+		if resp.StatusCode != 502 || !strings.HasPrefix(msg, want+" control refused") {
+			t.Fatalf("refused as %s: %d %q", as, resp.StatusCode, msg)
+		}
+	}
+	fc.TeamRefuse, fc.TeamRefuseAs = "", ""
 	fc.Down = true
 	for path, body := range teamBodies {
 		resp, m := post(t, c, path, body)

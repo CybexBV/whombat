@@ -139,12 +139,22 @@ func shareErr(w http.ResponseWriter, op device.DeviceOpName, err error) {
 		w.Header().Set("Retry-After", "300")
 		writeErr(w, http.StatusServiceUnavailable, "control_unreachable", "control can't be reached now: "+err.Error())
 	default:
-		codes := "refused"
-		if code, detail := controlapi.ErrorCodes(err); code != "" && detail != "" && detail != code {
-			codes = code + " " + detail
-		} else if code != "" || detail != "" {
-			codes = code + detail
-		}
-		writeErr(w, http.StatusBadGateway, "control_refused", fmt.Sprintf("%s: control refused %s: %v", codes, op, err))
+		writeErr(w, http.StatusBadGateway, "control_refused", fmt.Sprintf("%s: control refused %s: %v", refusalCodes(err), op, err))
+	}
+}
+
+// refusalCodes is how a refusal's message starts: control's error code and its details.code, once when they are the
+// same (control's validation_failed is both), the one there is, or "refused" without either.
+func refusalCodes(err error) string {
+	code, detail := controlapi.ErrorCodes(err)
+	switch {
+	case code != "" && detail != "" && detail != code:
+		return code + " " + detail
+	case code != "":
+		return code
+	case detail != "":
+		return detail
+	default:
+		return "refused"
 	}
 }
