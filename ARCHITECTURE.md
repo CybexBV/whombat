@@ -1409,10 +1409,13 @@ Setup and operation: `docs/github.md`.
   name ([accounts.md](docs/decisions/accounts.md)).
 - **Servers** (`apps/server/src/hosts/`): the hosts service (`hosts/`, the program `whombat-hosts`) owns the agents on monitored servers, their
   history, alerts and consoles; the server talks to it over its socket, signs every change the person makes, relays
-  consoles through the session. A new or edited probe waits for a result from its current settings. The hub
-  measures that wait from when the settings took effect and corrects agent result times for clock skew.
+  consoles through the session. The hub's SQLite database tracks additive migrations by id and keeps
+  `user_version` for schema changes the previous hub cannot use. A new or edited probe waits for a result from its
+  current settings. The hub measures that wait from when the settings took effect and corrects agent result times for
+  clock skew.
   It holds alerts when a result goes stale and closes the previous probe's alerts when its settings change.
-  A check-in's first deadline also counts from when its settings took effect.
+  A check-in gets a full period and grace time when it starts or resumes. Temperature warning text reports the
+  effective warning limit.
   Connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
   automatically runs out of memory or an autostart libvirt VM crashes and stays stopped. Stops the hub requested
   stay quiet. The server gives the agent the built-in Servers
@@ -1470,7 +1473,8 @@ Setup and operation: `docs/github.md`.
   [findmy-timeline.md](docs/decisions/findmy-timeline.md), [findmy-watch.md](docs/decisions/findmy-watch.md)).
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
-  from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it. The health
+  from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.
+  Name lookups succeed when the chosen runner finds an IPv4 or IPv6 address. The health
   pass reads the current result, counts any probes the hub recorded as failed since the last pass in uptime history,
   and repairs a missing check. Check again reports the saved check's current result. Disconnect removes the connection
   and tries to delete its hub check. The health pass removes checks whose connection is gone. Its hub id is kept on the connection
@@ -1712,8 +1716,9 @@ Setup and operation: `docs/github.md`.
   an hour's share. Live points weigh up to seven and a half minutes and rolled-up points up to an hour. Every page (a
   connection's, device's, account's and a server's) says its week in one line (`uptime`, also one of a page's facts).
   A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
-  `things.history` lists a thing's incidents over 30
-  or 90 days, and the assistant reads all of it with `watch_status` and `watch_history` (`incidents/agent.ts`).
+  `things.history` lists a thing's incidents over 30 or 90 days. A server's history includes alerts that were open
+  during the period, including alerts that began earlier. The assistant reads this with `watch_status` and
+  `watch_history` (`incidents/agent.ts`).
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the

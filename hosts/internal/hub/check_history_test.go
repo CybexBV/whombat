@@ -33,7 +33,7 @@ func TestCheckDetailPeriodIncludesRecoveredFailures(t *testing.T) {
 		{ID: check.ID, At: now.Add(-2 * time.Minute)},
 		{ID: check.ID, At: now.Add(-time.Minute), OK: true},
 	} {
-		e.h.recordCheck(ctx, check, result, nil)
+		e.h.recordCheck(ctx, check, checkObservation{result: result}, nil)
 	}
 	for _, test := range []struct {
 		start time.Duration

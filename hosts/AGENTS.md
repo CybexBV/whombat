@@ -32,6 +32,10 @@ and `go test ./...` for the Go side only).
 - Whombat's appliance packages this folder (`../appliance/nix/packages/hosts`, `../appliance/nix/modules/hosts.nix`).
 - The agents are signed: a change to their code (`cmd/whombat-agent`, `internal/agent` and what they import) is a new
   agent for every monitored server, so make one only when it is meant.
+- Use the hub store's additive migration list for new tables, nullable or defaulted columns, and fills of new
+  columns that older hubs can still read and write around. Keep the existing column names in reads and writes.
+  The additive list leaves SQLite's `user_version` alone so a host rollback can use the same database. A change
+  that an older hub cannot use goes in the strict list and takes a snapshot before raising `user_version`.
 
 ## Git
 

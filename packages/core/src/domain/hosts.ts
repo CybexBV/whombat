@@ -248,6 +248,15 @@ export const HostAlertAck = z.object({
 });
 export type HostAlertAck = z.infer<typeof HostAlertAck>;
 
+/** Whombat's history read of the hub's alert list over its socket. */
+export const HostAlertOverlapQuery = z.object({
+  state: z.literal('all'),
+  server: Id.optional(),
+  rule: z.string().optional(),
+  overlaps_since: Timestamp,
+  limit: z.number().int().min(1).max(1000),
+});
+
 export const HostAlert = z.object({
   id: Id,
   /** Null for hub-level alerts (checks). */

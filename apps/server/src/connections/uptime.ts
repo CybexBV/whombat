@@ -76,6 +76,12 @@ function hubCheckName(label: string): string {
 export function uptimeSpec(row: Pick<UptimeRow, 'label' | 'fields'>) {
   const fields = UptimeFields.parse(row.fields);
   const heartbeat = fields.kind === 'heartbeat';
+  const options =
+    fields.kind === 'dns'
+      ? { dns_type: 'any' }
+      : fields.kind === 'http' && fields.keyword
+        ? { keyword: fields.keyword }
+        : {};
   return {
     name: hubCheckName(row.label),
     kind: fields.kind,
@@ -83,7 +89,7 @@ export function uptimeSpec(row: Pick<UptimeRow, 'label' | 'fields'>) {
     runner: heartbeat ? UPTIME_HUB_RUNNER : fields.runner,
     interval_s: Number(fields.every) * 60,
     grace_s: heartbeat ? Number(fields.late) * 60 : 0,
-    options: fields.kind === 'http' && fields.keyword ? { keyword: fields.keyword } : {},
+    options,
   };
 }
 
@@ -212,7 +218,8 @@ const sampledSpecChanged = (check: UptimeHubCheck, spec: ReturnType<typeof uptim
   check.kind !== spec.kind ||
   check.target !== spec.target ||
   check.runner !== spec.runner ||
-  (check.options.keyword ?? '') !== (spec.options.keyword ?? '');
+  (check.options.keyword ?? '') !== (spec.options.keyword ?? '') ||
+  (spec.kind === 'dns' && check.options.dnsType?.toLowerCase() !== spec.options.dns_type);
 
 /** The hub may still have a reading for the pre-edit settings. */
 export function currentUptimeReading(check: UptimeHubCheck, configuredAt: Date | null): UptimeHubCheck {

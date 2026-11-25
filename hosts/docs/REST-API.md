@@ -621,7 +621,9 @@ offline; `attention`: open and none of acknowledged, muted, suppressed.
 | `severity` | `critical` or `warning` |
 | `rule` | exact rule, or a prefix ending in `.` (`check.`) |
 | `q` | substring of title or detail |
-| `since`, `until`, `before` | RFC 3339; `resolved` and `all` only |
+| `since` | opened at or after this RFC 3339 time (for `resolved` and `all`) |
+| `overlaps_since` | still open or resolved at or after this RFC 3339 time (for `resolved` and `all`) |
+| `until`, `before` | opened before this RFC 3339 time (for `resolved` and `all`) |
 | `limit` | 1 to 1000 (other values give 200); `resolved` and `all` only |
 
 `open` lists the open alerts, most severe first, without paging.
@@ -2089,14 +2091,16 @@ PATCH):
 
 `options`: `expect_status` (http, e.g. `"200-299,301"`, default
 `200-399`), `keyword` (http: must appear in the body), `tls` (tcp: TLS
-handshake), `insecure` (skip certificate verification), `dns_type` (`A`,
-`AAAA`, `CNAME`, `MX`, `TXT`), `dns_server` (`host[:port]`), `expect` (dns:
+handshake), `insecure` (skip certificate verification), `dns_type` (`A`
+by default, `AAAA`, `CNAME`, `MX`, `TXT`, or `any` for either an A or AAAA
+answer on the chosen runner), `dns_server` (`host[:port]`), `expect` (dns:
 substring of an answer), `cert_warn_days` (0 to 365, 0 = 14).
+An `any` check uses two of the runner's probe slots.
 
 A probe change resolves alerts for its previous settings and waits for a
 new result. Until the first result, freshness counts from the change and
-only newer report gaps count. A check-in's first deadline is its period
-plus its grace time from when the check-in settings took effect.
+only newer report gaps count. A check-in gets its period plus grace from
+when it is set up or resumed, until its first successful ping.
 Response: the check. Errors: 400 `invalid_name`, `invalid_option`,
 `invalid_interval`, `invalid_grace`, `invalid_runner`, `invalid_owner`, `invalid_check`
 (kind, target, interval, timeout or options rejected); 404 `not_found`

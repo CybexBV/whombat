@@ -1207,9 +1207,16 @@ export class FakeHostsService implements ManageHost {
   #alerts(r: FakeRequest): Json[] {
     const state = r.query.get('state') ?? 'open';
     const server = r.query.get('server');
-    return this.alerts.filter(
-      (a) => (state === 'all' || a.state === state) && (!server || a.server === server),
-    );
+    const since = r.query.get('since');
+    const overlapsSince = r.query.get('overlaps_since');
+    return this.alerts.filter((a) => {
+      if ((state !== 'all' && a.state !== state) || (server && a.server !== server)) return false;
+      if (state === 'open') return true;
+      if (since && Date.parse(String(a.opened_at)) < Date.parse(since)) return false;
+      return (
+        !overlapsSince || !a.resolved_at || Date.parse(String(a.resolved_at)) >= Date.parse(overlapsSince)
+      );
+    });
   }
 
   #ack(id: string, r: FakeRequest, on: boolean): FakeAnswer {

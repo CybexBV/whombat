@@ -5,6 +5,7 @@
  */
 import {
   type HostAlert,
+  HostAlertOverlapQuery,
   parseThingId,
   type ThingHistory,
   type ThingHistoryAlert,
@@ -45,10 +46,10 @@ function offlineStretches(alerts: readonly HostAlert[]): DownStretch[] {
 }
 
 /**
- * The hosts service's alerts since `since` (open and resolved, newest first), of one server or all, optionally of one
- * rule; null when the hosts service doesn't serve this burrow or can't be read.
+ * The hosts service's alerts that were open at any time since the period started, newest first.
+ * Null when the hosts service doesn't serve this burrow or can't be read.
  */
-export async function hostsAlertsSince(
+export async function hostsAlertsOverlapping(
   services: Services,
   burrowId: string,
   actor: HostsActor,
@@ -59,13 +60,13 @@ export async function hostsAlertsSince(
   try {
     const raw = await hosts.call<unknown>({
       path: `${HOSTS_API}/alerts`,
-      query: {
+      query: HostAlertOverlapQuery.parse({
         state: 'all',
         server: query.server,
         rule: query.rule,
-        since: query.since.toISOString(),
+        overlaps_since: query.since.toISOString(),
         limit: query.limit ?? 500,
-      },
+      }),
       actor,
     });
     return arr(raw).map(toHostAlert);
@@ -114,7 +115,7 @@ export async function periodUptime(
     const [alerts, firstReportAt] = await Promise.all([
       input.alerts !== undefined
         ? input.alerts
-        : hostsAlertsSince(services, burrowId, actor, {
+        : hostsAlertsOverlapping(services, burrowId, actor, {
             server: parsed.id,
             rule: HEARTBEAT_RULE,
             since: from,
@@ -262,7 +263,7 @@ export async function thingHistory(
   // A server's alerts of every rule, its offline ones among them.
   const alerts =
     parsed.kind === 'server'
-      ? await hostsAlertsSince(
+      ? await hostsAlertsOverlapping(
           services,
           viewer.burrowId,
           { id: viewer.principal.id, name: viewer.principal.name || 'Someone', role: 'viewer' },

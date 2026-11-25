@@ -77,3 +77,19 @@ func TestAlertWarningsStayBelowCriticalAfterHardwareLimitChanges(t *testing.T) {
 		}
 	}
 }
+
+func TestTemperatureBannerUsesEffectiveWarningLimit(t *testing.T) {
+	report := &proto.Report{Sensors: []proto.Sensor{{ID: proto.SensorCPU, TempC: 65, LimitC: 90}}}
+	limits := func(rule, entity string) (float64, bool) {
+		return 71, rule == RuleTempCritical
+	}
+	conditions := HostConditionsWithLimits(report, limits)
+	if len(conditions) != 1 || conditions[0].Rule != RuleTempHigh {
+		t.Fatalf("warning conditions: %+v", conditions)
+	}
+	warning := conditions[0].Render(time.Minute)
+	if !strings.Contains(warning.Detail, "Above 60 °C") ||
+		!strings.Contains(warning.BannerDetail, "warning limit is 60 °C") {
+		t.Fatalf("warning text: %+v", warning)
+	}
+}
