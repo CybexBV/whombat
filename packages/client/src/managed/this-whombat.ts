@@ -82,7 +82,8 @@ export const THIS_WHOMBAT_TEXT = {
       : `${n} local network${n === 1 ? '' : 's'} open to ${agent}`,
   version: (app: string, runtime: string | null) =>
     runtime ? `App ${app} · Whombat ${runtime}` : `App ${app}`,
-  versionTitle: 'Version',
+  /** The AT A GLANCE row that opens About: named after the page it opens, its state on the line under it. */
+  aboutTitle: 'About',
   /** The agent's access with nothing in it (AP-1230). */
   nothingHere: 'Nothing to set here on this Whombat.',
   /** What a managed Whombat turns off (was “NOT ON A MANAGED WHOMBAT”; AP-1230). */
@@ -180,6 +181,8 @@ export interface WhombatItem {
   dot: Dot;
   title: string;
   meta?: string;
+  /** How it stands in a word or two where the title names the part instead (About's “Up to date”), for summary lines. */
+  state?: string;
   /** NEEDS YOU only: the button's step. */
   action?: WhombatAction;
   actionLabel?: string;
@@ -227,8 +230,10 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
         key: 'update',
         part: 'about',
         dot: update.dot ?? 'mut',
-        title: update.title,
-        ...(update.meta ? { meta: update.meta } : {}),
+        // “About” over “Up to date · Software …”: the row says where it goes, the line how the updates stand.
+        title: T.aboutTitle,
+        meta: update.meta ? `${update.title} · ${update.meta}` : update.title,
+        state: update.title,
       });
     if (s.licence) {
       // “Whombat plan · Active” over “Valid until 24 October 2026 · Connectors 3 of 50” (AP-1225).
@@ -343,7 +348,7 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
       key: 'version',
       part: 'about',
       dot: 'ok',
-      title: T.versionTitle,
+      title: T.aboutTitle,
       meta: T.version(input.versions.app, input.versions.runtime),
     });
 

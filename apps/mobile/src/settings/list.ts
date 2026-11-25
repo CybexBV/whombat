@@ -152,13 +152,16 @@ type OverviewDot = 'ok' | 'warn' | 'bad' | 'mut';
  */
 export function managedApplianceLine(overview: {
   needsYou: readonly { dot: OverviewDot; title: string }[];
-  glance: readonly { key: string; dot: OverviewDot; title: string }[];
+  glance: readonly { key: string; dot: OverviewDot; title: string; state?: string }[];
 }): ApplianceLine {
+  // The About row's title names the page; its `state` says how the updates stand.
+  const said = (g: { title: string; state?: string }) => g.state ?? g.title;
   const off = overview.needsYou[0] ?? overview.glance.find((g) => g.dot === 'bad' || g.dot === 'warn');
-  if (off) return { value: off.title, tone: off.dot === 'bad' ? 'bad' : 'warn' };
-  const parts = ['update', 'backups'].flatMap(
-    (key) => overview.glance.find((g) => g.key === key)?.title ?? [],
-  );
+  if (off) return { value: said(off), tone: off.dot === 'bad' ? 'bad' : 'warn' };
+  const parts = ['update', 'backups'].flatMap((key) => {
+    const g = overview.glance.find((item) => item.key === key);
+    return g ? said(g) : [];
+  });
   return { value: parts.length ? parts.join(' · ') : 'All fine', tone: null };
 }
 

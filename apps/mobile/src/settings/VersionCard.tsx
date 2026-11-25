@@ -6,10 +6,13 @@
  * On Android with a Whombat's service, “This app” says whether it is up to date and has “Check for updates”; a newer
  * build gets the “Update available” row under it (update-check.md AP-2972). On This Whombat → About the Hermes Agent the
  * assistant runs on follows the Whombat (chat-settle.md AP-6159). Also at the bottom of the Settings tab. Last, Privacy
- * opens the privacy policy: App Review wants it reachable inside the app (look-around.md AP-9728).
+ * opens the privacy policy: App Review wants it reachable inside the app (look-around.md AP-9728). About puts the
+ * Whombat's updates in the same card (`children`, before Privacy) under “VERSION & UPDATES”: one place for what runs and
+ * how it is kept up to date.
  */
 import { useIsFocused } from '@react-navigation/native';
 import Constants from 'expo-constants';
+import type { ReactNode } from 'react';
 import { Linking, Platform } from 'react-native';
 import { UI_ORIGINS } from '../managed/config';
 import { useManaged } from '../managed/context';
@@ -33,16 +36,21 @@ function useWhombatVersion(known: string | null | undefined): string | null {
 export function VersionCard({
   runtime,
   hermes,
+  label = VERSION_TEXT.label,
+  children,
 }: {
   runtime?: string | null;
   /** The Whombat's `ApplianceInfo.hermes` where its status was read (null: not known yet); absent: no Hermes row. */
   hermes?: { version: string } | null;
+  label?: string;
+  /** More rows after the versions, before Privacy (About's updates). */
+  children?: ReactNode;
 }) {
   // Asked again as the card shows, once the last answer is five minutes old (AP-2971).
   const check = useUpdateCheck(useManaged()?.updates, useIsFocused());
   const [app, ...rest] = versionRows(ownVersion(), useWhombatVersion(runtime), check?.status ?? null, hermes);
   return (
-    <Card label={VERSION_TEXT.label}>
+    <Card label={label}>
       {app ? (
         <Row
           first
@@ -66,6 +74,7 @@ export function VersionCard({
       {rest.map((r) => (
         <Row key={r.title} title={r.title} body={r.body ?? null} meta={r.meta} />
       ))}
+      {children}
       <Row
         title={VERSION_TEXT.privacy}
         meta={VERSION_TEXT.privacyWhat}

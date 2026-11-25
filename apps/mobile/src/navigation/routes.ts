@@ -161,8 +161,10 @@ export type RootStackParamList = {
    * as prompt, which goes back to the chat once saved).
    */
   PromptEdit: { promptId?: string; fromText?: string } | undefined;
-  /** `at`: opened at HARDWARE (NETWORK's See hardware, hardware-support-android.md AP-3255). */
+  /** `at`: opened at HARDWARE (a link from before the Hardware screen) or at REACH (a connection that needs it). */
   WhombatAbout: { at?: 'hardware' | 'reach' } | undefined;
+  /** The machine and every part (About's HARDWARE row, NETWORK's and BLUETOOTH's See hardware); `back` names the way back. */
+  WhombatHardware: { back?: string } | undefined;
   BackupFile: undefined;
   /**
    * Backups' options and one backup (backup-options-android.md AP-6853, AP-6856), from Backups; on a Whombat and in the

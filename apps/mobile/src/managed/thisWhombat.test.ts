@@ -91,7 +91,7 @@ describe('AT A GLANCE on the phone (AP-1244)', () => {
       ),
     );
     expect(rows.map((r) => [r.key, r.step.to, r.label])).toEqual([
-      ['update', 'WhombatAbout', 'Up to date, Software 2026.9.2'],
+      ['update', 'WhombatAbout', 'About, Up to date · Software 2026.9.2'],
       ['backups', 'WhombatBackups', 'Backed up, Last backup just now'],
       ['kit', 'WhombatBackups', 'Recovery kit saved, Keep it somewhere safe and offline.'],
       ['devices', 'Devices', '2 devices'],
@@ -123,7 +123,7 @@ describe('AT A GLANCE on the phone (AP-1244)', () => {
     });
     const rows = glanceRows(o);
     expect(rows.find((r) => r.key === 'version')).toMatchObject({
-      title: 'Version',
+      title: 'About',
       meta: 'App 0.74.0 · Whombat 2026.9.2',
       step: { to: 'WhombatAbout' },
     });

@@ -167,6 +167,7 @@ export function restorableRoute(route: SavedRoute, world: RestoreWorld): boolean
     case 'WhombatBackups':
     case 'Devices':
     case 'WhombatAbout':
+    case 'WhombatHardware':
     case 'BackupFile':
     case 'BackupOptions':
       return world.managed;

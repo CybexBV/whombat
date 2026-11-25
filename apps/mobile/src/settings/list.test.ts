@@ -97,11 +97,18 @@ describe('each row’s line (AP-2623)', () => {
       managedApplianceLine({
         needsYou: [],
         glance: [
-          { key: 'update', dot: 'ok', title: 'Up to date' },
+          { key: 'update', dot: 'ok', title: 'About', state: 'Up to date' },
           { key: 'backups', dot: 'ok', title: 'Backed up' },
         ],
       }),
     ).toEqual({ value: 'Up to date · Backed up', tone: null });
+    // A failed update says so, not the name of the page it opens.
+    expect(
+      managedApplianceLine({
+        needsYou: [],
+        glance: [{ key: 'update', dot: 'bad', title: 'About', state: 'The last update didn’t work' }],
+      }),
+    ).toEqual({ value: 'The last update didn’t work', tone: 'bad' });
     expect(
       managedApplianceLine({ needsYou: [{ dot: 'warn', title: 'Backups are off' }], glance: [] }),
     ).toEqual({ value: 'Backups are off', tone: 'warn' });

@@ -1,10 +1,11 @@
 /**
- * HARDWARE in This Whombat → About (Whombat hardware-support.md HD-01, HD-03, HD-11; hardware-support-android.md
- * AP-3259, AP-3260), the web's section (hardware-support-web.md AP-3228…AP-3230) on a phone: where the
- * Whombat offers `host.hardware`, before DIAGNOSTICS — the machine (its name over CPU, memory and kernel) with **Share
- * report**, the parts that don't work in one line each (“This Wi-Fi card has no driver yet.”) or that every part has a
- * driver, then every part by group (Network · Sound · Graphics & screens · Storage · Power · Other) in compact rows, its
- * vendor, what it does and its driver on the line under its name (“No driver” in red). Read once when About opens.
+ * HARDWARE (Whombat hardware-support.md HD-01, HD-03, HD-11; hardware-support-android.md AP-3259, AP-3260), where the
+ * Whombat offers `host.hardware`, in two sizes. On This Whombat → About, `HardwareSummary`: one row with the machine's
+ * name and “Every part has a driver.”, or the parts that don't work in one line each, opening the Hardware screen. On
+ * that screen, `HardwareSection`: the web's section (hardware-support-web.md AP-3228…AP-3230) — the machine (its name
+ * over CPU, memory and kernel) with **Share report**, the parts that don't work or that every part has a driver, then
+ * every part by group (Network · Sound · Graphics & screens · Storage · Power · Other) in compact rows, its vendor, what
+ * it does and its driver on the line under its name (“No driver” in red). Each reads once when it shows.
  *
  * Share report writes the shared `hardwareReportText` to `whombat-hardware-YYYY-MM-DD.txt` in the app's cache and
  * hands it to Android's share sheet (the copy goes afterwards), as DIAGNOSTICS shares its files.
@@ -28,26 +29,15 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button, SkeletonRows } from '../ui/primitives';
 import { hardwareReportAbout, MACHINE_TEXT } from './machine';
-import { Card, ErrorLine, Row } from './ui';
+import { Card, ErrorLine, LinkRow, Row } from './ui';
 import type { MachineHere } from './useMachine';
 
 const T = HARDWARE_TEXT;
 
 type Read = { hardware: HostHardware } | { failed: true } | null;
 
-/**
- * HARDWARE, or nothing (no manager here). `runtime`: the Whombat's version for the
- * report's header; `onLayout` lets About scroll to it (NETWORK's See hardware).
- */
-export function HardwareSection({
-  machine,
-  runtime,
-  onLayout,
-}: {
-  machine: MachineHere;
-  runtime?: string | null;
-  onLayout?: (e: LayoutChangeEvent) => void;
-}) {
+/** HARDWARE in full (the Hardware screen), or nothing (no manager here). `runtime`: the Whombat's version for the report's header. */
+export function HardwareSection({ machine, runtime }: { machine: MachineHere; runtime?: string | null }) {
   if (!machine.hardware) return null;
   return (
     <Hardware
@@ -55,30 +45,31 @@ export function HardwareSection({
       name={machine.name}
       runtime={runtime ?? null}
       onReset={machine.onReset}
-      onLayout={onLayout}
     />
   );
 }
 
-function Hardware({
-  load,
-  name,
-  runtime,
-  onReset,
+/**
+ * HARDWARE on About, or nothing (no manager here): one row that opens the Hardware screen, so the list of parts doesn't
+ * fill About. The parts that don't work stay in sight under it. `onLayout` lets About scroll to it.
+ */
+export function HardwareSummary({
+  machine,
+  onOpen,
   onLayout,
 }: {
-  load: HardwareLoader;
-  name: string;
-  runtime: string | null;
-  onReset: MachineHere['onReset'];
-  onLayout: ((e: LayoutChangeEvent) => void) | undefined;
+  machine: MachineHere;
+  onOpen: () => void;
+  onLayout?: (e: LayoutChangeEvent) => void;
 }) {
-  const theme = useTheme();
-  const { timeZone } = useBurrowBase();
+  if (!machine.hardware) return null;
+  return <Summary load={machine.hardware} onReset={machine.onReset} onOpen={onOpen} onLayout={onLayout} />;
+}
+
+/** The hardware read once as it shows, again on Try again and when the demo machine starts over; `gone`: no manager. */
+function useHardwareRead(load: HardwareLoader, onReset: MachineHere['onReset']) {
   const [read, setRead] = useState<Read>(null);
   const [gone, setGone] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
   const ask = useCallback(() => {
     let live = true;
     setRead(null);
@@ -98,9 +89,80 @@ function Hardware({
   useEffect(ask, [ask]);
   // The demo machine starting over as another one.
   useEffect(() => onReset?.(() => void ask()), [onReset, ask]);
-  if (gone) return null;
   const hardware = read && 'hardware' in read ? read.hardware : null;
-  const v = hardware ? hardwareSectionView(hardware) : null;
+  return { read, gone, ask, hardware, view: hardware ? hardwareSectionView(hardware) : null };
+}
+
+/** “The hardware couldn’t be read right now.” with Try again. */
+function Unavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Row
+      first
+      dot="mut"
+      title={T.unavailable}
+      action={
+        <Button label={T.tryAgain} variant="secondary" onPress={onRetry} style={{ paddingHorizontal: 14 }} />
+      }
+    />
+  );
+}
+
+function Summary({
+  load,
+  onReset,
+  onOpen,
+  onLayout,
+}: {
+  load: HardwareLoader;
+  onReset: MachineHere['onReset'];
+  onOpen: () => void;
+  onLayout: ((e: LayoutChangeEvent) => void) | undefined;
+}) {
+  const { read, gone, ask, view: v } = useHardwareRead(load, onReset);
+  if (gone) return null;
+  const worst = v?.problems.some((p) => p.dot === 'bad') ? 'bad' : v?.problems.length ? 'warn' : 'ok';
+  return (
+    <View onLayout={onLayout}>
+      <Card label={T.section}>
+        {read === null ? <SkeletonRows count={1} lines={2} /> : null}
+        {read && !v ? <Unavailable onRetry={() => void ask()} /> : null}
+        {v ? (
+          <>
+            <LinkRow
+              first
+              dot={worst}
+              title={v.machine}
+              body={v.problems.length > 0 ? null : T.allWork}
+              label={v.problems.length > 0 ? v.machine : `${v.machine}, ${T.allWork}`}
+              onPress={onOpen}
+            />
+            {v.problems.map((p) => (
+              <Row key={p.key} dot={p.dot} title={p.title} meta={p.meta} />
+            ))}
+          </>
+        ) : null}
+      </Card>
+    </View>
+  );
+}
+
+function Hardware({
+  load,
+  name,
+  runtime,
+  onReset,
+}: {
+  load: HardwareLoader;
+  name: string;
+  runtime: string | null;
+  onReset: MachineHere['onReset'];
+}) {
+  const theme = useTheme();
+  const { timeZone } = useBurrowBase();
+  const { read, gone, ask, hardware, view: v } = useHardwareRead(load, onReset);
+  const [sharing, setSharing] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  if (gone) return null;
 
   const share = async () => {
     if (!hardware) return;
@@ -137,73 +199,58 @@ function Hardware({
   };
 
   return (
-    <View onLayout={onLayout}>
-      <Card label={T.section}>
-        {read === null ? <SkeletonRows count={3} lines={2} /> : null}
-        {read && !v ? (
-          <Row
-            first
-            dot="mut"
-            title={T.unavailable}
-            action={
-              <Button
-                label={T.tryAgain}
-                variant="secondary"
-                onPress={() => void ask()}
-                style={{ paddingHorizontal: 14 }}
-              />
-            }
-          />
-        ) : null}
-        {v ? (
-          <>
-            <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
-              <View style={{ gap: 3 }}>
-                <Text size={15} weight={500} lh={1.35}>
-                  {v.machine}
-                </Text>
-                <Text size={12} mono lh={1.45} color={theme.colors.mut}>
-                  {v.machineMeta}
-                </Text>
-              </View>
-              <Button
-                label={T.share}
-                variant="secondary"
-                // Not `busy`: a spinner for the label would narrow the button (as VERSION's Check, AP-2972).
-                disabled={sharing}
-                onPress={() => void share()}
-                style={{ alignSelf: 'flex-start', paddingHorizontal: 16 }}
-              />
-              <ErrorLine text={note} />
+    // The screen is titled Hardware already, so the card has no label of its own.
+    <Card>
+      {read === null ? <SkeletonRows count={3} lines={2} /> : null}
+      {read && !v ? <Unavailable onRetry={() => void ask()} /> : null}
+      {v ? (
+        <>
+          <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
+            <View style={{ gap: 3 }}>
+              <Text size={15} weight={500} lh={1.35}>
+                {v.machine}
+              </Text>
+              <Text size={12} mono lh={1.45} color={theme.colors.mut}>
+                {v.machineMeta}
+              </Text>
             </View>
-            {v.problems.length > 0 ? (
-              v.problems.map((p) => <Row key={p.key} dot={p.dot} title={p.title} meta={p.meta} />)
-            ) : (
-              <Row dot="ok" title={T.allWork} />
-            )}
-            {v.groups.map((g) => (
-              <View key={g.group} style={{ borderTopWidth: 1, borderTopColor: theme.colors.line }}>
-                <Text
-                  size={11}
-                  weight={500}
-                  mono
-                  tracking={0.05}
-                  color={theme.colors.mut}
-                  accessibilityRole="header"
-                  style={{ paddingTop: 12, paddingBottom: 2, paddingHorizontal: 16 }}
-                >
-                  {g.label.toUpperCase()}
-                </Text>
-                {g.rows.map((row) => (
-                  <DeviceRow key={row.key} row={row} />
-                ))}
-                <View style={{ height: 8 }} />
-              </View>
-            ))}
-          </>
-        ) : null}
-      </Card>
-    </View>
+            <Button
+              label={T.share}
+              variant="secondary"
+              // Not `busy`: a spinner for the label would narrow the button (as VERSION's Check, AP-2972).
+              disabled={sharing}
+              onPress={() => void share()}
+              style={{ alignSelf: 'flex-start', paddingHorizontal: 16 }}
+            />
+            <ErrorLine text={note} />
+          </View>
+          {v.problems.length > 0 ? (
+            v.problems.map((p) => <Row key={p.key} dot={p.dot} title={p.title} meta={p.meta} />)
+          ) : (
+            <Row dot="ok" title={T.allWork} />
+          )}
+          {v.groups.map((g) => (
+            <View key={g.group} style={{ borderTopWidth: 1, borderTopColor: theme.colors.line }}>
+              <Text
+                size={11}
+                weight={500}
+                mono
+                tracking={0.05}
+                color={theme.colors.mut}
+                accessibilityRole="header"
+                style={{ paddingTop: 12, paddingBottom: 2, paddingHorizontal: 16 }}
+              >
+                {g.label.toUpperCase()}
+              </Text>
+              {g.rows.map((row) => (
+                <DeviceRow key={row.key} row={row} />
+              ))}
+              <View style={{ height: 8 }} />
+            </View>
+          ))}
+        </>
+      ) : null}
+    </Card>
   );
 }
 

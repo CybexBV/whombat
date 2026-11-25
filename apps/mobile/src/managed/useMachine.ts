@@ -95,7 +95,8 @@ export function useBluetooth(
 }
 
 /**
- * About opened at HARDWARE (`at: 'hardware'`, NETWORK's See hardware; AP-3255): the screen scrolls to the card once it
+ * About opened at a card (`at`: REACH for a connection that needs it, HARDWARE for a link saved before the Hardware
+ * screen): the screen scrolls to the card once it
  * and the container above it are laid out, and stops following once a finger scrolls, as Devices does
  * (AP-1247).
  */
