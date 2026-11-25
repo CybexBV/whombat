@@ -1,9 +1,10 @@
 /**
  * Reports to the Whombat Team (Whombat docs/decisions/team-reports.md), the same on the web and the phone: whether the
  * entry shows, the list's order and folds, a report's conversation in time order with its status changes, the
- * four-step track, what is sent with a new report, and the words people read. Pure.
+ * four-step track, what is sent with a new report, the assistant's draft card's Edit, and the words people read. Pure.
  */
 import {
+  type Approval,
   TEAM_REPORT_STAGES,
   TEAM_REPORT_STATUS_WORDS,
   type TeamReport,
@@ -61,6 +62,8 @@ export const TEAM_REPORT_WORDS = {
   sending: 'Sending…',
   sent: 'Sent. The Whombat Team reads every report and answers here.',
   draftDone: 'That draft was already sent or put aside. You can write a new report here.',
+  /** The assistant's card: opens the form with its draft, to change it before sending. */
+  edit: 'Edit',
   draftFailed: 'The draft couldn’t load. You can write the report here.',
   // A report's page.
   you: 'You',
@@ -82,6 +85,29 @@ export const TEAM_REPORT_WORDS = {
   failed: 'That didn’t go through. Try again in a moment.',
   full: 'This report can’t take more replies. Start a new report if something is still wrong.',
 } as const;
+
+/** The action the box's card names when the assistant asks to send its draft (the box's `TEAM_REPORT_ACTION`). */
+export const TEAM_REPORT_DRAFT_ACTION = 'report_to_whombat_team';
+
+/** A draft's id, as the form's address and the box's draft route take it. */
+const DRAFT_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * The assistant's draft a card still asks about: its id, so the card offers Edit (the form with the draft) and no later
+ * time. Null for any other approval, and once the card is answered.
+ */
+export function teamReportDraftOf(approval: Pick<Approval, 'action' | 'state'>): string | null {
+  if (approval.state !== 'pending') return null;
+  const { action } = approval;
+  if (action.type !== 'custom' || action.params.name !== TEAM_REPORT_DRAFT_ACTION) return null;
+  const id = action.params.data.draftId;
+  return typeof id === 'string' && DRAFT_ID.test(id) ? id : null;
+}
+
+/** The form with the assistant's draft, burrow-less: `/reports/new?draft=<id>`. */
+export function teamReportDraftPath(draftId: string): string {
+  return `/reports/new?draft=${encodeURIComponent(draftId)}`;
+}
 
 /** A report's kind in one word, for its row and page. */
 export const TEAM_REPORT_KIND_WORDS: Readonly<Record<TeamReportKind, string>> = {

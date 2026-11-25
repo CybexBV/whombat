@@ -1,10 +1,12 @@
-import type { TeamReportRow } from '@whombat/core';
+import type { Approval, TeamReportRow } from '@whombat/core';
 import { TEAM_REPORTS_MINOR } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import {
   browserDeviceWords,
   TEAM_REPORT_WORDS,
   teamReportClientContext,
+  teamReportDraftOf,
+  teamReportDraftPath,
   teamReportGroups,
   teamReportRowLine,
   teamReportSentWithLine,
@@ -211,5 +213,47 @@ describe('what is sent with a report', () => {
       ),
     ).toBe('Edge 142 · Windows');
     expect(browserDeviceWords('')).toBeNull();
+  });
+});
+
+describe('the assistant’s draft card', () => {
+  const card = (
+    over: { state?: Approval['state']; name?: string; data?: Record<string, string | number> } = {},
+  ): Pick<Approval, 'action' | 'state'> => ({
+    state: over.state ?? 'pending',
+    action: {
+      type: 'custom',
+      params: {
+        name: over.name ?? 'report_to_whombat_team',
+        keyId: 'messages.external',
+        data: over.data ?? { draftId: 'trd_AAAAAAAAAAAAAAAAAAAAAA' },
+      },
+    },
+  });
+
+  it('offers its draft while it waits', () => {
+    expect(teamReportDraftOf(card())).toBe('trd_AAAAAAAAAAAAAAAAAAAAAA');
+  });
+
+  it('offers nothing once answered, for another action, or without a draft’s id', () => {
+    expect(teamReportDraftOf(card({ state: 'approved' }))).toBeNull();
+    expect(teamReportDraftOf(card({ state: 'declined' }))).toBeNull();
+    expect(teamReportDraftOf(card({ name: 'something_else' }))).toBeNull();
+    expect(teamReportDraftOf(card({ data: {} }))).toBeNull();
+    expect(teamReportDraftOf(card({ data: { draftId: 42 } }))).toBeNull();
+    expect(teamReportDraftOf(card({ data: { draftId: '../../x' } }))).toBeNull();
+    expect(
+      teamReportDraftOf({
+        state: 'pending',
+        action: { type: 'merge_pr', params: { prNumber: 1 } } as unknown as Approval['action'],
+      }),
+    ).toBeNull();
+  });
+
+  it('opens the form with it', () => {
+    expect(teamReportDraftPath('trd_AAAAAAAAAAAAAAAAAAAAAA')).toBe(
+      '/reports/new?draft=trd_AAAAAAAAAAAAAAAAAAAAAA',
+    );
+    expect(TEAM_REPORT_WORDS.edit).toBe('Edit');
   });
 });
