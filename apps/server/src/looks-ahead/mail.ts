@@ -1,10 +1,10 @@
 /**
- * Incoming mail as a proactive Looks ahead source (docs/decisions/looks-ahead.md): scans recent inbox messages across
- * every active Google, Microsoft 365 and Email (IMAP) mail connection at most every 15 minutes (unless `fresh`), runs
- * the cheap deterministic pre-filter (`aheadMailCandidate`) so newsletters cost zero AI tokens, and produces mail
- * candidates for `planAheadPass`.
+ * Incoming mail as a Looks ahead source (docs/decisions/looks-ahead.md): reads the newest inbox mail of every active
+ * Google, Microsoft 365 and Email (IMAP) mailbox at most every 15 minutes (unless `fresh`), up to
+ * `AHEAD_MAIL_SWEEP_LIMIT` a mailbox so a busy day loses nothing, and leaves out the person's own mail and plain bulk mail
+ * (`aheadMailNoise`) before any AI reads it. Which of the rest is checked is the triage pass's choice, or a matter's.
  */
-import { aheadMailCandidate, type MailSummary } from '@whombat/core';
+import { AHEAD_MAIL_SWEEP_LIMIT, aheadMailNoise, type MailSummary } from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { providerMode, providerWorkspace } from '../connectors/providers';
 import type { Db, Tx } from '../db/client';
@@ -21,9 +21,7 @@ export interface MailAccount {
 
 /** How long recent inbox headers are kept between watcher passes. */
 const MAIL_KEEP_MS = 15 * 60_000;
-/** Max recent messages fetched per mailbox per sweep. */
-const MAIL_SWEEP_LIMIT = 15;
-/** Only consider mail received in the last 48 hours. */
+/** Only mail received in the last 48 hours: the longest a triage pass looks back. */
 const MAIL_MAX_AGE_MS = 48 * 3600_000;
 
 const mailCache = new WeakMap<Services, Map<string, { at: number; items: MailSummary[] }>>();
@@ -89,33 +87,39 @@ async function recentInbox(
   const items = await withAccountToken(services, account.accountId, account.provider, (token) =>
     providerWorkspace(services, account.provider).mailSearch(token, {
       query: inboxQuery(account.provider),
-      limit: MAIL_SWEEP_LIMIT,
+      limit: AHEAD_MAIL_SWEEP_LIMIT,
     }),
   );
   kept.set(account.connectionId, { at: now.getTime(), items });
   return items;
 }
 
-export interface MailFound {
+/** One new inbox mail the watcher may hand to a triage pass, a matter or a check. */
+export interface SweptMail {
+  /** `mail:<connection>:<message>`. */
   key: string;
+  /** Once-only version of the mail (`mailVersion`). */
   version: string;
+  /** When it came (ISO). */
   start: string;
   account: MailAccount;
   message: MailSummary;
 }
 
-/** Recent actionable incoming emails across all connected mailboxes (filtered cheaply before any AI turn). */
-export async function upcomingMailCandidates(
+/**
+ * The newest inbox mail of the last 48 hours across all connected mailboxes, newest first, without the person's own
+ * mail and plain bulk mail. A mailbox that can't be read is skipped this time.
+ */
+export async function sweepMail(
   services: Services,
   accounts: readonly MailAccount[],
-  rules: readonly string[],
   now: Date,
   fresh = false,
-): Promise<MailFound[]> {
+): Promise<SweptMail[]> {
   const ownAddresses = accounts.map((a) => a.email).filter(Boolean);
   const cutoff = now.getTime() - MAIL_MAX_AGE_MS;
-  const out: MailFound[] = [];
-  const seenIds = new Set<string>();
+  const out: SweptMail[] = [];
+  const seen = new Set<string>();
   for (const account of accounts) {
     const items = await recentInbox(services, account, now, fresh).catch((err) => {
       services.log.warn(
@@ -126,28 +130,19 @@ export async function upcomingMailCandidates(
     });
     for (const m of items) {
       const key = mailEventKey(account.connectionId, m.id);
-      if (seenIds.has(key)) continue;
-      seenIds.add(key);
-      const parsedDate = m.date ? Date.parse(m.date) : Number.NaN;
-      if (Number.isFinite(parsedDate) && parsedDate < cutoff) continue;
-      if (
-        !aheadMailCandidate({
-          from: m.from,
-          subject: m.subject,
-          snippet: m.snippet,
-          ownAddresses,
-          rules,
-        })
-      )
-        continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const at = m.date ? Date.parse(m.date) : Number.NaN;
+      if (Number.isFinite(at) && at < cutoff) continue;
+      if (aheadMailNoise({ from: m.from, subject: m.subject, snippet: m.snippet, ownAddresses })) continue;
       out.push({
         key,
         version: mailVersion(m.id),
-        start: Number.isFinite(parsedDate) ? new Date(parsedDate).toISOString() : now.toISOString(),
+        start: Number.isFinite(at) ? new Date(at).toISOString() : now.toISOString(),
         account,
         message: m,
       });
     }
   }
-  return out;
+  return out.sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
 }

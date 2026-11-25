@@ -126,7 +126,7 @@ export const aheadChecks = pgTable(
         description: string;
         timeZone: string;
         allDay?: boolean;
-        /** Where a calendar event is read again before a finding is told. */
+        /** Where a calendar event is read again before a finding is told, or the mailbox of a mail check. */
         connectionId: string;
         calendarId: string;
         eventId: string;
@@ -169,7 +169,10 @@ export const aheadChecks = pgTable(
             subject: string;
             date: string;
             snippet: string;
+            unread?: boolean;
           }[];
+          /** The things kept an eye on it was shown (`k1`…), so a pick's matter maps back to its id. */
+          matters?: { ref: string; id: string }[];
           /** Its picks, which wait here as mail checks for 48 hours. */
           picks?: { ref: string; matterId?: string }[];
         };

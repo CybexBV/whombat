@@ -1,17 +1,19 @@
 /**
  * Looks ahead in Settings (docs/decisions/looks-ahead.md): `looksAhead.get` reads the switch, calendars, incoming mail
- * switch, standing rules, stopped kinds, last week and recent checks; `looksAhead.update` changes one setting and
- * answers the same view; `looksAhead.checkNow` runs one immediate fresh pass and returns `{ started, view }`.
+ * switch, standing rules, stopped kinds, last week, recent checks and what it keeps an eye on; `looksAhead.update`
+ * changes one setting (or removes a matter) and answers the same view; `looksAhead.checkNow` runs one immediate fresh
+ * pass and returns `{ started, view }`.
  */
 import {
   AHEAD_KINDS,
+  AHEAD_MATTERS_MAX,
   AHEAD_RECENT_MAX,
   api,
   type LooksAheadCalendar,
   type LooksAheadCheckItem,
   type LooksAheadView,
 } from '@whombat/core';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ne, sql } from 'drizzle-orm';
 import { aheadChecks } from '../db/schema/index';
 import { isThePerson, thePerson } from '../domain/the-person';
 import { forbidden } from '../lib/errors';
@@ -21,6 +23,7 @@ import type { Services } from '../services';
 import { accountCalendars, calendarAccounts, calendarIsOn, calendarKey } from './calendars';
 import { aheadSettingsOf, updateLooksAhead } from './commands';
 import { mailAccounts } from './mail';
+import { matterItem, openMatters } from './matters';
 import { checkAheadNow } from './watch';
 
 const WEEK_MS = 7 * 24 * 3600_000;
@@ -52,13 +55,20 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
     }
   }
   const since = new Date(services.clock().getTime() - WEEK_MS);
+  // The week's count is of checks: a look through new mail only picks.
   const [week] = await services.db
     .select({
       checked: sql<number>`count(*) filter (where ${aheadChecks.state} in ('quiet', 'told'))::int`,
       told: sql<number>`count(*) filter (where ${aheadChecks.state} = 'told')::int`,
     })
     .from(aheadChecks)
-    .where(and(eq(aheadChecks.burrowId, burrowId), gte(aheadChecks.startedAt, since)));
+    .where(
+      and(
+        eq(aheadChecks.burrowId, burrowId),
+        gte(aheadChecks.startedAt, since),
+        ne(aheadChecks.source, 'triage'),
+      ),
+    );
 
   const rows = await services.db
     .select({
@@ -71,6 +81,7 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
       kind: aheadChecks.kind,
       threadRootId: aheadChecks.threadRootId,
       feedback: aheadChecks.feedback,
+      event: aheadChecks.event,
     })
     .from(aheadChecks)
     .where(eq(aheadChecks.burrowId, burrowId))
@@ -79,8 +90,20 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
 
   const recent: LooksAheadCheckItem[] = rows.map((r) => ({
     id: r.id,
-    source: r.source,
-    stage: r.stage,
+    // Older apps know only calendar and mail rows in the four old stages: a triage pass and a follow-up are mail rows
+    // that say what they are in `of`.
+    ...(r.source === 'calendar' && r.stage !== 'mail' && r.stage !== 'triage' && r.stage !== 'matter'
+      ? { source: 'calendar' as const, stage: r.stage }
+      : { source: 'mail' as const, stage: 'mail' as const }),
+    ...(r.source === 'triage'
+      ? {
+          of: 'triage' as const,
+          count: r.event.triage?.count ?? 0,
+          picked: r.event.triage?.picks?.length ?? 0,
+        }
+      : r.source === 'matter'
+        ? { of: 'matter' as const }
+        : {}),
     title: r.summary.slice(0, 300),
     at: r.startedAt.toISOString(),
     state: r.state,
@@ -88,6 +111,8 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
     threadRootId: r.state === 'told' ? r.threadRootId : null,
     feedback: r.feedback,
   }));
+
+  const matters = (await openMatters(services.db, burrowId)).slice(0, AHEAD_MATTERS_MAX).map(matterItem);
 
   return {
     on: settings.on,
@@ -100,6 +125,7 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
     stopped: AHEAD_KINDS.filter((k) => settings.stopped.includes(k)),
     week: { checked: week?.checked ?? 0, told: week?.told ?? 0 },
     recent,
+    matters,
   };
 }
 
