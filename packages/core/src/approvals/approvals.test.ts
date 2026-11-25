@@ -558,3 +558,30 @@ describe('lastingWordsAt', () => {
     expect([words.confirm, words.keep]).toEqual(['Let Neo do it', 'Keep asking']);
   });
 });
+
+describe('the assistant’s draft report to the Whombat Team', () => {
+  const draftCard = (data: Record<string, string>) =>
+    approvalView(
+      deployApproval({
+        action: {
+          type: 'custom',
+          params: { name: 'report_to_whombat_team', keyId: 'messages.external', data },
+        },
+      }),
+      ctx(),
+    );
+
+  it('shows exactly what would be sent wherever its card can be answered', () => {
+    const v = draftCard({ draftId: 'trd_A', text: 'The map is blank', expected: 'My phone on it' });
+    expect(v.content?.label).toBe('REPORT');
+    expect(v.content?.text.startsWith('The map is blank')).toBe(true);
+    expect(v.content?.text.endsWith('My phone on it')).toBe(true);
+    expect(draftCard({ draftId: 'trd_A', text: 'The map is blank', expected: '' }).content?.text).toBe(
+      'The map is blank',
+    );
+  });
+
+  it('shows nothing it doesn’t carry', () => {
+    expect(draftCard({ draftId: 'trd_A' }).content).toBeNull();
+  });
+});

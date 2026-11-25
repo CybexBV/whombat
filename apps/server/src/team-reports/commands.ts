@@ -16,6 +16,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   conversationLabel,
+  TEAM_REPORT_DRAFT_ACTION,
   TEAM_REPORT_EXPECTED_MAX,
   TEAM_REPORT_TEXT_MAX,
   TEAM_REPORTS_LIST_MAX,
@@ -49,11 +50,17 @@ export const TEAM_REPORT_WITHDRAWN_EVENT = 'team_report.withdrawn';
  * person set for it (the grants below), like a shared link, and the card offers no “Always allow”.
  */
 export const TEAM_REPORT_KEY_ID = 'messages.external';
-/** The approval action's name, which the apps' card reads to offer Edit (the form with `data.draftId`). */
-export const TEAM_REPORT_ACTION = 'report_to_whombat_team';
+/**
+ * The approval action's name, which the apps' card reads to offer Edit (the form with `data.draftId`) and to show the
+ * draft's words (`data.text`, `data.expected`).
+ */
+export const TEAM_REPORT_ACTION = TEAM_REPORT_DRAFT_ACTION;
 
 /** The page of one report in the apps, under the burrow. */
 export const teamReportHref = (reportId: string) => `/reports/${encodeURIComponent(reportId)}`;
+
+/** The form with the assistant's draft (its card's Edit), under the burrow. */
+export const teamReportDraftHref = (draftId: string) => `/reports/new?draft=${encodeURIComponent(draftId)}`;
 
 /**
  * The fixed words for a report that waits for the person: the push, the notification and the Inbox item say
@@ -406,7 +413,12 @@ export const sendTeamReportDraft = defineCommand({
       attempt: 'send a report to the Whombat Team',
       action: {
         type: 'custom',
-        params: { name: TEAM_REPORT_ACTION, keyId: TEAM_REPORT_KEY_ID, data: { draftId: draft.id } },
+        params: {
+          name: TEAM_REPORT_ACTION,
+          keyId: TEAM_REPORT_KEY_ID,
+          // The words go with the card, so every place it can be answered shows exactly what would be sent.
+          data: { draftId: draft.id, text: draft.text, expected: draft.expected },
+        },
       },
       where: 'Reports',
       conversationId: draft.conversationId,

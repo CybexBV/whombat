@@ -28,6 +28,7 @@ import {
   needsYouCount,
   needsYouGroupOf,
   type ThingSummary,
+  teamReportDraftWords,
   thingHref,
   thingId,
   type WatchItem,
@@ -55,7 +56,7 @@ import { liveResearches } from '../looks/research';
 import type { PrincipalRow } from '../read/principals';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
-import { TEAM_REPORT_ACTION } from '../team-reports/commands';
+import { TEAM_REPORT_ACTION, teamReportDraftHref } from '../team-reports/commands';
 import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
@@ -155,9 +156,11 @@ async function decidableApprovals(db: Db, burrowId: string, viewer: PrincipalRow
     conversation_id: string;
     created_at: string;
     action_name: string | null;
+    action_data: unknown;
   }>(sql`
     select a.id, a.number, a.title, a.question, a.explainer, a.summary, a.conversation_id, a.created_at,
-           case when a.action->>'type' = 'custom' then a.action->'params'->>'name' end as action_name
+           case when a.action->>'type' = 'custom' then a.action->'params'->>'name' end as action_name,
+           case when a.action->>'type' = 'custom' then a.action->'params'->'data' end as action_data
       from approvals a
      where a.burrow_id = ${burrowId} and a.state = 'pending'
      order by a.created_at desc
@@ -176,24 +179,47 @@ export const APPROVAL_WORDS = {
   no: APPROVAL_ASK_WORDS.no,
 } as const;
 
+/** The most an Inbox item's body holds (`NeedsYouItem.body`). */
+const BODY_MAX = 600;
+
 async function approvalItems(ctx: SourceCtx, viewer: PrincipalRow, burrow: BurrowRow): Promise<Sourced[]> {
   const rows = await decidableApprovals(ctx.db, burrow.id, viewer);
   const start = windowStartOf(burrow);
   const later = nextLocalTime(ctx.now, burrow.timeZone, start.hour, start.minute);
-  return rows.map((r) => ({
-    conversationId: r.conversation_id,
-    item: {
+  return rows.map((r) => {
+    const item: NeedsYouItem = {
       id: `approval:${r.number}`,
       ref: { kind: 'approval', id: String(r.number) },
       kind: 'approval',
       severity: 'warn',
       title: clip(r.question || r.title, 200),
-      body: clip(r.explainer || r.summary || '', 600),
+      body: clip(r.explainer || r.summary || '', BODY_MAX),
       at: new Date(r.created_at).toISOString(),
       approvalNumber: r.number,
-      actions: approvalActions(r.action_name === TEAM_REPORT_ACTION ? null : later),
-    },
-  }));
+      actions: approvalActions(later),
+    };
+    return {
+      conversationId: r.conversation_id,
+      item: r.action_name === TEAM_REPORT_ACTION ? draftItem(item, r.action_data) : item,
+    };
+  });
+}
+
+/**
+ * The assistant's draft report in the Inbox (team-reports.md): it goes now or not at all, its body is exactly what would
+ * be sent, and its form is where the person changes it (Edit). A draft too long for the item can't be read there in
+ * full, so it isn't sent from there either: its card, which holds all of it, takes the yes.
+ */
+function draftItem(item: NeedsYouItem, data: unknown): NeedsYouItem {
+  const words = teamReportDraftWords(data);
+  const draftId = (data as { draftId?: unknown } | null)?.draftId;
+  const fits = words !== null && words.length <= BODY_MAX;
+  return {
+    ...item,
+    ...(words ? { body: fits ? words : clip(words, BODY_MAX) } : {}),
+    ...(typeof draftId === 'string' ? { href: teamReportDraftHref(draftId) } : {}),
+    actions: approvalActions(null).filter((a) => fits || a.kind !== 'approve'),
+  };
 }
 
 /**

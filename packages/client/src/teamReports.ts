@@ -5,6 +5,7 @@
  */
 import {
   type Approval,
+  TEAM_REPORT_DRAFT_ACTION,
   TEAM_REPORT_STAGES,
   TEAM_REPORT_STATUS_WORDS,
   type TeamReport,
@@ -89,7 +90,7 @@ export const TEAM_REPORT_WORDS = {
 } as const;
 
 /** The action the box's card names when the assistant asks to send its draft (the box's `TEAM_REPORT_ACTION`). */
-export const TEAM_REPORT_DRAFT_ACTION = 'report_to_whombat_team';
+export { TEAM_REPORT_DRAFT_ACTION };
 
 /** A draft's id, as the form's address and the box's draft route take it. */
 const DRAFT_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -109,6 +110,21 @@ export function teamReportDraftOf(approval: Pick<Approval, 'action' | 'state'>):
 /** The form with the assistant's draft, burrow-less: `/reports/new?draft=<id>`. */
 export function teamReportDraftPath(draftId: string): string {
   return `/reports/new?draft=${encodeURIComponent(draftId)}`;
+}
+
+/**
+ * The assistant's draft an Inbox item of its card names (the item's `href`, the form with the draft), so the Inbox's
+ * card offers the same Edit as Chat's; null for any other item.
+ */
+export function teamReportDraftOfHref(href: string | null | undefined): string | null {
+  const id = /^\/reports\/new\?draft=([^&#]+)$/.exec(href ?? '')?.[1];
+  if (!id) return null;
+  try {
+    const draftId = decodeURIComponent(id);
+    return DRAFT_ID.test(draftId) ? draftId : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A report's kind in one word, for its row and page. */

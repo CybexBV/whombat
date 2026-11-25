@@ -6,6 +6,7 @@ import {
   TEAM_REPORT_WORDS,
   teamReportClientContext,
   teamReportDraftOf,
+  teamReportDraftOfHref,
   teamReportDraftPath,
   teamReportGroups,
   teamReportRowLine,
@@ -290,5 +291,16 @@ describe('the assistant’s draft card', () => {
       '/reports/new?draft=trd_AAAAAAAAAAAAAAAAAAAAAA',
     );
     expect(TEAM_REPORT_WORDS.edit).toBe('Edit');
+  });
+});
+
+describe('the draft’s Edit in the Inbox', () => {
+  it('finds the draft an Inbox item names, and nothing else', () => {
+    const id = 'trd_AbCdEfGhIjKlMnOpQrStUv';
+    expect(teamReportDraftOfHref(teamReportDraftPath(id))).toBe(id);
+    expect(teamReportDraftOfHref('/reports/new')).toBeNull();
+    expect(teamReportDraftOfHref('/reports/new?draft=x')).toBeNull();
+    expect(teamReportDraftOfHref('/reports/new?draft=%E0%A4%A')).toBeNull();
+    expect(teamReportDraftOfHref(undefined)).toBeNull();
   });
 });

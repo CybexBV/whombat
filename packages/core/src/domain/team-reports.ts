@@ -223,6 +223,20 @@ export function teamReportCanConfirm(status: TeamReportStatus): boolean {
   return status === 'available' || status === 'closed';
 }
 
+/** The approval action's name when the assistant asks to send its draft (`custom`, its data the draft's id and words). */
+export const TEAM_REPORT_DRAFT_ACTION = 'report_to_whombat_team';
+
+/**
+ * Exactly what the assistant's draft would send, from its card's approval data (`text`, and `expected` when there is
+ * one), for every place the card can be answered; null when the data doesn't carry the words.
+ */
+export function teamReportDraftWords(data: unknown): string | null {
+  const d = (data ?? {}) as { text?: unknown; expected?: unknown };
+  if (typeof d.text !== 'string' || !d.text.trim()) return null;
+  const expected = typeof d.expected === 'string' ? d.expected.trim() : '';
+  return expected ? `${d.text}\n\nWhat you expected:\n${expected}` : d.text;
+}
+
 /** A report's title until the team names it: the description's first line, cut at a word. */
 export function teamReportExcerptTitle(description: string): string {
   const line = (description.split(/\r?\n/).find((l) => l.trim()) ?? '').trim().replace(/\s+/g, ' ');

@@ -26,6 +26,7 @@ import {
   MCP_TOOLS,
   NumberParam,
   requestedTier,
+  TEAM_REPORT_DRAFT_ACTION,
   undo,
 } from '@whombat/core';
 import { and, desc, eq, sql } from 'drizzle-orm';
@@ -169,6 +170,10 @@ export const decideApproval = defineCommand({
     let executeAt: Date | null = null;
     if (input.executeAt !== undefined) {
       if (input.decision !== 'approve') throw executeAtProblem('Only a yes can run later.');
+      // The assistant's draft report to the Whombat Team goes now or not at all: a report waiting for the night helps
+      // nobody, and the person may send it from the form meanwhile.
+      if (approval.action.type === 'custom' && approval.action.params.name === TEAM_REPORT_DRAFT_ACTION)
+        throw executeAtProblem('This report goes now or not at all.');
       executeAt = new Date(input.executeAt);
       if (executeAt.getTime() <= ctx.now.getTime())
         throw executeAtProblem('Pick a time that is still to come.');

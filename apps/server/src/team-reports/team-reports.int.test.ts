@@ -510,4 +510,35 @@ describe('reports to the Whombat Team', () => {
       await t.services.db.select().from(teamReportDrafts).where(eq(teamReportDrafts.id, draftId)),
     ).toEqual([]);
   });
+  it('show the draft’s words wherever its card can be answered, and take no yes for later', async () => {
+    linkOn = true;
+    const { draftId, approvalId } = await draftWithCard('The map is blank on my phone');
+    const [a] = await t.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+    expect(a?.action).toMatchObject({
+      params: { data: { draftId, text: 'The map is blank on my phone', expected: '' } },
+    });
+    // The Inbox shows exactly what would go, offers Edit's form, and asks now or not at all.
+    const home = (await req('GET', '/home')).json();
+    const item = home.needsYouList.find((i: { approvalNumber?: number }) => i.approvalNumber === a?.number);
+    expect(item.body).toBe('The map is blank on my phone');
+    expect(item.href).toBe(`/reports/new?draft=${draftId}`);
+    expect(item.actions.map((x: { kind: string }) => x.kind)).toEqual(['approve', 'decline']);
+    await expect(
+      t.commit(IDS.mara, decideApproval, {
+        number: a?.number,
+        decision: 'approve',
+        executeAt: new Date(t.services.clock().getTime() + 3600_000).toISOString(),
+      }),
+    ).rejects.toMatchObject({ code: 'validation_failed' });
+
+    // Too long to read in the Inbox: its yes is on the card, which holds all of it.
+    const long = await draftWithCard(`The calendar ${'skips a day '.repeat(80)}`);
+    const [b] = await t.services.db.select().from(approvals).where(eq(approvals.id, long.approvalId));
+    const again = (await req('GET', '/home')).json();
+    const longItem = again.needsYouList.find(
+      (i: { approvalNumber?: number }) => i.approvalNumber === b?.number,
+    );
+    expect(longItem.body.length).toBeLessThanOrEqual(600);
+    expect(longItem.actions.map((x: { kind: string }) => x.kind)).toEqual(['decline']);
+  });
 });

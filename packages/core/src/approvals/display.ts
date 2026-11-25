@@ -17,6 +17,7 @@ import { COMMAND_SCOPES, type CommandScope } from '../commands/commands.js';
 import { COMMAND_DECLINE_CTA, commandScopeLabels, isToolCategory } from '../commands/copy.js';
 import type { Approval, ApprovalAction, ApprovalActionType, ApprovalCondition } from '../domain/approval.js';
 import type { Tone } from '../domain/common.js';
+import { TEAM_REPORT_DRAFT_ACTION, teamReportDraftWords } from '../domain/team-reports.js';
 import { alwaysAllowRow } from '../keys/actions.js';
 import { KEY_CATALOG } from '../keys/catalog.js';
 import { alwaysAllowLabel, keyRiskRow } from '../keys/grants.js';
@@ -265,7 +266,8 @@ export interface ApprovalView {
   whatHappens: { n: string; text: string }[];
   /**
    * What the action sends or runs, in full, for the approver to read: the body of an email (`MESSAGE`, IN-16), the
-   * exact command of a `run_command` (`COMMAND`, AC-41); null otherwise.
+   * exact command of a `run_command` (`COMMAND`, AC-41), the words of the assistant's draft report to the Whombat Team
+   * (`REPORT`); null otherwise.
    */
   content: { label: string; text: string } | null;
   /**
@@ -619,6 +621,11 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
       : stopAskingSentence;
   const scopeLabels = command ? commandScopeLabels(R) : null;
   const why = commandWhyOf(approval.action);
+  // The assistant's draft report to the Whombat Team: exactly what would be sent, wherever the card can be answered.
+  const reportWords =
+    approval.action.type === 'custom' && approval.action.params.name === TEAM_REPORT_DRAFT_ACTION
+      ? teamReportDraftWords(approval.action.params.data)
+      : null;
   const allowedSentence = command
     ? approval.scope === 'task'
       ? 'Allowed for this task.'
@@ -838,7 +845,9 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
         ? { label: 'MESSAGE', text: approval.action.params.body ?? approval.action.params.bodyPreview }
         : command
           ? { label: 'COMMAND', text: command.command }
-          : null,
+          : reportWords
+            ? { label: 'REPORT', text: reportWords }
+            : null,
     why,
     ask:
       pending && EVERYDAY_ASKS.includes(approval.action.type)

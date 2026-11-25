@@ -18,6 +18,9 @@ import {
   needsYouMore,
   needsYouSettledText,
   startedChatPath,
+  TEAM_REPORT_WORDS,
+  teamReportDraftOfHref,
+  teamReportDraftPath,
   threadToOpen,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
@@ -510,6 +513,9 @@ function ApprovalRow({
   const mayHaveGoneThrough = useUnknownAnswer(burrow, number);
   const check = useAskToCheck(burrow, row.title);
   const updateSearch = useSearchUpdate();
+  // The assistant's draft report: Edit opens the form with it, as on its card in Chat.
+  const draftId = teamReportDraftOfHref(row.item.href);
+  const navigate = useNavigateHref();
   return (
     <article
       ref={ref}
@@ -528,6 +534,11 @@ function ApprovalRow({
           .map((b) => ({ id: b.id, label: b.label, onSelect: () => onPress(b) }))}
         unknown={mayHaveGoneThrough ? check : null}
         className={styles.approvalCard}
+        edit={
+          draftId
+            ? { label: TEAM_REPORT_WORDS.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
+            : undefined
+        }
         details={
           number ? (
             <div>
