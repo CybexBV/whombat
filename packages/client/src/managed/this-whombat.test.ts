@@ -89,7 +89,7 @@ describe('the Overview (AP-1223…AP-1226)', () => {
     ]);
     expect(o.glance.map((i) => i.key)).toEqual(['update', 'plan', 'kit', 'devices', 'access']);
     // The row that opens About is named after it; how the updates stand is its line.
-    expect(o.glance[0]).toMatchObject({ part: 'about', title: 'About' });
+    expect(o.glance[0]).toMatchObject({ part: 'about', title: 'About', state: 'Up to date' });
     expect(o.glance[0]?.meta).toMatch(/^Up to date · /);
     expect(o.glance.find((i) => i.key === 'plan')?.meta).toContain('Connectors 0 of 3');
     expect(o.glance.find((i) => i.key === 'devices')?.meta).toBeUndefined();

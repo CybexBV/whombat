@@ -181,6 +181,8 @@ export interface WhombatItem {
   dot: Dot;
   title: string;
   meta?: string;
+  /** How it stands in a word or two where the title names the part instead (About's “Up to date”), for summary lines. */
+  state?: string;
   /** NEEDS YOU only: the button's step. */
   action?: WhombatAction;
   actionLabel?: string;
@@ -231,6 +233,7 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
         // “About” over “Up to date · Software …”: the row says where it goes, the line how the updates stand.
         title: T.aboutTitle,
         meta: update.meta ? `${update.title} · ${update.meta}` : update.title,
+        state: update.title,
       });
     if (s.licence) {
       // “Whombat plan · Active” over “Valid until 24 October 2026 · Connectors 3 of 50” (AP-1225).
