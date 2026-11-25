@@ -253,9 +253,10 @@ provider is certified, and otherwise on the European Commission's Standard Contr
   long as your Whombat is in your account.
 - **Shared links:** until you remove them or they expire.
 - **Feedback reports:** until your Whombat collects them, and never longer than 7 days.
-- **Reports to the Whombat Team:** until 90 days after the report is closed; at once when you withdraw it, delete
-  your account or take the Whombat out of Whombat Link, from our servers and the Whombat Team's list of reports. What
-  the Whombat Team wrote while working on it (its assistant's notes, its answers, a fix) stays in its own records.
+- **Reports to the Whombat Team:** until 90 days after the report is closed. When you withdraw it, delete your account
+  or take the Whombat out of Whombat Link: from our servers at once, and from the Whombat Team's list of reports within
+  minutes. What the Whombat Team wrote while working on it (its assistant's notes, its answers, a fix) stays in its own
+  records.
 - **Remote help:** what support did stays on your Whombat for 90 days (at most 500 MB), not with us. Our record of
   each key we gave support is part of the audit log.
 - **Feedback sign-ins:** codes for 10 minutes, sign-ins for 30 days. The entries of a visitor's list of reports: until
