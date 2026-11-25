@@ -323,6 +323,9 @@ func TestAddressLookupAcceptsIPv6OnlyOnExistingRunners(t *testing.T) {
 	if check.Last == nil || !slices.Equal(check.Last.Answer, aaaa.Answer) {
 		t.Fatalf("IPv6 answer: %+v", check.Last)
 	}
+	if check.Options.DNSType != "any" {
+		t.Fatalf("stored address lookup: %+v", check.Options)
+	}
 	aaaa.OK, aaaa.Answer, aaaa.Error = false, nil, "no records"
 	for i, want := range []string{"pending", "down"} {
 		a.At = now.Add(time.Duration(-8+i*2) * time.Second)
@@ -551,6 +554,41 @@ func TestGuestStopAfterHubActionIsQuiet(t *testing.T) {
 	check(1)
 	report.Docker.Error = ""
 	check(0)
+}
+
+func TestGuestCrashAfterPlannedRestartRaisesAlert(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&start)
+	e, admin := adminEnv(t, func(c *Config) { c.Now = func() time.Time { return *clock.Load() } })
+	e.enroll(admin, "basalt", "Lab")
+	autostart, code := true, 137
+	report := func(after time.Duration, state string, wantAlert bool) {
+		t.Helper()
+		at := start.Add(after)
+		clock.Store(&at)
+		guest := proto.Guest{ID: "photos", State: state, Autostart: &autostart}
+		if state == proto.StateStopped {
+			guest.OOMKilled, guest.ExitCode, guest.FinishedAt = true, &code, &at
+		}
+		e.h.ingestReport(context.Background(), "basalt", &proto.Report{
+			At: at, Docker: &proto.Platform{Guests: []proto.Guest{guest}},
+		})
+		found := false
+		for _, a := range e.h.alerts.Open("basalt") {
+			if a.Rule == rules.RuleGuestStopped && a.Entity == "docker/photos" {
+				found = true
+			}
+		}
+		if found != wantAlert {
+			t.Fatalf("%s after %s: guest stopped alert = %t, want %t", state, after, found, wantAlert)
+		}
+	}
+	report(0, proto.StateRunning, false)
+	e.h.notePlannedStop("basalt", "docker:photos", proto.ActionRestart)
+	report(time.Second, proto.StateStopped, false)
+	report(5*time.Second, proto.StateRunning, false)
+	report(95*time.Second, proto.StateStopped, true)
 }
 
 func TestLibvirtGuestStopNeedsCrashEvent(t *testing.T) {

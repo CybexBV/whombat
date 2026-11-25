@@ -422,7 +422,8 @@ within its server). What Whombat's menu does on a server's line:
 
 An autostart Unraid Docker container that ran out of memory or an
 autostart libvirt VM that crashed can open a critical `guest.stopped`
-alert if it stays stopped. Stops the hub requested stay quiet.
+alert if it stays stopped. Stops the hub requested stay quiet, and a report
+showing the guest running clears its planned-stop note.
 
 Custom limits for disk use, inodes, SSD wear and temperature apply to the
 server unless the alert's entity has its own. The hub rechecks its latest
@@ -439,6 +440,7 @@ for its own first result, and its wait counts from when the settings took
 effect. A check-in gets its full period and grace time when set up or
 resumed, until its first successful ping. For a name lookup, set
 `options.dns_type` to `any` to accept an A or AAAA answer. The default is A.
+A hub rolled back to the previous version runs an A lookup for that check.
 
 Hints (conditions near a limit, not alerts yet) are `hints[]` of `GET
 /fleet` and `GET /servers/{id}`. Headless, a heartbeat check's `ping_url`

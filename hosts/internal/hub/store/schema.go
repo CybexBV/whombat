@@ -435,4 +435,10 @@ ALTER TABLE checks ADD COLUMN probe_changed_at INTEGER NOT NULL DEFAULT 0
 --;
 UPDATE checks SET probe_changed_at = created_at
 `},
+	{"check_dns_any_address", `
+ALTER TABLE checks ADD COLUMN dns_any_address INTEGER NOT NULL DEFAULT 0
+--;
+UPDATE checks SET dns_any_address = 1, options = json_set(options, '$.dns_type', 'A')
+WHERE lower(CASE WHEN json_valid(options) THEN json_extract(options, '$.dns_type') END) = 'any'
+`},
 }

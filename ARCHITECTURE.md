@@ -1419,8 +1419,8 @@ Setup and operation: `docs/github.md`.
   effective warning limit.
   Connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
   automatically runs out of memory or an autostart libvirt VM crashes and stays stopped. Stops the hub requested
-  stay quiet. The server gives the agent the built-in Servers
-  connection, which acts without asking unless the person sets a server to ask before risky actions. Powering off,
+  stay quiet, and a report showing the guest running clears its planned-stop note. The server gives the agent the
+  built-in Servers connection, which acts without asking unless the person sets a server to ask before risky actions. Powering off,
   restarting or updating the server this
   Whombat runs on always asks. A server's name, which the person can give it (“Attic server”), is Whombat's own
   (`server_names`, `hosts/names.ts`): read into memory with every fleet read, so every word a person reads uses it
@@ -1475,8 +1475,9 @@ Setup and operation: `docs/github.md`.
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
   from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.
-  Name lookups succeed when the chosen runner finds an IPv4 or IPv6 address. The health
-  pass reads the current result, counts any probes the hub recorded as failed since the last pass in uptime history,
+  Name lookups succeed when the chosen runner finds an IPv4 or IPv6 address. The hub stores the dual-family
+  setting separately from the A record type a rolled-back hub reads. The health pass reads the current result,
+  counts any probes the hub recorded as failed since the last pass in uptime history,
   and repairs a missing check. Check again reports the saved check's current result. Disconnect removes the connection
   and tries to delete its hub check. The health pass removes checks whose connection is gone. Its hub id is kept on the connection
   and the hub knows its owner, so only the connection's own lines reach Inbox and Watch. The assistant can ask the
