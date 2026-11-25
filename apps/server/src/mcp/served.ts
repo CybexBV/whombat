@@ -9,6 +9,7 @@
  */
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
+  AHEAD_TOOL_NAMES,
   type ApprovalActionType,
   BROWSER_PREVIEW_TOOL,
   COUNCIL_TOOL_NAMES,
@@ -355,7 +356,24 @@ export interface TurnShape {
    * (`server.ts`). Absent: no.
    */
   outside?: boolean;
+  /**
+   * A Looks ahead check (trigger `ahead`; docs/decisions/looks-ahead.md): Whombat's quiet turn about something on the
+   * person's calendar, which reads strangers' text (mail, web pages) while it holds the person's. Served only
+   * `AHEAD_TOOLS`. Absent: no.
+   */
+  ahead?: boolean;
 }
+
+/**
+ * Everything a Looks ahead check may be served (docs/decisions/looks-ahead.md): read the calendar and the mail, search
+ * and read public web pages, and say what it found. Nothing that writes, sends, remembers or reaches anything else: no
+ * other room, memory, notes, settings, Vault, connection, server, browser or command. Anything new stays out until it is
+ * added here.
+ */
+export const AHEAD_TOOLS: readonly McpToolName[] = AHEAD_TOOL_NAMES;
+
+/** The tools only a Looks ahead check is served. */
+const AHEAD_ONLY_TOOLS: readonly McpToolName[] = ['search_web', 'read_web_page', 'ahead_report'];
 
 /**
  * Everything an outsiders' turn may be served (docs/decisions/outsiders-turns.md). What strangers send may shape only
@@ -413,6 +431,8 @@ export const CODE_TOOLS = [
 
 /** Whether a turn of this shape is served the tool (PE-05); the other listing rules (keys, connectors) still apply. */
 export function toolFitsTurn(name: McpToolName, turn: TurnShape): boolean {
+  if (turn.ahead) return AHEAD_TOOLS.includes(name);
+  if (AHEAD_ONLY_TOOLS.includes(name)) return false;
   if (turn.outside) {
     if (!(OUTSIDERS_TOOLS as readonly string[]).includes(name)) return false;
     // A pull request only from the checkout its automation step was given (the handler checks the branch).
@@ -516,6 +536,11 @@ export interface ServedSelection {
    * `report_to_whombat_team` and `whombat_team_reports`. Absent: no.
    */
   teamReports?: boolean;
+  /**
+   * The person's own turn in the thread of something Looks ahead told them (docs/decisions/looks-ahead.md):
+   * `ahead_feedback`, their word on it. No other turn lists it. Absent: no.
+   */
+  aheadThread?: boolean;
 }
 
 /** Reports to the Whombat Team (team-reports.md): the person's own turns, where they can send reports or have some. */
@@ -568,6 +593,8 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   if (name === 'propose_connection_actions' && !sel.proposes) return false;
   // What the assistant found out about a look: only in a look's turns (look-research.md LR-05).
   if (name === 'look_report' && !sel.looks) return false;
+  // The person's word on what Looks ahead told them: only in their turn in its thread (looks-ahead.md).
+  if (name === 'ahead_feedback' && !sel.aheadThread) return false;
   // Automations change only when the person asks in Chat, never from inside an automation's own step, and a step
   // finishes its work in its own turn.
   if ((AUTOMATION_CHAT_TOOLS as readonly string[]).includes(name) && sel.automationStep) return false;
@@ -610,6 +637,8 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
  * none (`visibleConnections`, outsiders-turns.md OT-11).
  */
 function trailingTools(sel: ServedSelection): McpToolName[] {
+  // A Looks ahead check has neither (looks-ahead.md, `AHEAD_TOOLS`).
+  if (sel.turn.ahead) return [];
   return [
     ...(sel.browser === 'none' || sel.turn.outside === true ? [] : BROWSER_TOOLS),
     ...(sel.connections ? CONNECTION_TOOL_NAMES : []),

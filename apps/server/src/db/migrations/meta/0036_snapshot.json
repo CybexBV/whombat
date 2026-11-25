@@ -1,6 +1,6 @@
 {
-  "id": "5bbf8d11-833d-453c-b95f-adf69235967e",
-  "prevId": "3d457ea3-0a7f-4304-a9b2-bca4b79d1f3d",
+  "id": "01d80ee5-25ef-4776-bb3f-979473b6d152",
+  "prevId": "e351b831-32cd-4ec9-976b-06980343a0e7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -16716,6 +16716,394 @@
           "tableTo": "principals",
           "columnsFrom": [
             "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ahead_checks": {
+      "name": "ahead_checks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "burrow_id": {
+          "name": "burrow_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_key": {
+          "name": "event_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendar": {
+          "name": "calendar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_at": {
+          "name": "start_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_at": {
+          "name": "end_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event": {
+          "name": "event",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "feedback": {
+          "name": "feedback",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dispatch_id": {
+          "name": "dispatch_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thread_root_id": {
+          "name": "thread_root_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mail_read_at": {
+          "name": "mail_read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ahead_checks_version_idx": {
+          "name": "ahead_checks_version_idx",
+          "columns": [
+            {
+              "expression": "burrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ahead_checks_one_checking_idx": {
+          "name": "ahead_checks_one_checking_idx",
+          "columns": [
+            {
+              "expression": "burrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"ahead_checks\".\"state\" = 'checking'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ahead_checks_event_idx": {
+          "name": "ahead_checks_event_idx",
+          "columns": [
+            {
+              "expression": "burrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ahead_checks_started_idx": {
+          "name": "ahead_checks_started_idx",
+          "columns": [
+            {
+              "expression": "burrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ahead_checks_thread_idx": {
+          "name": "ahead_checks_thread_idx",
+          "columns": [
+            {
+              "expression": "thread_root_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ahead_checks_dispatch_idx": {
+          "name": "ahead_checks_dispatch_idx",
+          "columns": [
+            {
+              "expression": "dispatch_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ahead_checks_burrow_id_burrows_id_fk": {
+          "name": "ahead_checks_burrow_id_burrows_id_fk",
+          "tableFrom": "ahead_checks",
+          "tableTo": "burrows",
+          "columnsFrom": [
+            "burrow_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ahead_checks_agent_id_principals_id_fk": {
+          "name": "ahead_checks_agent_id_principals_id_fk",
+          "tableFrom": "ahead_checks",
+          "tableTo": "principals",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ahead_checks_person_id_principals_id_fk": {
+          "name": "ahead_checks_person_id_principals_id_fk",
+          "tableFrom": "ahead_checks",
+          "tableTo": "principals",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ahead_checks_conversation_id_conversations_id_fk": {
+          "name": "ahead_checks_conversation_id_conversations_id_fk",
+          "tableFrom": "ahead_checks",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.looks_ahead_settings": {
+      "name": "looks_ahead_settings",
+      "schema": "",
+      "columns": {
+        "burrow_id": {
+          "name": "burrow_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "on": {
+          "name": "on",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "calendars_off": {
+          "name": "calendars_off",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "calendars_on": {
+          "name": "calendars_on",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "stopped": {
+          "name": "stopped",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "looks_ahead_settings_burrow_id_burrows_id_fk": {
+          "name": "looks_ahead_settings_burrow_id_burrows_id_fk",
+          "tableFrom": "looks_ahead_settings",
+          "tableTo": "burrows",
+          "columnsFrom": [
+            "burrow_id"
           ],
           "columnsTo": [
             "id"

@@ -80,6 +80,7 @@ describe('the assistant’s page keeps its old links', () => {
   it('opens its own parts, and Name and face for anything else', () => {
     expect(agentPartTarget('may', managed)).toEqual({ kind: 'part', part: 'may' });
     expect(agentPartTarget('ai', managed)).toEqual({ kind: 'part', part: 'ai' });
+    expect(agentPartTarget('ahead', managed)).toEqual({ kind: 'part', part: 'ahead' });
     expect(agentPartTarget(undefined, managed)).toEqual({ kind: 'part', part: 'profile' });
     expect(agentPartTarget('Keys <b>', managed)).toEqual({ kind: 'part', part: 'profile' });
   });

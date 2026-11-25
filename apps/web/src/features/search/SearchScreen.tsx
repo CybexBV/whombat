@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { BrandMark } from '@whombat/brand/react';
-import { type AppPlace, agentFaceOf, appPath, SEARCH_WORDS } from '@whombat/client';
+import { type AppPlace, agentFaceOf, appPath, hasLooksAhead, SEARCH_WORDS } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
 import {
   useApiMutation,
@@ -8,6 +8,7 @@ import {
   useChats,
   useHomeOverview,
   useSearchPages,
+  useSessionProtocol,
   useTheAgent,
   useWhombat,
 } from '@whombat/client/react';
@@ -164,9 +165,15 @@ export function SearchScreen({ burrow, q, type, filters: asked = {}, onChange }:
   const { agent: researcher, words } = useTheAgent(burrow);
   // Things, settings and places: found here as the person types (the shell reads Home already).
   const { data: home } = useHomeOverview({ params: { burrow } }, { retry: false });
+  const looksAhead = hasLooksAhead(useSessionProtocol());
   const catalog = useMemo(
-    () => searchCatalog({ things: home?.things, agent: words.name, here: { managed: managed !== null } }),
-    [home?.things, words.name, managed],
+    () =>
+      searchCatalog({
+        things: home?.things,
+        agent: words.name,
+        here: { managed: managed !== null, looksAhead },
+      }),
+    [home?.things, words.name, managed, looksAhead],
   );
   const found = useMemo(() => matchCatalog(catalog, q), [catalog, q]);
 

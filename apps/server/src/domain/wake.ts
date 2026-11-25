@@ -138,10 +138,12 @@ export async function wakeQuietly(
   });
   const services = ctx.services;
   ctx.after(async () => {
-    services.typing.start(
-      { conversationId: args.conversationId, threadRootId: args.threadRootId, principalId: agent.id },
-      id,
-    );
+    // A Looks ahead check is quiet: nothing shows it at work, as nothing may come of it (looks-ahead.md).
+    if (args.trigger !== 'ahead')
+      services.typing.start(
+        { conversationId: args.conversationId, threadRootId: args.threadRootId, principalId: agent.id },
+        id,
+      );
     services.runtime.wake();
   });
   return { dispatchId: id, created: true };

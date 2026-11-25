@@ -31,6 +31,7 @@ CREATE TABLE "team_report_drafts" (
 	"done_at" timestamp with time zone
 );
 --> statement-breakpoint
+ALTER TABLE "tracker_cursors" ADD COLUMN "erased_after" text;--> statement-breakpoint
 ALTER TABLE "team_report_copies" ADD CONSTRAINT "team_report_copies_burrow_id_burrows_id_fk" FOREIGN KEY ("burrow_id") REFERENCES "public"."burrows"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team_report_copies" ADD CONSTRAINT "team_report_copies_created_by_id_principals_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."principals"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team_report_drafts" ADD CONSTRAINT "team_report_drafts_burrow_id_burrows_id_fk" FOREIGN KEY ("burrow_id") REFERENCES "public"."burrows"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

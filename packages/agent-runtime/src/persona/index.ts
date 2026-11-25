@@ -12,6 +12,7 @@ export {
   sandboxFor,
   toolKeyAccess,
 } from './access';
+export { aheadThreadLines, aheadTurnLines } from './ahead';
 export { grantedApprovalLine, retryLine, undoRequestLines } from './approvals';
 export { attachmentNote } from './attachments';
 export { cardNote } from './cards';

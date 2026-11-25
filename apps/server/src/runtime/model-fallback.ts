@@ -67,7 +67,8 @@ export async function noteModelFallback(
   const report = body.modelFallback;
   if (!report) {
     if (body.outcome === 'done') {
-      if (row.trigger === 'look') return null;
+      // A turn on the background model (a look, a Looks ahead check) says nothing about the main model.
+      if (row.trigger === 'look' || row.trigger === 'ahead') return null;
       if (body.ran && body.ran.model !== undefined) {
         const agent = await loadPrincipalRow(tx, row.agentId);
         if (agent?.kind !== 'agent') return null;

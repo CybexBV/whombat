@@ -50,6 +50,14 @@ import { beforeTool } from '../github/visibility';
 import { NOT_PERSONAL_GUIDE_TEXT } from '../guides/commands';
 import { ApiError, zodFields } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK } from '../looks/research';
+import {
+  AHEAD_TOOL_REFUSED,
+  aheadThreadOf,
+  aheadToolRan,
+  aheadToolRefusal,
+  NOT_AN_AHEAD_CHECK,
+  NOT_AN_AHEAD_THREAD,
+} from '../looks-ahead/turn';
 import { loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import { withToolActivity } from '../runtime/activity-mcp';
 import { type DispatchRow, dispatchCheckout } from '../runtime/context';
@@ -105,7 +113,15 @@ async function turnShape(
         (await dispatchCheckout(services.db, dispatch))?.access === 'write' ||
         (await startedRun(services, dispatch.id))))(),
   ]);
-  return { personal, answer, run, teamWork, code: canCode || run, outside: outsidersTurn(dispatch) };
+  return {
+    personal,
+    answer,
+    run,
+    teamWork,
+    code: canCode || run,
+    outside: outsidersTurn(dispatch),
+    ...(dispatch.trigger === 'ahead' ? { ahead: true } : {}),
+  };
 }
 
 /**
@@ -221,6 +237,10 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
         : false;
     }),
     looks: once(() => looksInTurn(db, agentId, dispatchId)),
+    aheadThread: once(async () => {
+      const row = await dispatch();
+      return !!row && row.agentId === agentId && (await aheadThreadOf(db, row)) !== null;
+    }),
     tracker,
     unavailableActions: async () =>
       OPTIONAL_EXECUTOR_ACTION_TYPES.filter((t) => !services.approvals.hasExecutor(t)),
@@ -242,10 +262,11 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
     const row = await dispatch();
     return isAssessment(row) ? assessmentTools(services, row) : null;
   });
-  // The Vault's own: saving and adding servers in a person's own turns (vault-self-serve.md VS-12), never an outsiders'.
+  // The Vault's own: saving and adding servers in a person's own turns (vault-self-serve.md VS-12), never an outsiders'
+  // or a Looks ahead check's.
   const vault = once(async () => {
     const [shape, tools] = await Promise.all([turn(), vaultToolList(db, agentId, dispatchId)]);
-    return shape.outside ? [] : tools;
+    return shape.outside || shape.ahead ? [] : tools;
   });
   return {
     dispatch,
@@ -301,6 +322,10 @@ async function notServed(
   if (name === 'report_assessment') return errorResult('forbidden', NOT_AN_ASSESSMENT);
   if (name === 'propose_connection_actions') return errorResult('forbidden', NOT_PROPOSING_ACTIONS);
   if (name === 'look_report') return errorResult('forbidden', NOT_A_LOOK);
+  if (name === 'ahead_report' || name === 'search_web' || name === 'read_web_page')
+    return errorResult('forbidden', NOT_AN_AHEAD_CHECK);
+  if (name === 'ahead_feedback') return errorResult('forbidden', NOT_AN_AHEAD_THREAD);
+  if (row?.trigger === 'ahead') return errorResult('forbidden', AHEAD_TOOL_REFUSED);
   const account = row?.onBehalfOfAccountId ?? null;
   const connector = mcpToolConnector(name);
   if (connector) {
@@ -428,6 +453,12 @@ export async function callTool(
   // A step's turn that handed its T3 Code wait to Whombat has ended its part: nothing more runs in it, so it can't act
   // twice with the turn that goes on (docs/decisions/outsiders-turns.md).
   if (dispatch.waitsOn) return errorResult('forbidden', HANDED_TURN_ENDED);
+  // A Looks ahead check reads the person's calendar and mail only where the keys say Allowed: nobody is there to ask
+  // (looks-ahead.md).
+  if (dispatch.trigger === 'ahead') {
+    const refusal = await aheadToolRefusal(services, dispatch, name);
+    if (refusal) return errorResult('forbidden', refusal);
+  }
   const ctx: ToolContext = {
     services,
     agentId: auth.agentId,
@@ -452,6 +483,8 @@ export async function callTool(
         return errorResult('internal', `The ${name} result does not match the contract.`);
       }
     }
+    // The mails a Looks ahead check read may be named as its sources.
+    if (out.status === 'ok') await aheadToolRan(services, dispatch, name, out);
     // A post waiting for approval or blocked by a key said nothing yet.
     if (MCP_POSTING_TOOLS.has(name) && out.status === 'ok')
       await services.runtime.markPosted(auth.dispatchId);

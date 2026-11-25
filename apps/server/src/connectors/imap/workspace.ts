@@ -1003,6 +1003,9 @@ export class ImapWorkspace implements GoogleWorkspace {
   async calendarEvents(): Promise<never> {
     return this.notMail();
   }
+  async calendarList(): Promise<never> {
+    return this.notMail();
+  }
   async calendarGetEvent(): Promise<never> {
     return this.notMail();
   }

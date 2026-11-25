@@ -103,7 +103,7 @@ function keptOf(services: Services): Kept {
 }
 
 /** A call with the person's token, once more with a fresh one when the provider refused it (HTTP 401). */
-async function withAccountToken<T>(
+export async function withAccountToken<T>(
   services: Services,
   accountId: string,
   provider: ConnectorProvider,

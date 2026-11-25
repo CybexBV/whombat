@@ -11,6 +11,7 @@ import type {
   CalendarEvent,
   CalendarEventInput,
   CalendarEventPatch,
+  CalendarInfo,
   ConnectionCheck,
   ConnectorProvider,
   ConnectorService,
@@ -388,6 +389,8 @@ export interface GoogleWorkspace {
   mailTrash(accessToken: string, input: { messageIds: string[] }): Promise<{ trashed: number }>;
 
   calendarEvents(accessToken: string, input: CalendarEventsInput): Promise<CalendarEvent[]>;
+  /** The account's calendars (Whombat looks-ahead.md): its own, shared ones and subscriptions. */
+  calendarList(accessToken: string): Promise<CalendarInfo[]>;
   /** The event as it is now (its guests decide whether a change asks first). */
   calendarGetEvent(
     accessToken: string,

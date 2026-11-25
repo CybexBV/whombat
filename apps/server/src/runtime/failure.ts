@@ -57,10 +57,17 @@ import { claudeExtraUsageText } from './failure-text';
 import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 
-/** Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step or a search answer. */
+/**
+ * Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step, a search answer or a
+ * Looks ahead check (its watcher alone tries it again, looks-ahead.md).
+ */
 export function retryable(row: Pick<DispatchRow, 'trigger' | 'mode' | 'onBehalfOfAccountId'>): boolean {
   return (
-    !outsidersTurn(row) && row.trigger !== 'feedback' && row.trigger !== 'automation' && row.mode !== 'answer'
+    !outsidersTurn(row) &&
+    row.trigger !== 'feedback' &&
+    row.trigger !== 'automation' &&
+    row.trigger !== 'ahead' &&
+    row.mode !== 'answer'
   );
 }
 
@@ -170,12 +177,13 @@ export const recordTurnFailure = defineCommand({
       });
     let messageId: string | null = null;
     // A usage limit with a reset time: the turn carries on after it by itself (RA-32).
+    // A Looks ahead check isn't carried on later: the watcher tries the event again while it still can (looks-ahead.md).
     const requeue =
-      input.code === 'usage_limit' && resetsAt && agent
+      input.code === 'usage_limit' && resetsAt && agent && row.trigger !== 'ahead'
         ? await requeueAfterLimit(ctx, row, agent, new Date(resetsAt))
         : null;
-    // A search answer shows its own failure on the search screen.
-    if (row.mode !== 'answer') {
+    // A search answer shows its own failure on the search screen; a Looks ahead check is quiet, failed or not.
+    if (row.mode !== 'answer' && row.trigger !== 'ahead') {
       const conversation = await loadConversationRow(tx, row.conversationId);
       if (conversation && conversation.burrowId === row.burrowId) {
         const withCard = retryable(row);

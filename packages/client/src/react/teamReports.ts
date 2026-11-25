@@ -1,7 +1,7 @@
 /**
  * Reports to the Whombat Team in React (Whombat docs/decisions/team-reports.md): the person's list, one report (opening
  * it reads it), sending a new one, replying, It works / Still happening / Withdraw, and the assistant's draft for the
- * form. Asked only of a Whombat whose session speaks them (minor 10). Each answer is put in the cache where the list
+ * form. Asked only of a Whombat whose session speaks them (minor 11). Each answer is put in the cache where the list
  * and the report's page read it. Each send keeps one request id from the moment its form or box opens, for every try,
  * and takes a new one once it went: the team gets the words once however often the app tries. Works in React DOM and
  * React Native.

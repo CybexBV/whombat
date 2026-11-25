@@ -150,7 +150,7 @@ export function teamReportsUnavailableText(reason: TeamReportsReason | null): st
 }
 
 /**
- * Whether the entry shows (“Report a problem or idea”): only on a Whombat that speaks reports (session minor 10), and
+ * Whether the entry shows (“Report a problem or idea”): only on a Whombat that speaks reports (session minor 11), and
  * only where the person can send one or already has some. Nobody else sees it.
  */
 export function teamReportsShown(

@@ -51,6 +51,7 @@ export * from './job-result.js';
 export * from './links.js';
 export * from './local-model.js';
 export * from './look-research.js';
+export * from './looks-ahead.js';
 export * from './memory.js';
 export * from './message.js';
 export * from './models.js';

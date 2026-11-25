@@ -98,6 +98,11 @@ export interface PostMessageArgs {
   planStep?: { planId: string; stepId: string; agentId: string };
   /** The message is the result of a job handed to T3 Code (`Message.jobResult`): its text is T3 Code's report. */
   jobResult?: JobResult | null;
+  /**
+   * Fetch previews of its links (default true). A Looks ahead finding doesn't: its links are the pages the check read,
+   * and nothing a turn that read strangers' text wrote makes Whombat fetch anything (looks-ahead.md).
+   */
+  linkPreviews?: boolean;
 }
 
 export interface PostedMessage {
@@ -314,7 +319,7 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     if (rootId) await indexMessage(services.db, rootId);
   });
   // Link previews are fetched after the commit, off the request's path (EC-17).
-  ctx.after(async () => services.linkPreviews.schedule(id));
+  if (args.linkPreviews !== false) ctx.after(async () => services.linkPreviews.schedule(id));
   // Badges and notifications don't hold the response (server-efficiency.md SV-02); a room's badges in order. In the
   // person's Chat and Feedback rooms a reply counts too, and their own message may have read a thread, so they hear it
   // on their other devices as well.

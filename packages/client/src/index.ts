@@ -43,6 +43,7 @@ export * from './job';
 export * from './jobResult';
 export * from './keptSites';
 export * from './localModel';
+export * from './looksAhead';
 export * from './memory';
 export * from './mermaid';
 export * from './modelEffort';

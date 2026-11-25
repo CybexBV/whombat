@@ -1,1 +1,0 @@
-ALTER TABLE "tracker_cursors" ADD COLUMN "erased_after" text;

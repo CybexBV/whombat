@@ -460,6 +460,9 @@ const TABLE = {
   // The quiet hours for changes (care-plan.md): one signed row, the same value when sent again.
   'changeWindow.get': READ,
   'changeWindow.set': RECEIPT,
+  // Looks ahead's switch: each change sets the same state again.
+  'looksAhead.get': READ,
+  'looksAhead.update': RECEIPT,
   'changes.list': READ,
   'changes.undo': DESTRUCTIVE_NEVER,
   // Arranging the Overview (overview-arranged.md): one layout written whole; views and figures only read.

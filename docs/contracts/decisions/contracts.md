@@ -12510,7 +12510,7 @@ answer there (Whombat team-reports.md). A minor: new device ops, manager paths a
   `not_invited`, `link_off`, `too_many_open`, `report_unknown`, `report_closed`, `validation_failed`, `rate_limited`).
 - **CT-1803** Manager paths `/v1/runtime/team-reports/{list,get,create,reply,act}` (`MANAGER_PATHS.teamReports*`), the
   device ops' bodies and answers exactly. An older manager answers 404.
-- **CT-1804** The session, minor 10 (`TEAM_REPORTS_MINOR`): `teamReports.list`, `.get`, `.draft` (reads),
+- **CT-1804** The session, minor 11 (`TEAM_REPORTS_MINOR`): `teamReports.list`, `.get`, `.draft` (reads),
   `teamReports.create` and `.reply` (never resent: they act at control first) and `teamReports.act` (destructive and
   never resent: a withdrawn report is deleted). The three are secret ops, so the person's and the team's words stay
   out of receipts and logs. Their bodies take an optional `requestId` (`TeamRequestId`) the app keeps for every try of
