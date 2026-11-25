@@ -85,6 +85,19 @@ export const REMOTE_HELP_TEXT = {
   /** Accessible names. */
   onLabel: 'Remote help is on',
   connectedLabel: 'Connected',
+  /** About's short card: remote help's state while it's off, and the way to its page. */
+  offTitle: 'Off',
+  offLine: 'Nobody can get in. Turn it on when Whombat support asks.',
+  open: 'Open remote help',
+  /** What support did, grouped by visit (`remoteHelpVisitGroups`). */
+  visitCount: (n: number) => (n === 1 ? '1 visit' : `${n} visits`),
+  stepCount: (n: number) => (n === 1 ? '1 step' : `${n} steps`),
+  today: (clock: string) => `Today ${clock}`,
+  yesterday: (clock: string) => `Yesterday ${clock}`,
+  now: 'Now',
+  allSteps: (n: number) => `Show all ${n} steps`,
+  fewerSteps: 'Show fewer',
+  earlierVisits: (n: number) => (n === 1 ? 'Show 1 earlier visit' : `Show ${n} earlier visits`),
 } as const;
 
 /** The viewer's time zone unless one is given (core's helpers say UTC without one). */
@@ -454,4 +467,70 @@ export function remoteHelpVisitRows(
     rows.push(...own);
   }
   return rows;
+}
+
+/** One visit in What support did: who, how much, when, and its steps (oldest first). */
+export interface RemoteHelpVisitGroup {
+  key: string;
+  visitId: string;
+  /** “Whombat support”. */
+  who: string;
+  level: RemoteHelpLevel;
+  /** “Look and fix · 12 steps”. */
+  line: string;
+  /** “Today 14:02”, “Yesterday 09:15”, “20 Oct 14:02”: when it started. */
+  when: string;
+  /** Still going (no end yet). */
+  ongoing: boolean;
+  /** The steps the box kept, oldest first, after “Earlier steps aren’t shown.” where it left older ones out. */
+  steps: RemoteHelpStepRow[];
+  /** How many steps it had in all that the box says: the kept ones. */
+  stepCount: number;
+  /** The visit whose command line can be opened, or null where none was kept. */
+  transcript: string | null;
+}
+
+function visitWhen(at: string, now: Date, timeZone: string | undefined): string {
+  const tz = zone(timeZone);
+  const clock = formatClock(at, tz);
+  const days = daysAgo(at, now, tz);
+  if (days <= 0) return REMOTE_HELP_TEXT.today(clock);
+  if (days === 1) return REMOTE_HELP_TEXT.yesterday(clock);
+  return `${formatDate(at, tz, { now })} ${clock}`;
+}
+
+/**
+ * What support did, one group per visit (newest first), so a long history folds: each visit says who came, how much
+ * they could do, when, and how many steps, over its own steps. The steps are `remoteHelpVisitRows`' without “Show” on a
+ * step: the visit carries its command line itself.
+ */
+export function remoteHelpVisitGroups(
+  visits: readonly RemoteHelpVisit[],
+  options: { now: Date; timeZone?: string },
+): RemoteHelpVisitGroup[] {
+  return visits.map((visit) => {
+    const steps = visit.steps.map((step, i) => stepRow(visit, step, i, options.now, options.timeZone));
+    if (visit.truncated)
+      steps.unshift({
+        key: `${visit.id}:earlier`,
+        time: '',
+        at: visit.startedAt,
+        text: REMOTE_HELP_TEXT.earlier,
+        code: null,
+        transcript: null,
+        muted: true,
+      });
+    return {
+      key: visit.id,
+      visitId: visit.id,
+      who: visit.who,
+      level: visit.level,
+      line: [W.levels[visit.level].label, REMOTE_HELP_TEXT.stepCount(visit.steps.length)].join(' · '),
+      when: visitWhen(visit.startedAt, options.now, options.timeZone),
+      ongoing: visit.endedAt === null,
+      steps,
+      stepCount: visit.steps.length,
+      transcript: visit.transcriptBytes > 0 ? visit.id : null,
+    };
+  });
 }

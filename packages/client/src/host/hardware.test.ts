@@ -11,6 +11,7 @@ import {
   hardwareReportFileName,
   hardwareReportText,
   hardwareSectionView,
+  hardwareSpecs,
   hardwareStatusText,
 } from './hardware';
 
@@ -85,6 +86,23 @@ describe('HARDWARE', () => {
       '2.5 Gbit/s',
       '10 Gbit/s',
     ]);
+  });
+});
+
+describe('the machine’s facts as tiles', () => {
+  it('says the processor, memory, all disks together and the system', () => {
+    const h = fakeHardware('z13', NOW);
+    const specs = hardwareSpecs(h);
+    expect(specs.map((s) => s.key)).toEqual(['cpu', 'memory', 'storage', 'system']);
+    expect(specs[0]).toMatchObject({ label: 'Processor', value: h.cpu.model });
+    expect(specs[0]?.line).toContain('cores');
+    expect(specs[3]?.value).toContain(h.kernel);
+  });
+
+  it('leaves out storage when no disk says its size', () => {
+    const h = fakeHardware('z13', NOW);
+    const specs = hardwareSpecs({ ...h, devices: h.devices.filter((d) => d.kind !== 'storage') });
+    expect(specs.map((s) => s.key)).toEqual(['cpu', 'memory', 'system']);
   });
 });
 

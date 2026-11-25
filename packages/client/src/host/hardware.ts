@@ -111,6 +111,17 @@ export const HARDWARE_TEXT = {
   screenConnected: 'Screen connected',
   inputs: (n: number) => (n === 1 ? '1 input' : `${n} inputs`),
   outputs: (n: number) => (n === 1 ? '1 output' : `${n} outputs`),
+  /** The machine's facts as tiles (`hardwareSpecs`). */
+  specs: { cpu: 'Processor', memory: 'Memory', storage: 'Storage', system: 'System' },
+  disks: (n: number) => (n === 1 ? '1 disk' : `${n} disks`),
+  /** The badge under the machine's name when every part works. */
+  everyPartWorks: 'Every part works',
+  /** The card of the parts that don't work as they should. */
+  problemsLabel: 'Needs attention',
+  /** The badge under the machine's name when a part doesn't work as it should. */
+  needAttention: (n: number) => (n === 1 ? '1 part needs attention' : `${n} parts need attention`),
+  /** How many parts a group has, after its name. */
+  parts: (n: number) => (n === 1 ? '1 part' : `${n} parts`),
 } as const;
 
 const T = HARDWARE_TEXT;
@@ -243,6 +254,44 @@ export function hardwareSectionView(h: HostHardware): HardwareSectionView {
     problems,
     groups,
   };
+}
+
+/** One of the machine's facts as a tile: what it is, its value, and a line under it. */
+export interface HardwareSpec {
+  key: 'cpu' | 'memory' | 'storage' | 'system';
+  label: string;
+  value: string;
+  line: string | null;
+}
+
+/**
+ * The machine's facts as tiles, in this order: the processor (its model over its cores), the memory, the storage (all
+ * disks together, where they say their size) and the system (Linux and its version).
+ */
+export function hardwareSpecs(
+  h: Pick<HostHardware, 'cpu' | 'memoryBytes' | 'kernel' | 'devices'>,
+): HardwareSpec[] {
+  const out: HardwareSpec[] = [];
+  const cores = h.cpu.cores > 0 ? T.cores(h.cpu.cores, h.cpu.threads) : null;
+  if (h.cpu.model || cores)
+    out.push({
+      key: 'cpu',
+      label: T.specs.cpu,
+      value: h.cpu.model || (cores as string),
+      line: h.cpu.model ? cores : null,
+    });
+  if (h.memoryBytes > 0)
+    out.push({ key: 'memory', label: T.specs.memory, value: formatBytes(h.memoryBytes), line: null });
+  const disks = h.devices.filter((d) => d.kind === 'storage' && d.sizeBytes);
+  if (disks.length > 0)
+    out.push({
+      key: 'storage',
+      label: T.specs.storage,
+      value: formatBytes(disks.reduce((sum, d) => sum + (d.sizeBytes ?? 0), 0)),
+      line: T.disks(disks.length),
+    });
+  if (h.kernel) out.push({ key: 'system', label: T.specs.system, value: T.kernel(h.kernel), line: null });
+  return out;
 }
 
 /* The report ----------------------------------------------------------------------------------------------------- */

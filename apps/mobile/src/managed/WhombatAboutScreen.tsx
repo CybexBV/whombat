@@ -6,10 +6,10 @@
  * oldest app builds let in; “Keep server agents up to date”, agent-updates-app.md AP-2992), REACH (this phone's
  * connection with the Whombat's fingerprint, Whombat Link, its address, Tailscale; whombat-link.md LNK-42), what a
  * managed Whombat turns off under TURNED OFF HERE (the phone has no Agents’ access part, so they live here),
- * HARDWARE in one row that opens the Hardware screen (`HardwareSummary`), then help: REMOTE HELP
- * (`RemoteHelpSection`, app remote-help.md AP-4470), the reports to the Whombat Team, DIAGNOSTICS — the files
- * made, the checklist behind “Make a file for support…”, each part in plain words, and this phone's sync log to share
- * (live-data-calm.md AP-6574) — and this phone's fingerprint.
+ * HARDWARE in one row that opens the Hardware screen (`HardwareSummary`), then help: REMOTE HELP as a short card that
+ * opens the Remote help screen (`RemoteHelpSummary`, app remote-help.md AP-4470), the reports to the Whombat Team,
+ * DIAGNOSTICS — the files made, the checklist behind “Make a file for support…”, each part in plain words, and this
+ * phone's sync log to share (live-data-calm.md AP-6574) — and this phone's fingerprint.
  */
 
 import { type RouteProp, useRoute } from '@react-navigation/native';
@@ -70,7 +70,7 @@ import { COPY, MANAGED_TEXT } from './copy';
 import { phoneClient } from './env';
 import { HardwareSummary } from './HardwareSection';
 import { ChannelRow, ReachCard } from './ReachCard';
-import { RemoteHelpSection } from './RemoteHelpSection';
+import { RemoteHelpSummary } from './RemoteHelpSection';
 import { diagnosticScopeLine } from './thisWhombat';
 import { Card, ErrorLine, LinkRow, Note, Row } from './ui';
 import { useApplianceStatus, useReleaseSummary } from './useApplianceStatus';
@@ -235,7 +235,9 @@ export function WhombatAboutScreen() {
           />
           {/* Help, last: remote help, a report to the Whombat Team, files for support. */}
           {/* Remote help is a Whombat Link feature (LNK-07); a box before Link keeps the old rule (HE-58, AP-5470). */}
-          {remoteHelpShown ? <RemoteHelpSection here={remoteHelp} /> : null}
+          {remoteHelpShown ? (
+            <RemoteHelpSummary here={remoteHelp} onOpen={() => navigation.navigate('WhombatRemoteHelp')} />
+          ) : null}
           {reports ? (
             <Card>
               <LinkRow

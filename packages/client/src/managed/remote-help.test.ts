@@ -15,6 +15,7 @@ import {
   remoteHelpErrorText,
   remoteHelpPasskeyOptions,
   remoteHelpPollMs,
+  remoteHelpVisitGroups,
   remoteHelpVisitRows,
   turnOnRemoteHelp,
 } from './remote-help';
@@ -339,6 +340,26 @@ describe('what support did', () => {
     });
     expect(rows[0]).toMatchObject({ muted: true, text: 'Earlier steps aren’t shown.' });
     expect(rows[1]?.time).toBe('21 Oct 10:02');
+  });
+
+  it('groups the steps by visit, each saying who, how much, when and how many steps', () => {
+    const groups = remoteHelpVisitGroups(
+      [
+        visit({ id: 'vis_2', startedAt: '2026-10-21T09:00:00Z', endedAt: null, transcriptBytes: 0 }),
+        visit({ startedAt: '2026-10-20T08:02:00Z', truncated: true }),
+      ],
+      { now: NOW, timeZone: TZ },
+    );
+    expect(groups.map((g) => [g.visitId, g.who, g.when, g.ongoing, g.transcript])).toEqual([
+      ['vis_2', 'John', 'Today 11:00', true, null],
+      ['vis_1', 'John', 'Yesterday 10:02', false, 'vis_1'],
+    ]);
+    expect(groups[0]?.line).toBe('Look and fix · 5 steps');
+    expect(groups[0]?.steps).toHaveLength(5);
+    // The visit carries its command line; no step says Show.
+    expect(groups.flatMap((g) => g.steps).some((r) => r.transcript)).toBe(false);
+    expect(groups[1]?.steps[0]).toMatchObject({ muted: true });
+    expect(groups[1]?.stepCount).toBe(5);
   });
 });
 

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Text } from '../theme/Text';
 import { makeStyles, useTheme } from '../theme/theme';
+import type { LucideIcon } from './icons';
 import { Touchable } from './Touchable';
 
 export function toneColor(theme: ReturnType<typeof useTheme>, tone: Tone | null | undefined): string {
@@ -46,6 +47,8 @@ export interface ButtonProps {
   accessibilityState?: AccessibilityState;
   /** The label wraps onto more lines instead of being cut (large text). */
   wrap?: boolean;
+  /** A small icon before the label, in its colour. */
+  icon?: LucideIcon;
 }
 
 export function Button({
@@ -60,6 +63,7 @@ export function Button({
   accessibilityHint,
   accessibilityState,
   wrap = false,
+  icon: Icon,
 }: ButtonProps) {
   const theme = useTheme();
   const lg = size === 'lg';
@@ -91,6 +95,13 @@ export function Button({
     >
       {busy ? (
         <ActivityIndicator color={color} />
+      ) : Icon ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Icon size={lg ? 18 : 17} color={color} strokeWidth={1.9} />
+          <Text size={lg ? 16 : 15} weight={primary ? 600 : 500} color={color} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
       ) : (
         <Text
           size={lg ? 16 : 15}

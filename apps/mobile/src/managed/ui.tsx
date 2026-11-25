@@ -11,7 +11,9 @@ import { WhombatAvatar } from '../avatars/Avatars';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
+import { tint } from '../ui/glanceColors';
 import { BackBar, Screen } from '../ui/headers';
+import type { LucideIcon } from '../ui/icons';
 import { KeyboardAvoidingView } from '../ui/keyboard';
 import { RowChevron } from '../ui/ListRow';
 import { SectionLabel, StatusDot } from '../ui/primitives';
@@ -287,11 +289,46 @@ export function Row({
 }
 
 /**
+ * An icon on a rounded tile: in its tone's colour on a wash of it (ok, warn, bad), or quiet on the chips' surface
+ * (`mut`, or no tone). What it shows is said in words next to it, so it is hidden from TalkBack and VoiceOver.
+ */
+export function IconTile({
+  icon: Icon,
+  tone = null,
+  size = 36,
+}: {
+  icon: LucideIcon;
+  tone?: Dot | null;
+  size?: number;
+}) {
+  const theme = useTheme();
+  const color = tone && tone !== 'mut' ? dotColor(theme, tone) : theme.colors.ink2;
+  return (
+    <View
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.round(size * 0.3),
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: tone && tone !== 'mut' ? tint(color, 0.14) : theme.colors.sf2,
+      }}
+    >
+      <Icon size={Math.round(size * 0.5)} color={color} strokeWidth={1.8} />
+    </View>
+  );
+}
+
+/**
  * A row that opens a screen (This Whombat's AT A GLANCE, this-whombat-sections-android.md AP-1244): a `Row`'s look with
  * a chevron at the end, the whole 56dp row one button read as `label` (its title and line; the dot is in the words).
+ * With `icon`, an icon tile in the dot's tone takes the dot's place.
  */
 export function LinkRow({
   dot,
+  icon,
   title,
   body = null,
   meta,
@@ -300,6 +337,7 @@ export function LinkRow({
   onPress,
 }: {
   dot?: Dot | null;
+  icon?: LucideIcon;
   title: string;
   /** A plain line under the title, before the mono `meta`, as a `Row` has it. */
   body?: string | null;
@@ -326,7 +364,9 @@ export function LinkRow({
         borderTopColor: theme.colors.line,
       }}
     >
-      {dot ? (
+      {icon ? (
+        <IconTile icon={icon} tone={dot ?? null} />
+      ) : dot ? (
         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor(theme, dot) }} />
       ) : null}
       <View style={{ flex: 1, gap: 3 }}>
