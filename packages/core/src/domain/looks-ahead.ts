@@ -70,8 +70,16 @@ export const AHEAD_TRIAGE_MAIL_MAX = 60;
 export const AHEAD_TRIAGE_PICKS_MAX = 3;
 /** The newest this many inbox mails of each mailbox are read for one look, so a busy day loses nothing. */
 export const AHEAD_MAIL_SWEEP_LIMIT = 50;
-/** A look covers mail since the last one began, but never more than this far back. */
+/**
+ * A look covers mail that came after the last finished look read the inbox, but never more than this far back. A look
+ * that failed doesn't move it, so nothing is lost to a look that never ended.
+ */
 export const AHEAD_TRIAGE_SINCE_MAX_MS = 48 * 3600_000;
+/**
+ * A look starts this much before the last finished look read the inbox: a mail whose date is a little behind its arrival
+ * still falls in. Mails an earlier look listed are left out of the next by their keys.
+ */
+export const AHEAD_TRIAGE_OVERLAP_MS = 10 * 60_000;
 /** The very first look covers this far back. */
 export const AHEAD_TRIAGE_FIRST_MS = 24 * 3600_000;
 /** Mails a look picked wait this long for their check; after that they are too old to matter. */
@@ -85,8 +93,19 @@ export const AHEAD_MATTERS_OPENED_PER_DAY = 3;
 export const AHEAD_MATTER_TITLE_MAX = 120;
 /** Longest “who” of a thing kept an eye on. */
 export const AHEAD_MATTER_WHO_MAX = 80;
-/** A thing kept an eye on goes after this long without news. */
+/** A thing kept an eye on goes after this long without news… */
 export const AHEAD_MATTER_KEEP_MS = 30 * 24 * 3600_000;
+/** …but one with a date never before this long after that date. */
+export const AHEAD_MATTER_KEEP_AFTER_DUE_MS = 14 * 24 * 3600_000;
+/** No follow-up within this long of a thing's start or its last news: what was just told isn't told again. */
+export const AHEAD_MATTER_QUIET_MS = 12 * 3600_000;
+/**
+ * At most this many mails a day are checked at once for one thing kept an eye on because they match it; more matching
+ * mail that day waits for a look through new mail like any other.
+ */
+export const AHEAD_MATTER_CHECKS_PER_DAY = 3;
+/** A sender word or a subject word needs at least this many characters. */
+export const AHEAD_MATCH_WORD_MIN = 3;
 /** Waiting for an answer this long without news is worth one follow-up. */
 export const AHEAD_MATTER_NO_ANSWER_MS = 5 * 24 * 3600_000;
 /** Something waiting on the person is followed up this long before its date. */
@@ -348,8 +367,8 @@ export interface AheadCandidate {
   /** Higher checks first within the same stage (give mail that matches a thing kept an eye on a higher one). */
   priority?: number;
   /**
-   * Mail about something the person asked Whombat to keep an eye on: it goes first among mail, and still starts once
-   * the day's findings are used, since they asked for it.
+   * About something the person asked Whombat to keep an eye on (a mail that matched it, a triage pick about it, or its
+   * follow-up): it goes first within its stage, and still starts once the day's findings are used, since they asked.
    */
   asked?: boolean;
 }
@@ -384,7 +403,7 @@ export interface AheadPassInput {
  * urgency (`morning` > `eve` > `mail` > `matter` > `triage` > `early`), then mail the person asked about, then candidate
  * priority, then soonest start time. A version+stage is never checked twice; a later stage (`eve` after `early`,
  * `morning` after `eve`) may still run even if an earlier stage had a finding, carrying its prior note so Dusty never
- * repeats itself. Once the day's findings are used only mail the person asked about may start.
+ * repeats itself. Once the day's findings are used only what the person asked for may start.
  */
 export function planAheadPass(input: AheadPassInput): AheadCandidate | null {
   if (input.busy || !input.ready) return null;
@@ -443,13 +462,15 @@ export function planAheadPass(input: AheadPassInput): AheadCandidate | null {
 
 /**
  * Whether a look through new mail is due now (pure): within the hours a check may begin, new mail came, fewer than
- * `AHEAD_TRIAGE_PER_DAY` looks today, and either “Check now” asked (`fresh`), none ran yet, or the last began at least
- * `AHEAD_TRIAGE_GAP_MS` ago.
+ * `AHEAD_TRIAGE_PER_DAY` looks today (failed ones count), and either “Check now” asked (`fresh`), none ran yet, or the
+ * last that didn't fail began at least `AHEAD_TRIAGE_GAP_MS` ago: a failed look doesn't make the next one wait.
  */
 export function aheadTriageDue(input: {
   now: DateInput;
   timeZone: string;
+  /** When the last look that didn't fail (finished or still going) began; null when there is none. */
   lastTriageAt: Date | null;
+  /** Looks begun today, failed ones too. */
   triagesToday: number;
   newMail: number;
   fresh?: boolean;
@@ -461,14 +482,17 @@ export function aheadTriageDue(input: {
 }
 
 /**
- * From when a look through new mail covers mail (pure): since the last look began, so mail that came at night or while
- * the day's checks were used is still in it, but never more than `AHEAD_TRIAGE_SINCE_MAX_MS` back; the first look
- * covers `AHEAD_TRIAGE_FIRST_MS`.
+ * From when a look through new mail covers mail (pure): from when the last look that finished read the inbox (which can
+ * be a while before it began), less `AHEAD_TRIAGE_OVERLAP_MS`, so mail that came at night, while the day's checks were
+ * used, or between that read and its start is still in it; never more than `AHEAD_TRIAGE_SINCE_MAX_MS` back. With no
+ * finished look, `AHEAD_TRIAGE_FIRST_MS`. A look that failed isn't given here, so it moves nothing.
  */
-export function aheadTriageSince(lastTriageAt: Date | null, now: DateInput): Date {
+export function aheadTriageSince(lastSweptAt: Date | null, now: DateInput): Date {
   const nowMs = toDate(now).getTime();
-  if (!lastTriageAt) return new Date(nowMs - AHEAD_TRIAGE_FIRST_MS);
-  return new Date(Math.max(lastTriageAt.getTime(), nowMs - AHEAD_TRIAGE_SINCE_MAX_MS));
+  if (!lastSweptAt) return new Date(nowMs - AHEAD_TRIAGE_FIRST_MS);
+  return new Date(
+    Math.max(lastSweptAt.getTime() - AHEAD_TRIAGE_OVERLAP_MS, nowMs - AHEAD_TRIAGE_SINCE_MAX_MS),
+  );
 }
 
 /* Incoming mail: what is left out of a look, and what is listed first ---------------------------------------------- */
@@ -485,9 +509,48 @@ const MAIL_PROMO_NOISE =
 const MAIL_STRONG_SIGNAL =
   /\b(?:confirmation|confirmed|itinerary|e-?ticket|boarding pass|booking|reservation|invoice|overdue|cancelled|rescheduled|boeking|bevestiging|factuur|geannuleerd|bezorgmoment)\b/i;
 
+/** What an address must look like: `local@domain.tld`. */
+const MAIL_ADDRESS = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/;
+
+/**
+ * The address a From line came from, lowercased, or null (pure). A sender chooses their display name, so it can hold
+ * anything, another address too (`"Refund <boss@company.example>" <attacker@evil.example>`): the address is the last
+ * one in angle brackets once quoted parts and comments are set aside, or, with no brackets, the one bare address on the
+ * line. It must look like `local@domain.tld`; otherwise there is none.
+ */
+export function mailFromAddress(from: string): string | null {
+  const line = from
+    .slice(0, 1000)
+    .replace(/"(?:[^"\\]|\\.)*"/g, ' ')
+    .replace(/\([^()]*\)/g, ' ');
+  const bracketed = [...line.matchAll(/<([^<>]*)>/g)];
+  let address: string | undefined;
+  if (bracketed.length) address = bracketed[bracketed.length - 1]?.[1];
+  else if (!/[<>"]/.test(line)) {
+    const bare = line.split(/[\s,;]+/).filter((w) => w.includes('@'));
+    if (bare.length === 1) address = bare[0];
+  }
+  const lower = address?.trim().toLowerCase() ?? '';
+  return lower.length <= 254 && MAIL_ADDRESS.test(lower) ? lower : null;
+}
+
+/** Whether the person sent a mail themselves (pure): its address is one of theirs. */
+export function aheadMailOwn(input: { from: string; ownAddresses: readonly string[] }): boolean {
+  const address = mailFromAddress(input.from);
+  if (!address) return false;
+  return input.ownAddresses.some((own) => own.trim().toLowerCase() === address);
+}
+
+/** Whether a mail is plain bulk mail (pure): a newsletter or offer without a booking or invoice word. */
+export function aheadMailBulk(input: { subject: string; snippet: string }): boolean {
+  const text = `${input.subject}\n${input.snippet}`;
+  return MAIL_PROMO_NOISE.test(text) && !MAIL_STRONG_SIGNAL.test(text);
+}
+
 /**
  * Whether a mail is left out of a look through new mail before any AI reads it (pure): the person sent it themselves,
- * or it is plain bulk mail (a newsletter or offer without a booking or invoice word).
+ * or it is plain bulk mail (`aheadMailBulk`). Bulk mail may still be news on a thing kept an eye on
+ * (`aheadMatterForMail`); the person's own never is.
  */
 export function aheadMailNoise(input: {
   from: string;
@@ -495,12 +558,7 @@ export function aheadMailNoise(input: {
   snippet: string;
   ownAddresses: readonly string[];
 }): boolean {
-  const fromLower = input.from.toLowerCase();
-  for (const own of input.ownAddresses) {
-    if (own.trim() && fromLower.includes(own.trim().toLowerCase())) return true;
-  }
-  const text = `${input.subject}\n${input.snippet}`;
-  return MAIL_PROMO_NOISE.test(text) && !MAIL_STRONG_SIGNAL.test(text);
+  return aheadMailOwn(input) || aheadMailBulk(input);
 }
 
 /**
@@ -563,52 +621,200 @@ export const AheadMatterReason = z.enum(['due', 'no_answer']);
 export type AheadMatterReason = z.infer<typeof AheadMatterReason>;
 
 /**
- * How mail is matched to a thing kept an eye on: the mail threads it is in, words of its senders, or (only for one the
- * person asked for, and only without senders) words of its subject.
+ * How mail is matched to a thing kept an eye on: the mail threads it is in, words of its senders' addresses, and words of
+ * its subject (which narrow a sender, or match on their own when it has no sender).
  */
 export const AheadMatterMatch = z.object({
   threads: z.array(z.object({ connectionId: z.string().max(64), threadId: z.string().max(200) })).max(10),
-  senders: z.array(z.string().min(2).max(80)).max(AHEAD_MATTER_SENDERS_MAX),
-  words: z.array(z.string().min(2).max(40)).max(AHEAD_MATTER_WORDS_MAX),
+  senders: z.array(z.string().min(AHEAD_MATCH_WORD_MIN).max(80)).max(AHEAD_MATTER_SENDERS_MAX),
+  words: z.array(z.string().min(AHEAD_MATCH_WORD_MIN).max(40)).max(AHEAD_MATTER_WORDS_MAX),
 });
 export type AheadMatterMatch = z.infer<typeof AheadMatterMatch>;
 
+/** Words of an address everyone shares: a public mailbox provider, a bare top-level word, a mailbox's role. */
+const COMMON_SENDER_WORDS: ReadonlySet<string> = new Set([
+  'gmail',
+  'googlemail',
+  'outlook',
+  'hotmail',
+  'live',
+  'msn',
+  'icloud',
+  'me',
+  'mac',
+  'yahoo',
+  'aol',
+  'gmx',
+  'proton',
+  'protonmail',
+  'pm',
+  'kpnmail',
+  'kpnplanet',
+  'ziggo',
+  'xs4all',
+  'hetnet',
+  'telenet',
+  'skynet',
+  'com',
+  'net',
+  'org',
+  'nl',
+  'be',
+  'de',
+  'co',
+  'uk',
+  'fr',
+  'eu',
+  'io',
+  'info',
+  'mail',
+  'email',
+  'noreply',
+  'no-reply',
+  'donotreply',
+  'www',
+]);
+
 /**
- * Whether a mail belongs to a thing kept an eye on (pure; words match whatever their case): it is in one of its
- * threads; or one of its senders' words is in who sent it; or, when it has no senders, one of its words is in the
- * subject or the snippet.
+ * Whether a sender word is too common to match mail by (pure): a public mailbox provider (`gmail`, `outlook.com`) or a
+ * bare top-level word (`nl`, `com`), alone or together, so every friend's or shop's mail would match. A full address
+ * (`jan@gmail.com`) or a site of its own (`notaris-jansen.nl`) is fine.
  */
+export function aheadCommonSender(word: string): boolean {
+  const w = word.trim().toLowerCase();
+  const at = w.indexOf('@');
+  if (at > 0) return false;
+  const parts = w
+    .replace(/^@/, '')
+    .split('.')
+    .filter((p) => p.length > 0);
+  return parts.length === 0 || parts.every((p) => COMMON_SENDER_WORDS.has(p));
+}
+
+/** How a mail matched a thing kept an eye on: by its thread, its sender's address, or the thing's subject words. */
+export type AheadMatchedBy = 'thread' | 'sender' | 'words';
+
+/** The words of a match worth comparing: trimmed, lowercased, at least `AHEAD_MATCH_WORD_MIN` characters. */
+function matchWordsOf(words: readonly string[]): string[] {
+  return words.map((w) => w.trim().toLowerCase()).filter((w) => w.length >= AHEAD_MATCH_WORD_MIN);
+}
+
+/**
+ * How a mail belongs to a thing kept an eye on, or null (pure; words match whatever their case): it is in one of its
+ * threads (`thread`); or a sender word is in the address it came from (never the display name a stranger chose) and,
+ * when the thing also has subject words, one of them is in the subject or the snippet (`sender`); or the thing has no
+ * sender words and one of its subject words is in the subject or the snippet (`words`).
+ */
+export function aheadMatterMatchBy(
+  match: AheadMatterMatch,
+  mail: { connectionId: string; threadId: string; from: string; subject: string; snippet: string },
+): AheadMatchedBy | null {
+  if (
+    mail.threadId &&
+    match.threads.some((t) => t.connectionId === mail.connectionId && t.threadId === mail.threadId)
+  )
+    return 'thread';
+  const senders = matchWordsOf(match.senders);
+  const words = matchWordsOf(match.words);
+  const text = `${mail.subject}\n${mail.snippet}`.toLowerCase();
+  const worded = words.some((w) => text.includes(w));
+  if (senders.length > 0) {
+    const address = mailFromAddress(mail.from);
+    if (!address || !senders.some((s) => address.includes(s))) return null;
+    return words.length === 0 || worded ? 'sender' : null;
+  }
+  return worded ? 'words' : null;
+}
+
+/** Whether a mail belongs to a thing kept an eye on (pure; `aheadMatterMatchBy`). */
 export function aheadMatterMatches(
   match: AheadMatterMatch,
   mail: { connectionId: string; threadId: string; from: string; subject: string; snippet: string },
 ): boolean {
-  if (match.threads.some((t) => t.connectionId === mail.connectionId && t.threadId === mail.threadId))
-    return true;
-  const has = (text: string, word: string) => {
-    const w = word.trim().toLowerCase();
-    return w.length > 0 && text.toLowerCase().includes(w);
-  };
-  if (match.senders.length > 0) return match.senders.some((s) => has(mail.from, s));
-  const text = `${mail.subject}\n${mail.snippet}`;
-  return match.words.some((w) => has(text, w));
+  return aheadMatterMatchBy(match, mail) !== null;
+}
+
+/** A thing kept an eye on as `aheadMatterForMail` weighs it. */
+export interface AheadMatterToMatch {
+  id: string;
+  /** The person asked for it, or a check opened it. */
+  origin: 'person' | 'check';
+  /** When it began: mail that came after is news on it, a second reply already in the inbox too. */
+  createdAt: Date;
+  match: AheadMatterMatch;
+}
+
+/**
+ * The thing kept an eye on a new mail is news on, and how it matched, or null (pure). Only mail that came after the
+ * thing began. A mail in its thread counts whatever it looks like; a sender or word match counts for a thing the person
+ * asked for even when the mail looks like bulk mail, and not for one a check opened. When several match, a thread match
+ * wins, then the person's own, then the newest. The caller leaves out the person's own mail and the things whose
+ * `AHEAD_MATTER_CHECKS_PER_DAY` are used today.
+ */
+export function aheadMatterForMail<M extends AheadMatterToMatch>(
+  matters: readonly M[],
+  mail: {
+    connectionId: string;
+    threadId: string;
+    from: string;
+    subject: string;
+    snippet: string;
+    at: DateInput;
+    bulk: boolean;
+  },
+): { matter: M; by: AheadMatchedBy } | null {
+  const at = toDate(mail.at).getTime();
+  const hits = matters.flatMap((matter) => {
+    if (!(at > matter.createdAt.getTime())) return [];
+    const by = aheadMatterMatchBy(matter.match, mail);
+    if (!by) return [];
+    if (by !== 'thread' && mail.bulk && matter.origin !== 'person') return [];
+    return [{ matter, by }];
+  });
+  hits.sort(
+    (a, b) =>
+      Number(b.by === 'thread') - Number(a.by === 'thread') ||
+      Number(b.matter.origin === 'person') - Number(a.matter.origin === 'person') ||
+      b.matter.createdAt.getTime() - a.matter.createdAt.getTime(),
+  );
+  return hits[0] ?? null;
+}
+
+/**
+ * Whether an open thing kept an eye on has run out (pure): `AHEAD_MATTER_KEEP_MS` without news, and, when it has a date,
+ * at least `AHEAD_MATTER_KEEP_AFTER_DUE_MS` past that date.
+ */
+export function aheadMatterExpired(
+  matter: { lastNewsAt: Date; dueAt: Date | null },
+  now: DateInput,
+): boolean {
+  const at = toDate(now).getTime();
+  if (at - matter.lastNewsAt.getTime() < AHEAD_MATTER_KEEP_MS) return false;
+  return !matter.dueAt || at - matter.dueAt.getTime() >= AHEAD_MATTER_KEEP_AFTER_DUE_MS;
 }
 
 /**
  * Whether a thing kept an eye on is due for its follow-up now, and why (pure). Waiting on the person with a date: from
  * `AHEAD_MATTER_DUE_LEAD_MS` before that date until it (`due`). Waiting on someone else: from its date, or else from
  * `AHEAD_MATTER_NO_ANSWER_MS` after the last news, for `AHEAD_MATTER_FOLLOW_WINDOW_MS` (`no_answer`). Never a reason it
- * was already followed up for.
+ * was already followed up for, and never within `AHEAD_MATTER_QUIET_MS` of its start or its last news, so what was just
+ * told isn't told again.
  */
 export function aheadMatterDue(
   matter: {
     waitingOn: AheadWaitingOn;
     dueAt: Date | null;
     lastNewsAt: Date;
+    /** When it began. */
+    createdAt: Date;
     followedUp: readonly AheadMatterReason[];
   },
   now: DateInput,
 ): AheadMatterReason | null {
   const at = toDate(now).getTime();
+  const quietUntil =
+    Math.max(matter.createdAt.getTime(), matter.lastNewsAt.getTime()) + AHEAD_MATTER_QUIET_MS;
+  if (at < quietUntil) return null;
   if (matter.waitingOn === 'you') {
     if (!matter.dueAt || matter.followedUp.includes('due')) return null;
     const due = matter.dueAt.getTime();
@@ -619,6 +825,22 @@ export function aheadMatterDue(
     ? matter.dueAt.getTime()
     : matter.lastNewsAt.getTime() + AHEAD_MATTER_NO_ANSWER_MS;
   return at >= from && at < from + AHEAD_MATTER_FOLLOW_WINDOW_MS ? 'no_answer' : null;
+}
+
+/**
+ * The version of a follow-up to start for a reason that is due, or null (pure). A reason counts as followed up when its
+ * check reported (the caller's `followedUp`); a follow-up whose turn failed is tried once more (`<reason>.again`), not
+ * more, and one still going or that reported is never started again. `earlier`: the follow-up rows of this thing, with
+ * their stored (stage-suffixed) versions.
+ */
+export function aheadMatterTry(
+  reason: AheadMatterReason,
+  earlier: readonly { version: string; failed: boolean }[],
+): string | null {
+  const tries = [reason, `${reason}.again`];
+  const mine = earlier.filter((e) => tries.some((t) => e.version === aheadStageVersion(t, 'matter')));
+  if (mine.some((e) => !e.failed)) return null;
+  return tries[mine.length] ?? null;
 }
 
 /** A date as `YYYY-MM-DD`. */
@@ -939,17 +1161,19 @@ export const AheadWatchInput = z
       .optional()
       .describe('Who it is with, as the person says it (“the notary”).'),
     senders: z
-      .array(z.string().trim().min(2).max(80))
+      .array(z.string().trim().min(AHEAD_MATCH_WORD_MIN).max(80))
       .max(AHEAD_MATTER_SENDERS_MAX)
       .optional()
       .describe(
-        'Words of the sender’s name or address to match new mail by (“notaris”, “example-notary.nl”).',
+        'The sender’s address or site to match new mail by (“notaris-jansen.example”, “jan@example.com”): matched against the address only, never the name shown. Not a public mailbox provider (gmail, outlook) or a bare ending (com, nl).',
       ),
     words: z
-      .array(z.string().trim().min(2).max(40))
+      .array(z.string().trim().min(AHEAD_MATCH_WORD_MIN).max(40))
       .max(AHEAD_MATTER_WORDS_MAX)
       .optional()
-      .describe('Words of the subject to match new mail by, used only when no sender is given.'),
+      .describe(
+        'Words of the subject or the opening lines: with senders, a mail must have one of them too; without, they match on their own.',
+      ),
     waitingOn: AheadWaitingOn.default('them').describe(
       'them: the person waits for someone else (the usual). you: it waits on the person.',
     ),

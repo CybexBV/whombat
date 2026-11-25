@@ -7,7 +7,10 @@
  *   the day's findings, never at night; “Stop checking for this” under it closes the matter;
  * - a mail check opens a matter matched only by the mail's thread and sender, within the caps;
  * - a follow-up runs by the clock once per reason and closes a matter the check says is done;
- * - Settings shows matters and recent rows in the values older apps know, and the person removes a matter.
+ * - Settings shows matters and recent rows in the values older apps know, and the person removes a matter;
+ * - no mail slips between two passes, mail matches a matter by its sender's address within the day's cap, what the
+ *   person asked for starts beyond the day's findings, a failed follow-up is tried once more, and a thread several
+ *   matters share answers to the finding said last there.
  * Postgres because every step is a signed commit and a queued turn.
  */
 import {
@@ -18,7 +21,7 @@ import {
   LOOKS_AHEAD_WORDS,
   newId,
 } from '@whombat/core';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueDispatchToken } from '../auth/agent-tokens';
 import { sendMessage } from '../commands/messages';
@@ -29,8 +32,9 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
 import { mcpClient } from '../test/mcp';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
-import { aheadSettingsOf, updateLooksAhead } from './commands';
+import { aheadSettingsOf, startAheadCheck, tidyAhead, updateLooksAhead } from './commands';
 import { looksAheadView } from './settings';
+import { aheadWatchServed } from './turn';
 import { checkAheadNow, watchAhead } from './watch';
 
 const t = useTestServer({ seed: true, listen: true });
@@ -105,6 +109,23 @@ function said(result: object): string {
 /** Every check's turn is over, so the watcher may start the next. */
 async function endTurns() {
   await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+}
+
+/** Ends a triage pass with these picks. */
+async function finishTriage(id: string, picks: { mail: string; matter?: string }[] = []) {
+  const mcp = await inTurn((await row(id)).dispatchId);
+  await mcp.client.callTool({ name: 'ahead_triage', arguments: { picks } });
+  await mcp.close();
+  await endTurns();
+}
+
+/** Ends a check's turn with nothing found (or this report). */
+async function finishQuietly(id: string, report: Record<string, unknown> = { found: false }) {
+  const mcp = await inTurn((await row(id)).dispatchId);
+  const res = await mcp.client.callTool({ name: 'ahead_report', arguments: report });
+  await mcp.close();
+  await endTurns();
+  return res;
 }
 
 /** A fresh start: no checks, no matters, no new mail. */
@@ -422,7 +443,19 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     expect((await mcp.client.callTool({ name: 'ahead_watch', arguments: { action: 'list' } })).isError).toBe(
       true,
     );
+    // A mail check speaks only about its own mail, read first, and names that mail, not the matter.
+    const unread = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: { found: true, kind: 'other', text: 'The notary replied.', sources: [{ calendar: true }] },
+    });
+    expect(unread.isError).toBe(true);
+    expect(said(unread)).toContain('mail_read');
     await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 'm_notary' } });
+    const byMatter = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: { found: true, kind: 'other', text: 'The notary replied.', sources: [{ matter: true }] },
+    });
+    expect(byMatter.isError).toBe(true);
     const told = await mcp.client.callTool({
       name: 'ahead_report',
       arguments: {
@@ -498,6 +531,7 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
       title: 'Parcel from the shop',
       match: { threads: [], senders: ['parcel.example'], words: [] },
       lastNewsAt: new Date('2026-12-15T12:00:00Z'),
+      createdAt: new Date('2026-12-15T12:00:00Z'),
     });
     mail('m_parcel', 'Parcel <track@parcel.example>', 'Your parcel', '2026-12-15T19:55:00Z');
     now = new Date('2026-12-15T20:25:00Z');
@@ -525,9 +559,14 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
   it('opens a matter from a mail check, matched only by the mail’s thread and sender, within the caps', async () => {
     await clean();
     now = new Date('2026-12-16T09:00:00Z');
-    mail('m_refund', 'Shop Service <Service@Shop.example>', 'Your refund request', '2026-12-16T08:00:00Z', {
-      threadId: 'thr_refund',
-    });
+    // The display name holds another address: the matter keeps the sender's own.
+    mail(
+      'm_refund',
+      '"Refund <boss@company.example>" <Service@Shop.example>',
+      'Your refund request',
+      '2026-12-16T08:00:00Z',
+      { threadId: 'thr_refund' },
+    );
     const triage = await pass();
     const tm = await inTurn((await row(triage)).dispatchId);
     await tm.client.callTool({ name: 'ahead_triage', arguments: { picks: [{ mail: 'm1' }] } });
@@ -541,6 +580,14 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
       arguments: { found: false, matter: { ref: 'k1', close: true } },
     });
     expect(byRef.isError).toBe(true);
+    // Opening a matter needs the mail read first.
+    const unread = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: { found: false, matter: { title: 'Refund for the kettle', waitingOn: 'them' } },
+    });
+    expect(unread.isError).toBe(true);
+    expect(said(unread)).toContain('mail_read');
+    await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 'm_refund' } });
     const res = await mcp.client.callTool({
       name: 'ahead_report',
       arguments: {
@@ -588,6 +635,7 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     await endTurns();
     const check2 = await pass();
     const mcp2 = await inTurn((await row(check2)).dispatchId);
+    await mcp2.client.callTool({ name: 'mail_read', arguments: { messageId: 'm_other' } });
     await mcp2.client.callTool({
       name: 'ahead_report',
       arguments: { found: false, matter: { title: 'Car service booking', waitingOn: 'you' } },
@@ -633,7 +681,8 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
       summary: 'Refund for the kettle',
     });
     expect(r.mailReadAt).not.toBeNull();
-    expect((await matter(quiet)).followedUp).toEqual(['no_answer']);
+    // A reason counts as followed up once its check reported, not when it began.
+    expect((await matter(quiet)).followedUp).toEqual([]);
     const ctx = await buildDispatchContext(t.services, await turnOf(r.dispatchId));
     expect(ctx.ahead).toMatchObject({ source: 'matter', matter: { ref: 'k1', reason: 'no_answer' } });
     const mcp = await inTurn(r.dispatchId);
@@ -653,6 +702,7 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     const [posted] = await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId));
     expect(posted?.text).toContain(LOOKS_AHEAD_WORDS.matters);
     expect((await matter(quiet)).threadRootId).toBe(r.threadRootId);
+    expect((await matter(quiet)).followedUp).toEqual(['no_answer']);
     // Once per reason.
     expect(await pass()).toBeNull();
 
@@ -660,6 +710,8 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
       title: 'Answer the school about the trip',
       waitingOn: 'you',
       dueAt: new Date('2026-12-18T09:00:00Z'),
+      createdAt: new Date('2026-12-15T09:00:00Z'),
+      lastNewsAt: new Date('2026-12-15T09:00:00Z'),
     });
     const follow = await pass();
     expect((await row(follow)).version).toBe('due:matter');
@@ -715,5 +767,370 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     await t.commit(IDS.mara, updateLooksAhead, { removeMatter: id });
     expect(await matter(id)).toMatchObject({ state: 'closed', closedReason: 'removed' });
     expect((await looksAheadView(t.services, TEST_BURROW_ID)).matters).toEqual([]);
+  });
+});
+
+describe('Looks ahead: nothing slips, matching, follow-ups and shared threads (looks-ahead.md)', () => {
+  it('covers mail that came between a pass’s inbox read and its start, and a failed pass loses nothing', async () => {
+    await clean();
+    now = new Date('2026-12-18T08:50:00Z');
+    mail('s_first', 'Ann <ann@example.org>', 'Can we meet on Monday?', '2026-12-18T08:40:00Z');
+    // The day's findings are used: the inbox is read (and kept a while) but no pass starts.
+    const used: string[] = [];
+    for (let i = 0; i < AHEAD_FINDINGS_PER_DAY; i++)
+      used.push(await insertRow({ state: 'told', kind: 'other' }));
+    expect(await pass(false)).toBeNull();
+    await t.services.db.delete(aheadChecks).where(inArray(aheadChecks.id, used));
+    // It arrives after that read and before the pass begins.
+    mail('s_between', 'Ben <ben@example.org>', 'Are you coming on Friday?', '2026-12-18T08:55:00Z');
+    now = new Date('2026-12-18T09:00:00Z');
+    const first = await row(await pass(false));
+    expect(first.source).toBe('triage');
+    expect(first.event.triage?.mails.map((m) => m.messageId)).toEqual(['s_first']);
+    expect(first.event.triage?.sweptAt).toBe('2026-12-18T08:50:00.000Z');
+    await finishTriage(first.id);
+    now = new Date('2026-12-18T13:40:00Z');
+    const second = await row(await pass(false));
+    expect(second.event.triage?.mails.map((m) => m.messageId)).toEqual(['s_between']);
+    // Its turn ends without picking: it failed, moves nothing, and the next pass needn't wait the gap.
+    await endTurns();
+    now = new Date('2026-12-18T13:45:00Z');
+    const third = await row(await pass(false));
+    expect(await row(second.id)).toMatchObject({ state: 'failed' });
+    expect(third.source).toBe('triage');
+    expect(third.event.triage?.mails.map((m) => m.messageId)).toEqual(['s_between']);
+    await finishTriage(third.id);
+  });
+
+  it('holds the gap inside the commit too, unless Check now or the last pass failed', async () => {
+    await clean();
+    now = new Date('2026-12-19T12:00:00Z');
+    const recent = await insertRow({
+      source: 'triage',
+      stage: 'triage',
+      eventKey: 'triage:recent',
+      summary: 'New mail',
+      startedAt: new Date('2026-12-19T10:30:00Z'),
+    });
+    const at = now.toISOString();
+    const event = {
+      source: 'triage' as const,
+      stage: 'triage' as const,
+      key: 'triage:race',
+      version: 'pass:triage',
+      connectionId: '',
+      eventId: '',
+      summary: 'New mail',
+      location: '',
+      description: '',
+      calendar: '',
+      start: at,
+      end: at,
+      timeZone: 'UTC',
+      triage: { since: at, count: 1, mails: [], matters: [] },
+    };
+    const start = async (fresh?: boolean) => {
+      const res = await t.commit(mine.agentId, startAheadCheck, {
+        event,
+        personId: IDS.mara,
+        ...(fresh ? { fresh: true } : {}),
+      });
+      if (res.status !== 'ok') throw new Error(res.status);
+      return res.result;
+    };
+    expect(await start()).toBeNull();
+    const asked = await start(true);
+    expect(asked?.checkId).toBeTruthy();
+    await endTurns();
+    await t.services.db.delete(aheadChecks).where(eq(aheadChecks.id, asked?.checkId ?? ''));
+    await t.services.db.update(aheadChecks).set({ state: 'failed' }).where(eq(aheadChecks.id, recent));
+    expect((await start())?.checkId).toBeTruthy();
+    await endTurns();
+  });
+
+  it('matches mail by the sender’s address after the matter began, bulk only for the person’s, three a day', async () => {
+    await clean();
+    now = new Date('2026-12-20T09:00:00Z');
+    const began = new Date('2026-12-20T08:00:00Z');
+    const theirs = await insertMatter({
+      origin: 'person',
+      title: 'Answer from the notary',
+      match: { threads: [], senders: ['notaris-jansen'], words: [] },
+      createdAt: began,
+      lastNewsAt: began,
+    });
+    await insertMatter({
+      title: 'Refund from the shop',
+      match: { threads: [], senders: ['news@shop.example'], words: [] },
+      createdAt: began,
+      lastNewsAt: began,
+    });
+    const notary = 'Notaris Jansen <office@notaris-jansen.example>';
+    mail('c_early', notary, 'Re: deed', '2026-12-20T07:30:00Z');
+    mail('c_first', notary, 'Re: deed', '2026-12-20T08:10:00Z');
+    mail('c_forged', '"office@notaris-jansen.example" <x@evil.example>', 'Re: deed', '2026-12-20T08:15:00Z');
+    mail('c_second', notary, 'Re: deed, the draft', '2026-12-20T08:20:00Z');
+    mail('c_bulk', notary, 'News from the office', '2026-12-20T08:25:00Z', {
+      body: 'Our newsletter. Unsubscribe here.',
+    });
+    mail('c_shop', 'Shop <news@shop.example>', 'Weekly digest', '2026-12-20T08:30:00Z', {
+      body: 'Our newsletter. Unsubscribe here.',
+    });
+    mail('c_fourth', notary, 'Re: deed, one more thing', '2026-12-20T08:40:00Z');
+    const checked: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const r = await row(await pass());
+      expect(r).toMatchObject({ source: 'mail', matterId: theirs });
+      const id = r.event.mail?.messageId ?? '';
+      checked.push(id);
+      if (i === 0) {
+        // Told: news on it now, and the second reply already in the inbox still matches.
+        const mcp = await inTurn(r.dispatchId);
+        await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: id } });
+        const told = await mcp.client.callTool({
+          name: 'ahead_report',
+          arguments: { found: true, kind: 'other', text: 'The notary replied.', sources: [{ mailId: id }] },
+        });
+        expect(told.structuredContent).toMatchObject({ told: true });
+        await mcp.close();
+        await endTurns();
+      } else await finishQuietly(r.id);
+      now = new Date(now.getTime() + 60_000);
+    }
+    expect(checked).toEqual(['c_first', 'c_second', 'c_bulk']);
+    // The day's three are used: the next reply waits for a pass, beside a forged name and mail from before it began;
+    // the shop's newsletter matches nothing a check opened and isn't listed either.
+    const triage = await row(await pass());
+    expect(triage.source).toBe('triage');
+    expect(triage.event.triage?.mails.map((m) => m.messageId).sort()).toEqual([
+      'c_early',
+      'c_forged',
+      'c_fourth',
+    ]);
+    await finishTriage(triage.id);
+  });
+
+  it('starts what the person asked for beyond the day’s findings, and keeps it open unless told it is done', async () => {
+    await clean();
+    now = new Date('2026-12-21T10:00:00Z');
+    const theirs = await insertMatter({
+      origin: 'person',
+      title: 'Answer from the plumber',
+      match: { threads: [], senders: ['plumber-co'], words: [] },
+      createdAt: new Date('2026-12-10T10:00:00Z'),
+      lastNewsAt: new Date('2026-12-15T10:00:00Z'),
+    });
+    for (let i = 0; i < AHEAD_FINDINGS_PER_DAY; i++) await insertRow({ state: 'told', kind: 'other' });
+    const since = '2026-12-21T08:00:00Z';
+    await insertRow({
+      source: 'triage',
+      stage: 'triage',
+      eventKey: 'triage:asked',
+      summary: 'New mail',
+      startedAt: new Date('2026-12-21T09:00:00Z'),
+      event: {
+        start: since,
+        end: since,
+        description: '',
+        timeZone: 'UTC',
+        connectionId: '',
+        calendarId: '',
+        eventId: '',
+        triage: {
+          since,
+          count: 1,
+          mails: [
+            {
+              ref: 'm1',
+              connectionId: mine.connectionId ?? '',
+              provider: 'google',
+              account: 'you@example.com',
+              messageId: 'p_pick',
+              threadId: 'thr_pick',
+              from: 'Plumber <desk@plumber-co.example>',
+              subject: 'Your quote',
+              date: '2026-12-21T08:30:00Z',
+              snippet: 'Your quote',
+            },
+          ],
+          matters: [{ ref: 'k1', id: theirs }],
+          picks: [{ ref: 'm1', matterId: theirs }],
+        },
+      },
+    });
+    const pick = await row(await pass());
+    expect(pick).toMatchObject({
+      source: 'mail',
+      matterId: theirs,
+      eventKey: `mail:${mine.connectionId}:p_pick`,
+    });
+    await finishQuietly(pick.id);
+    const follow = await row(await pass());
+    expect(follow).toMatchObject({ source: 'matter', matterId: theirs, version: 'no_answer:matter' });
+    // A check doesn't close what the person asked for without telling them.
+    const res = await finishQuietly(follow.id, { found: false, matter: { ref: 'k1', close: true } });
+    expect(res.structuredContent).toMatchObject({ status: 'ok', told: false });
+    expect(await matter(theirs)).toMatchObject({ state: 'open', followedUp: ['no_answer'] });
+  });
+
+  it('tries a follow-up whose turn failed once more, not more', async () => {
+    await clean();
+    now = new Date('2026-12-22T10:00:00Z');
+    const id = await insertMatter({
+      title: 'Refund for the lamp',
+      createdAt: new Date('2026-12-10T10:00:00Z'),
+      lastNewsAt: new Date('2026-12-16T10:00:00Z'),
+    });
+    const first = await row(await pass());
+    expect(first.version).toBe('no_answer:matter');
+    await endTurns();
+    const again = await row(await pass());
+    expect(await row(first.id)).toMatchObject({ state: 'failed' });
+    expect(again.version).toBe('no_answer.again:matter');
+    await endTurns();
+    expect(await pass()).toBeNull();
+    expect(await row(again.id)).toMatchObject({ state: 'failed' });
+    expect((await matter(id)).followedUp).toEqual([]);
+  });
+
+  it('makes a matter a check keeps an eye on the person’s when they ask for it, and refuses common senders', async () => {
+    await clean();
+    now = new Date('2026-12-22T11:00:00Z');
+    const kept = await insertMatter({
+      title: 'Refund for the kettle',
+      match: {
+        threads: [{ connectionId: mine.connectionId ?? '', threadId: 'thr_kettle' }],
+        senders: ['service@shop.example'],
+        words: [],
+      },
+      createdAt: new Date('2026-12-20T11:00:00Z'),
+    });
+    const { messageId, turn } = await personSays('Tell me when the kettle refund comes');
+    const mcp = await inTurn(turn.id);
+    const common = await mcp.client.callTool({
+      name: 'ahead_watch',
+      arguments: { action: 'start', title: 'Answer from Jan', senders: ['gmail.com'] },
+    });
+    expect(common.isError).toBe(true);
+    expect(said(common)).toContain('gmail.com');
+    const res = await mcp.client.callTool({
+      name: 'ahead_watch',
+      arguments: {
+        action: 'start',
+        title: 'Refund for the kettle',
+        senders: ['shop.example'],
+        words: ['refund'],
+      },
+    });
+    expect(res.structuredContent).toMatchObject({ status: 'ok', matter: { id: kept, asked: true } });
+    await mcp.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.id, turn.id));
+    expect(await matter(kept)).toMatchObject({
+      origin: 'person',
+      conversationId: mine.dmId,
+      threadRootId: messageId,
+      match: {
+        threads: [{ connectionId: mine.connectionId ?? '', threadId: 'thr_kettle' }],
+        senders: ['service@shop.example', 'shop.example'],
+        words: ['refund'],
+      },
+    });
+  });
+
+  it('serves ahead_watch only in the person’s own message turn, or Try again on one', async () => {
+    const { turn } = await personSays('Tell me when the bank answers');
+    expect(await aheadWatchServed(t.services.db, turn)).toBe(true);
+    for (const trigger of [
+      'expand',
+      'schedule',
+      'automation',
+      'look_fix',
+      'undo_requested',
+      'notify',
+    ] as const)
+      expect(await aheadWatchServed(t.services.db, { ...turn, trigger })).toBe(false);
+    expect(await aheadWatchServed(t.services.db, { ...turn, trigger: 'retry', retryOfId: turn.id })).toBe(
+      true,
+    );
+    expect(await aheadWatchServed(t.services.db, { ...turn, trigger: 'retry', retryOfId: null })).toBe(false);
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.id, turn.id));
+  });
+
+  it('lets a matter run out after a month without news, not before two weeks past its date', async () => {
+    await clean();
+    now = new Date('2026-12-22T12:00:00Z');
+    const old = new Date('2026-11-10T12:00:00Z');
+    const plain = await insertMatter({ lastNewsAt: old, createdAt: old });
+    const dated = await insertMatter({
+      lastNewsAt: old,
+      createdAt: old,
+      dueAt: new Date('2026-12-15T12:00:00Z'),
+    });
+    await t.commit(mine.agentId, tidyAhead, {});
+    expect(await matter(plain)).toMatchObject({ state: 'closed', closedReason: 'expired' });
+    expect((await matter(dated)).state).toBe('open');
+  });
+
+  it('answers to the finding said last in a thread matters share, and settles it once the newest’s time passed', async () => {
+    await clean();
+    now = new Date('2026-12-23T09:00:00Z');
+    const { messageId: asked, turn } = await personSays('Tell me when the two firms answer');
+    const ask = await inTurn(turn.id);
+    const start = async (title: string, sender: string) => {
+      const res = await ask.client.callTool({
+        name: 'ahead_watch',
+        arguments: { action: 'start', title, senders: [sender] },
+      });
+      return (res.structuredContent as { matter: { id: string } }).matter.id;
+    };
+    const first = await start('Answer from the first firm', 'first-firm.example');
+    const second = await start('Answer from the second firm', 'second-firm.example');
+    await ask.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.id, turn.id));
+    const tell = async (id: string, from: string, at: string) => {
+      mail(id, from, 'Re: your question', at);
+      const r = await row(await pass());
+      const mcp = await inTurn(r.dispatchId);
+      await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: id } });
+      const told = await mcp.client.callTool({
+        name: 'ahead_report',
+        arguments: { found: true, kind: 'other', text: 'They answered.', sources: [{ mailId: id }] },
+      });
+      expect(told.structuredContent).toMatchObject({ told: true });
+      await mcp.close();
+      await endTurns();
+      return r;
+    };
+    now = new Date('2026-12-23T09:30:00Z');
+    const a = await tell('f_first', 'First <desk@first-firm.example>', '2026-12-23T09:20:00Z');
+    now = new Date('2026-12-23T10:00:00Z');
+    const b = await tell('f_second', 'Second <desk@second-firm.example>', '2026-12-23T09:50:00Z');
+    expect([a.matterId, b.matterId]).toEqual([first, second]);
+    const settledAt = async () =>
+      (await t.services.db.select().from(messages).where(eq(messages.id, asked)))[0]?.settledAt ?? null;
+    // The older finding's time passed, the newer's not: the thread waits for it.
+    await t.services.db
+      .update(aheadChecks)
+      .set({ endAt: new Date(now.getTime() - 3 * HOUR) })
+      .where(eq(aheadChecks.id, a.id));
+    await t.commit(mine.agentId, tidyAhead, {});
+    expect(await settledAt()).toBeNull();
+    await t.services.db
+      .update(aheadChecks)
+      .set({ endAt: new Date(now.getTime() - 3 * HOUR) })
+      .where(eq(aheadChecks.id, b.id));
+    await t.commit(mine.agentId, tidyAhead, {});
+    expect(await settledAt()).not.toBeNull();
+
+    // “Stop checking for this” there means the finding said last, and its own matter.
+    const { turn: stop } = await personSays('Stop checking for this', asked);
+    const mcp = await inTurn(stop.id);
+    const res = await mcp.client.callTool({ name: 'ahead_feedback', arguments: { verdict: 'stop_kind' } });
+    expect(res.structuredContent).toMatchObject({ status: 'ok' });
+    await mcp.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.id, stop.id));
+    expect(await matter(second)).toMatchObject({ state: 'closed', closedReason: 'removed' });
+    expect((await matter(first)).state).toBe('open');
+    expect(await row(b.id)).toMatchObject({ feedback: 'stop_kind' });
   });
 });

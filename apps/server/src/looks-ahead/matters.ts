@@ -5,13 +5,18 @@
  * date, closing one, which turn may start one, and the commands `ahead_watch` runs.
  */
 import {
+  AHEAD_MATCH_WORD_MIN,
+  AHEAD_MATTER_SENDERS_MAX,
   AHEAD_MATTER_TITLE_MAX,
   AHEAD_MATTER_WHO_MAX,
+  AHEAD_MATTER_WORDS_MAX,
   AHEAD_MATTERS_MAX,
   type AheadMatterContext,
   type AheadMatterReason,
   AheadWaitingOn,
+  aheadCommonSender,
   type LooksAheadMatter,
+  mailFromAddress,
   newId,
   zonedInstant,
   zonedParts,
@@ -21,7 +26,7 @@ import { z } from 'zod';
 import type { ApplyContext } from '../commit/types';
 import { defineCommand } from '../commit/types';
 import type { Db, Tx } from '../db/client';
-import { type AheadMatterRow, aheadMatters, messages } from '../db/schema/index';
+import { type AheadMatterRow, aheadMatters, dispatches, messages } from '../db/schema/index';
 import { isThePerson } from '../domain/the-person';
 import { ApiError, badRequest, forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
@@ -105,11 +110,13 @@ export function matterDueAt(day: string | undefined, timeZone: string): Date | n
   return zonedInstant({ year, month, day: date }, '12:00', timeZone);
 }
 
-/** The address a mail came from, lowercased (`notary@example.com`), or null when it carries none. */
+/**
+ * The address a mail came from, lowercased (`notary@example.com`), as a matter keeps it: never one a display name holds
+ * (`mailFromAddress`). Null when it carries none, or one too long to keep.
+ */
 export function senderAddress(from: string): string | null {
-  const address = /<([^<>\s]+@[^<>\s]+)>/.exec(from)?.[1] ?? /[^\s<>"]+@[^\s<>"]+/.exec(from)?.[0] ?? '';
-  const lower = address.toLowerCase().trim();
-  return lower.length >= 3 && lower.length <= 80 ? lower : null;
+  const address = mailFromAddress(from);
+  return address && address.length <= 80 ? address : null;
 }
 
 /** Closes a matter that is still open; nothing when it is closed already. Whether it closed now. */
@@ -148,19 +155,50 @@ export async function matterThreadRoot(
   return { rootId: msg.threadRootId ?? msg.id, conversationId: msg.conversationId };
 }
 
-/** Triggers that are never a turn the person began: Whombat's own checks, automations, and turns the agent scheduled. */
-const NOT_THE_PERSONS = new Set(['ahead', 'automation', 'schedule', 'feedback']);
+/** The triggers that are a person's own message to the assistant: in its direct chat, or naming it. */
+const THE_PERSONS_MESSAGE: ReadonlySet<string> = new Set(['dm', 'mention']);
+/** How many “Try again”s back a retry is followed to the turn it tries again. */
+const RETRIES_FOLLOWED = 5;
 
 /**
- * Whether the person began this turn themselves, in their own words: it is for them (not an outsiders' turn), it isn't
- * a Looks ahead check, an automation's step or a turn the agent scheduled, and the message that started it is theirs.
+ * Whether the turn is the person's own message to the assistant: `dm` or `mention`, or “Try again” on such a turn
+ * (followed back through its retries to the turn it tries again, with the same message).
+ */
+async function personsMessageTurn(
+  db: Db | Tx,
+  dispatch: Pick<DispatchRow, 'trigger' | 'messageId'> & { retryOfId?: string | null },
+): Promise<boolean> {
+  let turn = dispatch;
+  for (let i = 0; i <= RETRIES_FOLLOWED; i++) {
+    if (THE_PERSONS_MESSAGE.has(turn.trigger)) return true;
+    if (turn.trigger !== 'retry' || !turn.retryOfId) return false;
+    const [before] = await db
+      .select({
+        trigger: dispatches.trigger,
+        messageId: dispatches.messageId,
+        retryOfId: dispatches.retryOfId,
+      })
+      .from(dispatches)
+      .where(eq(dispatches.id, turn.retryOfId));
+    if (!before || before.messageId !== dispatch.messageId) return false;
+    turn = before;
+  }
+  return false;
+}
+
+/**
+ * Whether the person began this turn themselves, in their own words: it is for them (not an outsiders' turn), it is
+ * their message to the assistant (`personsMessageTurn`; never a Looks ahead check, an automation's step, a scheduled
+ * turn or anything else Whombat woke it for), and the message that started it is theirs.
  */
 export async function personBeganTurn(
   db: Db | Tx,
-  dispatch: Pick<DispatchRow, 'trigger' | 'burrowId' | 'onBehalfOfAccountId' | 'messageId'>,
+  dispatch: Pick<DispatchRow, 'trigger' | 'burrowId' | 'onBehalfOfAccountId' | 'messageId'> & {
+    retryOfId?: string | null;
+  },
 ): Promise<boolean> {
-  if (!dispatch.onBehalfOfAccountId || NOT_THE_PERSONS.has(dispatch.trigger) || !dispatch.messageId)
-    return false;
+  if (!dispatch.onBehalfOfAccountId || !dispatch.messageId) return false;
+  if (!(await personsMessageTurn(db, dispatch))) return false;
   const [msg] = await db
     .select({ authorId: messages.authorId, conversationId: messages.conversationId })
     .from(messages)
@@ -174,20 +212,26 @@ export async function personBeganTurn(
   );
 }
 
-/** Words the person gave to match mail by: trimmed, lowercased, each once. */
+/** Words to match mail by: trimmed, lowercased, long enough, each once. */
 function matchWords(words: readonly string[] | undefined, max: number, longest: number): string[] {
   const out: string[] = [];
   for (const w of words ?? []) {
     const word = w.trim().toLowerCase().slice(0, longest);
-    if (word.length >= 2 && !out.includes(word)) out.push(word);
+    if (word.length >= AHEAD_MATCH_WORD_MIN && !out.includes(word)) out.push(word);
   }
   return out.slice(0, max);
+}
+
+/** What the assistant hears when a sender word would match everyone's mail. */
+export function commonSenderRefusal(word: string): string {
+  return `“${word}” is in almost everyone’s address: give the sender’s own address or site instead.`;
 }
 
 /**
  * The person asked the assistant to keep an eye on something in their mail (`ahead_watch` `start`, in their own turn):
  * a matter they own, matched by their own sender and subject words, told in the conversation and thread they asked in.
- * An open one with the same title is answered instead of a second one.
+ * An open one of theirs with the same title is answered instead of a second one; one with the same title a check opened
+ * becomes theirs (told where they asked, their words added to what it is matched by).
  */
 export const startAheadMatter = defineCommand({
   name: 'ahead.matter_start',
@@ -208,15 +252,52 @@ export const startAheadMatter = defineCommand({
       throw forbidden('Only the person asks to keep an eye on something.');
     const title = cleanShortLabel(input.title, AHEAD_MATTER_TITLE_MAX);
     if (!title) throw badRequest(MATTER_TITLE_EMPTY);
+    const senders = matchWords(input.senders, AHEAD_MATTER_SENDERS_MAX, 80);
+    // Subject words narrow a sender, or match on their own without one (`aheadMatterMatchBy`).
+    const words = matchWords(input.words, AHEAD_MATTER_WORDS_MAX, 40);
+    const common = senders.find(aheadCommonSender);
+    if (common) throw badRequest(commonSenderRefusal(common));
     const open = await openMatters(tx, ctx.burrow.id);
     const same = open.find((m) => m.title.toLowerCase() === title.toLowerCase());
-    if (same) return { matter: same, created: false };
-    if (open.length >= AHEAD_MATTERS_MAX) throw forbidden(MATTERS_FULL);
+    if (same?.origin === 'person') return { matter: same, created: false };
     const conversation = await loadConversationRow(tx, input.conversationId);
     if (!conversation || conversation.burrowId !== ctx.burrow.id) throw notFound('Conversation');
-    const senders = matchWords(input.senders, 3, 80);
-    // Subject words match only when no sender is given (`aheadMatterMatches`); kept as the person said them.
-    const words = matchWords(input.words, 5, 40);
+    if (same) {
+      // A check already keeps an eye on it: now the person asked, it is theirs, told where they asked.
+      const matter: AheadMatterRow = {
+        ...same,
+        origin: 'person',
+        personId: input.personId,
+        conversationId: conversation.id,
+        threadRootId: input.threadRootId,
+        match: {
+          threads: same.match.threads,
+          senders: [...new Set([...same.match.senders, ...senders])].slice(0, AHEAD_MATTER_SENDERS_MAX),
+          words: [...new Set([...same.match.words, ...words])].slice(0, AHEAD_MATTER_WORDS_MAX),
+        },
+        updatedAt: ctx.now,
+      };
+      await tx
+        .update(aheadMatters)
+        .set({
+          origin: matter.origin,
+          personId: matter.personId,
+          conversationId: matter.conversationId,
+          threadRootId: matter.threadRootId,
+          match: matter.match,
+          updatedAt: ctx.now,
+        })
+        .where(eq(aheadMatters.id, same.id));
+      await ctx.emit({
+        type: 'ahead.matter_opened',
+        kind: 'System',
+        text: 'Started keeping an eye on something in mail',
+        where: null,
+        payload: { aheadMatterId: same.id, origin: 'person', upgraded: true },
+      });
+      return { matter, created: false };
+    }
+    if (open.length >= AHEAD_MATTERS_MAX) throw forbidden(MATTERS_FULL);
     if (!senders.length && !words.length)
       throw badRequest('Say whose mail or which subject words to watch for.');
     const row: AheadMatterRow = {

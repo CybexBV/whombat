@@ -156,6 +156,11 @@ export const aheadChecks = pgTable(
         triage?: {
           /** The mail it covers came after this (ISO). */
           since: string;
+          /**
+           * When the inboxes it lists were read (ISO; the oldest read among them): once it finished, the next pass
+           * covers mail from here, less an overlap. Absent on passes from before it was kept: their start stands in.
+           */
+          sweptAt?: string;
           /** How many mails it looked through. */
           count: number;
           mails: {

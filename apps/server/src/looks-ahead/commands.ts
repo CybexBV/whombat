@@ -14,6 +14,7 @@ import {
   AHEAD_FEEDBACK_REASON_MAX,
   AHEAD_FINDINGS_PER_DAY,
   AHEAD_KINDS,
+  AHEAD_MATTER_KEEP_AFTER_DUE_MS,
   AHEAD_MATTER_KEEP_MS,
   AHEAD_MATTER_TITLE_MAX,
   AHEAD_MATTER_WHO_MAX,
@@ -23,6 +24,7 @@ import {
   AHEAD_REPLIES,
   AHEAD_RULES_MAX,
   AHEAD_SOURCES_MAX,
+  AHEAD_TRIAGE_GAP_MS,
   AHEAD_TRIAGE_MAIL_MAX,
   AHEAD_TRIAGE_PER_DAY,
   type AheadKind,
@@ -33,10 +35,11 @@ import {
   AheadStage,
   AheadTriggerSource,
   aheadHours,
+  aheadMatterExpired,
   LooksAheadUpdate,
   newId,
 } from '@whombat/core';
-import { and, desc, eq, gte, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { settleResolvedThreads } from '../chats/settle';
 import type { ApplyContext } from '../commit/types';
@@ -157,6 +160,8 @@ export const AheadEventInput = z.object({
   triage: z
     .object({
       since: z.string().max(40),
+      /** When the inboxes it lists were read: the next pass covers mail from here (less an overlap). */
+      sweptAt: z.string().max(40).optional(),
       count: z.number().int().min(0),
       mails: z.array(TriageMailInput).max(AHEAD_TRIAGE_MAIL_MAX),
       matters: z
@@ -198,7 +203,12 @@ export const startAheadCheck = defineCommand({
   name: 'ahead.check_start',
   // A new turn: a lapsed appliance refuses it up front (LC-10).
   licence: 'agentTurn',
-  schema: z.object({ event: AheadEventInput, personId: z.string().min(1).max(64) }),
+  schema: z.object({
+    event: AheadEventInput,
+    personId: z.string().min(1).max(64),
+    /** “Check now”: a triage pass needn't wait for the gap since the last one. */
+    fresh: z.boolean().optional(),
+  }),
   async apply(tx, ctx, input): Promise<{ checkId: string; dispatchId: string } | null> {
     if (ctx.actor.kind !== 'agent') throw forbidden('Only the assistant checks ahead.');
     const { event } = input;
@@ -223,7 +233,24 @@ export const startAheadCheck = defineCommand({
     const dayStart = startOfLocalDay(ctx.now, ctx.burrow.timeZone);
     const begun = await begunSince(tx, ctx.burrow.id, dayStart, triage);
     if (begun >= (triage ? AHEAD_TRIAGE_PER_DAY : AHEAD_CHECKS_PER_DAY)) return null;
-    // The matter it is about must still be open; a follow-up runs once per reason.
+    // Two watcher passes that read the rows at once can't start two triage passes minutes apart: the gap since the last
+    // pass that didn't fail holds here too, unless the person pressed “Check now”.
+    if (triage && !input.fresh) {
+      const [recent] = await tx
+        .select({ id: aheadChecks.id })
+        .from(aheadChecks)
+        .where(
+          and(
+            eq(aheadChecks.burrowId, ctx.burrow.id),
+            eq(aheadChecks.source, 'triage'),
+            ne(aheadChecks.state, 'failed'),
+            gt(aheadChecks.startedAt, new Date(ctx.now.getTime() - AHEAD_TRIAGE_GAP_MS)),
+          ),
+        )
+        .limit(1);
+      if (recent) return null;
+    }
+    // The matter it is about must still be open; a follow-up runs once per reason (marked when it reports).
     let matterId: string | null = null;
     const aboutId = event.source === 'matter' ? event.matter?.id : event.matterId;
     if (aboutId) {
@@ -232,10 +259,6 @@ export const startAheadCheck = defineCommand({
       if (event.source === 'matter') {
         const reason = event.matter?.reason;
         if (!matter || !matterId || !reason || matter.followedUp.includes(reason)) return null;
-        await tx
-          .update(aheadMatters)
-          .set({ followedUp: [...matter.followedUp, reason], updatedAt: ctx.now })
-          .where(eq(aheadMatters.id, matter.id));
       }
     } else if (event.source === 'matter') return null;
     const agent = await loadPrincipalRow(tx, ctx.actor.id);
@@ -559,6 +582,13 @@ export const reportAhead = defineCommand({
     // A finding that isn't about the matter its mail matched stands on its own, with its own thread and replies.
     let matterId = told && !about ? null : row.matterId;
     const change = fromMail ? report.matter : undefined;
+    // A follow-up counts once it reported, whatever it found: one whose turn failed may be tried once more.
+    const followed = row.source === 'matter' ? row.event.matter?.reason : undefined;
+    if (followed && given && !given.followedUp.includes(followed))
+      await tx
+        .update(aheadMatters)
+        .set({ followedUp: [...given.followedUp, followed], updatedAt: ctx.now })
+        .where(eq(aheadMatters.id, given.id));
     if (about) {
       const byRef = change?.ref ? change : undefined;
       const matterNote = cleanShortLabel(byRef?.note, AHEAD_NOTE_MAX);
@@ -578,7 +608,9 @@ export const reportAhead = defineCommand({
           .update(aheadMatters)
           .set({ ...set, updatedAt: ctx.now })
           .where(eq(aheadMatters.id, about.id));
-      if (byRef?.close) await closeMatterIn(ctx, about, 'done');
+      // A check closes what the person asked for only together with a finding it told them; one it opened itself it
+      // may close quietly.
+      if (byRef?.close && (about.origin !== 'person' || told)) await closeMatterIn(ctx, about, 'done');
     } else if (change && !change.ref && !row.matterId) {
       matterId = await openMatterFromCheck(ctx, row, change, startedThread);
     }
@@ -642,26 +674,11 @@ async function existingEventThreadRoot(tx: Tx, row: AheadCheckRow): Promise<stri
 
 /* The person's word on a finding ------------------------------------------------------------------------------------- */
 
-/** The newest told check about a matter, or null. */
-async function latestToldOfMatter(tx: Pick<Tx, 'select'>, burrowId: string, matterId: string) {
-  const [latest] = await tx
-    .select()
-    .from(aheadChecks)
-    .where(
-      and(
-        eq(aheadChecks.burrowId, burrowId),
-        eq(aheadChecks.matterId, matterId),
-        eq(aheadChecks.state, 'told'),
-      ),
-    )
-    .orderBy(desc(aheadChecks.reportedAt))
-    .limit(1);
-  return latest ?? null;
-}
-
 /**
- * The latest told check whose thread a turn is in, or null: several stages of one event share a thread, and so does
- * everything told about one matter (whose thread may be one the person began by asking).
+ * The latest told finding posted in a thread, or null: the thread's first message or a reply in it. Several stages of
+ * one event share a thread, so does everything told about one matter (whose thread may be one the person began by
+ * asking), and several matters may share one: “Not useful” and “Stop checking for this” act on the finding said last
+ * there, and on that finding's own matter.
  */
 export async function toldCheckOfThread(
   tx: Pick<Tx, 'select'>,
@@ -669,40 +686,20 @@ export async function toldCheckOfThread(
   threadRootId: string | null,
 ) {
   if (!threadRootId) return null;
-  const [root] = await tx
-    .select()
-    .from(aheadChecks)
-    .where(
-      and(
-        eq(aheadChecks.burrowId, burrowId),
-        eq(aheadChecks.threadRootId, threadRootId),
-        eq(aheadChecks.state, 'told'),
-      ),
-    );
-  if (!root) {
-    // A matter's thread whose root isn't a finding: the person's own ask.
-    const [matter] = await tx
-      .select({ id: aheadMatters.id })
-      .from(aheadMatters)
-      .where(and(eq(aheadMatters.burrowId, burrowId), eq(aheadMatters.threadRootId, threadRootId)))
-      .limit(1);
-    return matter ? latestToldOfMatter(tx, burrowId, matter.id) : null;
-  }
-  if (root.matterId) return (await latestToldOfMatter(tx, burrowId, root.matterId)) ?? root;
-  // If a later stage posted a reply in this same event's thread, return the newest told check for that event.
   const [latest] = await tx
-    .select()
+    .select({ check: aheadChecks })
     .from(aheadChecks)
+    .innerJoin(messages, eq(messages.id, aheadChecks.threadRootId))
     .where(
       and(
         eq(aheadChecks.burrowId, burrowId),
-        eq(aheadChecks.eventKey, root.eventKey),
         eq(aheadChecks.state, 'told'),
+        or(eq(messages.id, threadRootId), eq(messages.threadRootId, threadRootId)),
       ),
     )
-    .orderBy(desc(aheadChecks.reportedAt))
+    .orderBy(desc(aheadChecks.reportedAt), desc(aheadChecks.startedAt))
     .limit(1);
-  return latest ?? root;
+  return latest?.check ?? null;
 }
 
 /**
@@ -768,10 +765,23 @@ export const aheadFeedback = defineCommand({
 
 /* The watcher's bookkeeping ------------------------------------------------------------------------------------------ */
 
+/** Open matters that ran out by `now` (`aheadMatterExpired`), as a query. */
+export function mattersExpiredBy(now: Date) {
+  return and(
+    eq(aheadMatters.state, 'open'),
+    lt(aheadMatters.lastNewsAt, new Date(now.getTime() - AHEAD_MATTER_KEEP_MS)),
+    or(
+      isNull(aheadMatters.dueAt),
+      lt(aheadMatters.dueAt, new Date(now.getTime() - AHEAD_MATTER_KEEP_AFTER_DUE_MS + 1)),
+    ),
+  );
+}
+
 /**
  * Once a pass: checks whose turn ended without a report, or never ran, failed; a finding's thread settles a while after
- * its event ended (or 48h after a mail or matter finding), when the person didn't write in it; rows go a month after
- * their event; matters without news for a month close, and closed ones go a month later.
+ * its event ended (or 48h after a mail or matter finding), when the person didn't write in it and no newer finding there
+ * is still waiting for its own time; rows go a month after their event; matters without news for a month (and two weeks
+ * past their date, when they have one) close, and closed ones go a month later.
  */
 export const tidyAhead = defineCommand({
   name: 'ahead.tidy',
@@ -831,17 +841,27 @@ export const tidyAhead = defineCommand({
       );
     let settled = 0;
     if (passed.length) {
+      // A thread with a newer finding whose time hasn't passed yet waits for that one.
+      const pending = await tx
+        .select({ threadRootId: aheadChecks.threadRootId })
+        .from(aheadChecks)
+        .where(
+          and(
+            eq(aheadChecks.burrowId, ctx.burrow.id),
+            eq(aheadChecks.state, 'told'),
+            isNull(aheadChecks.settledAt),
+            gte(aheadChecks.endAt, new Date(now - SETTLE_AFTER_MS)),
+          ),
+        );
       // Resolve actual root message ids (multi-stage replies point to their thread root).
       const msgRows = await tx
         .select({ id: messages.id, threadRootId: messages.threadRootId })
         .from(messages)
         .where(
-          inArray(
-            messages.id,
-            passed.map((p) => p.threadRootId),
-          ),
+          inArray(messages.id, [...passed.map((p) => p.threadRootId), ...pending.map((p) => p.threadRootId)]),
         );
       const rootOf = new Map(msgRows.map((m) => [m.id, m.threadRootId ?? m.id]));
+      const waiting = new Set(pending.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId));
       const actualRoots = [...new Set(passed.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId))];
       const wrote = new Set(
         actualRoots.length
@@ -864,7 +884,7 @@ export const tidyAhead = defineCommand({
       const byChat = new Map<string, Set<string>>();
       for (const p of passed) {
         const rootId = rootOf.get(p.threadRootId) ?? p.threadRootId;
-        if (wrote.has(rootId)) continue;
+        if (wrote.has(rootId) || waiting.has(rootId)) continue;
         const set = byChat.get(p.conversationId) ?? new Set<string>();
         set.add(rootId);
         byChat.set(p.conversationId, set);
@@ -885,20 +905,16 @@ export const tidyAhead = defineCommand({
       .where(
         and(eq(aheadChecks.burrowId, ctx.burrow.id), lt(aheadChecks.endAt, new Date(now - CHECKS_KEEP_MS))),
       );
-    // Matters without news for a month go; closed ones are kept a month for the record, then removed.
+    // Matters without news for a month go (one with a date not before two weeks past it); closed ones are kept a month
+    // for the record, then removed.
     const stale = await tx
       .select()
       .from(aheadMatters)
-      .where(
-        and(
-          eq(aheadMatters.burrowId, ctx.burrow.id),
-          eq(aheadMatters.state, 'open'),
-          lt(aheadMatters.lastNewsAt, new Date(now - AHEAD_MATTER_KEEP_MS)),
-        ),
-      )
+      .where(and(eq(aheadMatters.burrowId, ctx.burrow.id), mattersExpiredBy(ctx.now)))
       .for('update');
     let expired = 0;
-    for (const matter of stale) if (await closeMatterIn(ctx, matter, 'expired')) expired++;
+    for (const matter of stale)
+      if (aheadMatterExpired(matter, ctx.now) && (await closeMatterIn(ctx, matter, 'expired'))) expired++;
     await tx
       .delete(aheadMatters)
       .where(

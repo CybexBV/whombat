@@ -11,7 +11,7 @@
 import {
   AHEAD_CHECKS_PER_DAY,
   AHEAD_MAIL_CALENDAR_MS,
-  AHEAD_MATTER_KEEP_MS,
+  AHEAD_MATTER_CHECKS_PER_DAY,
   AHEAD_MATTERS_MAX,
   AHEAD_PICKS_KEEP_MS,
   AHEAD_READ_MS,
@@ -20,7 +20,8 @@ import {
   type AheadScheduleEntry,
   type AheadStage,
   aheadMatterDue,
-  aheadMatterMatches,
+  aheadMatterForMail,
+  aheadMatterTry,
   aheadPriority,
   aheadSkip,
   aheadStage,
@@ -54,6 +55,7 @@ import {
   CHECKING_MAX_MS,
   CHECKS_KEEP_MS,
   MATTERS_CLOSED_KEEP_MS,
+  mattersExpiredBy,
   SETTLE_AFTER_MS,
   startAheadCheck,
   tidyAhead,
@@ -124,10 +126,7 @@ async function tidyDue(services: Services, burrowId: string, now: Date): Promise
       and(
         eq(aheadMatters.burrowId, burrowId),
         or(
-          and(
-            eq(aheadMatters.state, 'open'),
-            lt(aheadMatters.lastNewsAt, new Date(now.getTime() - AHEAD_MATTER_KEEP_MS)),
-          ),
+          mattersExpiredBy(now),
           and(
             eq(aheadMatters.state, 'closed'),
             lt(aheadMatters.closedAt, new Date(now.getTime() - MATTERS_CLOSED_KEEP_MS)),
@@ -440,9 +439,10 @@ export async function watchAhead(
     .select({
       today: sql<number>`count(*) filter (where ${aheadChecks.startedAt} >= ${dayStart.toISOString()}::timestamptz and ${aheadChecks.source} <> 'triage')::int`,
       triages: sql<number>`count(*) filter (where ${aheadChecks.startedAt} >= ${dayStart.toISOString()}::timestamptz and ${aheadChecks.source} = 'triage')::int`,
+      // The gap counts from the last pass that didn't fail: a failed one makes the next wait for nothing.
       lastTriage: sql<
         string | null
-      >`max(${aheadChecks.startedAt}) filter (where ${aheadChecks.source} = 'triage')`,
+      >`max(${aheadChecks.startedAt}) filter (where ${aheadChecks.source} = 'triage' and ${aheadChecks.state} <> 'failed')`,
       busy: sql<number>`count(*) filter (where ${aheadChecks.state} = 'checking')::int`,
     })
     .from(aheadChecks)
@@ -498,6 +498,7 @@ export async function watchAhead(
         fresh,
         triagesToday: counts?.triages ?? 0,
         lastTriageAt: counts?.lastTriage ? new Date(counts.lastTriage) : null,
+        dayStart,
       })),
     );
   if (!found.length) return null;
@@ -542,13 +543,17 @@ export async function watchAhead(
       )
     : null;
   if (!pick) return null;
-  const res = await services.pipeline.commit(startAheadCheck, { event: pick.event, personId: person.id }, as);
+  const res = await services.pipeline.commit(
+    startAheadCheck,
+    { event: pick.event, personId: person.id, ...(fresh ? { fresh: true } : {}) },
+    as,
+  );
   return res.status === 'ok' ? (res.result?.checkId ?? null) : null;
 }
 
 /**
- * Everything incoming mail may start: mail that matches an open matter, the picks of earlier triage passes, a matter's
- * follow-up when its time came, and a triage pass when new mail came and one is due.
+ * Everything incoming mail may start: mail that is news on an open matter, the picks of earlier triage passes, a
+ * matter's follow-up when its time came, and a triage pass when new mail came and one is due.
  */
 async function mailFound(
   services: Services,
@@ -562,15 +567,19 @@ async function mailFound(
     fresh: boolean;
     triagesToday: number;
     lastTriageAt: Date | null;
+    dayStart: Date;
   },
 ): Promise<Found[]> {
   const { now, timeZone, schedule } = pass;
   const db = services.db;
-  const swept = await sweepMail(services, pass.mailboxes, now, pass.fresh);
+  const sweep = await sweepMail(services, pass.mailboxes, now, pass.fresh);
+  const swept = sweep.mails;
   const matters = await openMatters(db, burrowId);
   const picksSince = new Date(now.getTime() - AHEAD_PICKS_KEEP_MS);
+  // The passes that finished: their picks wait, the mails they listed aren't listed again, and the newest says from
+  // when the next pass covers mail.
   const triages = await db
-    .select({ event: aheadChecks.event })
+    .select({ event: aheadChecks.event, startedAt: aheadChecks.startedAt })
     .from(aheadChecks)
     .where(
       and(
@@ -581,9 +590,28 @@ async function mailFound(
       ),
     )
     .orderBy(desc(aheadChecks.startedAt));
+  const [lastDone] = triages.length
+    ? triages
+    : await db
+        .select({ event: aheadChecks.event, startedAt: aheadChecks.startedAt })
+        .from(aheadChecks)
+        .where(
+          and(
+            eq(aheadChecks.burrowId, burrowId),
+            eq(aheadChecks.source, 'triage'),
+            eq(aheadChecks.state, 'quiet'),
+          ),
+        )
+        .orderBy(desc(aheadChecks.startedAt))
+        .limit(1);
+  const lastSweptAt = lastDone
+    ? new Date(Date.parse(lastDone.event.triage?.sweptAt ?? '') || lastDone.startedAt.getTime())
+    : null;
+  const listed = new Set<string>();
   const picked: { mail: TriageMail; matterId?: string; rank: number }[] = [];
   for (const t of triages) {
     const triage = t.event.triage;
+    for (const m of triage?.mails ?? []) listed.add(mailEventKey(m.connectionId, m.messageId));
     (triage?.picks ?? []).forEach((p, rank) => {
       const mail = triage?.mails.find((m) => m.ref === p.ref);
       if (mail) picked.push({ mail, rank, ...(p.matterId ? { matterId: p.matterId } : {}) });
@@ -608,58 +636,129 @@ async function mailFound(
   );
 
   const out = new Map<string, Found>();
-  // Mail that matches a matter: checked at once, without a triage pass.
+  // Mail that is news on a matter: checked at once, without a triage pass, up to the matter's checks for the day; more
+  // matching mail that day waits for a pass like any other.
+  const checkedToday = new Map(
+    matters.length
+      ? (
+          await db
+            .select({
+              id: sql<string>`${aheadChecks.event}->'matter'->>'id'`,
+              n: sql<number>`count(*)::int`,
+            })
+            .from(aheadChecks)
+            .where(
+              and(
+                eq(aheadChecks.burrowId, burrowId),
+                eq(aheadChecks.source, 'mail'),
+                gte(aheadChecks.startedAt, pass.dayStart),
+                inArray(
+                  sql`${aheadChecks.event}->'matter'->>'id'`,
+                  matters.map((m) => m.id),
+                ),
+              ),
+            )
+            .groupBy(sql`${aheadChecks.event}->'matter'->>'id'`)
+        ).map((r) => [r.id, r.n] as const)
+      : [],
+  );
+  const left = new Map(
+    matters.map((m) => [m.id, AHEAD_MATTER_CHECKS_PER_DAY - (checkedToday.get(m.id) ?? 0)]),
+  );
   const matched = new Set<string>();
-  for (const m of swept) {
+  // Oldest first, so the first reply takes the day's first check.
+  for (const m of [...swept].reverse()) {
     if (hasRow.has(m.key)) continue;
-    const mail = {
-      connectionId: m.account.connectionId,
-      threadId: m.message.threadId,
-      from: m.message.from,
-      subject: m.message.subject,
-      snippet: m.message.snippet,
-    };
-    // The person's own first, then the newest.
-    const matter = matters
-      .filter((x) => Date.parse(m.start) > x.lastNewsAt.getTime() && aheadMatterMatches(x.match, mail))
-      .sort((a, b) => Number(b.origin === 'person') - Number(a.origin === 'person'))[0];
-    if (!matter) continue;
+    const hit = aheadMatterForMail(
+      matters.filter((x) => (left.get(x.id) ?? 0) > 0),
+      {
+        connectionId: m.account.connectionId,
+        threadId: m.message.threadId,
+        from: m.message.from,
+        subject: m.message.subject,
+        snippet: m.message.snippet,
+        at: m.start,
+        bulk: m.bulk,
+      },
+    );
+    if (!hit) continue;
+    const { matter } = hit;
+    left.set(matter.id, (left.get(matter.id) ?? 0) - 1);
     matched.add(m.key);
-    const asked = matter.origin === 'person';
     out.set(
       m.key,
-      mailCheck(factsOfSwept(m), timeZone, schedule, MATTER_MAIL_PRIORITY[matter.origin], matter.id, asked),
+      mailCheck(
+        factsOfSwept(m),
+        timeZone,
+        schedule,
+        MATTER_MAIL_PRIORITY[matter.origin],
+        matter.id,
+        matter.origin === 'person',
+      ),
     );
   }
-  // The picks of earlier triage passes, one at a time as the budget allows.
-  const open = new Set(matters.map((m) => m.id));
+  // The picks of earlier triage passes, one at a time as the budget allows; one about a matter the person asked for is
+  // theirs as much as a mail that matched it.
+  const openById = new Map(matters.map((m) => [m.id, m]));
   for (const p of picked) {
     const facts = factsOfListed(p.mail);
     if (hasRow.has(facts.key) || out.has(facts.key)) continue;
-    const matterId = p.matterId && open.has(p.matterId) ? p.matterId : undefined;
-    out.set(facts.key, mailCheck(facts, timeZone, schedule, PICK_PRIORITY - p.rank, matterId));
+    const about = p.matterId ? openById.get(p.matterId) : undefined;
+    out.set(
+      facts.key,
+      mailCheck(facts, timeZone, schedule, PICK_PRIORITY - p.rank, about?.id, about?.origin === 'person'),
+    );
   }
-  // A follow-up of a matter whose time came, once per reason.
+  // A follow-up of a matter whose time came: once per reason, a failed one tried once more.
+  const followUps = matters.length
+    ? await db
+        .select({ key: aheadChecks.eventKey, version: aheadChecks.version, state: aheadChecks.state })
+        .from(aheadChecks)
+        .where(
+          and(
+            eq(aheadChecks.burrowId, burrowId),
+            inArray(
+              aheadChecks.eventKey,
+              matters.map((m) => `matter:${m.id}`),
+            ),
+          ),
+        )
+    : [];
   for (const matter of matters) {
     const reason = aheadMatterDue(
       {
         waitingOn: matter.waitingOn,
         dueAt: matter.dueAt,
         lastNewsAt: matter.lastNewsAt,
+        createdAt: matter.createdAt,
         followedUp: matter.followedUp,
       },
       now,
     );
     if (!reason) continue;
     const key = `matter:${matter.id}`;
+    const version = aheadMatterTry(
+      reason,
+      followUps
+        .filter((f) => f.key === key)
+        .map((f) => ({ version: f.version, failed: f.state === 'failed' })),
+    );
+    if (!version) continue;
     const start = (matter.dueAt ?? now).toISOString();
     out.set(key, {
-      candidate: { key, version: reason, start, stage: 'matter', source: 'matter' },
+      candidate: {
+        key,
+        version,
+        start,
+        stage: 'matter',
+        source: 'matter',
+        ...(matter.origin === 'person' ? { asked: true } : {}),
+      },
       event: {
         source: 'matter',
         stage: 'matter',
         key,
-        version: aheadStageVersion(reason, 'matter'),
+        version: aheadStageVersion(version, 'matter'),
         connectionId: '',
         calendarId: '',
         eventId: '',
@@ -676,10 +775,16 @@ async function mailFound(
       },
     });
   }
-  // A triage pass over the new mail no check or matter took yet.
-  const since = aheadTriageSince(pass.lastTriageAt, now);
+  // A triage pass over the new mail no check, matter or finished pass took yet: what came since the last finished pass
+  // read the inbox, so nothing slips between two passes, and a failed pass loses nothing.
+  const since = aheadTriageSince(lastSweptAt, now);
   const fresh = swept.filter(
-    (m) => !hasRow.has(m.key) && !matched.has(m.key) && Date.parse(m.start) > since.getTime(),
+    (m) =>
+      !m.bulk &&
+      !hasRow.has(m.key) &&
+      !matched.has(m.key) &&
+      !listed.has(m.key) &&
+      Date.parse(m.start) >= since.getTime(),
   );
   if (
     aheadTriageDue({
@@ -693,6 +798,8 @@ async function mailFound(
   ) {
     const at = now.toISOString();
     const key = `triage:${at}`;
+    // A mailbox that couldn't be read now keeps this pass from moving the window past its mail.
+    const sweptAt = sweep.partial ? since : sweep.readAt;
     out.set(key, {
       candidate: { key, version: 'pass', start: at, stage: 'triage', source: 'triage' },
       event: {
@@ -714,6 +821,7 @@ async function mailFound(
         ...(schedule.length ? { daySchedule: [...schedule] } : {}),
         triage: {
           since: since.toISOString(),
+          sweptAt: new Date(Math.min(sweptAt.getTime(), now.getTime())).toISOString(),
           count: fresh.length,
           mails: triageMailList(fresh, pass.rules),
           matters: matters.slice(0, AHEAD_MATTERS_MAX).map((m, i) => ({ ref: `k${i + 1}`, id: m.id })),

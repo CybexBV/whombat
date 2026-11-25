@@ -4,10 +4,14 @@ import {
   AHEAD_FINDINGS_PER_DAY,
   AHEAD_MATTER_DUE_LEAD_MS,
   AHEAD_MATTER_FOLLOW_WINDOW_MS,
+  AHEAD_MATTER_KEEP_AFTER_DUE_MS,
+  AHEAD_MATTER_KEEP_MS,
   AHEAD_MATTER_NO_ANSWER_MS,
+  AHEAD_MATTER_QUIET_MS,
   AHEAD_TOOL_NAMES,
   AHEAD_TRIAGE_FIRST_MS,
   AHEAD_TRIAGE_GAP_MS,
+  AHEAD_TRIAGE_OVERLAP_MS,
   AHEAD_TRIAGE_PER_DAY,
   AHEAD_TRIAGE_PICKS_MAX,
   AHEAD_TRIAGE_SINCE_MAX_MS,
@@ -15,12 +19,18 @@ import {
   AheadReportInput,
   AheadTriageInput,
   AheadWatchInput,
+  aheadCommonSender,
   aheadDue,
   aheadHours,
+  aheadMailBulk,
   aheadMailNoise,
   aheadMailSignal,
   aheadMatterDue,
+  aheadMatterExpired,
+  aheadMatterForMail,
+  aheadMatterMatchBy,
   aheadMatterMatches,
+  aheadMatterTry,
   aheadPriority,
   aheadQueryRefusal,
   aheadSkip,
@@ -34,6 +44,7 @@ import {
   LooksAheadCheckItem,
   LooksAheadUpdate,
   LooksAheadView,
+  mailFromAddress,
   planAheadPass,
 } from './looks-ahead.js';
 
@@ -306,6 +317,16 @@ describe('incoming mail before a look', () => {
         ownAddresses: own,
       }),
     ).toBe(false);
+    // Only the address is the person's: a display name holding their address is someone else's mail.
+    expect(
+      aheadMailNoise({
+        from: '"mara@example.com" <x@evil.example>',
+        subject: 'Re: deed',
+        snippet: 'Hello',
+        ownAddresses: own,
+      }),
+    ).toBe(false);
+    expect(aheadMailBulk({ subject: 'Weekly newsletter', snippet: 'Unsubscribe' })).toBe(true);
     // A question without any keyword is not noise.
     expect(
       aheadMailNoise({
@@ -365,10 +386,10 @@ describe('looking through new mail', () => {
     expect(aheadTriageDue({ ...base, lastTriageAt: longAgo, triagesToday: 1 })).toBe(true);
   });
 
-  it('covers mail since the last look began, never too far back', () => {
+  it('covers mail since the last finished look read the inbox, with an overlap, never too far back', () => {
     expect(aheadTriageSince(null, now).getTime()).toBe(now.getTime() - AHEAD_TRIAGE_FIRST_MS);
-    const last = new Date(now.getTime() - 5 * 3600_000);
-    expect(aheadTriageSince(last, now).getTime()).toBe(last.getTime());
+    const read = new Date(now.getTime() - 5 * 3600_000);
+    expect(aheadTriageSince(read, now).getTime()).toBe(read.getTime() - AHEAD_TRIAGE_OVERLAP_MS);
     const old = new Date(now.getTime() - 5 * 24 * 3600_000);
     expect(aheadTriageSince(old, now).getTime()).toBe(now.getTime() - AHEAD_TRIAGE_SINCE_MAX_MS);
   });
@@ -396,29 +417,132 @@ describe('keeping an eye on', () => {
     snippet: 'Bijgaand het concept.',
   };
 
-  it('matches mail by its thread, its sender, or (without senders) its words', () => {
+  it('matches mail by its thread, its sender’s address (narrowed by words), or (without senders) its words', () => {
     const none = { threads: [], senders: [], words: [] };
     expect(aheadMatterMatches(none, mail)).toBe(false);
     expect(
-      aheadMatterMatches({ ...none, threads: [{ connectionId: 'con_g', threadId: 'th_1' }] }, mail),
-    ).toBe(true);
+      aheadMatterMatchBy({ ...none, threads: [{ connectionId: 'con_g', threadId: 'th_1' }] }, mail),
+    ).toBe('thread');
     expect(
       aheadMatterMatches({ ...none, threads: [{ connectionId: 'con_m', threadId: 'th_1' }] }, mail),
     ).toBe(false);
-    expect(aheadMatterMatches({ ...none, senders: ['NOTARIS'] }, mail)).toBe(true);
+    expect(aheadMatterMatchBy({ ...none, senders: ['NOTARIS'] }, mail)).toBe('sender');
     expect(aheadMatterMatches({ ...none, senders: ['coolblue'] }, mail)).toBe(false);
-    expect(aheadMatterMatches({ ...none, words: ['akte'] }, mail)).toBe(true);
+    expect(aheadMatterMatchBy({ ...none, words: ['akte'] }, mail)).toBe('words');
     expect(aheadMatterMatches({ ...none, words: ['concept'] }, mail)).toBe(true);
-    // With senders, words alone don't match.
+    // With senders, words alone don't match, and they narrow a sender that matches.
     expect(aheadMatterMatches({ ...none, senders: ['coolblue'], words: ['akte'] }, mail)).toBe(false);
+    expect(aheadMatterMatchBy({ ...none, senders: ['notaris-smit'], words: ['akte'] }, mail)).toBe('sender');
+    expect(aheadMatterMatches({ ...none, senders: ['notaris-smit'], words: ['factuur'] }, mail)).toBe(false);
+    // Only the address counts: a display name a stranger chose matches nothing.
+    expect(aheadMatterMatches({ ...none, senders: ['notariskantoor'] }, mail)).toBe(false);
+    const forged = { ...mail, from: '"Notaris <info@notaris-smit.example>" <x@evil.example>' };
+    expect(aheadMatterMatches({ ...none, senders: ['notaris-smit'] }, forged)).toBe(false);
+    // Words shorter than three characters match nothing.
+    expect(aheadMatterMatches({ ...none, words: ['ak'] }, mail)).toBe(false);
   });
 
-  it('follows up by the clock, once per reason', () => {
+  it('refuses sender words that are in almost everyone’s address', () => {
+    for (const w of ['gmail', 'Outlook.com', '@hotmail.com', 'nl', 'com', 'noreply', 'yahoo.co.uk', 'me.com'])
+      expect(aheadCommonSender(w)).toBe(true);
+    for (const w of ['notaris-jansen.nl', 'jan@gmail.com', 'coolblue', 'ziggodome.nl'])
+      expect(aheadCommonSender(w)).toBe(false);
+  });
+
+  it('reads the From line’s own address, never one a display name holds', () => {
+    expect(mailFromAddress('Notaris <Info@Notaris.example>')).toBe('info@notaris.example');
+    expect(mailFromAddress('info@notaris.example')).toBe('info@notaris.example');
+    expect(mailFromAddress('"Refund <boss@company.example>" <attacker@evil.example>')).toBe(
+      'attacker@evil.example',
+    );
+    expect(mailFromAddress('Refund <boss@company.example> <attacker@evil.example>')).toBe(
+      'attacker@evil.example',
+    );
+    expect(mailFromAddress('boss@company.example attacker@evil.example')).toBeNull();
+    expect(mailFromAddress('Notaris')).toBeNull();
+    expect(mailFromAddress('<not-an-address>')).toBeNull();
+    expect(mailFromAddress('<x@localhost>')).toBeNull();
+  });
+
+  it('picks the thing a mail is news on: a thread first, then the person’s, then the newest; bulk only for theirs', () => {
+    const at = new Date('2026-12-12T10:00:00Z');
+    const base = {
+      createdAt: new Date('2026-12-10T10:00:00Z'),
+      match: { threads: [], senders: [], words: [] },
+    };
+    const bySender = {
+      ...base,
+      id: 'sender',
+      origin: 'check' as const,
+      match: { ...base.match, senders: ['notaris-smit'] },
+    };
+    const byThread = {
+      ...base,
+      id: 'thread',
+      origin: 'check' as const,
+      createdAt: new Date('2026-12-09T10:00:00Z'),
+      match: { ...base.match, threads: [{ connectionId: 'con_g', threadId: 'th_1' }] },
+    };
+    const asked = {
+      ...base,
+      id: 'asked',
+      origin: 'person' as const,
+      match: { ...base.match, words: ['akte'] },
+    };
+    const newer = { ...bySender, id: 'newer', createdAt: new Date('2026-12-11T10:00:00Z') };
+    const one = { ...mail, at, bulk: false };
+    expect(aheadMatterForMail([bySender, asked, byThread], one)).toMatchObject({
+      matter: { id: 'thread' },
+      by: 'thread',
+    });
+    expect(aheadMatterForMail([bySender, asked], one)?.matter.id).toBe('asked');
+    expect(aheadMatterForMail([bySender, newer], one)?.matter.id).toBe('newer');
+    // A second reply already in the inbox still matches: the floor is when the thing began.
+    expect(aheadMatterForMail([{ ...asked, createdAt: new Date(at.getTime() - 1) }], one)).not.toBeNull();
+    expect(aheadMatterForMail([{ ...asked, createdAt: at }], one)).toBeNull();
+    // Bulk-looking mail: a thread always, the person's own by sender or words, a check's only by its thread.
+    const bulk = { ...one, bulk: true };
+    expect(aheadMatterForMail([bySender], bulk)).toBeNull();
+    expect(aheadMatterForMail([byThread], bulk)?.by).toBe('thread');
+    expect(aheadMatterForMail([asked], bulk)?.matter.id).toBe('asked');
+  });
+
+  it('runs out after a month without news, never before two weeks past its date', () => {
+    const lastNewsAt = new Date('2026-11-01T10:00:00Z');
+    const out = new Date(lastNewsAt.getTime() + AHEAD_MATTER_KEEP_MS);
+    expect(aheadMatterExpired({ lastNewsAt, dueAt: null }, new Date(out.getTime() - 1))).toBe(false);
+    expect(aheadMatterExpired({ lastNewsAt, dueAt: null }, out)).toBe(true);
+    const dueAt = new Date(out.getTime() - 24 * 3600_000);
+    expect(aheadMatterExpired({ lastNewsAt, dueAt }, out)).toBe(false);
+    expect(
+      aheadMatterExpired({ lastNewsAt, dueAt }, new Date(dueAt.getTime() + AHEAD_MATTER_KEEP_AFTER_DUE_MS)),
+    ).toBe(true);
+  });
+
+  it('tries a follow-up whose turn failed once more, never one that reported or is going on', () => {
+    expect(aheadMatterTry('no_answer', [])).toBe('no_answer');
+    expect(aheadMatterTry('no_answer', [{ version: 'no_answer:matter', failed: true }])).toBe(
+      'no_answer.again',
+    );
+    expect(
+      aheadMatterTry('no_answer', [
+        { version: 'no_answer:matter', failed: true },
+        { version: 'no_answer.again:matter', failed: true },
+      ]),
+    ).toBeNull();
+    expect(aheadMatterTry('no_answer', [{ version: 'no_answer:matter', failed: false }])).toBeNull();
+    // Another reason's rows don't count.
+    expect(aheadMatterTry('due', [{ version: 'no_answer:matter', failed: true }])).toBe('due');
+  });
+
+  it('follows up by the clock, once per reason, never right after its start or news', () => {
     const dueAt = new Date('2026-12-18T00:00:00+01:00');
+    const createdAt = new Date('2026-12-01T10:00:00Z');
     const you = {
       waitingOn: 'you' as const,
       dueAt,
       lastNewsAt: new Date('2026-12-10T10:00:00Z'),
+      createdAt,
       followedUp: [],
     };
     expect(aheadMatterDue(you, new Date(dueAt.getTime() - AHEAD_MATTER_DUE_LEAD_MS - 1))).toBeNull();
@@ -427,8 +551,15 @@ describe('keeping an eye on', () => {
     expect(aheadMatterDue({ ...you, followedUp: ['due'] }, new Date(dueAt.getTime() - 3600_000))).toBeNull();
     expect(aheadMatterDue({ ...you, dueAt: null }, dueAt)).toBeNull();
 
+    // Quiet for a while after it began or after news: a date tomorrow doesn't repeat what was just told.
+    const fresh = { ...you, createdAt: new Date(dueAt.getTime() - 3600_000) };
+    expect(aheadMatterDue(fresh, new Date(dueAt.getTime() - 3000_000))).toBeNull();
+    const news = { ...you, lastNewsAt: new Date(dueAt.getTime() - AHEAD_MATTER_QUIET_MS - 60_000) };
+    expect(aheadMatterDue(news, new Date(dueAt.getTime() - 120_000))).toBeNull();
+    expect(aheadMatterDue(news, new Date(dueAt.getTime() - 60_000))).toBe('due');
+
     const lastNewsAt = new Date('2026-12-10T10:00:00Z');
-    const them = { waitingOn: 'them' as const, dueAt: null, lastNewsAt, followedUp: [] };
+    const them = { waitingOn: 'them' as const, dueAt: null, lastNewsAt, createdAt, followedUp: [] };
     const quietFrom = lastNewsAt.getTime() + AHEAD_MATTER_NO_ANSWER_MS;
     expect(aheadMatterDue(them, new Date(quietFrom - 1))).toBeNull();
     expect(aheadMatterDue(them, new Date(quietFrom))).toBe('no_answer');
@@ -483,6 +614,7 @@ describe('keeping an eye on', () => {
     expect(AheadWatchInput.safeParse({ action: 'stop' }).success).toBe(false);
     expect(AheadWatchInput.safeParse({ action: 'stop', id: 'ahm_1' }).success).toBe(true);
     expect(AheadWatchInput.safeParse({ title: 'x y', senders: ['a', 'notaris'] }).success).toBe(false);
+    expect(AheadWatchInput.safeParse({ title: 'x y', words: ['ab'] }).success).toBe(false);
   });
 
   it('a turn reads the list by number, and a follow-up its reason', () => {

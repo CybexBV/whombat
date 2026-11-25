@@ -1,10 +1,11 @@
 /**
  * Incoming mail as a Looks ahead source (docs/decisions/looks-ahead.md): reads the newest inbox mail of every active
  * Google, Microsoft 365 and Email (IMAP) mailbox at most every 15 minutes (unless `fresh`), up to
- * `AHEAD_MAIL_SWEEP_LIMIT` a mailbox so a busy day loses nothing, and leaves out the person's own mail and plain bulk mail
- * (`aheadMailNoise`) before any AI reads it. Which of the rest is checked is the triage pass's choice, or a matter's.
+ * `AHEAD_MAIL_SWEEP_LIMIT` a mailbox so a busy day loses nothing, and leaves out the person's own mail before any AI reads
+ * it. Plain bulk mail is marked (`aheadMailBulk`): a look through new mail leaves it out, while it may still be news on a
+ * thing the person asked to keep an eye on. Which of the rest is checked is the triage pass's choice, or a matter's.
  */
-import { AHEAD_MAIL_SWEEP_LIMIT, aheadMailNoise, type MailSummary } from '@whombat/core';
+import { AHEAD_MAIL_SWEEP_LIMIT, aheadMailBulk, aheadMailOwn, type MailSummary } from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { providerMode, providerWorkspace } from '../connectors/providers';
 import type { Db, Tx } from '../db/client';
@@ -64,34 +65,36 @@ export function mailVersion(messageId: string): string {
   return hash.toString(16).padStart(8, '0');
 }
 
-/** Provider-appropriate query for recent inbox messages. */
+/** Provider-appropriate query for recent inbox messages (Microsoft reads its Inbox folder for `in:inbox`). */
 function inboxQuery(provider: 'google' | 'microsoft' | 'imap'): string {
   if (provider === 'google') return 'in:inbox newer_than:2d';
   if (provider === 'imap') return 'in:INBOX';
-  return '';
+  return 'in:inbox';
 }
 
+/** The newest inbox mail of one mailbox and when it was read (a kept read can be up to 15 minutes old). */
 async function recentInbox(
   services: Services,
   account: MailAccount,
   now: Date,
   fresh = false,
-): Promise<MailSummary[]> {
+): Promise<{ at: number; items: MailSummary[] }> {
   let kept = mailCache.get(services);
   if (!kept) {
     kept = new Map();
     mailCache.set(services, kept);
   }
   const held = kept.get(account.connectionId);
-  if (!fresh && held && now.getTime() - held.at < MAIL_KEEP_MS) return held.items;
+  if (!fresh && held && now.getTime() - held.at < MAIL_KEEP_MS) return held;
   const items = await withAccountToken(services, account.accountId, account.provider, (token) =>
     providerWorkspace(services, account.provider).mailSearch(token, {
       query: inboxQuery(account.provider),
       limit: AHEAD_MAIL_SWEEP_LIMIT,
     }),
   );
-  kept.set(account.connectionId, { at: now.getTime(), items });
-  return items;
+  const read = { at: now.getTime(), items };
+  kept.set(account.connectionId, read);
+  return read;
 }
 
 /** One new inbox mail the watcher may hand to a triage pass, a matter or a check. */
@@ -104,45 +107,68 @@ export interface SweptMail {
   start: string;
   account: MailAccount;
   message: MailSummary;
+  /** Plain bulk mail (`aheadMailBulk`): never in a look through new mail. */
+  bulk: boolean;
+}
+
+/** What one sweep found, and when the inboxes it used were read. */
+export interface Sweep {
+  mails: SweptMail[];
+  /** The oldest read among the mailboxes it used: mail that came later isn't in it yet. */
+  readAt: Date;
+  /** A mailbox couldn't be read this time: its mail since `readAt` may be missing. */
+  partial: boolean;
 }
 
 /**
  * The newest inbox mail of the last 48 hours across all connected mailboxes, newest first, without the person's own
- * mail and plain bulk mail. A mailbox that can't be read is skipped this time.
+ * mail, bulk mail marked. A mailbox that can't be read is skipped this time (`partial`).
  */
 export async function sweepMail(
   services: Services,
   accounts: readonly MailAccount[],
   now: Date,
   fresh = false,
-): Promise<SweptMail[]> {
+): Promise<Sweep> {
   const ownAddresses = accounts.map((a) => a.email).filter(Boolean);
   const cutoff = now.getTime() - MAIL_MAX_AGE_MS;
   const out: SweptMail[] = [];
   const seen = new Set<string>();
+  let readAt = now.getTime();
+  let partial = false;
   for (const account of accounts) {
-    const items = await recentInbox(services, account, now, fresh).catch((err) => {
+    const read = await recentInbox(services, account, now, fresh).catch((err) => {
       services.log.warn(
         { err: String(err), connectionId: account.connectionId, provider: account.provider },
         'looks ahead: mail unread',
       );
-      return [];
+      return null;
     });
-    for (const m of items) {
+    if (!read) {
+      partial = true;
+      continue;
+    }
+    readAt = Math.min(readAt, read.at);
+    for (const m of read.items) {
       const key = mailEventKey(account.connectionId, m.id);
       if (seen.has(key)) continue;
       seen.add(key);
       const at = m.date ? Date.parse(m.date) : Number.NaN;
       if (Number.isFinite(at) && at < cutoff) continue;
-      if (aheadMailNoise({ from: m.from, subject: m.subject, snippet: m.snippet, ownAddresses })) continue;
+      if (aheadMailOwn({ from: m.from, ownAddresses })) continue;
       out.push({
         key,
         version: mailVersion(m.id),
         start: Number.isFinite(at) ? new Date(at).toISOString() : now.toISOString(),
         account,
         message: m,
+        bulk: aheadMailBulk({ subject: m.subject, snippet: m.snippet }),
       });
     }
   }
-  return out.sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+  return {
+    mails: out.sort((a, b) => Date.parse(b.start) - Date.parse(a.start)),
+    readAt: new Date(readAt),
+    partial,
+  };
 }

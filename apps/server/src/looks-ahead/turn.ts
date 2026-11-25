@@ -21,6 +21,7 @@ import {
   type LooksAheadMatter,
   MCP_TOOLS,
   type McpToolName,
+  mailFromAddress,
 } from '@whombat/core';
 import { and, desc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
@@ -68,6 +69,9 @@ import { braveSearch, httpUrl, readPage, WebRefusal } from './web';
 
 export { NOT_AN_AHEAD_CHECK, NOT_AN_AHEAD_THREAD } from './commands';
 export { NOT_A_TRIAGE, TRIAGE_ONLY } from './triage';
+
+/** What a mail check hears when it reports a finding or a matter before reading its own mail. */
+export const READ_THE_MAIL_FIRST = 'Read this mail with mail_read first, then report.';
 
 /** What a check hears when it calls anything it isn't served. */
 export const AHEAD_TOOL_REFUSED =
@@ -401,13 +405,8 @@ const AHEAD_PRIVATE_BODY_MAX = 8000;
  * chose for themselves; “mail” when there is no address.
  */
 export function senderName(from: unknown): string {
-  const text = typeof from === 'string' ? from : '';
-  const address = /<([^<>\s]+@[^<>\s]+)>/.exec(text)?.[1] ?? /[^\s<>"]+@[^\s<>"]+/.exec(text)?.[0] ?? '';
-  const domain =
-    address
-      .split('@')[1]
-      ?.toLowerCase()
-      .replace(/[^a-z0-9.-]/g, '') ?? '';
+  const address = mailFromAddress(typeof from === 'string' ? from : '');
+  const domain = address?.split('@')[1] ?? '';
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain) ? domain.slice(0, 60) : 'mail';
 }
 
@@ -600,8 +599,13 @@ export async function aheadReportSources(
       'This check was given nothing kept an eye on: leave ref out to start keeping an eye on something new.',
     );
   if (ref && ref !== 'k1') throw forbidden(`${ref} isn’t what this check was given: use k1.`);
-  if (!report.found) return [];
   const seen = seenOf(services, dispatch.id);
+  // A mail check speaks only about its own mail, read: a finding or a change to a matter needs that mail read first.
+  if (row.source === 'mail' && (report.found || report.matter)) {
+    const own = row.event.mail?.messageId;
+    if (!own || !seen.mails.has(own)) throw forbidden(READ_THE_MAIL_FIRST);
+  }
+  if (!report.found) return [];
   const named: NamedSource[] = [];
   for (const source of report.sources ?? []) {
     if ('url' in source) {
@@ -632,8 +636,8 @@ export async function aheadReportSources(
     } else if ('calendar' in source) {
       named.push({ label: 'Your calendar' });
     } else if ('matter' in source) {
-      if (row.source === 'calendar' || !row.matterId)
-        throw forbidden('matter is a source only in a check about something kept an eye on.');
+      if (row.source !== 'matter' || !row.matterId)
+        throw forbidden('matter is a source only in a follow-up: name the mail you read instead.');
       named.push({ label: LOOKS_AHEAD_WORDS.matters });
     }
   }
@@ -737,7 +741,11 @@ export async function aheadWatchTool(
 /** Whether a turn may be served `ahead_watch`: one the person began themselves. */
 export async function aheadWatchServed(
   db: Db | Tx,
-  dispatch: Pick<DispatchRow, 'trigger' | 'burrowId' | 'onBehalfOfAccountId' | 'messageId'> | undefined,
+  dispatch:
+    | (Pick<DispatchRow, 'trigger' | 'burrowId' | 'onBehalfOfAccountId' | 'messageId'> & {
+        retryOfId?: string | null;
+      })
+    | undefined,
 ): Promise<boolean> {
   return !!dispatch && (await personBeganTurn(db, dispatch));
 }
