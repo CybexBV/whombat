@@ -17,7 +17,7 @@ import {
   LooksAheadUpdate,
   newId,
 } from '@whombat/core';
-import { and, eq, gte, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { settleResolvedThreads } from '../chats/settle';
 import type { ApplyContext } from '../commit/types';

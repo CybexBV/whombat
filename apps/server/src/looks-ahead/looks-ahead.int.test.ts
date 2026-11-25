@@ -7,7 +7,7 @@
  * because every step is a signed commit and a queued turn.
  */
 import { AHEAD_REPLIES, type CalendarEvent } from '@whombat/core';
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueDispatchToken } from '../auth/agent-tokens';
 import { sendMessage } from '../commands/messages';
