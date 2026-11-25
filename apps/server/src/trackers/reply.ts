@@ -8,6 +8,7 @@
  */
 import {
   type AutomationStep,
+  connectionSignature,
   customerReplyProblem,
   customerSignature,
   renderTemplate,
@@ -328,18 +329,22 @@ export async function otherOrganizations(
   return rows.map((r) => r.name).filter((n): n is string => !!n);
 }
 
-/** The agent of step `from`: its name and how it signs (TA-26). */
+/**
+ * The agent of step `from`: its name and how it signs (TA-26), or the connection's own signature when it has one
+ * (team-reports.md).
+ */
 export async function replyAgent(
   db: Db | Tx,
   burrowId: string,
   steps: readonly AutomationStep[],
   from: string,
+  fields?: Readonly<Record<string, string>> | null,
 ): Promise<{ agent: string; signature: string }> {
   const step = steps.find((s) => s.id === from);
   // The agent's voice (one-agent.md OA-15): every agent step is its turn.
   const row = step?.kind === 'dispatch_agent' ? await loadAgentRow(db, burrowId) : undefined;
   const agent = row?.name ?? 'The agent';
-  return { agent, signature: customerSignature(agent) };
+  return { agent, signature: connectionSignature(fields) ?? customerSignature(agent) };
 }
 
 /** `> ` before every line: the reply as the thread quotes it, signature included. */
@@ -386,7 +391,13 @@ export async function trackerReplyPlan(
     return { ok: false, reason: `Nothing to send: “${reportId.slice(0, 60)}” isn’t a report id.` };
   const row = await trackerConnectionRow(db, run.burrowId, step.connectionId);
   if (!row) return { ok: false, reason: 'Its tracker connection is gone.', fatal: true };
-  const { agent, signature } = await replyAgent(db, run.burrowId, run.definition.steps, step.from);
+  const { agent, signature } = await replyAgent(
+    db,
+    run.burrowId,
+    run.definition.steps,
+    step.from,
+    row.fields,
+  );
   const kept = steps.find((s) => s.stepId === step.from)?.output as
     | { assessment?: unknown; closes?: unknown }
     | undefined;

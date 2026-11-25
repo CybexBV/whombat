@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   type AutomationDefinition,
+  connectionSignature,
   customerSignature,
   type FixOutcome,
   fixOutcomeOf,
@@ -471,8 +472,10 @@ async function noticeVoice(
     guessLanguage(
       `${typeof scope.title === 'string' ? scope.title : ''} ${typeof scope.description === 'string' ? scope.description : ''}`,
     );
+  // The connection's own signature, when it has one (team-reports.md).
+  const own = connectionSignature((await trackerConnectionRow(db, run.burrowId, connectionId))?.fields);
   return {
-    signature: agent ? customerSignature(agent.name) : '',
+    signature: own ?? (agent ? customerSignature(agent.name) : ''),
     language,
   };
 }

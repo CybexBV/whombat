@@ -300,6 +300,20 @@ export function customerSignature(name: string): string {
   return `${name.trim()} - AI Assistant`;
 }
 
+/** The longest signature a tracker connection may give its replies (`signature`). */
+export const TRACKER_SIGNATURE_MAX = 60;
+
+/**
+ * A tracker connection's own signature for its replies (“Whombat Team (AI assistant)”), from its `signature` field, on
+ * one line; null without one, and the agent's name signs as before (`customerSignature`). Whombat team-reports.md.
+ */
+export function connectionSignature(
+  fields: Readonly<Record<string, string>> | null | undefined,
+): string | null {
+  const own = (fields?.signature ?? '').replace(/\s+/g, ' ').trim();
+  return own && own.length <= TRACKER_SIGNATURE_MAX ? own : null;
+}
+
 /** A reply as the tracker sends it: the text, a blank line and the signature. */
 export function signedReply(text: string, signature: string): string {
   return `${text.trim()}\n\n${signature}`;
