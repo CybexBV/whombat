@@ -33,6 +33,7 @@ const Demo =
 const managedApp =
   !DEMO && !Harness ? (require('./managed/ManagedApp') as typeof import('./managed/ManagedApp')) : null;
 const Managed = managedApp?.ManagedApp ?? null;
+const UpdatePrompt = managedApp?.ManagedUpdatePrompt ?? null;
 // What its first screen needs starts loading now, while the fonts load (AP-920).
 managedApp?.startManagedApp();
 
@@ -54,9 +55,13 @@ function Root() {
       {fontsReady && Body ? (
         // The last resort, around everything the app draws that no page's own boundary is around (the tab bar, the
         // bridges, the sign-in screens): “This page didn’t load.” with Try again, instead of the app closing.
-        <PageBoundary>
-          <Body />
-        </PageBoundary>
+        <>
+          <PageBoundary>
+            <Body />
+          </PageBoundary>
+          {/* A newer Android app, said once per version over whatever screen is open (update-check.md). */}
+          {UpdatePrompt ? <UpdatePrompt /> : null}
+        </>
       ) : (
         <StartHold>
           <View style={{ flex: 1, backgroundColor: theme.colors.bg }} />

@@ -115,3 +115,15 @@ export function appUpdateStatus(state: UpdateCheckState, ownBuild: number | unde
   if (state.failed) return 'failed';
   return state.answered && ownBuild !== undefined ? 'newest' : 'unknown';
 }
+
+/**
+ * The newer build the pop-up offers (update-check.md): once per version, so “Later” holds until the next one. Null
+ * while nothing newer is out, once the pop-up showed this version or a later one, and where the phone can't remember
+ * what it showed (`seen` null: no pop-up rather than one at every start).
+ */
+export function updateToAnnounce(
+  update: AndroidDownload | null,
+  seen: number | null,
+): AndroidDownload | null {
+  return update && seen !== null && update.versionCode > seen ? update : null;
+}

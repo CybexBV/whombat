@@ -7,6 +7,7 @@ import {
   UPDATE_CHECK_FRESH_MS,
   UPDATE_UNASKED,
   updateCheckFor,
+  updateToAnnounce,
 } from './appUpdate';
 
 const apk = (versionCode: number): AndroidDownload => ({
@@ -117,5 +118,20 @@ describe('Update available (SS-71)', () => {
     expect(COPY.update.availableMeta('0.37.1', 1)).toBe(
       '0.37.1 · 1 MB · Download and install it over this app.',
     );
+  });
+});
+
+describe('the pop-up for a newer app', () => {
+  it('offers each newer version once', () => {
+    expect(updateToAnnounce(apk(34_001), 0)?.versionCode).toBe(34_001);
+    expect(updateToAnnounce(apk(34_001), 34_000)?.versionCode).toBe(34_001);
+    // Shown (and closed with Later) for this version: not again until a newer one.
+    expect(updateToAnnounce(apk(34_001), 34_001)).toBeNull();
+    expect(updateToAnnounce(apk(34_002), 34_001)?.versionCode).toBe(34_002);
+  });
+
+  it('stays away with nothing newer, or where the phone can’t remember what it showed', () => {
+    expect(updateToAnnounce(null, 0)).toBeNull();
+    expect(updateToAnnounce(apk(34_001), null)).toBeNull();
   });
 });

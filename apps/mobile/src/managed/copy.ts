@@ -146,6 +146,12 @@ export const COPY = {
       `${version} · ${Math.max(1, Math.round(size / 1_000_000))} MB · Download and install it over this app.`,
     /** The row's button: downloads the APK. */
     install: 'Update',
+    /** The pop-up when a newer build is out, once per version (update-check.md). */
+    newTitle: 'A new version of Whombat',
+    /** “Version 3.155.0 (37 MB) is ready. It takes a minute, and you stay signed in.” */
+    newLead: (version: string, size: number) =>
+      `Version ${version} (${Math.max(1, Math.round(size / 1_000_000))} MB) is ready. It takes a minute, and you stay signed in.`,
+    later: 'Later',
     /** The app updates itself (AP-813): the button while the APK downloads into the app. */
     downloading: (percent: number) => `Downloading ${percent}%`,
     /** “0.44.0 · 34 of 96 MB” */

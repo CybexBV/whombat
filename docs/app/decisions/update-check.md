@@ -16,7 +16,21 @@ the process (AP-701). Coming back to the app, opening Settings, a new screen: th
 | AP-2974 | **No check where there is no APK**: the iPhone, a self-hosted server and the demo world show the versions only, without the button (no control client to ask). | Nothing to look for there. |
 | AP-2975 | **whombat-app 0.101.0.** No contract change (contracts stay 0.98.0), no web change: the Whombat vendor pin stays, DEV gets the APK (`publish:apk --env dev`). A phone on 0.100.x finds 0.101.0 the old way (within the hour, or after closing the app); from 0.101.0 on, coming back to the app or “Check for updates” is enough. | The check has to be installed before it can help. |
 
-AP-2970…AP-2975 used; AP-2976…AP-2979 kept for this work's follow-ups.
+AP-2970…AP-2975 used; AP-2976…AP-2979 below.
+
+## A notification and a pop-up for a newer app (AP-2976…AP-2979)
+
+John, 2026-11-25: “when there is an update for the Android app we should get a notification and a pop-up in the app
+itself.” Until now a newer build showed only as a calm card in Settings, a row in VERSION and the tab's dot: easy to
+miss, and nothing at all while the app was closed.
+
+| ID | Decision | Why |
+|---|---|---|
+| AP-2976 | **A background check notifies once per newer version** (`modules/whombat-updater`, `UpdateWatch` + `UpdateCheckJob`): Android's JobScheduler runs it every three hours when the phone has a connection, kept over restarts (`RECEIVE_BOOT_COMPLETED`). It asks control's public `downloads/android` (the address the app hands over at every start, `androidDownloadUrl`) and, for a `versionCode` above this build's and above any version already notified or shown in the pop-up, posts “A new version of Whombat is ready” · “Version 3.155.0 is out. Tap to update.” on its own channel “App updates” (default importance). Tapping it opens the app. With notifications off nothing is marked, so it comes once they're on. | The app's own check runs only while it is open. JobScheduler is part of Android: no new library, no server or control change, no push through the box. Three hours is quick enough to hear about an update the same day and costs a few hundred bytes. |
+| AP-2977 | **The pop-up says it once per version** (`AppUpdatePrompt`, drawn beside the app in `App.tsx`, so over any screen, signed in or not): a sheet “A new version of Whombat” · “Version 3.155.0 (37 MB) is ready. It takes a minute, and you stay signed in.” with Later and Update. Update is the same in-app download as the Settings card (AP-815): the line under the title follows it (progress, allow installs, Install, what went wrong). Later or closing it holds until the next version; the card, the VERSION row and the dot stay. | One clear moment to update without nagging at every start. A notification tapped opens the app straight into this sheet. |
+| AP-2978 | **What was shown is remembered on the phone** (`updateSeen` / `markUpdateSeen`, the module's own preferences): the pop-up marks its version as it opens, which also clears that version's notification and keeps it from being notified later. A build that can't remember shows no pop-up rather than one at every start. | The notification and the pop-up shouldn't both nag about a version the person already saw. |
+| AP-2979 | **Android only.** The iPhone gets its updates from TestFlight, which tells the person itself. | Nothing for the app to look for there (AP-2974). |
+
 
 ## whombat-app 0.101.0
 

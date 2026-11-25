@@ -13,6 +13,12 @@ opens Android's installer on it. No browser and no Downloads folder.
   (`cache/updates/` only). Android asks “Do you want to update this app?” and ends with “App installed · Done / Open”;
   the update replaces this process, so success never reports back.
 - Staged files not newer than the running build are deleted when the module loads.
+- `watchUpdates(url)` — schedules `UpdateCheckJob` (Android's JobScheduler, every three hours with a connection, kept
+  over restarts): it asks control's `downloads/android` at `url` and posts one “A new version of Whombat is ready”
+  notification (channel “App updates”) per newer version. Tapping it opens the app. The app hands the address over at
+  every start (`docs/app/decisions/update-check.md`).
+- `updateSeen()` / `markUpdateSeen(versionCode)` — the newest version the app's pop-up showed; marking one clears its
+  notification and stops it from being notified.
 
 Rejection codes: `busy`, `network`, `verify`, `signature`, `failed`. The app side is
 `src/managed/appInstall.ts` (steps, unit-tested), `useAppInstall.ts`, `UpdateAppButton.tsx` and

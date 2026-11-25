@@ -16,6 +16,9 @@ interface NativeWhombatUpdater {
   canInstall(): boolean;
   openInstallSettings(): boolean;
   openAppDetails?(): boolean;
+  watchUpdates?(url: string): void;
+  updateSeen?(): number;
+  markUpdateSeen?(versionCode: number): void;
   download(url: string, sha256: string, size: number, versionCode: number): Promise<string>;
   install(path: string): Promise<void>;
   addListener(event: 'onProgress', listener: (event: UpdaterProgress) => void): { remove(): void };
@@ -51,6 +54,33 @@ export const WhombatUpdater = {
       return native?.openAppDetails?.() ?? false;
     } catch {
       return false;
+    }
+  },
+  /**
+   * Asks control at `url` every few hours while the app isn't open, and notifies once for each newer version
+   * (update-check.md). Called at every start; nothing where the build has no such call.
+   */
+  watchUpdates: (url: string): void => {
+    try {
+      native?.watchUpdates?.(url);
+    } catch {
+      // Without the watch the app still finds updates while it is open.
+    }
+  },
+  /** The newest version the in-app pop-up showed; null where the build can't remember it (no pop-up then). */
+  updateSeen: (): number | null => {
+    try {
+      return native?.updateSeen?.() ?? null;
+    } catch {
+      return null;
+    }
+  },
+  /** The pop-up showed this version: it isn't notified any more, and a notification already up goes. */
+  markUpdateSeen: (versionCode: number): void => {
+    try {
+      native?.markUpdateSeen?.(versionCode);
+    } catch {
+      // Shown again at the next start at worst.
     }
   },
   /** Downloads and checks the APK; resolves with its path in the app's cache. */
