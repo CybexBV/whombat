@@ -7,6 +7,7 @@ import {
   type AheadDispatchContext,
   type AheadKind,
   type AheadReportInput,
+  aheadHours,
   aheadQueryRefusal,
   aheadSkip,
   aheadVersion,
@@ -24,25 +25,17 @@ import { loadGrants } from '../read/principals';
 import type { DispatchRow } from '../runtime/context';
 import type { Services } from '../services';
 import { openWebSearchKey } from '../web-search/store';
-import { calendarAccounts, currentEvent } from './calendars';
+import { calendarAccounts, calendarKey, currentEvent } from './calendars';
 import {
   aheadFeedback,
   aheadSettingsOf,
+  CHECKING_MAX_MS,
+  markAheadMailRead,
   NOT_AN_AHEAD_CHECK,
   reportAhead,
   toldCheckOfThread,
 } from './commands';
-import {
-  forgetSeen,
-  sawLink,
-  sawLinks,
-  sawSource,
-  sawSourceOf,
-  seenOf,
-  takePage,
-  takeSearch,
-  webClosed,
-} from './seen';
+import { forgetSeen, sawLink, sawLinks, sawSource, sawSourceOf, seenOf, takePage, takeSearch } from './seen';
 import { braveSearch, httpUrl, readPage, WebRefusal } from './web';
 
 export { NOT_AN_AHEAD_CHECK, NOT_AN_AHEAD_THREAD } from './commands';
@@ -122,8 +115,23 @@ export async function aheadToolRefusal(
   if (name === 'ahead_report') return null;
   const row = await aheadCheckOfTurn(services.db, dispatch);
   if (row?.state !== 'checking') return 'This check has ended.';
-  if (!(await aheadSettingsOf(services.db, dispatch.burrowId)).on)
-    return 'Looks ahead was switched off: end with ahead_report, found false.';
+  // A check that ran late (claimed after its time, or past its two hours) does nothing more.
+  const now = services.clock();
+  const [burrow] = await services.db
+    .select({ timeZone: burrows.timeZone })
+    .from(burrows)
+    .where(eq(burrows.id, dispatch.burrowId));
+  if (
+    !aheadHours(now, burrow?.timeZone ?? 'UTC') ||
+    now.getTime() - row.startedAt.getTime() >= CHECKING_MAX_MS
+  )
+    return 'This check is over: end with ahead_report, found false.';
+  const settings = await aheadSettingsOf(services.db, dispatch.burrowId);
+  if (
+    !settings.on ||
+    settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId))
+  )
+    return 'Looks ahead or this calendar was switched off: end with ahead_report, found false.';
   if (name === 'calendar_events') {
     const asked = input as { calendarId?: unknown; provider?: unknown } | null;
     const [account] = await services.db
@@ -135,10 +143,19 @@ export async function aheadToolRefusal(
   }
   const key = MCP_TOOLS[name].requiredKey;
   // A key that depends on the input is never one of a check's tools (calendar and mail read have fixed keys).
-  if (!key || key === 'by_input') return null;
-  return (await keyAllowed(services, dispatch.agentId, key))
-    ? null
-    : 'This needs the person’s yes, and nobody is there to ask while you check ahead: go on without it.';
+  if (key && key !== 'by_input' && !(await keyAllowed(services, dispatch.agentId, key)))
+    return 'This needs the person’s yes, and nobody is there to ask while you check ahead: go on without it.';
+  // Mail is about to reach the model: the check's web closes now, kept on its row.
+  if (name === 'mail_search' || name === 'mail_read') {
+    seenOf(services, dispatch.id).mailRead = true;
+    const res = await services.pipeline.commit(
+      markAheadMailRead,
+      { dispatchId: dispatch.id },
+      { burrowId: dispatch.burrowId, actorId: dispatch.agentId },
+    );
+    if (res.status !== 'ok') return 'The mail can’t be read in this check now.';
+  }
+  return null;
 }
 
 /** The most of one mail's text a check reads. */
@@ -170,10 +187,8 @@ export async function aheadToolRan(
   out: unknown,
 ): Promise<void> {
   if (dispatch.trigger !== 'ahead' || (name !== 'mail_read' && name !== 'mail_search')) return;
-  const seen = seenOf(services, dispatch.id);
-  // Strangers' words are in its context now: nothing more of this check goes to the web.
-  seen.mailRead = true;
   if (name !== 'mail_read') return;
+  const seen = seenOf(services, dispatch.id);
   const found =
     (out as { messages?: { id?: unknown; from?: unknown; body?: unknown; bodyTruncated?: unknown }[] } | null)
       ?.messages ?? [];
@@ -234,7 +249,7 @@ const WEB_CLOSED =
 export async function searchWebTool(services: Services, dispatch: DispatchRow, query: string) {
   const row = await liveCheck(services, dispatch);
   const seen = seenOf(services, dispatch.id);
-  if (webClosed(services, seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
+  if (row.mailReadAt || seen.mailRead) throw forbidden(WEB_CLOSED);
   const refusal = aheadQueryRefusal(query, await privateWords(services, dispatch.burrowId, row));
   if (refusal) throw forbidden(refusal);
   const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, dispatch.burrowId));
@@ -256,7 +271,6 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
       seen,
       results.map((r) => r.url),
     );
-    for (const r of results) sawSource(seen, r.url);
     return { status: 'ok' as const, results };
   } catch (err) {
     if (err instanceof WebRefusal) throw forbidden(err.message);
@@ -265,9 +279,9 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
 }
 
 export async function readWebPageTool(services: Services, dispatch: DispatchRow, url: string) {
-  await liveCheck(services, dispatch);
+  const row = await liveCheck(services, dispatch);
   const seen = seenOf(services, dispatch.id);
-  if (webClosed(services, seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
+  if (row.mailReadAt || seen.mailRead) throw forbidden(WEB_CLOSED);
   if (!sawLink(seen, url))
     throw forbidden(
       'Only a link exactly as you saw it in a search result or on a page you read: links in the event or a mail aren’t opened.',
@@ -317,7 +331,7 @@ export async function aheadReportSources(
     if ('url' in source) {
       if (!sawSourceOf(seen, source.url))
         throw forbidden(
-          `${source.url} isn’t a page you read or found in this check: name only what you saw.`,
+          `${source.url} isn’t a page you read in this check: read it with read_web_page first (a search result is only a lead).`,
         );
       named.push({ label: siteOf(source.url), url: httpUrl(source.url) ?? source.url });
     } else {
@@ -336,6 +350,12 @@ export async function aheadReportSources(
 export async function aheadEventCurrent(services: Services, dispatch: DispatchRow): Promise<boolean> {
   const row = await aheadCheckOfTurn(services.db, dispatch);
   if (!row?.event.connectionId) return false;
+  const settings = await aheadSettingsOf(services.db, dispatch.burrowId);
+  if (
+    !settings.on ||
+    settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId))
+  )
+    return false;
   if (!(await keyAllowed(services, dispatch.agentId, 'calendar.read'))) return false;
   const person = await thePerson(services.db, dispatch.burrowId);
   const account = person?.accountId

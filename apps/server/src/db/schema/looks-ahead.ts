@@ -77,6 +77,8 @@ export const aheadChecks = pgTable(
       .references(() => conversations.id, { onDelete: 'cascade' }),
     threadRootId: text('thread_root_id').notNull(),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    /** The check read mail: nothing more of it goes to the web, whatever restarts or claims come after. */
+    mailReadAt: timestamp('mail_read_at', { withTimezone: true }),
     reportedAt: timestamp('reported_at', { withTimezone: true }),
     settledAt: timestamp('settled_at', { withTimezone: true }),
   },

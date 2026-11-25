@@ -1724,11 +1724,11 @@ Setup and operation: `docs/github.md`.
   are Allowed (each mail cut to 8 000 characters), `search_web` (Brave on the person's key; a search with an address, a
   link, a phone number, a code or the person's own name is refused) and `read_web_page` (a public https page through
   `lib/outbound.ts`, only a link the check found: a search result or a link on a page it read; `looks-ahead/seen.ts`),
-  and `ahead_report`; the web comes first, and once it read mail nothing more goes to the web; switched off, only
-  `ahead_report` is left. Hermes's policy blocks everything else, its memory among them, and says `review: false`, so the
+  and `ahead_report`; the web comes first, and once it read mail nothing more goes to the web (kept on the row,
+  `mail_read_at`); switched off or running late, only `ahead_report` is left. Hermes's policy blocks everything else, its memory among them, and says `review: false`, so the
   plugin's post-answer review does nothing; when the check's turn ends, its Hermes session is deleted from the person's
   home (`hermes_session_drops`). `ahead_report` ends it: nothing found keeps only the row; a finding whose sources the check
-  read or found is posted by the assistant as the thread's first message — its words without links or markup, then the
+  read (pages it read, mails it read; search results are only leads) is posted by the assistant as the thread's first message — its words without links or markup, then the
   sources as Whombat names them (a page's site, a mail's sender's site), no link previews — with the quick replies “Not useful” and
   “Stop checking for this”, and the person's Chat tells them (inbox and push). It stays quiet instead when its kind was
   stopped, two were told that day, Looks ahead or the calendar went off, it is night or the event is about to begin, or

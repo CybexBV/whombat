@@ -289,6 +289,8 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect(mail.isError).toBeFalsy();
     const late = await mcp.client.callTool({ name: 'search_web', arguments: { query: 'Ziggo Dome' } });
     expect(late.isError).toBe(true);
+    // Kept on the row, so a restart or a later claim keeps the web closed too.
+    expect((await row(second)).mailReadAt).not.toBeNull();
     // Only the event's own calendar is read.
     const other = await mcp.client.callTool({
       name: 'calendar_events',
@@ -385,6 +387,10 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect((await row(moved)).summary).toBe('Parents’ evening');
     let mcp = await inTurn((await row(moved)).dispatchId ?? '');
     await mcp.client.callTool({ name: 'search_web', arguments: { query: 'School Utrecht parents evening' } });
+    await mcp.client.callTool({
+      name: 'read_web_page',
+      arguments: { url: 'https://venue.example.com/the-script' },
+    });
     // The person stopped “changed times”: a finding of that kind is kept quiet.
     const stoppedKind = await mcp.client.callTool({
       name: 'ahead_report',
@@ -405,6 +411,10 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const third = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
     mcp = await inTurn((await row(third)).dispatchId ?? '');
     await mcp.client.callTool({ name: 'search_web', arguments: { query: 'School Utrecht' } });
+    await mcp.client.callTool({
+      name: 'read_web_page',
+      arguments: { url: 'https://venue.example.com/the-script' },
+    });
     evening.start = '2026-12-14T19:30:00Z';
     const changed = await mcp.client.callTool({
       name: 'ahead_report',
@@ -483,6 +493,10 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect(evening).toMatch(/^ahc_/);
     const searching = await inTurn((await row(evening)).dispatchId ?? '');
     await searching.client.callTool({ name: 'search_web', arguments: { query: 'Ziggo Dome' } });
+    await searching.client.callTool({
+      name: 'read_web_page',
+      arguments: { url: 'https://venue.example.com/the-script' },
+    });
     await searching.close();
     now = new Date('2026-12-13T21:05:00Z');
     const mcp = await inTurn((await row(evening)).dispatchId ?? '');

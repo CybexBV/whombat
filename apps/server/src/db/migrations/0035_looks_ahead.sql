@@ -19,6 +19,7 @@ CREATE TABLE "ahead_checks" (
 	"conversation_id" text NOT NULL,
 	"thread_root_id" text NOT NULL,
 	"started_at" timestamp with time zone NOT NULL,
+	"mail_read_at" timestamp with time zone,
 	"reported_at" timestamp with time zone,
 	"settled_at" timestamp with time zone
 );

@@ -1,5 +1,5 @@
 {
-  "id": "fbee84e0-b045-4edf-82e7-eb3d60fd621e",
+  "id": "e351b831-32cd-4ec9-976b-06980343a0e7",
   "prevId": "639f92e2-65ba-4749-8b40-dfdac9e07d55",
   "version": "7",
   "dialect": "postgresql",
@@ -16853,6 +16853,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
+        },
+        "mail_read_at": {
+          "name": "mail_read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "reported_at": {
           "name": "reported_at",

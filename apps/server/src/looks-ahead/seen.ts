@@ -1,9 +1,9 @@
 /**
  * What one Looks ahead check has seen so far (docs/decisions/looks-ahead.md), by its dispatch, in this server's memory:
  * the links it may read (search results and links on pages it read, never one it made up, so nothing private leaves in
- * an address), the pages it may name as sources (search results and pages it read), the mails it read (by their
- * sender), and whether it read mail at all: after that nothing more goes to the web, so a stranger's mail can't steer
- * what leaves the Whombat. A server that restarted during a check doesn't know: that check's web is closed.
+ * an address), the pages it may name as sources (pages it read), the mails it read (by their
+ * sender), and whether it read mail (also kept on the check's row, `mail_read_at`, which outlasts a restart): after
+ * that nothing more goes to the web, so a stranger's mail can't steer what leaves the Whombat.
  */
 import { AHEAD_PAGES_MAX, AHEAD_SEARCHES_MAX } from '@whombat/core';
 import type { Services } from '../services';
@@ -12,7 +12,7 @@ import { httpUrl } from './web';
 export interface CheckSeen {
   /** Links it may read: a search result, or a link on a page it read. */
   urls: Set<string>;
-  /** Pages it may name as a source: a search result, or a page it read (not a link it only saw). */
+  /** Pages it may name as a source: pages it read (a search result is only a lead). */
   sources: Set<string>;
   /** The mails it read, by id, with the sender's name a finding names them by. */
   mails: Map<string, string>;
@@ -28,13 +28,6 @@ const KEEP_MS = 3 * 3600_000;
 /** Links remembered per check, at most. */
 const URLS_MAX = 400;
 const seenBy = new WeakMap<Services, Map<string, CheckSeen>>();
-/** When this process started (the system clock). */
-const PROCESS_STARTED = Date.now();
-/**
- * When this server started, on the services' own clock: a check begun before may have read mail its memory doesn't
- * know of.
- */
-const startedBy = new WeakMap<Services, number>();
 
 /** The check's memory, empty the first time it is asked for. */
 export function seenOf(services: Services, dispatchId: string): CheckSeen {
@@ -42,7 +35,6 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
   if (!all) {
     all = new Map();
     seenBy.set(services, all);
-    startedBy.set(services, services.clock().getTime() - (Date.now() - PROCESS_STARTED));
   }
   const now = services.clock().getTime();
   for (const [id, s] of all) if (now - s.at > KEEP_MS) all.delete(id);
@@ -60,12 +52,6 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
     all.set(dispatchId, seen);
   }
   return seen;
-}
-
-/** Whether the check's web is closed: it read mail, or it began before this server kept memories (it may have). */
-export function webClosed(services: Services, seen: CheckSeen, claimedAt: Date | null): boolean {
-  const started = startedBy.get(services) ?? 0;
-  return seen.mailRead || (claimedAt !== null && claimedAt.getTime() < started);
 }
 
 /** Remembers links the check may now read. */

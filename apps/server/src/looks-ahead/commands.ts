@@ -202,6 +202,25 @@ export const startAheadCheck = defineCommand({
   },
 });
 
+/* Mail closes the web ------------------------------------------------------------------------------------------------ */
+
+/**
+ * A check is about to read mail: kept on its row before the mail reaches the model, so nothing more of it goes to the
+ * web — not after a restart, nor in a later claim of the same turn.
+ */
+export const markAheadMailRead = defineCommand({
+  name: 'ahead.mail_read',
+  schema: z.object({ dispatchId: z.string().min(1).max(64) }),
+  async apply(tx, ctx, input): Promise<{ ok: true }> {
+    if (ctx.actor.kind !== 'agent') throw forbidden(NOT_AN_AHEAD_CHECK);
+    const row = await checkOfTurn(tx, ctx.burrow.id, input.dispatchId);
+    if (!row || row.agentId !== ctx.actor.id) throw forbidden(NOT_AN_AHEAD_CHECK);
+    if (!row.mailReadAt)
+      await tx.update(aheadChecks).set({ mailReadAt: ctx.now }).where(eq(aheadChecks.id, row.id));
+    return { ok: true };
+  },
+});
+
 /* The report --------------------------------------------------------------------------------------------------------- */
 
 /** The check a Looks ahead turn works on, locked, or null. */
@@ -559,4 +578,11 @@ export const updateLooksAhead = defineCommand({
   },
 });
 
-export const AHEAD_COMMANDS = [startAheadCheck, reportAhead, aheadFeedback, tidyAhead, updateLooksAhead];
+export const AHEAD_COMMANDS = [
+  startAheadCheck,
+  markAheadMailRead,
+  reportAhead,
+  aheadFeedback,
+  tidyAhead,
+  updateLooksAhead,
+];

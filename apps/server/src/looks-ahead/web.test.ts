@@ -6,17 +6,7 @@ import { AHEAD_PAGES_MAX, AHEAD_SEARCHES_MAX } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { Services } from '../services';
 import { findingWords } from './commands';
-import {
-  forgetSeen,
-  sawLink,
-  sawLinks,
-  sawSource,
-  sawSourceOf,
-  seenOf,
-  takePage,
-  takeSearch,
-  webClosed,
-} from './seen';
+import { forgetSeen, sawLink, sawLinks, sawSource, sawSourceOf, seenOf, takePage, takeSearch } from './seen';
 import { senderName } from './turn';
 import {
   braveSearch,
@@ -62,7 +52,7 @@ describe('links', () => {
 });
 
 describe('what a check has seen', () => {
-  it('reads only links it found, names only pages it read or found, and closes the web once it read mail', () => {
+  it('reads only links it found and names only pages it read', () => {
     const { services } = fakeServices(() => html(''));
     const seen = seenOf(services, 'dsp_1');
     expect(sawLink(seen, 'https://example.com/event')).toBe(false);
@@ -73,11 +63,6 @@ describe('what a check has seen', () => {
     expect(sawSourceOf(seen, 'https://example.org/news')).toBe(false);
     sawSource(seen, 'https://example.org/news');
     expect(sawSourceOf(seen, 'https://example.org/news/')).toBe(true);
-    expect(webClosed(services, seen, services.clock())).toBe(false);
-    seen.mailRead = true;
-    expect(webClosed(services, seen, services.clock())).toBe(true);
-    // A check begun before this server started may have read mail it doesn't know of.
-    expect(webClosed(services, seenOf(services, 'dsp_3'), new Date(0))).toBe(true);
     forgetSeen(services, 'dsp_1');
     expect(sawLink(seenOf(services, 'dsp_1'), 'https://example.org/news')).toBe(false);
   });
