@@ -207,6 +207,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Which change a quiet window is at, for Undo (docs/decisions/monitoring.md): one integer column on quiet_windows that defaults to 0. The release before it reads and writes quiet_windows past the column; a change it records carries no count, and Undo of that change compares the window's end as before."
+    },
+    "0033_incident_down_stretches": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The stretches an incident's thing didn't answer (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column; an empty list reads as one stretch from down_since to the end, as before."
     }
   }
 }

@@ -5,14 +5,16 @@
  * - **`incidents.pass`** (the watcher, `watch.ts`): opens, worsens and ends incidents as a pass planned (`plan.ts`).
  *   Opening signs `thing.down` or `thing.problem`, a problem going down `thing.down`, each other bad check counting
  *   on it (at the start or later) `thing.problem` once, carrying that check, and ending `thing.back`
- *   (`ThingIncidentEvent`, no text: they show in no feed); automations are nudged. An incident whose thing was removed
- *   ends without `thing.back`: it didn't come back. When the last incident a push named ends, its push is withdrawn
- *   quietly: its inbox row is read, and on a managed Whombat the phone's notification goes (a content-free clear).
- *   Nothing says it's back. Home's `things` hears of each opening, worsening and end, so an open page's “What happened”
- *   reads again.
+ *   (`ThingIncidentEvent`, no text: they show in no feed); automations are nudged. A `down` incident's thing that
+ *   answers again, or stops again, while the incident stays open closes or opens a stretch of its down time. An
+ *   incident whose thing was removed ends without `thing.back`: it didn't come back. When the last incident a push
+ *   named ends, its push is withdrawn quietly: its inbox row is read, and on a managed Whombat the phone's notification
+ *   goes (a content-free clear). Nothing says it's back. Home's `things` hears of each opening, worsening and end, so an
+ *   open page's “What happened” reads again.
  * - **`incidents.push`** (the watcher): saves the Inbox notification and marks the incidents pushed in one commit,
- *   then uses the usual push delivery. Whether each is still open and not kept quiet
- *   or down because of something else is checked again in its commit, and its words name only those left.
+ *   then uses the usual push delivery. Whether each is still open, not kept quiet or down because of something else,
+ *   and not pushed about by a research finding meanwhile is checked again in its commit, and its words name only those
+ *   left, as each is on the watcher's pass.
  */
 import {
   INCIDENTS_KEEP_DAYS,
@@ -32,6 +34,7 @@ import { managedAppOrigin } from '../config';
 import type { Db, Tx } from '../db/client';
 import {
   catalogConnections,
+  type DownStretchRow,
   type IncidentRow,
   incidents,
   lookResearches,
@@ -77,6 +80,8 @@ const Opened = z.object({
   pushed: z.boolean().optional(),
   /** The bad checks counting on it as it opens: each other than `check` signs `thing.problem` too. */
   problems: z.array(Problem).max(30).optional(),
+  /** When it stopped answering, when later than its start (passes that couldn't read it came between). */
+  downSince: z.iso.datetime({ offset: true }).optional(),
 });
 const Changed = z.object({
   id: z.string().min(1).max(80),
@@ -90,6 +95,12 @@ const Changed = z.object({
 });
 /** A bad check that began counting on an open incident. */
 const Noted = Problem.extend({ id: z.string().min(1).max(80) });
+/** A `down` incident's thing answered again (`down` false) or stopped answering again (true). */
+const Stretched = z.object({
+  id: z.string().min(1).max(80),
+  down: z.boolean(),
+  at: z.iso.datetime({ offset: true }),
+});
 const Ended = z.object({
   id: z.string().min(1).max(80),
   endedAt: z.iso.datetime({ offset: true }),
@@ -217,6 +228,7 @@ export const incidentsPass = defineCommand({
     opened: z.array(Opened).max(200),
     changed: z.array(Changed).max(200),
     noted: z.array(Noted).max(200).optional(),
+    stretched: z.array(Stretched).max(200).optional(),
     ended: z.array(Ended).max(200),
   }),
   async apply(tx, ctx, input) {
@@ -238,7 +250,7 @@ export const incidentsPass = defineCommand({
           checkId: o.check,
           subject: o.subject,
           startedAt: new Date(o.startedAt),
-          downSince: o.nature === 'down' ? new Date(o.startedAt) : null,
+          downSince: o.nature === 'down' ? new Date(o.downSince ?? o.startedAt) : null,
           causeThing: o.cause?.thing ?? null,
           causeName: o.cause?.name ?? null,
           checks,
@@ -304,6 +316,24 @@ export const incidentsPass = defineCommand({
       signed++;
     }
     let moved = signed > 0;
+    for (const s of input.stretched ?? []) {
+      const [was] = await tx
+        .select()
+        .from(incidents)
+        .where(and(eq(incidents.id, s.id), eq(incidents.burrowId, ctx.burrow.id), isNull(incidents.endedAt)))
+        .for('update');
+      if (was?.nature !== 'down') continue;
+      const stretches: DownStretchRow[] = was.downStretches.length
+        ? was.downStretches.map((x) => ({ ...x }))
+        : [{ from: (was.downSince ?? was.startedAt).toISOString(), to: null }];
+      const last = stretches.at(-1);
+      // Closing needs one still open, opening one that closed: a pass told twice changes nothing.
+      if (!last || (last.to === null) === s.down) continue;
+      if (s.down) stretches.push({ from: s.at, to: null });
+      else last.to = s.at;
+      await tx.update(incidents).set({ downStretches: stretches }).where(eq(incidents.id, was.id));
+      moved = true;
+    }
     const groups: string[] = [];
     for (const e of input.ended) {
       const [row] = await tx
@@ -365,12 +395,19 @@ async function pushLink(ctx: ApplyContext, group: readonly IncidentRow[]) {
 
 /**
  * Saves one Inbox row in the commit marking its incidents as pushed (one group), then sends the person a push,
- * “Needs you”. Incidents already pushed, ended, with a cause, or kept quiet or down because of something else meanwhile
- * are left out, and the words name only those still in it.
+ * “Needs you”. Incidents already pushed, ended, with a cause, kept quiet or down because of something else, or pushed
+ * about by a research finding meanwhile are left out, and the words name only those still in it, as each is now
+ * (`now`, from the watcher's pass: a thing that answers again is no longer down).
  */
 export const incidentsPush = defineCommand({
   name: 'incidents.push',
-  schema: z.object({ ids: z.array(z.string().min(1).max(80)).min(1).max(PUSH_MAX) }),
+  schema: z.object({
+    ids: z.array(z.string().min(1).max(80)).min(1).max(PUSH_MAX),
+    now: z
+      .array(z.object({ id: z.string().min(1).max(80), nature: Nature, words: z.string().min(1).max(200) }))
+      .max(PUSH_MAX)
+      .optional(),
+  }),
   async apply(tx, ctx, input) {
     await requireSigner(tx, ctx.actor.id);
     const candidates = await tx
@@ -386,19 +423,33 @@ export const incidentsPush = defineCommand({
         ),
       )
       .for('update');
+    // A research finding that pushed while this waited told the person already: one outage buzzes once.
+    const oldest = Math.min(...candidates.map((r) => r.startedAt.getTime()));
+    const findings = candidates.length
+      ? await findingsPushedSince(tx, ctx.burrow.id, new Date(oldest))
+      : new Map<string, number>();
     const ids: string[] = [];
     for (const row of candidates)
-      if (!(await holdsIncident(tx, ctx.burrow.id, row.thingId, ctx.now))) ids.push(row.id);
+      if (
+        (findings.get(row.thingId) ?? 0) < row.startedAt.getTime() &&
+        !(await holdsIncident(tx, ctx.burrow.id, row.thingId, ctx.now))
+      )
+        ids.push(row.id);
     const person = await thePerson(tx, ctx.burrow.id);
     if (!ids.length || !person) return { pushed: 0 };
     const group = newId('incident');
+    const current = new Map((input.now ?? []).map((n) => [n.id, n] as const));
+    const asNow = (r: IncidentRow) => {
+      const n = current.get(r.id);
+      return { ...openIncidentOf(r), ...(n ? { nature: n.nature, words: n.words } : {}) };
+    };
     const rows = (
       await tx
         .update(incidents)
         .set({ pushedAt: ctx.now, pushGroup: group })
         .where(and(eq(incidents.burrowId, ctx.burrow.id), inArray(incidents.id, ids)))
         .returning()
-    ).sort((a, b) => pushOrder(openIncidentOf(a), openIncidentOf(b)));
+    ).sort((a, b) => pushOrder(asNow(a), asNow(b)));
     if (!rows.length) return { pushed: 0 };
     const { link, messageId } = { messageId: undefined, ...(await pushLink(ctx, rows)) };
     await notifyInCommit(ctx, {
@@ -408,7 +459,7 @@ export const incidentsPush = defineCommand({
       kind: 'needs_you' as const,
       actorId: ctx.actor.id,
       where: rows.length === 1 ? (rows[0] as IncidentRow).name.slice(0, 120) : 'Overview',
-      text: incidentPushText(rows.map(openIncidentOf)),
+      text: incidentPushText(rows.map(asNow)),
       link,
       createdAt: ctx.now,
       dedupKey: pushKey(group),
@@ -455,7 +506,14 @@ export function openIncidentOf(row: IncidentRow): OpenIncident {
     cause: row.causeThing && row.causeName ? { thing: row.causeThing, name: row.causeName } : null,
     pushedAt: row.pushedAt,
     checks: withCheck(row.checks ?? [], row.checkId),
+    answeringSince: answeringSince(row),
   };
+}
+
+/** When a `down` incident's thing answered again, while it still answers; null while it is down. */
+function answeringSince(row: IncidentRow): Date | null {
+  const to = row.nature === 'down' ? row.downStretches?.at(-1)?.to : null;
+  return to ? new Date(to) : null;
 }
 
 /**

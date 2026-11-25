@@ -7,12 +7,14 @@
  *   saw of the thing itself, whatever is quiet about it (`ThingSeen`): two passes in a row that saw it fine end it, at
  *   the first of them; one that saw it still bad (not answering, a bad line someone quieted, held quiet or down because
  *   of something else) starts the count again; one that couldn't read it counts neither way. A thing that was removed
- *   ends its incident at once, as removed: it didn't come back.
+ *   ends its incident at once, as removed: it didn't come back. A `down` incident keeps when its thing stopped and
+ *   started answering, so its down time ends when it answers again while a problem keeps it open.
  * - **The push.** An incident open 10 minutes, about which no research finding pushed meanwhile, is pushed once,
  *   together with the others that opened within a few minutes of it. Not one that something else took down with it
  *   (its cause), nor one older than an hour when Whombat first could push it (it was down before Whombat watched, or
  *   while it couldn't push), nor past the day's cap or a thing's. The clock starts at the incident's start, or when a
- *   hold over it ended when that is later: Whombat couldn't tell anyone while it was kept quiet.
+ *   hold over it ended or the last pass that couldn't read it when that is later: Whombat couldn't tell anyone while it
+ *   was kept quiet, nor knew while it was blind.
  */
 import type { IncidentNature } from '@whombat/core';
 
@@ -61,6 +63,8 @@ export interface OpenIncident {
   pushedAt: Date | null;
   /** The checks it signed an event for already: a bad check counting on it that isn't here is new. */
   checks?: readonly string[];
+  /** A `down` incident whose thing answers again while a problem keeps it open: since when. */
+  answeringSince?: Date | null;
 }
 
 /**
@@ -81,6 +85,8 @@ export interface PassBefore {
   fine?: ReadonlyMap<string, Date>;
   /** The last pass that saw each thing held (kept quiet, or down because of something else): the watcher's memory. */
   held?: ReadonlyMap<string, Date>;
+  /** The last pass of each thing's run of looks that couldn't read it: what it was meanwhile isn't known. */
+  unread?: ReadonlyMap<string, Date>;
   /** It was the watcher's first pass since it started: what it saw was bad before Whombat watched. */
   first?: boolean;
 }
@@ -97,14 +103,22 @@ export interface IncidentPassInput {
    * it) and those the pass before had a look of (one it couldn't read keeps its run of looks).
    */
   seen?: ReadonlyMap<string, ThingSeen>;
+  /**
+   * Whether each open incident's thing answers now, whatever is quiet about it: true, false (it doesn't), absent when
+   * not known (held, not read).
+   */
+  answering?: ReadonlyMap<string, boolean>;
   /** The Whombat has no incidents yet: its first ones are what it found already bad when it started watching. */
   noneYet?: boolean;
   now: Date;
 }
 
 export interface IncidentPassPlan {
-  /** `pushed`: bad before Whombat watched, so it is told as already pushed (no push now). */
-  opened: (SeenLook & { startedAt: Date; pushed?: true })[];
+  /**
+   * `pushed`: bad before Whombat watched, so it is told as already pushed (no push now). `downSince`: down after
+   * passes that couldn't read it, so its down time starts at the last of them.
+   */
+  opened: (SeenLook & { startedAt: Date; pushed?: true; downSince?: Date })[];
   /** Open incidents that got worse (a problem now down), or learned their cause. */
   changed: {
     id: string;
@@ -118,6 +132,8 @@ export interface IncidentPassPlan {
   }[];
   /** Bad checks that began counting on an open incident: each signs once. */
   noted: { id: string; check: string; words: string }[];
+  /** `down` incidents whose thing answered again (`down` false) or stopped answering again (true), at `at`. */
+  stretched: { id: string; down: boolean; at: Date }[];
   /** `removed`: its thing is gone; it ended without coming back. */
   ended: { id: string; endedAt: Date; removed?: true }[];
   /** What this pass saw, for the next. */
@@ -132,11 +148,24 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
   const opened: IncidentPassPlan['opened'] = [];
   const changed: IncidentPassPlan['changed'] = [];
   const noted: IncidentPassPlan['noted'] = [];
+  const stretched: IncidentPassPlan['stretched'] = [];
   const ended: IncidentPassPlan['ended'] = [];
   const keep = new Set<string>();
   const fine = new Map<string, Date>();
   for (const inc of input.open) {
     const look = byThing.get(inc.thing);
+    // Its down time is how long it didn't answer, not how long the incident lasts: a problem can keep it open after.
+    const answers = input.answering?.get(inc.thing);
+    if (inc.nature === 'down' && answers === true && !inc.answeringSince)
+      stretched.push({ id: inc.id, down: false, at: now });
+    else if (inc.nature === 'down' && answers === false && inc.answeringSince) {
+      const since = look?.since;
+      stretched.push({
+        id: inc.id,
+        down: true,
+        at: since && since > inc.answeringSince && since <= now ? since : now,
+      });
+    }
     if (look) {
       const worse = inc.nature === 'problem' && look.nature === 'down';
       const cause = inc.cause ?? look.cause;
@@ -205,7 +234,14 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
       if (openThings.has(look.thing) || !before.things.has(look.thing)) continue;
       const first = runSince.get(look.thing) ?? before.at;
       const since = look.since && look.since < first ? look.since : first;
-      opened.push({ ...look, startedAt: since, ...(inherited ? { pushed: true as const } : {}) });
+      // Passes that couldn't read it in between say nothing of whether it answered then.
+      const blind = before.unread?.get(look.thing);
+      opened.push({
+        ...look,
+        startedAt: since,
+        ...(inherited ? { pushed: true as const } : {}),
+        ...(look.nature === 'down' && blind && blind > since ? { downSince: blind } : {}),
+      });
     }
   const things = new Set([...input.looks.map((l) => l.thing), ...keep]);
   // What this pass couldn't read (any server while the servers weren't read) keeps what the pass before saw of it,
@@ -218,12 +254,22 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
         runSince.set(t, before.since?.get(t) ?? before.at);
       }
     }
+  // The last pass of each run that couldn't read its thing: the push's clock starts again then.
+  const unread = new Map<string, Date>();
+  for (const t of things) {
+    const blind =
+      !byThing.has(t) && ((!input.serversRead && t.startsWith('server:')) || input.seen?.get(t) === 'unread');
+    const was = before?.unread?.get(t);
+    if (blind) unread.set(t, now);
+    else if (was) unread.set(t, was);
+  }
   return {
     opened,
     changed,
     noted,
+    stretched,
     ended,
-    seen: { at: now, things, since: runSince, fine, first: before === null },
+    seen: { at: now, things, since: runSince, fine, unread, first: before === null },
   };
 }
 
@@ -231,11 +277,14 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
 export interface PushCandidate extends OpenIncident {
   /** A research finding about this thing pushed since the incident started. */
   findingPushed: boolean;
-  /** When a hold over its thing last ended (a quiet window, a cause): the push's clock starts then when it is later. */
+  /**
+   * When a hold over its thing last ended (a quiet window, a cause), or the last pass that couldn't read it: the push's
+   * clock starts then when it is later.
+   */
   heldUntil?: Date | null;
 }
 
-/** When the push's clock starts: the incident's start, or the end of a hold over it when that is later. */
+/** When the push's clock starts: the incident's start, or the end of a hold or a blind stretch when that is later. */
 export function pushFrom(i: Pick<PushCandidate, 'startedAt' | 'heldUntil'>): number {
   return Math.max(i.startedAt.getTime(), i.heldUntil?.getTime() ?? 0);
 }

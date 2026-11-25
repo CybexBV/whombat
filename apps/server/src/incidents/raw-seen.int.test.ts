@@ -1,14 +1,17 @@
 /**
  * The end of an outage read from the thing itself, on a real database with the watcher's own passes: a Google account
  * that needs a new sign-in opens an incident, stays open while kept quiet and ends as back (not as removed) once signed
- * in, while a watch on it keeps running; a server whose failing disk the person ignored keeps its incident; a
- * connection whose details couldn't be read isn't back; a pass that couldn't read a connection doesn't start its run
- * again; a short or undone window doesn't cancel a delayed automation for good. Postgres because each pass is a signed
- * commit read back with the connector rows, line states, windows and automation claims beside it.
+ * in, while a watch on it keeps running; a server whose failing disk the person ignored keeps its incident, and one
+ * whose ignored disk has nothing to do with its outage ends it when it answers again; a connection whose details
+ * couldn't be read isn't back; a pass that couldn't read a connection doesn't start its run again, nor counts as down
+ * or makes the push stale; down time ends when the thing answers again while a problem keeps it open, and the push
+ * says what is wrong now; one outage buzzes once beside a research finding; a short or undone window doesn't cancel a
+ * delayed automation for good. Postgres because each pass is a signed commit read back with the connector rows, line
+ * states, windows and automation claims beside it.
  */
 import { type AutomationDefinitionInput, FEEDBACK_THING_ID, newId, THING_BACK } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { and, eq, like } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sendMessage } from '../commands/messages';
 import {
   catalogConnections,
@@ -16,7 +19,9 @@ import {
   dispatches,
   events,
   incidents,
+  lookResearches,
   noticeStates,
+  notifications,
   principals,
   quietWindows,
   thingWatches,
@@ -26,13 +31,15 @@ import { HOSTS_API } from '../hosts/client';
 import { serversPrincipal } from '../hosts/principal';
 import { hostsFor } from '../hosts/service';
 import { FakeHostsService } from '../hosts/testing/fake';
+import { reportLook, startResearch } from '../looks/research';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import { integrationSettings } from '../test/feedback';
 import type { GlanceLine } from '../things/quiet/glance';
 import { thingWatchTool } from './agent';
+import { periodUptime } from './history';
 import type { PassBefore } from './plan';
-import { incidentsPass } from './store';
+import { incidentsPass, incidentsPush } from './store';
 import { watchIncidents } from './watch';
 
 const fake = new FakeHostsService();
@@ -233,6 +240,60 @@ describe('a server whose critical alert the person ignored', () => {
   });
 });
 
+describe('a server whose ignored alert has nothing to do with its outage', () => {
+  /** The server stops reporting (its offline alert opens), or reports again. */
+  function power(server: string, on: boolean) {
+    const card = (fake.fleet.servers as Record<string, unknown>[]).find((s) => s.id === server);
+    if (!card) throw new Error(`Missing ${server}`);
+    if (on) {
+      Object.assign(card, { status: 'online', agent_connected: true });
+      fake.resolveAlert(`al_${server}_offline`);
+      return;
+    }
+    Object.assign(card, { status: 'offline', agent_connected: false });
+    fake.openAlert({
+      id: `al_${server}_offline`,
+      server,
+      rule: 'agent.heartbeat_missing',
+      severity: 'critical',
+      title: `${server} isn’t reporting`,
+    });
+  }
+
+  it('ends its offline incident with thing.back once it answers again', async () => {
+    const thing = 'server:obsidian';
+    fake.openAlert({
+      id: 'al_obsidian_disk',
+      server: 'obsidian',
+      rule: 'disk.smart_failing',
+      severity: 'critical',
+      title: 'A disk is failing',
+      entity: 'disk:sdb',
+    });
+    await hostsFor(w.services).call({
+      method: 'POST',
+      path: `${HOSTS_API}/alerts/al_obsidian_disk/ack`,
+      body: {},
+      actor: { id: IDS.mara, name: 'Mara', role: 'operator' },
+    });
+    await pass();
+    await pass();
+    expect(await open(thing)).toBeUndefined();
+    // It loses power: an outage of its own, about its being offline.
+    power('obsidian', false);
+    await pass();
+    await pass();
+    expect(await open(thing)).toMatchObject({ nature: 'down' });
+    // Back, its failing disk still ignored: the outage is over.
+    power('obsidian', true);
+    await pass();
+    await pass();
+    expect(await open(thing)).toBeUndefined();
+    expect(await backs(thing)).toHaveLength(1);
+    fake.resolveAlert('al_obsidian_disk');
+  });
+});
+
 describe('a connection Whombat couldn’t read', () => {
   it('isn’t back while the details that found the fault weren’t read', async () => {
     const thing = await connection('nextcloud', 'Nextcloud');
@@ -279,6 +340,189 @@ describe('a connection Whombat couldn’t read', () => {
     await stored(thing, [NOT_ANSWERING]);
     await pass();
     expect((await open(thing))?.startedAt).toEqual(first);
+  });
+
+  it('counts three blind hours neither as down nor against the push', async () => {
+    const thing = await connection('lidarr', 'Lidarr');
+    await stored(thing, [NOT_ANSWERING]);
+    await pass();
+    const first = w.now();
+    // Its runner stops reporting for three hours.
+    await stored(thing, null);
+    await pass();
+    w.advance(180 * MINUTE);
+    await pass();
+    const blind = w.now();
+    await stored(thing, [NOT_ANSWERING]);
+    await pass();
+    const incident = await open(thing);
+    expect(incident).toMatchObject({ startedAt: first, downSince: blind });
+    for (let i = 0; i < 9; i++) await pass();
+    expect((await open(thing))?.pushGroup).not.toBeNull();
+  });
+});
+
+describe('a thing that answers again while a problem keeps its outage open', () => {
+  it('stops counting down time, says what is wrong now in its push, and counts a second stop', async () => {
+    const thing = await connection('sabnzbd', 'SABnzbd');
+    await stored(thing, [NOT_ANSWERING]);
+    await pass();
+    const start = w.now();
+    await pass();
+    expect(await open(thing)).toMatchObject({ nature: 'down', startedAt: start });
+    // It answers again; its disk is almost full.
+    await stored(thing, [line('machine.disk', 'The disk is almost full')]);
+    await pass();
+    const answered = w.now();
+    expect((await open(thing))?.downStretches).toEqual([
+      { from: start.toISOString(), to: answered.toISOString() },
+    ]);
+    for (let i = 0; i < 8; i++) await pass();
+    const incident = await open(thing);
+    expect(incident?.pushGroup).not.toBeNull();
+    const [pushed] = await w.services.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.dedupKey, `incident:${incident?.pushGroup}`));
+    expect(pushed?.text).toMatch(/^SABnzbd: /);
+    expect(pushed?.text).not.toContain('down');
+    // It stops again, then answers and is fine: two stretches, each counted.
+    await stored(thing, [NOT_ANSWERING]);
+    await pass();
+    await stored(thing, []);
+    await pass();
+    await pass();
+    const [ended] = (await incidentsOf(thing)).filter((r) => r.id === incident?.id);
+    expect(ended?.endedAt).not.toBeNull();
+    expect(ended?.downStretches).toHaveLength(2);
+    const said = await periodUptime(w.services, w.burrowId, thing, {
+      now: w.now(),
+      days: 7,
+      timeZone: 'UTC',
+    });
+    expect(said?.uptime).toMatchObject({ downs: 2, downMinutes: 3 });
+  });
+});
+
+describe('one outage, one buzz', () => {
+  async function research(thing: string, name: string) {
+    const started = await w.ok(IDS.dusty, startResearch, {
+      look: {
+        key: thing,
+        kind: 'server',
+        name,
+        rank: 0,
+        reason: 'Not answering',
+        question: null,
+        check: null,
+        subject: '',
+        since: null,
+        lines: [],
+      },
+      personId: IDS.mara,
+    });
+    if (!started) throw new Error('Missing research');
+    return started;
+  }
+
+  async function report(dispatchId: string) {
+    await w.ok(IDS.dusty, reportLook, {
+      dispatchId,
+      report: {
+        title: 'It lost power',
+        summary: 'It lost power after the storm.',
+        fixed: false,
+        fix: { label: 'Wake it', step: 'Send it a wake-on-LAN packet.' },
+      },
+    });
+    await w.settle();
+  }
+
+  it('doesn’t push an outage a research finding pushed about meanwhile', async () => {
+    const thing = 'server:onyx';
+    const signer = await serversPrincipal(w.services, w.burrowId);
+    await w.ok(signer, incidentsPass, {
+      opened: [
+        {
+          thing,
+          kind: 'server',
+          name: 'onyx',
+          nature: 'down',
+          words: 'Not answering',
+          check: null,
+          subject: '',
+          cause: null,
+          startedAt: w.now().toISOString(),
+        },
+      ],
+      changed: [],
+      ended: [],
+    });
+    const incident = await open(thing);
+    const { researchId, dispatchId } = await research(thing, 'onyx');
+    await report(dispatchId);
+    const [finding] = await w.services.db
+      .select()
+      .from(lookResearches)
+      .where(eq(lookResearches.id, researchId));
+    expect(finding?.pushedAt).not.toBeNull();
+    // The watcher had planned the push before the finding went out.
+    expect(await w.ok(signer, incidentsPush, { ids: [incident?.id ?? ''] })).toEqual({ pushed: 0 });
+    expect((await open(thing))?.pushedAt).toBeNull();
+  });
+
+  it('keeps a late finding in the Inbox without a second buzz', async () => {
+    const control = w.services.push.control;
+    const deliver = vi.fn(async () => {});
+    w.services.push.control = deliver;
+    try {
+      const findingRows = () =>
+        w.services.db.select().from(notifications).where(like(notifications.dedupKey, 'look-finding:%'));
+      const outage = async (thing: string, name: string) => {
+        const signer = await serversPrincipal(w.services, w.burrowId);
+        await w.ok(signer, incidentsPass, {
+          opened: [
+            {
+              thing,
+              kind: 'server',
+              name,
+              nature: 'down',
+              words: 'Not answering',
+              check: null,
+              subject: '',
+              cause: null,
+              startedAt: w.now().toISOString(),
+            },
+          ],
+          changed: [],
+          ended: [],
+        });
+        return open(thing);
+      };
+      // The outage of flint was pushed ten minutes in; the research's finding comes after.
+      const flint = await outage('server:flint', 'flint');
+      const signer = await serversPrincipal(w.services, w.burrowId);
+      await w.ok(signer, incidentsPush, { ids: [flint?.id ?? ''] });
+      await w.settle();
+      deliver.mockClear();
+      const late = await research('server:flint', 'flint');
+      await report(late.dispatchId);
+      const held = (await findingRows()).find((r) => r.dedupKey === `look-finding:${late.researchId}`);
+      expect(held).toBeDefined();
+      expect(deliver).not.toHaveBeenCalled();
+      // Quartz's outage wasn't pushed: its finding buzzes.
+      await outage('server:quartz', 'quartz');
+      const first = await research('server:quartz', 'quartz');
+      await report(first.dispatchId);
+      const buzzed = (await findingRows()).find((r) => r.dedupKey === `look-finding:${first.researchId}`);
+      expect(deliver).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ notificationId: buzzed?.id }),
+        expect.anything(),
+      );
+    } finally {
+      w.services.push.control = control;
+    }
   });
 });
 

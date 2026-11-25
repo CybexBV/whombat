@@ -42,11 +42,18 @@ const DAY = 24 * 60 * 60_000;
 /** A thing watched for less than this past the period's start says “since …” instead of the period. */
 const LATE_START_MS = 6 * 60 * 60_000;
 
-/** An incident's down stretch, when it was a `down` one. */
+/**
+ * The stretches a `down` incident's thing didn't answer: those it kept once it answered again while a problem kept it
+ * open, else one from when it stopped to the incident's end.
+ */
 function downStretches(rows: readonly IncidentRow[]): DownStretch[] {
   return rows
     .filter((r) => r.nature === 'down')
-    .map((r) => ({ from: r.downSince ?? r.startedAt, to: r.endedAt }));
+    .flatMap((r) =>
+      r.downStretches?.length
+        ? r.downStretches.map((s) => ({ from: new Date(s.from), to: s.to ? new Date(s.to) : r.endedAt }))
+        : [{ from: r.downSince ?? r.startedAt, to: r.endedAt }],
+    );
 }
 
 /** A server's offline stretches from its heartbeat alerts. */

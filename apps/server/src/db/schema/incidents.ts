@@ -41,6 +41,11 @@ export const incidents = pgTable(
     startedAt: ts('started_at').notNull(),
     /** When it stopped answering, which may be later than the first problem. */
     downSince: ts('down_since'),
+    /**
+     * Each stretch it didn't answer, once it answered again while a problem kept it open: `to` null while it is down
+     * now. Empty: one stretch, from `downSince` to its end.
+     */
+    downStretches: jsonb('down_stretches').$type<DownStretchRow[]>().notNull().default([]),
     endedAt: ts('ended_at'),
     /** Down because what it runs on was down: that thing's id and name. Such an incident never pushes. */
     causeThing: text('cause_thing'),
@@ -63,6 +68,12 @@ export const incidents = pgTable(
 );
 
 export type IncidentRow = typeof incidents.$inferSelect;
+
+/** One stretch an incident's thing didn't answer, as ISO times; `to` null while it still doesn't. */
+export interface DownStretchRow {
+  from: string;
+  to: string | null;
+}
 
 /** One claim per automation and incident. A due time keeps a delayed start across restarts. */
 export const incidentTriggers = pgTable(

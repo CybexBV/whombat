@@ -397,6 +397,86 @@ describe('incidents from the looks', () => {
     expect(plan.changed[0]?.downSince).toBe(at(48).toISOString());
   });
 
+  it('keeps a down incident’s down time to the stretches its thing didn’t answer', () => {
+    const nas = incident('server:nas', { kind: 'server' });
+    const answers = (yes: boolean) => new Map([['server:nas', yes]]);
+    const pass = (
+      open: OpenIncident,
+      answering: Map<string, boolean>,
+      now: Date,
+      since: Date | null = null,
+    ) =>
+      planIncidents({
+        looks: [look('server:nas', { since })],
+        open: [open],
+        before: null,
+        serversRead: true,
+        answering,
+        now,
+      }).stretched;
+    // It answers again while a failing disk keeps the incident open: its down time ends here.
+    expect(pass(nas, answers(true), at(20))).toEqual([{ id: nas.id, down: false, at: at(20) }]);
+    const answering = { ...nas, answeringSince: at(20) };
+    expect(pass(answering, answers(true), at(21))).toEqual([]);
+    // It stops again: a new stretch, from its last report when Whombat knows it.
+    expect(pass(answering, answers(false), at(30), at(29))).toEqual([{ id: nas.id, down: true, at: at(29) }]);
+    expect(pass(answering, answers(false), at(30), at(10))).toEqual([{ id: nas.id, down: true, at: at(30) }]);
+    // Not known (held, not read) says nothing; a problem has no down time.
+    expect(pass(nas, new Map(), at(20))).toEqual([]);
+    expect(pass(incident('server:nas', { nature: 'problem' }), answers(true), at(20))).toEqual([]);
+  });
+
+  it('starts the push’s clock and the down time after the passes of a run that couldn’t read it', () => {
+    const plex = look('connection:plex');
+    let before = planIncidents({ looks: [plex], open: [], before: null, serversRead: true, now: at(0) }).seen;
+    // Its runner stopped reporting for three hours.
+    for (const m of [1, 180])
+      before = planIncidents({
+        looks: [],
+        open: [],
+        before,
+        serversRead: true,
+        seen: seenAs('unread', 'connection:plex'),
+        now: at(m),
+      }).seen;
+    const opened = planIncidents({ looks: [plex], open: [], before, serversRead: true, now: at(181) });
+    expect(opened.opened).toMatchObject([{ startedAt: at(0), downSince: at(180) }]);
+    const blind = opened.seen.unread?.get('connection:plex');
+    expect(blind).toEqual(at(180));
+    // Not stale: it is pushed ten minutes after Whombat could read it again.
+    const candidate: PushCandidate = {
+      ...incident('connection:plex'),
+      findingPushed: false,
+      heldUntil: blind,
+    };
+    const push = (now: Date) =>
+      planPush({ open: [candidate], now, pushedToday: 0, pushedTodayOf: new Map() });
+    expect(push(at(185))).toEqual([]);
+    expect(push(at(190))).toHaveLength(1);
+    // Kept while the incident lasts, forgotten once the run ends.
+    const open = [incident('connection:plex')];
+    const next = planIncidents({ looks: [plex], open, before: opened.seen, serversRead: true, now: at(182) });
+    expect(next.seen.unread?.get('connection:plex')).toEqual(at(180));
+    const gone = planIncidents({
+      looks: [],
+      open: [],
+      before: next.seen,
+      serversRead: true,
+      seen: seenAs('fine', 'connection:plex'),
+      now: at(183),
+    });
+    expect(gone.seen.unread?.has('connection:plex')).toBe(false);
+    // Read on every pass: down from the start.
+    const seenEach = planIncidents({
+      looks: [plex],
+      open: [],
+      before: planIncidents({ looks: [plex], open: [], before: null, serversRead: true, now: at(0) }).seen,
+      serversRead: true,
+      now: at(1),
+    });
+    expect(seenEach.opened[0]?.downSince).toBeUndefined();
+  });
+
   it('weighs a desk look: amber opens nothing, its cause comes along', () => {
     const base: DeskLook = { key: 'connection:plex', kind: 'connection', name: 'Plex', state: 'look' };
     expect(seenLookOf(base, null)).toBeNull();
