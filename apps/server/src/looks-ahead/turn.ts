@@ -42,7 +42,7 @@ export { NOT_AN_AHEAD_CHECK, NOT_AN_AHEAD_THREAD } from './commands';
 
 /** What a check hears when it calls anything it isn't served. */
 export const AHEAD_TOOL_REFUSED =
-  'While checking ahead you only read the calendar and the mail, search and read public pages, and end with ahead_report.';
+  'While checking ahead you only search and read public pages, then read the mail, and end with ahead_report.';
 
 type AheadCheckRow = typeof aheadChecks.$inferSelect;
 
@@ -245,14 +245,12 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
   if (refusal) throw forbidden(refusal);
   const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, dispatch.burrowId));
   if (!burrow?.webSearch || !burrow.webSearchKeyEnc)
-    throw forbidden(
-      'There is no web search here (no Brave Search key): go on with the calendar and the mail.',
-    );
+    throw forbidden('There is no web search here (no Brave Search key): go on with the mail.');
   let key: string;
   try {
     key = openWebSearchKey(services.custody, burrow.id, burrow.webSearchKeyEnc);
   } catch {
-    throw forbidden('The web search key can’t be used right now: go on with the calendar and the mail.');
+    throw forbidden('The web search key can’t be used right now: go on with the mail.');
   }
   if (!takeSearch(seen))
     throw forbidden('That was the last search for this check: decide with what you found.');

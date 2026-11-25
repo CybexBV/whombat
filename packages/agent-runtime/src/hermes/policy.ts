@@ -189,7 +189,7 @@ export interface HermesPolicyOptions {
  * commands, files, browser, web of its own, Vault or helpers; and no post-answer review at all (`review: false`).
  */
 export const AHEAD_REFUSED =
-  'While checking ahead you use only Whombat’s tools: the calendar, the mail, search_web, read_web_page and ahead_report.';
+  'While checking ahead you use only Whombat’s tools: search_web, read_web_page, the mail and ahead_report.';
 
 /**
  * A Looks ahead check's own tools as Claude Code and Hermes name them (`mcp__whombat__<tool>`,
@@ -214,6 +214,7 @@ export function hermesPolicy(ctx: DispatchContext, options: HermesPolicyOptions 
   if (options.replyOnly)
     return {
       default: 'block',
+      ...(ctx.dispatch.trigger === 'ahead' ? { review: false } : {}),
       rules: [
         {
           tools: ['*'],

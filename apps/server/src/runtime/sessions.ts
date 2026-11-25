@@ -235,8 +235,8 @@ export function sessionsSince(db: Queryable, conversationId: string, since: Date
 
 /**
  * A Looks ahead check's Hermes session, once its turn ended for good (looks-ahead.md): forgotten and deleted from the
- * person's home at once, so no later turn of theirs finds what it read in its past sessions. A turn queued again keeps
- * it (its next attempt resumes it); the watcher's pass forgets any this missed (`endedAheadSessions`).
+ * person's home at once, so no later turn of theirs finds what it read in its past sessions; an attempt queued again
+ * loses it too (the next starts fresh). The watcher's pass forgets any this missed (`endedAheadSessions`).
  */
 export async function forgetAheadSession(
   ctx: Pick<ApplyContext, 'tx' | 'services' | 'background' | 'now'>,
@@ -244,7 +244,9 @@ export async function forgetAheadSession(
   providerSessionId: string | undefined,
 ): Promise<void> {
   const [turn] = await ctx.tx.select().from(dispatches).where(eq(dispatches.id, dispatchId));
-  if (turn?.trigger !== 'ahead' || !['done', 'failed', 'cancelled'].includes(turn.state)) return;
+  // Ended, or queued again after a failed attempt: that attempt's session (it read mail and pages) goes too, and the
+  // next attempt starts a fresh one.
+  if (turn?.trigger !== 'ahead' || !['done', 'failed', 'cancelled', 'queued'].includes(turn.state)) return;
   const ids = [...new Set([turn.providerSessionId, providerSessionId])].filter(
     (s): s is string => !!s?.startsWith(HERMES_SESSION),
   );

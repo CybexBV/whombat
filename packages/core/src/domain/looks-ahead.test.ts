@@ -129,11 +129,14 @@ describe('what a search may hold', () => {
     // Dates, times and flight numbers are public; a booking code isn't.
     expect(aheadQueryRefusal('The Script Ziggo Dome 2026-12-14', [])).toBeNull();
     expect(aheadQueryRefusal('Ziggo Dome 14.12.2026 20:45', [])).toBeNull();
-    expect(aheadQueryRefusal('KL1234 Schiphol 14 12 2026', [])).toBeNull();
+    expect(aheadQueryRefusal('KL1234 Schiphol 14-12-2026', [])).toBeNull();
     expect(aheadQueryRefusal('booking X7K2PQ', [])).not.toBeNull();
     expect(aheadQueryRefusal('call 06-12-345678', [])).not.toBeNull();
     expect(aheadQueryRefusal('Ziggo Dome 14 december 2026 20.45', [])).toBeNull();
     expect(aheadQueryRefusal('Ziggo Dome 20.45 - 23.00', [])).toBeNull();
+    // A phone number that looks like times or dates is still one.
+    for (const phone of ['06.12.34.56.78', '06-12-34-56-78', '0800 2026 2027', '06.12 14.25 18.30'])
+      expect(aheadQueryRefusal(`call ${phone}`, [])).not.toBeNull();
   });
 });
 

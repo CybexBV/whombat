@@ -630,8 +630,9 @@ export class RunnerRuntime {
         // reply's first claim chooses its thread's session once the claim lock is released (`chooseClaimedSession`,
         // TE-12).
         // A Whombat Feedback assessment always starts a fresh session (feedback.md FB-21), even on its retry.
+        // A Looks ahead check never resumes an earlier attempt's session either (looks-ahead.md).
         const session =
-          d.trigger === 'feedback'
+          d.trigger === 'feedback' || d.trigger === 'ahead'
             ? null
             : d.providerSessionId
               ? { providerSessionId: d.providerSessionId }

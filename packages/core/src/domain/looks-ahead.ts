@@ -243,9 +243,13 @@ export const AheadReportInput = z
   });
 export type AheadReportInput = z.infer<typeof AheadReportInput>;
 
-/** A time, a date or a year: “20:45”, “20.45”, “14-12-2026”, “2026-12-14”, “14 12 2026”, “2026”. */
+/**
+ * A time or a date as people write them, on its own (not a piece of a longer run of numbers): “20:45”, “20.45”,
+ * “2026-12-14”, “14-12-2026”, “14.12.2026”. A time followed by another number with only a space between isn't one
+ * (“06.12 14.25 18.30” is a phone number); one with a dash is a range (“20.45 - 23.00”).
+ */
 const DATE_OR_TIME =
-  /\b\d{1,2}[.:]\d{2}\b|\b20\d{2}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[./-]\d{1,2}[./-](?:20)?\d{2}\b|\b\d{1,2}\s\d{1,2}\s20\d{2}\b|\b20\d{2}\b/g;
+  /(?<![\d./:-])(?:[01]?\d|2[0-3])[.:][0-5]\d(?![\d./:-]|\s+\d)|(?<![\d./-])20\d{2}-(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01])(?![\d./-])|(?<![\d./-])(?:0?[1-9]|[12]\d|3[01])[./-](?:0?[1-9]|1[0-2])[./-]20\d{2}(?![\d./-])/g;
 
 /**
  * A change to a text that leaves its times, dates and years as they are (“20.45 - 23.00”, “14-12-2026”): they are set
@@ -253,7 +257,10 @@ const DATE_OR_TIME =
  */
 export function keepingDatesAndTimes(text: string, change: (text: string) => string): string {
   const kept: string[] = [];
-  const hidden = text.replace(DATE_OR_TIME, (m) => `\uE000${kept.push(m) - 1}\uE001`);
+  // Nothing of the text can pass for a placeholder.
+  const hidden = text
+    .replace(/[\u0000-\u001f\uE000\uE001]/g, ' ')
+    .replace(DATE_OR_TIME, (m) => `\uE000${kept.push(m) - 1}\uE001`);
   return change(hidden).replace(/\uE000(\d+)\uE001/g, (_m, i: string) => kept[Number(i)] ?? '');
 }
 

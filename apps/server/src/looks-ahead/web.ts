@@ -158,7 +158,8 @@ export async function readPage(
       const next = httpUrl(header(answer.headers, 'location'), at);
       if (!next) throw new WebRefusal(`The page answered HTTP ${answer.status} without a place to go.`);
       // The same site (http → https, a trailing slash) or a link the turn saw: else it stops here.
-      if (new URL(next).hostname !== new URL(at).hostname && !allow(next))
+      const site = (u: string) => new URL(u).hostname.replace(/^www\./, '');
+      if (site(next) !== site(at) && !allow(next))
         throw new WebRefusal('The page sends you to another site this check hasn’t seen.');
       at = secure(next);
       continue;

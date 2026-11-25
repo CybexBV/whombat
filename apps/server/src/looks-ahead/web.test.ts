@@ -159,6 +159,11 @@ describe('what a finding may show', () => {
     expect(findingWords('It starts at 20:45 on 14 December, not 20:00.')).toBe(
       'It starts at 20:45 on 14 December, not 20:00.',
     );
+    // A phone number that looks like times or dates is still taken out.
+    for (const phone of ['06.12.34.56.78', '06-12-34-56-78', '0800 2026 2027', '06.12 14.25 18.30'])
+      expect(findingWords(`Call ${phone} to rebook.`)).not.toMatch(
+        /\d{2}[.\s-]+\d{2}[.\s-]+\d{2}|\d{4}\s\d{4}/,
+      );
     // Dutch times and numeric dates are kept.
     expect(findingWords('Het concert duurt nu van 20.45 - 23.00 uur, niet 20.00.')).toBe(
       'Het concert duurt nu van 20.45 - 23.00 uur, niet 20.00.',
