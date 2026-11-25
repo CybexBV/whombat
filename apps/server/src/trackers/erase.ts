@@ -1,10 +1,12 @@
 /**
- * A report its tracker erased is forgotten here too (docs/decisions/report-trackers.md TA-161): the poller reads the
- * driver's `erasures` each cycle, and for each report this Whombat mirrored or ran for, `tracker.items_erased` deletes
- * what Whombat keeps of it — the mirrored report and its customer's answers, its feature request cards — blanks the
- * words the runs about it kept (their trigger's summary and `{{trigger.*}}`), stops the runs still working on it (their
- * agents' turns, their waiting cards and approvals) with a line in their thread, and stops following its fixes, so no
- * customer is told anything more. Signed by the burrow's tracker principal with ids only; nothing goes to the tracker.
+ * A report its tracker erased is forgotten here too (docs/decisions/report-trackers.md): the poller reads the driver's
+ * `erasures` each cycle, and for each report this Whombat mirrored or ran for, `tracker.items_erased` deletes what
+ * Whombat keeps of it — the mirrored report and its customer's answers, its feature request cards — blanks the words
+ * the runs about it kept (their trigger's summary and `{{trigger.*}}`, the instructions their agent steps kept, the
+ * report's title in their requests to the agents in the thread), stops the runs still working on it (their agents'
+ * turns, their waiting cards and approvals) with a line in their thread, and stops following its fixes, so no customer
+ * is told anything more. What the team's agents and people wrote about it stays. Signed by the burrow's tracker
+ * principal with ids only; nothing goes to the tracker.
  */
 import { conversationLabel, type JsonObject, topics } from '@whombat/core';
 import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
@@ -12,7 +14,15 @@ import { z } from 'zod';
 import { publishApproval, syncPlanSteps } from '../approvals/engine';
 import { cancelRunFor } from '../automations/commands';
 import { turnThreads } from '../automations/mail-text';
-import { ACTIVE_RUN_STATUSES, loadStepRows, publishAutomation, publishRun } from '../automations/store';
+import { requestLineWithoutTitle } from '../automations/steps/words';
+import {
+  ACTIVE_RUN_STATUSES,
+  type AutomationRunRow,
+  type AutomationStepRow,
+  loadStepRows,
+  publishAutomation,
+  publishRun,
+} from '../automations/store';
 import { type ApplyContext, defineCommand } from '../commit/types';
 import type { Db } from '../db/client';
 import {
@@ -21,9 +31,12 @@ import {
   automationRuns,
   dispatches,
   featureRequests,
+  messages,
   trackerFixes,
   trackerItems,
 } from '../db/schema/index';
+import { refreshMessageNotifications } from '../domain/message-edits';
+import { indexMessage } from '../domain/search-index';
 import { forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { loadMessageRow, loadMessages } from '../read/messages';
@@ -161,6 +174,44 @@ async function withdrawRunApprovals(ctx: ApplyContext, runId: string): Promise<n
   return rows.length;
 }
 
+/**
+ * The words an erased report's run kept in its steps and its thread, gone: each agent step's instructions (rendered
+ * from the report), and the report's title in the run's requests to its agents (“@Dusty Assess it: #15 “…””, the
+ * customer's first line until the team names it), republished as an edited message is. What the agents answered
+ * stays. Answers the messages it changed, for the search index after the commit.
+ */
+async function forgetRunWords(
+  ctx: ApplyContext,
+  run: AutomationRunRow,
+  steps: readonly AutomationStepRow[],
+): Promise<string[]> {
+  for (const step of steps) {
+    const output = step.output ?? {};
+    if (typeof output.instructions !== 'string' || !output.instructions) continue;
+    await ctx.tx
+      .update(automationRunSteps)
+      .set({ output: { ...output, instructions: '' } })
+      .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, step.idx)));
+  }
+  const title = typeof run.scope?.title === 'string' ? run.scope.title : '';
+  const prompts = new Set(steps.map((s) => s.promptMessageId).filter((id): id is string => !!id));
+  const changed: string[] = [];
+  for (const id of prompts) {
+    const row = await loadMessageRow(ctx.tx, id);
+    if (!row || row.deletedAt) continue;
+    const text = requestLineWithoutTitle(row.text, title);
+    if (text === row.text) continue;
+    const [updated] = await ctx.tx.update(messages).set({ text }).where(eq(messages.id, id)).returning();
+    if (!updated) continue;
+    await refreshMessageNotifications(ctx.tx, id, text);
+    const [loaded] = await loadMessages(ctx.tx, [updated], null);
+    if (loaded)
+      ctx.publish(topics.conversation(row.conversationId), { type: 'message.updated', message: loaded });
+    changed.push(id, ...(row.threadRootId ? [row.threadRootId] : []));
+  }
+  return changed;
+}
+
 /** The messages of these cards again, now without their request: the apps drop the card's controls and words. */
 async function republishCards(ctx: ApplyContext, messageIds: readonly string[]): Promise<void> {
   for (const id of messageIds) {
@@ -210,6 +261,7 @@ export const eraseTrackerItems = defineCommand({
       .for('update');
     let stopped = 0;
     const automationIds = new Set<string>();
+    const reindex = new Set<string>();
     for (const run of runs) {
       if ((ACTIVE_RUN_STATUSES as readonly string[]).includes(run.status)) {
         // Its agents' turns stop, its unfinished steps and feature request cards end, its thread hears why.
@@ -227,8 +279,9 @@ export const eraseTrackerItems = defineCommand({
           updatedAt: ctx.now,
         })
         .where(eq(automationRuns.id, run.id));
-      // The Hermes sessions its agents' turns ran in hold the report as they read it: forgotten, as a mail run's are.
       const steps = await loadStepRows(tx, run.id);
+      for (const id of await forgetRunWords(ctx, run, steps)) reindex.add(id);
+      // The Hermes sessions its agents' turns ran in hold the report as they read it: forgotten, as a mail run's are.
       await dropSessions(ctx, await finishedAutomationSessions(tx, await turnThreads(tx, run, steps)));
     }
     // Its feature request cards: what the agent made of the report and the replies it drafted.
@@ -279,10 +332,13 @@ export const eraseTrackerItems = defineCommand({
         fixes: fixes.length,
       },
     });
-    if (stopped) {
-      const services = ctx.services;
-      ctx.after(async () => services.automations.nudge());
-    }
+    const services = ctx.services;
+    // Search finds the requests by their words as they are now.
+    if (reindex.size)
+      ctx.after(async () => {
+        for (const id of reindex) await indexMessage(services.db, id);
+      });
+    if (stopped) ctx.after(async () => services.automations.nudge());
     return { erased: gone.length, stopped };
   },
 });

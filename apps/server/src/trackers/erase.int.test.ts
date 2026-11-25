@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAutomation, deleteAutomation, setAutomationKeys } from '../automations/commands';
 import {
   approvals,
+  automationRunSteps,
   automationRuns,
   dispatches,
   events,
@@ -254,6 +255,24 @@ describe('a tracker that erases reports (TA-161)', () => {
       description: '',
     });
     expect(JSON.stringify([stored?.scope, stored?.trigger])).not.toMatch(/rollout|40%|HollowMere|Acme Fleet/);
+    // Neither its steps nor its thread keep the report's first line or its description; the agent's own answer stays.
+    const steps = await w.services.db
+      .select({ output: automationRunSteps.output, inputSummary: automationRunSteps.inputSummary })
+      .from(automationRunSteps)
+      .where(eq(automationRunSteps.runId, run.id));
+    expect(steps.length).toBeGreaterThan(0);
+    expect(JSON.stringify(steps)).not.toMatch(/rollout never finishes|Stuck at 40%/);
+    const thread = await w.services.db
+      .select({ id: messages.id, text: messages.text, card: messages.card })
+      .from(messages)
+      .where(eq(messages.threadRootId, run.threadRootId as string));
+    const root = await w.services.db
+      .select({ id: messages.id, text: messages.text, card: messages.card })
+      .from(messages)
+      .where(eq(messages.id, run.threadRootId as string));
+    expect(JSON.stringify([...root, ...thread])).not.toMatch(/rollout never finishes|Stuck at 40%/);
+    expect(root[0]?.text).toContain(`#${gone.number}`);
+    expect(thread.some((m) => m.text.includes('A real bug in saving.'))).toBe(true);
     // Its thread says it stopped, in the automation's words.
     const notice = await w.services.db
       .select({ text: messages.text })
