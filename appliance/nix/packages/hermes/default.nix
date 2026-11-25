@@ -52,8 +52,8 @@
 }:
 let
   # The release this source is (NX-433): the version Hermes reports comes from its install stamp, not the source.
-  version = "0.23.3";
-  pinnedRev = "caafe5389ae585ef77387a962aee05b1bcf17029";
+  version = "0.23.4";
+  pinnedRev = "8fc0374447313e276f6b9a2764bfc750190c966a";
 
   # Hermes pins its Python family in pm/lock.json; uv2nix builds against a nixpkgs interpreter of that family. Its SQLite
   # must have the WAL-reset fix, or Hermes keeps every database in rollback-journal mode (hermes_cli/sqlite_runtime.py:
