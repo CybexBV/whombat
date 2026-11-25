@@ -92,7 +92,10 @@ export interface IncidentPassInput {
   before: PassBefore | null;
   /** The servers' cards were read; else what the pass before saw of servers carries over. */
   serversRead: boolean;
-  /** What Whombat saw of each open incident's thing without a look (`ThingSeen`); absent: it couldn't read it. */
+  /**
+   * What Whombat saw of things without a look on this pass (`ThingSeen`): each open incident's (absent: it couldn't read
+   * it) and those the pass before had a look of (one it couldn't read keeps its run of looks).
+   */
   seen?: ReadonlyMap<string, ThingSeen>;
   /** The Whombat has no incidents yet: its first ones are what it found already bad when it started watching. */
   noneYet?: boolean;
@@ -195,13 +198,16 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
       opened.push({ ...look, startedAt: since, ...(inherited ? { pushed: true as const } : {}) });
     }
   const things = new Set([...input.looks.map((l) => l.thing), ...keep]);
-  // Servers not read this pass keep what the pass before saw of them.
-  if (!input.serversRead && before)
-    for (const t of before.things)
-      if (t.startsWith('server:') && !things.has(t)) {
+  // What this pass couldn't read (any server while the servers weren't read) keeps what the pass before saw of it,
+  // with when its run began: bad, unread, bad opens from the first bad pass.
+  if (before)
+    for (const t of before.things) {
+      const unread = (!input.serversRead && t.startsWith('server:')) || input.seen?.get(t) === 'unread';
+      if (unread && !things.has(t)) {
         things.add(t);
         runSince.set(t, before.since?.get(t) ?? before.at);
       }
+    }
   return {
     opened,
     changed,

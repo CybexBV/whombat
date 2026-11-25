@@ -1701,12 +1701,16 @@ Setup and operation: `docs/github.md`.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;
-  amber opens none, a problem that goes down becomes a `down` one. Whether it is over is read from the thing itself,
-  not its dot (`observeThings`): a server's fleet row online, a connection's last check (its outcome and lines, before
-  the quiet rows) or a device's last read, made after any hold over it ended. Two passes in a row that see it fine end
-  it, at the first of them; one that sees it still bad underneath (not answering, a line someone quieted or switched
-  off, kept quiet, down because of something else) starts the count again; one that couldn't read it counts neither
-  way. A thing that was removed ends its incident at once without `thing.back`, and its watches stop with a short line.
+  amber opens none, a problem that goes down becomes a `down` one; a pass that couldn't read a thing between two that
+  saw its look keeps its run. Whether it is over is read from the thing itself, not its dot (`observeThings`): a server
+  from the hosts service's own list (online, without an open critical alert whoever ignored or snoozed it; one still
+  being added says nothing), a connection's last check (its outcome and lines, before the quiet rows; one that answered
+  without reading a check the incident is about says nothing), a device's last read, made after any hold over it ended,
+  and the person's accounts from their own records (Google, Microsoft 365 and Email signed in; GitHub and Website
+  feedback there). Two passes in a row that see it fine end it, at the first of them; one that sees it still bad
+  underneath (not answering, a line someone quieted or switched off, kept quiet, down because of something else) starts
+  the count again; one that couldn't read it counts neither way. A thing that was removed ends its incident at once
+  without `thing.back`, and its watches stop with a short line.
   On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
   update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
   then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,

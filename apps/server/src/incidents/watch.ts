@@ -4,9 +4,11 @@
  * ends incidents from them (`plan.ts`) and pushes once for what has been down a while. A look's line is one that counts
  * already (watched, not quiet, confirmed): what the person quieted makes no look. A look something else took down with it
  * (`causedBy`) records its cause and never pushes, nor does an incident while its thing is kept quiet or down because of
- * something else. Whether an outage is over is read from the thing itself (`observeThings`), not from its dot: a server's
- * row online, a connection's or device's own last check, made after any hold over it ended. Quieting a line, a hold, or
- * a pass that couldn't read the thing never says it is back; a thing that was removed ends its incident as removed.
+ * something else. Whether an outage is over is read from the thing itself (`observeThings`), not from its dot: a server
+ * as the hosts service lists it (online, no critical alert open whoever ignored it), a connection's or device's own last
+ * check made after any hold over it ended (one that didn't read the incident's check says nothing), the person's
+ * accounts from their own records. Quieting a line, a hold, or a pass that couldn't read the thing never says it is
+ * back; a thing that was removed ends its incident as removed.
  *
  * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass.
  */
@@ -105,20 +107,38 @@ export async function watchIncidents(
   const rows = await openIncidents(services.db, burrowId);
   const open = rows.map(openIncidentOf);
   // What Whombat sees of the things themselves: the open incidents' (are they over?), the looks' (did a hold over them
-  // end?) and those running watches wait on.
+  // end?), the pass before's (could this pass read one whose look went?) and those running watches wait on.
   const watches = await watchedThings(services.db, burrowId, now);
   const observed = await observeThings(
     services,
     burrowId,
     live,
-    [...open.map((o) => o.thing), ...looks.map((l) => l.thing), ...watches.map((w) => w.thing)],
+    [
+      ...open.map((o) => o.thing),
+      ...looks.map((l) => l.thing),
+      ...(before?.things ?? []),
+      ...watches.map((w) => w.thing),
+    ],
     before?.held ?? new Map(),
     now,
+    new Map(open.map((o) => [o.thing, o.checks ?? []] as const)),
   );
   const withLook = new Set(looks.map((l) => l.thing));
   const seen = new Map<string, ThingSeen>();
   for (const inc of open)
-    if (!withLook.has(inc.thing)) seen.set(inc.thing, seenOf(observed.raw.get(inc.thing) ?? 'unread'));
+    if (!withLook.has(inc.thing))
+      seen.set(
+        inc.thing,
+        seenOf(
+          observed.raw.get(inc.thing) ?? 'unread',
+          (inc.checks ?? []).some((c) => observed.unread.get(inc.thing)?.has(c)),
+        ),
+      );
+  // A thing whose look went because this pass couldn't read it keeps its run of looks.
+  for (const thing of before?.things ?? []) {
+    const raw = observed.raw.get(thing);
+    if (raw && !withLook.has(thing) && !seen.has(thing)) seen.set(thing, seenOf(raw, false));
+  }
   const plan = planIncidents({
     looks,
     open,
@@ -169,9 +189,14 @@ export async function watchIncidents(
   return { ...plan.seen, held: observed.held };
 }
 
-/** What a thing's own state says of its open incident: only seeing it fine counts towards its end. */
-function seenOf(raw: RawSeen): ThingSeen {
-  if (raw === 'fine' || raw === 'unread' || raw === 'gone') return raw;
+/**
+ * What a thing's own state says of its open incident: only seeing it fine counts towards its end. `unreadCheck`: its
+ * last check didn't read a check the incident is about (it answered, its details couldn't be read), so fine says
+ * nothing of that.
+ */
+export function seenOf(raw: RawSeen, unreadCheck: boolean): ThingSeen {
+  if (raw === 'fine') return unreadCheck ? 'unread' : 'fine';
+  if (raw === 'unread' || raw === 'gone') return raw;
   return 'bad';
 }
 
