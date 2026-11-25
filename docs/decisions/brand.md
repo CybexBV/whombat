@@ -28,9 +28,10 @@ usage rules).
 - **BR-05 The Ink tile is the app icon.** Of the package's Ink, Cocoa and Paper tiles, Ink (paper face on
   burrow ink) is the icon everywhere: iOS/Expo `icon.png` (rendered, the face 60% of the tile: the package's
   two-thirds face looked too big on a home screen, John 2026-11-25), the Android adaptive icon (vectors under their own name `@mipmap/whombat_launcher`,
-  `apps/mobile/plugins/with-launcher-icon.cjs`: the face 38 of 108 dp wide, half of the 72 dp launchers show, paper
-  with its features in ink on `#2b221d`; the themed-icon layer is the small symbol. A Samsung phone kept showing the
-  earlier bitmap `ic_launcher` after updates, while a vector icon changed at once), the web `apple-touch-icon.png`, `icon-192/512.png` (manifest, `any` and `maskable`: the face
+  `apps/mobile/plugins/with-launcher-icon.cjs`: the face 48 of 108 dp wide, two thirds of the 72 dp launchers show,
+  paper with its features in ink on `#2b221d`; the first icon's 61 dp looked too big, 38 too small; the themed-icon
+  layer is the small symbol. A Samsung phone with a Theme Park icon style keeps the icon it baked until the style is
+  applied again), the web `apple-touch-icon.png`, `icon-192/512.png` (manifest, `any` and `maskable`: the face
   fits the maskable safe zone) and the package's `favicon.ico`.
 - **BR-06 favicon.svg follows the color scheme.** The package's README says its `favicon.svg` switches ink/paper
   with the browser's scheme, but the file has no style rule; ours is generated from the small symbol with a

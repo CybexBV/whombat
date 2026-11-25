@@ -81,8 +81,11 @@ export function webManifest(colors: { background: string }): string {
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
-/** How wide the face is on Android's 108 dp launcher icon canvas, in dp. */
-export const LAUNCHER_FACE_DP = 38;
+/**
+ * How wide the face is on Android's 108 dp launcher icon canvas, in dp: two thirds of the 72 dp a launcher shows, as
+ * the iPhone's face sits in its tile. 61 (the first icon) looked too big beside other apps, 38 too small.
+ */
+export const LAUNCHER_FACE_DP = 48;
 
 const argb = (hex: string) => `#FF${hex.replace('#', '').toUpperCase()}`;
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -115,8 +118,7 @@ ${body}
 
 /**
  * The Android launcher icon's foreground (adaptive icon): the full symbol, its mask painted in order on the Ink
- * background — what it keeps in paper, what it cuts in ink. A vector, like the status-bar icon: a launcher draws it
- * fresh, where Samsung kept showing an earlier bitmap of the same name after an update.
+ * background — what it keeps in paper, what it cuts in ink. A vector, like the status-bar icon: sharp at every size.
  */
 export function androidLauncherForegroundXml(colors: { ink: string; paper: string }): string {
   const body = SYMBOL_MASK.map((s) => {
