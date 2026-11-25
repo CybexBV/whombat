@@ -831,9 +831,10 @@ function ServerHead({
               {read}
             </Text>
           </View>
+          {/* The row's gap sets it apart: a “·” of its own would start the next line when it wraps. */}
           {week ? (
             <Text size={12} mono color={theme.colors.mut} numberOfLines={2} style={{ flexShrink: 1 }}>
-              {`· ${week}`}
+              {week}
             </Text>
           ) : null}
         </View>

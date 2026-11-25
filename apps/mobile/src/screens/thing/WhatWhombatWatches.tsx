@@ -6,12 +6,10 @@
  * the thing's `useQuietActions` (the toast says so). Look only and guests read the same rows with “On” or “Off” instead
  * of a switch and no Undo. Only the rows: the caller puts them in its card (a connection's settings, a server's Summary).
  * A server's check with a limit says when it warns (“Warns above 90 %”, and each item
- * with its own) with Change, which opens Change the limit.
+ * with its own) with Change, which opens Change the limit; someone who can't change it reads the limits without Change.
  */
 import {
   type LimitView,
-  limitLine,
-  limitView,
   thingWatchView,
   type WatchCheckView,
   type WatchExceptionView,
@@ -20,7 +18,7 @@ import type { QuietActions } from '@whombat/client/react';
 import type { ThingWatch } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { Switch, View } from 'react-native';
-import { MONITORING_COPY } from '../../data/monitoring';
+import { MONITORING_COPY, type WatchLimitLine, watchLimitLines } from '../../data/monitoring';
 import { checkToastName, exceptionText, foldWatchRows, QUIET_COPY, watchRowSpoken } from '../../data/quiet';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -57,7 +55,10 @@ export function WhatWhombatWatches({
   divider: Divider;
   /** The rows' side padding: the card's. */
   inset: number;
-  /** Opens Change the limit for a check's limit, or one item's (a server's); none: limits aren't shown. */
+  /**
+   * Opens Change the limit for a check's limit, or one item's (a server's); none: limits aren't shown. Someone who can't
+   * change them reads them without Change.
+   */
   onLimit?: ((view: LimitView) => void) | null;
 }) {
   const theme = useTheme();
@@ -94,8 +95,8 @@ export function WhatWhombatWatches({
           border={border}
           inset={inset}
           limit={(() => {
-            const c = onLimit && view.mayChange ? checks.get(row.check) : undefined;
-            return c && onLimit ? { check: c, open: onLimit } : null;
+            const c = onLimit ? checks.get(row.check) : undefined;
+            return c ? { check: c, open: view.mayChange ? onLimit : null } : null;
           })()}
         />
       ))}
@@ -136,8 +137,8 @@ function CheckRow({
   actions: QuietActions;
   border: object;
   inset: number;
-  /** Its limit and what opens Change the limit, for who may change it. */
-  limit: { check: ThingWatch['checks'][number]; open: (view: LimitView) => void } | null;
+  /** Its limit, and what opens Change the limit for who may change it (null: read only). */
+  limit: { check: ThingWatch['checks'][number]; open: ((view: LimitView) => void) | null } | null;
 }) {
   const theme = useTheme();
   const busy = actions.busy({ check: row.check });
@@ -247,70 +248,62 @@ function ExceptionLine({
   );
 }
 
-/** A check's limit: “Warns above 90 %” (or what applies without one) and each item with its own, each with Change. */
+/**
+ * A check's limit: “Warns above 90 %” (or what applies without one) and each item with its own, each with Change for
+ * who may change it.
+ */
 function LimitLines({
   check,
   open,
 }: {
   check: ThingWatch['checks'][number];
-  open: (view: LimitView) => void;
+  open: ((view: LimitView) => void) | null;
 }) {
-  const whole = limitView(check);
-  const line = limitLine(check);
-  if (!whole || !line) return null;
+  const lines = watchLimitLines(check, !!open);
+  if (!lines.length) return null;
   return (
     <View style={{ paddingBottom: 4 }}>
-      <LimitLine
-        text={line.words}
-        spoken={MONITORING_COPY.changeLimitHint(check.name)}
-        onPress={() => open(whole)}
-      />
-      {line.items.map((item) => {
-        const own = limitView(check, item.subject);
-        return own ? (
-          <LimitLine
-            key={item.subject.id}
-            text={`${item.subject.name} ${item.words}`}
-            spoken={MONITORING_COPY.changeLimitHint(`${check.name} · ${item.subject.name}`)}
-            onPress={() => open(own)}
-          />
-        ) : null;
-      })}
+      {lines.map((line) => (
+        <LimitLine key={line.key} line={line} open={open} />
+      ))}
     </View>
   );
 }
 
 /**
- * One limit's words in mono under the check's name, as “Off since …” is, and Change at the switch's edge: 32 tall with
- * slop to 44, so the lines sit close to the check they belong to.
+ * One limit's words in mono under the check's name, as “Off since …” is, and Change at the switch's edge for who may
+ * change it: 32 tall with slop to 44, so the lines sit close to the check they belong to.
  */
-function LimitLine({ text, spoken, onPress }: { text: string; spoken: string; onPress: () => void }) {
+function LimitLine({ line, open }: { line: WatchLimitLine; open: ((view: LimitView) => void) | null }) {
   const theme = useTheme();
+  const view = line.view;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32, marginTop: -6 }}>
       <Text size={12} mono color={theme.colors.mut} style={{ flex: 1, minWidth: 0 }}>
-        {text}
+        {line.text}
       </Text>
-      <Touchable
-        onPress={onPress}
-        feedback="fade"
-        ringRadius={10}
-        accessibilityRole="button"
-        accessibilityLabel={MONITORING_COPY.changeLimit}
-        accessibilityHint={spoken}
-        hitSlop={hitSlopFor(32)}
-        style={{
-          minHeight: 32,
-          minWidth: 44,
-          paddingLeft: 10,
-          justifyContent: 'center',
-          alignItems: 'flex-end',
-        }}
-      >
-        <Text size={13} weight={600} color={theme.colors.brand}>
-          {QUIET_COPY.change}
-        </Text>
-      </Touchable>
+      {view && open ? (
+        <Touchable
+          onPress={() => open(view)}
+          feedback="fade"
+          ringRadius={10}
+          accessibilityRole="button"
+          accessibilityLabel={MONITORING_COPY.changeLimit}
+          accessibilityHint={line.spoken}
+          hitSlop={hitSlopFor(32)}
+          style={{
+            minHeight: 32,
+            minWidth: 44,
+            paddingLeft: 10,
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+          }}
+        >
+          <Text size={13} weight={600} color={theme.colors.brand}>
+            {QUIET_COPY.change}
+          </Text>
+        </Touchable>
+      ) : null}
     </View>
   );
 }

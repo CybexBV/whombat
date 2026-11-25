@@ -66,6 +66,7 @@ import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import { DEFAULT_RANGE, rangeOptions } from '../data/dashboard';
 import {
   factsWithoutUptime,
+  holdLineShown,
   MONITORING_COPY,
   parseMonitoringPick,
   thingMoreMenu,
@@ -327,7 +328,7 @@ export function ThingPageScreen({
         busy={keep.busy}
         onEnd={() => void keep.end()}
       />
-    ) : page && hold && page.badge !== hold.words ? (
+    ) : page && hold && holdLineShown(page) ? (
       <KeptQuietLine words={hold.words} who={null} endNow={false} busy={false} onEnd={() => {}} />
     ) : null;
   // What it is down because of, opened from beside its state (“Open media ›”).

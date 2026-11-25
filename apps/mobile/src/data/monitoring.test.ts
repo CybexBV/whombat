@@ -4,17 +4,19 @@
  * Worth a look (End now, not Undo), the ⋯ menus and a limit's words.
  */
 import { keepQuietBody } from '@whombat/client';
-import type { ThingPage, ThingPagePanel } from '@whombat/core';
+import type { ThingPage, ThingPagePanel, ThingWatchCheck } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
   daysEdges,
   factsWithoutUptime,
   firstPick,
+  holdLineShown,
   parseMonitoringPick,
   pickDays,
   pickedValue,
   serverMoreMenu,
   thingMoreMenu,
+  watchLimitLines,
   withoutHoldLines,
 } from './monitoring';
 import { quietLineMenu } from './nativeMenu';
@@ -103,6 +105,22 @@ describe('the hold on a page', () => {
     expect(factsWithoutUptime(facts, undefined)).toBe(facts);
   });
 
+  it('says a cause once: in the state pill even when the badge was cut, else in a line under it', () => {
+    const long = 'Not answering while the virtual machine homeassistant-production on pve-02 is stopped';
+    const cause = { thing: 'server:pve-02/guest/pve%3A131', name: 'homeassistant', words: long };
+    // The server sends the cause's words as the badge, cut at 60 characters.
+    expect(holdLineShown({ badge: long.slice(0, 60), causedBy: cause })).toBe(false);
+    expect(holdLineShown({ badge: 'Not answering', causedBy: { ...cause, words: 'Not answering' } })).toBe(
+      false,
+    );
+    // Quiet with its server keeps its own state: the line says why.
+    const quiet = { ...cause, kind: 'quiet' as const, words: 'Quiet while pve-02 is kept quiet' };
+    expect(holdLineShown({ badge: 'Fine', causedBy: quiet })).toBe(true);
+    // Kept quiet always has its line (who kept it quiet, End now); nothing held, none.
+    expect(holdLineShown({ badge: 'Quiet until 23:00', keptQuiet: KEPT })).toBe(true);
+    expect(holdLineShown({ badge: 'Fine' })).toBe(false);
+  });
+
   it('leaves out the heads-up line only where the page carries the hold', () => {
     const hold = { id: 'quiet-window', tone: 'info' as const, icon: 'clock' as const, title: KEPT.words };
     const line = { id: 'ap', tone: 'warn' as const, icon: 'device' as const, title: 'Garage AP is offline' };
@@ -174,6 +192,32 @@ describe('menus and limits', () => {
     ).toEqual(['rename']);
     expect(parseMonitoringPick('keep_quiet')).toBe('keep_quiet');
     expect(parseMonitoringPick('rename')).toBeNull();
+  });
+
+  it('lists a check’s limits for everyone, with Change only for who may change them', () => {
+    const check: ThingWatchCheck = {
+      check: 'host.disk.space_high',
+      name: 'A disk filling up',
+      nature: 'problem',
+      on: true,
+      perItem: true,
+      exceptions: [],
+      limit: {
+        unit: '%',
+        min: 50,
+        max: 99,
+        value: null,
+        defaultValue: 90,
+        items: [{ subject: { id: '/mnt/backup', name: '/mnt/backup' }, value: 95 }],
+      },
+    };
+    const readOnly = watchLimitLines(check, false);
+    expect(readOnly.map((l) => l.text)).toEqual(['Warns above 90 %, the default', '/mnt/backup above 95 %']);
+    expect(readOnly.every((l) => l.view === null)).toBe(true);
+    const mine = watchLimitLines(check, true);
+    expect(mine.map((l) => l.view?.subject?.id ?? null)).toEqual([null, '/mnt/backup']);
+    expect(mine.every((l) => l.view !== null)).toBe(true);
+    expect(watchLimitLines({ ...check, limit: undefined }, true)).toEqual([]);
   });
 
   it('offers Change the limit in a line’s ⋯ before Stop watching, the gentler choice', () => {
