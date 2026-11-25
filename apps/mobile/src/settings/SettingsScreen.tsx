@@ -11,7 +11,14 @@
  */
 import { useIsFocused } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
-import { agentFaceOf, SETTINGS_HOME_TEXT, settingsHomeRows } from '@whombat/client';
+import {
+  agentFaceOf,
+  agentGroupParts,
+  hasLooksAhead,
+  SETTINGS_HOME_TEXT,
+  settingsHomeRows,
+} from '@whombat/client';
+import { useSessionProtocol } from '@whombat/client/react';
 import { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { PersonAvatar, WhombatAvatar } from '../avatars/Avatars';
@@ -103,10 +110,10 @@ export function SettingsScreen() {
   const notifications = parts.includes('notifications');
   const applianceLine = useApplianceLine();
   // The home's names and, where a row has no news of its own, what it holds.
-  const home = Object.fromEntries(settingsHomeRows(agentName, parts).map((r) => [r.key, r])) as Record<
-    string,
-    { title: string; line: string }
-  >;
+  const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(useSessionProtocol()) });
+  const home = Object.fromEntries(
+    settingsHomeRows(agentName, parts, agentParts).map((r) => [r.key, r]),
+  ) as Record<string, { title: string; line: string }>;
   const homeRows = { you: home.you?.title ?? 'You' };
   const homeLine = (key: SettingsRowKey) => home[key === 'screen' ? 'screens' : key]?.line ?? null;
   const [switching, setSwitching] = useState(false);

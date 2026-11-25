@@ -1,0 +1,33 @@
+/*
+ * Settings → the assistant → Looks ahead (Whombat looks-ahead.md; not in the mocks): Settings' rows and cards
+ * (`SettingsScreen.module.css`), with the part's line on top as What it may do has it.
+ */
+
+/* What Looks ahead does, as What it may do's intro (`Permissions.module.css` .intro). */
+.intro {
+  margin: -6px 0 0;
+  max-width: 40em;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+/* Why there are no calendars to choose: a quiet line in the section's place. */
+.note {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--mut);
+}
+
+/* A calendar while Looks ahead is off: it keeps its choice but rests. */
+.resting {
+  opacity: 0.55;
+}
+
+/* The stopped kinds are a list; the card keeps its look. */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

@@ -2,14 +2,15 @@
  * Settings → the assistant by its name (Whombat one-agent.md OA-09; one-agent.md AP-4965; the web's `?tab=agent`): its
  * page. Under “‹ Settings”, its face and name, then its parts as tabs that scroll sideways — Name and face, AI sign-in,
  * Memory (what it remembers about you and the notes it reads in every chat), What it may do (every permission on one
- * page) and Council (who sits on the councils it asks) — and the open part under them, with its own pull to refresh.
+ * page), Looks ahead (what it checks on your calendar, on a Whombat that has it) and Council (who sits on the councils
+ * it asks) — and the open part under them, with its own pull to refresh.
  * `whombat://settings/agent` opens it, `?part=may` at a part; an old part opens where it went (Notes in Memory, the
  * model, keys, what runs, schedules, spend and skills in Advanced). You change all of it (one-person-android.md
  * AP-5761). Leaving a part (or the page) with unsaved changes asks first. A failed load says what happened (AP-707).
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { agentFaceOf } from '@whombat/client';
-import { useAgent } from '@whombat/client/react';
+import { agentFaceOf, hasLooksAhead } from '@whombat/client';
+import { useAgent, useSessionProtocol } from '@whombat/client/react';
 import { AGENT_STATUS_COPY } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -29,6 +30,7 @@ import { ErrorState, Skeleton, SkeletonRows } from '../ui/primitives';
 import { UnderlineTabs } from '../ui/UnderlineTabs';
 import { AiPart } from './agent/AiPart';
 import { CouncilPart } from './agent/CouncilPart';
+import { LooksAheadPart } from './agent/LooksAheadPart';
 import { MayPart } from './agent/MayPart';
 import { MemoryPart } from './agent/MemoryPart';
 import { NameAndFacePart } from './agent/NameAndFacePart';
@@ -44,7 +46,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
   const profile = query.data;
   const asked = route.params?.part;
   const target = agentPartTarget(asked, { mode }, agentKeyParam(route.params?.key));
-  const [part, setPart] = useState<AgentPart>(() => (target.kind === 'part' ? target.part : 'profile'));
+  const [chosen, setPart] = useState<AgentPart>(() => (target.kind === 'part' ? target.part : 'profile'));
   // A link that names another part (What it may do from a card) opens it.
   const askedPart = asked && target.kind === 'part' ? target.part : null;
   useEffect(() => {
@@ -60,7 +62,9 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
   }, [elsewhere, navigation]);
 
   const name = profile?.agent.name ?? words.name;
-  const parts = agentParts(name);
+  const parts = agentParts(name, { looksAhead: hasLooksAhead(useSessionProtocol()) });
+  // A part this Whombat doesn't have (Looks ahead on an older one) opens Name and face.
+  const part: AgentPart = parts.some((p) => p.key === chosen) ? chosen : 'profile';
   const partLabel = parts.find((p) => p.key === part)?.label ?? '';
   // Unsaved changes in the open part: leaving the page, or the part, asks first.
   const guard = useUnsavedGuard(name, partLabel);
@@ -153,6 +157,8 @@ function PartPanel({ part, props }: { part: AgentPart; props: PartProps }) {
       return <MemoryPart {...props} />;
     case 'may':
       return <MayPart {...props} />;
+    case 'ahead':
+      return <LooksAheadPart {...props} />;
     case 'council':
       return <CouncilPart {...props} />;
     default:

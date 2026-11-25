@@ -1,11 +1,6 @@
 import { useBlocker } from '@tanstack/react-router';
-import {
-  AGENT_GROUP_PARTS,
-  type AgentGroupPart,
-  isAgentGroupPart,
-  SETTINGS_GROUP_TEXT,
-} from '@whombat/client';
-import { useAgent, useBootstrap, useTheAgent } from '@whombat/client/react';
+import { type AgentGroupPart, agentGroupParts, hasLooksAhead, SETTINGS_GROUP_TEXT } from '@whombat/client';
+import { useAgent, useBootstrap, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import type { AgentProfile } from '@whombat/core';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
@@ -20,6 +15,7 @@ import { usePartInView } from '../../settings/usePartInView';
 import { CredentialSection } from '../CredentialSection';
 import styles from './AgentTab.module.css';
 import { CouncilTab } from './CouncilTab';
+import { LooksAheadPart } from './LooksAheadPart';
 import { PermissionsTab } from './PermissionsTab';
 import { ProfileTab } from './ProfileTab';
 
@@ -44,14 +40,17 @@ export interface SettingsTabProps {
  * Settings → the assistant by its name (`?tab=agent`; settings-groups.md; one-agent.md OA-09): its
  * **Name and face**, the **AI sign-in** it runs on (one place: what it runs on and your sign-ins), **Memory** (what it
  * remembers about you and the notes it reads in every chat, in one place), **What it may do** (every permission on
- * one page, with its keys and the commands always allowed) and the **Council** (who sits on the councils it leads). The
+ * one page, with its keys and the commands always allowed), **Looks ahead** (what it checks on the person's calendar,
+ * on a Whombat that has it) and the **Council** (who sits on the councils it leads). The
  * model, what it runs, its skills and spend are Settings → Advanced's. The open part is at `&part=`; leaving a part with
  * unsaved changes asks first.
  */
 export function AgentTab({ burrow, part, agentKey, onPartChange }: AgentTabProps) {
   const { words } = useTheAgent(burrow);
   const labels = SETTINGS_GROUP_TEXT.agent(words.name);
-  const current: AgentGroupPart = isAgentGroupPart(part) ? part : 'profile';
+  // Looks ahead only on a Whombat that has it; its address on an older one opens Name and face.
+  const parts = agentGroupParts({ looksAhead: hasLooksAhead(useSessionProtocol()) });
+  const current: AgentGroupPart = part && parts.includes(part) ? part : 'profile';
   usePartInView(styles.parts ?? '', current);
   return (
     <>
@@ -61,7 +60,7 @@ export function AgentTab({ burrow, part, agentKey, onPartChange }: AgentTabProps
         className={styles.parts}
         value={current}
         onChange={(next) => onPartChange(next)}
-        options={AGENT_GROUP_PARTS.map((p) => ({ value: p, label: labels[p] }))}
+        options={parts.map((p) => ({ value: p, label: labels[p] }))}
       />
       <AgentProfilePart burrow={burrow} part={current} label={labels[current]}>
         {(props) => <PartPanel part={current} agentKey={agentKey} {...props} />}
@@ -171,6 +170,8 @@ function PartPanel({
       );
     case 'may':
       return <PermissionsTab {...props} showKey={agentKey} />;
+    case 'ahead':
+      return <LooksAheadPart burrow={props.burrow} />;
     case 'council':
       return <CouncilTab {...props} />;
     default:

@@ -17,6 +17,7 @@ export * from './handoffs';
 export * from './home';
 export * from './keptSites';
 export * from './looks';
+export * from './looksAhead';
 export * from './monitoring';
 export * from './mutations';
 export * from './overview';

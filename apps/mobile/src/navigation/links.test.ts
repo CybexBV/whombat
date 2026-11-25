@@ -33,6 +33,7 @@ describe('web paths on the phone (AP-366)', () => {
     ['/settings?tab=agent&part=may', 'whombat://settings/agent?part=may'],
     // Settings → the assistant → Council, where the live council card's link goes (council.md CNL-54).
     ['/settings?tab=agent&part=council', 'whombat://settings/agent?part=council'],
+    ['/settings?tab=agent&part=ahead', 'whombat://settings/agent?part=ahead'],
     ['/settings?tab=advanced&part=keys&key=deploy', 'whombat://settings/advanced/keys?key=deploy'],
     ['/settings?tab=advanced&part=spend', 'whombat://spend'],
     ['/settings?tab=agent&part=may&key=deploy', 'whombat://settings/advanced/keys?key=deploy'],
