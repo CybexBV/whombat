@@ -217,6 +217,8 @@ module.exports = {
       },
     ],
     ['./plugins/with-dark-window-background.cjs', { backgroundColor: BG.dark }],
+    // The launcher icon: vectors under a name of their own, the Ink tile's background.
+    ['./plugins/with-launcher-icon.cjs', { background: BRAND.ink }],
     // No white film over the area under the tab bar on the unfolded screen (AP-2751).
     './plugins/with-navigation-bar.cjs',
     './plugins/with-english-resources.cjs',

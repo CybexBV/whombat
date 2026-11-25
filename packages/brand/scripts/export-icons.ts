@@ -16,7 +16,14 @@ import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { brandColors, themeColors } from '@whombat/tokens';
 import { chromium } from 'playwright';
-import { androidSmallIconXml, faviconSvg, webManifest } from '../src/files';
+import {
+  androidLauncherForegroundXml,
+  androidLauncherMonochromeXml,
+  androidSmallIconXml,
+  faviconSvg,
+  LAUNCHER_FACE_DP,
+  webManifest,
+} from '../src/files';
 import { buildLogo, renderLogoSvg } from '../src/index';
 
 const brand = resolve(import.meta.dirname, '..');
@@ -49,6 +56,12 @@ write(
   join(mobile, 'modules/whombat-live/android/src/main/res/drawable/whombat_live_small.xml'),
   androidSmallIconXml(),
 );
+// The Android launcher icon's layers, vectors that plugins/with-launcher-icon.cjs puts in the build.
+write(
+  join(mobile, 'assets/android/whombat_launcher_foreground.xml'),
+  androidLauncherForegroundXml(brandColors),
+);
+write(join(mobile, 'assets/android/whombat_launcher_monochrome.xml'), androidLauncherMonochromeXml());
 
 /** The full-face symbol from the package (`ink` / `paper`), without its content-credential metadata. */
 const packageSymbol = (tone: 'ink' | 'paper') =>
@@ -78,10 +91,14 @@ const renders: Render[] = [
     svg: packageSymbol('paper'),
     ground: brandColors.ink,
   },
-  // Android adaptive foreground (also the themed-icon monochrome): paper on the Ink background colour. Launchers show
-  // about the middle 72 of its 108 dp, Samsung's One UI less (about 56): the face is 38 dp wide, half of the usual tile
-  // and two thirds of Samsung's, like the apps beside it. At 61 dp and then 48 it still filled a Samsung tile.
-  { file: join(mobile, 'assets/adaptive-icon.png'), size: 1024, width: 0.35, svg: packageSymbol('paper') },
+  // Expo's own adaptive icon, the same face as the launcher vectors above (`LAUNCHER_FACE_DP`, 38 of 108 dp): the
+  // build's launcher icon is the vector one (plugins/with-launcher-icon.cjs); this stays for Expo's generated files.
+  {
+    file: join(mobile, 'assets/adaptive-icon.png'),
+    size: 1024,
+    width: LAUNCHER_FACE_DP / 108,
+    svg: packageSymbol('paper'),
+  },
   // Splash: ink on the light `bg`, paper on the dark one.
   { file: join(mobile, 'assets/splash-icon.png'), size: 1024, width: 0.56, svg: packageSymbol('ink') },
   { file: join(mobile, 'assets/splash-icon-dark.png'), size: 1024, width: 0.56, svg: packageSymbol('paper') },
