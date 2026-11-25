@@ -69,6 +69,14 @@ export function firstPick(now: Date | number, timeZone: string): { day: string; 
   return { day: today.value, clock: `${two(p.hour + 2)}:00` };
 }
 
+/**
+ * Which sides of Pick a time's scrolling days fade into the sheet: a side with more days past it, so a day the edge
+ * cuts off reads as more to scroll to, never as a stray sliver beside the clock. A pixel of rounding isn't more.
+ */
+export function daysEdges(view: number, content: number, x: number): { left: boolean; right: boolean } {
+  return { left: x > 1, right: x + view < content - 1 };
+}
+
 /** Pick a time's day and clock as the shared `keepQuietBody` reads them (`2026-09-23T16:00`). */
 export function pickedValue(day: string, clock: string): string {
   return `${day}T${clock}`;

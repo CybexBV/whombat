@@ -27,10 +27,11 @@ import {
   parseLimit,
 } from '@whombat/client';
 import { type KeepQuietActions, useThingHistory, type WatchLimitActions } from '@whombat/client/react';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { firstPick, MONITORING_COPY, pickDays, pickedValue } from '../../data/monitoring';
+import { daysEdges, firstPick, MONITORING_COPY, pickDays, pickedValue } from '../../data/monitoring';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, MonoLabel, OneCard } from '../../ui/assistant';
@@ -128,14 +129,7 @@ function KeepQuietBody({
         {choice === 'pick' ? (
           // The days and the clock on one row, so the sheet's buttons stay in reach at a phone's height.
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ScrollView
-              accessibilityLabel={MONITORING_COPY.day}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={{ flex: 1 }}
-              contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
-            >
+            <DaysRow>
               {days.map((d) => (
                 <Chip
                   key={d.value}
@@ -147,7 +141,7 @@ function KeepQuietBody({
                   }}
                 />
               ))}
-            </ScrollView>
+            </DaysRow>
             <ClockField
               label={MONITORING_COPY.time}
               spoken={`${KEEP_QUIET_WORDS.pickLabel} ${MONITORING_COPY.time.toLowerCase()}`}
@@ -171,6 +165,69 @@ function KeepQuietBody({
         />
       </View>
     </OneSheet>
+  );
+}
+
+/** How far Pick a time's days fade into the sheet at a side with more days past it. */
+const DAYS_FADE = 32;
+
+/** Pick a time's days, scrolling sideways before the clock, faded at a side with more days past it. */
+function DaysRow({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  const size = useRef({ view: 0, content: 0, x: 0 });
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measure = (next: Partial<{ view: number; content: number; x: number }>) => {
+    Object.assign(size.current, next);
+    const e = daysEdges(size.current.view, size.current.content, size.current.x);
+    setEdges((was) => (was.left === e.left && was.right === e.right ? was : e));
+  };
+  return (
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <ScrollView
+        accessibilityLabel={MONITORING_COPY.day}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+        onLayout={(e) => measure({ view: e.nativeEvent.layout.width })}
+        onContentSizeChange={(width) => measure({ content: width })}
+        onScroll={(e) => measure({ x: e.nativeEvent.contentOffset.x })}
+        scrollEventThrottle={16}
+      >
+        {children}
+      </ScrollView>
+      {edges.left ? <EdgeFade side="left" color={theme.colors.sf} /> : null}
+      {edges.right ? <EdgeFade side="right" color={theme.colors.sf} /> : null}
+    </View>
+  );
+}
+
+/** The sheet's own colour over a scroll's edge, clear on the inside: decorative, so nothing for a screen reader. */
+function EdgeFade({ side, color }: { side: 'left' | 'right'; color: string }) {
+  const id = `days-fade-${side}`;
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{ position: 'absolute', top: 0, bottom: 0, width: DAYS_FADE, [side]: 0 }}
+    >
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient
+            id={id}
+            x1={side === 'left' ? '1' : '0'}
+            y1="0"
+            x2={side === 'left' ? '0' : '1'}
+            y2="0"
+          >
+            <Stop offset="0" stopColor={color} stopOpacity={0} />
+            <Stop offset="0.6" stopColor={color} stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </View>
   );
 }
 
