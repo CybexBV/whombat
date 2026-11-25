@@ -91,8 +91,10 @@ function KeepQuietBody({
     });
     if ('problem' in asked) return setProblem(asked.problem);
     setProblem(null);
-    void actions.keep(asked.body).then((ok) => {
-      if (ok) onClose();
+    // A refusal stays in the open sheet: a toast would show behind it.
+    void actions.keep(asked.body).then((done) => {
+      if (done === true) onClose();
+      else setProblem(done.problem);
     });
   };
   return (
@@ -422,9 +424,11 @@ function LimitBody({
     setBusy(which);
     void actions
       .set({ check: view.check, subject: view.subject, name: view.name, unit: view.unit, limit })
-      .then((ok) => {
+      .then((done) => {
         setBusy(null);
-        if (ok) onClose();
+        // A refusal (a warning at or above the critical limit) stays in the open sheet, under the field.
+        if (done === true) onClose();
+        else setProblem(done.problem);
       });
   };
   const save = () => {

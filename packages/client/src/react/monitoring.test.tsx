@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../query/keys';
 import { fakeClient } from '../test/session';
 import { WhombatClientProvider } from './context';
-import { useKeepQuiet, useSetWatchLimit } from './monitoring';
+import { type SheetOutcome, useKeepQuiet, useSetWatchLimit } from './monitoring';
 
 const BURROW = 'mara';
 const THING = 'connection:con_unifi';
@@ -77,11 +77,11 @@ describe('useKeepQuiet', () => {
         }),
       { wrapper },
     );
-    let ok = false;
+    let done: SheetOutcome | null = null;
     await act(async () => {
-      ok = await result.current.keep({ until: kept.until, note: 'Moving the NAS' });
+      done = await result.current.keep({ until: kept.until, note: 'Moving the NAS' });
     });
-    expect(ok).toBe(true);
+    expect(done).toBe(true);
     expect(sent[0]?.url).toContain(`/things/${THING}/keep-quiet`);
     expect(sent[0]?.body).toEqual({ until: kept.until, note: 'Moving the NAS' });
     expect(queryClient.getQueryData<ThingPage>(pageKey)?.keptQuiet?.id).toBe('qw_1');
@@ -92,7 +92,7 @@ describe('useKeepQuiet', () => {
     expect(queryClient.getQueryData<ThingPage>(pageKey)?.keptQuiet).toBeUndefined();
   });
 
-  it('says a refusal in the server’s words and changes nothing', async () => {
+  it('gives a refusal’s words back to the open sheet instead of a toast behind it, and changes nothing', async () => {
     const { wrapper, queryClient, pageKey } = setup(() =>
       json({ error: { code: 'not_allowed', message: 'You can’t keep this quiet.' } }, 403),
     );
@@ -106,12 +106,12 @@ describe('useKeepQuiet', () => {
         }),
       { wrapper },
     );
-    let ok = true;
+    let done: SheetOutcome = true;
     await act(async () => {
-      ok = await result.current.keep({ minutes: 60 });
+      done = await result.current.keep({ minutes: 60 });
     });
-    expect(ok).toBe(false);
-    expect(notes[0]?.failed).toBe(true);
+    expect(done).toEqual({ problem: 'You can’t keep this quiet.' });
+    expect(notes).toEqual([]);
     expect(queryClient.getQueryData<ThingPage>(pageKey)?.keptQuiet).toBeUndefined();
   });
 });
@@ -139,5 +139,32 @@ describe('useSetWatchLimit', () => {
     expect(queryClient.getQueryData<ThingWatch>(watchKey)?.checks[0]?.limit?.value).toBe(95);
     expect(notes[0]?.message).toContain('95 %');
     expect(typeof notes[0]?.undo).toBe('function');
+  });
+
+  it('gives the hub’s refusal back to the open sheet, toasts nothing and keeps the watch list', async () => {
+    const refusal = 'Set it below the critical limit of 90 °C.';
+    const { wrapper, queryClient } = setup(() =>
+      json({ error: { code: 'invalid_request', message: refusal } }, 400),
+    );
+    const watchKey = queryKeys.endpoint(api.things.watch, { params: { burrow: BURROW, thing: SERVER } });
+    queryClient.setQueryData(watchKey, watch);
+    const notes: { message: string }[] = [];
+    const { result } = renderHook(
+      () => useSetWatchLimit(BURROW, SERVER, { note: (message, o) => notes.push({ message, ...o }) }),
+      { wrapper },
+    );
+    let done: SheetOutcome = true;
+    await act(async () => {
+      done = await result.current.set({
+        check: 'host.sensor.temp_high',
+        name: 'Running hot',
+        unit: '°C',
+        limit: 92,
+      });
+    });
+    expect(done).toEqual({ problem: refusal });
+    expect(notes).toEqual([]);
+    expect(result.current.busy).toBe(false);
+    expect(queryClient.getQueryData<ThingWatch>(watchKey)?.checks[0]?.limit?.value).toBe(95);
   });
 });

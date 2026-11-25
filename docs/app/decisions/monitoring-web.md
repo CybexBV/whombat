@@ -117,3 +117,20 @@ it doesn't list is newer than it (an older box) and nothing there could connect 
 it fails, every entry is offered. The entry's own page, reached by a link, says it can't be connected on this Whombat
 yet.
 
+
+## Council round 2 (2026-11-25)
+
+### AP-9946 A refusal stays in the sheet that asked
+
+When the Whombat refuses Keep quiet or a limit (the hosts service refuses a warning at or above the critical limit:
+“Set it below the critical limit of 90 °C.”), the sheet stays open and says why: under the limit's field, under the
+picked time, or above the buttons. The shared `useKeepQuiet` and `useSetWatchLimit` give the refusal's words back to
+the sheet (`{ problem }`) and toast nothing, so the words show once and next to what to change. End now and Undo, which
+have no sheet, still say a refusal in a toast. The fixture world refuses a warning at or above its critical limit as
+the hosts service does (a sensor's own is 95 °C there; wear's default 90 %), so the refusal can be seen.
+
+### AP-9947 A fold with no line above it starts at the edge
+
+“Show N on hold” (and “Show N heads-ups”) right under Worth a look's band, with no line above it, starts where the
+band's words do (14 px), as on the phone, instead of at a line's text (62 px): with no icon above, the indent looked
+like a mistake. Under a line it keeps lining up with the line's text.

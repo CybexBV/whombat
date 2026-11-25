@@ -3,7 +3,9 @@
  * minor 9): Keep quiet and End now (`things.keepQuiet`, `things.endQuiet`), What happened (`things.history`,
  * only asked of a Whombat that has it) and a server check's limit (`things.setWatchLimit`, Undo through
  * `changes.undo`). Each says how it went through the app's `note` (a toast), with Undo where it can be taken back; the
- * page, Home and the watch lists are read again after the answer. Works in React DOM and React Native.
+ * page, Home and the watch lists are read again after the answer. Keep quiet and a limit are asked from a sheet, which
+ * stays open when they are refused: their refusal comes back as words for that sheet instead of a toast, which the
+ * phone would draw behind it. Works in React DOM and React Native.
  */
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import {
@@ -28,6 +30,14 @@ import { queryHook } from './queries';
 
 /** How a press went: the toast's words, Undo when it can be taken back, and whether it failed. */
 export type MonitoringNote = (message: string, options?: { undo?: () => void; failed?: boolean }) => void;
+
+/** A sheet's press: true when it went through, else why not in words the open sheet shows. */
+export type SheetOutcome = true | { problem: string };
+
+/** The words of a refusal for the sheet; never empty, so the sheet always says something. */
+function refused(words: string | null): { problem: string } {
+  return { problem: words || 'That didn’t work.' };
+}
 
 /** The server a `server:<id>` thing is, else null. */
 function serverOf(thing: string): string | null {
@@ -66,8 +76,11 @@ function readAgain(qc: QueryClient, burrow: string, thing: string) {
 /* Keep quiet and End now ------------------------------------------------------------------------------------------- */
 
 export interface KeepQuietActions {
-  /** Keep it quiet (`things.keepQuiet`); true when it went through. The toast says until when, with Undo (End now). */
-  keep(body: KeepQuietBody): Promise<boolean>;
+  /**
+   * Keep it quiet (`things.keepQuiet`); true when it went through, else the refusal's words for the sheet. The toast
+   * says until when, with Undo (End now).
+   */
+  keep(body: KeepQuietBody): Promise<SheetOutcome>;
   /** End now (`things.endQuiet`); true when it went through. */
   end(): Promise<boolean>;
   busy: boolean;
@@ -109,22 +122,18 @@ export function useKeepQuiet(
   }, [client, qc, burrow, thing, name]);
 
   const keep = useCallback(
-    async (body: KeepQuietBody): Promise<boolean> => {
+    async (body: KeepQuietBody): Promise<SheetOutcome> => {
       setBusy(true);
       try {
         const result = await client.request(api.things.keepQuiet, { params: { burrow, thing }, body });
-        if (result.status !== 'ok') {
-          noteRef.current(commitOutcomeText(result) ?? '', { failed: true });
-          return false;
-        }
+        if (result.status !== 'ok') return refused(commitOutcomeText(result));
         const kept = result.data.keptQuiet;
         applyKept(qc, burrow, thing, kept);
         // Undo of keeping quiet ends it (the change's own Undo in Activity does the same).
         if (kept) noteRef.current(keptToast(kept.until, Date.now(), timeZone), { undo: () => void end() });
         return true;
       } catch (error) {
-        noteRef.current(hostErrorInfo(error).message, { failed: true });
-        return false;
+        return refused(hostErrorInfo(error).message);
       } finally {
         setBusy(false);
         readAgain(qc, burrow, thing);
@@ -158,7 +167,7 @@ export function useThingHistory(burrow: string, thing: string, days: 30 | 90 = 3
 export interface WatchLimitActions {
   /**
    * Set a check's limit for the server or one item, or clear it (`limit` null: Use the default); true when it went
-   * through. The toast says the new limit with Undo (`changes.undo`).
+   * through, else the refusal's words for the sheet. The toast says the new limit with Undo (`changes.undo`).
    */
   set(input: {
     check: string;
@@ -166,7 +175,7 @@ export interface WatchLimitActions {
     name: string;
     unit: string;
     limit: number | null;
-  }): Promise<boolean>;
+  }): Promise<SheetOutcome>;
   busy: boolean;
 }
 
@@ -210,10 +219,7 @@ export function useSetWatchLimit(
           params: { burrow, thing },
           body: { check, ...(subject ? { subject } : {}), limit },
         });
-        if (result.status !== 'ok') {
-          noteRef.current(commitOutcomeText(result) ?? '', { failed: true });
-          return false;
-        }
+        if (result.status !== 'ok') return refused(commitOutcomeText(result));
         qc.setQueriesData<ThingWatch>(
           { queryKey: queryKeys.scope('things.watch', { burrow, thing }) },
           () => result.data.watch,
@@ -225,8 +231,7 @@ export function useSetWatchLimit(
         );
         return true;
       } catch (error) {
-        noteRef.current(hostErrorInfo(error).message, { failed: true });
-        return false;
+        return refused(hostErrorInfo(error).message);
       } finally {
         setBusy(false);
         readAgain(qc, burrow, thing);

@@ -114,7 +114,9 @@ export function KeepQuietDialog({
       return;
     }
     setProblem(null);
-    if (await actions.keep(built.body)) close();
+    const done = await actions.keep(built.body);
+    if (done === true) close();
+    else setProblem(done.problem);
   };
   return (
     <Modal open={open} onOpenChange={(o) => !o && !actions.busy && close()}>
