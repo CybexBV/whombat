@@ -469,6 +469,9 @@ export function remoteHelpVisitRows(
   return rows;
 }
 
+/** How much of What support did shows before Show all: the newest visits, and each visit's last steps. */
+export const REMOTE_HELP_FOLD = { visits: 3, steps: 3 } as const;
+
 /** One visit in What support did: who, how much, when, and its steps (oldest first). */
 export interface RemoteHelpVisitGroup {
   key: string;

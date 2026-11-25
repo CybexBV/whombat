@@ -1,17 +1,20 @@
 import {
   REMOTE_HELP_DEFAULT_CHOICE,
+  REMOTE_HELP_FOLD,
   REMOTE_HELP_TEXT,
   REMOTE_HELP_WORDS,
   type RemoteHelpChoice,
   type RemoteHelpStepRow,
   type RemoteHelpTranscript,
+  type RemoteHelpVisitGroup,
   remoteHelpApi,
   remoteHelpCard,
   remoteHelpChoice,
   remoteHelpConfirmText,
-  remoteHelpVisitRows,
+  remoteHelpVisitGroups,
 } from '@whombat/client/managed';
 import { type RemoteHelpModel, useRemoteHelp } from '@whombat/client/react';
+import { Eye, SquareTerminal, Wrench } from 'lucide-react';
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
@@ -34,8 +37,9 @@ const T = REMOTE_HELP_TEXT;
  * above DIAGNOSTICS. Off: how much (Look, Look and fix as radio cards), for how long (a segmented control,
  * Forever only on a test Whombat), “Turn on remote help” and the passkey hint; the confirmation is the passkey, or a
  * dialog for someone without one. On: the state line with Stop, the help code a customer box needs, who is connected.
- * Always: WHAT SUPPORT DID, each command line behind Show (a modal with Download). A box without a support key says it
- * isn't available yet.
+ * Always: WHAT SUPPORT DID, one block per visit (docs/app/decisions/about-page.md: who, how much, when, how many steps),
+ * the newest three visits and each one's last three steps, the rest behind Show all, and a visit's command line behind
+ * Command line (a modal with Download). A box without a support key says it isn't available yet.
  */
 export function RemoteHelpSection() {
   const { session, managed } = useAppServices();
@@ -243,7 +247,10 @@ function OnPart({ card, model }: { card: OnCard; model: RemoteHelpModel }) {
   );
 }
 
-/** WHAT SUPPORT DID (AP-4451): every visit's steps, Show opening a command line. */
+/**
+ * WHAT SUPPORT DID (AP-4451): one block per visit, so a long history folds — the newest three, the rest behind
+ * “Show N earlier visits”; a visit's Command line opens what the command line showed.
+ */
 function VisitsPart({
   model,
   api,
@@ -255,8 +262,9 @@ function VisitsPart({
   const [open, setOpen] = useState<RemoteHelpTranscript | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const rows = useMemo(
-    () => (model.visits ? remoteHelpVisitRows(model.visits, { now: new Date() }) : null),
+  const [all, setAll] = useState(false);
+  const groups = useMemo(
+    () => (model.visits ? remoteHelpVisitGroups(model.visits, { now: new Date() }) : null),
     [model.visits],
   );
   const show = async (visitId: string) => {
@@ -271,20 +279,27 @@ function VisitsPart({
       setLoading(null);
     }
   };
+  const shown = groups ? (all ? groups : groups.slice(0, REMOTE_HELP_FOLD.visits)) : [];
+  const hidden = groups ? groups.length - shown.length : 0;
   return (
     <div className={rh.visits}>
       <span className={rh.label} id={labelId}>
         {W.visits}
       </span>
-      {rows === null ? null : rows.length === 0 ? (
+      {groups === null ? null : groups.length === 0 ? (
         <p className={rh.empty}>{W.noVisits}</p>
       ) : (
-        <ol className={rh.log} aria-labelledby={labelId}>
-          {rows.map((r) => (
-            <Step key={r.key} row={r} loading={loading === r.transcript} onShow={show} />
+        <ol className={rh.visitList} aria-labelledby={labelId}>
+          {shown.map((g) => (
+            <Visit key={g.key} group={g} loading={loading === g.visitId} onShow={show} />
           ))}
         </ol>
       )}
+      {hidden > 0 ? (
+        <Button variant="link" size="sm" className={rh.more} onClick={() => setAll(true)}>
+          {T.earlierVisits(hidden)}
+        </Button>
+      ) : null}
       {failed ? (
         <p className={rh.problem} role="alert">
           {T.transcriptFailed}
@@ -326,24 +341,80 @@ function VisitsPart({
   );
 }
 
-function Step({
-  row,
+/**
+ * One visit: an eye (Look) or a wrench (Look and fix), green with “Now” while it lasts, who came; when it started, how
+ * much they could do and how many steps; its last three steps, Show all for the rest, and Command line where one was
+ * kept.
+ */
+function Visit({
+  group: g,
   loading,
   onShow,
 }: {
-  row: RemoteHelpStepRow;
+  group: RemoteHelpVisitGroup;
   loading: boolean;
   onShow: (visitId: string) => Promise<void>;
 }) {
+  const [open, setOpen] = useState(false);
+  const headId = useId();
+  // “Earlier steps aren’t shown.” isn't a step: only real ones count toward Show all.
+  const more = g.stepCount > REMOTE_HELP_FOLD.steps;
+  const steps = open || !more ? g.steps : g.steps.slice(-REMOTE_HELP_FOLD.steps);
+  const Icon = g.level === 'fix' ? Wrench : Eye;
+  return (
+    <li className={rh.visit}>
+      <div className={rh.visitHead} id={headId}>
+        <span className={rh.visitIcon} data-ongoing={g.ongoing || undefined} aria-hidden="true">
+          <Icon size={18} strokeWidth={1.8} />
+        </span>
+        <span className={rh.visitWho}>
+          <span className={rh.who}>
+            {g.who}
+            {g.ongoing ? <span className={rh.now}>{T.now}</span> : null}
+          </span>
+          <span className={rh.visitMeta}>{`${g.when} · ${g.line}`}</span>
+        </span>
+      </div>
+      <ol className={rh.log} aria-labelledby={headId}>
+        {steps.map((r) => (
+          <Step key={r.key} row={r} />
+        ))}
+      </ol>
+      {more || g.transcript ? (
+        <div className={rh.visitActions}>
+          {/* Command line first, so it stays put when Show all becomes Show fewer. */}
+          {g.transcript ? (
+            <Button
+              variant="link"
+              size="sm"
+              disabled={loading}
+              aria-label={`${W.transcript.show} ${W.transcript.title.toLowerCase()}`}
+              onClick={() => void onShow(g.transcript as string)}
+            >
+              <SquareTerminal size={15} strokeWidth={2} aria-hidden="true" />
+              {W.transcript.title}
+            </Button>
+          ) : null}
+          {more ? (
+            <Button variant="link" size="sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+              {open ? T.fewerSteps : T.allSteps(g.stepCount)}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/** A step: its time in mono (the visit says the day), its words, a command line in code style. */
+function Step({ row }: { row: RemoteHelpStepRow }) {
   return (
     <li className={rh.step} data-muted={row.muted || undefined}>
       {row.time ? (
         <time className={rh.time} dateTime={row.at}>
           {row.time}
         </time>
-      ) : (
-        <span className={rh.time} />
-      )}
+      ) : null}
       <span className={rh.stepText}>
         {row.text}
         {row.code ? (
@@ -353,18 +424,6 @@ function Step({
           </>
         ) : null}
       </span>
-      {row.transcript ? (
-        <Button
-          variant="link"
-          size="sm"
-          className={rh.show}
-          disabled={loading}
-          aria-label={`${W.transcript.show} ${W.transcript.title.toLowerCase()}`}
-          onClick={() => void onShow(row.transcript as string)}
-        >
-          {W.transcript.show}
-        </Button>
-      ) : null}
     </li>
   );
 }

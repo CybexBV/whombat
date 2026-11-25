@@ -14,6 +14,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import {
   REMOTE_HELP_DEFAULT_CHOICE,
+  REMOTE_HELP_FOLD,
   REMOTE_HELP_TEXT,
   REMOTE_HELP_WORDS,
   type RemoteHelpApi,
@@ -60,9 +61,8 @@ const T = REMOTE_HELP_TEXT;
 type OffCard = Extract<RemoteHelpCard, { kind: 'off' }>;
 type OnCard = Extract<RemoteHelpCard, { kind: 'on' }>;
 
-/** How many visits and steps show before Show all. */
-const VISITS_SHOWN = 3;
-const STEPS_SHOWN = 3;
+const VISITS_SHOWN = REMOTE_HELP_FOLD.visits;
+const STEPS_SHOWN = REMOTE_HELP_FOLD.steps;
 
 /** The card's state, asked only while the screen is in front and the app in the foreground. */
 function useRemoteHelpHereCard(here: RemoteHelpHere) {
