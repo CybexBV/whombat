@@ -79,6 +79,16 @@ export interface FoundCause {
   words: string;
 }
 
+/**
+ * Whether a connection's last check got an answer: one that answered with an error answered, as the incidents read it;
+ * only no answer at all (offline) doesn't.
+ */
+export function answeredLast(
+  glance: Pick<ConnectionGlance, 'outcome' | 'status'> | null | undefined,
+): boolean {
+  return glance?.outcome !== 'offline' && glance?.status !== 'offline';
+}
+
 /** The id a machine goes by as a cause: `server:pve-02/guest/<id>`. */
 export function machineThing(serverId: string, guestId: string | null): string {
   const server = thingId('server', serverId);
@@ -269,7 +279,7 @@ export async function passCauses(services: Services, now = services.clock()): Pr
       return {
         thingId: thingId('connection', row.id),
         ...(machine ? { machine: { serverId: machine.serverId, guestId: machine.guestId } } : {}),
-        answering: !glance?.outcome && glance?.status !== 'offline',
+        answering: answeredLast(glance),
         internet: onInternet(row, machine),
       } satisfies CauseConnection;
     });
