@@ -488,10 +488,14 @@ export const reportAhead = defineCommand({
     const fromMail = row.source !== 'calendar';
     const given = row.matterId ? await matterForUpdate(tx, ctx.burrow.id, row.matterId) : null;
     const matter = given?.state === 'open' ? given : null;
-    // They asked for it: told whatever the kinds and the day's count say, but never at night.
-    const asked = matter?.origin === 'person';
     const daytime = aheadHours(ctx.now, timeZone);
-    if (matter && asked && !daytime) return checkAgainInTheMorning(ctx, row, matter);
+    // News the person asked for is never told at night, and never lost to it.
+    if (matter?.origin === 'person' && !daytime) return checkAgainInTheMorning(ctx, row, matter);
+    // A check that was given a matter reports on it, unless it says its finding is about something else: a watched
+    // sender also writes about other things, and those are told as any other mail's finding.
+    const about = matter && !(row.source === 'mail' && report.found && report.unrelated) ? matter : null;
+    // They asked for it: told whatever the kinds and the day's count say.
+    const asked = about?.origin === 'person';
     const calendarOff =
       !fromMail && settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId));
     const mailOff = fromMail && !settings.mailOn;
@@ -522,13 +526,13 @@ export const reportAhead = defineCommand({
     let told = false;
     let conversationId = row.conversationId;
     // The thread a matter's finding joins: its matter's, while that message is still there.
-    const matterThread = matter ? await matterThreadRoot(tx, matter) : null;
+    const matterThread = about ? await matterThreadRoot(tx, about) : null;
     if (tellable) {
       // Otherwise an earlier stage's thread of the same event, or a thread of its own.
-      const eventRoot = matter ? null : await existingEventThreadRoot(tx, row);
+      const eventRoot = about ? null : await existingEventThreadRoot(tx, row);
       const thread =
         matterThread ?? (eventRoot ? { rootId: eventRoot, conversationId: row.conversationId } : null);
-      const where = thread?.conversationId ?? matter?.conversationId ?? row.conversationId;
+      const where = thread?.conversationId ?? about?.conversationId ?? row.conversationId;
       const conversation =
         (await loadConversationRow(tx, where)) ?? (await loadConversationRow(tx, row.conversationId));
       if (conversation) {
@@ -552,9 +556,10 @@ export const reportAhead = defineCommand({
       told && !(matterThread && matterThread.conversationId === conversationId)
         ? { rootId: row.threadRootId, conversationId }
         : null;
-    let matterId = row.matterId;
+    // A finding that isn't about the matter its mail matched stands on its own, with its own thread and replies.
+    let matterId = told && !about ? null : row.matterId;
     const change = fromMail ? report.matter : undefined;
-    if (matter) {
+    if (about) {
       const byRef = change?.ref ? change : undefined;
       const matterNote = cleanShortLabel(byRef?.note, AHEAD_NOTE_MAX);
       const due = byRef?.due ? matterDueAt(byRef.due, timeZone) : null;
@@ -572,8 +577,8 @@ export const reportAhead = defineCommand({
         await tx
           .update(aheadMatters)
           .set({ ...set, updatedAt: ctx.now })
-          .where(eq(aheadMatters.id, matter.id));
-      if (byRef?.close) await closeMatterIn(ctx, matter, 'done');
+          .where(eq(aheadMatters.id, about.id));
+      if (byRef?.close) await closeMatterIn(ctx, about, 'done');
     } else if (change && !change.ref && !row.matterId) {
       matterId = await openMatterFromCheck(ctx, row, change, startedThread);
     }

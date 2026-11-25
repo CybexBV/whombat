@@ -90,6 +90,7 @@ export function matterContext(
     ...(row.note ? { note: row.note } : {}),
     asked: row.origin === 'person',
     since: row.createdAt.toISOString(),
+    lastNews: row.lastNewsAt.toISOString(),
     ...(reason ? { reason } : {}),
   };
 }

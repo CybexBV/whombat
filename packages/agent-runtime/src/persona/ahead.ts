@@ -264,7 +264,7 @@ function mailMatterLines(m: AheadMatterContext, a: AheadDispatchContext, person:
     matterLine(m, a.timeZone, person),
     '[[end of what it may be news on]]',
     `Whombat thinks this mail may be news on ${ref}. If it really is, report the news in one to three sentences: what the mail says, and what, if anything, ${person} has to do (kind deadline when it waits on ${person}, else other). Then say with ahead_report’s matter whether it goes on (ref ${ref}, a short note, and a new due or waitingOn when that changed) or is done (ref ${ref}, close true).`,
-    `This check is only about ${ref}: if the mail isn’t about it, call ahead_report with found false and leave the matter as it is.`,
+    `If the mail isn’t about ${ref}: found false, unless something else in it needs ${person}. Then report that as any other mail’s finding, with unrelated true and without matter.`,
     ...(m.asked
       ? [
           `${person} asked to be told about this one: any real news on it is worth telling, whatever its kind.`,
@@ -328,7 +328,7 @@ function followUpLines(
           `Read the mail (mail_search, mail_read) to see whether ${person} already answered or handled it. Handled: ahead_report with found false and matter { ref: ${ref}, close: true }. Not handled: a finding (kind deadline) that says what is asked and by when, with an action such as “Draft a reply”.`,
         ]
       : [
-          `Why now: ${person} waits on ${who}, and no news on it has come for a while (it began ${dayOf(m.since, a.timeZone)}${m.due ? `; it was due ${dayOf(m.due, a.timeZone)}` : ''}).`,
+          `Why now: ${person} waits on ${who}, and no news on it has come since ${dayOf(m.lastNews ?? m.since, a.timeZone)} (it began ${dayOf(m.since, a.timeZone)}${m.due ? `; it was due ${dayOf(m.due, a.timeZone)}` : ''}).`,
           `Search the mail (mail_search, mail_read) for an answer. Found one that no earlier check told: report it (kind other), and say with matter whether it goes on (ref ${ref}, a short note) or is done (ref ${ref}, close true). Nothing came: a finding (kind other) that says since when nothing came, with an action such as “Draft a reminder”. If it clearly doesn’t matter any more: found false with matter { ref: ${ref}, close: true }, and nothing more.`,
         ];
   return [

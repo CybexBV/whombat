@@ -63,7 +63,7 @@ export const AHEAD_FEEDBACK_REASON_MAX = 200;
 /** Looks through new mail as a whole at most this many times a day; these passes aren't counted as checks. */
 export const AHEAD_TRIAGE_PER_DAY = 3;
 /** At least this long between two looks through new mail, unless the person pressed “Check now”. */
-export const AHEAD_TRIAGE_GAP_MS = 3.5 * 3600_000;
+export const AHEAD_TRIAGE_GAP_MS = 4.5 * 3600_000;
 /** At most this many mails in one look through new mail: a short list the background model reads cheaply. */
 export const AHEAD_TRIAGE_MAIL_MAX = 60;
 /** At most this many mails one look picks for a closer check. */
@@ -761,6 +761,12 @@ export const AheadReportInput = z
     matter: AheadReportMatter.optional().describe(
       'Only in a mail check or a follow-up: start keeping an eye on something that goes on after today (no ref), or update or close the one you were given (ref).',
     ),
+    unrelated: z
+      .boolean()
+      .optional()
+      .describe(
+        'Only in a mail check that was given a matter: true when your finding is about something else in the mail, not that matter.',
+      ),
   })
   .refine((v) => !v.found || (v.kind && v.text && v.sources?.length), {
     message: 'A finding needs its kind, its text and at least one source.',
@@ -1049,6 +1055,8 @@ export const AheadMatterContext = z.object({
   asked: z.boolean(),
   /** When it began. */
   since: z.string().max(40),
+  /** When the last news on it came (a told finding or a note); with none, when it began. */
+  lastNews: z.string().max(40).optional(),
   /** In a follow-up: why it is followed up now. */
   reason: AheadMatterReason.optional(),
 });

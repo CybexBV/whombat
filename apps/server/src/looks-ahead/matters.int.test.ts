@@ -18,7 +18,7 @@ import {
   LOOKS_AHEAD_WORDS,
   newId,
 } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueDispatchToken } from '../auth/agent-tokens';
 import { sendMessage } from '../commands/messages';
@@ -296,7 +296,7 @@ describe('Looks ahead: the triage pass (looks-ahead.md)', () => {
     expect(await pass(false)).toBeNull();
   });
 
-  it('runs at most three triage passes a day, 3.5 hours apart unless Check now, outside the checks budget', async () => {
+  it('runs at most three triage passes a day, 4.5 hours apart unless Check now, outside the checks budget', async () => {
     const finish = async (id: string | null, picks: { mail: string }[] = []) => {
       const mcp = await inTurn((await row(id)).dispatchId);
       await mcp.client.callTool({ name: 'ahead_triage', arguments: { picks } });
@@ -314,8 +314,8 @@ describe('Looks ahead: the triage pass (looks-ahead.md)', () => {
       .where(and(eq(aheadChecks.source, 'triage'), eq(aheadChecks.state, 'checking')));
     expect(second?.event.triage?.mails.map((m) => m.messageId)).toEqual(['m_a']);
     await finish(second?.id ?? null);
-    now = new Date('2026-12-14T13:30:00Z');
-    mail('m_b', 'Ben <ben@example.org>', 'Lunch next week?', '2026-12-14T13:00:00Z');
+    now = new Date('2026-12-14T14:30:00Z');
+    mail('m_b', 'Ben <ben@example.org>', 'Lunch next week?', '2026-12-14T14:00:00Z');
     const third = await pass(false);
     expect((await row(third)).source).toBe('triage');
     await finish(third);
@@ -438,6 +438,43 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     const [posted] = await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId));
     expect(posted?.threadRootId).toBe(askedIn);
     expect((await matter(asked)).lastNewsAt.getTime()).toBe(now.getTime());
+  });
+
+  it('tells a watched sender’s mail about something else as an ordinary finding, in a thread of its own', async () => {
+    // Yesterday's findings don't count towards today's.
+    await t.services.db
+      .update(aheadChecks)
+      .set({ reportedAt: new Date('2026-12-14T10:00:00Z') })
+      .where(and(eq(aheadChecks.state, 'told'), isNull(aheadChecks.matterId)));
+    now = new Date('2026-12-15T10:30:00Z');
+    mail(
+      'm_other',
+      'Notaris Jansen <office@notaris-jansen.example>',
+      'Your invoice is overdue',
+      '2026-12-15T10:20:00Z',
+    );
+    const r = await row(await pass());
+    expect(r).toMatchObject({ source: 'mail', matterId: asked });
+    const before = (await matter(asked)).lastNewsAt.getTime();
+    const mcp = await inTurn(r.dispatchId);
+    await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 'm_other' } });
+    const told = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: {
+        found: true,
+        kind: 'deadline',
+        text: 'The notary’s invoice is overdue.',
+        sources: [{ mailId: 'm_other' }],
+        unrelated: true,
+      },
+    });
+    expect(told.structuredContent).toMatchObject({ status: 'ok', told: true });
+    await mcp.close();
+    await endTurns();
+    const [posted] = await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId));
+    expect(posted?.threadRootId ?? null).toBeNull();
+    expect(await row(r.id)).toMatchObject({ state: 'told', matterId: null });
+    expect((await matter(asked)).lastNewsAt.getTime()).toBe(before);
   });
 
   it('closes the matter on “Stop checking for this” under its finding, without stopping the kind', async () => {

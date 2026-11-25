@@ -1772,7 +1772,7 @@ Setup and operation: `docs/github.md`.
   calendar overrides, the person's standing `rules` and stopped kinds. From 08:00 until 20:30, one at a time, while a
   turn of the person's could run, it starts the one most urgent thing due (`planAheadPass`): a calendar check in its
   stage (`morning`, then `eve`), a mail check (one that matches a matter first), a matter's follow-up, a triage pass,
-  then an `early` calendar check. At most 12 checks and 4 findings a day; at most 3 triage passes, 3.5 hours apart,
+  then an `early` calendar check. At most 12 checks and 4 findings a day; at most 3 triage passes, 4.5 hours apart,
   which aren't counted as checks. Each is one `ahead_checks` row, unique per thing and version, never repeated, and one
   quiet turn (trigger `ahead`) on the background model with no conversation, no visible activity, `review: false` and
   its Hermes session dropped when it ends (`hermes_session_drops`). Its lines
