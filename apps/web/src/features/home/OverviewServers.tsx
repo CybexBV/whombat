@@ -6,7 +6,7 @@
  * `hosts:<burrowId>`.
  */
 import { BrandMark } from '@whombat/brand/react';
-import { CHAT_WORDS, OVERVIEW_WORDS } from '@whombat/client';
+import { CHAT_WORDS, OVERVIEW_WORDS, serverQuietWords } from '@whombat/client';
 import {
   isHostsUnavailable,
   litSegments,
@@ -20,7 +20,8 @@ import {
   TILE_SEGMENTS,
 } from '@whombat/client/hosts';
 import { useHostsFleet, useHostsLive, useHostsStatus } from '@whombat/client/hosts/react';
-import { Clock, Server } from 'lucide-react';
+import { type ThingSummary, thingId } from '@whombat/core';
+import { BellOff, Clock, Server } from 'lucide-react';
 import { useMemo } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
@@ -159,8 +160,11 @@ function RunningCell({ c }: { c: OverviewRunningCell }) {
   );
 }
 
-/** One server's row: its logo, name (the row's link), tag and pill, its system line, then the five figures. */
-export function ServerRow({ row }: { row: OverviewServerRow }) {
+/**
+ * One server's row: its logo, name (the row's link), tag and pill, its system line, “Quiet until 23:00” while it is kept
+ * quiet, then the five figures.
+ */
+export function ServerRow({ row, quiet = null }: { row: OverviewServerRow; quiet?: string | null }) {
   return (
     <li
       className={cx(
@@ -179,7 +183,11 @@ export function ServerRow({ row }: { row: OverviewServerRow }) {
         </span>
         <div className={styles.nm}>
           <div className={styles.nmline}>
-            <AppLink href={row.href} className={styles.name} aria-label={row.label}>
+            <AppLink
+              href={row.href}
+              className={styles.name}
+              aria-label={quiet ? `${row.label}. ${quiet}` : row.label}
+            >
               {row.name}
             </AppLink>
             {row.thisWhombat ? <span className={styles.tag}>{OVERVIEW_WORDS.thisWhombat}</span> : null}
@@ -192,6 +200,12 @@ export function ServerRow({ row }: { row: OverviewServerRow }) {
             <div className={styles.stale}>
               <Icon icon={Clock} size={12} />
               {row.stale}
+            </div>
+          ) : null}
+          {quiet ? (
+            <div className={styles.stale} data-quiet="">
+              <Icon icon={BellOff} size={12} />
+              {quiet}
             </div>
           ) : null}
         </div>
@@ -252,10 +266,13 @@ export function OverviewServers({
   timeZone,
   onAdd,
   savedNoteShown,
+  things,
 }: {
   burrow: string;
   now: number;
   timeZone: string;
+  /** Home's things: a server kept quiet says until when on its row (the fleet doesn't carry it). */
+  things?: readonly Pick<ThingSummary, 'id' | 'kind' | 'quietUntil'>[] | null;
   /** Opens Add a server on this page (`?add=1`). */
   onAdd: () => void;
   /** Overview already says its refresh failed: no second note here. */
@@ -263,6 +280,7 @@ export function OverviewServers({
 }) {
   const { status, fleet, servers } = useOverviewFleet(burrow);
   const rows = useMemo(() => overviewServerRows(servers ?? [], now, timeZone), [servers, now, timeZone]);
+  const quiet = useMemo(() => serverQuietWords(things, now, timeZone), [things, now, timeZone]);
   const pending = fleet.data?.pendingEnrollments ?? 0;
   const down =
     isHostsUnavailable(status.error) || isHostsUnavailable(fleet.error) || status.data?.healthy === false;
@@ -290,7 +308,7 @@ export function OverviewServers({
       <ul className={cx(styles.card, styles.srvlist)} aria-label="Servers">
         {rows.length ? <ColumnHead /> : null}
         {rows.map((row) => (
-          <ServerRow key={row.id} row={row} />
+          <ServerRow key={row.id} row={row} quiet={quiet.get(thingId('server', row.id)) ?? null} />
         ))}
         {pending ? <WaitingRow pending={pending} onReview={onAdd} /> : null}
         {!rows.length && !pending ? (

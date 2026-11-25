@@ -56,10 +56,32 @@ export function overviewSections(
     }
     if (tab.key === 'services') {
       const rows = sections.find((s) => s.kind === 'things')?.rows ?? [];
-      return { ...tab, anchor: ANCHORS.services, summary: statusSummary(rows.map((r) => r.level)) };
+      // One down because of something else is grey, but it isn't connected: the line says so as the count does.
+      const down = rows.filter((r) => r.notAnswering && r.level === 'connected');
+      const rest = rows.filter((r) => !down.includes(r)).map((r) => r.level);
+      return { ...tab, anchor: ANCHORS.services, summary: statusSummary(rest, down.length) };
     }
     return { ...tab, anchor: ANCHORS.pinned, summary: OVERVIEW_WORDS.fromYourChats };
   });
+}
+
+/**
+ * “Quiet until 23:00” for each server kept quiet now, by its thing id (`server:pve-02`), from Home's things: the fleet's
+ * rows don't carry a window. A server's row or card says it under its system line.
+ */
+export function serverQuietWords(
+  things: readonly Pick<ThingSummary, 'id' | 'kind' | 'quietUntil'>[] | null | undefined,
+  now: Date | number,
+  timeZone: string,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const at = typeof now === 'number' ? now : now.getTime();
+  for (const t of things ?? []) {
+    if (t.kind !== 'server' || !t.quietUntil || Date.parse(t.quietUntil) <= at) continue;
+    const words = thingStateWords({ quietUntil: t.quietUntil }, now, timeZone);
+    if (words) out.set(t.id, words);
+  }
+  return out;
 }
 
 /**
