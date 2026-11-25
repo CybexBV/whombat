@@ -168,8 +168,8 @@ describe('Settings → This Whombat in parts (this-whombat-sections.md AP-1221�
     const labels = [...document.querySelectorAll('#settings-panel h2')].map((h) => h.textContent);
     expect(labels[0]).toBe('How it’s doing');
     expect(labels).toContain('AT A GLANCE');
-    const version = await within(glance).findByRole('button', { name: /^Version/ });
-    expect(version.textContent).toBe('VersionApp 0.36.0 · Whombat 0.41.1');
+    const version = await within(glance).findByRole('button', { name: /^About/ });
+    expect(version.textContent).toBe('AboutApp 0.36.0 · Whombat 0.41.1');
     await user.click(version);
     await waitFor(() => expect(app.location()).toBe('/settings?tab=appliance&section=about'));
     expect(await screen.findByRole('region', { name: 'VERSION' })).toBeTruthy();

@@ -35,6 +35,8 @@ export const MACHINE_TEXT = {
   /** The alert's title when Use Wi-Fi only or Use the cable again is refused (network-move-app.md). */
   switchFailed: (use: CableUse) => (use === 'wifi' ? 'Couldn’t use Wi-Fi only' : 'Couldn’t use the cable'),
   shareFailed: 'Couldn’t share the report. Try again.',
+  /** The title of the screen About's HARDWARE row opens: the machine and every part. */
+  hardware: 'Hardware',
 } as const;
 
 /* The card -------------------------------------------------------------------------------------------------------- */

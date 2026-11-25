@@ -196,14 +196,14 @@ export function WhombatScreen() {
           <VoiceSection api={voice} />
           <NetworkSection
             machine={machine}
-            onHardware={() => navigation.navigate('WhombatAbout', { at: 'hardware' })}
+            onHardware={() => navigation.navigate('WhombatHardware', { back: COPY.whombat.title })}
             onRepoint={() => navigation.navigate('RepointServers')}
           />
           <TailscaleSection here={tailscale} />
           <MailSection here={mail} />
           <BluetoothSection
             machine={machine}
-            onHardware={() => navigation.navigate('WhombatAbout', { at: 'hardware' })}
+            onHardware={() => navigation.navigate('WhombatHardware', { back: COPY.whombat.title })}
           />
           <Card label={T.glance}>
             {glance.map((row, i) => (

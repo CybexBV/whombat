@@ -88,6 +88,9 @@ describe('the Overview (AP-1223…AP-1226)', () => {
       ['passkey', 'setUpPasskey'],
     ]);
     expect(o.glance.map((i) => i.key)).toEqual(['update', 'plan', 'kit', 'devices', 'access']);
+    // The row that opens About is named after it; how the updates stand is its line.
+    expect(o.glance[0]).toMatchObject({ part: 'about', title: 'About' });
+    expect(o.glance[0]?.meta).toMatch(/^Up to date · /);
     expect(o.glance.find((i) => i.key === 'plan')?.meta).toContain('Connectors 0 of 3');
     expect(o.glance.find((i) => i.key === 'devices')?.meta).toBeUndefined();
     expect(o.badges).toEqual({ backups: 1, devices: 1 });
@@ -226,7 +229,7 @@ describe('a Whombat that isn’t managed', () => {
     expect(o.needsYou).toEqual([]);
     expect(o.glance.map((i) => [i.part, i.title, i.meta])).toEqual([
       ['access', 'Dusty may reach your local network', undefined],
-      ['about', 'Version', 'App 0.74.0 · Whombat 2026.10.11'],
+      ['about', 'About', 'App 0.74.0 · Whombat 2026.10.11'],
     ]);
   });
 

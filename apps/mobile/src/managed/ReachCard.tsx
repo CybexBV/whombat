@@ -70,10 +70,16 @@ function ReachMore({ label, points }: { label: string; points: readonly string[]
 export function ReachCard({
   session,
   reach,
+  connection,
   onLayout,
 }: {
   session: ApplianceSession;
   reach: PhoneReach;
+  /**
+   * This phone's own connection, first (“Connected · end-to-end encrypted · Fingerprint …”): it answers the same
+   * question, how the phone reaches the Whombat, so it isn't a card of its own. Shown even before REACH is read.
+   */
+  connection?: { ok: boolean; title: string; meta: string };
   /** Lets About scroll to REACH (a connection that needs a secure address opens it there). */
   onLayout?: (e: LayoutChangeEvent) => void;
 }) {
@@ -87,7 +93,15 @@ export function ReachCard({
     return () => clearInterval(t);
   }, [starting]);
   const r = reach.reach;
-  if (!r) return null;
+  const own = connection ? (
+    <Row first dot={connection.ok ? 'ok' : 'warn'} title={connection.title} meta={connection.meta} />
+  ) : null;
+  if (!r)
+    return own ? (
+      <View onLayout={onLayout}>
+        <Card label={T.section}>{own}</Card>
+      </View>
+    ) : null;
   const link = r.link ? linkRowView(r.link, { offerLink: OFFER_LINK, now }) : null;
   const address = r.ownAddress ? null : addressRowView(r, { offerLink: OFFER_LINK });
   const tailscale = tailscaleRowView(tailscaleOn.state ?? r.tailscale);
@@ -108,10 +122,11 @@ export function ReachCard({
   return (
     <View onLayout={onLayout}>
       <Card label={T.section}>
+        {own}
         {link ? (
           <>
             <Row
-              first
+              first={!own}
               dot={link.tone}
               kicker={C.easy.label}
               title={link.title}
@@ -150,10 +165,10 @@ export function ReachCard({
             <Note text={reach.error} />
           </>
         ) : null}
-        {address ? <Row first={!link} dot="mut" title={address.title} meta={address.meta} /> : null}
+        {address ? <Row first={!own && !link} dot="mut" title={address.title} meta={address.meta} /> : null}
         {tailscale ? (
           <Row
-            first={!link && !address}
+            first={!own && !link && !address}
             dot={tailscale.tone}
             kicker={C.expert.label}
             title={T.tailscale.title}

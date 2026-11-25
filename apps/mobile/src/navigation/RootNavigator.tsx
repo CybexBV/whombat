@@ -742,6 +742,16 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
         ) : null}
         {managed ? (
           <Stack.Screen
+            name="WhombatHardware"
+            getComponent={() =>
+              (
+                require('../managed/WhombatHardwareScreen') as typeof import('../managed/WhombatHardwareScreen')
+              ).WhombatHardwareScreen
+            }
+          />
+        ) : null}
+        {managed ? (
+          <Stack.Screen
             name="BackupFile"
             getComponent={() =>
               (require('../managed/BackupFileScreen') as typeof import('../managed/BackupFileScreen'))

@@ -1,12 +1,13 @@
 /**
  * This Whombat → About (managed only; this-whombat-sections-android.md AP-1248), the web's About part (Whombat
- * this-whombat-sections.md AP-1231, AP-1232) on its own screen: facts and tools you look up. VERSION (this app, the
- * Whombat; SS-06), UPDATES (waiting, failed, the last one with what it brought; the oldest app builds let in; “Keep
- * server agents up to date”, agent-updates-app.md AP-2992; “Updates from”, Production or Beta), REACH
- * (Whombat Link, its address, Tailscale; whombat-link.md LNK-42), CONNECTION (the Whombat's fingerprint), what a
+ * this-whombat-sections.md AP-1231, AP-1232) on its own screen: facts and tools you look up, about one screen long
+ * (docs/app/decisions/about-page.md). VERSION & UPDATES (this app, the Whombat, Hermes; SS-06; then the updates:
+ * waiting, failed, the last one with what it brought; “Ask before updating”; “Updates from”, Production or Beta; the
+ * oldest app builds let in; “Keep server agents up to date”, agent-updates-app.md AP-2992), REACH (this phone's
+ * connection with the Whombat's fingerprint, Whombat Link, its address, Tailscale; whombat-link.md LNK-42), what a
  * managed Whombat turns off under TURNED OFF HERE (the phone has no Agents’ access part, so they live here),
- * HARDWARE where the Whombat has `host.hardware` (`HardwareSection`, hardware-support-android.md AP-3259; opened at it
- * by NETWORK's See hardware), REMOTE HELP (`RemoteHelpSection`, app remote-help.md AP-4470), DIAGNOSTICS — the files
+ * HARDWARE in one row that opens the Hardware screen (`HardwareSummary`), then help: REMOTE HELP
+ * (`RemoteHelpSection`, app remote-help.md AP-4470), the reports to the Whombat Team, DIAGNOSTICS — the files
  * made, the checklist behind “Make a file for support…”, each part in plain words, and this phone's sync log to share
  * (live-data-calm.md AP-6574) — and this phone's fingerprint.
  */
@@ -53,8 +54,9 @@ import { SYNC_LOG_TEXT, syncLog, syncLogFile } from '../data/syncLog';
 import { useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { showNotice } from '../screens/feedback';
-import { AgentUpdatesSwitchCard, AgentUpdatesSwitchRow } from '../settings/AgentUpdatesSwitch';
+import { AgentUpdatesSwitchRow } from '../settings/AgentUpdatesSwitch';
 import { VersionCard } from '../settings/VersionCard';
+import { VERSION_TEXT } from '../settings/version';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { copyToClipboard } from '../ui/clipboard';
@@ -66,7 +68,7 @@ import { APP_BUILD } from './config';
 import { useManagedOrThrow } from './context';
 import { COPY, MANAGED_TEXT } from './copy';
 import { phoneClient } from './env';
-import { HardwareSection } from './HardwareSection';
+import { HardwareSummary } from './HardwareSection';
 import { ChannelRow, ReachCard } from './ReachCard';
 import { RemoteHelpSection } from './RemoteHelpSection';
 import { diagnosticScopeLine } from './thisWhombat';
@@ -154,60 +156,65 @@ export function WhombatAboutScreen() {
       >
         <LargeTitle title={THIS_WHOMBAT_TEXT.parts.about} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }} onLayout={place.onContainer}>
-          <VersionCard runtime={status.appliance.runtimeVersion} hermes={status.appliance.hermes ?? null} />
+          {/* What runs and how it is kept up to date, in one card: the versions, then the updates (waiting, failed, the
+              last one with what it brought, AP-258) and their settings. */}
+          <VersionCard
+            runtime={status.appliance.runtimeVersion}
+            hermes={status.appliance.hermes ?? null}
+            label={VERSION_TEXT.labelWithUpdates}
+          >
+            {status.update
+              ? updates.rows.map((row) => (
+                  <Row
+                    key={row.title}
+                    {...(row.dot ? { dot: row.dot } : {})}
+                    title={row.title}
+                    meta={
+                      row.lastUpdate && summary ? [row.meta, summary].filter(Boolean).join(' · ') : row.meta
+                    }
+                    action={
+                      row.action === 'install' && row.release ? (
+                        <Button
+                          label={UPDATE_TEXT.install}
+                          busy={installing === row.release}
+                          onPress={() => row.release && install(row.release)}
+                        />
+                      ) : undefined
+                    }
+                  />
+                ))
+              : null}
+            {status.update ? (
+              <>
+                {/* “Ask before updating” (ask-before-updating.md ABU-01). */}
+                <AskFirstRow status={status} onChanged={reload} />
+                {/* “Updates from”: Production or Beta (whombat-link.md LNK-21). */}
+                <ChannelRow session={managed.session} />
+                {floor.length > 0 ? (
+                  <Row
+                    dot="mut"
+                    title={MANAGED_TEXT.clientFloor}
+                    meta={MANAGED_TEXT.clientFloorMeta(floor)}
+                  />
+                ) : null}
+              </>
+            ) : null}
+            {/* “Keep server agents up to date” (agent-updates-app.md AP-2992). */}
+            <AgentUpdatesSwitchRow />
+          </VersionCard>
 
-          {status.update ? (
-            // Waiting (for what, since when), failed (why; nothing changed), the last update (AP-258).
-            <Card label={MANAGED_TEXT.updates}>
-              {updates.rows.map((row, i) => (
-                <Row
-                  key={row.title}
-                  first={i === 0}
-                  {...(row.dot ? { dot: row.dot } : {})}
-                  title={row.title}
-                  meta={
-                    row.lastUpdate && summary ? [row.meta, summary].filter(Boolean).join(' · ') : row.meta
-                  }
-                  action={
-                    row.action === 'install' && row.release ? (
-                      <Button
-                        label={UPDATE_TEXT.install}
-                        busy={installing === row.release}
-                        onPress={() => row.release && install(row.release)}
-                      />
-                    ) : undefined
-                  }
-                />
-              ))}
-              {/* “Ask before updating” (ask-before-updating.md ABU-01). */}
-              <AskFirstRow status={status} onChanged={reload} />
-              {/* “Updates from”: Production or Beta (whombat-link.md LNK-21). */}
-              <ChannelRow session={managed.session} />
-              {floor.length > 0 ? (
-                <Row dot="mut" title={MANAGED_TEXT.clientFloor} meta={MANAGED_TEXT.clientFloorMeta(floor)} />
-              ) : null}
-              {/* “Keep server agents up to date” (agent-updates-app.md AP-2992). */}
-              <AgentUpdatesSwitchRow />
-            </Card>
-          ) : (
-            <AgentUpdatesSwitchCard />
-          )}
-
-          {/* How it is reached: Whombat Link, its address, Tailscale (LNK-42). The licence shows nothing (LNK-04). */}
+          {/* How it is reached: this phone's connection, Whombat Link, its address, Tailscale (LNK-42). The licence
+              shows nothing (LNK-04). */}
           <ReachCard
             session={managed.session}
             reach={reach}
+            connection={{
+              ok: managed.connection.status === 'open',
+              title: managed.applianceName ?? 'Your Whombat',
+              meta: `${MANAGED_TEXT.connected} · ${MANAGED_TEXT.fingerprint(managed.applianceFingerprint)}`,
+            }}
             {...(target === 'reach' ? { onLayout: place.onCard } : {})}
           />
-
-          <Card label={MANAGED_TEXT.connection}>
-            <Row
-              first
-              dot={managed.connection.status === 'open' ? 'ok' : 'warn'}
-              title={managed.applianceName ?? 'Your Whombat'}
-              meta={`${MANAGED_TEXT.connected} · ${MANAGED_TEXT.fingerprint(managed.applianceFingerprint)}`}
-            />
-          </Card>
 
           {/* The box's own address (own-address.md): what it is, with Copy. */}
           {status.ownAddress ? <OwnAddressCard own={status.ownAddress} onChanged={reload} /> : null}
@@ -220,11 +227,13 @@ export function WhombatAboutScreen() {
             </Card>
           ) : null}
 
-          <HardwareSection
+          {/* One row for the machine; every part is on the Hardware screen. */}
+          <HardwareSummary
             machine={machine}
-            runtime={status.appliance.runtimeVersion}
+            onOpen={() => navigation.navigate('WhombatHardware', { back: THIS_WHOMBAT_TEXT.parts.about })}
             {...(target === 'hardware' ? { onLayout: place.onCard } : {})}
           />
+          {/* Help, last: remote help, a report to the Whombat Team, files for support. */}
           {/* Remote help is a Whombat Link feature (LNK-07); a box before Link keeps the old rule (HE-58, AP-5470). */}
           {remoteHelpShown ? <RemoteHelpSection here={remoteHelp} /> : null}
           {reports ? (

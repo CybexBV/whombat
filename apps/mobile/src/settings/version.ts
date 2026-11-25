@@ -10,6 +10,8 @@ import type { AppUpdateStatus } from '../managed/appUpdate';
 
 export const VERSION_TEXT = {
   label: 'VERSION',
+  /** On This Whombat → About the card holds the updates too: what runs, how its updates stand and their settings. */
+  labelWithUpdates: 'VERSION & UPDATES',
   app: 'This app',
   whombat: 'Whombat',
   unknown: 'Not known',
