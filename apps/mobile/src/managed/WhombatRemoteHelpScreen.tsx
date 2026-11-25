@@ -24,7 +24,7 @@ export function WhombatRemoteHelpScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}>
         <LargeTitle title={REMOTE_HELP_WORDS.title} />
         <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-          <RemoteHelpSection here={here} />
+          <RemoteHelpSection here={here} titled={false} />
         </View>
       </ScrollView>
     </Screen>

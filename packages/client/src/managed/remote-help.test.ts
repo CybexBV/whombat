@@ -359,6 +359,8 @@ describe('what support did', () => {
     // The visit carries its command line; no step says Show.
     expect(groups.flatMap((g) => g.steps).some((r) => r.transcript)).toBe(false);
     expect(groups[1]?.steps[0]).toMatchObject({ muted: true });
+    // Yesterday's steps say their clock only: the visit says the day.
+    expect(groups[1]?.steps[1]?.time).toBe('10:02');
     expect(groups[1]?.stepCount).toBe(5);
   });
 });

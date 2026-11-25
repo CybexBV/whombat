@@ -160,19 +160,24 @@ export function RemoteHelpSummary({
   );
 }
 
-/** REMOTE HELP in full (the Remote help screen, the demo world's This Whombat), then WHAT SUPPORT DID. */
+/**
+ * REMOTE HELP in full (the Remote help screen, the demo world's This Whombat), then WHAT SUPPORT DID. `titled`: the
+ * card's own label, left out where the screen's title says Remote help already.
+ */
 export function RemoteHelpSection({
   here,
+  titled = true,
   onLayout,
 }: {
   here: RemoteHelpHere;
+  titled?: boolean;
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const { model, card, timeZone } = useRemoteHelpHereCard(here);
   if (!here.shown) return null;
   return (
     <View onLayout={onLayout} style={{ gap: 14 }}>
-      <Card label={W.title.toUpperCase()}>
+      <Card {...(titled ? { label: W.title.toUpperCase() } : {})}>
         {card.kind === 'off' ? (
           <OffPart card={card} model={model} here={here} />
         ) : card.kind === 'on' ? (
@@ -463,8 +468,9 @@ function Visit({
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const steps = open ? g.steps : g.steps.slice(-STEPS_SHOWN);
-  const more = g.steps.length > STEPS_SHOWN;
+  // “Earlier steps aren’t shown.” isn't a step: only real ones count toward Show all.
+  const more = g.stepCount > STEPS_SHOWN;
+  const steps = open || !more ? g.steps : g.steps.slice(-STEPS_SHOWN);
   return (
     <View
       style={{
@@ -516,18 +522,19 @@ function Visit({
       </View>
       {more || g.transcript ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 20, paddingLeft: 48 }}>
-          {more ? (
-            <TextLink
-              label={open ? T.fewerSteps : T.allSteps(g.steps.filter((r) => !r.muted).length)}
-              onPress={() => setOpen((o) => !o)}
-            />
-          ) : null}
+          {/* Command line first, so it stays put when Show all becomes Show fewer. */}
           {g.transcript ? (
             <TextLink
               label={W.transcript.title}
               icon={SquareTerminal}
               busy={loading}
               onPress={() => void onShow(g.transcript as string)}
+            />
+          ) : null}
+          {more ? (
+            <TextLink
+              label={open ? T.fewerSteps : T.allSteps(g.stepCount)}
+              onPress={() => setOpen((o) => !o)}
             />
           ) : null}
         </View>

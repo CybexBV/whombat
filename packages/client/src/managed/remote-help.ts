@@ -502,14 +502,19 @@ function visitWhen(at: string, now: Date, timeZone: string | undefined): string 
 /**
  * What support did, one group per visit (newest first), so a long history folds: each visit says who came, how much
  * they could do, when, and how many steps, over its own steps. The steps are `remoteHelpVisitRows`' without “Show” on a
- * step: the visit carries its command line itself.
+ * step (the visit carries its command line itself) and with only their clock (the visit says the day).
  */
 export function remoteHelpVisitGroups(
   visits: readonly RemoteHelpVisit[],
   options: { now: Date; timeZone?: string },
 ): RemoteHelpVisitGroup[] {
+  const tz = zone(options.timeZone);
   return visits.map((visit) => {
-    const steps = visit.steps.map((step, i) => stepRow(visit, step, i, options.now, options.timeZone));
+    // The visit's header says the day, so a step says only its clock.
+    const steps = visit.steps.map((step, i) => ({
+      ...stepRow(visit, step, i, options.now, options.timeZone),
+      time: formatClock(step.at, tz),
+    }));
     if (visit.truncated)
       steps.unshift({
         key: `${visit.id}:earlier`,

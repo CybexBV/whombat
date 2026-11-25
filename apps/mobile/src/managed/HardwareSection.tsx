@@ -358,7 +358,8 @@ function MachineCard({
             borderRadius: 17,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: tint(theme.colors.brand, 0.14),
+            // A stronger wash than the tiles' so it reads as the brand's colour in the light theme too.
+            backgroundColor: tint(theme.colors.brand, 0.24),
           }}
         >
           <Icon size={28} color={theme.colors.brand} strokeWidth={1.7} />
