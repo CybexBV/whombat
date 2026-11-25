@@ -170,13 +170,14 @@ export async function keepThingQuiet(
 
 /**
  * Undo of keeping quiet that changed the person's window: it gets its end, note and who back, a server a maintenance
- * window until then (the one it replaces goes on the list to give back). `set` is the end the undone change set.
+ * window until then (the one it replaces goes on the list to give back). `set` is the end the undone change set and
+ * `revision` the window's count of changes it left (absent on older changes).
  */
 async function restoreThingQuiet(
   services: Services,
   viewer: ConnectionViewer,
   value: string,
-  input: { windowId: string; set: string; previous: QuietWindowWas },
+  input: { windowId: string; set: string; revision?: number | undefined; previous: QuietWindowWas },
   timeZone: string,
 ): Promise<void> {
   const thing = await windowThing(services, viewer, value, timeZone);
@@ -193,9 +194,13 @@ async function restoreThingQuiet(
         thing,
         windowId: input.windowId,
         set: input.set,
+        ...(input.revision !== undefined ? { revision: input.revision } : {}),
         endsAt: input.previous.endsAt,
         note: input.previous.note,
         byId: input.previous.byId,
+        ...(countOf(input.previous.revision) !== undefined
+          ? { previousRevision: countOf(input.previous.revision) }
+          : {}),
         ...(maintenanceId ? { maintenanceId } : {}),
       },
       { burrowId: viewer.burrowId, actorId: viewer.principal.id },
@@ -218,7 +223,7 @@ export async function endThingQuiet(
   viewer: ConnectionViewer,
   value: string,
   timeZone: string,
-  opts: { agentId?: string; windowId?: string; set?: string } = {},
+  opts: { agentId?: string; windowId?: string; set?: string; revision?: number } = {},
 ): Promise<KeepQuietResponse> {
   if (viewer.principal.kind !== 'person') throw notAllowed('Only you can end this.');
   const thing = await windowThing(services, viewer, value, timeZone);
@@ -227,7 +232,13 @@ export async function endThingQuiet(
     endQuiet,
     {
       thing,
-      ...(opts.windowId ? { windowId: opts.windowId, ...(opts.set ? { set: opts.set } : {}) } : {}),
+      ...(opts.windowId
+        ? {
+            windowId: opts.windowId,
+            ...(opts.set ? { set: opts.set } : {}),
+            ...(opts.revision !== undefined ? { revision: opts.revision } : {}),
+          }
+        : {}),
       ...(opts.agentId ? { agentId: opts.agentId } : {}),
     },
     { burrowId: viewer.burrowId, actorId: viewer.principal.id },
@@ -272,6 +283,11 @@ function isWindowWas(value: unknown): value is QuietWindowWas {
   return !!v && typeof v.endsAt === 'string' && Number.isFinite(Date.parse(v.endsAt));
 }
 
+/** A count of changes from a stored payload, when it is one. */
+function countOf(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
 function viewerOf(person: PrincipalRow): ConnectionViewer {
   return { accountId: person.accountId ?? '', burrowId: person.burrowId, principal: person };
 }
@@ -297,19 +313,21 @@ export async function undoKeepQuiet(ctx: DirectUndoCtx, change: RecordedChange):
   const viewer = viewerOf(person);
   const timeZone = await timeZoneOf(ctx.services, ctx.burrowId);
   const previous = isWindowWas(undo.previous) ? undo.previous : null;
+  const revision = countOf(undo.revision);
   try {
     if (previous && undo.endsAt && Date.parse(previous.endsAt) > ctx.services.clock().getTime())
       await restoreThingQuiet(
         ctx.services,
         viewer,
         undo.thing,
-        { windowId: undo.windowId, set: undo.endsAt, previous },
+        { windowId: undo.windowId, set: undo.endsAt, revision, previous },
         timeZone,
       );
     else
       await endThingQuiet(ctx.services, viewer, undo.thing, timeZone, {
         windowId: undo.windowId,
         ...(undo.endsAt ? { set: undo.endsAt } : {}),
+        ...(revision !== undefined ? { revision } : {}),
       });
   } catch (err) {
     if (err instanceof ApiError && err.code === 'conflict' && err.message === CHANGED_SINCE)

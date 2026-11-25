@@ -142,8 +142,9 @@ export const updateWork = (serverId: string, taskId: string) => `update:${server
 /**
  * Keeps a server, or one machine of it, quiet for Whombat's own work (an update, a restart): from now until the work
  * ends and 15 minutes after (`workEnded`), at most `expectedMs` and 15 minutes when nothing says. `work` names the work
- * (`care:…`, `update:<task>`, `power:<server>/<guest>`): the same work again moves its end. A server's window is a
- * maintenance window in the hosts service too. Never throws: Whombat's work goes on whatever happens here.
+ * (`care:…`, `update:<task>`, `power:<server>/<guest>`): the same work again for the same Whombat moves its end. A
+ * server's window is a maintenance window in the hosts service too. Never throws: Whombat's work goes on whatever
+ * happens here.
  */
 export async function keepQuietForWork(
   services: Services,
@@ -164,42 +165,73 @@ export async function keepQuietForWork(
     const [open] = await services.db
       .select()
       .from(quietWindows)
-      .where(and(eq(quietWindows.work, input.work), isNull(quietWindows.endedAt)));
-    const maintenanceId =
-      !guestId && !open?.maintenanceId
+      .where(
+        and(
+          eq(quietWindows.ownerId, input.burrowId),
+          eq(quietWindows.work, input.work),
+          isNull(quietWindows.endedAt),
+        ),
+      );
+    // The hub ends a maintenance window where it was made to, so an end moved later needs a new one (the old one goes
+    // back); without it the hub would speak up again before the work is done. When the hub can't make it, the old one
+    // stays: it ends before Whombat's own window, so it never mutes the server for longer. An end moved earlier keeps
+    // its maintenance window until the minute's sweep gives it back with the window, as when the work ends.
+    const later = !!open?.maintenanceId && endsAt.getTime() > open.endsAt.getTime();
+    const made =
+      !guestId && (!open?.maintenanceId || later)
         ? await makeMaintenance(services, input.serverId, endsAt, WHOMBAT_WORK_NOTE, null)
-        : (open?.maintenanceId ?? null);
-    await services.pipeline.transact(input.burrowId, async (session) => {
+        : null;
+    const maintenanceId = made ?? open?.maintenanceId ?? null;
+    const replaced = made && open?.maintenanceId ? open.maintenanceId : null;
+    const write = services.pipeline.transact(input.burrowId, async (session): Promise<boolean> => {
+      if (replaced)
+        await session.tx
+          .insert(quietMaintenanceLeft)
+          .values({ maintenanceId: replaced, ownerId: input.burrowId, createdAt: now })
+          .onConflictDoNothing();
+      let named = true;
       if (open)
         await session.tx
           .update(quietWindows)
           .set({ endsAt, maintenanceId })
           .where(eq(quietWindows.id, open.id));
       else
-        await session.tx
-          .insert(quietWindows)
-          .values({
-            id: newWindowId(),
-            ownerId: input.burrowId,
-            thingId: thingId('server', input.serverId),
-            guestId,
-            startsAt: now,
-            endsAt,
-            note: WHOMBAT_WORK_NOTE,
-            byId: null,
-            work: input.work,
-            maintenanceId,
-            endedAt: null,
-            endedById: null,
-            createdAt: now,
-          })
-          .onConflictDoNothing();
+        named = !!(
+          await session.tx
+            .insert(quietWindows)
+            .values({
+              id: newWindowId(),
+              ownerId: input.burrowId,
+              thingId: thingId('server', input.serverId),
+              guestId,
+              startsAt: now,
+              endsAt,
+              note: WHOMBAT_WORK_NOTE,
+              byId: null,
+              work: input.work,
+              maintenanceId,
+              endedAt: null,
+              endedById: null,
+              createdAt: now,
+            })
+            .onConflictDoNothing()
+            .returning({ id: quietWindows.id })
+        )[0];
       publishHomeChanged(session, await homeAudience(session, input.burrowId), [
         'things',
         'watch',
         'needsYou',
       ]);
+      return named;
     });
+    // One made for a write that didn't go through, or for a window already there, names no window: it goes back (or
+    // on the list) at once.
+    const { result: named } = await write.catch(async (err: unknown) => {
+      if (made) await dropMaintenance(services, input.burrowId, made);
+      throw err;
+    });
+    if (made && !named) await dropMaintenance(services, input.burrowId, made);
+    if (replaced) await giveBackMaintenance(services, input.burrowId, replaced);
   } catch (err) {
     services.log.warn(
       { err: err instanceof Error ? err.name : 'error' },

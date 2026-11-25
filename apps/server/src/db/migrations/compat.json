@@ -195,6 +195,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The checks an incident signed an event for (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column, and a row it opens reads as one that signed only its own check."
+    },
+    "0031_quiet_window_revision": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Which change a quiet window is at, for Undo (docs/decisions/monitoring.md): one integer column on quiet_windows that defaults to 0. The release before it reads and writes quiet_windows past the column; a change it records carries no count, and Undo of that change compares the window's end as before."
     }
   }
 }

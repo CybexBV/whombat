@@ -31,20 +31,39 @@ export interface QuietWindowWas {
   endsAt: string;
   note: string | null;
   byId: string | null;
+  /** Its count of changes then, which Undo puts back (absent on changes made before windows counted them). */
+  revision?: number;
 }
 
 /** What Undo of keeping quiet needs: the thing, the window, the end this change set and the window before it. */
 export interface KeepQuietUndo {
   thing: string;
   windowId: string;
-  /** The end this change set: a window changed again since is left as it is (absent on changes made before it). */
+  /** The end this change set (absent on changes made before it): what Undo compares when there is no `revision`. */
   endsAt?: string;
+  /**
+   * The window's count of changes this change left: a window changed again since (another end, or only another note)
+   * is left as it is. Absent on changes made before windows counted them.
+   */
+  revision?: number;
   /** The window as it was, when this change changed one that held already; absent when it made the window. */
   previous?: QuietWindowWas;
 }
 
 /** Thrown when Undo finds the window changed again since the change it takes back. */
 export const CHANGED_SINCE = 'It was changed again since.';
+
+/**
+ * Whether the window is still as the change being undone left it: by its count of changes when the change has one,
+ * else by its end (a change recorded before windows counted them).
+ */
+function unchangedSince(
+  w: { endsAt: Date; revision: number },
+  since: { revision?: number | undefined; set?: string | undefined },
+): boolean {
+  if (since.revision !== undefined) return w.revision === since.revision;
+  return since.set === undefined || w.endsAt.getTime() === new Date(since.set).getTime();
+}
 
 /**
  * A maintenance window no window names any more goes on the list to give back, in the transaction that dropped its id:
@@ -107,13 +126,16 @@ export const keepQuiet = defineCommand({
     const holding = open.filter((w) => windowHolds(w, ctx.now)).sort((a, b) => +b.endsAt - +a.endsAt)[0];
     const note = input.note?.trim() || null;
     const previousMaintenance = holding?.maintenanceId ?? null;
-    const maintenanceId = input.maintenanceId ?? previousMaintenance;
+    // A server's window names only the maintenance window made for its new end: when the hub couldn't make one, the old
+    // one (perhaps longer) goes back all the same, and Whombat's own window keeps the server quiet by itself.
+    const maintenanceId = input.maintenanceId ?? null;
+    const revision = holding ? holding.revision + 1 : 0;
     let windowId: string;
     if (holding) {
       windowId = holding.id;
       await tx
         .update(quietWindows)
-        .set({ endsAt: until, note, byId: ctx.actor.id, maintenanceId })
+        .set({ endsAt: until, note, byId: ctx.actor.id, maintenanceId, revision })
         .where(eq(quietWindows.id, holding.id));
     } else {
       windowId = input.windowId;
@@ -127,10 +149,11 @@ export const keepQuiet = defineCommand({
         note,
         byId: ctx.actor.id,
         work: null,
-        maintenanceId: input.maintenanceId ?? null,
+        maintenanceId,
         endedAt: null,
         endedById: null,
         createdAt: ctx.now,
+        revision,
       });
     }
     const words = untilWords(until, ctx.now, input.timeZone ?? ctx.burrow.timeZone ?? 'UTC');
@@ -139,8 +162,16 @@ export const keepQuiet = defineCommand({
       thing: thing.id,
       windowId,
       endsAt: until.toISOString(),
+      revision,
       ...(holding
-        ? { previous: { endsAt: holding.endsAt.toISOString(), note: holding.note, byId: holding.byId } }
+        ? {
+            previous: {
+              endsAt: holding.endsAt.toISOString(),
+              note: holding.note,
+              byId: holding.byId,
+              revision: holding.revision,
+            },
+          }
         : {}),
     };
     const changeId = await recordChange(ctx, {
@@ -165,9 +196,9 @@ export const keepQuiet = defineCommand({
 });
 
 /**
- * Undo of keeping quiet that changed the person's window: it gets its end, note and who kept it quiet back (with a new
- * maintenance window for a server, made before the commit). A window that ended, or whose end changed again since, is
- * left alone.
+ * Undo of keeping quiet that changed the person's window: it gets its end, note, who kept it quiet and its count of
+ * changes back (with a new maintenance window for a server, made before the commit), so the change before it can be
+ * undone next. A window that ended, or that changed again since, is left alone.
  */
 export const restoreQuiet = defineCommand({
   name: 'restore_quiet',
@@ -176,9 +207,13 @@ export const restoreQuiet = defineCommand({
     windowId: z.string().min(1).max(64),
     /** The end the change being undone set. */
     set: z.string().datetime({ offset: true }),
+    /** The window's count of changes the change being undone left; absent on changes recorded before windows had one. */
+    revision: z.number().int().nonnegative().optional(),
     endsAt: z.string().datetime({ offset: true }),
     note: z.string().max(120).nullable(),
     byId: z.string().min(1).max(64).nullable(),
+    /** The count of changes the window had before that change. */
+    previousRevision: z.number().int().nonnegative().optional(),
     maintenanceId: z.string().min(1).max(64).optional(),
   }),
   async apply(tx, ctx, input) {
@@ -197,12 +232,19 @@ export const restoreQuiet = defineCommand({
         ),
       );
     if (!w || !windowHolds(w, ctx.now)) throw notFound('Quiet');
-    if (w.endsAt.getTime() !== new Date(input.set).getTime()) throw conflict(CHANGED_SINCE);
+    if (!unchangedSince(w, input)) throw conflict(CHANGED_SINCE);
     const endsAt = new Date(input.endsAt);
-    const maintenanceId = input.maintenanceId ?? w.maintenanceId;
+    // As when keeping quiet: only a maintenance window made for the restored end; Whombat's window holds without one.
+    const maintenanceId = input.maintenanceId ?? null;
     await tx
       .update(quietWindows)
-      .set({ endsAt, note: input.note, byId: input.byId, maintenanceId })
+      .set({
+        endsAt,
+        note: input.note,
+        byId: input.byId,
+        maintenanceId,
+        revision: input.previousRevision ?? w.revision + 1,
+      })
       .where(eq(quietWindows.id, w.id));
     const replaced = w.maintenanceId && w.maintenanceId !== maintenanceId ? w.maintenanceId : null;
     if (replaced) await giveBackLater(tx, ctx, replaced);
@@ -224,6 +266,8 @@ export const endQuiet = defineCommand({
     windowId: z.string().min(1).max(64).optional(),
     /** With `windowId`: the end the change being undone set; a window whose end changed again since stays. */
     set: z.string().datetime({ offset: true }).optional(),
+    /** With `windowId`: the window's count of changes the change being undone left; one changed again since stays. */
+    revision: z.number().int().nonnegative().optional(),
     agentId: z.string().min(1).max(64).optional(),
   }),
   async apply(tx, ctx, input) {
@@ -237,12 +281,12 @@ export const endQuiet = defineCommand({
     let ids: string[];
     if (input.windowId) {
       ids = [input.windowId];
-      if (input.set) {
+      if (input.set !== undefined || input.revision !== undefined) {
         const [w] = await tx
-          .select({ endsAt: quietWindows.endsAt })
+          .select({ endsAt: quietWindows.endsAt, revision: quietWindows.revision })
           .from(quietWindows)
           .where(and(mine, eq(quietWindows.id, input.windowId)));
-        if (w && w.endsAt.getTime() !== new Date(input.set).getTime()) throw conflict(CHANGED_SINCE);
+        if (w && !unchangedSince(w, input)) throw conflict(CHANGED_SINCE);
       }
     } else {
       const open = await tx
