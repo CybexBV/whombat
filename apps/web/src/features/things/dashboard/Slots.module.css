@@ -858,6 +858,13 @@
   border-top: none;
 }
 
+/* No line above it (everything is on hold): no icon to line up with, so it starts where the band's words do, as on
+   the phone. */
+.stripHead + .stripHeadsUps,
+.stripHead + .stripHeadsUps + .stripHeadsUps {
+  padding-left: 14px;
+}
+
 .stripMore:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
