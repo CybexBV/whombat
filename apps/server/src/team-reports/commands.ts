@@ -183,7 +183,8 @@ export const keepTeamReport = defineCommand({
         ...values,
         createdById: ctx.actor.kind === 'person' ? ctx.actor.id : null,
       });
-    if (input.sent)
+    // Once per report: a retry of the same send answers the same report, already logged.
+    if (input.sent && !had)
       await ctx.emit({
         type: TEAM_REPORT_SENT_EVENT,
         kind: 'Messages',

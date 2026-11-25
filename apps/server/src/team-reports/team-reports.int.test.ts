@@ -310,6 +310,10 @@ describe('reports to the Whombat Team', () => {
     expect(again.json().report.id).toBe(one.json().report.id);
     expect(manager.team.reports.size).toBe(before + 1);
     const id = one.json().report.id as string;
+    const logged = (
+      await t.services.db.select().from(events).where(eq(events.type, 'team_report.sent'))
+    ).filter((e) => (e.payload as { reportId?: string }).reportId === id);
+    expect(logged).toHaveLength(1);
 
     const reply = { text: 'It happens every morning', requestId: rid('b') };
     await req('POST', `/team-reports/${id}/replies`, reply);
