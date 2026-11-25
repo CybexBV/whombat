@@ -79,6 +79,7 @@ import { SETTINGS_MCP_TOOLS } from './mcp-settings.js';
 import { SETUP_MCP_TOOLS } from './mcp-setup.js';
 import { SHARE_MCP_TOOLS } from './mcp-shares.js';
 import { TAILNET_MCP_TOOLS } from './mcp-tailnet.js';
+import { TEAM_REPORT_MCP_TOOLS } from './mcp-team-reports.js';
 import { TRACKER_MCP_TOOLS } from './mcp-tracker.js';
 import { VAULT_MCP_TOOLS } from './mcp-vault.js';
 import { PlanStepLinkInput } from './work.js';
@@ -810,6 +811,9 @@ export const MCP_TOOLS = {
   // This Whombat's own backups (Whombat first-day.md): set where they go when nothing does yet; only in their turn.
   ...BACKUP_MCP_TOOLS,
   ...SHARE_MCP_TOOLS,
+  // Reports to the Whombat Team (Whombat team-reports.md): drafted for the person's press, read without the team's words;
+  // only in the person's turn, where they can send reports or have some.
+  ...TEAM_REPORT_MCP_TOOLS,
   // The council the agent leads (Whombat council.md): members as T3 Code threads; only in the person's turn.
   ...COUNCIL_MCP_TOOLS,
   // Tasks the agent hands to T3 Code from a checklist card (Whombat delegate.md): only in the person's turn.

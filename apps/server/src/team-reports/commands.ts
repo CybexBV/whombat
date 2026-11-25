@@ -1,0 +1,451 @@
+/**
+ * Reports to the Whombat Team through the commit pipeline (docs/decisions/team-reports.md). Control keeps the reports;
+ * the calls to it happen outside any transaction (`service.ts`), and these commands keep what it answered:
+ *
+ * - `team_report_keep`: a whole report as control answered it, and whether the person has read it now;
+ * - `team_report_seen`: control's list. A team change shows as unread; a status entering a question or a fix to try is
+ *   an Inbox item and a notification in fixed words, never the team's;
+ * - `team_report_forget`: a report that is gone (withdrawn, or no longer at control) leaves the box at once.
+ *
+ * The assistant drafts: `team_report_draft_save` keeps its draft and `team_report_draft_send` always asks the
+ * person on a card that quotes exactly what goes, whatever the assistant's keys say; their yes sends it as them
+ * (`sendDraftForAssistant`), and the card's Edit opens the form with the draft.
+ */
+import { randomBytes } from 'node:crypto';
+import {
+  TEAM_REPORT_EXPECTED_MAX,
+  TEAM_REPORT_TEXT_MAX,
+  TEAM_REPORTS_LIST_MAX,
+  TeamReport,
+  TeamReportKind,
+  type TeamReportStatus,
+  TeamReportSummary,
+  teamReportNeedsYou,
+} from '@whombat/core/domain';
+import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { z } from 'zod';
+import { type ApplyContext, defineCommand, type KeyRequirement } from '../commit/types';
+import { managedAppOrigin } from '../config';
+import type { Db, Tx } from '../db/client';
+import { notifications, teamReportCopies, teamReportDrafts } from '../db/schema/index';
+import { notifyInCommit } from '../domain/notify';
+import { thePerson } from '../domain/the-person';
+import { homeAudience, publishHomeChanged } from '../home/notify';
+import { conflict, forbidden, notFound } from '../lib/errors';
+import { quoted } from '../trackers/reply';
+import { sendDraftForAssistant } from './service';
+
+export const TEAM_REPORT_SENT_EVENT = 'team_report.sent';
+export const TEAM_REPORT_WITHDRAWN_EVENT = 'team_report.withdrawn';
+
+/**
+ * The key the assistant's ask names: what it sends goes to people outside this Whombat. It always asks whatever the
+ * person set for it (the grants below), like a shared link, and the card offers no “Always allow”.
+ */
+export const TEAM_REPORT_KEY_ID = 'messages.external';
+/** The approval action's name, which the apps' card reads to offer Edit (the form with `data.draftId`). */
+export const TEAM_REPORT_ACTION = 'report_to_whombat_team';
+
+/** The page of one report in the apps, under the burrow. */
+export const teamReportHref = (reportId: string) => `/reports/${encodeURIComponent(reportId)}`;
+
+/**
+ * The fixed words for a report that waits for the person: the push, the notification and the Inbox item say
+ * only these, never the team's words.
+ */
+export const TEAM_REPORT_NOTICE_WORDS = {
+  needs_information: {
+    title: 'The Whombat Team asked about your report',
+    body: (n: number) => `Open report #${n} to answer.`,
+  },
+  available: {
+    title: 'A fix for your report is ready to try',
+    body: (n: number) => `Try it, then say in report #${n} whether it works.`,
+  },
+  open: 'Open the report',
+} as const;
+
+/** The fixed title for a status that waits for the person; null for any other. */
+export function teamReportNoticeTitle(status: TeamReportStatus): string | null {
+  return status === 'needs_information' || status === 'available'
+    ? TEAM_REPORT_NOTICE_WORDS[status].title
+    : null;
+}
+
+const at = (seconds: number) => new Date(seconds * 1000);
+
+type CopyRow = typeof teamReportCopies.$inferSelect;
+type Summary = z.output<typeof TeamReportSummary>;
+
+/** The columns a summary sets on a copy. */
+function summaryColumns(s: Summary) {
+  return {
+    number: s.number,
+    kind: s.kind,
+    title: s.title,
+    status: s.status,
+    createdAt: at(s.createdAt),
+    updatedAt: at(s.updatedAt),
+  };
+}
+
+/**
+ * Whether control's newer summary entered a status that waits for the person by a change of the team's (its revision
+ * moved): the person's own reply moves no revision, so it never notifies them.
+ */
+export function teamReportEnteredNeedsYou(
+  before: Pick<CopyRow, 'status' | 'revision'>,
+  after: Pick<Summary, 'status' | 'revision'>,
+): boolean {
+  return (
+    teamReportNeedsYou(after.status) && after.status !== before.status && after.revision > before.revision
+  );
+}
+
+/** Home reads its Inbox again (an item came or went). */
+async function inboxChanged(ctx: ApplyContext): Promise<void> {
+  publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['needsYou']);
+}
+
+/** The person's report as the box keeps it now: the whole report, and whether they read it. */
+export const keepTeamReport = defineCommand({
+  name: 'team_report_keep',
+  schema: z.object({ report: TeamReport, read: z.boolean(), sent: z.boolean().default(false) }),
+  async apply(tx, ctx, input) {
+    const r = input.report;
+    const [had] = await tx
+      .select()
+      .from(teamReportCopies)
+      .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)))
+      .for('update');
+    // Control's revision only grows: an answer that crossed a newer list doesn't move it back.
+    const revision = Math.max(had?.revision ?? 0, r.revision);
+    const readRevision = input.read ? Math.max(had?.readRevision ?? 0, r.revision) : (had?.readRevision ?? 0);
+    const values = { ...summaryColumns(r), revision, readRevision, report: r, copiedAt: ctx.now };
+    if (had)
+      await tx
+        .update(teamReportCopies)
+        .set(values)
+        .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, r.id)));
+    else
+      await tx.insert(teamReportCopies).values({
+        burrowId: ctx.burrow.id,
+        reportId: r.id,
+        ...values,
+        createdById: ctx.actor.kind === 'person' ? ctx.actor.id : null,
+      });
+    if (input.sent)
+      await ctx.emit({
+        type: TEAM_REPORT_SENT_EVENT,
+        kind: 'Messages',
+        text:
+          r.kind === 'idea' ? 'Sent an idea to the Whombat Team' : 'Reported a problem to the Whombat Team',
+        where: 'Reports',
+        // Ids only: the person's words stay out of the log.
+        payload: { reportId: r.id, number: r.number, kind: r.kind },
+      });
+    if (teamReportNeedsYou(r.status) !== (had ? teamReportNeedsYou(had.status as TeamReportStatus) : false))
+      await inboxChanged(ctx);
+    return { reportId: r.id };
+  },
+});
+
+/** The link a notification about a report opens: the report's page in the app. */
+function reportLink(ctx: ApplyContext, reportId: string) {
+  try {
+    return {
+      type: 'external' as const,
+      url: `${managedAppOrigin(ctx.services.config)}${teamReportHref(reportId)}`,
+    };
+  } catch {
+    // No app address configured (a development box): the person's Chat.
+    return { type: 'dm' as const };
+  }
+}
+
+/**
+ * Control's list of the box's reports: the copies take its summaries (a report the box didn't know comes in unread
+ * when the team changed it), and with the whole list (`complete`) copies of reports control no longer keeps go. A
+ * report that now waits for the person is told to them once, in fixed words.
+ */
+export const seeTeamReports = defineCommand({
+  name: 'team_report_seen',
+  schema: z.object({
+    reports: z.array(TeamReportSummary).max(TEAM_REPORTS_LIST_MAX),
+    complete: z.boolean(),
+  }),
+  async apply(tx, ctx, input) {
+    const burrowId = ctx.burrow.id;
+    const rows = await tx
+      .select()
+      .from(teamReportCopies)
+      .where(eq(teamReportCopies.burrowId, burrowId))
+      .for('update');
+    const byId = new Map(rows.map((r) => [r.reportId, r]));
+    const tell: Summary[] = [];
+    let changed = false;
+    for (const s of input.reports) {
+      const had = byId.get(s.id);
+      if (!had) {
+        await tx.insert(teamReportCopies).values({
+          burrowId,
+          reportId: s.id,
+          ...summaryColumns(s),
+          revision: s.revision,
+          readRevision: 0,
+          report: null,
+          createdById: null,
+          copiedAt: ctx.now,
+        });
+        changed ||= teamReportNeedsYou(s.status);
+        continue;
+      }
+      const same =
+        had.status === s.status &&
+        had.revision >= s.revision &&
+        had.title === s.title &&
+        had.updatedAt.getTime() === at(s.updatedAt).getTime();
+      if (same) continue;
+      await tx
+        .update(teamReportCopies)
+        .set({ ...summaryColumns(s), revision: Math.max(had.revision, s.revision), copiedAt: ctx.now })
+        .where(and(eq(teamReportCopies.burrowId, burrowId), eq(teamReportCopies.reportId, s.id)));
+      if (teamReportNeedsYou(s.status) !== teamReportNeedsYou(had.status as TeamReportStatus)) changed = true;
+      if (teamReportEnteredNeedsYou(had, s)) tell.push(s);
+    }
+    let gone = 0;
+    if (input.complete) {
+      const kept = input.reports.map((s) => s.id);
+      const left = await tx
+        .delete(teamReportCopies)
+        .where(
+          and(
+            eq(teamReportCopies.burrowId, burrowId),
+            kept.length ? notInArray(teamReportCopies.reportId, kept) : undefined,
+          ),
+        )
+        .returning({ status: teamReportCopies.status });
+      gone = left.length;
+      if (left.some((l) => teamReportNeedsYou(l.status as TeamReportStatus))) changed = true;
+    }
+    const person = tell.length ? await thePerson(tx, burrowId) : null;
+    for (const s of person ? tell : []) {
+      const words = TEAM_REPORT_NOTICE_WORDS[s.status as 'needs_information' | 'available'];
+      const dedupKey = `team-report:${s.id}:${s.revision}`;
+      if (!person || (await notifiedAlready(tx, person.id, dedupKey))) continue;
+      await notifyInCommit(ctx, {
+        burrowId,
+        burrowSlug: ctx.burrow.slug,
+        principalId: person.id,
+        kind: 'needs_you',
+        actorId: ctx.actor.id,
+        where: `Report #${s.number}`,
+        text: words.title,
+        link: reportLink(ctx, s.id),
+        createdAt: ctx.now,
+        dedupKey,
+        group: `team-report:${s.id}`,
+      });
+    }
+    if (changed || tell.length) await inboxChanged(ctx);
+    return { told: person ? tell.length : 0, gone };
+  },
+});
+
+async function notifiedAlready(tx: Tx, principalId: string, dedupKey: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(and(eq(notifications.principalId, principalId), eq(notifications.dedupKey, dedupKey)))
+    .limit(1);
+  return !!row;
+}
+
+/** A report that is gone: its copy leaves the box. `withdrawn`: the person took it back (the log says so). */
+export const forgetTeamReport = defineCommand({
+  name: 'team_report_forget',
+  schema: z.object({ reportId: z.string().min(1).max(64), withdrawn: z.boolean() }),
+  async apply(tx, ctx, input) {
+    const [gone] = await tx
+      .delete(teamReportCopies)
+      .where(and(eq(teamReportCopies.burrowId, ctx.burrow.id), eq(teamReportCopies.reportId, input.reportId)))
+      .returning();
+    if (input.withdrawn)
+      await ctx.emit({
+        type: TEAM_REPORT_WITHDRAWN_EVENT,
+        kind: 'Messages',
+        text: 'Took back a report to the Whombat Team',
+        where: 'Reports',
+        payload: { reportId: input.reportId, number: gone?.number ?? null, kind: gone?.kind ?? null },
+      });
+    if (gone && teamReportNeedsYou(gone.status as TeamReportStatus)) await inboxChanged(ctx);
+    return { reportId: input.reportId, gone: !!gone };
+  },
+});
+
+/* The assistant's drafts ------------------------------------------------------------------------------------------- */
+
+type DraftRow = typeof teamReportDrafts.$inferSelect;
+
+export async function loadDraft(db: Db | Tx, burrowId: string, draftId: string): Promise<DraftRow> {
+  const [row] = await db.select().from(teamReportDrafts).where(eq(teamReportDrafts.id, draftId));
+  if (!row || row.burrowId !== burrowId) throw notFound('Draft');
+  return row;
+}
+
+/** The assistant's draft, kept for the card and the form. */
+export const saveTeamReportDraft = defineCommand({
+  name: 'team_report_draft_save',
+  schema: z.object({
+    kind: TeamReportKind,
+    text: z.string().trim().min(1).max(TEAM_REPORT_TEXT_MAX),
+    expected: z.string().trim().max(TEAM_REPORT_EXPECTED_MAX),
+    personId: z.string().min(1).max(64),
+    conversationId: z.string().min(1).max(64).nullable(),
+  }),
+  async apply(tx, ctx, input) {
+    if (ctx.actor.kind !== 'agent') throw forbidden();
+    const id = `trd_${randomBytes(16).toString('base64url')}`;
+    await tx.insert(teamReportDrafts).values({
+      id,
+      burrowId: ctx.burrow.id,
+      personId: input.personId,
+      agentId: ctx.actor.id,
+      conversationId: input.conversationId,
+      kind: input.kind,
+      text: input.text,
+      expected: input.expected,
+      state: 'waiting',
+      createdAt: ctx.now,
+    });
+    return { id };
+  },
+});
+
+/** The card's words: exactly what would be sent, quoted. */
+export function draftCardText(draft: Pick<DraftRow, 'kind' | 'text' | 'expected'>): string {
+  const what = draft.kind === 'idea' ? 'this idea' : 'this problem';
+  const expected = draft.expected ? `\n\nWhat you expected:\n\n${quoted(draft.expected)}` : '';
+  return `I wrote down ${what} for the Whombat Team. Nothing goes until you say yes.\n\n${quoted(draft.text)}${expected}`;
+}
+
+/**
+ * Sending the assistant's draft: always a card first, whatever its keys say. On the person's yes this runs again as the
+ * assistant with the approval, and the report goes out after the commit (`sendDraftForAssistant`).
+ */
+export const sendTeamReportDraft = defineCommand({
+  name: 'team_report_draft_send',
+  schema: z.object({ draftId: z.string().min(8).max(64) }),
+  async requiredKey(input, { db, burrow, actor }): Promise<KeyRequirement | null> {
+    if (actor.kind === 'person') return null;
+    const draft = await loadDraft(db, burrow.id, input.draftId);
+    return {
+      keyId: TEAM_REPORT_KEY_ID,
+      // Always asks: only the person's press sends their words to the team.
+      grants: [{ agentId: actor.id, keyId: TEAM_REPORT_KEY_ID, tier: 'ask' }],
+      attempt: 'send a report to the Whombat Team',
+      action: {
+        type: 'custom',
+        params: { name: TEAM_REPORT_ACTION, keyId: TEAM_REPORT_KEY_ID, data: { draftId: draft.id } },
+      },
+      where: 'Reports',
+      conversationId: draft.conversationId,
+      approval: {
+        title:
+          draft.kind === 'idea' ? 'Send an idea to the Whombat Team' : 'Report a problem to the Whombat Team',
+        question: 'Send this to the Whombat Team?',
+        target: 'Whombat Team',
+        whatHappens: [
+          'The Whombat Team and its AI assistant read it, with this Whombat’s version.',
+          'You follow their answer under Reports, and can take it back there.',
+        ],
+        explainer: `${actor.shortName} always asks before telling the Whombat Team anything. Only your yes sends it, exactly as shown. Edit changes it first.`,
+        cardText: draftCardText(draft),
+      },
+    };
+  },
+  async apply(tx, ctx, input) {
+    const [draft] = await tx
+      .select()
+      .from(teamReportDrafts)
+      .where(and(eq(teamReportDrafts.id, input.draftId), eq(teamReportDrafts.burrowId, ctx.burrow.id)))
+      .for('update');
+    if (!draft) throw notFound('Draft');
+    if (ctx.actor.kind === 'agent' && !ctx.approvalId) throw forbidden();
+    if (ctx.actor.kind === 'person' && ctx.actor.id !== draft.personId) throw forbidden();
+    if (draft.state !== 'waiting') throw conflict('This report was sent already.');
+    const services = ctx.services;
+    const call = {
+      draftId: draft.id,
+      agentId: draft.agentId ?? ctx.actor.id,
+      approvalId: ctx.approvalId,
+      conversationId: draft.conversationId,
+    };
+    // The send happens after this commit, outside any transaction; the assistant is woken with how it went.
+    ctx.after(() => sendDraftForAssistant(services, ctx.burrow.id, call));
+    return { draftId: draft.id };
+  },
+});
+
+/** The card that asks about the draft, so a decline makes it done. */
+export const askedTeamReportDraft = defineCommand({
+  name: 'team_report_draft_asked',
+  schema: z.object({ draftId: z.string().min(8).max(64), approvalId: z.string().min(1).max(64) }),
+  async apply(tx, ctx, input) {
+    await tx
+      .update(teamReportDrafts)
+      .set({ approvalId: input.approvalId })
+      .where(and(eq(teamReportDrafts.id, input.draftId), eq(teamReportDrafts.burrowId, ctx.burrow.id)));
+    return { draftId: input.draftId };
+  },
+});
+
+/** The draft is done: sent (as which report), or no longer wanted. */
+export const doneTeamReportDraft = defineCommand({
+  name: 'team_report_draft_done',
+  schema: z.object({
+    draftId: z.string().min(8).max(64),
+    state: z.enum(['sent', 'declined']),
+    reportId: z.string().min(1).max(64).nullable(),
+  }),
+  async apply(tx, ctx, input) {
+    const done = await tx
+      .update(teamReportDrafts)
+      .set({ state: input.state, reportId: input.reportId, doneAt: ctx.now })
+      .where(
+        and(
+          eq(teamReportDrafts.id, input.draftId),
+          eq(teamReportDrafts.burrowId, ctx.burrow.id),
+          eq(teamReportDrafts.state, 'waiting'),
+        ),
+      )
+      .returning({ id: teamReportDrafts.id });
+    return { done: done.length > 0 };
+  },
+});
+
+/** Drafts older than this go (sent, declined or left waiting): the card's Edit then says the draft is gone. */
+export const TEAM_REPORT_DRAFT_KEEP_DAYS = 30;
+
+export const sweepTeamReportDrafts = defineCommand({
+  name: 'team_report_drafts_sweep',
+  schema: z.object({ ids: z.array(z.string().min(8).max(64)).min(1).max(500) }),
+  async apply(tx, ctx, input) {
+    const gone = await tx
+      .delete(teamReportDrafts)
+      .where(and(eq(teamReportDrafts.burrowId, ctx.burrow.id), inArray(teamReportDrafts.id, input.ids)))
+      .returning({ id: teamReportDrafts.id });
+    return { gone: gone.length };
+  },
+});
+
+export const TEAM_REPORT_COMMANDS = [
+  keepTeamReport,
+  seeTeamReports,
+  forgetTeamReport,
+  saveTeamReportDraft,
+  sendTeamReportDraft,
+  askedTeamReportDraft,
+  doneTeamReportDraft,
+  sweepTeamReportDrafts,
+];

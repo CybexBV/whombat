@@ -222,6 +222,10 @@ export const EVENT_TYPES = {
   // Shared links (Whombat share-links.md, contracts 3.18).
   'share.created': 'Messages',
   'share.stopped': 'Messages',
+  // Reports to the Whombat Team (Whombat team-reports.md, contracts 4.18): sent and taken back (`{reportId, number,
+  // kind}`; the person's words stay out of the log).
+  'team_report.sent': 'Messages',
+  'team_report.withdrawn': 'Messages',
   // Contracts 0.110 (CT-710; Whombat connections-setup.md CS-53, CS-D47): a service the scan found hidden from Found on
   // your network, or shown there again (`{catalogId, host, port}`; the text names the entry and its address).
   'connection.found_hidden': 'System',

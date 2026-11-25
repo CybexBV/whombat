@@ -604,3 +604,26 @@ describe('the delegation’s tools (delegate.md)', () => {
     expect(none({ ...person, council: true, turn: { ...person.turn, personal: false } })).toEqual([]);
   });
 });
+
+describe('the tools for reports to the Whombat Team (team-reports.md)', () => {
+  const person: ServedSelection = {
+    turn: { personal: true, answer: false, run: false, teamWork: true, code: false },
+    usable: [],
+    browser: 'preview',
+    connections: true,
+  };
+  const TEAM = ['report_to_whombat_team', 'whombat_team_reports'];
+  const served = (sel: ServedSelection) =>
+    TEAM.filter((n) => servedToolNames(sel).includes(n as McpToolName));
+
+  it('are served in the person’s own turns where they can send reports or have some', () => {
+    expect(served({ ...person, teamReports: true })).toEqual(TEAM);
+  });
+
+  it('are not served elsewhere: no reports here, an automation’s step, a turn for nobody, an outsiders’ turn', () => {
+    expect(served(person)).toEqual([]);
+    expect(served({ ...person, teamReports: true, automationStep: true })).toEqual([]);
+    expect(served({ ...person, teamReports: true, turn: { ...person.turn, personal: false } })).toEqual([]);
+    expect(served({ ...person, teamReports: true, turn: { ...person.turn, outside: true } })).toEqual([]);
+  });
+});

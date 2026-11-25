@@ -37,6 +37,7 @@ import { authorizeGit } from '../runtime/git';
 import { SETTINGS_COMMANDS } from '../settings/command';
 import { SHARE_COMMANDS } from '../shares/commands';
 import { recordSkillChange, recordSkillInstall } from '../skills/commands';
+import { TEAM_REPORT_COMMANDS } from '../team-reports/commands';
 import { TRACKER_COMMANDS } from '../trackers/index';
 import { ASK_SERVER_COMMANDS } from '../vault/ask-server';
 import { VAULT_ENTRY_COMMANDS } from '../vault/commands';
@@ -179,6 +180,7 @@ export const COMMANDS: CommandDef[] = [
   ...SETTINGS_COMMANDS,
   // Shared links (shares/commands.ts, share-links.md): an approval runs `share_create` again by name.
   ...SHARE_COMMANDS,
+  ...TEAM_REPORT_COMMANDS,
   // The person's prompts (prompts/commands.ts, prompts.md).
   ...PROMPT_COMMANDS,
   // Settings → Skills and Hermes's hub (hermes-engine.md HE-41, hermes-skills.md HSK-06).

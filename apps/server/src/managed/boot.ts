@@ -27,6 +27,9 @@ import { registerBoxBackupSource } from '../home/box-backup';
 import type { Services } from '../services';
 import { useShares } from '../shares/publish';
 import { startShareRound } from '../shares/round';
+import { useTeamReports } from '../team-reports/control';
+import { startTeamReportsFollow } from '../team-reports/follow';
+import { registerTeamReportsSource } from '../team-reports/inbox';
 import { AdminSocket } from './admin-socket';
 import { BackupSocketClient } from './backup';
 import { startBackupKeys } from './backup-key';
@@ -142,6 +145,16 @@ export async function startManaged(
   // Shared links (share-links.md): the manager's share routes, and the round that keeps the links right.
   useShares(services, manager);
   startShareRound(services);
+  // Reports to the Whombat Team (team-reports.md): a Link account's, so only while Link is on or in grace. A
+  // development box has no Link: its manager stand-in has no Link routes and its stand-in team answers instead.
+  const link = runtime.link;
+  useTeamReports(
+    services,
+    manager,
+    () => link.running() || (config.NODE_ENV === 'development' && link.view().assumed),
+  );
+  registerTeamReportsSource();
+  startTeamReportsFollow(services);
   // A backup opened to bring one thing back closes when unused for two hours and when the box stops (backup-look.md).
   const looks = runtime.dispatcher.backup ? looksFor(services) : null;
   if (looks && runtime.dispatcher.backup) await looks.start(runtime.dispatcher.backup).catch(() => {});

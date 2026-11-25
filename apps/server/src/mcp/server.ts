@@ -56,6 +56,7 @@ import { type DispatchRow, dispatchCheckout } from '../runtime/context';
 import { dispatchScopeOf, runInDispatchScope } from '../runtime/dispatch-scope';
 import { outsidersTurn } from '../runtime/person';
 import type { Services } from '../services';
+import { teamReportsOffered } from '../team-reports/tool';
 import { NOT_A_TRACKER_TURN, trackerToolsInTurn } from '../trackers/access';
 import { vaultToolList } from '../vault/context';
 import { imageOf } from './image';
@@ -231,6 +232,10 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
     customConnections: once(async () => {
       const agentRow = await agent();
       return !!agentRow && (await hasCustomConnection(db, agentRow.burrowId));
+    }),
+    teamReports: once(async () => {
+      const agentRow = await agent();
+      return !!agentRow && (await teamReportsOffered(services, agentRow.burrowId));
     }),
   };
   const assessment = once(async () => {

@@ -36,6 +36,7 @@ import type { Services } from '../services';
 import { shareRoutes } from '../shares/routes';
 import { skillHubRoutes } from '../skills/hub-routes';
 import { libraryRoutes } from '../skills/library-routes';
+import { teamReportRoutes } from '../team-reports/routes';
 import { thingRoutes } from '../things/routes';
 import { trackerRoutes } from '../trackers/routes';
 import { usageRoutes } from '../usage/routes';
@@ -101,6 +102,7 @@ export const ROUTES: RouteDef[] = [
   ...backupRoutes,
   // Shared links (share-links.md).
   ...shareRoutes,
+  ...teamReportRoutes,
   ...keptSiteRoutes,
   // The person's prompts (prompts.md).
   ...promptRoutes,
