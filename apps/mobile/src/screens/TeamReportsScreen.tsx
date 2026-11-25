@@ -19,7 +19,6 @@ import type { TeamReportRow } from '@whombat/core';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { TEAM_REPORTS_PHONE_WORDS } from '../data/teamReports';
 import { Card, Note } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -52,7 +51,7 @@ export function TeamReportsScreen({ navigation, route }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={TEAM_REPORTS_PHONE_WORDS.olderWhombat} />
+        <ErrorState text={TEAM_REPORT_WORDS.updateFirst} />
       </Screen>
     );
   if (list.isError && !list.data)

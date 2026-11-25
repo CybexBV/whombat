@@ -31,7 +31,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { TEAM_REPORTS_PHONE_WORDS, teamReportTone } from '../data/teamReports';
+import { teamReportTone } from '../data/teamReports';
 import { ErrorLine } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -98,7 +98,7 @@ export function TeamReportScreen({ navigation, route }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={TEAM_REPORTS_PHONE_WORDS.olderWhombat} />
+        <ErrorState text={TEAM_REPORT_WORDS.updateFirst} />
       </Screen>
     );
   if (!valid)

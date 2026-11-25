@@ -7,8 +7,6 @@ import type { TeamReportStatus, Tone } from '@whombat/core';
 
 /** What the phone's report screens say that the web's don't need. */
 export const TEAM_REPORTS_PHONE_WORDS = {
-  /** A Whombat whose session doesn't speak reports yet (before session minor 10). */
-  olderWhombat: 'Update this Whombat to send reports.',
   /** The ⋯ button's name for screen readers. */
   more: (title: string) => `More for ${title}`,
 } as const;
