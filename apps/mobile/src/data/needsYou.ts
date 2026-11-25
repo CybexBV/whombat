@@ -21,6 +21,7 @@ import {
   needsYouMore,
   needsYouStatusLevel,
   needsYouSwipe,
+  teamReportDraftOfHref,
 } from '@whombat/client';
 import {
   DESK_WORDS,
@@ -206,6 +207,21 @@ export function phoneRowInline(
     return { answers: shown, lead: null, more };
   const [lead = null, ...rest] = shown;
   return { answers: [], lead, more: [...rest, ...more] };
+}
+
+/**
+ * What an approval row offers after its answers: for the assistant's draft report its Edit, the form with the draft
+ * (`draftId`); and where the Inbox doesn't take the yes (a draft too long to read there in full) the approval's own
+ * screen (`approvalNumber`), whose card holds all of it and takes the yes. Null for what the row doesn't offer.
+ */
+export function approvalRowDoors(row: Pick<NeedsYouListRow, 'item' | 'buttons'>): {
+  draftId: string | null;
+  approvalNumber: number | null;
+} {
+  const draftId = teamReportDraftOfHref(row.item.href);
+  const yes = row.buttons.some((b) => b.action?.kind === 'approve');
+  const number = row.item.approvalNumber ?? null;
+  return { draftId, approvalNumber: draftId && !yes && number ? number : null };
 }
 
 /** A group's heading with its count, the count left out when it is zero (“Settled”, never “Settled · 0”). */
