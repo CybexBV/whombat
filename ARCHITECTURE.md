@@ -1045,7 +1045,8 @@ while control can't be reached the list shows the copies (`stale`). While a repo
 item while the report waits for the person, both opening `/reports/<id>`. The team's words show only on the report's
 page: never in Chat, the assistant's context, Search or automations. The assistant's `report_to_whombat_team` keeps a
 draft (`team_report_drafts`) and always asks on a card that quotes it; the person's yes sends it as theirs, and the
-card's Edit opens the form with the draft (`teamReports.draft`). `whombat_team_reports` reads numbers, titles, statuses
+card's Edit opens the form with the draft (`teamReports.draft`); sent from the form, the draft is done and its waiting
+card withdrawn (`team_report_draft_done`). `whombat_team_reports` reads numbers, titles, statuses
 in words and dates. Both are served only in the person's own turns where they can send reports or have some. A tracker
 connection may sign its replies with its own `signature` instead of “<assistant> - AI Assistant”. Development's manager
 stand-in has a small team in memory (`managed/fake-team.ts`) that answers each new report a few seconds later. Reasons:
