@@ -710,9 +710,20 @@ export class RunnerRuntime {
   /** A session a beat tells for a turn that no longer runs (`forgetLateMailSession`). */
   private async forgetLateSession(id: string, body: ProgressBody): Promise<void> {
     if (!body.providerSessionId) return;
-    await this.services.pipeline.transactAccount((_tx, session) =>
-      forgetLateMailSession(session, id, body.providerSessionId),
-    );
+    await this.services.pipeline.transactAccount(async (tx, session) => {
+      await forgetLateMailSession(session, id, body.providerSessionId);
+      // A Looks ahead check that ended and tells its session late: forgotten too (looks-ahead.md).
+      await forgetAheadSession(
+        {
+          tx,
+          services: this.services,
+          background: session.background.bind(session),
+          now: this.services.clock(),
+        },
+        id,
+        body.providerSessionId,
+      );
+    });
   }
 
   /** Why the dispatch's turn must stop, if it must. */

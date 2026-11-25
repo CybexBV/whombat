@@ -55,16 +55,19 @@ def _end(marker: Optional[Path]) -> None:
 
 def _review_off(agent: Any = None) -> bool:
     """Whether the turn's policy says it has no review (``review: false``: a Looks ahead check). The session is the
-    gateway's bound one, else the agent's own. A policy that can't be read leaves the review as it was: its memory and
-    skill calls still meet the same policy, which blocks them for such a turn."""
+    gateway's bound one, else the agent's own. A policy that can't be read: in a person's pod the review doesn't run;
+    in a turn's own Hermes it runs as it was, and its memory and skill calls still meet the same policy."""
+    from .settings import in_pod
+
     try:
         from .policy import policy_for
 
         session = getattr(agent, "session_id", None) if agent is not None else None
         policy = policy_for({"session_id": session} if isinstance(session, str) else {}).load()
     except Exception:
+        # In a person's pod a session whose policy can't be read gets no review (its tools would be blocked anyway).
         logger.warning("whombat: the review couldn't read the turn's policy", exc_info=True)
-        return False
+        return in_pod()
     return policy is not None and not policy.review
 
 

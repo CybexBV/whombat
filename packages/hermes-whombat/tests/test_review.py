@@ -116,3 +116,14 @@ def test_in_a_pod_the_agents_session_says_no_review(profile: Path, monkeypatch: 
     target()
     assert not ran.is_set()
     assert markers(profile) == []
+
+
+def test_in_a_pod_a_session_without_a_readable_policy_gets_no_review(profile: Path, monkeypatch: pytest.MonkeyPatch):
+    from whombat_hermes import policy, settings
+
+    monkeypatch.setenv(settings.POD_ENV, "1")
+    monkeypatch.setattr(policy, "_session_policies", policy.SessionPolicies())
+    ran = threading.Event()
+    target, _ = review.signalled(lambda *a, **k: (ran.set, "p"))(types.SimpleNamespace(session_id="s-none"), [])
+    target()
+    assert not ran.is_set()

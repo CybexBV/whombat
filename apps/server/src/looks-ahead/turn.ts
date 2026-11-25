@@ -17,7 +17,7 @@ import {
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
-import { aheadChecks, burrows, principals } from '../db/schema/index';
+import { aheadChecks, burrows, connections, principals } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
@@ -125,9 +125,13 @@ export async function aheadToolRefusal(
   if (!(await aheadSettingsOf(services.db, dispatch.burrowId)).on)
     return 'Looks ahead was switched off: end with ahead_report, found false.';
   if (name === 'calendar_events') {
-    const calendarId = (input as { calendarId?: unknown } | null)?.calendarId ?? 'primary';
-    if (calendarId !== row.event.calendarId)
-      return `Read only the calendar this event is on (calendarId ${row.event.calendarId}).`;
+    const asked = input as { calendarId?: unknown; provider?: unknown } | null;
+    const [account] = await services.db
+      .select({ provider: connections.provider })
+      .from(connections)
+      .where(eq(connections.id, row.event.connectionId));
+    if ((asked?.calendarId ?? 'primary') !== row.event.calendarId || asked?.provider !== account?.provider)
+      return `Read only the calendar this event is on: provider ${account?.provider ?? 'google'}, calendarId ${row.event.calendarId}.`;
   }
   const key = MCP_TOOLS[name].requiredKey;
   // A key that depends on the input is never one of a check's tools (calendar and mail read have fixed keys).
@@ -191,17 +195,37 @@ export async function aheadToolRan(
  */
 async function privateWords(services: Services, burrowId: string, row: AheadCheckRow): Promise<string[]> {
   const people = await services.db
-    .select({ name: principals.name, accountId: principals.accountId })
+    .select({ name: principals.name })
     .from(principals)
     .where(and(eq(principals.burrowId, burrowId), eq(principals.kind, 'person')));
   const person = await thePerson(services.db, burrowId);
-  const accounts = person?.accountId ? await calendarAccounts(services.db, person.accountId) : [];
-  const addresses = [...accounts.map((a) => a.email), ...(row.event.guests ?? [])].flatMap((a) => [
-    a,
-    a.split('@')[0] ?? '',
-  ]);
-  return [...people.flatMap((p) => p.name.split(/\s+/)), ...addresses].filter((w) => w.length >= 3);
+  // Every account of the person's (mail-only ones too), as the turn's preface names them.
+  const addresses = person?.accountId
+    ? (
+        await services.db
+          .select({ email: connections.email })
+          .from(connections)
+          .where(eq(connections.accountId, person.accountId))
+      ).map((c) => c.email)
+    : [];
+  // In the same pieces the search is cut into: “john.pals@example.com” is “john”, “pals”, “example”, “com”.
+  return [...people.map((p) => p.name), ...addresses, ...(row.event.guests ?? [])]
+    .flatMap((w) => w.split(/[^\p{L}\p{N}]+/u))
+    .filter((w) => w.length >= 3 && !COMMON_WORDS.has(w.toLowerCase()));
 }
+
+/** Pieces of addresses that are everyone's, not a person's. */
+const COMMON_WORDS = new Set([
+  'com',
+  'net',
+  'org',
+  'gmail',
+  'outlook',
+  'hotmail',
+  'icloud',
+  'live',
+  'example',
+]);
 
 /** What a check hears when it reaches for the web after reading mail. */
 const WEB_CLOSED =
@@ -210,7 +234,7 @@ const WEB_CLOSED =
 export async function searchWebTool(services: Services, dispatch: DispatchRow, query: string) {
   const row = await liveCheck(services, dispatch);
   const seen = seenOf(services, dispatch.id);
-  if (webClosed(seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
+  if (webClosed(services, seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
   const refusal = aheadQueryRefusal(query, await privateWords(services, dispatch.burrowId, row));
   if (refusal) throw forbidden(refusal);
   const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, dispatch.burrowId));
@@ -243,7 +267,7 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
 export async function readWebPageTool(services: Services, dispatch: DispatchRow, url: string) {
   await liveCheck(services, dispatch);
   const seen = seenOf(services, dispatch.id);
-  if (webClosed(seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
+  if (webClosed(services, seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
   if (!sawLink(seen, url))
     throw forbidden(
       'Only a link exactly as you saw it in a search result or on a page you read: links in the event or a mail aren’t opened.',

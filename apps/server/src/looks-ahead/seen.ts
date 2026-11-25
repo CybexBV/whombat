@@ -27,10 +27,14 @@ export interface CheckSeen {
 const KEEP_MS = 3 * 3600_000;
 /** Links remembered per check, at most. */
 const URLS_MAX = 400;
-/** When this server started: a check begun before it may have read mail this memory doesn't know of. */
-const STARTED_AT = Date.now();
-
 const seenBy = new WeakMap<Services, Map<string, CheckSeen>>();
+/** When this process started (the system clock). */
+const PROCESS_STARTED = Date.now();
+/**
+ * When this server started, on the services' own clock: a check begun before may have read mail its memory doesn't
+ * know of.
+ */
+const startedBy = new WeakMap<Services, number>();
 
 /** The check's memory, empty the first time it is asked for. */
 export function seenOf(services: Services, dispatchId: string): CheckSeen {
@@ -38,6 +42,7 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
   if (!all) {
     all = new Map();
     seenBy.set(services, all);
+    startedBy.set(services, services.clock().getTime() - (Date.now() - PROCESS_STARTED));
   }
   const now = services.clock().getTime();
   for (const [id, s] of all) if (now - s.at > KEEP_MS) all.delete(id);
@@ -57,9 +62,10 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
   return seen;
 }
 
-/** Whether the check's web is closed: it read mail, or it began before this server did (it may have). */
-export function webClosed(seen: CheckSeen, claimedAt: Date | null): boolean {
-  return seen.mailRead || (claimedAt !== null && claimedAt.getTime() < STARTED_AT);
+/** Whether the check's web is closed: it read mail, or it began before this server kept memories (it may have). */
+export function webClosed(services: Services, seen: CheckSeen, claimedAt: Date | null): boolean {
+  const started = startedBy.get(services) ?? 0;
+  return seen.mailRead || (claimedAt !== null && claimedAt.getTime() < started);
 }
 
 /** Remembers links the check may now read. */

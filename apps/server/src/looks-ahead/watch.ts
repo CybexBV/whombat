@@ -10,8 +10,8 @@ import {
   AHEAD_FINDINGS_PER_DAY,
   AHEAD_READ_MS,
   type AheadChecked,
-  aheadHours,
   aheadSkip,
+  aheadStartHours,
   aheadVersion,
   type CalendarEvent,
   planAheadPass,
@@ -106,6 +106,7 @@ async function upcoming(
   timeZone: string,
 ): Promise<Found[]> {
   const out = new Map<string, Found>();
+  const skipped = new Set<string>();
   for (const account of accounts) {
     const calendars = await accountCalendars(services, account).catch((err) => {
       services.log.warn(
@@ -130,11 +131,17 @@ async function upcoming(
         return [];
       });
       for (const event of events) {
-        if (aheadSkip(event)) continue;
         const key = eventKey(account.connectionId, { ...event, calendarId: calendar.id });
         // One event on two calendars (the person's and the family's) is checked once: by its iCalendar id, else by
-        // its provider id and the moment it starts.
+        // its provider id and the moment it starts. A copy the person declined or didn't answer anywhere is never
+        // checked through another calendar's copy.
         const same = event.uid ? key : `${event.id}\n${Date.parse(event.start)}`;
+        if (skipped.has(same)) continue;
+        if (aheadSkip(event)) {
+          skipped.add(same);
+          out.delete(same);
+          continue;
+        }
         if (out.has(same)) continue;
         const version = aheadVersion(event);
         out.set(same, {
@@ -181,7 +188,7 @@ export async function watchAhead(
   if (await tidyDue(services, burrowId, now)) await services.pipeline.commit(tidyAhead, {}, as);
   const settings = await aheadSettingsOf(services.db, burrowId);
   const timeZone = burrow.timeZone;
-  if (!settings.on || !aheadHours(now, timeZone)) return null;
+  if (!settings.on || !aheadStartHours(now, timeZone)) return null;
   // The day's budgets and one at a time, before anything is read.
   const dayStart = startOfLocalDay(now, timeZone);
   const [counts] = await services.db
@@ -199,6 +206,19 @@ export async function watchAhead(
     findingsToday >= AHEAD_FINDINGS_PER_DAY
   )
     return null;
+  // A check's turn still at work (one past its two hours, hung) holds the next back too.
+  const [working] = await services.db
+    .select({ id: dispatches.id })
+    .from(dispatches)
+    .where(
+      and(
+        eq(dispatches.burrowId, burrowId),
+        eq(dispatches.trigger, 'ahead'),
+        inArray(dispatches.state, ['queued', 'claimed', 'running']),
+      ),
+    )
+    .limit(1);
+  if (working) return null;
   // The calendar is read only where its key is Allowed: an assistant that must ask first doesn't read it by itself.
   if (!(await keyAllowed(services, agent.id, 'calendar.read'))) return null;
   const accounts = await calendarAccounts(services.db, person.accountId);

@@ -73,11 +73,11 @@ describe('what a check has seen', () => {
     expect(sawSourceOf(seen, 'https://example.org/news')).toBe(false);
     sawSource(seen, 'https://example.org/news');
     expect(sawSourceOf(seen, 'https://example.org/news/')).toBe(true);
-    expect(webClosed(seen, new Date())).toBe(false);
+    expect(webClosed(services, seen, services.clock())).toBe(false);
     seen.mailRead = true;
-    expect(webClosed(seen, new Date())).toBe(true);
+    expect(webClosed(services, seen, services.clock())).toBe(true);
     // A check begun before this server started may have read mail it doesn't know of.
-    expect(webClosed(seenOf(services, 'dsp_3'), new Date(0))).toBe(true);
+    expect(webClosed(services, seenOf(services, 'dsp_3'), new Date(0))).toBe(true);
     forgetSeen(services, 'dsp_1');
     expect(sawLink(seenOf(services, 'dsp_1'), 'https://example.org/news')).toBe(false);
   });

@@ -290,10 +290,12 @@ export const reportAhead = defineCommand({
     const calendarOff = settings.calendarsOff.includes(
       calendarKey(row.event.connectionId, row.event.calendarId),
     );
+    // Its words as they would be posted: nothing left of them (only links or markup) is nothing to tell.
+    const words = report.text ? findingWords(report.text) : '';
     const tellable =
       report.found &&
       report.kind &&
-      report.text &&
+      words.length > 0 &&
       input.sources.length > 0 &&
       input.current &&
       settings.on &&
@@ -304,13 +306,13 @@ export const reportAhead = defineCommand({
       (await findingsSince(tx, ctx.burrow.id, startOfLocalDay(ctx.now, ctx.burrow.timeZone))) <
         AHEAD_FINDINGS_PER_DAY;
     let told = false;
-    if (tellable && report.text) {
+    if (tellable) {
       const conversation = await loadConversationRow(tx, row.conversationId);
       if (conversation) {
         await postMessage(ctx, {
           conversation,
           id: row.threadRootId,
-          text: findingText(report.text, input.sources),
+          text: findingText(words, input.sources),
           suggestions: AHEAD_REPLIES,
           // The person's Chat tells them, inbox and push, as any message of the assistant's there.
           dispatch: false,
@@ -324,7 +326,7 @@ export const reportAhead = defineCommand({
       .set({
         state: told ? 'told' : 'quiet',
         kind: report.found ? (report.kind ?? null) : null,
-        text: told && report.text ? findingWords(report.text) : null,
+        text: told ? words : null,
         reportedAt: ctx.now,
       })
       .where(eq(aheadChecks.id, row.id));

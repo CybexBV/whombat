@@ -78,6 +78,8 @@ export async function isBackgroundDispatch(
     if (!parent) break;
     current = parent;
   }
+  // A Looks ahead check is always the assistant's own background work (looks-ahead.md).
+  if (current.trigger === 'ahead') return true;
   if (current.trigger === 'look') {
     const [research] = await db
       .select({ askedById: lookResearches.askedById })
