@@ -829,7 +829,7 @@ export const MCP_TOOLS = {
     name: 'ahead_report',
     title: 'Say what you found',
     description:
-      'Only while you check something on the person’s calendar, once, at the end. found false: everything matches, or you found nothing you can show with a source; the person hears nothing. found true: one finding the person must know before going (kind, one to three plain sentences in their language without links, and its sources: a page you read or a search result, or a mail you read; Whombat names them). Whombat posts it in a thread of its own with a push.',
+      'Only while you check something on the person’s calendar, once, at the end. found false: everything matches, or you found nothing you can show with a source; the person hears nothing. found true: one finding the person must know before going (kind, one to three plain sentences in their language without links, and its sources: a page you read with read_web_page, or a mail you read; a search result is only a lead; Whombat names them). Whombat posts it in a thread of its own with a push.',
     input: AheadReportInput,
     output: commitOutcome({ told: z.boolean() }),
     requiredKey: null,

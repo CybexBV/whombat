@@ -58,7 +58,7 @@ export function aheadTurnLines(ctx: DispatchContext): string[] {
     'Not worth telling: what matches, guesses, general advice, the weather, anything they surely know.',
     ...(a.stopped.length ? [`${person} asked not to hear about: ${kindWords(a.stopped)}.`] : []),
     'Most checks find nothing: then ahead_report with found false, and that is all.',
-    `A finding: ahead_report with found true, its kind, one to three plain sentences in the language you and ${person} talk in (what differs, why it matters, what they could do), no links in them, and its sources: the pages you read or found and the mails you read it in. Whombat names the sources and posts it in a thread of its own.`,
+    `A finding: ahead_report with found true, its kind, one to three plain sentences in the language you and ${person} talk in (what differs, why it matters, what they could do), no links in them, and its sources: the pages you read with read_web_page and the mails you read it in (a search result is only a lead: read the page before you read mail). Whombat names the sources and posts it in a thread of its own.`,
     'Do all of it in this turn, without helpers; never say you’ll come back.',
   ];
 }

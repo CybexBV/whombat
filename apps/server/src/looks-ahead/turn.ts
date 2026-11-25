@@ -325,7 +325,9 @@ export async function aheadReportSources(
         throw forbidden(
           `${source.url} isn’t a page you read in this check: read it with read_web_page first (a search result is only a lead).`,
         );
-      named.push({ label: siteOf(source.url), url: httpUrl(source.url) ?? source.url });
+      // Pages are read over https: the link is the page as Whombat read it.
+      const link = (httpUrl(source.url) ?? source.url).replace(/^http:/, 'https:');
+      named.push({ label: siteOf(source.url), url: link });
     } else {
       const sender = seen.mails.get(source.mailId);
       if (!sender) throw forbidden('A mail you name must be one you read with mail_read in this check.');

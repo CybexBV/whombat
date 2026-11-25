@@ -195,12 +195,16 @@ export function planAheadPass(input: AheadPassInput): AheadCandidate | null {
 /* The check's report ------------------------------------------------------------------------------------------------ */
 
 /**
- * Where a finding comes from: a web page the check read or found, or a mail it read. Whombat names each itself (the
+ * Where a finding comes from: a web page the check read, or a mail it read. Whombat names each itself (the
  * site, the sender), so a finding's links and names are never the model's words.
  */
 export const AheadSource = z.union([
   z.strictObject({
-    url: z.string().url().max(2048).describe('A web page this check read or found with search_web.'),
+    url: z
+      .string()
+      .url()
+      .max(2048)
+      .describe('A web page this check read with read_web_page (a search result is only a lead).'),
   }),
   z.strictObject({
     mailId: z.string().min(1).max(1024).describe('A message this check read with mail_read.'),
