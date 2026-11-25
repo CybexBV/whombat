@@ -29,6 +29,7 @@ import {
   thingWatches,
 } from '../db/schema/index';
 import { serversPrincipal } from '../hosts/principal';
+import { startResearch } from '../looks/research';
 import { callTool } from '../mcp/server';
 import { loadMessages } from '../read/messages';
 import { IDS, useAutomationWorld } from '../test/automations';
@@ -694,4 +695,97 @@ it('ends a Website check’s outage quietly when its address changes, so its del
     .from(events)
     .where(and(eq(events.type, THING_BACK), eq(events.burrowId, w.burrowId)));
   expect(back.filter((e) => e.payload.incidentId === incidentId)).toHaveLength(0);
+});
+
+/** A Website check, as the connect side stores one (the test helper makes only services with a base address). */
+async function website(handle: string, label: string) {
+  const thing = await connection(handle, label);
+  await w.services.db
+    .update(catalogConnections)
+    .set({
+      catalogId: 'uptime',
+      signIn: 'none',
+      fields: { kind: 'http', address: `https://${handle}.example.com/`, runner: 'hub', every: '1' },
+    })
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+  return thing;
+}
+
+/** The person points a Website check at another address. */
+function readdress(thing: string, handle: string) {
+  return w.ok(IDS.mara, changeConnection, {
+    connectionId: thing.slice('connection:'.length),
+    set: {
+      fields: { kind: 'http', address: `https://${handle}.example.com/new`, runner: 'hub', every: '1' },
+    },
+    what: ['fields'],
+  });
+}
+
+async function openIncidentsOf(thing: string) {
+  return (await w.services.db.select().from(incidents).where(eq(incidents.thingId, thing))).filter(
+    (r) => !r.endedAt,
+  );
+}
+
+it('counts a Website check’s looks from the start again when it is edited in its outage’s first minute', async () => {
+  const thing = await website('cart', 'Cart');
+  await lines(thing, [NOT_ANSWERING]);
+  let before = await watchIncidents(w.services, w.burrowId, null);
+  w.advance(MINUTE);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  expect(await openIncidentsOf(thing)).toHaveLength(1);
+  // Within the minute it is pointed at another address, which fails too: its first bad pass opens nothing.
+  await readdress(thing, 'cart');
+  await lines(thing, [NOT_ANSWERING]);
+  w.advance(MINUTE);
+  const from = w.now();
+  before = await watchIncidents(w.services, w.burrowId, before);
+  expect(await openIncidentsOf(thing)).toHaveLength(0);
+  w.advance(MINUTE);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  const opened = await openIncidentsOf(thing);
+  expect(opened.map((r) => r.startedAt)).toEqual([from]);
+  await close(opened[0]?.id ?? '');
+});
+
+it('dates a Website check’s new outage from its new address, not from research on the old one', async () => {
+  const thing = await website('till', 'Till');
+  const automation = await w.publish(definition([{ kind: 'thing', event: 'down', thing, forMinutes: 30 }]), {
+    name: 'Till is down',
+  });
+  // The assistant looked into the old address 40 minutes before the edit.
+  await w.ok(IDS.dusty, startResearch, {
+    look: {
+      key: thing,
+      kind: 'connection',
+      name: 'Till',
+      rank: 0,
+      reason: 'Not answering',
+      question: null,
+      check: null,
+      subject: '',
+      since: null,
+      lines: [],
+    },
+    personId: IDS.mara,
+  });
+  w.advance(40 * MINUTE);
+  await readdress(thing, 'till');
+  // The edit's sync with the hosts service records when the check took its new address.
+  await w.services.db
+    .update(catalogConnections)
+    .set({ hubCheckChangedAt: w.now() })
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+  await lines(thing, [NOT_ANSWERING]);
+  let before = await watchIncidents(w.services, w.burrowId, null);
+  const from = w.now();
+  w.advance(MINUTE);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  const [row] = await openIncidentsOf(thing);
+  expect(row?.startedAt).toEqual(from);
+  // Its second bad pass is two minutes into the new address's outage, not 40.
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(0);
+  await close(row?.id ?? '');
 });

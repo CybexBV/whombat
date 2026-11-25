@@ -13,8 +13,9 @@
  * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass. A
  * pass that can't read Home keeps only what it knew of the open incidents, as a pass that couldn't read their things.
  */
-import type { IncidentNature } from '@whombat/core';
-import { burrows } from '../db/schema/index';
+import { type IncidentNature, thingId } from '@whombat/core';
+import { and, eq, isNotNull } from 'drizzle-orm';
+import { burrows, catalogConnections } from '../db/schema/index';
 import type { DeskLook } from '../desk/shapes';
 import { startOfLocalDay } from '../home/time';
 import { serversPrincipal } from '../hosts/principal';
@@ -86,14 +87,26 @@ export async function watchIncidents(
   const { burrow, fleet, serversRead } = live;
   // The assistant's research of a look as bad or worse began when the trouble did, or later.
   const research = new Map((await liveRows(services.db, burrowId)).map((r) => [r.lookKey, r] as const));
+  // A Website or address check pointed at another target: what was known before says nothing of the new one.
+  const changed = new Map(
+    (
+      await services.db
+        .select({ id: catalogConnections.id, at: catalogConnections.hubCheckChangedAt })
+        .from(catalogConnections)
+        .where(
+          and(eq(catalogConnections.burrowId, burrowId), isNotNull(catalogConnections.hubCheckChangedAt)),
+        )
+    ).map((c) => [thingId('connection', c.id), c.at?.getTime() ?? 0] as const),
+  );
   const sinceOf = (look: DeskLook): Date | null => {
     const seen = look.server && look.state === 'down' ? fleet?.rows.get(look.server)?.lastSeen : null;
     const r = research.get(look.key);
     const rank = look.state === 'down' ? LOOK_RANK.down : LOOK_RANK.bad;
+    const from = changed.get(look.key) ?? Number.NEGATIVE_INFINITY;
     const times = [
       ...(seen ? [new Date(seen)] : []),
       ...(r && r.rank <= rank ? [r.since ?? r.startedAt] : []),
-    ].filter((d) => !Number.isNaN(d.getTime()));
+    ].filter((d) => !Number.isNaN(d.getTime()) && d.getTime() >= from);
     return times.length ? new Date(Math.min(...times.map((d) => d.getTime()))) : null;
   };
   const looks = live.looks
@@ -156,14 +169,15 @@ export async function watchIncidents(
     now,
   });
   const signer = () => serversPrincipal(services, burrowId);
+  const stillOpen = new Map(plan.seen.open);
   if (
     plan.opened.length ||
     plan.changed.length ||
     plan.noted.length ||
     plan.stretched.length ||
     plan.ended.length
-  )
-    await services.pipeline.commit(
+  ) {
+    const done = await services.pipeline.commit(
       incidentsPass,
       {
         opened: plan.opened.slice(0, 200).map(({ since: _since, startedAt, downSince, ...o }) => ({
@@ -183,6 +197,9 @@ export async function watchIncidents(
       },
       { burrowId, actorId: await signer() },
     );
+    // Opened on this pass, open after it: an edit that ends one before the next pass ends its run of looks too.
+    if (done.status === 'ok') for (const o of done.result.opened) stillOpen.set(o.id, o.thing);
+  }
   // The push's clock starts again after a hold over a thing, or after passes that couldn't read it.
   const pushClock = new Map(observed.heldUntil);
   for (const [thing, at] of plan.seen.unread ?? []) {
@@ -217,7 +234,7 @@ export async function watchIncidents(
       'incidents: watches of removed things could not be read',
     ),
   );
-  return { ...plan.seen, held: observed.held };
+  return { ...plan.seen, open: stillOpen, held: observed.held };
 }
 
 /**
@@ -299,7 +316,9 @@ export async function passMemory(
   if (seen) return seen;
   if (!before) return null;
   const rows = await openIncidents(services.db, burrowId).catch(() => null);
-  return rows && blindPass(before, new Map(rows.map((r) => [r.id, r.thingId] as const)), services.clock());
+  // Not even the open incidents could be read: the last known ones are still open, and as unread as the rest.
+  const open = rows ? new Map(rows.map((r) => [r.id, r.thingId] as const)) : (before.open ?? new Map());
+  return blindPass(before, open, services.clock());
 }
 
 /** The watcher's memory: what each burrow's pass before saw. */

@@ -236,6 +236,8 @@ export const incidentsPass = defineCommand({
   async apply(tx, ctx, input) {
     await requireSigner(tx, ctx.actor.id);
     let signed = 0;
+    // What this pass opened, so the watcher knows them as open before its next pass reads them.
+    const opened: { id: string; thing: string }[] = [];
     for (const o of input.opened) {
       const others = (o.problems ?? []).filter((p) => p.check !== o.check);
       const checks = others.reduce((list, p) => withCheck(list, p.check), withCheck([], o.check));
@@ -263,6 +265,7 @@ export const incidentsPass = defineCommand({
         .onConflictDoNothing()
         .returning();
       if (!row) continue;
+      opened.push({ id: row.id, thing: row.thingId });
       await sign(ctx, row.nature === 'down' ? THING_DOWN : THING_PROBLEM, row);
       signed++;
       // Something else took it down: it starts nothing, as its own event doesn't.
@@ -357,7 +360,7 @@ export const incidentsPass = defineCommand({
     if (moved) publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['things']);
     const services = ctx.services;
     if (signed) ctx.after(async () => services.automations.nudge());
-    return { signed };
+    return { signed, opened };
   },
 });
 
