@@ -5,7 +5,8 @@
  *
  * A server's window is also a maintenance window in the hosts service (scope server, from now until its end), so the
  * hub's own alerts of it are muted there too; it is made before the commit (and removed again when the commit fails)
- * and removed when the window ends early. Windows that ended by themselves give their maintenance window back on the
+ * and removed when the window ends early. One a window no longer names (it got a new one) is on the list to give back
+ * until the hub confirms it is gone. Windows that ended by themselves give their maintenance window back on the
  * minute's sweep (`window-work.ts`, with Whombat's own planned work). A connection, device or account is found through
  * the pages' part, loaded when asked: the servers' tools reach this file's neighbours without the pages' modules.
  */
@@ -35,8 +36,21 @@ import { outsidersTurn } from '../../runtime/person';
 import type { Services } from '../../services';
 import type { QuietThing } from './commands';
 import { thingQuiet } from './store';
-import { endQuiet, type KeepQuietUndo, keepQuiet } from './window-commands';
-import { makeMaintenance, newWindowId, removeMaintenance } from './window-work';
+import {
+  CHANGED_SINCE,
+  endQuiet,
+  type KeepQuietUndo,
+  keepQuiet,
+  type QuietWindowWas,
+  restoreQuiet,
+} from './window-commands';
+import {
+  dropMaintenance,
+  giveBackMaintenance,
+  makeMaintenance,
+  newWindowId,
+  removeMaintenance,
+} from './window-work';
 import { activeWindow, keptQuiet } from './windows';
 import { quietNames } from './wire';
 
@@ -124,6 +138,7 @@ export async function keepThingQuiet(
       ? await makeMaintenance(services, thing.ref, until, note, viewer.principal)
       : null;
   let replaced: string | null = null;
+  let changeId: string | null = null;
   try {
     const result = await services.pipeline.commit(
       keepQuiet,
@@ -140,13 +155,58 @@ export async function keepThingQuiet(
     );
     if (result.status !== 'ok') throw notAllowed('This can’t be kept quiet now.');
     replaced = result.result.replaced;
+    changeId = result.result.changeId;
   } catch (err) {
-    if (maintenanceId) await removeMaintenance(services, maintenanceId);
+    if (maintenanceId) await dropMaintenance(services, viewer.burrowId, maintenanceId);
     throw err;
   }
-  if (replaced) await removeMaintenance(services, replaced);
+  if (replaced) await giveBackMaintenance(services, viewer.burrowId, replaced);
   const w = await holdingWindow(services, thing.owner, thing.id);
-  return { keptQuiet: w ? await wireWindow(services, w, timeZone, true) : null };
+  return {
+    keptQuiet: w ? await wireWindow(services, w, timeZone, true) : null,
+    ...(changeId ? { changeId } : {}),
+  };
+}
+
+/**
+ * Undo of keeping quiet that changed the person's window: it gets its end, note and who back, a server a maintenance
+ * window until then (the one it replaces goes on the list to give back). `set` is the end the undone change set.
+ */
+async function restoreThingQuiet(
+  services: Services,
+  viewer: ConnectionViewer,
+  value: string,
+  input: { windowId: string; set: string; previous: QuietWindowWas },
+  timeZone: string,
+): Promise<void> {
+  const thing = await windowThing(services, viewer, value, timeZone);
+  const endsAt = new Date(input.previous.endsAt);
+  const maintenanceId =
+    thing.kind === 'server'
+      ? await makeMaintenance(services, thing.ref, endsAt, input.previous.note, viewer.principal)
+      : null;
+  let replaced: string | null = null;
+  try {
+    const result = await services.pipeline.commit(
+      restoreQuiet,
+      {
+        thing,
+        windowId: input.windowId,
+        set: input.set,
+        endsAt: input.previous.endsAt,
+        note: input.previous.note,
+        byId: input.previous.byId,
+        ...(maintenanceId ? { maintenanceId } : {}),
+      },
+      { burrowId: viewer.burrowId, actorId: viewer.principal.id },
+    );
+    if (result.status !== 'ok') throw notAllowed('This can’t be undone now.');
+    replaced = result.result.replaced;
+  } catch (err) {
+    if (maintenanceId) await dropMaintenance(services, viewer.burrowId, maintenanceId);
+    throw err;
+  }
+  if (replaced) await giveBackMaintenance(services, viewer.burrowId, replaced);
 }
 
 /**
@@ -158,7 +218,7 @@ export async function endThingQuiet(
   viewer: ConnectionViewer,
   value: string,
   timeZone: string,
-  opts: { agentId?: string; windowId?: string } = {},
+  opts: { agentId?: string; windowId?: string; set?: string } = {},
 ): Promise<KeepQuietResponse> {
   if (viewer.principal.kind !== 'person') throw notAllowed('Only you can end this.');
   const thing = await windowThing(services, viewer, value, timeZone);
@@ -167,7 +227,7 @@ export async function endThingQuiet(
     endQuiet,
     {
       thing,
-      ...(opts.windowId ? { windowId: opts.windowId } : {}),
+      ...(opts.windowId ? { windowId: opts.windowId, ...(opts.set ? { set: opts.set } : {}) } : {}),
       ...(opts.agentId ? { agentId: opts.agentId } : {}),
     },
     { burrowId: viewer.burrowId, actorId: viewer.principal.id },
@@ -207,6 +267,11 @@ function isKeepQuietUndo(value: unknown): value is KeepQuietUndo {
   return !!v && typeof v.thing === 'string' && typeof v.windowId === 'string';
 }
 
+function isWindowWas(value: unknown): value is QuietWindowWas {
+  const v = value as QuietWindowWas | null;
+  return !!v && typeof v.endsAt === 'string' && Number.isFinite(Date.parse(v.endsAt));
+}
+
 function viewerOf(person: PrincipalRow): ConnectionViewer {
   return { accountId: person.accountId ?? '', burrowId: person.burrowId, principal: person };
 }
@@ -219,21 +284,36 @@ async function timeZoneOf(services: Services, burrowId: string): Promise<string>
   return row?.timeZone ?? 'UTC';
 }
 
-/** Undo of keeping a thing quiet: it ends now, as the person who pressed Undo. */
+/**
+ * Undo of keeping a thing quiet, as the person who pressed Undo: the person's window gets its earlier end and note back
+ * when this change changed one (ending now when that end has passed), else the window it made ends. Only that window:
+ * Whombat's for its own work stays. A window changed again since is left as it is.
+ */
 export async function undoKeepQuiet(ctx: DirectUndoCtx, change: RecordedChange): Promise<DirectUndoResult> {
   const undo = change.undo.payload;
   if (!isKeepQuietUndo(undo)) return { ok: false, reason: 'This can’t be undone any more.' };
   const person = await loadPrincipalRow(ctx.services.db, ctx.person.id);
   if (person?.kind !== 'person') return { ok: false, reason: 'Only you can end this.' };
+  const viewer = viewerOf(person);
+  const timeZone = await timeZoneOf(ctx.services, ctx.burrowId);
+  const previous = isWindowWas(undo.previous) ? undo.previous : null;
   try {
-    await endThingQuiet(
-      ctx.services,
-      viewerOf(person),
-      undo.thing,
-      await timeZoneOf(ctx.services, ctx.burrowId),
-      { windowId: undo.windowId },
-    );
+    if (previous && undo.endsAt && Date.parse(previous.endsAt) > ctx.services.clock().getTime())
+      await restoreThingQuiet(
+        ctx.services,
+        viewer,
+        undo.thing,
+        { windowId: undo.windowId, set: undo.endsAt, previous },
+        timeZone,
+      );
+    else
+      await endThingQuiet(ctx.services, viewer, undo.thing, timeZone, {
+        windowId: undo.windowId,
+        ...(undo.endsAt ? { set: undo.endsAt } : {}),
+      });
   } catch (err) {
+    if (err instanceof ApiError && err.code === 'conflict' && err.message === CHANGED_SINCE)
+      return { ok: false, reason: CHANGED_SINCE };
     if (err instanceof ApiError && (err.code === 'not_found' || err.code === 'not_allowed'))
       return { ok: false, reason: 'It isn’t kept quiet any more.' };
     throw err;

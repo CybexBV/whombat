@@ -204,6 +204,13 @@
       "when": 1795566870959,
       "tag": "0028_account_uptime",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795567956425,
+      "tag": "0029_quiet_maintenance_left",
+      "breakpoints": true
     }
   ]
 }

@@ -1554,12 +1554,15 @@ Setup and operation: `docs/github.md`.
 - **Keep quiet for a while** (`things/quiet/windows.ts`, `window-service.ts`, `window-commands.ts`,
   `window-work.ts`): a server, connection or device is kept quiet until a time with an optional note
   (`things.keepQuiet`, End now `things.endQuiet`, the assistant's `quiet_until` only on the person's word), a signed
-  change of the person's whose Undo ends it (`quiet_windows`). While a window holds, `applyQuiet` keeps every line of the
+  change of the person's (`quiet_windows`). Keeping quiet again changes the person's own window, never Whombat's; the
+  answer carries the change, and its Undo (`changes.undo`) puts the person's earlier window back, or ends the one it
+  made, unless the window changed again since. While a window holds, `applyQuiet` keeps every line of the
   thing quiet with it, so pages, dots, the desk's looks and the Inbox follow, and the health pass forgets the lines'
   counts: what is still wrong when it ends counts again from the start. The page carries `keptQuiet` and a heads-up
   first line (“Quiet until 23:00 · Moving the NAS”); Home's thing carries `quietUntil` (servers and devices too). A
   server's window is also a maintenance window in the hosts service, made before the commit and given back when it ends
-  (End now, or the minute's sweep); whether or not the hub muted them, the server's open alerts are held with the window
+  (End now, or the minute's sweep); one a window no longer names (it got a new one) stays in `quiet_maintenance_left`,
+  written with the change, until the hub confirms it is gone; whether or not the hub muted them, the server's open alerts are held with the window
   (`NoticeQuiet.held`, no longer asking for attention, out of the Inbox), and Undo on one ends the window. Whombat's own
   restarts (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends)
   keep the server or machine quiet the same way, in a window of their own beside the person's, noted “Whombat is
@@ -1574,14 +1577,15 @@ Setup and operation: `docs/github.md`.
   with the thing's quiet rows: its lines are
   quiet with the cause's words, its dot is grey and its page and Home's thing say “Not answering while pve-02 is down”
   (`causedBy`), and the cause's Inbox item and desk look name what it takes with it (“Plex and 4 more are down with
-  it”). Servers held by a parent stay grouped by the hosts service.
+  it”), counting only causes the job confirmed lately, as the things themselves do. Servers held by a parent stay grouped by the hosts service.
 - **Whombat's own way out** (`managed/way-out.ts`): every minute the server process checks its router (the default
   gateway from its own `/proc/self/net/route`, which the unit's `ProcSubset=pid` keeps; a TCP connect where a refusal
   counts) and the internet (TCP connects to Whombat's own service and an anycast address, by their last address) at the
   same time, and name lookups (the system resolver, always with one fixed name). The internet is down when nothing
   outside answers, the router's fault only when a known gateway doesn't answer either; without a gateway the router
   isn't judged. A step failing for two minutes is an outage (`way_out_outages`, included in all-things `watch_history`) and one Inbox item
-  that starts on (“The internet is down since 14:02”), listing the connections down with it. A development box and
+  that starts on (“The internet is down since 14:02”), listing the connections down with it. It ends at the first pass
+  where its own step works: every step working, or a later step failing instead, which confirms on its own. A development box and
   tests never probe unless `WHOMBAT_WAY_OUT=on`.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
   addresses only, the resolved address pinned, no redirects, a size cap); link previews and the Vault add their own

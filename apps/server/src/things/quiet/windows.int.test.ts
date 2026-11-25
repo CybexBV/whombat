@@ -30,7 +30,7 @@ import { insertConnection } from '../../test/connections';
 import { useTestServer } from '../../test/harness';
 import { sessionFor } from '../../test/tokens';
 import { useVaultNetForTests } from '../../vault/net';
-import { passCauses } from '../causes';
+import { passCauses, takenNames } from '../causes';
 import { forgetKindReads } from '../kinds/read';
 import { KEEP_QUIET_CHANGE_KIND } from './window-commands';
 import { QUIET_ASK_FIRST_TEXT, quietUntilTool } from './window-service';
@@ -211,6 +211,30 @@ describe('Keep quiet for a while', () => {
     expect((await page()).keptQuiet).toBeUndefined();
   });
 
+  it('Home says until when also while the connection needs signing in again', async () => {
+    const [was] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, apiId));
+    await t.services.db
+      .update(catalogConnections)
+      .set({ status: 'needs_reauth' })
+      .where(eq(catalogConnections.id, apiId));
+    try {
+      const res = await call(person, 'POST', path('/keep-quiet'), { minutes: 60 });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const kept = api.things.keepQuiet.response.parse(res.body).keptQuiet;
+      const mine = await myThing();
+      expect(mine?.line).toBe('Needs you to sign in again');
+      expect(mine?.quietUntil).toBe(kept?.until);
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ status: was?.status ?? 'active' })
+        .where(eq(catalogConnections.id, apiId));
+    }
+  });
+
   it('the assistant keeps it quiet only on the person’s word', async () => {
     const toolCtx = (asked: string | undefined): ToolContext => ({
       services: t.services,
@@ -273,6 +297,13 @@ describe('One cause, one message', () => {
     const outage = items.find((i) => i.ref.kind === 'way_out');
     expect(outage?.title).toContain('The internet is down since');
     expect(outage?.body).toContain('Grafana');
+
+    // A cause the job hasn't confirmed lately counts for nothing, also in what the outage takes with it.
+    const now = t.services.clock();
+    expect(await takenNames(t.services.db, t.burrowId, 'box:network', now)).toEqual(['Grafana']);
+    expect(
+      await takenNames(t.services.db, t.burrowId, 'box:network', new Date(now.getTime() + 10 * 60_000)),
+    ).toEqual([]);
 
     // Once the internet is back the cause goes, and the connection counts again on its own.
     await t.services.db.update(wayOutOutages).set({ endedAt: t.services.clock() });

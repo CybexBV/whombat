@@ -2,16 +2,18 @@
  * Keeping servers quiet and one cause, against the hosts service's stand-in rather than fixtures. It needs Postgres because the windows, the causes job, Home's reads and the commit pipeline
  * meet only there. A server kept quiet: Home's thing says until when, its open alerts are held with the window whether
  * or not the hub muted them (and whether or not it made the maintenance window), they leave the Inbox, and Undo on one
- * ends the window. End now ends Whombat's own window for its work beside the person's; the work's end and windows that
- * run out are told to Home. A “Website or address” check down while the internet is down stays down because of it, and
+ * ends the window. End now ends Whombat's own window for its work beside the person's, while keeping quiet and its Undo
+ * touch only the person's; a maintenance window the hub didn't remove when it was replaced is given back by the sweep.
+ * The work's end and windows that run out are told to Home. A “Website or address” check down while the internet is down stays down because of it, and
  * a fleet that can't be read leaves kept causes alone.
  */
 import { api, thingId, topics } from '@whombat/core';
-import { eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   catalogConnections,
   principals,
+  quietMaintenanceLeft,
   quietWindows,
   thingCauses,
   wayOutOutages,
@@ -40,6 +42,7 @@ const t = useTestServer({
 
 let person = '';
 let refuseMaintenance = false;
+let refuseRemoval = false;
 let fleetDown = false;
 
 beforeAll(async () => {
@@ -54,6 +57,9 @@ beforeAll(async () => {
   fake.on('POST', '/api/v1/maintenance', () =>
     refuseMaintenance ? problem(500, 'internal', 'maintenance refused') : null,
   );
+  fake.on('DELETE', '/api/v1/maintenance/*', () =>
+    refuseRemoval ? problem(500, 'internal', 'removal failed') : null,
+  );
   fake.on('GET', '/api/v1/fleet', () => (fleetDown ? problem(500, 'internal', 'fleet failed') : null));
 });
 
@@ -63,10 +69,12 @@ afterAll(async () => {
 
 beforeEach(async () => {
   refuseMaintenance = false;
+  refuseRemoval = false;
   fleetDown = false;
   fake.maintenance.splice(0);
   for (const a of fake.alerts) Object.assign(a, { muted: false, attention: true, acknowledged: null });
   await t.services.db.delete(quietWindows);
+  await t.services.db.delete(quietMaintenanceLeft);
   await t.services.db.delete(thingCauses);
   await t.services.db.delete(wayOutOutages);
   hostsFor(t.services).forget();
@@ -91,12 +99,38 @@ async function viewer() {
   return { principal, burrow };
 }
 
-async function keepQuiet(serverId: string, minutes = 60) {
+async function keepQuietAnswer(serverId: string, minutes = 60) {
   const res = await call('POST', thingPath(thingId('server', serverId), '/keep-quiet'), { minutes });
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   hostsFor(t.services).forget();
-  return api.things.keepQuiet.response.parse(res.body).keptQuiet;
+  return api.things.keepQuiet.response.parse(res.body);
 }
+
+async function keepQuiet(serverId: string, minutes = 60) {
+  return (await keepQuietAnswer(serverId, minutes)).keptQuiet;
+}
+
+/** The person's own window of a server (not Whombat's for its work), while it is open. */
+async function personsWindow(serverId: string) {
+  const rows = await t.services.db
+    .select()
+    .from(quietWindows)
+    .where(
+      and(
+        eq(quietWindows.thingId, thingId('server', serverId)),
+        isNull(quietWindows.work),
+        isNull(quietWindows.endedAt),
+      ),
+    );
+  expect(rows.length).toBeLessThanOrEqual(1);
+  return rows[0];
+}
+
+async function workWindow(work: string) {
+  return (await t.services.db.select().from(quietWindows).where(eq(quietWindows.work, work)))[0];
+}
+
+const endsOf = () => fake.maintenance.map((m) => Date.parse(String(m.ends_at))).sort();
 
 async function serverPage(serverId: string) {
   hostsFor(t.services).forget();
@@ -221,6 +255,87 @@ describe('End now and Whombat’s own work', () => {
       { windowId: kept?.id as string },
     );
     expect(answer.keptQuiet).toMatchObject({ whombat: true });
+  });
+
+  it('keeping quiet again changes the person’s own window, never Whombat’s, and Undo puts the earlier one back', async () => {
+    const first = await keepQuiet('basalt', 30);
+    // Whombat's window for its work ends after the person's: keeping quiet again must still find the person's.
+    await keepQuietForWork(t.services, {
+      burrowId: t.burrowId,
+      serverId: 'basalt',
+      work: 'update:basalt/task-4',
+      expectedMs: 60 * 60_000,
+    });
+    const work = await workWindow('update:basalt/task-4');
+    const again = await keepQuietAnswer('basalt', 90);
+    expect(again.changeId).toBeTruthy();
+    expect(await workWindow('update:basalt/task-4')).toEqual(work);
+    const mine = await personsWindow('basalt');
+    expect(mine?.id).toBe(first?.id);
+    expect(mine?.endsAt.getTime()).toBe(Date.parse(again.keptQuiet?.until ?? ''));
+    // The person's new maintenance window and Whombat's; the person's old one went back.
+    expect(endsOf()).toEqual([work?.endsAt.getTime(), mine?.endsAt.getTime()].sort());
+
+    // The work's end still finds Whombat's window.
+    const at = t.services.clock();
+    await workEnded(t.services, 'update:basalt/task-4', at);
+    expect((await workWindow('update:basalt/task-4'))?.endsAt.getTime()).toBe(at.getTime() + 15 * 60_000);
+
+    // The toast's Undo takes back that change only: the person's window ends when it did before, Whombat's stays.
+    const undo = await call('POST', `/changes/${again.changeId}/undo`);
+    expect(undo.status, JSON.stringify(undo.body)).toBe(200);
+    const back = await personsWindow('basalt');
+    expect(back?.endsAt.getTime()).toBe(Date.parse(first?.until ?? ''));
+    expect((await workWindow('update:basalt/task-4'))?.endedAt).toBeNull();
+    expect(endsOf()).toContain(Date.parse(first?.until ?? ''));
+    expect(fake.maintenance).toHaveLength(2);
+    // Taken back once: the same Undo again changes nothing more.
+    expect((await call('POST', `/changes/${again.changeId}/undo`)).status).not.toBe(200);
+  });
+
+  it('Undo of the keeping quiet that made the window ends it alone; one changed again since stays', async () => {
+    const made = await keepQuietAnswer('basalt', 30);
+    await keepQuietForWork(t.services, {
+      burrowId: t.burrowId,
+      serverId: 'basalt',
+      work: 'update:basalt/task-5',
+      expectedMs: 60 * 60_000,
+    });
+    const later = await keepQuietAnswer('basalt', 60);
+    // The earlier change can't be taken back over the later one.
+    const refused = await call('POST', `/changes/${made.changeId}/undo`);
+    expect(refused.status).not.toBe(200);
+    expect(await personsWindow('basalt')).toBeTruthy();
+    // Undo the later, then the earlier: the person's window ends, Whombat's for its work holds on.
+    expect((await call('POST', `/changes/${later.changeId}/undo`)).status).toBe(200);
+    expect((await call('POST', `/changes/${made.changeId}/undo`)).status).toBe(200);
+    expect(await personsWindow('basalt')).toBeUndefined();
+    expect((await workWindow('update:basalt/task-5'))?.endedAt).toBeNull();
+    expect((await serverPage('basalt')).keptQuiet).toMatchObject({ whombat: true });
+  });
+
+  it('a replaced maintenance window the hub didn’t remove is given back by the sweep', async () => {
+    await keepQuiet('marble', 30);
+    const old = (await personsWindow('marble'))?.maintenanceId;
+    refuseRemoval = true;
+    await keepQuiet('marble', 90);
+    // The window names its new maintenance window; the old one is still on the hub and on the list to give back.
+    const now = (await personsWindow('marble'))?.maintenanceId;
+    expect(now).not.toBe(old);
+    expect(fake.maintenance.map((m) => m.id)).toEqual(expect.arrayContaining([old, now]));
+    expect(await t.services.db.select().from(quietMaintenanceLeft)).toMatchObject([{ maintenanceId: old }]);
+
+    // The hub still refuses: it stays on the list.
+    await sweepQuietWindows(t.services);
+    expect(await t.services.db.select().from(quietMaintenanceLeft)).toHaveLength(1);
+    refuseRemoval = false;
+    await sweepQuietWindows(t.services);
+    expect(await t.services.db.select().from(quietMaintenanceLeft)).toEqual([]);
+    expect(fake.maintenance.map((m) => m.id)).toEqual([now]);
+
+    // End now gives back the one that holds, so the server isn't muted past it.
+    expect((await call('POST', thingPath('server:marble', '/keep-quiet/end'), {})).status).toBe(200);
+    expect(fake.maintenance).toEqual([]);
   });
 
   it('tells Home when the work ends and when a window runs out', async () => {

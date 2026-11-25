@@ -206,6 +206,15 @@ export interface WayOutChange {
   close: boolean;
 }
 
+/** The order the way out is tried in: a step failing later than another means that one works. */
+const STEP_ORDER: Record<WayOutStep, number> = { router: 0, internet: 1, names: 2 };
+
+/**
+ * What a pass changes. An outage opens after its step failed for two minutes and ends at the first pass with every step
+ * working, or at once when a later step fails instead (the internet back while name lookups still fail: the internet
+ * works, so it isn't down any more); that later step confirms on its own. A step before it failing (the router while
+ * the internet is down) leaves it open until that step confirms and replaces it: the way out is still broken there.
+ */
 export function nextWayOut(
   memory: WayOutMemory,
   seen: WayOutStep | null,
@@ -215,8 +224,9 @@ export function nextWayOut(
   if (!seen) return { memory: { failing: null }, open: null, close: current !== null };
   const since = memory.failing?.step === seen ? memory.failing.since : now;
   const next = { failing: { step: seen, since } };
-  if (current?.step === seen || now.getTime() - since.getTime() < WAY_OUT_CONFIRM_MS)
-    return { memory: next, open: null, close: false };
+  if (current?.step === seen) return { memory: next, open: null, close: false };
+  const works = current !== null && STEP_ORDER[seen] > STEP_ORDER[current.step];
+  if (now.getTime() - since.getTime() < WAY_OUT_CONFIRM_MS) return { memory: next, open: null, close: works };
   return { memory: next, open: { step: seen, startedAt: since }, close: current !== null };
 }
 
@@ -381,8 +391,8 @@ export function wayOutItem(
   };
 }
 
-/** What the outage takes with it in a burrow: the names of the things down because of it (the causes job's rows). */
-export type TakenBy = (db: Db | Tx, burrowId: string, cause: string) => Promise<string[]>;
+/** What the outage takes with it in a burrow at `now`: the names of the things down because of it (the causes job's rows). */
+export type TakenBy = (db: Db | Tx, burrowId: string, cause: string, now: Date) => Promise<string[]>;
 
 let takenBy: TakenBy = async () => [];
 
@@ -407,7 +417,7 @@ export async function wayOutNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
       .from(burrows)
       .where(and(eq(burrows.id, ctx.burrowId)))
       .then((r) => r[0]?.timeZone ?? 'UTC'),
-    takenBy(ctx.db, ctx.burrowId, WAY_OUT_THING).catch(() => [] as string[]),
+    takenBy(ctx.db, ctx.burrowId, WAY_OUT_THING, ctx.now).catch(() => [] as string[]),
   ]);
   return [wayOutItem(row, { timeZone: zone, takes })];
 }

@@ -34,7 +34,7 @@ import {
 import type { Services } from '../services';
 import { displayName } from './part-of';
 import { sweepQuietWindows } from './quiet/window-work';
-import { takenWords, windowHolds } from './quiet/windows';
+import { liveCause, takenWords, windowHolds } from './quiet/windows';
 import { connectionHostname, guestLabel, hostsServing } from './runs-on';
 
 /** How often the causes are found again. */
@@ -341,13 +341,14 @@ export async function keepCauses(
 /* What a cause takes with it -------------------------------------------------------------------------------------- */
 
 /**
- * The names of the things that don't answer because of `cause` in a burrow (`server:pve-02` also takes those on its
- * machines),
- * people's names for them, by name.
+ * The names of the things that don't answer because of `cause` in a burrow at `now` (`server:pve-02` also takes those
+ * on its machines), people's names for them, by name. A cause nobody confirmed lately counts no more here than on the
+ * thing itself.
  */
-export async function takenNames(db: Db | Tx, burrowId: string, cause: string): Promise<string[]> {
+export async function takenNames(db: Db | Tx, burrowId: string, cause: string, now: Date): Promise<string[]> {
   const rows = await db.select().from(thingCauses).where(eq(thingCauses.ownerId, burrowId));
   const ids = rows
+    .filter((r) => liveCause(r, now))
     // Only what doesn't answer because of it is down with it; what is quiet with it isn't.
     .filter((r) => r.kind === 'down')
     .filter((r) => r.causeThing === cause || r.causeThing.startsWith(`${cause}/guest/`))
@@ -376,6 +377,7 @@ export async function addTaken(
   burrowId: string,
   items: NeedsYouItem[],
   alerts: readonly Pick<HostAlert, 'id' | 'rule' | 'serverId'>[],
+  now: Date,
 ): Promise<void> {
   const down = new Map(
     alerts.flatMap((a) =>
@@ -386,7 +388,7 @@ export async function addTaken(
   for (const item of items) {
     const server = down.get(item.id);
     if (!server) continue;
-    const words = takenWords(await takenNames(db, burrowId, thingId('server', server)).catch(() => []));
+    const words = takenWords(await takenNames(db, burrowId, thingId('server', server), now).catch(() => []));
     if (words) item.body = `${item.body.replace(/[.\s]*$/, '')}. ${words}.`.replace(/^\. /, '').slice(0, 600);
   }
 }

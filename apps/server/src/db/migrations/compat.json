@@ -183,6 +183,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "A new table keeps uptime samples for connected accounts and the burrow's GitHub connection."
+    },
+    "0029_quiet_maintenance_left": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Maintenance windows still to give back to the hosts service after a quiet window got a new one (docs/decisions/monitoring.md): one new table, quiet_maintenance_left. The release before it never reads or writes it."
     }
   }
 }

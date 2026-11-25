@@ -63,9 +63,20 @@ function setup(respond: (url: string, body: Record<string, unknown>) => Response
 }
 
 describe('useKeepQuiet', () => {
-  it('keeps a thing quiet: the page carries it at once, the toast says until when with Undo that ends it', async () => {
+  it('keeps a thing quiet: the page carries it at once, the toast says until when with Undo of that change', async () => {
     const { sent, wrapper, queryClient, pageKey } = setup((url) =>
-      json({ keptQuiet: url.endsWith('/end') ? null : kept }),
+      url.endsWith('/undo')
+        ? json({
+            state: 'undone',
+            change: {
+              id: 'chg_quiet_1',
+              title: 'Kept UniFi quiet until 23:00',
+              at: kept.since,
+              actor: { kind: 'person', id: 'prn_mara', name: 'Mara' },
+              undo: { state: 'undone' },
+            },
+          })
+        : json({ keptQuiet: kept, changeId: 'chg_quiet_1' }),
     );
     const notes: { message: string; undo?: () => void; failed?: boolean }[] = [];
     const { result } = renderHook(
@@ -86,9 +97,32 @@ describe('useKeepQuiet', () => {
     expect(sent[0]?.body).toEqual({ until: kept.until, note: 'Moving the NAS' });
     expect(queryClient.getQueryData<ThingPage>(pageKey)?.keptQuiet?.id).toBe('qw_1');
     expect(notes[0]?.message).toMatch(/^Quiet until /);
+    // Undo takes back this change only (changes.undo), never End now of every window holding the thing.
     act(() => notes[0]?.undo?.());
-    await waitFor(() => expect(notes.at(-1)?.message).toContain('UniFi'));
-    expect(sent.at(-1)?.url).toContain('/keep-quiet/end');
+    await waitFor(() => expect(notes).toHaveLength(2));
+    expect(sent.at(-1)?.url).toContain('/changes/chg_quiet_1/undo');
+    expect(sent.some((s) => s.url.endsWith('/keep-quiet/end'))).toBe(false);
+    expect(notes[1]?.failed).toBeUndefined();
+  });
+
+  it('End now ends it: the page drops it and the toast names the thing', async () => {
+    const { sent, wrapper, queryClient, pageKey } = setup(() => json({ keptQuiet: null }));
+    queryClient.setQueryData(pageKey, { id: THING, tabs: [], keptQuiet: kept } as unknown as ThingPage);
+    const notes: { message: string }[] = [];
+    const { result } = renderHook(
+      () =>
+        useKeepQuiet(BURROW, THING, {
+          name: 'UniFi',
+          timeZone: TZ,
+          note: (message) => notes.push({ message }),
+        }),
+      { wrapper },
+    );
+    await act(async () => {
+      await result.current.end();
+    });
+    expect(sent[0]?.url).toContain('/keep-quiet/end');
+    expect(notes[0]?.message).toContain('UniFi');
     expect(queryClient.getQueryData<ThingPage>(pageKey)?.keptQuiet).toBeUndefined();
   });
 
