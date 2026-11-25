@@ -97,8 +97,11 @@ type Server struct {
 	Host HostMetrics
 	// Hardware answers POST /v1/host/hardware (CT-560, MG-113); nil: 404 unavailable.
 	Hardware Hardware
-	// CheckNow polls control now and returns its answer (POST /v1/update/check, MG-67); nil: 404 unavailable.
+	// CheckNow looks for a newer release now and returns what it found (POST /v1/update/check, MG-67); nil: 404
+	// unavailable.
 	CheckNow func(ctx context.Context) (*CheckResult, error)
+	// checks: the last check's answer, reused for a while, and one check at a time (check.go).
+	checks checkMemo
 	// WakeEngine has the update engine step now (the owner's switch or approval, ask.go); nil: it steps at its own pace.
 	WakeEngine func()
 	// AdminUIDs may ask for that poll: root and the manager's own user (`whombat-manager check`).
@@ -173,7 +176,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+local.ManagerPathUpdateApprove, s.onlyN(rt, askBodyMax, s.updateApprove))
 	mux.HandleFunc("POST "+local.ManagerPathUpdateChannel, s.onlyN(rt, channelBodyMax, s.updateChannel))       // channel.go
 	mux.HandleFunc("POST "+local.ManagerPathUpdateChannelSet, s.onlyN(rt, channelBodyMax, s.updateChannelSet)) // channel.go
-	mux.HandleFunc("POST "+PathCheck, s.only(s.AdminUIDs, s.check))
+	// The owner's “Check for updates” through the runtime, and `whombat-manager check` (MG-67, MG-194).
+	mux.HandleFunc("POST "+PathCheck, s.onlyN(append(append([]uint32{}, rt...), s.AdminUIDs...), 1024, s.check))
 	mux.HandleFunc("POST /v1/maintenance/lock", s.only(lock, s.lock))
 	mux.HandleFunc("POST /v1/maintenance/unlock", s.only(lock, s.unlock))
 	mux.HandleFunc("POST /v1/network/candidates", s.only(rt, s.netSubmit))

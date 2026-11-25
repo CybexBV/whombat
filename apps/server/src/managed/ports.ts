@@ -56,6 +56,7 @@ import type {
   UpdateAskResponse,
   UpdateChannelResponse,
   UpdateChannelSetRequest,
+  UpdateCheckResponse,
   WifiChangeResponse,
   WifiForgetRequest,
   WifiJoinRequest,
@@ -230,6 +231,12 @@ export interface ManagerPort extends TailscalePort {
   updateApprove?(
     request: z.input<typeof UpdateApproveRequest>,
   ): Promise<z.output<typeof UpdateApproveResponse>>;
+  /**
+   * The owner's “Check for updates” (check-for-updates.md): the manager looks for a newer release now and offers one it
+   * finds. 503 `unavailable` / 502 `control_refused` when the release list or control can't be read; 404 from a manager
+   * before contracts 4.19.
+   */
+  updateCheck?(): Promise<z.output<typeof UpdateCheckResponse>>;
   /**
    * Whombat Link (contracts 4.4; docs/decisions/whombat-link.md): the state the manager last heard from control, the
    * owner turning it on (the runtime signs its part of the box's registration, `contentProof`) or off. 404

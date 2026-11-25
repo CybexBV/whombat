@@ -348,6 +348,17 @@ type UpdateApproveResponse struct {
 	Release string `json:"release"`
 }
 
+type UpdateCheckRequest struct {
+	V int64 `json:"v"` // always 1
+}
+
+type UpdateCheckResponse struct {
+	V          int64   `json:"v"` // always 1
+	Result     string  `json:"result"`
+	Decision   *string `json:"decision,omitempty"`
+	NextCheckS int64   `json:"nextCheckS"`
+}
+
 type MaintenanceLockRequest struct {
 	Holder string `json:"holder"`
 	Reason string `json:"reason"`
@@ -2750,6 +2761,36 @@ func (v *UpdateApproveResponse) Validate() error {
 }
 
 var _ = register("UpdateApproveResponse", func(data []byte) (any, error) { return ParseUpdateApproveResponse(data) })
+
+// ParseUpdateCheckRequest validates data against the UpdateCheckRequest JSON Schema and decodes it.
+func ParseUpdateCheckRequest(data []byte) (*UpdateCheckRequest, error) {
+	v := new(UpdateCheckRequest)
+	if err := schemas.Decode("UpdateCheckRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the UpdateCheckRequest JSON Schema (as it would be sent).
+func (v *UpdateCheckRequest) Validate() error { return schemas.ValidateValue("UpdateCheckRequest", v) }
+
+var _ = register("UpdateCheckRequest", func(data []byte) (any, error) { return ParseUpdateCheckRequest(data) })
+
+// ParseUpdateCheckResponse validates data against the UpdateCheckResponse JSON Schema and decodes it.
+func ParseUpdateCheckResponse(data []byte) (*UpdateCheckResponse, error) {
+	v := new(UpdateCheckResponse)
+	if err := schemas.Decode("UpdateCheckResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the UpdateCheckResponse JSON Schema (as it would be sent).
+func (v *UpdateCheckResponse) Validate() error {
+	return schemas.ValidateValue("UpdateCheckResponse", v)
+}
+
+var _ = register("UpdateCheckResponse", func(data []byte) (any, error) { return ParseUpdateCheckResponse(data) })
 
 // ParseMaintenanceLockRequest validates data against the MaintenanceLockRequest JSON Schema and decodes it.
 func ParseMaintenanceLockRequest(data []byte) (*MaintenanceLockRequest, error) {

@@ -801,6 +801,20 @@ export type ApplianceUpdateInstallInput = z.infer<typeof ApplianceUpdateInstallI
 export const ApplianceUpdateInstallOutput = z.object({ release: ReleaseId });
 export type ApplianceUpdateInstallOutput = z.infer<typeof ApplianceUpdateInstallOutput>;
 
+/**
+ * `appliance.update.check` (minor 13; Whombat check-for-updates.md): the owner's “Check for updates”. The box looks for
+ * a newer release now instead of at its next hourly look, and takes one it finds as any update (it still waits for the
+ * owner where “Ask before updating” is on). `outcome`: `found` (a newer version is on its way), `upToDate` (nothing
+ * newer, and no update under way), `nothingNewer` (nothing newer than the update already under way), `refused` (the box
+ * found a version it won't take). `not_implemented` from a box whose manager can't check on demand; `unavailable` when
+ * the release list or control can't be reached.
+ */
+export const ApplianceUpdateCheckInput = z.strictObject({});
+export type ApplianceUpdateCheckInput = z.infer<typeof ApplianceUpdateCheckInput>;
+export const APPLIANCE_UPDATE_CHECK_OUTCOMES = ['found', 'upToDate', 'nothingNewer', 'refused'] as const;
+export const ApplianceUpdateCheckOutput = z.object({ outcome: z.enum(APPLIANCE_UPDATE_CHECK_OUTCOMES) });
+export type ApplianceUpdateCheckOutput = z.infer<typeof ApplianceUpdateCheckOutput>;
+
 /** Payload of `update.ask_set` (4.2): who turned “Ask before updating” on or off, and to what. */
 export const UpdateAskAuditPayload = z.object({ byAccountId: AccountId, askFirst: z.boolean() });
 export type UpdateAskAuditPayload = z.infer<typeof UpdateAskAuditPayload>;

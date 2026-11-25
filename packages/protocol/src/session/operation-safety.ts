@@ -733,6 +733,8 @@ const TABLE = {
   // the switch can be turned back, and an approved update installs as any update does.
   'appliance.update.ask': NEVER,
   'appliance.update.install': NEVER,
+  // A check may start an update outside any receipt: a person presses again rather than a client by itself.
+  'appliance.update.check': NEVER,
   'host.metrics': READ,
   // The box's hardware and network (0.102, CT-570). A join and a forget act on the box outside any receipt (the manager
   // changes iwd's networks), so they are never resent by a client on its own; the join is secret. Neither is

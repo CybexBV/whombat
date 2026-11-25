@@ -30,6 +30,8 @@
  *   POST /v1/tailscale/peers       {v}                      → {v, peers} (3.11, CT-1635; tailnet-reach.md TN-06)
  *   POST /v1/update/ask            {v, askFirst}            → {v, askFirst} (4.2; ask-before-updating.md)
  *   POST /v1/update/approve        {v, release}             → {v, release}  (409 not_waiting)
+ *   POST /v1/update/check          {v}                      → {v, result, decision?, nextCheckS} (4.19;
+ *                                                              check-for-updates.md; 404 from an older manager)
  *   POST /v1/own-address/state|register|cert|ct|check|rename {v, label?, host?}
  *                                                            → state, the pair, the CT watch, a name's verdict (4.3,
  *                                                              4.16; own-address.md; 404 own_address.off or an older
@@ -141,6 +143,8 @@ import {
   UpdateChannelRequest,
   UpdateChannelResponse,
   UpdateChannelSetRequest,
+  UpdateCheckRequest,
+  UpdateCheckResponse,
   WifiChangeResponse,
   WifiForgetRequest,
   WifiJoinRequest,
@@ -174,6 +178,8 @@ export const HOST_WIFI_TIMEOUT_MS = 15_000;
 const HOST_ANSWER_MAX_BYTES = 256 * 1024;
 /** The envelopes go on to control: the manager answers once control did. */
 const KIT_ENVELOPES_TIMEOUT_MS = 30_000;
+/** The owner's “Check for updates”: the manager reads the release list or asks control and gives up after 60 s. */
+const UPDATE_CHECK_TIMEOUT_MS = 65_000;
 /** A shared link's copy goes on to control (up to 11 MiB): the manager answers once control kept it. */
 const SHARE_TIMEOUT_MS = 60_000;
 /**
@@ -606,6 +612,17 @@ export class ManagerSocketClient implements ManagerPort {
   async updateApprove(body: z.input<typeof UpdateApproveRequest>) {
     return UpdateApproveResponse.parse(
       await this.call(MANAGER_PATHS.updateApprove, UpdateApproveRequest.parse(body)),
+    );
+  }
+
+  /** The owner's “Check for updates” (check-for-updates.md): the manager looks for a newer release now. */
+  async updateCheck() {
+    return UpdateCheckResponse.parse(
+      await this.call(
+        MANAGER_PATHS.updateCheck,
+        UpdateCheckRequest.parse({ v: LOCAL_API_VERSION }),
+        UPDATE_CHECK_TIMEOUT_MS,
+      ),
     );
   }
 

@@ -12,6 +12,7 @@ const (
 	ManagerPathUpdateStatus       = "/v1/update/status"
 	ManagerPathUpdateAsk          = "/v1/update/ask"
 	ManagerPathUpdateApprove      = "/v1/update/approve"
+	ManagerPathUpdateCheck        = "/v1/update/check"
 	ManagerPathLock               = "/v1/maintenance/lock"
 	ManagerPathUnlock             = "/v1/maintenance/unlock"
 	ManagerPathNetworkCandidates  = "/v1/network/candidates"

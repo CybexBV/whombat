@@ -2993,3 +2993,18 @@ with the management key; control's answer checked against the contract and answe
   request (`TeamRefuse`, in `details.code`; `TeamRefuseAs` the error's own code, `refused` by default).
 - Tests: broker `TestTeamReportsForwarded`, `TestTeamReportsAnswers`, `TestTeamReportsTooLarge`,
   `TestTeamReportsControlErrors`, `TestTeamReportsGate`, `TestTeamReportsWithdrawAfterLinkEnded`.
+
+## MG-194 The owner's “Check for updates” through the runtime (2026-11-25; Whombat check-for-updates.md, contracts 4.19)
+
+- `POST /v1/update/check` (MG-67's `whombat-manager check`) is a contract path now (`local.ManagerPathUpdateCheck`)
+  and the runtime may call it too: the owner's “Check for updates” in This Whombat. The runtime sends
+  `UpdateCheckRequest` (`{v}`); `whombat-manager check` still sends nothing. A body with anything else is `400`.
+- It does what it did (`Daemon.CheckNow`): a box with a channel refreshes the repository and offers the channel's
+  newest again (`OfferLatestNow`), one without polls control now. The answer is `UpdateCheckResponse`:
+  `{v, result, decision?, nextCheckS}`. Errors as before: `503 unavailable`, `502 control_refused`, `404` without
+  checks.
+- **One check at a time, and the last answer reused for 30 s** (`checkReuse`): a press while one runs waits for it and
+  takes its answer, and a press within 30 s of the last answer gets that answer without asking the release list or
+  control again.
+- The hourly look (`tufLoop`, `RefreshSec`) and the assignment poll are unchanged.
+- Tests: broker `TestCheckEndpoint`, `TestCheckEndpointContract`, `TestCheckEndpointReusesTheLastAnswer`.

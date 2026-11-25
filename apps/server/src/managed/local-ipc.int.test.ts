@@ -25,6 +25,7 @@ import { useManagedRuntime } from '../test/managed';
 import { accountOf } from '../test/tokens';
 import { AdminSocket } from './admin-socket';
 import { ManagerSocketClient } from './manager-client';
+import { ManagerCallError } from './ports';
 import { opaqueRef } from './push';
 
 const m = useManagedRuntime({ seed: true });
@@ -321,6 +322,53 @@ describe('ask before updating (ask-before-updating.md)', () => {
       ['update.ask_set', { byAccountId: expect.any(String), askFirst: true }],
       ['update.approved', { byAccountId: expect.any(String), release: 'pve-20261116.1' }],
     ]);
+  });
+});
+
+describe('check for updates (check-for-updates.md)', () => {
+  const update = (candidate: string | null) => ({
+    v: 1,
+    backup: null,
+    update: {
+      state: candidate ? 'Staged' : 'Healthy',
+      current: 'pve-20261115.1',
+      candidate,
+      lastCheckedAt: null,
+      deferredReason: null,
+      failure: null,
+    },
+  });
+
+  it('the owner’s check reaches the manager and says what came of it', async () => {
+    expect(await call('/facts', update(null))).toMatchObject({ status: 200 });
+    const c = await m.client(await m.enroll(IDS.mara));
+    m.manager.checkAnswer = { v: 1, result: 'none', nextCheckS: 3600 };
+    expect(await c.request('appliance.update.check', {})).toMatchObject({
+      t: 'result',
+      output: { outcome: 'upToDate' },
+    });
+    m.manager.checkAnswer = { v: 1, result: 'assigned', decision: 'started', nextCheckS: 3600 };
+    expect(await c.request('appliance.update.check', {})).toMatchObject({ output: { outcome: 'found' } });
+    // Nothing newer than the update already under way.
+    expect(await call('/facts', update('pve-20261116.1'))).toMatchObject({ status: 200 });
+    m.manager.checkAnswer = { v: 1, result: 'unchanged', nextCheckS: 3600 };
+    expect(await c.request('appliance.update.check', {})).toMatchObject({
+      output: { outcome: 'nothingNewer' },
+    });
+    m.manager.checkAnswer = { v: 1, result: 'assigned', decision: 'refused', nextCheckS: 3600 };
+    expect(await c.request('appliance.update.check', {})).toMatchObject({ output: { outcome: 'refused' } });
+    expect(m.manager.checks).toBe(4);
+  });
+
+  it('a release list out of reach is unavailable; a manager that can’t check is not_implemented', async () => {
+    const c = await m.client(await m.enroll(IDS.mara));
+    m.manager.checkAnswer = new ManagerCallError('/v1/update/check', 503, 'unavailable', 'control away');
+    expect(await c.request('appliance.update.check', {})).toMatchObject({ t: 'error', code: 'unavailable' });
+    m.manager.checkAnswer = new ManagerCallError('/v1/update/check', 404, 'unavailable', 'no checks here');
+    expect(await c.request('appliance.update.check', {})).toMatchObject({
+      t: 'error',
+      code: 'not_implemented',
+    });
   });
 });
 

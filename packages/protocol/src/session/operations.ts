@@ -165,6 +165,8 @@ import {
   ApplianceStatusOutput,
   ApplianceUpdateAskInput,
   ApplianceUpdateAskOutput,
+  ApplianceUpdateCheckInput,
+  ApplianceUpdateCheckOutput,
   ApplianceUpdateInstallInput,
   ApplianceUpdateInstallOutput,
   EndpointsListInput,
@@ -673,6 +675,8 @@ const SESSION_SPECS = [
   // ask-before-updating.md): the box's manager keeps the setting and holds the update until it is approved.
   session('appliance.update.ask', ApplianceUpdateAskInput, ApplianceUpdateAskOutput, 'app'),
   session('appliance.update.install', ApplianceUpdateInstallInput, ApplianceUpdateInstallOutput, 'app'),
+  // The owner's “Check for updates” (minor 13; Whombat check-for-updates.md): the box looks for a newer release now.
+  session('appliance.update.check', ApplianceUpdateCheckInput, ApplianceUpdateCheckOutput, 'app'),
   // Reach and Updates (4.4; Whombat whombat-link.md): how the box is reached, Whombat Link on or off, the update
   // channel, and a phone's push token registered through the box.
   session('reach.get', ReachGetInput, ReachGetOutput, 'app', false),
