@@ -177,6 +177,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Automations started by something going down or coming back, and one-time watches (docs/decisions/monitoring.md MON-90…MON-99): two new tables, incident_triggers (one claim per automation and incident, with a delayed start's due time) and thing_watches (each watch the assistant started, its thread and card), cascading with the burrow, and one nullable column on automations (thing_active_at). The release before it never reads or writes the two tables and reads and writes automations past the column. It can't read a definition with a thing trigger, though, yet would advance a run one started: this schema marks the first release that runs them, and a box makes, turns on and runs them only while the release it would go back to recorded at least this schema in runtime_releases."
+    },
+    "0028_incident_checks": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The checks an incident signed an event for (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column, and a row it opens reads as one that signed only its own check."
     }
   }
 }

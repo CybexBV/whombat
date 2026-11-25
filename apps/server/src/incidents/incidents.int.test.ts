@@ -4,8 +4,9 @@
  * person's “Needs you” row; when it answers again for two passes it ends, signs `thing.back` and its push is withdrawn
  * (the row read). Its page says its week, `things.history` lists it, and the assistant reads it with `watch_status` and
  * `watch_history`. What was already down at the watcher's very first pass is never pushed; a thing kept quiet or not
- * seen keeps its incident without a push until it is seen fine again. Postgres because each step is a signed commit, an
- * inbox row and a read across them.
+ * seen keeps its incident without a push until it is seen fine again, by a check made after the hold ended; quieting
+ * its down line doesn't end it either. Postgres because each step is a signed commit, an inbox row and a read across
+ * them.
  */
 import { topics } from '@whombat/core';
 import { and, eq, inArray, like } from 'drizzle-orm';
@@ -19,6 +20,7 @@ import {
   wayOutOutages,
 } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
+import type { ConnectionGlance } from '../home/types';
 import { serversPrincipal } from '../hosts/principal';
 import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { insertConnection } from '../test/connections';
@@ -308,16 +310,21 @@ describe('a thing held or unseen while it is down', () => {
     const [held] = (await rows()).filter((r) => r.id === open?.id);
     expect(held).toMatchObject({ endedAt: null, pushedAt: null });
     expect(await signed('thing.back')).toHaveLength(1);
-    // The window ends and Plex answers: two passes seen fine end it.
+    // The window ends. A check made while it held says nothing of now: Plex isn't back yet.
     await t.services.db
       .update(quietWindows)
       .set({ endedAt: at(115) })
       .where(eq(quietWindows.id, 'qw_plex_fix'));
     await glance('ok');
     await passAt(116);
-    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toBeNull();
     await passAt(117);
-    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toEqual(at(116));
+    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toBeNull();
+    // Checked again after the window, it answers: two passes seen fine end it.
+    await glance('ok');
+    await passAt(118);
+    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toBeNull();
+    await passAt(119);
+    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toEqual(at(118));
     expect(await signed('thing.back')).toHaveLength(2);
     expect((await incidentPushes()).filter((n) => n.text.includes('Plex'))).toHaveLength(1);
   });
@@ -335,6 +342,66 @@ describe('a thing held or unseen while it is down', () => {
     await passAt(135);
     await passAt(136);
     expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toEqual(at(135));
+  });
+
+  it('keeps it while its down line is quieted, or not counted again yet after a hold', async () => {
+    await glance('offline');
+    await passAt(150);
+    await passAt(151);
+    const [open] = (await rows()).filter((r) => !r.endedAt);
+    expect(open).toBeDefined();
+    const stored = (glance: Omit<ConnectionGlance, 'facts'>) =>
+      t.services.db
+        .update(catalogConnections)
+        .set({ glance: { facts: [], ...glance }, glanceAt: now })
+        .where(eq(catalogConnections.id, plex));
+    // Its check switched off mid-outage: the dot is fine, yet the check found it doesn't answer.
+    await stored({ status: 'ok', outcome: 'offline', lines: [] });
+    for (const minute of [152, 153, 154]) await passAt(minute);
+    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toBeNull();
+    // A line a hold reset counts once more before it colours the dot: still not answering meanwhile.
+    await stored({ status: 'ok', outcome: 'offline', lines: [{ ...NOT_ANSWERING, seen: 1 }] });
+    for (const minute of [155, 156, 157]) await passAt(minute);
+    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toBeNull();
+    expect((await signed('thing.back')).length).toBe(3);
+    await glance('ok');
+    await passAt(158);
+    await passAt(159);
+    expect((await rows()).find((r) => r.id === open?.id)?.endedAt).toEqual(at(158));
+  });
+
+  it('pushes what is still down after a long hold ten minutes after the hold ended', async () => {
+    const of = async () =>
+      (
+        await t.services.db
+          .select()
+          .from(incidents)
+          .where(eq(incidents.thingId, `connection:${sonarr}`))
+      ).find((r) => !r.endedAt);
+    await glance('offline', sonarr);
+    await passAt(160);
+    await passAt(161);
+    expect((await of())?.startedAt).toEqual(at(160));
+    // Kept quiet for two hours before the push was due.
+    await t.services.db.insert(quietWindows).values({
+      id: 'qw_sonarr_long',
+      ownerId: TEST_BURROW_ID,
+      thingId: `connection:${sonarr}`,
+      startsAt: at(162),
+      endsAt: at(282),
+      createdAt: at(162),
+    });
+    for (const minute of [165, 200, 281]) await passAt(minute);
+    expect((await of())?.pushedAt).toBeNull();
+    // Still down when it ends: the push waits ten minutes from then, as for a new outage, instead of never.
+    await passAt(283);
+    expect((await of())?.pushedAt).toBeNull();
+    await passAt(293);
+    expect((await of())?.pushedAt).toEqual(at(293));
+    await glance('ok', sonarr);
+    await passAt(294);
+    await passAt(295);
+    expect(await of()).toBeUndefined();
   });
 
   it('checks again in the push’s own commit, and names only what is still open and not held', async () => {

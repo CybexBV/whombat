@@ -3,20 +3,30 @@
  * Drive the incident writer directly so the clock can cross a deadline without waiting on health passes; a
  * connection's stored glance says which of its lines count when a delayed start reaches its deadline.
  */
-import { type AutomationDefinitionInput, type AutomationTriggerInput, THING_BACK } from '@whombat/core';
+import type { UpdateFacts } from '@whombat/control-contracts/local';
+import {
+  type AutomationDefinitionInput,
+  type AutomationTriggerInput,
+  THING_BACK,
+  THING_PROBLEM,
+} from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { expect, it } from 'vitest';
+import type { AgentAuth } from '../auth/agent-tokens';
+import { NewerAutomationsGate, THING_AUTOMATIONS_LATER } from '../automations/release-gate';
 import { sendMessage } from '../commands/messages';
 import {
   catalogConnections,
   dispatches,
   events,
   incidents,
+  incidentTriggers,
   quietWindows,
   thingCauses,
   thingWatches,
 } from '../db/schema/index';
 import { serversPrincipal } from '../hosts/principal';
+import { callTool } from '../mcp/server';
 import { loadMessages } from '../read/messages';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
@@ -317,4 +327,172 @@ it('tells when a thing down because of its server answers again', async () => {
   const thread = await replies(back.messageId);
   expect(thread).toHaveLength(2);
   expect(thread.find((m) => !m.card)?.text).toContain('Sonarr is back');
+});
+
+it('doesn’t start a delayed “goes down” automation once the thing answers again, with an error', async () => {
+  const thing = await connection('jellyfin', 'Jellyfin');
+  const id = await w.publish(definition([{ kind: 'thing', event: 'down', thing, forMinutes: 5 }]), {
+    name: 'Jellyfin stays down',
+  });
+  await lines(thing, [NOT_ANSWERING]);
+  const incidentId = await open(thing, 'down');
+  await w.settle();
+  // It answers again, with an error: the same check counts, as a bad line, but it isn't down.
+  w.advance(3 * MINUTE);
+  await lines(thing, [line('conn.answers', 'It answered with an error')]);
+  w.advance(3 * MINUTE);
+  await w.settle();
+  expect(await w.runs(id)).toHaveLength(0);
+  await close(incidentId);
+  // Still not answering at the deadline: it runs.
+  const again = await open(thing, 'down');
+  await lines(thing, [NOT_ANSWERING]);
+  await w.settle();
+  w.advance(6 * MINUTE);
+  await w.settle();
+  expect(await w.runs(id)).toHaveLength(1);
+  await close(again);
+});
+
+it('starts an automation naming a check that begins counting on an incident already open, once', async () => {
+  const thing = await connection('nas', 'NAS');
+  const id = await w.publish(
+    definition([{ kind: 'thing', event: 'problem', thing, forMinutes: 10, check: 'conn.check' }]),
+    { name: 'Shut down after ten minutes on battery' },
+  );
+  const disk = line('machine.disk', 'The disk is almost full');
+  await lines(thing, [disk]);
+  const incidentId = await open(thing, 'problem', null, 'machine.disk');
+  await w.settle();
+  // Twenty minutes into the disk problem, the battery runs low.
+  w.advance(20 * MINUTE);
+  await lines(thing, [disk, line('conn.check', 'The battery is low')]);
+  let before = await watchIncidents(w.services, w.burrowId, null);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  const noted = (await w.services.db.select().from(events).where(eq(events.type, THING_PROBLEM))).filter(
+    (e) => (e.payload as { incidentId?: string }).incidentId === incidentId,
+  );
+  // Once each, also after a second pass.
+  expect(noted.map((e) => (e.payload as { check?: string }).check).sort()).toEqual([
+    'conn.check',
+    'machine.disk',
+  ]);
+  // Its ten minutes count from when the battery line came, not from the disk's.
+  await w.settle();
+  expect(await w.runs(id)).toHaveLength(0);
+  w.advance(9 * MINUTE);
+  await w.settle();
+  expect(await w.runs(id)).toHaveLength(0);
+  w.advance(2 * MINUTE);
+  await w.settle();
+  expect(await w.runs(id)).toHaveLength(1);
+  await close(incidentId);
+});
+
+it('ends the incident of a thing that was removed without saying it is back', async () => {
+  const thing = await connection('radarr', 'Radarr');
+  const back = await w.publish(definition([{ kind: 'thing', event: 'back', thing }]), {
+    name: 'Radarr back',
+  });
+  await lines(thing, [NOT_ANSWERING]);
+  const incidentId = await open(thing, 'down');
+  const waiting = await watch(thing, 'back');
+  expect(waiting.watch.status).toBe('watching');
+  await w.settle();
+  // Disconnected while it is down.
+  await w.services.db
+    .delete(catalogConnections)
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+  await watchIncidents(w.services, w.burrowId, null);
+  const [row] = await w.services.db.select().from(incidents).where(eq(incidents.id, incidentId));
+  expect(row?.endedAt).not.toBeNull();
+  const backs = (await w.services.db.select().from(events).where(eq(events.type, THING_BACK))).filter(
+    (e) => (e.payload as { thing?: string }).thing === thing,
+  );
+  expect(backs).toEqual([]);
+  await w.settle();
+  expect(await w.runs(back)).toHaveLength(0);
+  const [settled] = await w.services.db
+    .select()
+    .from(thingWatches)
+    .where(eq(thingWatches.id, waiting.watch.id));
+  expect(settled?.status).toBe('cancelled');
+  const said = (await replies(waiting.messageId)).filter((m) => !m.card);
+  expect(said).toHaveLength(1);
+  expect(said[0]?.text).toContain('Radarr');
+  expect(said[0]?.text).toContain('removed');
+});
+
+it('neither claims an incident nor runs a thing automation while the release to go back to can’t run them', async () => {
+  const thing = await connection('lidarr', 'Lidarr');
+  const id = await w.publish(
+    {
+      version: 1,
+      conversationId: IDS.incidents,
+      triggers: [{ kind: 'thing', event: 'down', thing }],
+      steps: [
+        { id: 'pause', kind: 'wait', minutes: 1 },
+        { id: 'note', kind: 'post_message', text: '{{trigger.name}} is down' },
+      ],
+    },
+    { name: 'Lidarr is down' },
+  );
+  const first = await open(thing, 'down');
+  await w.settle();
+  const [run] = await w.runs(id);
+  expect(run?.status).toBe('waiting');
+  // The box was updated from a release that runs mail and Find My automations but not these.
+  const opened = w.services.newerAutomations;
+  const update: UpdateFacts = {
+    state: 'Healthy',
+    current: 'rel-now',
+    candidate: null,
+    lastCheckedAt: null,
+    deferredReason: null,
+    failure: null,
+    lastUpdate: { release: 'rel-now', from: 'rel-before', at: w.now().toISOString() },
+  };
+  const gate = new NewerAutomationsGate(
+    { NODE_ENV: 'production', WHOMBAT_RELEASE_ID: 'rel-now' },
+    async () => true,
+    async () => '0026_quiet_windows',
+  );
+  gate.follow(() => update);
+  w.services.newerAutomations = gate;
+  try {
+    expect([await gate.ready(), await gate.findMyReady(), await gate.thingsReady()]).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    // The assistant's guide says they wait, before it drafts one.
+    const auth: AgentAuth = {
+      dispatchId: await w.turn(IDS.dusty, IDS.dmDusty),
+      agentId: IDS.dusty,
+      burrowId: w.burrowId,
+    };
+    const read = (await callTool(w.services, auth, 'automation_read', {})).structuredContent as {
+      guide: string;
+    };
+    expect(read.guide).toContain(THING_AUTOMATIONS_LATER);
+    // The run already started waits as it is.
+    w.advance(2 * MINUTE);
+    await w.settle();
+    expect((await w.run(run?.id as string)).status).toBe('waiting');
+    // Something new going down claims nothing and starts nothing.
+    await close(first);
+    const second = await open(thing, 'down');
+    await w.settle();
+    expect(await w.runs(id)).toHaveLength(1);
+    const claims = await w.services.db
+      .select()
+      .from(incidentTriggers)
+      .where(eq(incidentTriggers.incidentId, second));
+    expect(claims).toEqual([]);
+    await close(second);
+  } finally {
+    w.services.newerAutomations = opened;
+  }
+  await w.settle();
+  expect((await w.run(run?.id as string)).status).toBe('succeeded');
 });

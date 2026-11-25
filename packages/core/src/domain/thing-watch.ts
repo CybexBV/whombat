@@ -75,6 +75,11 @@ export function thingWatchResultText(watch: WatchSubject, incident?: ThingIncide
   return minutes === null ? result : `${result} It was down for ${thingIncidentDurationWords(minutes)}.`;
 }
 
+/** What a watch says when its thing was removed while it waited. */
+export function thingWatchRemovedText(watch: Pick<WatchSubject, 'name'>): string {
+  return `${watch.name} was removed, so I stopped watching it.`;
+}
+
 export function thingWatchExpiredText(watch: WatchSubject): string {
   return `I didn’t see ${watch.name} ${watch.event === 'down' ? 'go down' : 'come back'} before the watch ended.`;
 }

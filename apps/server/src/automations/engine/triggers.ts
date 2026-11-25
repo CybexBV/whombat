@@ -108,7 +108,10 @@ export async function scanBurrow(
       .limit(500);
     let created = 0;
     const now = services.clock();
-    const due = await dueIncidentTriggers(tx, burrowId, now);
+    // While the release the box would go back to can't run thing automations, something going down or coming back
+    // claims no incident and starts nothing; a delayed start already waiting keeps its time.
+    const things = await services.newerAutomations.thingsReady();
+    const due = things ? await dueIncidentTriggers(tx, burrowId, now) : [];
     const active = liveChecks(services, burrowId, now);
     const work = [
       ...due,
@@ -143,7 +146,7 @@ export async function scanBurrow(
         )
           continue;
         if (facts.facts.kind === 'thing') {
-          if (event.createdAt < (a.thingActiveAt ?? v.publishedAt)) continue;
+          if (!things || event.createdAt < (a.thingActiveAt ?? v.publishedAt)) continue;
           const triggers = v.definition.triggers.filter((t) => t.kind === 'thing');
           if (!(await claimIncidentTrigger(tx, a.id, v.n, triggers, facts.facts, event, now, active)))
             continue;
