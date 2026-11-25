@@ -524,6 +524,82 @@ describe('one outage, one buzz', () => {
       w.services.push.control = control;
     }
   });
+
+  it('holds a finding’s buzz when the outage that buzzed ended while the research was underway', async () => {
+    const control = w.services.push.control;
+    const deliver = vi.fn(async () => {});
+    w.services.push.control = deliver;
+    try {
+      const signer = await serversPrincipal(w.services, w.burrowId);
+      const findingOf = async (researchId: string) =>
+        (
+          await w.services.db
+            .select()
+            .from(notifications)
+            .where(like(notifications.dedupKey, 'look-finding:%'))
+        ).find((r) => r.dedupKey === `look-finding:${researchId}`);
+      const pushedOutage = async (thing: string) => {
+        await w.ok(signer, incidentsPass, {
+          opened: [
+            {
+              thing,
+              kind: 'server',
+              name: thing.slice('server:'.length),
+              nature: 'down',
+              words: 'Not answering',
+              check: null,
+              subject: '',
+              cause: null,
+              startedAt: w.now().toISOString(),
+            },
+          ],
+          changed: [],
+          ended: [],
+        });
+        const row = await open(thing);
+        await w.ok(signer, incidentsPush, { ids: [row?.id ?? ''] });
+        await w.settle();
+        return row?.id ?? '';
+      };
+      const end = (id: string) =>
+        w.ok(signer, incidentsPass, {
+          opened: [],
+          changed: [],
+          ended: [{ id, endedAt: w.now().toISOString() }],
+        });
+
+      // Slate's outage buzzed; it comes back while the research looks into it, and the finding comes after.
+      const slate = await pushedOutage('server:slate');
+      deliver.mockClear();
+      const late = await research('server:slate', 'slate');
+      w.advance(MINUTE);
+      await end(slate);
+      await report(late.dispatchId);
+      const held = await findingOf(late.researchId);
+      expect(held).toBeDefined();
+      // Only the outage's push was cleared quietly when it ended.
+      expect(deliver).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ notificationId: held?.id }),
+        expect.anything(),
+      );
+
+      // Basalt's outage ended before its research began: that finding buzzes.
+      const basalt = await pushedOutage('server:basalt');
+      await end(basalt);
+      w.advance(MINUTE);
+      deliver.mockClear();
+      const fresh = await research('server:basalt', 'basalt');
+      await report(fresh.dispatchId);
+      expect(deliver).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ notificationId: (await findingOf(fresh.researchId))?.id }),
+        expect.anything(),
+      );
+    } finally {
+      w.services.push.control = control;
+    }
+  });
 });
 
 describe('a delayed automation', () => {

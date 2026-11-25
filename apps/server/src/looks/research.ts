@@ -285,14 +285,17 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
     dedupKey: `look-finding:${row.id}`,
     messageId,
     group: threadPushGroup(row.conversationId, row.threadRootId),
-    ...((await outagePushed(ctx.tx, ctx.burrow.id, row.lookKey)) ? { pushHeld: true } : {}),
+    ...((await outagePushed(ctx.tx, ctx.burrow.id, row.lookKey, row.startedAt)) ? { pushHeld: true } : {}),
   };
   const services = ctx.services;
   ctx.background('look finding push', () => notify(services, [draft]));
 }
 
-/** Whether the thing's open outage has buzzed already (one Whombat found bad before it watched never did). */
-async function outagePushed(tx: Tx, burrowId: string, thing: string): Promise<boolean> {
+/**
+ * Whether an outage of the thing buzzed already during the research (one Whombat found bad before it watched never
+ * did): one still open, or one that ended after the research began, as the thing came back while it looked.
+ */
+async function outagePushed(tx: Tx, burrowId: string, thing: string, researchFrom: Date): Promise<boolean> {
   const [row] = await tx
     .select({ id: incidents.id })
     .from(incidents)
@@ -300,7 +303,7 @@ async function outagePushed(tx: Tx, burrowId: string, thing: string): Promise<bo
       and(
         eq(incidents.burrowId, burrowId),
         eq(incidents.thingId, thing),
-        isNull(incidents.endedAt),
+        or(isNull(incidents.endedAt), gt(incidents.endedAt, researchFrom)),
         isNotNull(incidents.pushGroup),
       ),
     )
