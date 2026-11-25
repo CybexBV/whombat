@@ -113,6 +113,8 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
   const causes = new Map<string, ThingCause>();
   const limits = new Map<LimitKey, number>();
   const changes = new Map<string, LimitChange>();
+  /** Keeping quiet's changes: the window as it was before (none: the change made it) and the end it set. */
+  const quietChanges = new Map<string, { thing: string; before: Window | null; until: number }>();
   let seq = 0;
 
   if (opts.seeded) {
@@ -176,7 +178,31 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
       ...(body.note ? { note: body.note } : {}),
       by: BY,
     });
-    return json({ keptQuiet: keptOf(thing, windows.get(thing) as Window) });
+    const changeId = `chg_fx_quiet_${++seq}`;
+    quietChanges.set(changeId, { thing, before, until });
+    return json({ keptQuiet: keptOf(thing, windows.get(thing) as Window), changeId });
+  }
+
+  /** Undo of keeping quiet: the window as it was before, or none; a window changed again since stays. */
+  function undoQuiet(changeId: string): Response | null {
+    const change = quietChanges.get(changeId);
+    if (!change) return null;
+    if (window(change.thing)?.until !== change.until)
+      return refused(409, 'conflict', 'It was changed again since.');
+    if (change.before) windows.set(change.thing, change.before);
+    else windows.delete(change.thing);
+    quietChanges.delete(changeId);
+    return json({
+      state: 'undone',
+      change: {
+        id: changeId,
+        title: 'Kept it quiet',
+        at: new Date(now()).toISOString(),
+        actor: { kind: 'person', id: mara.id, name: 'Mara' },
+        undo: { state: 'undone' },
+        thingId: change.thing,
+      },
+    });
   }
 
   function end(thing: string): Response {
@@ -566,9 +592,9 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
           return watch && thing.startsWith('server:') ? json(decorateWatch(thing, watch)) : res;
         }
       }
-      const undone = /^\/changes\/(chg_fx_limit_\d+)\/undo$/.exec(rest);
+      const undone = /^\/changes\/(chg_fx_(?:limit|quiet)_\d+)\/undo$/.exec(rest);
       if (undone && req.method === 'POST') {
-        const answer = undo(undone[1] as string);
+        const answer = undo(undone[1] as string) ?? undoQuiet(undone[1] as string);
         if (answer) return answer;
       }
       if (req.method !== 'GET') return inner(req);

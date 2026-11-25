@@ -5,6 +5,8 @@
  *   Whombat for its own planned work (`work`). `thing_id` is the thing's id as `things.page` takes it; `guest_id` narrows
  *   a server's window to one of its machines (Whombat's work on one guest). A server's window is also a maintenance
  *   window in the hosts service (`maintenance_id`). Ended early: `ended_at`.
+ * - `quiet_maintenance_left`: a hosts service maintenance window no window names any more (a newer one replaced it)
+ *   that the hub hasn't confirmed removed yet; the minute's sweep tries again until it does.
  * - `thing_causes`: a thing that is down because of something else (its server offline, its machine stopped or kept
  *   quiet, the internet down), kept current by a job every minute (operational, like the glance).
  * - `way_out_outages`: the box's own way out failing (its router, name lookups, the internet), since when and until when,
@@ -44,6 +46,16 @@ export const quietWindows = pgTable(
     uniqueIndex('quiet_windows_work_idx').on(t.work),
   ],
 );
+
+/**
+ * A maintenance window to give back to the hosts service: written in the same transaction that replaced it, removed
+ * once the hub confirms, so a failed removal can't leave a server muted with nothing in Whombat naming it.
+ */
+export const quietMaintenanceLeft = pgTable('quiet_maintenance_left', {
+  maintenanceId: text('maintenance_id').primaryKey(),
+  ownerId: text('owner_id').notNull(),
+  createdAt: ts('created_at').notNull(),
+});
 
 /** A thing down because of something else. */
 export const thingCauses = pgTable(

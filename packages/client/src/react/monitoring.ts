@@ -66,7 +66,10 @@ function readAgain(qc: QueryClient, burrow: string, thing: string) {
 /* Keep quiet and End now ------------------------------------------------------------------------------------------- */
 
 export interface KeepQuietActions {
-  /** Keep it quiet (`things.keepQuiet`); true when it went through. The toast says until when, with Undo (End now). */
+  /**
+   * Keep it quiet (`things.keepQuiet`); true when it went through. The toast says until when, with Undo
+   * (`changes.undo` of that change: the person's earlier window back, or theirs ended; Whombat's own stays).
+   */
   keep(body: KeepQuietBody): Promise<boolean>;
   /** End now (`things.endQuiet`); true when it went through. */
   end(): Promise<boolean>;
@@ -84,9 +87,29 @@ export function useKeepQuiet(
 ): KeepQuietActions {
   const { client } = useWhombat();
   const qc = useQueryClient();
+  const undo = useUndoChange(burrow);
   const [busy, setBusy] = useState(false);
   const noteRef = useRef(note);
   noteRef.current = note;
+
+  // Undo takes back that one change only, not every window holding the thing as End now does.
+  const takeBack = useCallback(
+    async (changeId: string) => {
+      try {
+        const result = await undo.mutateAsync(changeId);
+        if (result.status !== 'ok') {
+          noteRef.current(commitOutcomeText(result) ?? '', { failed: true });
+          return;
+        }
+        noteRef.current(undoOutcome(result.data).message);
+      } catch (error) {
+        noteRef.current(hostErrorInfo(error).message, { failed: true });
+      } finally {
+        readAgain(qc, burrow, thing);
+      }
+    },
+    [undo, qc, burrow, thing],
+  );
 
   const end = useCallback(async (): Promise<boolean> => {
     setBusy(true);
@@ -117,10 +140,13 @@ export function useKeepQuiet(
           noteRef.current(commitOutcomeText(result) ?? '', { failed: true });
           return false;
         }
-        const kept = result.data.keptQuiet;
+        const { keptQuiet: kept, changeId } = result.data;
         applyKept(qc, burrow, thing, kept);
-        // Undo of keeping quiet ends it (the change's own Undo in Activity does the same).
-        if (kept) noteRef.current(keptToast(kept.until, Date.now(), timeZone), { undo: () => void end() });
+        if (kept)
+          noteRef.current(
+            keptToast(kept.until, Date.now(), timeZone),
+            changeId ? { undo: () => void takeBack(changeId) } : undefined,
+          );
         return true;
       } catch (error) {
         noteRef.current(hostErrorInfo(error).message, { failed: true });
@@ -130,7 +156,7 @@ export function useKeepQuiet(
         readAgain(qc, burrow, thing);
       }
     },
-    [client, qc, burrow, thing, timeZone, end],
+    [client, qc, burrow, thing, timeZone, takeBack],
   );
 
   return { keep, end, busy };

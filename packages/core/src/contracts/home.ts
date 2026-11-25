@@ -474,8 +474,15 @@ export const KeepQuietBody = z
     path: ['until'],
   });
 export type KeepQuietBody = z.infer<typeof KeepQuietBody>;
-/** The thing as it is kept quiet now; null after `things.endQuiet`. */
-export const KeepQuietResponse = z.object({ keptQuiet: KeptQuiet.nullable() });
+/**
+ * The thing as it is kept quiet now; null after `things.endQuiet`. `changeId` (from `things.keepQuiet`): the change it
+ * made, whose `changes.undo` puts the person's window back as it was, or ends the one it made; it never ends Whombat's
+ * own window for its work.
+ */
+export const KeepQuietResponse = z.object({
+  keptQuiet: KeptQuiet.nullable(),
+  changeId: ChangeId.optional(),
+});
 export type KeepQuietResponse = z.infer<typeof KeepQuietResponse>;
 
 export const thingEndpoints = {

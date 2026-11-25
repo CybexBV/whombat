@@ -1,32 +1,60 @@
 /**
  * Keeping a thing quiet for a while in the commit pipeline: `keep_quiet` keeps a
- * server, connection or device quiet until a time (a thing kept quiet already gets the new end and note), `end_quiet`
- * ends it now. Both are the person's, signed, and recorded as a change of the thing: keeping quiet with Undo (which ends
- * it), ending it in the thing's Activity. The assistant does it only on the person's word (`quiet_until`), recorded as
- * its change for them. A server's maintenance window in the hosts service is made before the commit and removed after
- * it (`window-service.ts`); here only its id is kept.
+ * server, connection or device quiet until a time (the person's own window, when one holds already, gets the new end
+ * and note; Whombat's window for its planned work is never changed), `end_quiet` ends it now. Both are the person's,
+ * signed, and recorded as a change of the thing: keeping quiet with Undo (which puts the person's window back as it was,
+ * or ends the one it made: `restore_quiet`, `end_quiet` of one window), ending it in the thing's Activity. The assistant
+ * does it only on the person's word (`quiet_until`), recorded as its change for them. A server's maintenance window in
+ * the hosts service is made before the commit and removed after it (`window-service.ts`); here only its id is kept, and
+ * one a window no longer names goes on the list to give back in the same transaction.
  */
 import { thingHref } from '@whombat/core';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ApplyContext } from '../../commit/types';
 import { defineCommand } from '../../commit/types';
-import { quietWindows } from '../../db/schema/index';
+import type { Tx } from '../../db/client';
+import { quietMaintenanceLeft, quietWindows } from '../../db/schema/index';
 import { EVERYDAY_CHANGE_PREFIX } from '../../home/changes';
 import { homeAudience, publishHomeChanged } from '../../home/notify';
 import { recordChange } from '../../home/registry';
-import { badRequest, forbidden, notFound } from '../../lib/errors';
+import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { QuietThingInput } from './commands';
 import { windowHolds } from './windows';
 import { untilWords } from './words';
 
-/** The kind of the change that keeps a thing quiet: its Undo ends the window. */
+/** The kind of the change that keeps a thing quiet: its Undo puts the window back as it was, or ends the one it made. */
 export const KEEP_QUIET_CHANGE_KIND = 'things.keepQuiet';
 
-/** What Undo of keeping quiet needs: the thing and the window. */
+/** The person's window as it was before keeping quiet changed it. */
+export interface QuietWindowWas {
+  endsAt: string;
+  note: string | null;
+  byId: string | null;
+}
+
+/** What Undo of keeping quiet needs: the thing, the window, the end this change set and the window before it. */
 export interface KeepQuietUndo {
   thing: string;
   windowId: string;
+  /** The end this change set: a window changed again since is left as it is (absent on changes made before it). */
+  endsAt?: string;
+  /** The window as it was, when this change changed one that held already; absent when it made the window. */
+  previous?: QuietWindowWas;
+}
+
+/** Thrown when Undo finds the window changed again since the change it takes back. */
+export const CHANGED_SINCE = 'It was changed again since.';
+
+/**
+ * A maintenance window no window names any more goes on the list to give back, in the transaction that dropped its id:
+ * when removing it from the hub fails later, the minute's sweep still knows it and tries again.
+ */
+async function giveBackLater(tx: Tx, ctx: ApplyContext, maintenanceId: string): Promise<void> {
+  await tx
+    .insert(quietMaintenanceLeft)
+    .values({ maintenanceId, ownerId: ctx.burrow.id, createdAt: ctx.now })
+    .onConflictDoNothing();
 }
 
 async function tell(ctx: ApplyContext, thing: z.infer<typeof QuietThingInput>, payload: object) {
@@ -40,7 +68,11 @@ async function tell(ctx: ApplyContext, thing: z.infer<typeof QuietThingInput>, p
   publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['things', 'watch', 'needsYou']);
 }
 
-/** Keep a thing quiet until `until`, with an optional note; a window that holds already is changed in place. */
+/**
+ * Keep a thing quiet until `until`, with an optional note; the person's own window that holds already is changed in
+ * place. Whombat's window for its planned work stays as it is beside it: it keeps its work, its maintenance window and
+ * its end after the work.
+ */
 export const keepQuiet = defineCommand({
   name: 'keep_quiet',
   schema: z.object({
@@ -68,24 +100,20 @@ export const keepQuiet = defineCommand({
           eq(quietWindows.ownerId, thing.owner),
           eq(quietWindows.thingId, thing.id),
           isNull(quietWindows.guestId),
+          isNull(quietWindows.work),
           isNull(quietWindows.endedAt),
         ),
       );
     const holding = open.filter((w) => windowHolds(w, ctx.now)).sort((a, b) => +b.endsAt - +a.endsAt)[0];
     const note = input.note?.trim() || null;
     const previousMaintenance = holding?.maintenanceId ?? null;
+    const maintenanceId = input.maintenanceId ?? previousMaintenance;
     let windowId: string;
     if (holding) {
       windowId = holding.id;
       await tx
         .update(quietWindows)
-        .set({
-          endsAt: until,
-          note,
-          byId: ctx.actor.id,
-          work: null,
-          maintenanceId: input.maintenanceId ?? holding.maintenanceId,
-        })
+        .set({ endsAt: until, note, byId: ctx.actor.id, maintenanceId })
         .where(eq(quietWindows.id, holding.id));
     } else {
       windowId = input.windowId;
@@ -107,7 +135,14 @@ export const keepQuiet = defineCommand({
     }
     const words = untilWords(until, ctx.now, input.timeZone ?? ctx.burrow.timeZone ?? 'UTC');
     await tell(ctx, thing, { kind: 'quiet.keep', until: until.toISOString() });
-    const undo: KeepQuietUndo = { thing: thing.id, windowId };
+    const undo: KeepQuietUndo = {
+      thing: thing.id,
+      windowId,
+      endsAt: until.toISOString(),
+      ...(holding
+        ? { previous: { endsAt: holding.endsAt.toISOString(), note: holding.note, byId: holding.byId } }
+        : {}),
+    };
     const changeId = await recordChange(ctx, {
       burrowId: ctx.burrow.id,
       actorId: ctx.actor.id,
@@ -123,10 +158,56 @@ export const keepQuiet = defineCommand({
     });
     // A maintenance window this one replaced: the caller removes it from the hosts service after the commit.
     const replaced =
-      input.maintenanceId && previousMaintenance && previousMaintenance !== input.maintenanceId
-        ? previousMaintenance
-        : null;
+      previousMaintenance && previousMaintenance !== maintenanceId ? previousMaintenance : null;
+    if (replaced) await giveBackLater(tx, ctx, replaced);
     return { windowId, changeId, replaced };
+  },
+});
+
+/**
+ * Undo of keeping quiet that changed the person's window: it gets its end, note and who kept it quiet back (with a new
+ * maintenance window for a server, made before the commit). A window that ended, or whose end changed again since, is
+ * left alone.
+ */
+export const restoreQuiet = defineCommand({
+  name: 'restore_quiet',
+  schema: z.object({
+    thing: QuietThingInput,
+    windowId: z.string().min(1).max(64),
+    /** The end the change being undone set. */
+    set: z.string().datetime({ offset: true }),
+    endsAt: z.string().datetime({ offset: true }),
+    note: z.string().max(120).nullable(),
+    byId: z.string().min(1).max(64).nullable(),
+    maintenanceId: z.string().min(1).max(64).optional(),
+  }),
+  async apply(tx, ctx, input) {
+    if (ctx.actor.kind !== 'person') throw forbidden('Only you can undo this.');
+    const { thing } = input;
+    const [w] = await tx
+      .select()
+      .from(quietWindows)
+      .where(
+        and(
+          eq(quietWindows.id, input.windowId),
+          eq(quietWindows.ownerId, thing.owner),
+          eq(quietWindows.thingId, thing.id),
+          isNull(quietWindows.work),
+          isNull(quietWindows.endedAt),
+        ),
+      );
+    if (!w || !windowHolds(w, ctx.now)) throw notFound('Quiet');
+    if (w.endsAt.getTime() !== new Date(input.set).getTime()) throw conflict(CHANGED_SINCE);
+    const endsAt = new Date(input.endsAt);
+    const maintenanceId = input.maintenanceId ?? w.maintenanceId;
+    await tx
+      .update(quietWindows)
+      .set({ endsAt, note: input.note, byId: input.byId, maintenanceId })
+      .where(eq(quietWindows.id, w.id));
+    const replaced = w.maintenanceId && w.maintenanceId !== maintenanceId ? w.maintenanceId : null;
+    if (replaced) await giveBackLater(tx, ctx, replaced);
+    await tell(ctx, thing, { kind: 'quiet.keep', until: endsAt.toISOString() });
+    return { replaced };
   },
 });
 
@@ -141,6 +222,8 @@ export const endQuiet = defineCommand({
     thing: QuietThingInput,
     /** One window only (Undo); without it, every window holding the thing. */
     windowId: z.string().min(1).max(64).optional(),
+    /** With `windowId`: the end the change being undone set; a window whose end changed again since stays. */
+    set: z.string().datetime({ offset: true }).optional(),
     agentId: z.string().min(1).max(64).optional(),
   }),
   async apply(tx, ctx, input) {
@@ -152,8 +235,16 @@ export const endQuiet = defineCommand({
       isNull(quietWindows.endedAt),
     );
     let ids: string[];
-    if (input.windowId) ids = [input.windowId];
-    else {
+    if (input.windowId) {
+      ids = [input.windowId];
+      if (input.set) {
+        const [w] = await tx
+          .select({ endsAt: quietWindows.endsAt })
+          .from(quietWindows)
+          .where(and(mine, eq(quietWindows.id, input.windowId)));
+        if (w && w.endsAt.getTime() !== new Date(input.set).getTime()) throw conflict(CHANGED_SINCE);
+      }
+    } else {
       const open = await tx
         .select()
         .from(quietWindows)
@@ -185,4 +276,4 @@ export const endQuiet = defineCommand({
   },
 });
 
-export const QUIET_WINDOW_COMMANDS = [keepQuiet, endQuiet];
+export const QUIET_WINDOW_COMMANDS = [keepQuiet, restoreQuiet, endQuiet];

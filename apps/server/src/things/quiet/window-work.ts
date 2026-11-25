@@ -8,7 +8,7 @@
  */
 import { randomIdBody, thingId } from '@whombat/core';
 import { and, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
-import { quietWindows } from '../../db/schema/index';
+import { quietMaintenanceLeft, quietWindows } from '../../db/schema/index';
 import { homeAudience, publishHomeChanged } from '../../home/notify';
 import { HOSTS_API, seg } from '../../hosts/client';
 import { hostsCall } from '../../hosts/errors';
@@ -75,6 +75,55 @@ export async function removeMaintenance(services: Services, maintenanceId: strin
       'quiet window: maintenance not removed',
     );
     return false;
+  }
+}
+
+/**
+ * Gives back a maintenance window a commit put on the list to give back (one a window no longer names): off the list
+ * once the hub confirms, else the minute's sweep tries again. Never throws.
+ */
+export async function giveBackMaintenance(
+  services: Services,
+  burrowId: string,
+  maintenanceId: string,
+): Promise<void> {
+  try {
+    if (!(await removeMaintenance(services, maintenanceId))) return;
+    await services.pipeline.transact(burrowId, async (session) => {
+      await session.tx
+        .delete(quietMaintenanceLeft)
+        .where(eq(quietMaintenanceLeft.maintenanceId, maintenanceId));
+    });
+  } catch (err) {
+    services.log.warn(
+      { err: err instanceof Error ? err.name : 'error' },
+      'quiet window: maintenance not given back',
+    );
+  }
+}
+
+/**
+ * Removes a maintenance window made for a commit that didn't go through: no window names it, so one the hub keeps goes
+ * on the list to give back for the sweep. Never throws.
+ */
+export async function dropMaintenance(
+  services: Services,
+  burrowId: string,
+  maintenanceId: string,
+): Promise<void> {
+  try {
+    if (await removeMaintenance(services, maintenanceId)) return;
+    await services.pipeline.transact(burrowId, async (session) => {
+      await session.tx
+        .insert(quietMaintenanceLeft)
+        .values({ maintenanceId, ownerId: burrowId, createdAt: services.clock() })
+        .onConflictDoNothing();
+    });
+  } catch (err) {
+    services.log.warn(
+      { err: err instanceof Error ? err.name : 'error' },
+      'quiet window: maintenance not given back',
+    );
   }
 }
 
@@ -191,15 +240,15 @@ const RAN_OUT_LOOKBACK_MS = 2 * 60_000;
 const lastSweep = new WeakMap<Services, Date>();
 
 /**
- * The minute's sweep: windows that are over give their maintenance window back to the hosts service, and windows ended
- * long ago go. Home hears of windows that ran out by themselves since the last sweep, so an open page stops saying
+ * The minute's sweep: windows that are over give their maintenance window back to the hosts service, so do the
+ * maintenance windows on the list to give back (replaced by a newer one), and windows ended long ago go. Home hears of windows that ran out by themselves since the last sweep, so an open page stops saying
  * “Quiet until …”. Every write goes through the commit pipeline, per burrow. Returns how many maintenance windows were
  * removed.
  */
 export async function sweepQuietWindows(services: Services, now = services.clock()): Promise<number> {
   const since = lastSweep.get(services) ?? new Date(now.getTime() - RAN_OUT_LOOKBACK_MS);
   lastSweep.set(services, now);
-  const [over, ranOut, old] = await Promise.all([
+  const [over, left, ranOut, old] = await Promise.all([
     services.db
       .select()
       .from(quietWindows)
@@ -209,6 +258,7 @@ export async function sweepQuietWindows(services: Services, now = services.clock
           or(isNotNull(quietWindows.endedAt), lte(quietWindows.endsAt, now)),
         ),
       ),
+    services.db.select().from(quietMaintenanceLeft),
     services.db
       .select({ ownerId: quietWindows.ownerId })
       .from(quietWindows)
@@ -226,19 +276,27 @@ export async function sweepQuietWindows(services: Services, now = services.clock
       ),
   ]);
   const given: { id: string; ownerId: string }[] = [];
-  if (over.length && hostsFor(services).present)
+  const back: { maintenanceId: string; ownerId: string }[] = [];
+  if ((over.length || left.length) && hostsFor(services).present) {
     for (const w of over)
       if (w.maintenanceId && (await removeMaintenance(services, w.maintenanceId))) given.push(w);
-  const owners = new Set([...given, ...ranOut, ...old].map((w) => w.ownerId));
+    for (const m of left) if (await removeMaintenance(services, m.maintenanceId)) back.push(m);
+  }
+  const owners = new Set([...given, ...back, ...ranOut, ...old].map((w) => w.ownerId));
   for (const owner of owners)
     await services.pipeline.transact(owner, async (session) => {
       const mineGiven = given.filter((w) => w.ownerId === owner).map((w) => w.id);
+      const mineBack = back.filter((m) => m.ownerId === owner).map((m) => m.maintenanceId);
       const mineOld = old.filter((w) => w.ownerId === owner).map((w) => w.id);
       if (mineGiven.length)
         await session.tx
           .update(quietWindows)
           .set({ maintenanceId: null })
           .where(inArray(quietWindows.id, mineGiven));
+      if (mineBack.length)
+        await session.tx
+          .delete(quietMaintenanceLeft)
+          .where(inArray(quietMaintenanceLeft.maintenanceId, mineBack));
       if (mineOld.length)
         await session.tx
           .delete(quietWindows)
@@ -246,5 +304,5 @@ export async function sweepQuietWindows(services: Services, now = services.clock
       if (mineGiven.length || ranOut.some((w) => w.ownerId === owner))
         publishHomeChanged(session, await homeAudience(session, owner), ['things', 'watch', 'needsYou']);
     });
-  return given.length;
+  return given.length + back.length;
 }
