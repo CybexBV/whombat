@@ -1048,12 +1048,13 @@ older than the copy leaves it), `team_report_seen` after control's list when it 
 `team_report_forget` when it is gone or withdrawn, `team_reports_drop` for every copy when the manager says the box is
 out of Link and, with the drafts not sent, before a backup restored onto new hardware takes the new device id. A report
 is unread while control's revision is past the one read; while control can't be reached the list shows the copies
-(`stale`). While a report is open a ten-minute job
+(`stale`). Shortly after start, and while a report is open every ten minutes, a job
 (`team-reports.follow`) asks control's list; a status entering a question (`needs_information`) or a fix to try
 (`available`) by the team's change becomes a needs-you notification and push in fixed words, and the Inbox shows an
 item while the report waits for the person, both opening `/reports/<id>`. The team's words show only on the report's
 page: never in Chat, the assistant's context, Search or automations. The assistant's `report_to_whombat_team` keeps a
-draft (`team_report_drafts`) and always asks on a card that quotes it; the person's yes sends it as theirs, and the
+draft (`team_report_drafts`) and always asks on a card that quotes it (its approval carries the words, so its details
+and its Inbox item show them too); the person's yes, never for later, sends it as theirs, and the
 card's Edit opens the form with the draft (`teamReports.draft`); sent from the form, the draft is done and its waiting
 card withdrawn (`team_report_draft_done`). `whombat_team_reports` reads numbers, the start of the person's own words
 as titles (never control's title, which the team may rename), statuses in words and dates. Both are served only in the person's own turns where they can send reports or have some. A tracker
