@@ -3,7 +3,10 @@ import type { Db } from '../db/client';
 import { quietWindows, thingCauses } from '../db/schema/index';
 import { CAUSE_FRESH_MS } from '../things/quiet/windows';
 
-/** Ignore incident activity when a thing is quiet or another thing is the reason. */
+/**
+ * Whether incident activity of a thing is ignored at `at`: it is kept quiet, or another thing is the reason. `since`: a
+ * window that held at any moment from then until `at` counts too.
+ */
 export async function holdsIncident(
   db: Db,
   burrowId: string,

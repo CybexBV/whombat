@@ -76,22 +76,20 @@ export async function claimIncidentTrigger(
   const dueAt = thingTriggerDueAt(triggers, facts);
   if (dueAt === null) return false;
   const { incident } = facts;
-  if (
-    await holdsIncident(
-      tx,
-      event.burrowId,
-      incident.thing,
-      now,
-      incident.endedAt ? new Date(incident.endedAt) : event.createdAt,
-    )
-  )
-    return false;
+  const delayed = dueAt > Date.parse(incident.startedAt);
+  // At a delayed start's deadline only a hold now stops it: a short window since the event, or one undone, mustn't
+  // cancel it for good while the outage goes on. Before then, a hold at any time since the event counts.
+  const since = incident.endedAt
+    ? new Date(incident.endedAt)
+    : delayed && dueAt <= now.getTime()
+      ? now
+      : event.createdAt;
+  if (await holdsIncident(tx, event.burrowId, incident.thing, now, since)) return false;
 
   const [row] = await tx
     .select({ endedAt: incidents.endedAt, cause: incidents.causeThing })
     .from(incidents)
     .where(and(eq(incidents.id, incident.incidentId), eq(incidents.burrowId, event.burrowId)));
-  const delayed = dueAt > Date.parse(incident.startedAt);
   if (!row || row.cause || (delayed && row.endedAt)) return false;
   // When to look again: the deadline while it is ahead; a minute on when the thing couldn't be read at it.
   let next: number | null = dueAt > now.getTime() ? dueAt : null;

@@ -5,20 +5,34 @@
  * waits on still bad.
  *
  * Whether an outage is over is read from the thing itself instead (`observeThings`): a look goes when someone quiets
- * its line, and a line that a hold reset needs two passes to count again, while the thing is still down meanwhile.
+ * its line, and a line that a hold reset needs two passes to count again, while the thing is still down meanwhile. So
+ * servers come from the hosts service's own list and alerts, connections from their stored checks, devices from their
+ * reads and the person's accounts from their own records.
  */
-import { parseThingId, type ThingSummary } from '@whombat/core';
+import { FEEDBACK_THING_ID, GITHUB_THING_ID, parseThingId, type ThingSummary } from '@whombat/core';
 import { and, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import type { BurrowRow } from '../commit/types';
-import { burrows, catalogConnections, deviceSkills, quietWindows, thingCauses } from '../db/schema/index';
+import {
+  connections as accountRows,
+  burrows,
+  catalogConnections,
+  deviceSkills,
+  noticeStates,
+  quietWindows,
+  thingCauses,
+} from '../db/schema/index';
 import { type DeskFleet, deskFleet, deskLooks, lookLinesOf } from '../desk/glance';
 import type { DeskLook } from '../desk/shapes';
 import { DEVICE_FRESH_MS } from '../devices/home';
 import { thePerson } from '../domain/the-person';
+import { githubShown } from '../home/github-thing';
+import { COUNTED, isAccountThing } from '../home/mail-glance';
 import { type HomeViewer, things } from '../home/overview';
 import type { ConnectionGlance } from '../home/types';
 import { serverLines } from '../hosts/quiet-lines';
+import type { PrincipalRow } from '../read/principals';
 import type { Services } from '../services';
+import { feedbackShown } from '../things/accounts/feedback';
 import { thingLines } from '../things/quiet/connection';
 import { CAUSE_FRESH_MS } from '../things/quiet/windows';
 
@@ -29,6 +43,8 @@ const DAY_MS = 24 * 60 * 60_000;
 
 export interface LiveLooks {
   burrow: BurrowRow;
+  /** The burrow's person, whose Home this is: their accounts are things on it. */
+  person: PrincipalRow;
   thingList: ThingSummary[];
   /** Null when the servers couldn't be read, or the burrow has none. */
   fleet: DeskFleet | null;
@@ -56,6 +72,7 @@ export async function readLiveLooks(
   });
   return {
     burrow,
+    person,
     thingList,
     fleet,
     serversRead,
@@ -119,10 +136,19 @@ export function observedOf(status: string): 'up' | 'down' | 'unknown' {
  */
 export type RawSeen = 'fine' | 'answering' | 'down' | 'held' | 'unread' | 'gone';
 
+/**
+ * One of the person's accounts as Home lists it (Google, Microsoft 365, Email, GitHub, Website feedback): `fine` while
+ * it is signed in (GitHub and Website feedback while they are there), `signed_out` while it needs the person to sign in
+ * again, `unread` when Whombat couldn't tell.
+ */
+export type AccountSeen = 'fine' | 'signed_out' | 'unread';
+
 /** What `rawSeen` reads beside the live looks. */
 export interface RawFacts {
   /** Connections' own rows by thing id: their last check's outcome and lines, as the health pass stored them. */
   connections: ReadonlyMap<string, { status: string; glance: unknown; glanceAt: Date | null }>;
+  /** The person's accounts by thing id, read from their own records. */
+  accounts: ReadonlyMap<string, AccountSeen>;
   /** Switched-on devices' last reads by thing id. */
   devices: ReadonlyMap<string, { lastReadAt: Date | null; lastReadError: string | null }>;
   /** Held now: kept quiet, or down because of something else. */
@@ -135,28 +161,23 @@ export interface RawFacts {
 export function rawSeen(live: LiveLooks, thing: string, facts: RawFacts, now: Date): RawSeen {
   const target = parseThingId(thing);
   if (!target) return 'unread';
-  if (target.kind === 'server') {
-    // A fleet that wasn't read says nothing; one read without the server says it is gone.
-    if (!live.serversRead || !live.fleet) return 'unread';
-    const row = live.fleet.rows.get(target.id);
-    if (!row) return 'gone';
-    if (facts.held.has(thing)) return 'held';
-    // Offline is offline also while its alert is quiet or held back by its offline parent.
-    if (row.status === 'offline') return 'down';
-    return row.status === 'pending' ? 'unread' : 'fine';
-  }
+  if (target.kind === 'server') return serverSeen(live, target.id, facts.held.has(thing));
+  // A hold says nothing of whether the thing is still there: one kept quiet stays held until the hold ends.
+  if (facts.held.has(thing)) return 'held';
   const until = facts.heldUntil.get(thing);
   if (target.kind === 'device') {
     const row = facts.devices.get(thing);
     if (!row) return 'gone';
-    if (facts.held.has(thing)) return 'held';
     if (row.lastReadError !== null) return 'down';
     if (!row.lastReadAt || (until && row.lastReadAt <= until)) return 'unread';
     return now.getTime() - row.lastReadAt.getTime() > DEVICE_FRESH_MS ? 'unread' : 'fine';
   }
   const row = facts.connections.get(thing);
-  if (!row) return 'gone';
-  if (facts.held.has(thing)) return 'held';
+  if (!row) {
+    const account = facts.accounts.get(thing);
+    // An account that needs a new sign-in still answers: the service refused the credential.
+    return account === undefined ? 'gone' : account === 'signed_out' ? 'answering' : account;
+  }
   // The service refused the credential: it answers.
   if (row.status === 'needs_reauth') return 'answering';
   const glance = row.glance as ConnectionGlance | null;
@@ -173,18 +194,66 @@ export function rawSeen(live: LiveLooks, thing: string, facts: RawFacts, now: Da
   return 'fine';
 }
 
+/**
+ * A server from the hosts service's own list, before anything quieted it: offline is down also while its alert is
+ * quiet or held back by its offline parent; one of its critical alerts open is still wrong also while the person
+ * ignored or snoozed it; one still being added says nothing yet.
+ */
+function serverSeen(live: LiveLooks, id: string, held: boolean): RawSeen {
+  // A fleet that wasn't read says nothing; one read without the server says it is gone.
+  if (!live.serversRead || !live.fleet) return 'unread';
+  if (held) return 'held';
+  const raw = live.fleet.raw?.get(id);
+  const status = raw?.status ?? live.fleet.rows.get(id)?.status;
+  if (!status) return 'gone';
+  if (status === 'offline') return 'down';
+  if (status === 'pending') return 'unread';
+  return raw?.critical ? 'answering' : 'fine';
+}
+
+/** A line's state as the health pass keeps it: when a pass last saw it. */
+export interface LineState {
+  checkId: string;
+  lastSeen: Date;
+}
+
+/**
+ * Of `checks` (what an open incident is about), those a connection's last check didn't read, so whatever it found of
+ * them says nothing: every check but its `conn.` ones when it answered and its reader didn't, and any whose line it
+ * kept from an earlier pass (a line's state is renewed on every pass that reads its check, and dropped on one that
+ * reads it fine).
+ */
+export function unreadChecks(
+  row: { glance: unknown; glanceAt: Date | null },
+  states: readonly LineState[],
+  checks: readonly string[],
+): Set<string> {
+  const out = new Set<string>();
+  const glance = row.glance as ConnectionGlance | null;
+  if (!glance || !row.glanceAt) return out;
+  const at = row.glanceAt.getTime();
+  for (const check of checks) {
+    if (glance.readFailedSince && !check.startsWith('conn.')) out.add(check);
+    else if (states.some((s) => s.checkId === check && s.lastSeen.getTime() < at)) out.add(check);
+  }
+  return out;
+}
+
 /** What `observeThings` found: each thing's `RawSeen`, when a hold last ended, and the memory for the next pass. */
 export interface Observed {
   raw: Map<string, RawSeen>;
   heldUntil: Map<string, Date>;
   /** The last pass that saw each of these things held. */
   held: Map<string, Date>;
+  /** Of the checks asked about (`checks`), by thing, those its last check didn't read (`unreadChecks`). */
+  unread: Map<string, Set<string>>;
 }
 
 /**
  * Reads what Whombat sees of some things themselves now (`rawSeen`): their own rows, their holds (from Home's things,
  * the windows and the causes) and when a hold last ended, from the windows and from `heldBefore`, the last pass that saw
- * each held (a cause leaves no row once it lifts).
+ * each held (a cause leaves no row once it lifts). `checks`: the checks open incidents are about, by thing, to know
+ * which of them a connection's last check didn't read.
  */
 export async function observeThings(
   services: Services,
@@ -193,6 +262,7 @@ export async function observeThings(
   list: readonly string[],
   heldBefore: ReadonlyMap<string, Date>,
   now: Date,
+  checks: ReadonlyMap<string, readonly string[]> = new Map(),
 ): Promise<Observed> {
   const ids = [...new Set(list)].slice(0, 500);
   const inner = (kind: string) =>
@@ -202,7 +272,8 @@ export async function observeThings(
     });
   const connectionIds = inner('connection');
   const deviceIds = inner('device');
-  const [connections, devices, windows, causes] = ids.length
+  const asked = ids.filter((t) => t.startsWith('connection:') && checks.get(t)?.length);
+  const [connections, accounts, states, devices, windows, causes] = ids.length
     ? await Promise.all([
         connectionIds.length
           ? services.db
@@ -215,6 +286,22 @@ export async function observeThings(
               .from(catalogConnections)
               .where(
                 and(eq(catalogConnections.burrowId, burrowId), inArray(catalogConnections.id, connectionIds)),
+              )
+          : [],
+        connectionIds.length ? accountsSeen(services, burrowId, live.person, connectionIds) : new Map(),
+        asked.length
+          ? services.db
+              .select({
+                thing: noticeStates.thingId,
+                checkId: noticeStates.checkId,
+                lastSeen: noticeStates.lastSeen,
+              })
+              .from(noticeStates)
+              .where(
+                and(
+                  inArray(noticeStates.thingId, asked),
+                  inArray(noticeStates.checkId, [...new Set(asked.flatMap((t) => checks.get(t) ?? []))]),
+                ),
               )
           : [],
         deviceIds.length
@@ -261,7 +348,7 @@ export async function observeThings(
             ),
           ),
       ])
-    : [[], [], [], []];
+    : [[], new Map<string, AccountSeen>(), [], [], [], []];
   const held = new Set(causes.map((c) => c.thing));
   const heldUntil = new Map<string, Date>();
   const later = (thing: string, at: Date) => {
@@ -284,15 +371,75 @@ export async function observeThings(
   }
   const facts: RawFacts = {
     connections: new Map(connections.map((c) => [`connection:${c.id}`, c] as const)),
+    accounts,
     devices: new Map(
       devices.flatMap((d) => (d.connectionId ? [[`device:${d.connectionId}`, d] as const] : [])),
     ),
     held,
     heldUntil,
   };
+  const unread = new Map<string, Set<string>>();
+  for (const thing of asked) {
+    const row = facts.connections.get(thing);
+    const skipped = row
+      ? unreadChecks(
+          row,
+          states.filter((s) => s.thing === thing),
+          checks.get(thing) ?? [],
+        )
+      : null;
+    if (skipped?.size) unread.set(thing, skipped);
+  }
   return {
     raw: new Map(ids.map((t) => [t, rawSeen(live, t, facts, now)] as const)),
     heldUntil,
     held: memory,
+    unread,
   };
+}
+
+/**
+ * The person's accounts among `ids` (connection ids), read from their own records as Home lists them: Google,
+ * Microsoft 365 and Email from the person's connector rows (signed in while active), GitHub and Website feedback while
+ * they are there for this Whombat.
+ */
+async function accountsSeen(
+  services: Services,
+  burrowId: string,
+  person: PrincipalRow,
+  ids: readonly string[],
+): Promise<Map<string, AccountSeen>> {
+  const out = new Map<string, AccountSeen>();
+  const present = (thing: string, shown: boolean | null) => {
+    if (shown !== false) out.set(thing, shown ? 'fine' : 'unread');
+  };
+  const wanted = new Set(ids.map((id) => `connection:${id}`));
+  const [rows, github, feedback] = await Promise.all([
+    person.accountId
+      ? services.db
+          .select({
+            id: accountRows.id,
+            provider: accountRows.provider,
+            services: accountRows.services,
+            status: accountRows.status,
+          })
+          .from(accountRows)
+          .where(
+            and(
+              eq(accountRows.accountId, person.accountId),
+              inArray(accountRows.id, [...ids]),
+              inArray(accountRows.provider, [...COUNTED]),
+            ),
+          )
+      : [],
+    wanted.has(GITHUB_THING_ID) ? githubShown(services, burrowId).catch(() => null) : false,
+    wanted.has(FEEDBACK_THING_ID)
+      ? feedbackShown(services, { burrowId, principal: person }).catch(() => null)
+      : false,
+  ]);
+  for (const row of rows)
+    if (isAccountThing(row)) out.set(`connection:${row.id}`, row.status === 'active' ? 'fine' : 'signed_out');
+  present(GITHUB_THING_ID, github);
+  present(FEEDBACK_THING_ID, feedback);
+  return out;
 }

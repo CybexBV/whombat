@@ -847,7 +847,8 @@ published automation details read their definition and publisher from one versio
   schedules (cron in a time zone) and Run now. A `thing` trigger listens to signed starts, escalations or ends of
   incidents for one thing or selected kinds; one that names a check starts on any event carrying it (the incident's
   own, or a bad check that began counting on it later). The engine claims each incident once per automation. A delayed
-  claim survives a restart and runs only while the incident is still open, independent and unmuted, and, as the
+  claim survives a restart and runs only while the incident is still open, independent and not kept quiet at its
+  deadline (a window that came and went meanwhile doesn't count), and, as the
   incident watcher reads the thing then, a `down` one only while it still doesn't answer and a `problem` one only while
   the check it waited on (the trigger's, else the event's) is still bad; a thing it can't read then is asked again a
   minute later. Until the release a box would go back to knows them (`0027_incident_automation_watches` in
@@ -1707,13 +1708,17 @@ Setup and operation: `docs/github.md`.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;
-  amber opens none, a problem that goes down becomes a `down` one. The incident keeps when it stopped answering
-  (`down_since`), which starts the delay for `thing.down` automations and counts toward downtime. Whether it is over
-  is read from the thing itself, not its dot (`observeThings`): a server's fleet row online, a connection's last check (its outcome and lines, before
-  the quiet rows) or a device's last read, made after any hold over it ended. Two passes in a row that see it fine end
-  it, at the first of them; one that sees it still bad underneath (not answering, a line someone quieted or switched
-  off, kept quiet, down because of something else) starts the count again; one that couldn't read it counts neither
-  way. A thing that was removed ends its incident at once without `thing.back`, and its watches stop with a short line.
+  amber opens none, a problem that goes down becomes a `down` one; a pass that couldn't read a thing between two that
+  saw its look keeps its run. The incident keeps when it stopped answering (`down_since`), which starts the delay for
+  `thing.down` automations and counts toward downtime. Whether it is over is read from the thing itself, not its dot (`observeThings`): a server
+  from the hosts service's own list (online, without an open critical alert whoever ignored or snoozed it; one still
+  being added says nothing), a connection's last check (its outcome and lines, before the quiet rows; one that answered
+  without reading a check the incident is about says nothing), a device's last read, made after any hold over it ended,
+  and the person's accounts from their own records (Google, Microsoft 365 and Email signed in; GitHub and Website
+  feedback there). Two passes in a row that see it fine end it, at the first of them; one that sees it still bad
+  underneath (not answering, a line someone quieted or switched off, kept quiet, down because of something else) starts
+  the count again; one that couldn't read it counts neither way. A thing that was removed ends its incident at once
+  without `thing.back`, and its watches stop with a short line.
   On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
   update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
   then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,

@@ -217,6 +217,52 @@ describe('incidents from the looks', () => {
     expect(again.opened.map((o) => o.startedAt)).toEqual([at(1)]);
   });
 
+  it('keeps the run of a connection or device a pass couldn’t read, and only of one it couldn’t read', () => {
+    const plex = look('connection:plex');
+    const tv = look('device:tv', { kind: 'device' });
+    const first = planIncidents({ looks: [plex, tv], open: [], before: null, serversRead: true, now: at(1) });
+    // Its check couldn't run, and the TV wasn't read: no look of either, nothing counted.
+    const unread = planIncidents({
+      looks: [],
+      open: [],
+      before: first.seen,
+      serversRead: true,
+      seen: seenAs('unread', 'connection:plex', 'device:tv'),
+      now: at(2),
+    });
+    expect(unread.opened).toEqual([]);
+    const again = planIncidents({
+      looks: [plex, tv],
+      open: [],
+      before: unread.seen,
+      serversRead: true,
+      now: at(3),
+    });
+    expect(again.opened.map((o) => [o.thing, o.startedAt])).toEqual([
+      ['connection:plex', at(1)],
+      ['device:tv', at(1)],
+    ]);
+    // Seen fine, or bad yet quieted, in between: the run starts again.
+    for (const between of ['fine', 'bad'] as const) {
+      const gap = planIncidents({
+        looks: [],
+        open: [],
+        before: first.seen,
+        serversRead: true,
+        seen: seenAs(between, 'connection:plex'),
+        now: at(2),
+      });
+      const later = planIncidents({
+        looks: [plex],
+        open: [],
+        before: gap.seen,
+        serversRead: true,
+        now: at(3),
+      });
+      expect(later.opened).toEqual([]);
+    }
+  });
+
   it('ends one whose thing was removed at once, as removed', () => {
     const open = [incident('connection:plex')];
     const plan = planIncidents({
