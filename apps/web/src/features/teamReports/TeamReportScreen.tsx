@@ -203,7 +203,7 @@ function ReportPage({
             });
           }}
         >
-          The Whombat Team’s copy is deleted.
+          It is deleted, also from the Whombat Team’s list of reports.
         </ConfirmDialog>
       ) : null}
     </PlacePage>

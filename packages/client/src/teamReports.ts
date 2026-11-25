@@ -78,7 +78,7 @@ export const TEAM_REPORT_WORDS = {
   stillHappening: 'Still happening',
   more: 'More',
   withdraw: 'Withdraw report',
-  withdrawConfirm: 'Withdraw this report? The Whombat Team’s copy is deleted.',
+  withdrawConfirm: 'Withdraw this report? It is deleted, also from the Whombat Team’s list of reports.',
   withdrawn: 'Report withdrawn.',
   cancel: 'Cancel',
   notFound: 'This report isn’t here any more.',
