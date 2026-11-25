@@ -257,9 +257,10 @@ const DATE_OR_TIME =
  */
 export function keepingDatesAndTimes(text: string, change: (text: string) => string): string {
   const kept: string[] = [];
-  // Nothing of the text can pass for a placeholder.
-  const hidden = text
-    .replace(/[\u0000-\u001f\uE000\uE001]/g, ' ')
+  // Nothing of the text can pass for a placeholder: control characters and the two markers become spaces.
+  const hidden = [...text]
+    .map((c) => (c < ' ' || c === '\uE000' || c === '\uE001' ? ' ' : c))
+    .join('')
     .replace(DATE_OR_TIME, (m) => `\uE000${kept.push(m) - 1}\uE001`);
   return change(hidden).replace(/\uE000(\d+)\uE001/g, (_m, i: string) => kept[Number(i)] ?? '');
 }
