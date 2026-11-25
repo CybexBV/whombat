@@ -160,7 +160,7 @@ export function LooksAheadPart({ profile }: PartProps) {
         </Section>
       ) : null}
 
-      {hasMatters && view.hasMail ? (
+      {hasMatters && (view.hasMail || matters.length > 0) ? (
         <Section title={T.matters}>
           {matters.length ? (
             matters.map((matter, i) => (

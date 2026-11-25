@@ -1778,30 +1778,41 @@ Setup and operation: `docs/github.md`.
   its Hermes session dropped when it ends (`hermes_session_drops`). Its lines
   (`packages/agent-runtime/src/persona/ahead.ts`) give every stranger's word delimited and defused; the Hermes policy
   and the server's served tools (`mcp/served.ts`) both hold each kind of turn to its own tools.
-  - **A triage pass** (`aheadTriageDue`, `aheadTriageSince`) runs when new mail came since the last pass began (at most
-    48 hours back): the person's own mail and plain bulk mail are left out before the turn (`aheadMailNoise`), and the
+  - **A triage pass** (`aheadTriageDue`, `aheadTriageSince`) runs when new mail came after the inbox read of the last
+    pass that finished (with 10 minutes of overlap, at most 48 hours back, the first 24 hours); a failed pass doesn't
+    move that point and may be retried at once, though it counts as one of the day's three. Mail a recent pass already
+    listed, the person's own mail and plain bulk mail are left out before the turn (`aheadMailNoise`), and the
     rest is a numbered list (`m1`…: sender, subject, date, a short snippet, at most 60, those with a booking, deadline
     or rule word first), beside the open matters (`k1`…), the next 14 days of plans, the rules and the recent “Not
     useful” verdicts. Its only tool is `ahead_triage`: at most 3 picks, each a mail's number and perhaps a matter's
     ref; it reads no mail and writes no words. The picks stay on its row (`event.triage.picks`) for 48 hours, and the
     watcher starts each as a mail check within the day's budget.
   - **A mail check** reads one mail (`mail_search`, `mail_read`, files, docs; the web is closed from the start: its
-    row's `mail_read_at` is stamped) with the next 14 days of plans, and ends with `ahead_report`. It looks for a
+    row's `mail_read_at` is stamped) with the next 14 days of plans, and ends with `ahead_report`. The server refuses
+    its finding or a change to a matter until it has read its own mail with `mail_read`, and takes `{ matter: true }`
+    as a source only from a follow-up. It looks for a
     booking missing from or differing with the calendar, a deadline, someone waiting on the person's answer, a problem
     with an account or payment, and news they wait for. Given a matter (`matter_id`, and what earlier checks of it
     told), it reports news on it or stays silent, and says with `ahead_report`'s `matter` whether it goes on or is done;
     without one it may open a matter for something that goes on after today.
   - **Matters** (`ahead_matters`, at most 30 open): what Whombat keeps an eye on, in fixed short fields scrubbed like a
     finding's words (title, who, whom it waits on, an optional date and note), with how mail is matched to it
-    (`aheadMatterMatches`: its mail threads, sender words, or subject words for one the person asked for). A check
-    opens at most 3 a day, matched only by that mail's thread and sender; the person opens one in their own turn with
-    `ahead_watch` (`start`, `list`, `stop`), which needs Looks ahead and incoming mail on and is never served to an
-    `ahead` turn, an automation's or an outsider's. New mail that matches an open matter becomes a mail check at once.
-    `aheadMatterDue` starts one follow-up per reason (`source: 'matter'`): the day before the date of one that waits on
-    the person (`due`), or at its date or after 5 days without news for one that waits on someone else (`no_answer`).
-    The follow-up reads the mail; handled, it closes the matter silently; otherwise it tells, with `{ matter: true }`
-    as its source when there is no mail to point at. A matter closes when a check says it is done, when the person
-    removes it, or after 30 days without news.
+    (`aheadMatterMatches`): one of its mail threads; or a sender word (3 or more characters) in the sender's address,
+    read from the end of the From line and never the display name, plus one of its subject words in the subject or
+    snippet when it has any; or, without sender words, a subject word. Only mail that arrived after the matter began
+    matches, a thread match wins over another matter's, and bulk mail from the sender matches only a matter the person
+    asked for (or a thread). A check opens at most 3 a day, matched only by that mail's thread and sender; the person
+    opens one with `ahead_watch` (`start`, `list`, `stop`) in a turn their own message began (`dm`, `mention`), which
+    needs Looks ahead and incoming mail on, refuses a public mailbox provider or a bare word like `com` as a sender
+    word, and makes a matter a check already keeps (same title) theirs. Up to 3 matching mails a day per matter
+    (`AHEAD_MATTER_CHECKS_PER_DAY`) become a mail check at once; the rest go through the triage. `aheadMatterDue`
+    starts one follow-up per reason (`source: 'matter'`): from the day before the date of one that waits on the person
+    (`due`), or at its date or after 5 days without news for one that waits on someone else (`no_answer`), never within
+    12 hours of its start or last news (`AHEAD_MATTER_QUIET_MS`); a reason is spent once its check reported, and a
+    failed turn is tried once more. The follow-up reads the mail; handled, it closes the matter (silently for one a
+    check opened, with a finding for one the person asked for); otherwise it tells, with `{ matter: true }` as its
+    source when there is no mail to point at. A matter closes when a check says it is done, when the person removes
+    it, or after 30 days without news and no sooner than 14 days after its date.
   - **A calendar check** reads the plan and the rest of its day's accepted plans: first the web (`search_web` on Brave
     with public words only, `read_web_page` with JSON-LD event data and an incognito headless Chromium behind a local
     SSRF-checked proxy), then mail, Drive/OneDrive files and read-only Paperless-ngx and Notion docs
@@ -1810,12 +1821,15 @@ Setup and operation: `docs/github.md`.
   - **Findings**: `ahead_report` posts a sourced finding (Whombat names each source itself) in the person's Chat with a
     push, in one thread per event, mail or matter (news on one the person asked for goes in the thread they asked in),
     with an optional one-tap action chip, “Not useful” (with an optional reason later checks read) and “Stop checking
-    for this”, which stops the finding's kind or, under a finding about a matter, that matter (`ahead_feedback`). News
-    on a matter the person asked for is told outside the day's count and whatever kinds are stopped, never at night.
-    Threads settle 2 hours after the event or 48 hours after a mail finding when the person didn't write in them. What
-    lasts is only the notes of an event's stages, the matters, the person's rules and their recent verdicts.
+    for this”, which stops the finding's kind or, under a finding about a matter, that matter (`ahead_feedback`); both
+    act on the finding they were said under. What the person asked for (its matched mail, linked picks and
+    follow-ups) is never held back by the day's findings, and its news is told whatever kinds are stopped, never at
+    night. Threads settle 2 hours after the event or 48 hours after a mail finding when the person didn't write in
+    them, by their newest finding. What lasts is only the notes of an event's stages, the matters, the person's rules
+    and their recent verdicts.
   - Settings → {assistant} → Looks ahead (`looksAhead.get`, `looksAhead.update`, `looksAhead.checkNow`) shows the
-    switch with “Check now”, calendars, the incoming mail switch, “Keeping an eye on” (each matter with Remove),
+    switch with “Check now”, calendars, the incoming mail switch, “Keeping an eye on” (each matter with Remove, while
+    a mailbox is connected or any matter is kept),
     standing rules, stopped kinds, the week's count and the 15 most recent checks; the assistant reads and changes it as
     the person asks.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job

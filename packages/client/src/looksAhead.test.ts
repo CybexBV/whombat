@@ -4,6 +4,7 @@ import {
   hasLooksAhead,
   hasLooksAheadMatters,
   hasLooksAheadV2,
+  LOOKS_AHEAD_TEXT,
   looksAheadCalendarMeta,
   looksAheadCheckMeta,
   looksAheadRecentLabel,
@@ -111,6 +112,16 @@ describe('Looks ahead in Settings', () => {
     );
     expect(looksAheadRecentLabel({ of: 'matter' })).toBe('Follow-up');
     expect(looksAheadRecentLabel({})).toBeNull();
+    // “Stop checking for this” under a follow-up stopped that one thing, not a kind.
+    const stopped = {
+      ...quiet,
+      state: 'told' as const,
+      kind: 'deadline' as const,
+      feedback: 'stop_kind' as const,
+    };
+    expect(looksAheadCheckMeta({ ...stopped, of: 'matter' })).toContain(LOOKS_AHEAD_TEXT.stoppedMatter);
+    expect(looksAheadCheckMeta({ ...stopped, of: 'matter' })).not.toContain(LOOKS_AHEAD_TEXT.stoppedKind);
+    expect(looksAheadCheckMeta(stopped)).toContain(LOOKS_AHEAD_TEXT.stoppedKind);
   });
 
   it('says who, whom it waits on and its date under a thing kept an eye on', () => {

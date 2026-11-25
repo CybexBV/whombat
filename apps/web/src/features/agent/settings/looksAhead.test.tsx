@@ -133,10 +133,22 @@ describe('Settings → the assistant → Looks ahead', () => {
     expect(within(matters).queryByRole('listitem')).toBeNull();
   });
 
-  it('leaves out what it keeps an eye on without a mailbox', async () => {
-    open({ looksAhead: { hasMail: false } });
+  it('leaves out what it keeps an eye on without a mailbox and nothing kept', async () => {
+    open({ looksAhead: { hasMail: false, matters: [] } });
     await screen.findByRole('region', { name: T.rules });
     expect(screen.queryByRole('region', { name: T.matters })).toBeNull();
+  });
+
+  it('still lists what it keeps, each removable, when the mailbox dropped out', async () => {
+    const user = userEvent.setup();
+    const { updates } = open({ looksAhead: { hasMail: false } });
+    const matters = await screen.findByRole('region', { name: T.matters });
+    expect(within(matters).getAllByRole('listitem')).toHaveLength(3);
+    await user.click(
+      within(matters).getByRole('button', { name: T.removeMatterLabel('Refund for the cancelled flight') }),
+    );
+    await waitFor(() => expect(updates()).toHaveLength(1));
+    expect(updates()[0]?.body).toEqual({ removeMatter: 'ahm_2' });
   });
 
   it('leaves out what it keeps an eye on below its minor', async () => {

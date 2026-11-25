@@ -45,6 +45,10 @@ export const LOOKS_AHEAD_TEXT = {
   triageChecking: 'Looking through new mail',
   /** A thing kept an eye on's remove button, for screen readers. */
   removeMatterLabel: (title: string) => `${LOOKS_AHEAD_WORDS.removeMatter}: ${title}`,
+  /** A recent check's feedback: the person stopped a kind of check, or (under a follow-up) the thing kept an eye on. */
+  stoppedKind: 'Stopped this kind',
+  stoppedMatter: 'Stopped keeping an eye on it',
+  notUseful: 'Marked not useful',
 } as const;
 
 /** A thing kept an eye on's remove button, for screen readers: “Remove: Answer from the notary”. */
@@ -188,11 +192,15 @@ export function looksAheadCheckMeta(
   else if (item.state === 'told')
     outcome = item.kind ? `Flagged · ${AHEAD_KIND_WORDS[item.kind]}` : 'Flagged';
   else outcome = 'Checked · nothing to flag';
+  // Under a follow-up, “Stop checking for this” stopped keeping an eye on that one thing, not a kind. A mail check's
+  // row doesn't say whether its finding was about a matter, so it keeps the kind's words.
   const fb =
     item.feedback === 'not_useful'
-      ? 'Marked not useful'
+      ? LOOKS_AHEAD_TEXT.notUseful
       : item.feedback === 'stop_kind'
-        ? 'Stopped this kind'
+        ? item.of === 'matter'
+          ? LOOKS_AHEAD_TEXT.stoppedMatter
+          : LOOKS_AHEAD_TEXT.stoppedKind
         : '';
   return [origin, outcome, fb].filter(Boolean).join(' · ');
 }

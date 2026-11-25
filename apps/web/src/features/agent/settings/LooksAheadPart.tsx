@@ -190,7 +190,7 @@ export function LooksAheadPart({ burrow }: { burrow: string }) {
         </section>
       ) : null}
 
-      {hasMatters && view.hasMail ? (
+      {hasMatters && (view.hasMail || matters.length > 0) ? (
         <section className={styles.section} aria-labelledby={`${ids}-matters`} data-ahead="matters">
           <SectionLabel as="h2" id={`${ids}-matters`}>
             {T.matters}
