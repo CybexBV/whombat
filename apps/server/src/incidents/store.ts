@@ -10,7 +10,8 @@
  *   incident whose thing was removed ends without `thing.back`: it didn't come back. When the last incident a push
  *   named ends, its push is withdrawn quietly: its inbox row is read, and on a managed Whombat the phone's notification
  *   goes (a content-free clear). Nothing says it's back. Home's `things` hears of each opening, worsening and end, so an
- *   open page's “What happened” reads again.
+ *   open page's “What happened” reads again. A Website check pointed at another address ends its incident the same
+ *   quiet way in the edit's own commit (`endIncidentQuietly`).
  * - **`incidents.push`** (the watcher): saves the Inbox notification and marks the incidents pushed in one commit,
  *   then uses the usual push delivery. Whether each is still open, not kept quiet or down because of something else,
  *   and not pushed about by a research finding meanwhile is checked again in its commit, and its words name only those
@@ -37,6 +38,7 @@ import {
   type DownStretchRow,
   type IncidentRow,
   incidents,
+  incidentTriggers,
   lookResearches,
   notifications,
 } from '../db/schema/index';
@@ -358,6 +360,36 @@ export const incidentsPass = defineCommand({
     return { signed };
   },
 });
+
+/**
+ * Ends a thing's open incident inside the caller's commit, quietly, as a removed thing's: nothing says it is back, its
+ * push is withdrawn and the delayed starts waiting on it are dropped. For a Website check pointed at another address:
+ * the old target's outage says nothing of the new one, which opens its own after the usual passes.
+ */
+export async function endIncidentQuietly(ctx: ApplyContext, thing: string): Promise<void> {
+  const rows = await ctx.tx
+    .update(incidents)
+    .set({ endedAt: ctx.now })
+    .where(
+      and(eq(incidents.burrowId, ctx.burrow.id), eq(incidents.thingId, thing), isNull(incidents.endedAt)),
+    )
+    .returning();
+  if (!rows.length) return;
+  await ctx.tx.delete(incidentTriggers).where(
+    and(
+      eq(incidentTriggers.burrowId, ctx.burrow.id),
+      inArray(
+        incidentTriggers.incidentId,
+        rows.map((r) => r.id),
+      ),
+      isNotNull(incidentTriggers.dueAt),
+    ),
+  );
+  await withdrawPushes(ctx, [
+    ...new Set(rows.flatMap((r) => (r.pushGroup && !r.withdrawnAt ? [r.pushGroup] : []))),
+  ]);
+  publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['things']);
+}
 
 /** Where a tap on the push opens: the thing's look thread when it has one, else its page; for several, the Inbox. */
 async function pushLink(ctx: ApplyContext, group: readonly IncidentRow[]) {

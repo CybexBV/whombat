@@ -10,7 +10,8 @@
  * accounts from their own records. Quieting a line, a hold, or a pass that couldn't read the thing never says it is
  * back; a thing that was removed ends its incident as removed.
  *
- * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass.
+ * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass. A
+ * pass that can't read Home keeps only what it knew of the open incidents, as a pass that couldn't read their things.
  */
 import type { IncidentNature } from '@whombat/core';
 import { burrows } from '../db/schema/index';
@@ -22,6 +23,7 @@ import type { Services } from '../services';
 import { holdsIncident } from './holds';
 import { lookNow, observeThings, type RawSeen, readLiveLooks } from './looks';
 import {
+  blindPass,
   type OpenIncident,
   type PassBefore,
   PUSH_MAX,
@@ -283,6 +285,23 @@ async function pushDue(
   );
 }
 
+/**
+ * What the watcher remembers of a pass: what it saw, or after one that read nothing, only what it knew of the open
+ * incidents, with the pass as one that couldn't read them (`blindPass`), so the push's clock starts again once Whombat
+ * can; null forgets.
+ */
+export async function passMemory(
+  services: Services,
+  burrowId: string,
+  before: PassBefore | null,
+  seen: PassBefore | null,
+): Promise<PassBefore | null> {
+  if (seen) return seen;
+  if (!before) return null;
+  const rows = await openIncidents(services.db, burrowId).catch(() => null);
+  return rows && blindPass(before, new Map(rows.map((r) => [r.id, r.thingId] as const)), services.clock());
+}
+
 /** The watcher's memory: what each burrow's pass before saw. */
 export class IncidentWatcher {
   readonly #before = new Map<string, PassBefore>();
@@ -297,12 +316,13 @@ export class IncidentWatcher {
       await deliverThingWatches(this.services, id).catch((err) =>
         this.services.log.warn({ err, burrowId: id }, 'Thing watches could not be read'),
       );
-      const seen = await watchIncidents(this.services, id, this.#before.get(id) ?? null).catch((err) => {
+      const before = this.#before.get(id) ?? null;
+      const seen = await watchIncidents(this.services, id, before).catch((err) => {
         this.services.log.warn({ err: String(err), burrowId: id }, 'incidents: the pass failed');
         return null;
       });
-      // A pass that read nothing forgets: a look must be seen on two passes that read it.
-      if (seen) this.#before.set(id, seen);
+      const kept = await passMemory(this.services, id, before, seen);
+      if (kept) this.#before.set(id, kept);
       else this.#before.delete(id);
     }
     const now = this.services.clock();
