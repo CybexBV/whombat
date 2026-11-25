@@ -20,7 +20,7 @@
     # here (nix/packages/hermes) with our nixpkgs' Python 3.14, not through its own flake (whose nixpkgs-unstable,
     # flake-parts, home-manager and npm inputs would come along). A new pin only after our tests (NX-433).
     hermes = {
-      url = "github:NousResearch/hermes-agent/caafe5389ae585ef77387a962aee05b1bcf17029"; # v0.23.3
+      url = "github:NousResearch/hermes-agent/8fc0374447313e276f6b9a2764bfc750190c966a"; # v0.23.4
       flake = false;
     };
     # The uv2nix tool chain Hermes's own flake builds its locked Python environment with, at the revisions its
