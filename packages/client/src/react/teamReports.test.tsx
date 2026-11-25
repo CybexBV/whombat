@@ -11,6 +11,7 @@ import { WhombatClientProvider } from './context';
 import {
   useActTeamReport,
   useCreateTeamReport,
+  useReplyTeamReport,
   useTeamReport,
   useTeamReports,
   useTeamReportsEntry,
@@ -183,6 +184,46 @@ describe('reports to the Whombat Team in React', () => {
     const acts = sent.filter((s) => s.url.endsWith('/act')).map((s) => s.body.requestId);
     expect(acts[1]).toBe(acts[0]);
     expect(acts[2]).not.toBe(acts[1]);
+    client.session?.close();
+  });
+
+  it('sends edited words with a new request id after a failure, and the same words again with the same one', async () => {
+    let fail = true;
+    const { client, wrapper, sent } = setup((method, url) => {
+      if (method === 'POST' && (url.endsWith('/team-reports') || url.endsWith('/replies'))) {
+        if (fail) return json({ error: { code: 'unavailable', message: 'Try again in a moment.' } }, 503);
+        return json(
+          { report: report({ id: NEW, messages: [] }), earlier: 0 },
+          url.endsWith('/replies') ? 200 : 201,
+        );
+      }
+      return json(list());
+    });
+    act(() => client.session?.connect());
+    const create = renderHook(() => useCreateTeamReport(BURROW), { wrapper });
+    const first = { kind: 'bug' as const, text: 'The map is blank.', expected: '', context: {} };
+    const edited = { ...first, text: 'The map is blank after midnight.' };
+    // The answer is lost; the person changes the words and tries again, twice.
+    await act(() => create.result.current.mutateAsync(first).catch(() => null));
+    await act(() => create.result.current.mutateAsync(edited).catch(() => null));
+    fail = false;
+    await act(() => create.result.current.mutateAsync(edited));
+    const ids = sent
+      .filter((s) => s.method === 'POST' && s.url.endsWith('/team-reports'))
+      .map((s) => s.body.requestId);
+    expect(ids).toHaveLength(3);
+    expect(ids[1]).not.toBe(ids[0]);
+    expect(ids[2]).toBe(ids[1]);
+
+    // A reply the same way.
+    fail = true;
+    const reply = renderHook(() => useReplyTeamReport(BURROW, ID), { wrapper });
+    await act(() => reply.result.current.mutateAsync('Firefox').catch(() => null));
+    await act(() => reply.result.current.mutateAsync('Firefox').catch(() => null));
+    await act(() => reply.result.current.mutateAsync('Firefox on Linux').catch(() => null));
+    const replies = sent.filter((s) => s.url.endsWith('/replies')).map((s) => s.body.requestId);
+    expect(replies[1]).toBe(replies[0]);
+    expect(replies[2]).not.toBe(replies[1]);
     client.session?.close();
   });
 });

@@ -80,16 +80,20 @@ function rowOf(report: TeamReport): TeamReportRow {
   return { ...summary, unread: false };
 }
 
-/** One send's request id: the same for every try, a new one once it went (`next`). */
+/**
+ * One send's request id: the same for every try of the same words (`what`), so a retry after a lost answer sends them
+ * once; a new one when the words changed (the edited words must go, not the earlier answer come back) and once it went
+ * (`next`).
+ */
 function useSendId() {
-  const id = useRef<string | null>(null);
+  const id = useRef<{ id: string; what: string } | null>(null);
   return {
-    current: () => {
-      id.current ??= newRequestId();
-      return id.current;
+    for: (what: string) => {
+      if (id.current?.what !== what) id.current = { id: newRequestId(), what };
+      return id.current.id;
     },
     next: () => {
-      id.current = newRequestId();
+      id.current = null;
     },
   };
 }
@@ -173,7 +177,8 @@ function okOrThrow<T>(result: CommitResult<T>): T {
 
 /**
  * Send a new report (`teamReports.create`); the answer is the report, its page ready to open. The form's request id
- * goes with every try (one with `draftId` goes with the draft's own, which the Whombat uses).
+ * goes with every try of the same words, a new one once they changed (one with `draftId` goes with the draft's own,
+ * which the Whombat uses).
  */
 export function useCreateTeamReport(burrow: string) {
   const { client } = useWhombat();
@@ -183,7 +188,12 @@ export function useCreateTeamReport(burrow: string) {
     mutationFn: async (body) => {
       const result = await client.request(api.teamReports.create, {
         params: { burrow },
-        body: { ...body, requestId: sendId.current() },
+        body: {
+          ...body,
+          requestId: sendId.for(
+            JSON.stringify([body.kind, body.text, body.expected ?? '', body.draftId ?? '']),
+          ),
+        },
       });
       const answer = okOrThrow(result);
       sendId.next();
@@ -194,7 +204,7 @@ export function useCreateTeamReport(burrow: string) {
   });
 }
 
-/** Write to the Whombat Team in a report (`teamReports.reply`); the box's request id goes with every try. */
+/** Write to the Whombat Team in a report (`teamReports.reply`); one request id for every try of the same words. */
 export function useReplyTeamReport(burrow: string, reportId: string) {
   const { client } = useWhombat();
   const qc = useQueryClient();
@@ -203,7 +213,7 @@ export function useReplyTeamReport(burrow: string, reportId: string) {
     mutationFn: async (text) => {
       const result = await client.request(api.teamReports.reply, {
         params: { burrow, reportId },
-        body: { text, requestId: sendId.current() },
+        body: { text, requestId: sendId.for(text) },
       });
       const answer = okOrThrow(result);
       sendId.next();
@@ -222,18 +232,14 @@ export function useActTeamReport(burrow: string, reportId: string) {
   const { client } = useWhombat();
   const qc = useQueryClient();
   const sendId = useSendId();
-  const lastAction = useRef<TeamReportAction | null>(null);
   return useMutation<TeamReport | null, Error, TeamReportAction>({
     mutationFn: async (action) => {
-      if (lastAction.current !== action) sendId.next();
-      lastAction.current = action;
       const result = await client.request(api.teamReports.act, {
         params: { burrow, reportId },
-        body: { action, requestId: sendId.current() },
+        body: { action, requestId: sendId.for(action) },
       });
       const answer = okOrThrow(result);
       sendId.next();
-      lastAction.current = null;
       if (action === 'withdraw' || !answer.report) {
         dropReport(qc, burrow, reportId);
         return null;
