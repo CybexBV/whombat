@@ -1533,8 +1533,9 @@ Setup and operation: `docs/github.md`.
   The health pass filters to eligible connections before it takes a batch. A check that answers while its kind's
   details stay unreadable for an hour gets a heads-up until a read works. A known machine's card says when it was
   last backed up, when its last attempt failed, or that no job covers it. The overdue line uses the last successful
-  backup from the job or its stored backup volumes. A covered machine with a failed attempt and no known successful
-  backup also gets the line.
+  backup from the job or its stored backup volumes. A covered machine with a failed attempt and an empty inventory
+  of usable backups also gets the line. A failed inventory read skips the overdue check. When the machine lookup
+  times out or fails, the health pass keeps the last mapping for cause matching.
 - **What Whombat watches** starts calm: every check of a kind, a device, a mail account or a server says whether it
   starts on (`startsOn`), and only the very important ones Whombat can act on do. A check that starts off is left out
   everywhere, as one switched off, until the person turns it on (`watch_ons`); `things/quiet/defaults.ts` keeps the
@@ -1711,10 +1712,12 @@ Setup and operation: `docs/github.md`.
   (`DeskLook.causedBy`, checked again in the push's commit, whose words name only what is left), nor one more than an
   hour old, nor past 6 pushes a day and 2 of a thing. The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's
-  notification. The health
-  pass stores whether each check answered (`up`, 1 or 0; none when the check couldn't run), so the hourly roll-up keeps
-  an hour's share. Live points weigh up to seven and a half minutes and rolled-up points up to an hour. Every page (a
-  connection's, device's, account's and a server's) says its week in one line (`uptime`, also one of a page's facts).
+  notification. The connection health pass and device reader store whether each check answered (`up`, 1 or 0).
+  Fresh account reads from the page, desk and mail count, and GitHub's own repository sync, keep one sample
+  per five minutes in `account_uptime_points`. Website feedback reads local reports and has no reachability check.
+  The hourly roll-up keeps the average and the reading count. Live points weigh up to seven and a half minutes.
+  A rolled hour weighs five minutes per reading, up to an hour. Older hourly points without a count weigh one reading.
+  Each page with uptime data says its week in one line (`uptime`, also one of a page's facts).
   A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
   `things.history` lists a thing's incidents over 30 or 90 days. A server's history includes alerts that were open
   during the period, including alerts that began earlier. The assistant reads this with `watch_status` and

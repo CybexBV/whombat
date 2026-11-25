@@ -4,6 +4,7 @@
  * incidents over 30 or 90 days, its uptime over them and, for a server, the alerts the hosts service had.
  */
 import {
+  GITHUB_THING_ID,
   type HostAlert,
   HostAlertOverlapQuery,
   parseThingId,
@@ -24,7 +25,14 @@ import { WHOMBAT_ACTOR } from '../hosts/service';
 import { notFound } from '../lib/errors';
 import type { Services } from '../services';
 import { thingVisible } from '../things/page';
-import { POINTS_KEEP_MS, RTT_KEY, readPoints, UP_KEY } from '../things/points';
+import {
+  POINTS_KEEP_MS,
+  RTT_KEY,
+  readAccountUptime,
+  readPoints,
+  UP_COUNT_KEY,
+  UP_KEY,
+} from '../things/points';
 import { hostsServing } from '../things/runs-on';
 import { incidentsSince } from './store';
 import { type DownStretch, downTime, thingUptime, upPoints, upShare } from './uptime';
@@ -147,17 +155,18 @@ export async function periodUptime(
       days,
     });
   }
-  const connectionId = parsed?.kind === 'connection' || parsed?.kind === 'device' ? parsed.id : null;
-  const points = connectionId
-    ? await readPoints(
-        services.db,
-        connectionId,
-        [UP_KEY, RTT_KEY],
-        now,
-        Math.min(days * DAY, POINTS_KEEP_MS),
-      )
-    : null;
-  const share = upShare(upPoints(points?.get(UP_KEY) ?? [], points?.get(RTT_KEY) ?? []), from, now);
+  const keptMs = Math.min(days * DAY, POINTS_KEEP_MS);
+  const keptFrom = new Date(now.getTime() - keptMs);
+  const points = await (async () => {
+    if (thing === GITHUB_THING_ID)
+      return readAccountUptime(services.db, { githubBurrowId: burrowId }, keptFrom);
+    if (parsed?.kind !== 'connection' && parsed?.kind !== 'device') return [];
+    const stored = await readPoints(services.db, parsed.id, [UP_KEY, UP_COUNT_KEY, RTT_KEY], now, keptMs);
+    const measured = upPoints(stored.get(UP_KEY) ?? [], stored.get(RTT_KEY) ?? [], stored.get(UP_COUNT_KEY));
+    if (measured.length || parsed.kind === 'device') return measured;
+    return readAccountUptime(services.db, { connectionId: parsed.id }, keptFrom);
+  })();
+  const share = upShare(points, from, now);
   const downs = downTime(downStretches(rows), from, now);
   return thingUptime({
     share: share.share,

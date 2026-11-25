@@ -29,7 +29,7 @@ import {
 import type { NeedsYouItem, ThingFact, ThingSummary, WatchItem } from '../home/types';
 import { iso } from '../lib/time';
 import type { Services } from '../services';
-import { devicePoints, recordPoints } from '../things/points';
+import { devicePoints, recordPoints, UP_KEY } from '../things/points';
 import { applyQuiet } from '../things/quiet/apply';
 import { withNotice } from '../things/quiet/connection';
 import { notWatched, registerChecks } from '../things/quiet/defaults';
@@ -330,7 +330,7 @@ export async function deviceWatch(ctx: SourceCtx): Promise<WatchItem[]> {
     });
 }
 
-/** Keeps a reading's numbers for the device's page chart (connection-pages.md CP-13, CP-15). */
+/** Keeps whether the device answered and any numbers the page can chart. */
 async function keepPoints(
   services: Services,
   skill: DeviceSkillRow,
@@ -341,7 +341,12 @@ async function keepPoints(
   const values = devicePoints(readings, skill.lastRead ?? skill.tested);
   const now = services.clock();
   await services.pipeline
-    .transactAccount((tx) => recordPoints(tx, connectionId, now, values))
+    .transactAccount((tx) =>
+      recordPoints(tx, connectionId, now, {
+        ...values,
+        [UP_KEY]: readings === null ? 0 : readings.length > 0 ? 1 : undefined,
+      }),
+    )
     .catch(() => undefined);
 }
 
@@ -384,18 +389,17 @@ async function devicePass(
 export async function readDevicesNow(services: Services, burrowId?: string): Promise<number> {
   let answered = 0;
   for (const skill of await skillsOn(services.db, burrowId)) {
+    let readings: ReadingResult[] | null = null;
+    let error: string | null = null;
     try {
-      const readings = await readDevice(services, skill.profile, addressOf(skill));
-      await keepLastRead(services, skill.id, readings, null);
-      await keepPoints(services, skill, readings);
-      await devicePass(services, skill, readings, null).catch(() => undefined);
-      answered++;
+      readings = await readDevice(services, skill.profile, addressOf(skill));
     } catch (err) {
-      const message = err instanceof DeviceCallError ? err.message : 'The device didn’t answer as expected.';
-      await keepLastRead(services, skill.id, null, message).catch(() => undefined);
-      await keepPoints(services, skill, null);
-      await devicePass(services, skill, null, message).catch(() => undefined);
+      error = err instanceof DeviceCallError ? err.message : 'The device didn’t answer as expected.';
     }
+    await keepLastRead(services, skill.id, readings, error).catch(() => undefined);
+    await keepPoints(services, skill, readings);
+    await devicePass(services, skill, readings, error).catch(() => undefined);
+    if (readings !== null) answered++;
   }
   return answered;
 }

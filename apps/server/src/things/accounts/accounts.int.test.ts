@@ -14,10 +14,12 @@ import {
   thingId,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ConnectionViewer } from '../../connections/store';
 import { storeGoogleConnection } from '../../connectors/store';
 import { accounts, feedbackReports, principals, prReviewers } from '../../db/schema/index';
+import { syncOwnedRepos } from '../../github/owned-repos';
+import { pollMailGlances } from '../../home/mail-glance';
 import { homeOverview } from '../../home/overview';
 import { ApiError } from '../../lib/errors';
 import type { PrincipalRow } from '../../read/principals';
@@ -26,6 +28,7 @@ import { createIntegration, filed, submission } from '../../test/feedback';
 import { useTestServer } from '../../test/harness';
 import { FAKE_ACCESS_TOKEN, FAKE_REFRESH_TOKEN } from '../../test/personal';
 import { thingPage, thingVisible } from '../page';
+import { readAccountUptime, rollUpPoints } from '../points';
 import { thingWatch } from '../quiet/service';
 
 const t = useTestServer({ seed: true });
@@ -74,9 +77,41 @@ describe('a Google account’s page', () => {
     expect(page.address).toBe('mara@example.com');
     expect(ids(page)).toEqual(expect.arrayContaining(['today', 'account', 'unread-mail', 'files']));
     expect(page.problem).toBeUndefined();
+    expect(page.uptime).toMatchObject({ upPct: 100 });
     await expect(thingPage(t.services, someone, google, TZ)).rejects.toBeInstanceOf(ApiError);
     expect(await thingVisible(t.services, mara, google)).toBe(true);
     expect(await thingVisible(t.services, someone, google)).toBe(false);
+  });
+
+  it('keeps one uptime sample for the shared reads per slot and rolls up the actual coverage', async () => {
+    const { services } = t;
+    const originalClock = services.clock;
+    const now = originalClock();
+    const hour = Math.floor(now.getTime() / 3600_000) * 3600_000 - 60 * 3600_000;
+    const failure = vi.spyOn(services.google.workspace, 'inboxUnread');
+    try {
+      services.clock = () => new Date(hour);
+      failure.mockRejectedValueOnce(new Error('No answer'));
+      expect(await pollMailGlances(services)).toBe(0);
+      services.clock = () => new Date(hour + 5 * 60_000);
+      await thingPage(services, mara, google, TZ);
+      // The health pass and page both read mail in this slot, and a failed part cannot erase a working one.
+      failure.mockRejectedValueOnce(new Error('No answer'));
+      await pollMailGlances(services);
+      await rollUpPoints(services, now);
+      await rollUpPoints(services, now);
+      const points = await readAccountUptime(
+        services.db,
+        { connectionId: google.slice('connection:'.length) },
+        new Date(hour),
+      );
+      expect(points.filter((p) => p.at.getTime() < hour + 3600_000)).toEqual([
+        { at: new Date(hour), value: 0.5, samples: 2 },
+      ]);
+    } finally {
+      failure.mockRestore();
+      services.clock = originalClock;
+    }
   });
 
   it('watches its sign-in from the start and Drive almost full once turned on', async () => {
@@ -104,6 +139,8 @@ describe('GitHub’s page', () => {
         ['failing', '1'],
       ]),
     );
+    await syncOwnedRepos(t.services, t.burrowId, IDS.mara);
+    expect((await thingPage(t.services, mara, GITHUB_THING_ID, TZ)).uptime).toMatchObject({ upPct: 100 });
   });
 });
 
@@ -120,6 +157,7 @@ describe('Website feedback’s page and Home', () => {
       .set({ status: 'resolved' })
       .where(eq(feedbackReports.id, first.id));
     const page = await thingPage(t.services, mara, FEEDBACK_THING_ID, TZ);
+    expect(page.uptime).toBeUndefined();
     expect(ThingPage.safeParse(page).error).toBeUndefined();
     expect(page).toMatchObject({ id: FEEDBACK_THING_ID, catalogId: 'feedback', name: 'Website feedback' });
     const fresh = page.tabs[0]?.panels.find((p) => p.id === 'new');

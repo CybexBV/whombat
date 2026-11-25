@@ -387,7 +387,7 @@ export interface MachineFigures {
   diskTotalGb: number | null;
   uptimeS: number | null;
   lastBackup: { at: string; result: string } | null;
-  /** A backup that exists even though the latest attempt failed. */
+  /** A usable backup after a failed attempt. Null means none was found. Undefined means the read failed. */
   lastSuccessfulBackupAt?: string | null;
   /** A Proxmox backup job covers it (null: unknown). */
   backupJob: boolean | null;
@@ -550,7 +550,7 @@ async function loadMachine(
         guest.platform === 'pve' && guest.backupJob && guest.lastBackup?.result === 'error'
           ? hosts
               .call<unknown>({ path: `${G}/backups`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
-              .catch(() => null)
+              .catch(() => undefined)
           : null,
       ]);
       return {
@@ -558,9 +558,11 @@ async function loadMachine(
         name: at.runsOn.name,
         backupRhythmMs: backupRhythm(arr(obj(jobs).items).map(toHostBackupJob), guest),
         lastSuccessfulBackupAt:
-          toHostBackupVolumes(backups).find(
-            (b) => b.verified !== 'failed' && Number.isFinite(Date.parse(b.created ?? '')),
-          )?.created ?? null,
+          backups === undefined
+            ? undefined
+            : (toHostBackupVolumes(backups).find(
+                (b) => b.verified !== 'failed' && Number.isFinite(Date.parse(b.created ?? '')),
+              )?.created ?? null),
       };
     }
     const fleet = await hosts.fleetRaw();

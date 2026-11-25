@@ -39,6 +39,7 @@ export function genericSlots(
   now: Date,
   timeZone: string,
   up: readonly RawPoint[] = [],
+  upCounts: readonly RawPoint[] = [],
 ): Pick<KindView, 'panels' | 'slots' | 'kpis'> {
   const t = now.getTime();
   const week = rtt.filter((p) => p.at.getTime() > t - 7 * DAY && p.at.getTime() <= t);
@@ -46,8 +47,7 @@ export function genericSlots(
   const answers = (ps: readonly RawPoint[]) =>
     ps.filter((p) => p.value !== null && Number.isFinite(p.value)).map((p) => p.value as number);
   const answered = answers(week);
-  // An hour rolled up weighs as an hour, a 5-minute check as 5 minutes.
-  const weekShare = upShare(upPoints(up, rtt), new Date(t - 7 * DAY + 1), now);
+  const weekShare = upShare(upPoints(up, rtt, upCounts), new Date(t - 7 * DAY + 1), now);
   const missedMin = Math.round(weekShare.missedMs / 60_000);
   const today = dayKey(now, timeZone);
   const typicalToday = median(answers(week.filter((p) => dayKey(p.at, timeZone) === today)));

@@ -14,18 +14,28 @@ const DAY = 24 * HOUR;
 /** The period a page's line covers. */
 export const UPTIME_WEEK_MS = 7 * DAY;
 
+interface UptimePoint extends RawPoint {
+  samples?: number | null;
+}
+
 /**
  * Whether the thing answered, point by point, oldest first: its `up` points, and before the first of them (points kept
  * before `up` was recorded) its response time: answered when it has one.
  */
-export function upPoints(up: readonly RawPoint[], rtt: readonly RawPoint[]): RawPoint[] {
+export function upPoints(
+  up: readonly RawPoint[],
+  rtt: readonly RawPoint[],
+  counts: readonly RawPoint[] = [],
+): UptimePoint[] {
   const first = Math.min(...up.map((p) => p.at.getTime()));
   const older = rtt
     .filter((p) => p.at.getTime() < first)
     .map((p) => ({ at: p.at, value: p.value !== null && Number.isFinite(p.value) ? 1 : 0 }));
-  return [...up.filter((p) => p.value !== null && Number.isFinite(p.value)), ...older].sort(
-    (a, b) => a.at.getTime() - b.at.getTime(),
-  );
+  const samples = new Map(counts.map((p) => [p.at.getTime(), p.value]));
+  const measured = up
+    .filter((p) => p.value !== null && Number.isFinite(p.value))
+    .map((p) => ({ ...p, samples: samples.get(p.at.getTime()) }));
+  return [...measured, ...older].sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 /** How much of `[from, to]` the points say it answered. */
@@ -41,10 +51,10 @@ export interface UpShare {
 }
 
 /**
- * The share of `[from, to]` the thing answered (`upPoints`' output), each point weighed by the time it stands for: until
- * the next point, at most 7.5 minutes for a health reading or an hour for a rollup. The rest of a gap has no reading.
+ * Live points weigh up to 7.5 minutes. Rolled hours weigh five minutes per recorded reading, up to an hour.
+ * An older hourly point with no count stands for one reading, since its original coverage is unknown.
  */
-export function upShare(points: readonly RawPoint[], from: Date, to: Date): UpShare {
+export function upShare(points: readonly UptimePoint[], from: Date, to: Date): UpShare {
   const inside = points.filter(
     (p) => p.value !== null && p.at.getTime() >= from.getTime() && p.at.getTime() <= to.getTime(),
   );
@@ -53,11 +63,11 @@ export function upShare(points: readonly RawPoint[], from: Date, to: Date): UpSh
   const rolledBefore = pointRollupBefore(to);
   for (const [i, p] of inside.entries()) {
     const at = p.at.getTime();
-    const rolled = at < rolledBefore && at % HOUR === 0;
-    const expected = rolled ? HOUR : HEALTH_POINT_MS;
+    const rolled = p.samples != null || (at < rolledBefore && at % HOUR === 0);
+    const expected = rolled ? Math.min(HOUR, (p.samples ?? 1) * HEALTH_POINT_MS) : HEALTH_POINT_MS;
     const next = inside[i + 1];
     const gap = next ? next.at.getTime() - at : expected;
-    const weight = Math.max(0, Math.min(gap, rolled ? HOUR : expected * 1.5));
+    const weight = Math.max(0, Math.min(gap, rolled ? expected : expected * 1.5));
     covered += weight;
     up += weight * Math.min(1, Math.max(0, p.value as number));
   }

@@ -1,6 +1,5 @@
 /**
- * True uptime: an hour rolled up weighs as an hour against 5-minute points, older points fall back
- * to the response time, overlapping outages count once, and the page's line in plain words.
+ * Uptime keeps coverage after rollup, falls back to older response times and counts overlapping outages once.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -23,13 +22,35 @@ describe('how much of the time it answered', () => {
   it('weighs a rolled-up hour as twelve 5-minute checks', () => {
     // A rolled-up hour where it answered half the time, then 12 five-minute checks that all answered.
     const points = [
-      { at: ago(60 * HOUR), value: 0.5 },
+      { at: ago(60 * HOUR), value: 0.5, samples: 12 },
       ...Array.from({ length: 12 }, (_, i) => ({ at: ago(2 * HOUR - i * 5 * MIN), value: 1 })),
     ];
     const share = upShare(points, ago(UPTIME_WEEK_MS), NOW);
     // The rolled-up point covers one hour. The gap between it and the live readings adds no weight.
     expect(share.share).toBeCloseTo(90 / 120, 3);
     expect(share.missedMs).toBe(30 * MIN);
+  });
+
+  it('weighs a sparse rolled hour by its readings and caps a dense hour', () => {
+    const points = upPoints(
+      [
+        { at: ago(61 * HOUR), value: 0 },
+        { at: ago(60 * HOUR), value: 1 },
+      ],
+      [],
+      [
+        { at: ago(61 * HOUR), value: 1 },
+        { at: ago(60 * HOUR), value: 20 },
+      ],
+    );
+    const share = upShare(points, ago(UPTIME_WEEK_MS), NOW);
+    expect(share.coveredMs).toBe(65 * MIN);
+    expect(share.missedMs).toBe(5 * MIN);
+  });
+
+  it('counts one reading when an older hourly point has no stored count', () => {
+    const share = upShare([{ at: ago(60 * HOUR), value: 0 }], ago(UPTIME_WEEK_MS), NOW);
+    expect(share.missedMs).toBe(5 * MIN);
   });
 
   it.each([0, 1])('caps a live reading of %s before a gap', (value) => {

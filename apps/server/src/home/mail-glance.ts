@@ -11,11 +11,11 @@
  */
 import { type ThingSummary, thingHref, thingId } from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
-import { providerWorkspace } from '../connectors/providers';
 import type { Db } from '../db/client';
 import { connections } from '../db/schema/index';
 import type { PrincipalRow } from '../read/principals';
 import type { Services } from '../services';
+import { accountUnreadCount } from '../things/accounts/reads';
 import { withNotice } from '../things/quiet/connection';
 import { registerChecks } from '../things/quiet/defaults';
 import { glanceLine, verdict } from '../things/quiet/glance';
@@ -48,12 +48,6 @@ function glancesOf(services: Services): Map<string, MailGlance> {
   return m;
 }
 
-/** One connection's unread inbox mail. */
-async function unreadOf(services: Services, row: typeof connections.$inferSelect): Promise<number> {
-  const token = await services.google.tokens.accessFor(row.accountId, row.provider);
-  return (await providerWorkspace(services, row.provider).inboxUnread(token)).count;
-}
-
 /** Counts unread inbox mail of every active Google, Microsoft and IMAP connection with mail (`home.connection-health`). */
 export async function pollMailGlances(services: Services, now = services.clock()): Promise<number> {
   const providers = COUNTED.filter((p) => p !== 'google' || services.google.mode !== 'off');
@@ -66,7 +60,7 @@ export async function pollMailGlances(services: Services, now = services.clock()
   for (const row of rows) {
     if (!row.services.includes('mail')) continue;
     try {
-      const unread = await unreadOf(services, row);
+      const unread = await accountUnreadCount(services, row.accountId, row);
       glancesOf(services).set(row.id, { unread, at: now, problem: false });
       counted++;
     } catch {

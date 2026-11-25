@@ -9,8 +9,15 @@
  */
 import type { CalendarEvent, ConnectorProvider } from '@whombat/core';
 import { providerWorkspace } from '../../connectors/providers';
-import { type FilesQuota, GoogleApiError, type InboxUnread, type RecentFile } from '../../connectors/types';
+import {
+  ConnectionUnavailableError,
+  type FilesQuota,
+  GoogleApiError,
+  type InboxUnread,
+  type RecentFile,
+} from '../../connectors/types';
 import type { Services } from '../../services';
+import { recordAccountUptime } from '../points';
 
 /** How long each read is kept (ms). */
 export const ACCOUNT_READ_KEEP_MS = {
@@ -96,7 +103,7 @@ function keptOf(services: Services): Kept {
 }
 
 /** A call with the person's token, once more with a fresh one when the provider refused it (HTTP 401). */
-export async function withAccountToken<T>(
+async function withAccountToken<T>(
   services: Services,
   accountId: string,
   provider: ConnectorProvider,
@@ -114,6 +121,45 @@ export async function withAccountToken<T>(
 const keyOf = (read: AccountRead, connectionId: string, extra = '') =>
   `${read}\n${connectionId}${extra ? `\n${extra}` : ''}`;
 
+/** Reads the provider itself. Local token trouble and reads served from the cache say nothing about uptime. */
+async function readAccount<T>(
+  services: Services,
+  accountId: string,
+  row: AccountRef,
+  read: (token: string) => Promise<T>,
+): Promise<T> {
+  let up: 0 | 1 | undefined;
+  try {
+    return await withAccountToken(services, accountId, row.provider, async (token) => {
+      try {
+        const value = await read(token);
+        up = 1;
+        return value;
+      } catch (err) {
+        if (err instanceof GoogleApiError && err.reason === 'unauthorized') up = 1;
+        else if (!(err instanceof ConnectionUnavailableError)) up ??= 0;
+        throw err;
+      }
+    });
+  } finally {
+    if (up !== undefined) await recordAccountUptime(services, { connectionId: row.id }, up);
+  }
+}
+
+/** The cheap unread count the health pass uses without opening any messages. */
+export async function accountUnreadCount(
+  services: Services,
+  accountId: string,
+  row: AccountRef,
+): Promise<number> {
+  return readAccount(
+    services,
+    accountId,
+    row,
+    async (token) => (await providerWorkspace(services, row.provider).inboxUnread(token)).count,
+  );
+}
+
 /** Today's calendar items of an account, `window` the start of today to the start of tomorrow in the zone. */
 export function accountCalendar(
   services: Services,
@@ -125,7 +171,7 @@ export function accountCalendar(
     keyOf('calendar', row.id, `${window.from}\n${window.to}`),
     ACCOUNT_READ_KEEP_MS.calendar,
     () =>
-      withAccountToken(services, accountId, row.provider, (token) =>
+      readAccount(services, accountId, row, (token) =>
         providerWorkspace(services, row.provider).calendarEvents(token, {
           calendarId: 'primary',
           from: window.from,
@@ -143,7 +189,7 @@ export function accountUnread(
   row: AccountRef,
 ): Promise<Held<InboxUnread>> {
   return keptOf(services).get(keyOf('unread', row.id), ACCOUNT_READ_KEEP_MS.unread, () =>
-    withAccountToken(services, accountId, row.provider, (token) =>
+    readAccount(services, accountId, row, (token) =>
       providerWorkspace(services, row.provider).inboxUnread(token, { newest: UNREAD_NEWEST }),
     ),
   );
@@ -156,7 +202,7 @@ export function accountQuota(
   row: AccountRef,
 ): Promise<Held<FilesQuota>> {
   return keptOf(services).get(keyOf('quota', row.id), ACCOUNT_READ_KEEP_MS.quota, () =>
-    withAccountToken(services, accountId, row.provider, (token) =>
+    readAccount(services, accountId, row, (token) =>
       providerWorkspace(services, row.provider).filesQuota(token),
     ),
   );
@@ -169,7 +215,7 @@ export function accountRecentFiles(
   row: AccountRef,
 ): Promise<Held<RecentFile[]>> {
   return keptOf(services).get(keyOf('recent', row.id), ACCOUNT_READ_KEEP_MS.recent, () =>
-    withAccountToken(services, accountId, row.provider, (token) =>
+    readAccount(services, accountId, row, (token) =>
       providerWorkspace(services, row.provider).filesRecent(token, { limit: RECENT_FILES }),
     ),
   );

@@ -15,6 +15,7 @@ import {
   approvals,
   catalogConnections,
   changes,
+  connectionPoints,
   connectionTools,
   deviceSkills,
   events,
@@ -29,6 +30,7 @@ import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
 import { addPersonalAgent } from '../test/personal';
 import { agentTokenFor, sessionFor } from '../test/tokens';
+import { UP_KEY } from '../things/points';
 import { useVaultNetForTests, vaultNetOf } from '../vault/net';
 import {
   deviceNeedsYou,
@@ -554,6 +556,13 @@ describe('using it within the limits', () => {
 
   it('keeps the last reading for Home: the thing is ok with its facts', async () => {
     expect(await readDevicesNow(t.services, t.burrowId)).toBe(1);
+    const page = await t.api.inject({
+      method: 'GET',
+      url: `/api/v1/burrows/burrow-hq/things/${encodeURIComponent(`device:${connectionId}`)}`,
+      headers: { cookie: (await sessionFor(t.services, IDS.mara)).cookie },
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.json().uptime).toMatchObject({ upPct: 100 });
     const things = await deviceThings({
       db: t.services.db,
       burrowId: t.burrowId,
@@ -608,6 +617,13 @@ describe('using it within the limits', () => {
       }),
     ]);
     expect((await deviceThings(ctx))[0]).toMatchObject({ status: 'offline', line: 'Not answering' });
+    const [lastUp] = await t.services.db
+      .select()
+      .from(connectionPoints)
+      .where(and(eq(connectionPoints.connectionId, connectionId), eq(connectionPoints.key, UP_KEY)))
+      .orderBy(desc(connectionPoints.at))
+      .limit(1);
+    expect(lastUp?.value).toBe(0);
     expect(await readDevicesNow(t.services, t.burrowId)).toBe(1);
     expect(await deviceWatch(ctx)).toEqual([]);
   });

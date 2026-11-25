@@ -70,7 +70,8 @@ describe('backup coverage and age', () => {
     expect(machineCard(failed, failed, null, now, [], failed)?.items).toMatchObject([
       { id: 'backup', label: expect.stringContaining('failed 5 h ago') },
     ]);
-    expect(backupNotice(failed, now)?.check).toBe('machine.backup_old');
+    expect(backupNotice(failed, now)).toBeNull();
+    expect(backupNotice({ ...failed, lastSuccessfulBackupAt: null }, now)?.check).toBe('machine.backup_old');
     expect(backupNotice({ ...failed, lastSuccessfulBackupAt: machine.lastBackup.at }, now)?.check).toBe(
       'machine.backup_old',
     );
