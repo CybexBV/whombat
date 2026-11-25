@@ -42,7 +42,10 @@ export type TeamReportsList = z.infer<typeof TeamReportsList>;
 /** What the app says about itself with a new report; the box adds its own version and channel. */
 export const TeamReportClientContext = z.strictObject({
   client: TeamReportClient.optional(),
-  appVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,64}$/).optional(),
+  appVersion: z
+    .string()
+    .regex(/^[0-9A-Za-z.+-]{1,64}$/)
+    .optional(),
   device: z.string().min(1).max(120).optional(),
   language: z
     .string()
@@ -57,7 +60,10 @@ export const CreateTeamReportBody = z.strictObject({
   expected: z.string().trim().max(TEAM_REPORT_EXPECTED_MAX).default(''),
   context: TeamReportClientContext.default({}),
   /** The assistant's draft this report was made from (its card's Edit), so the draft is done once it is sent. */
-  draftId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
+  draftId: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{8,64}$/)
+    .optional(),
 });
 export type CreateTeamReportBody = z.infer<typeof CreateTeamReportBody>;
 

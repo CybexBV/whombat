@@ -76,16 +76,25 @@ const Seconds = z.number().int().min(0).max(4_102_444_800);
 /** What the box and the app say about where the report was written; every part may be missing. */
 export const TeamReportContext = z.strictObject({
   /** The box's runtime version (`0.304.0`). */
-  runtimeVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,64}$/).optional(),
+  runtimeVersion: z
+    .string()
+    .regex(/^[0-9A-Za-z.+-]{1,64}$/)
+    .optional(),
   /** The box's update channel: Beta is `development`. */
   channel: z.enum(['development', 'production']).optional(),
   client: TeamReportClient.optional(),
   /** The app's own version (`3.158.0`). */
-  appVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,64}$/).optional(),
+  appVersion: z
+    .string()
+    .regex(/^[0-9A-Za-z.+-]{1,64}$/)
+    .optional(),
   /** The device and system in a few words (“iPhone · iOS 26.1”, “Firefox 146 · Linux”). */
   device: text(120, 1).optional(),
   /** The person's language (BCP 47, `nl`, `en-GB`): the team answers in it. */
-  language: z.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/).optional(),
+  language: z
+    .string()
+    .regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/)
+    .optional(),
 });
 export type TeamReportContext = z.infer<typeof TeamReportContext>;
 
