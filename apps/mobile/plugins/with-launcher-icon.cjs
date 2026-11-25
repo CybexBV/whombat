@@ -1,7 +1,7 @@
 // Android: the launcher icon is an adaptive icon of vectors under a name of its own, `@mipmap/whombat_launcher`
-// (docs/decisions/brand.md). Expo's `adaptiveIcon` writes bitmaps named `ic_launcher`; after an update that made the
-// face smaller, a Samsung phone kept showing the earlier bitmap, on the home screen and in App info alike, while an
-// app whose icon is a vector changed at once. The layers are generated from the logo
+// (docs/decisions/brand.md), sharp at every size where Expo's `adaptiveIcon` writes bitmaps. A phone still showing
+// an earlier icon after an update keeps a copy of its own (Samsung's Theme Park bakes every app's icon when a style is
+// applied; applying it again picks up the new one): nothing in the app changes that. The layers are generated from the logo
 // (`assets/android/whombat_launcher_*.xml`, `pnpm --filter @whombat/brand export-icons`); the background is the Ink
 // tile's colour. Below Android 8 (no adaptive icons) the name points at Expo's `ic_launcher` bitmap.
 const fs = require('node:fs');
