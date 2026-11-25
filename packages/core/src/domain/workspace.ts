@@ -186,6 +186,8 @@ export const CalendarEvent = z.object({
   webUrl: z.string().url().max(2048).nullable(),
   /** Video call link, when the event has one. */
   meetUrl: z.string().url().max(2048).nullable(),
+  /** The event's iCalendar id: the same on every calendar that shows it (Whombat looks-ahead.md). Absent: not known. */
+  uid: z.string().min(1).max(1024).optional(),
   /** One occurrence of a repeating event (Whombat looks-ahead.md). Absent: not known, or not one. */
   recurring: z.boolean().optional(),
   /**

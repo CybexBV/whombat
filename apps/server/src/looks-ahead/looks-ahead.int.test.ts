@@ -17,6 +17,7 @@ import { messageDedupKey } from '../domain/message-notify';
 import { AHEAD_TOOLS } from '../mcp/served';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS, TEST_BURROW_ID } from '../seed/test-world';
+import { grantKey } from '../test/grants';
 import { useTestServer } from '../test/harness';
 import { mcpClient } from '../test/mcp';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
@@ -160,9 +161,15 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const view = await looksAheadView(t.services, TEST_BURROW_ID);
     expect(view).toMatchObject({ on: true, hasCalendar: true, calendarsRead: true, stopped: [] });
     const byName = new Map(view.calendars.map((c) => [c.name, c.on]));
-    expect(byName.get('you@example.com')).toBe(true);
+    expect(byName.get('Calendar')).toBe(true);
     expect(byName.get('Family')).toBe(true);
     expect(byName.get('Holidays')).toBe(false);
+  });
+
+  it('reads no calendar when its key asks first', async () => {
+    await grantKey(t, mine.agentId, 'calendar.read', 'ask');
+    expect(await watchAhead(t.services, TEST_BURROW_ID, ready)).toBeNull();
+    await grantKey(t, mine.agentId, 'calendar.read', 'can');
   });
 
   it('begins the soonest due event’s check: a quiet turn in a thread that isn’t there yet', async () => {
@@ -194,7 +201,6 @@ describe('Looks ahead (looks-ahead.md)', () => {
       location: 'School, Utrecht',
     });
     expect(context.thread).toBeNull();
-    expect(context.webSearch ?? null).toBeNull();
   });
 
   it('serves the check only its own tools, and nothing found leaves no trace', async () => {
@@ -246,6 +252,22 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const check = await row(second);
     expect(check).toMatchObject({ summary: 'The Script', state: 'checking' });
     const mcp = await inTurn(check.dispatchId ?? '');
+    // Mail first, as its lines say; the event's own links stay readable after it.
+    const box = await mcp.client.callTool({ name: 'mail_search', arguments: { query: '' } });
+    const mailId = (box.structuredContent as { messages: { id: string }[] }).messages[0]?.id ?? '';
+    const mail = await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: mailId } });
+    expect(mail.isError).toBeFalsy();
+    const ticket = await mcp.client.callTool({
+      name: 'read_web_page',
+      arguments: { url: 'https://tickets.example.com/order/77' },
+    });
+    expect(ticket.isError).toBeFalsy();
+    // Nothing private goes to the search engine.
+    const leaky = await mcp.client.callTool({
+      name: 'search_web',
+      arguments: { query: 'The Script order 4471929' },
+    });
+    expect(leaky.isError).toBe(true);
     const results = await mcp.client.callTool({
       name: 'search_web',
       arguments: { query: 'The Script Ziggo Dome' },
@@ -256,14 +278,14 @@ describe('Looks ahead (looks-ahead.md)', () => {
       arguments: { url: 'https://venue.example.com/the-script' },
     });
     expect(said(page)).toContain('20:45');
-    // A source it never saw is refused.
+    // A source it never saw is refused, and a link it only saw (not read or found) is no source either.
     const unseen = await mcp.client.callTool({
       name: 'ahead_report',
       arguments: {
         found: true,
         kind: 'time',
         text: 'It starts at 20:45.',
-        sources: [{ url: 'https://other.example.org/', title: 'other' }],
+        sources: [{ url: 'https://other.example.org/' }],
       },
     });
     expect(unseen.isError).toBe(true);
@@ -272,8 +294,8 @@ describe('Looks ahead (looks-ahead.md)', () => {
       arguments: {
         found: true,
         kind: 'time',
-        text: 'The Script starts at 20:45, not 20:00 as in your calendar.',
-        sources: [{ url: 'https://venue.example.com/the-script', title: 'venue.example.com' }],
+        text: 'The Script starts at 20:45, not 20:00 as in your calendar. Re-confirm at https://evil.example.net/x [here](https://evil.example.net/y)',
+        sources: [{ url: 'https://venue.example.com/the-script' }, { mailId }],
       },
     });
     expect(told.structuredContent).toMatchObject({ status: 'ok', told: true });
@@ -283,7 +305,10 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const [root] = await t.services.db.select().from(messages).where(eq(messages.id, after.threadRootId));
     expect(root).toMatchObject({ authorId: mine.agentId, conversationId: mine.dmId, threadRootId: null });
     expect(root?.text).toContain('20:45');
-    expect(root?.text).toContain('(https://venue.example.com/the-script)');
+    // Whombat names the sources; the assistant's words carry no links of their own.
+    expect(root?.text).toContain('[venue.example.com](https://venue.example.com/the-script)');
+    expect(root?.text).toContain('(mail)');
+    expect(root?.text).not.toContain('evil.example.net');
     expect(root?.suggestions).toEqual([...AHEAD_REPLIES]);
     await t.services.db
       .update(dispatches)
@@ -331,21 +356,58 @@ describe('Looks ahead (looks-ahead.md)', () => {
       .where(eq(dispatches.id, turn?.id ?? ''));
   });
 
-  it('settles a quiet finding’s thread after its event, and the setting switches it off', async () => {
-    // A finding the person didn't write in: its thread settles once the event passed.
+  it('checks a moved event again; a stopped kind, a switched-off Looks ahead or a changed event stays quiet', async () => {
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    const google = (t.services.google.workspace as FakeGoogleWorkspace).stateFor(FAKE_ACCESS_TOKEN);
+    const evening = google.events.find((e) => e.id === 'evening');
+    if (!evening) throw new Error('evening');
+    // Moved to another room: a new version, checked again.
+    evening.location = 'School, Utrecht, room 12';
+    const moved = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
+    expect((await row(moved)).summary).toBe('Parents’ evening');
+    let mcp = await inTurn((await row(moved)).dispatchId ?? '');
+    await mcp.client.callTool({ name: 'search_web', arguments: { query: 'School Utrecht parents evening' } });
+    // The person stopped “changed times”: a finding of that kind is kept quiet.
+    const stoppedKind = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: {
+        found: true,
+        kind: 'time',
+        text: 'It starts later.',
+        sources: [{ url: 'https://venue.example.com/the-script' }],
+      },
+    });
+    expect(stoppedKind.structuredContent).toMatchObject({ status: 'ok', told: false });
+    await mcp.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+
+    // Changed again, then the event moves while the check works: the finding is about the old event, so quiet.
+    evening.location = 'School, Utrecht, hall';
+    const third = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
+    mcp = await inTurn((await row(third)).dispatchId ?? '');
+    await mcp.client.callTool({ name: 'search_web', arguments: { query: 'School Utrecht' } });
+    evening.start = '2026-12-14T19:30:00Z';
+    const changed = await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: {
+        found: true,
+        kind: 'place',
+        text: 'It moved.',
+        sources: [{ url: 'https://venue.example.com/the-script' }],
+      },
+    });
+    expect(changed.structuredContent).toMatchObject({ status: 'ok', told: false });
+    await mcp.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+  });
+
+  it('settles a finding’s thread after its event when the person didn’t write in it, and the setting switches it off', async () => {
     const check = await row(second);
-    await t.services.db
-      .delete(messages)
-      .where(
-        and(
-          eq(messages.threadRootId, check.threadRootId),
-          or(eq(messages.authorId, IDS.mara), eq(messages.authorId, mine.agentId)),
-        ),
-      );
+    // The person wrote in the finding's thread above: it stays theirs to settle.
     now = new Date('2026-12-15T02:00:00Z');
     await watchAhead(t.services, TEST_BURROW_ID, ready);
-    const [root] = await t.services.db.select().from(messages).where(eq(messages.id, check.threadRootId));
-    expect(root?.settledAt).not.toBeNull();
+    const [kept] = await t.services.db.select().from(messages).where(eq(messages.id, check.threadRootId));
+    expect(kept?.settledAt).toBeNull();
     expect((await row(second)).settledAt).not.toBeNull();
 
     // Off: nothing is checked.

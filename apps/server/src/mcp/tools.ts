@@ -63,8 +63,9 @@ import { thingWatchTool, watchHistoryTool, watchStatusTool } from '../incidents/
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK, reportLook } from '../looks/research';
 import {
+  aheadEventCurrent,
   aheadFeedback,
-  aheadReportReady,
+  aheadReportSources,
   aheadThreadOf,
   forgetSeen,
   NOT_AN_AHEAD_THREAD,
@@ -691,10 +692,15 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   search_web: (ctx, input) => searchWebTool(ctx.services, ctx.dispatch, input.query),
   read_web_page: (ctx, input) => readWebPageTool(ctx.services, ctx.dispatch, input.url),
   ahead_report: async (ctx, input) => {
-    await aheadReportReady(ctx.services, ctx.dispatch, input);
-    const out = await run(ctx, reportAhead, { dispatchId: ctx.dispatch.id, report: input }, (r) => ({
-      told: r.told,
-    }));
+    const sources = await aheadReportSources(ctx.services, ctx.dispatch, input);
+    // A finding is told only about the event as it still is (read again just before).
+    const current = input.found ? await aheadEventCurrent(ctx.services, ctx.dispatch) : true;
+    const out = await run(
+      ctx,
+      reportAhead,
+      { dispatchId: ctx.dispatch.id, report: input, sources, current },
+      (r) => ({ told: r.told }),
+    );
     forgetSeen(ctx.services, ctx.dispatch.id);
     return out;
   },

@@ -16,8 +16,8 @@ import {
   type CalendarEvent,
   planAheadPass,
 } from '@whombat/core';
-import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
-import { aheadChecks, burrows } from '../db/schema/index';
+import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { aheadChecks, burrows, dispatches } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { startOfLocalDay } from '../home/time';
 import { agentRuntimeOf, loadAgentRow, type PrincipalRow } from '../read/principals';
@@ -42,6 +42,7 @@ import {
   startAheadCheck,
   tidyAhead,
 } from './commands';
+import { keyAllowed } from './turn';
 
 /** How often the watcher looks. */
 export const AHEAD_WATCH_MS = 5 * 60_000;
@@ -79,7 +80,21 @@ async function tidyDue(services: Services, burrowId: string, now: Date): Promise
       ),
     )
     .limit(1);
-  return !!row;
+  if (row) return true;
+  // A check that ended whose Hermes session is still there.
+  const [ended] = await services.db
+    .select({ id: dispatches.id })
+    .from(dispatches)
+    .where(
+      and(
+        eq(dispatches.burrowId, burrowId),
+        eq(dispatches.trigger, 'ahead'),
+        inArray(dispatches.state, ['done', 'failed', 'cancelled']),
+        isNotNull(dispatches.providerSessionId),
+      ),
+    )
+    .limit(1);
+  return !!ended;
 }
 
 /** The events on the calendars that are on, from now to `AHEAD_READ_MS` ahead, that are ones to check. */
@@ -117,17 +132,22 @@ async function upcoming(
       });
       for (const event of events) {
         if (aheadSkip(event)) continue;
-        // One event on two calendars (the person's and the family's) is checked once.
-        const same = `${event.id}\n${event.start}`;
+        const key = eventKey(account.connectionId, { ...event, calendarId: calendar.id });
+        // One event on two calendars (the person's and the family's) is checked once: by its iCalendar id, else by
+        // its provider id and the moment it starts.
+        const same = event.uid ? key : `${event.id}\n${Date.parse(event.start)}`;
         if (out.has(same)) continue;
         const version = aheadVersion(event);
         out.set(same, {
-          key: eventKey(account.connectionId, calendar.id, event.id),
+          key,
           version,
           start: event.start,
           event: {
-            key: eventKey(account.connectionId, calendar.id, event.id),
+            key,
             version,
+            connectionId: account.connectionId,
+            calendarId: calendar.id,
+            eventId: event.id,
             summary: event.summary.slice(0, 300),
             location: event.location.slice(0, 500),
             description: event.description.slice(0, 2000),
@@ -176,6 +196,8 @@ export async function watchAhead(
     findingsToday >= AHEAD_FINDINGS_PER_DAY
   )
     return null;
+  // The calendar is read only where its key is Allowed: an assistant that must ask first doesn't read it by itself.
+  if (!(await keyAllowed(services, agent.id, 'calendar.read'))) return null;
   const accounts = await calendarAccounts(services.db, person.accountId);
   if (!accounts.length) return null;
   const ready = options.ready
@@ -198,15 +220,7 @@ export async function watchAhead(
           gte(aheadChecks.startedAt, new Date(now.getTime() - CHECKS_KEEP_MS)),
         ),
       )
-  )
-    // A check that failed is tried once more (a provider's hiccup); after two, that version counts as checked.
-    .filter((r, _i, all) => {
-      if (r.state !== 'failed') return true;
-      return (
-        all.filter((o) => o.state === 'failed' && o.key === r.key && o.version === r.version).length >= 2
-      );
-    })
-    .map((r) => ({ key: r.key, version: r.version, found: r.state === 'told' }));
+  ).map((r) => ({ key: r.key, version: r.version, found: r.state === 'told' }));
   const next = planAheadPass({
     candidates: found.map((f) => ({ key: f.key, version: f.version, start: f.start })),
     checked,

@@ -93,7 +93,7 @@ const TRIGGER_WORDS: Record<DispatchTrigger, string> = {
   look: 'looking into something that needs a look',
   look_fix: 'taking the step you let it take',
   // Looks ahead (looks-ahead.md).
-  ahead: 'checking something on your calendar ahead',
+  ahead: 'looking ahead at something on your calendar',
 };
 
 const PROVIDER_NAMES: Record<string, string> = {

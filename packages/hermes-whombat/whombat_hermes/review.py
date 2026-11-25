@@ -53,13 +53,28 @@ def _end(marker: Optional[Path]) -> None:
         logger.warning("whombat: the review marker couldn't be removed", exc_info=True)
 
 
+def _review_off() -> bool:
+    """Whether the turn's policy says it has no review (``review: false``: a Looks ahead check). A policy that can't be
+    read leaves the review as it was."""
+    try:
+        from .policy import policy_for
+
+        policy = policy_for({}).load()
+    except Exception:
+        return False
+    return policy is not None and not policy.review
+
+
 def signalled(spawn: Callable[..., Any]) -> Callable[..., Any]:
-    """``spawn_background_review_thread`` with the marker around the review it builds."""
+    """``spawn_background_review_thread`` with the marker around the review it builds; a turn whose policy says
+    ``review: false`` gets a review that does nothing (no model call, nothing remembered)."""
     if getattr(spawn, _WRAPPED, False):
         return spawn
 
     def wrapped(*args: Any, **kwargs: Any):
         target, prompt = spawn(*args, **kwargs)
+        if _review_off():
+            return (lambda: None), prompt
         marker = _start()
 
         def run() -> None:

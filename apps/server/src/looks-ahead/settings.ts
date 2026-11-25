@@ -33,7 +33,8 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
       const key = calendarKey(account.connectionId, c.id);
       calendars.push({
         key,
-        name: (c.primary ? account.email : c.name).slice(0, 120),
+        // A main calendar is often called by its address, which its line already says.
+        name: (c.primary && (!c.name || c.name === account.email) ? 'Calendar' : c.name).slice(0, 120),
         account: account.email.slice(0, 320),
         on: calendarIsOn(key, c, settings),
         primary: c.primary,

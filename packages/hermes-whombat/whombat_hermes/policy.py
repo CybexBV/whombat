@@ -91,6 +91,9 @@ class Rule:
 class Policy:
     rules: tuple[Rule, ...] = ()
     default: str = "allow"
+    #: Hermes's post-answer memory and skill review runs after the turn (``review: false``: a Looks ahead check, which
+    #: read strangers' text, has none; Whombat looks-ahead.md).
+    review: bool = True
 
     def decide(self, tool_name: str, args: Any = None, task_id: str = "") -> tuple[str, str, str, str]:
         """``(action, message, rule key, Whombat key)`` for one call."""
@@ -251,7 +254,10 @@ def parse_policy(data: Any) -> Policy:
         if not isinstance(raw_paths, list) or not all(isinstance(p, str) and p for p in raw_paths):
             raise PolicyError("a rule's paths must be a list of directories")
         rules.append(Rule(patterns, action, message, key, tuple(_expand(p) for p in raw_paths)))
-    return Policy(tuple(rules), default)
+    review = data.get("review", True)
+    if not isinstance(review, bool):
+        raise PolicyError("the policy's review must be true or false")
+    return Policy(tuple(rules), default, review)
 
 
 class PolicyFile:

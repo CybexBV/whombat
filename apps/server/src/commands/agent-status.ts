@@ -5,7 +5,7 @@
  * person's answer settle the status. Both are signed `agent.status` events by the agent.
  */
 import { type AgentStatus, MCP_TOOLS, topics } from '@whombat/core';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ApplyContext } from '../commit/types';
 import { defineCommand } from '../commit/types';
@@ -38,7 +38,14 @@ export async function settledStatus(tx: Tx, agentId: string): Promise<AgentStatu
   const [live] = await tx
     .select({ id: dispatches.id })
     .from(dispatches)
-    .where(and(eq(dispatches.agentId, agentId), inArray(dispatches.state, ['claimed', 'running'])))
+    .where(
+      and(
+        eq(dispatches.agentId, agentId),
+        inArray(dispatches.state, ['claimed', 'running']),
+        // A Looks ahead check is quiet: it never makes the assistant look busy (looks-ahead.md).
+        ne(dispatches.trigger, 'ahead'),
+      ),
+    )
     .limit(1);
   if (live) return 'working';
   return (await hasOpenQuestion(tx, agentId)) ? 'waiting' : 'idle';

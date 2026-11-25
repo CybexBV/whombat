@@ -537,12 +537,9 @@ export async function buildDispatchContext(
     localModel,
     // The person's Brave Search key for Hermes's `web_search`: their own turns only, never an assessment's or an
     // outsiders' turn.
-    // A Looks ahead check searches through Whombat's own `search_web` instead (looks-ahead.md).
-    webSearch: webSearchDispatch(
-      services.custody,
-      burrowRow,
-      !assessing && !outsidersTurn(row) && row.trigger !== 'ahead',
-    ),
+    // A Looks ahead check gets it too, as any of the person's turns (its policy blocks Hermes's `web_search`, and in the
+    // person's pod a turn without the key would take it from the turns beside it).
+    webSearch: webSearchDispatch(services.custody, burrowRow, !assessing && !outsidersTurn(row)),
     browser,
     logins,
     ...(assessing ? { feedback: assessing.feedback } : {}),

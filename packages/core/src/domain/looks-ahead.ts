@@ -9,7 +9,6 @@
 
 import { z } from 'zod';
 import { type DateInput, daysAgo, toDate, zonedParts } from '../text/time.js';
-import { Timestamp } from './common.js';
 import type { CalendarEvent } from './workspace.js';
 
 /* Limits ------------------------------------------------------------------------------------------------------------ */
@@ -178,15 +177,16 @@ export function planAheadPass(input: AheadPassInput): AheadCandidate | null {
 
 /* The check's report ------------------------------------------------------------------------------------------------ */
 
-/** Where a finding comes from: a web page the check read or found, or a mail it read. */
+/**
+ * Where a finding comes from: a web page the check read or found, or a mail it read. Whombat names each itself (the
+ * site, the sender), so a finding's links and names are never the model's words.
+ */
 export const AheadSource = z.union([
   z.strictObject({
     url: z.string().url().max(2048).describe('A web page this check read or found with search_web.'),
-    title: z.string().trim().min(1).max(80).describe('Short: the site or page, “ziggodome.nl”.'),
   }),
   z.strictObject({
     mailId: z.string().min(1).max(1024).describe('A message this check read with mail_read.'),
-    title: z.string().trim().min(1).max(80).describe('Short: the sender or subject, “Ticketmaster”.'),
   }),
 ]);
 export type AheadSource = z.infer<typeof AheadSource>;
@@ -221,6 +221,29 @@ export const AheadReportInput = z
     path: ['found'],
   });
 export type AheadReportInput = z.infer<typeof AheadReportInput>;
+
+/** Words that never go into a search: an address, a link, a phone number, a code or number from a booking. */
+const PRIVATE_IN_QUERY: readonly [RegExp, string][] = [
+  [/[^\s@]+@[^\s@]+\.[^\s@]+/, 'an e-mail address'],
+  [/https?:\/\/|www\./i, 'a link'],
+  [/\+?\d[\d\s().-]{7,}\d/, 'a phone number'],
+  [/\d{5,}/, 'a long number'],
+  [/\b(?=[A-Za-z]*\d)(?=\d*[A-Za-z])[A-Za-z\d]{6,}\b/, 'a code'],
+];
+
+/**
+ * Why a search can't go out, or null (pure): it holds an address, a link, a phone number, a booking code or number, or a
+ * private word (the person's own name or address). The search engine only ever gets public words.
+ */
+export function aheadQueryRefusal(query: string, privateWords: readonly string[]): string | null {
+  for (const [pattern, what] of PRIVATE_IN_QUERY)
+    if (pattern.test(query)) return `The search holds ${what}: search with public words only.`;
+  const words = new Set(query.toLowerCase().split(/[^\p{L}\p{N}]+/u));
+  for (const w of privateWords)
+    if (w.length >= 3 && words.has(w.toLowerCase()))
+      return 'The search holds a private word (a name or an address): search with public words only.';
+  return null;
+}
 
 /** `search_web`'s input: a public search, never anything private. */
 export const AheadSearchInput = z.strictObject({
@@ -318,16 +341,6 @@ export const LooksAheadUpdate = z.union([
 ]);
 export type LooksAheadUpdate = z.infer<typeof LooksAheadUpdate>;
 
-/** What a check found, as kept: for the week's count and for Settings. */
-export const AheadCheckView = z.object({
-  id: z.string(),
-  summary: z.string(),
-  start: Timestamp,
-  state: z.enum(['checking', 'quiet', 'told', 'failed']),
-  kind: AheadKind.nullable(),
-});
-export type AheadCheckView = z.infer<typeof AheadCheckView>;
-
 /* Words --------------------------------------------------------------------------------------------------------------- */
 
 export const LOOKS_AHEAD_WORDS = {
@@ -343,7 +356,7 @@ export const LOOKS_AHEAD_WORDS = {
   week: (checked: number, told: number) =>
     checked === 0
       ? 'Nothing checked in the last seven days.'
-      : `${checked} checked in the last seven days, ${told === 0 ? 'nothing to tell' : `${told} told`}.`,
+      : `${checked} checked in the last seven days, ${told === 0 ? 'nothing worth telling you' : `${told} worth telling you`}.`,
   switched: (on: boolean) => (on ? 'Looks ahead is on.' : 'Looks ahead is off.'),
   calendarSwitched: (name: string, on: boolean) =>
     on ? `${name} is checked.` : `${name} isn’t checked any more.`,

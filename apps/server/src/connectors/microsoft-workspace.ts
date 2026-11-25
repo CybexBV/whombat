@@ -138,6 +138,7 @@ function event(e: Obj, calendarId: string) {
     organizer: address(e.organizer) || null,
     webUrl: e.webLink ?? null,
     meetUrl: obj(e.onlineMeeting).joinUrl ?? null,
+    ...(str(e.iCalUId) ? { uid: str(e.iCalUId).slice(0, 1024) } : {}),
     // One occurrence of a series, or a changed one (looks-ahead.md).
     ...(e.type === 'occurrence' || e.type === 'exception' || e.seriesMasterId ? { recurring: true } : {}),
     ...ownResponse(e),

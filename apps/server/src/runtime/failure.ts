@@ -57,10 +57,17 @@ import { claudeExtraUsageText } from './failure-text';
 import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 
-/** Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step or a search answer. */
+/**
+ * Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step, a search answer or a
+ * Looks ahead check (its watcher alone tries it again, looks-ahead.md).
+ */
 export function retryable(row: Pick<DispatchRow, 'trigger' | 'mode' | 'onBehalfOfAccountId'>): boolean {
   return (
-    !outsidersTurn(row) && row.trigger !== 'feedback' && row.trigger !== 'automation' && row.mode !== 'answer'
+    !outsidersTurn(row) &&
+    row.trigger !== 'feedback' &&
+    row.trigger !== 'automation' &&
+    row.trigger !== 'ahead' &&
+    row.mode !== 'answer'
   );
 }
 

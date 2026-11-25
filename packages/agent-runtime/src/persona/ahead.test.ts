@@ -86,6 +86,7 @@ describe('a Looks ahead check’s tool policy', () => {
   it('allows Whombat’s own tools and blocks everything else, memory and the web of Hermes’s own among them', () => {
     const policy = hermesPolicy(check);
     expect(policy.default).toBe('block');
+    expect(policy.review).toBe(false);
     expect(policy.rules[0]).toMatchObject({ action: 'allow' });
     expect(policy.rules[0]?.tools).toContain('mcp__whombat__*');
     expect(policy.rules[0]?.tools).not.toContain('mcp__vault_*');

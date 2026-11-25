@@ -479,7 +479,7 @@ export async function callTool(
       }
     }
     // The mails a Looks ahead check read may be named as its sources.
-    if (out.status === 'ok') aheadToolRan(services, dispatch, name, out);
+    if (out.status === 'ok') await aheadToolRan(services, dispatch, name, out);
     // A post waiting for approval or blocked by a key said nothing yet.
     if (MCP_POSTING_TOOLS.has(name) && out.status === 'ok')
       await services.runtime.markPosted(auth.dispatchId);

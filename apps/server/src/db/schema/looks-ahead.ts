@@ -52,7 +52,16 @@ export const aheadChecks = pgTable(
     endAt: timestamp('end_at', { withTimezone: true }).notNull(),
     /** The event as the turn reads it (`AheadDispatchContext` without `stopped`). */
     event: jsonb('event')
-      .$type<{ start: string; end: string; description: string; timeZone: string }>()
+      .$type<{
+        start: string;
+        end: string;
+        description: string;
+        timeZone: string;
+        /** Where it is read again before a finding is told. */
+        connectionId: string;
+        calendarId: string;
+        eventId: string;
+      }>()
       .notNull(),
     state: text('state').$type<'checking' | 'quiet' | 'told' | 'failed'>().notNull(),
     kind: text('kind').$type<AheadKind>(),

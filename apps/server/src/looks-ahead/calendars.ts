@@ -6,8 +6,10 @@
 import type { CalendarEvent, CalendarInfo } from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { providerWorkspace } from '../connectors/providers';
+import { GoogleApiError } from '../connectors/types';
 import type { Db, Tx } from '../db/client';
 import { connections } from '../db/schema/index';
+import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
 import { withAccountToken } from '../things/accounts/reads';
 
@@ -37,9 +39,15 @@ export function calendarKey(connectionId: string, calendarId: string): string {
   return `${connectionId}:${calendarId}`;
 }
 
-/** `<connection id>:<calendar id>:<event id>`: one event. */
-export function eventKey(connectionId: string, calendarId: string, eventId: string): string {
-  return `${connectionId}:${calendarId}:${eventId}`;
+/**
+ * One event, whichever calendar of the account shows it: its iCalendar id where the provider gives one (an event on the
+ * person's calendar and the family's is one event), else `<calendar id>:<event id>`; after the connection's id.
+ */
+export function eventKey(
+  connectionId: string,
+  event: { calendarId: string; id: string; uid?: string | undefined },
+): string {
+  return event.uid ? `${connectionId}:uid:${event.uid}` : `${connectionId}:${event.calendarId}:${event.id}`;
 }
 
 /** On by default: the main calendar, and any other the person can add to and shows. */
@@ -93,6 +101,27 @@ export async function accountCalendars(
   );
   kept.set(account.connectionId, { at: now, list });
   return list;
+}
+
+/** One event as the provider has it now, or null when it is gone. Throws when the provider can't be read. */
+export async function currentEvent(
+  services: Services,
+  account: CalendarAccount,
+  calendarId: string,
+  eventId: string,
+): Promise<CalendarEvent | null> {
+  try {
+    return await withAccountToken(services, account.accountId, account.provider, (token) =>
+      providerWorkspace(services, account.provider).calendarGetEvent(token, { calendarId, eventId }),
+    );
+  } catch (err) {
+    const gone =
+      err instanceof GoogleApiError
+        ? err.status === 404 || err.status === 410 || err.reason === 'not_found'
+        : err instanceof ApiError && err.code === 'not_found';
+    if (gone) return null;
+    throw err;
+  }
 }
 
 /** The events on one calendar between two moments. Throws when the provider can't be read. */

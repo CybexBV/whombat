@@ -46,6 +46,11 @@ export interface HermesPolicyRule {
 export interface HermesPolicy {
   rules: HermesPolicyRule[];
   default: HermesPolicyAction;
+  /**
+   * Hermes's post-answer memory and skill review runs after the turn; false for a Looks ahead check (Whombat
+   * looks-ahead.md), which read strangers' text: the plugin gives it a review that does nothing. Absent: true.
+   */
+  review?: boolean;
 }
 
 /**
@@ -180,7 +185,7 @@ export interface HermesPolicyOptions {
  * A Looks ahead check (Whombat looks-ahead.md) reads strangers' text — mail, web pages — while it holds the person's:
  * Whombat's own tools only (the server serves it just the calendar, the mail, its web tools and its report), nothing of
  * Hermes's: no memory, skills or sessions (the post-answer review inherits this, so nothing it read is remembered), no
- * commands, files, browser, web of its own, Vault or helpers.
+ * commands, files, browser, web of its own, Vault or helpers; and no post-answer review at all (`review: false`).
  */
 export const AHEAD_REFUSED =
   'While checking ahead you use only Whombat’s tools: the calendar, the mail, search_web, read_web_page and ahead_report.';
@@ -193,6 +198,7 @@ export function hermesPolicy(ctx: DispatchContext, options: HermesPolicyOptions 
   if (ctx.dispatch.trigger === 'ahead' && !options.replyOnly)
     return {
       default: 'block',
+      review: false,
       rules: [
         { tools: [...WHOMBAT_OWN_PATTERNS], action: 'allow' },
         { tools: ['*'], action: 'block', message: AHEAD_REFUSED },

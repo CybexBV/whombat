@@ -113,15 +113,16 @@ describe('the search and the page', () => {
     await expect(braveSearch(services, 'k', 'x y')).rejects.toBeInstanceOf(WebRefusal);
   });
 
-  it('reads a page as text with its links, following a redirect on the same site', async () => {
-    const { services } = fakeServices((url) =>
-      url === 'http://example.com/event'
-        ? html('', 301, { location: 'https://example.com/event' })
+  it('reads a page as text with its links, over https, following a redirect on the same site', async () => {
+    const { services, asked } = fakeServices((url) =>
+      url === 'https://example.com/old'
+        ? html('', 301, { location: 'http://example.com/event' })
         : html(
             '<html><head><title>The Script</title><script>x()</script></head><body><p>Starts 20:45</p><a href="/tickets">Tickets</a></body></html>',
           ),
     );
-    const page = await readPage(services, 'http://example.com/event', () => false);
+    const page = await readPage(services, 'http://example.com/old', () => false);
+    expect(asked.map((a) => a.url)).toEqual(['https://example.com/old', 'https://example.com/event']);
     expect(page).toMatchObject({ url: 'https://example.com/event', title: 'The Script' });
     expect(page.text).toContain('Starts 20:45');
     expect(page.text).not.toContain('x()');

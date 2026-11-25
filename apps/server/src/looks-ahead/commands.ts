@@ -5,11 +5,15 @@
  * of events that passed, old rows), and the setting.
  */
 import {
+  AHEAD_CHECKS_PER_DAY,
   AHEAD_FINDINGS_PER_DAY,
   AHEAD_KINDS,
   AHEAD_REPLIES,
+  AHEAD_SOURCES_MAX,
+  AHEAD_TEXT_MAX,
   type AheadKind,
   AheadReportInput,
+  aheadHours,
   LooksAheadUpdate,
   newId,
 } from '@whombat/core';
@@ -28,7 +32,8 @@ import { startOfLocalDay } from '../home/time';
 import { forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { loadPrincipalRow } from '../read/principals';
-import type { AheadSettings } from './calendars';
+import { dropSessions, endedAheadSessions } from '../runtime/sessions';
+import { type AheadSettings, calendarKey } from './calendars';
 
 /** A check whose turn never ran this long after it began failed (no runner took it). */
 export const CHECKING_MAX_MS = 2 * 3600_000;
@@ -84,6 +89,10 @@ export async function findingsSince(tx: Pick<Tx, 'select'>, burrowId: string, si
 export const AheadEventInput = z.object({
   key: z.string().min(1).max(3200),
   version: z.string().min(1).max(16),
+  /** Where it is read again before a finding is told. */
+  connectionId: z.string().min(1).max(64),
+  calendarId: z.string().min(1).max(1024),
+  eventId: z.string().min(1).max(1024),
   summary: z.string().max(300),
   location: z.string().max(500),
   description: z.string().max(2000),
@@ -107,18 +116,31 @@ export const startAheadCheck = defineCommand({
   async apply(tx, ctx, input): Promise<{ checkId: string; dispatchId: string } | null> {
     if (ctx.actor.kind !== 'agent') throw forbidden('Only the assistant checks ahead.');
     const { event } = input;
-    // Never two checks of one version (one that failed may be tried again), nor one while another works.
+    // Never two checks of one version, nor one while another works.
     const [same] = await tx
       .select({ id: aheadChecks.id })
       .from(aheadChecks)
       .where(
         and(
           eq(aheadChecks.burrowId, ctx.burrow.id),
-          sql`(${aheadChecks.state} = 'checking' or (${aheadChecks.eventKey} = ${event.key} and ${aheadChecks.version} = ${event.version} and ${aheadChecks.state} <> 'failed'))`,
+          sql`(${aheadChecks.state} = 'checking' or (${aheadChecks.eventKey} = ${event.key} and ${aheadChecks.version} = ${event.version}))`,
         ),
       )
       .limit(1);
     if (same) return null;
+    // Switched off, or the day's checks used, since the watcher read it.
+    const settings = await aheadSettingsOf(tx, ctx.burrow.id);
+    if (!settings.on) return null;
+    const [today] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(aheadChecks)
+      .where(
+        and(
+          eq(aheadChecks.burrowId, ctx.burrow.id),
+          gte(aheadChecks.startedAt, startOfLocalDay(ctx.now, ctx.burrow.timeZone)),
+        ),
+      );
+    if ((today?.n ?? 0) >= AHEAD_CHECKS_PER_DAY) return null;
     const agent = await loadPrincipalRow(tx, ctx.actor.id);
     const person = await loadPrincipalRow(tx, input.personId);
     if (!agent || person?.kind !== 'person' || person.burrowId !== ctx.burrow.id || !person.accountId)
@@ -150,7 +172,15 @@ export const startAheadCheck = defineCommand({
       calendar: event.calendar,
       startAt: new Date(event.start),
       endAt: new Date(event.end),
-      event: { start: event.start, end: event.end, description: event.description, timeZone: event.timeZone },
+      event: {
+        start: event.start,
+        end: event.end,
+        description: event.description,
+        timeZone: event.timeZone,
+        connectionId: event.connectionId,
+        calendarId: event.calendarId,
+        eventId: event.eventId,
+      },
       state: 'checking',
       dispatchId: woken.dispatchId,
       conversationId: chatId,
@@ -181,24 +211,60 @@ async function checkOfTurn(tx: Tx, burrowId: string, dispatchId: string) {
   return row ?? null;
 }
 
+/** The assistant's words as one plain paragraph: no links, pictures or markup of its own (its sources are Whombat's). */
+export function findingWords(text: string): string {
+  return text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\bhttps?:\/\/\S+|\bwww\.\S+/gi, '')
+    .replace(/[`*_#>|~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, AHEAD_TEXT_MAX);
+}
+
+/** A source as Whombat names it: the site with its link, or the mail's sender. */
+export const NamedSourceInput = z.object({
+  label: z.string().min(1).max(80),
+  url: z.string().url().max(2048).optional(),
+});
+
 /** A finding's message: the assistant's words, then its sources on one line (a page as a link, a mail by name). */
-export function findingText(text: string, sources: NonNullable<AheadReportInput['sources']>): string {
-  const flat = (s: string) => s.replace(/[[\]\n\r]+/g, ' ').trim();
+export function findingText(text: string, sources: readonly z.infer<typeof NamedSourceInput>[]): string {
+  const flat = (s: string) =>
+    s
+      .replace(/[[\]\n\r*_`]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   const line = sources
     .map((s) =>
-      'url' in s ? `[${flat(s.title)}](${s.url.replace(/[()\s]/g, encodeURIComponent)})` : flat(s.title),
+      s.url
+        ? `[${flat(s.label)}](${s.url.replace(/[()\s]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`)})`
+        : flat(s.label),
     )
     .join(' · ');
-  return `${text.trim()}\n\n${line}`;
+  return `${findingWords(text)}\n\n${line}`;
 }
+
+/** The least time before an event a finding is still worth telling. */
+const TELL_LEAD_MS = 30 * 60_000;
 
 /**
  * The check's end. Nothing found: `quiet`, nothing posted. A finding: told in its own thread with a push and the quick
- * replies, unless the person stopped its kind or two were told today (then `quiet`, kept for the count). Once only.
+ * replies — unless Looks ahead or its calendar was switched off, the person stopped its kind, two were told today, it is
+ * night, the event is about to start or already began, or the event changed or went meanwhile (`current`): then `quiet`,
+ * its kind kept for the count. Once only.
  */
 export const reportAhead = defineCommand({
   name: 'ahead.report',
-  schema: z.object({ dispatchId: z.string().min(1).max(64), report: AheadReportInput }),
+  schema: z.object({
+    dispatchId: z.string().min(1).max(64),
+    report: AheadReportInput,
+    /** The finding's sources as Whombat named them, checked against what the turn saw. */
+    sources: z.array(NamedSourceInput).max(AHEAD_SOURCES_MAX),
+    /** The event is still as the check began it. */
+    current: z.boolean(),
+  }),
   async apply(tx, ctx, input): Promise<{ told: boolean }> {
     if (ctx.actor.kind !== 'agent') throw forbidden('Only the assistant says what it found.');
     const row = await checkOfTurn(tx, ctx.burrow.id, input.dispatchId);
@@ -206,26 +272,34 @@ export const reportAhead = defineCommand({
     if (row.state !== 'checking') throw forbidden('You already said what you found for this check.');
     const { report } = input;
     const settings = await aheadSettingsOf(tx, ctx.burrow.id);
+    const calendarOff = settings.calendarsOff.includes(
+      calendarKey(row.event.connectionId, row.event.calendarId),
+    );
     const tellable =
       report.found &&
       report.kind &&
       report.text &&
-      report.sources?.length &&
+      input.sources.length > 0 &&
+      input.current &&
       settings.on &&
+      !calendarOff &&
       !settings.stopped.includes(report.kind) &&
+      aheadHours(ctx.now, ctx.burrow.timeZone) &&
+      row.startAt.getTime() - ctx.now.getTime() >= TELL_LEAD_MS &&
       (await findingsSince(tx, ctx.burrow.id, startOfLocalDay(ctx.now, ctx.burrow.timeZone))) <
         AHEAD_FINDINGS_PER_DAY;
     let told = false;
-    if (tellable && report.text && report.sources) {
+    if (tellable && report.text) {
       const conversation = await loadConversationRow(tx, row.conversationId);
       if (conversation) {
         await postMessage(ctx, {
           conversation,
           id: row.threadRootId,
-          text: findingText(report.text, report.sources),
+          text: findingText(report.text, input.sources),
           suggestions: AHEAD_REPLIES,
           // The person's Chat tells them, inbox and push, as any message of the assistant's there.
           dispatch: false,
+          linkPreviews: false,
         });
         told = true;
       }
@@ -235,7 +309,7 @@ export const reportAhead = defineCommand({
       .set({
         state: told ? 'told' : 'quiet',
         kind: report.found ? (report.kind ?? null) : null,
-        text: told ? (report.text ?? null) : null,
+        text: told && report.text ? findingWords(report.text) : null,
         reportedAt: ctx.now,
       })
       .where(eq(aheadChecks.id, row.id));
@@ -342,11 +416,19 @@ export const tidyAhead = defineCommand({
         (c) => (c.dispatchId && ended.has(c.dispatchId)) || now - c.startedAt.getTime() >= CHECKING_MAX_MS,
       )
       .map((c) => c.id);
-    if (failed.length)
+    if (failed.length) {
       await tx
         .update(aheadChecks)
         .set({ state: 'failed', reportedAt: ctx.now })
         .where(and(inArray(aheadChecks.id, failed), eq(aheadChecks.state, 'checking')));
+      // A check no runner took in time is over: its turn never runs late (at night, after the event moved).
+      const stale = checking.flatMap((c) => (failed.includes(c.id) && c.dispatchId ? [c.dispatchId] : []));
+      if (stale.length)
+        await tx
+          .update(dispatches)
+          .set({ state: 'cancelled', finishedAt: ctx.now, error: 'expired' })
+          .where(and(inArray(dispatches.id, stale), eq(dispatches.state, 'queued')));
+    }
     // Threads of events that passed: settled as resolved when the person didn't write in them.
     const passed = await tx
       .select()
@@ -372,7 +454,10 @@ export const tidyAhead = defineCommand({
                   messages.threadRootId,
                   passed.map((p) => p.threadRootId),
                 ),
-                ne(messages.authorId, passed[0]?.agentId ?? ''),
+                inArray(
+                  messages.authorId,
+                  passed.map((p) => p.personId),
+                ),
               ),
             )
         ).map((m) => m.root),
@@ -398,6 +483,8 @@ export const tidyAhead = defineCommand({
       .where(
         and(eq(aheadChecks.burrowId, ctx.burrow.id), lt(aheadChecks.endAt, new Date(now - CHECKS_KEEP_MS))),
       );
+    // What ended checks read goes from the person's Hermes home: no later turn finds it in its past sessions.
+    await dropSessions(ctx, await endedAheadSessions(tx, ctx.burrow.id));
     if (failed.length || settled)
       await ctx.emit({
         type: 'ahead.tidied',

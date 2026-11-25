@@ -9,8 +9,12 @@ import type { Services } from '../services';
 import { httpUrl } from './web';
 
 interface CheckSeen {
+  /** Links it may read: in the event, a search result, on a page it read. */
   urls: Set<string>;
-  mails: Set<string>;
+  /** Pages it may name as a source: a search result, or a page it read (not a link it only saw). */
+  sources: Set<string>;
+  /** The mails it read, by id, with the sender's name a finding names them by. */
+  mails: Map<string, string>;
   searches: number;
   pages: number;
   at: number;
@@ -45,7 +49,14 @@ export function seenOf(services: Services, dispatchId: string, eventText: () => 
   for (const [id, s] of all) if (now - s.at > KEEP_MS) all.delete(id);
   let seen = all.get(dispatchId);
   if (!seen) {
-    seen = { urls: new Set(linksIn(eventText())), mails: new Set(), searches: 0, pages: 0, at: now };
+    seen = {
+      urls: new Set(linksIn(eventText())),
+      sources: new Set(),
+      mails: new Map(),
+      searches: 0,
+      pages: 0,
+      at: now,
+    };
     all.set(dispatchId, seen);
   }
   return seen;
@@ -67,6 +78,19 @@ export function sawLink(seen: CheckSeen, url: string): boolean {
   if (seen.urls.has(link)) return true;
   const other = link.endsWith('/') ? link.slice(0, -1) : `${link}/`;
   return seen.urls.has(other);
+}
+
+/** Remembers a page the check may name as a source. */
+export function sawSource(seen: CheckSeen, url: string): void {
+  const link = httpUrl(url);
+  if (link) seen.sources.add(link);
+}
+
+/** Whether the check may name this page as a source (as given, or without a trailing slash's difference). */
+export function sawSourceOf(seen: CheckSeen, url: string): boolean {
+  const link = httpUrl(url);
+  if (!link) return false;
+  return seen.sources.has(link) || seen.sources.has(link.endsWith('/') ? link.slice(0, -1) : `${link}/`);
 }
 
 /** One more search, or false when the check used its searches. */

@@ -141,7 +141,9 @@ export async function readPage(
   url: string,
   allow: (next: string) => boolean,
 ): Promise<Page> {
-  let at = url;
+  // Pages are read over https only (the outbound rule): an http link is tried at its https address.
+  const secure = (u: string) => (u.startsWith('http:') ? `https:${u.slice(5)}` : u);
+  let at = secure(url);
   for (let hop = 0; hop <= REDIRECTS_MAX; hop++) {
     let answer: WebAnswer;
     try {
@@ -158,7 +160,7 @@ export async function readPage(
       // The same site (http → https, a trailing slash) or a link the turn saw: else it stops here.
       if (new URL(next).hostname !== new URL(at).hostname && !allow(next))
         throw new WebRefusal('The page sends you to another site this check hasn’t seen.');
-      at = next;
+      at = secure(next);
       continue;
     }
     if (answer.status !== 200) throw new WebRefusal(`The page answered HTTP ${answer.status}.`);

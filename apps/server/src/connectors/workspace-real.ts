@@ -194,6 +194,7 @@ interface GoogleEvent {
   recurrence?: string[];
   /** Set on one occurrence of a repeating event (lists with `singleEvents`). */
   recurringEventId?: string;
+  iCalUID?: string;
   status?: string;
   id: string;
   summary?: string;
@@ -249,6 +250,7 @@ function calendarEvent(e: GoogleEvent, calendarId: string): CalendarEvent {
     organizer: e.organizer?.email ?? null,
     webUrl: httpsUrl(e.htmlLink),
     meetUrl: httpsUrl(e.hangoutLink ?? video),
+    ...(e.iCalUID ? { uid: clip(e.iCalUID, 1024) } : {}),
     ...(e.recurringEventId ? { recurring: true } : {}),
     ...ownResponse(e),
     ...(e.status === 'cancelled' ? { cancelled: true } : {}),

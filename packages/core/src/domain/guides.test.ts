@@ -299,6 +299,9 @@ describe('connections.finishGoogle (AG-14)', () => {
 describe('the assistant’s tools (AG-18)', () => {
   it('are personal-agent tools that need no key', () => {
     expect([...PERSONAL_ONLY_TOOL_NAMES].sort()).toEqual([
+      // Looks ahead's own: a check's report, the person's word on a finding (Whombat looks-ahead.md).
+      'ahead_feedback',
+      'ahead_report',
       // One thing back from a backup, on the person's yes (Whombat backup-look.md).
       'backup_bring_back',
       // Setting up from the chat with cards (Whombat connect-in-chat.md).
@@ -323,8 +326,11 @@ describe('the assistant’s tools (AG-18)', () => {
       'propose_device_skill',
       // Keeping a thing quiet for a while, on the person's word.
       'quiet_until',
+      // A Looks ahead check's web: a page it saw (Whombat looks-ahead.md).
+      'read_web_page',
       // What the assistant finished, for the desk's Done today (Whombat done-today.md DN-01).
       'report_done',
+      'search_web',
       'set_chat_title',
       // Whombat's settings for the person (Whombat assistant-settings.md).
       'settings_change',

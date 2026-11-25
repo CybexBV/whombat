@@ -34,7 +34,7 @@ import {
   type WorkingTask,
 } from '@whombat/core';
 import { APPROVAL_ASK_WORDS } from '@whombat/core/approvals';
-import { and, desc, eq, gt, gte, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, isNull, ne, or, type SQL, sql } from 'drizzle-orm';
 import { windowStartOf } from '../care/window';
 import { chatListTitle, chatRowsOf } from '../chats/read';
 import { type ChatRoom, roomByKey } from '../chats/rooms';
@@ -530,7 +530,14 @@ async function chatTurns(db: Db, chats: ViewerChats): Promise<Map<string, Date>>
       createdAt: dispatches.createdAt,
     })
     .from(dispatches)
-    .where(and(eq(dispatches.agentId, chats.agentId), inArray(dispatches.state, ['claimed', 'running'])))
+    .where(
+      and(
+        eq(dispatches.agentId, chats.agentId),
+        inArray(dispatches.state, ['claimed', 'running']),
+        // A Looks ahead check is quiet: no chat shows as being worked on for it (looks-ahead.md).
+        ne(dispatches.trigger, 'ahead'),
+      ),
+    )
     .limit(50);
   const mine = new Set(chats.ids);
   for (const r of rows) {

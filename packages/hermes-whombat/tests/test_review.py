@@ -77,3 +77,25 @@ def test_through_hermes_spawn_path(profile: Path, monkeypatch: pytest.MonkeyPatc
     release.set()
     assert done.wait(5)
     assert markers(profile) == []
+
+
+def test_a_turn_whose_policy_says_no_review_gets_none(profile: Path, monkeypatch: pytest.MonkeyPatch):
+    """A Looks ahead check (Whombat looks-ahead.md): its policy's ``review: false`` makes the review do nothing."""
+    from whombat_hermes import policy
+
+    (profile / policy.POLICY_FILE).write_text('{"default": "block", "rules": [], "review": false}', encoding="utf-8")
+    monkeypatch.setattr(policy, "_policy_file", policy.PolicyFile())
+    ran = threading.Event()
+    target, prompt = review.signalled(lambda *a, **k: (ran.set, "p"))()
+    assert prompt == "p"
+    assert markers(profile) == []
+    target()
+    assert not ran.is_set()
+
+
+def test_review_must_be_true_or_false():
+    from whombat_hermes import policy
+
+    with pytest.raises(policy.PolicyError):
+        policy.parse_policy({"rules": [], "review": "no"})
+    assert policy.parse_policy({"rules": []}).review is True

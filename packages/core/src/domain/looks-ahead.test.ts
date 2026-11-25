@@ -5,6 +5,7 @@ import {
   AheadReportInput,
   aheadDue,
   aheadHours,
+  aheadQueryRefusal,
   aheadSkip,
   aheadVersion,
   LooksAheadUpdate,
@@ -106,6 +107,21 @@ describe('planAheadPass', () => {
   });
 });
 
+describe('what a search may hold', () => {
+  it('only public words: no address, link, phone number, code or the person’s own name', () => {
+    expect(
+      aheadQueryRefusal('The Script Ziggo Dome 14 december 2026', ['Mara', 'mara@example.com']),
+    ).toBeNull();
+    expect(aheadQueryRefusal('Ajax wedstrijd 14 december', [])).toBeNull();
+    expect(aheadQueryRefusal('order 4471929 Ticketmaster', [])).not.toBeNull();
+    expect(aheadQueryRefusal('booking AB12CD34', [])).not.toBeNull();
+    expect(aheadQueryRefusal('mara@example.com tickets', [])).not.toBeNull();
+    expect(aheadQueryRefusal('call +31 6 1234 5678', [])).not.toBeNull();
+    expect(aheadQueryRefusal('https://example.com/x', [])).not.toBeNull();
+    expect(aheadQueryRefusal('Mara Okafor parents evening', ['Mara', 'Okafor'])).not.toBeNull();
+  });
+});
+
 describe('the report and the setting', () => {
   it('a finding needs its kind, words and a source; nothing found says nothing more', () => {
     expect(AheadReportInput.safeParse({ found: false }).success).toBe(true);
@@ -114,7 +130,7 @@ describe('the report and the setting', () => {
         found: true,
         kind: 'time',
         text: 'It starts at 20:45.',
-        sources: [{ url: 'https://example.com/the-script', title: 'example.com' }],
+        sources: [{ url: 'https://example.com/the-script' }],
       }).success,
     ).toBe(true);
     expect(AheadReportInput.safeParse({ found: true, kind: 'time', text: 'x' }).success).toBe(false);

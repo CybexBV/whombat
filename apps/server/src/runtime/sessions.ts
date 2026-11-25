@@ -234,6 +234,21 @@ export function sessionsSince(db: Queryable, conversationId: string, since: Date
 }
 
 /**
+ * The sessions of a Whombat's Looks ahead checks that ended (looks-ahead.md): what they read of mail and web pages
+ * must not stay where the person's later turns search their past sessions.
+ */
+export function endedAheadSessions(db: Queryable, burrowId: string) {
+  return sessionsWhere(
+    db,
+    and(
+      eq(dispatches.burrowId, burrowId),
+      eq(dispatches.trigger, 'ahead'),
+      inArray(dispatches.state, ['done', 'failed', 'cancelled']),
+    ),
+  );
+}
+
+/**
  * The sessions of the finished automation turns in these threads: what an automation run's agent steps ran in (each turn
  * answers in its prompt's thread), once none of them runs any more.
  */
