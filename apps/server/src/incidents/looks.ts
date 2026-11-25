@@ -157,11 +157,22 @@ export interface RawFacts {
   heldUntil: ReadonlyMap<string, Date>;
 }
 
-/** What Whombat saw of one thing itself now (`RawSeen`), pure. */
-export function rawSeen(live: LiveLooks, thing: string, facts: RawFacts, now: Date): RawSeen {
+/**
+ * What Whombat saw of one thing itself now (`RawSeen`), pure. `about`: the checks its open incident is about. A bad
+ * line or critical alert of another check, one the person ignored, says nothing of that incident; with none, any
+ * does. Not answering always counts: a thing that doesn't answer can't show its problem went.
+ */
+export function rawSeen(
+  live: LiveLooks,
+  thing: string,
+  facts: RawFacts,
+  now: Date,
+  about: readonly string[] = [],
+): RawSeen {
   const target = parseThingId(thing);
   if (!target) return 'unread';
-  if (target.kind === 'server') return serverSeen(live, target.id, facts.held.has(thing));
+  const counts = (check: string | null | undefined) => !about.length || (!!check && about.includes(check));
+  if (target.kind === 'server') return serverSeen(live, target.id, facts.held.has(thing), counts);
   // A hold says nothing of whether the thing is still there: one kept quiet stays held until the hold ends.
   if (facts.held.has(thing)) return 'held';
   const until = facts.heldUntil.get(thing);
@@ -187,7 +198,10 @@ export function rawSeen(live: LiveLooks, thing: string, facts: RawFacts, now: Da
   if (glance.status === 'unknown') return 'unread';
   const lines = glance.lines;
   if (lines?.some((l) => l.offline && l.tone !== 'info')) return 'down';
-  if (glance.outcome === 'error' || lines?.some((l) => l.tone === 'bad' && l.nature !== 'fyi'))
+  if (
+    glance.outcome === 'error' ||
+    lines?.some((l) => l.tone === 'bad' && l.nature !== 'fyi' && counts(l.check))
+  )
     return 'answering';
   // A glance kept before its lines were: its status stands.
   if (!lines) return glance.status === 'offline' ? 'down' : glance.status === 'bad' ? 'answering' : 'fine';
@@ -196,10 +210,10 @@ export function rawSeen(live: LiveLooks, thing: string, facts: RawFacts, now: Da
 
 /**
  * A server from the hosts service's own list, before anything quieted it: offline is down also while its alert is
- * quiet or held back by its offline parent; one of its critical alerts open is still wrong also while the person
- * ignored or snoozed it; one still being added says nothing yet.
+ * quiet or held back by its offline parent; one of its critical alerts open that `counts` is still wrong also while
+ * the person ignored or snoozed it; one still being added says nothing yet.
  */
-function serverSeen(live: LiveLooks, id: string, held: boolean): RawSeen {
+function serverSeen(live: LiveLooks, id: string, held: boolean, counts: (check: string) => boolean): RawSeen {
   // A fleet that wasn't read says nothing; one read without the server says it is gone.
   if (!live.serversRead || !live.fleet) return 'unread';
   if (held) return 'held';
@@ -208,7 +222,7 @@ function serverSeen(live: LiveLooks, id: string, held: boolean): RawSeen {
   if (!status) return 'gone';
   if (status === 'offline') return 'down';
   if (status === 'pending') return 'unread';
-  return raw?.critical ? 'answering' : 'fine';
+  return [...(raw?.critical ?? [])].some(counts) ? 'answering' : 'fine';
 }
 
 /** A line's state as the health pass keeps it: when a pass last saw it. */
@@ -252,8 +266,8 @@ export interface Observed {
 /**
  * Reads what Whombat sees of some things themselves now (`rawSeen`): their own rows, their holds (from Home's things,
  * the windows and the causes) and when a hold last ended, from the windows and from `heldBefore`, the last pass that saw
- * each held (a cause leaves no row once it lifts). `checks`: the checks open incidents are about, by thing, to know
- * which of them a connection's last check didn't read.
+ * each held (a cause leaves no row once it lifts). `checks`: the checks open incidents are about, by thing: only those
+ * keep an incident open, and a connection's last check may not have read them.
  * A delayed start uses only holds at its deadline, so it can read past an ended hold.
  */
 export async function observeThings(
@@ -393,7 +407,7 @@ export async function observeThings(
     if (skipped?.size) unread.set(thing, skipped);
   }
   return {
-    raw: new Map(ids.map((t) => [t, rawSeen(live, t, facts, now)] as const)),
+    raw: new Map(ids.map((t) => [t, rawSeen(live, t, facts, now, checks.get(t))] as const)),
     heldUntil,
     held: memory,
     unread,

@@ -776,8 +776,11 @@ export interface DeskFleet {
 /** A server as the hosts service has it, before Whombat's quiet rows and the person's Ignore or snooze. */
 export interface RawServer {
   status: HostServer['status'];
-  /** One of its own critical alerts is open, whoever ignored or snoozed it: something on it is still wrong. */
-  critical: boolean;
+  /**
+   * The checks of its own critical alerts that are open, whoever ignored or snoozed them: what on it is still wrong.
+   * An outage is judged only by its own checks among them.
+   */
+  critical: ReadonlySet<string>;
 }
 
 /**
@@ -798,12 +801,13 @@ export function deskFleetOf(servers: readonly HostServer[], alerts?: readonly Ho
     if (card.id) rows.set(card.id, row);
   }
   if (!alerts) return { cards: sortServers(cards), rows };
-  const raw = new Map<string, RawServer>(servers.map((s) => [s.id, { status: s.status, critical: false }]));
+  const raw = new Map(servers.map((s) => [s.id, { status: s.status, critical: new Set<string>() }]));
   for (const a of alerts) {
     const server = a.serverId ? raw.get(a.serverId) : undefined;
     // A heads-up never colours a server; a check's alert is its connection's, whose own lines say it.
     if (!server || a.state !== 'open' || a.severity !== 'critical' || a.rule.startsWith('check.')) continue;
-    if (alertLine(a).nature !== 'fyi') server.critical = true;
+    const line = alertLine(a);
+    if (line.nature !== 'fyi') server.critical.add(line.check);
   }
   return { cards: sortServers(cards), rows, raw };
 }

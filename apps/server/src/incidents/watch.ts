@@ -124,6 +124,10 @@ export async function watchIncidents(
     new Map(open.map((o) => [o.thing, o.checks ?? []] as const)),
   );
   const withLook = new Set(looks.map((l) => l.thing));
+  // Whether each thing answers now, before anything quieted it: a down incident's down time ends when it does.
+  const answersNow = new Map<string, boolean>();
+  for (const [thing, r] of observed.raw)
+    if (r === 'fine' || r === 'answering' || r === 'down') answersNow.set(thing, r !== 'down');
   const seen = new Map<string, ThingSeen>();
   for (const inc of open)
     if (!withLook.has(inc.thing))
@@ -145,21 +149,30 @@ export async function watchIncidents(
     before,
     serversRead,
     seen,
+    answering: answersNow,
     noneYet: !rows.length && !(await anyIncident(services.db, burrowId)),
     now,
   });
   const signer = () => serversPrincipal(services, burrowId);
-  if (plan.opened.length || plan.changed.length || plan.noted.length || plan.ended.length)
+  if (
+    plan.opened.length ||
+    plan.changed.length ||
+    plan.noted.length ||
+    plan.stretched.length ||
+    plan.ended.length
+  )
     await services.pipeline.commit(
       incidentsPass,
       {
-        opened: plan.opened.slice(0, 200).map(({ since: _since, startedAt, ...o }) => ({
+        opened: plan.opened.slice(0, 200).map(({ since: _since, startedAt, downSince, ...o }) => ({
           ...o,
           problems: o.problems?.slice(0, 30),
           startedAt: startedAt.toISOString(),
+          ...(downSince ? { downSince: downSince.toISOString() } : {}),
         })),
         changed: plan.changed.slice(0, 200),
         noted: plan.noted.slice(0, 200),
+        stretched: plan.stretched.slice(0, 200).map((s) => ({ ...s, at: s.at.toISOString() })),
         ended: plan.ended.slice(0, 200).map((e) => ({
           id: e.id,
           endedAt: e.endedAt.toISOString(),
@@ -168,7 +181,21 @@ export async function watchIncidents(
       },
       { burrowId, actorId: await signer() },
     );
-  await pushDue(services, burrowId, burrow.timeZone, now, signer, withLook, observed.heldUntil).catch((err) =>
+  // The push's clock starts again after a hold over a thing, or after passes that couldn't read it.
+  const pushClock = new Map(observed.heldUntil);
+  for (const [thing, at] of plan.seen.unread ?? []) {
+    const was = pushClock.get(thing);
+    if (!was || at > was) pushClock.set(thing, at);
+  }
+  await pushDue(
+    services,
+    burrowId,
+    burrow.timeZone,
+    now,
+    signer,
+    new Map(looks.map((l) => [l.thing, l] as const)),
+    pushClock,
+  ).catch((err) =>
     services.log.warn({ err: String(err), burrowId }, 'incidents: the push could not be saved'),
   );
   // “Tell me when Plex is back” while Plex had no outage of its own (it was down because of its server): seeing it
@@ -203,8 +230,9 @@ export function seenOf(raw: RawSeen, unreadCheck: boolean): ThingSeen {
 }
 
 /**
- * Pushes the incidents that are due now, as one push: only of things still bad on this pass (`bad`), not one seen fine
- * while its incident waits to end, nor one kept quiet or down because of something else.
+ * Pushes the incidents that are due now, as one push: only of things still bad on this pass (`bad`, their looks), not
+ * one seen fine while its incident waits to end, nor one kept quiet or down because of something else. Its words say
+ * what each look says now.
  */
 async function pushDue(
   services: Services,
@@ -212,7 +240,7 @@ async function pushDue(
   timeZone: string,
   now: Date,
   signer: () => Promise<string>,
-  bad: ReadonlySet<string>,
+  bad: ReadonlyMap<string, SeenLook>,
   heldUntil: ReadonlyMap<string, Date>,
 ): Promise<void> {
   const open = (await openIncidents(services.db, burrowId)).map(openIncidentOf);
@@ -234,15 +262,23 @@ async function pushDue(
   const candidates: PushCandidate[] = waiting.map((i) => ({
     ...i,
     findingPushed: (findings.get(i.thing) ?? 0) >= i.startedAt.getTime(),
-    // A hold over it that ended after it started: the push waits and stays fresh from then.
+    // A hold over it, or a stretch Whombat couldn't read it, that ended after it started: the push waits and stays
+    // fresh from then.
     heldUntil: heldUntil.get(i.thing) ?? null,
   }));
   const group = planPush({ open: candidates, pushedToday: pushes.total, pushedTodayOf: pushes.of, now });
   if (!group.length) return;
   // The words are made in the push's own commit, from what is still open and not held then.
+  const ids = group.slice(0, PUSH_MAX);
   await services.pipeline.commit(
     incidentsPush,
-    { ids: group.slice(0, PUSH_MAX).map((i) => i.id) },
+    {
+      ids: ids.map((i) => i.id),
+      now: ids.flatMap((i) => {
+        const look = bad.get(i.thing);
+        return look ? [{ id: i.id, nature: look.nature, words: look.words.slice(0, 200) }] : [];
+      }),
+    },
     { burrowId, actorId: await signer() },
   );
 }

@@ -213,6 +213,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The quiet_windows work index permits the same work key for different owners. Window rows stay readable and writable with the same columns. The release before monitoring does not use this table."
+    },
+    "0034_incident_down_stretches": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The stretches an incident's thing didn't answer (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column; an empty list reads as one stretch from down_since to the end, as before."
     }
   }
 }

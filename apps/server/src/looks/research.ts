@@ -57,6 +57,7 @@ import {
   burrows,
   catalogConnections,
   dispatches,
+  incidents,
   type LookCareRow,
   type LookPlanStepRow,
   type LookResearchRow,
@@ -257,6 +258,7 @@ async function republishPlanCard(
 /**
  * Pushes a finding the person has to say yes to, once per research (handle-it.md): a found step or plan. A fixed
  * problem never pushes (it is in Done today); the thread itself stays quiet. Opens the plan's card, else the thread.
+ * When the thing's outage was pushed already, the finding waits in the Inbox without a second buzz.
  */
 async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<void> {
   if (row.pushedAt || row.state !== 'found' || !row.personId || !row.conversationId) return;
@@ -283,9 +285,27 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
     dedupKey: `look-finding:${row.id}`,
     messageId,
     group: threadPushGroup(row.conversationId, row.threadRootId),
+    ...((await outagePushed(ctx.tx, ctx.burrow.id, row.lookKey)) ? { pushHeld: true } : {}),
   };
   const services = ctx.services;
   ctx.background('look finding push', () => notify(services, [draft]));
+}
+
+/** Whether the thing's open outage has buzzed already (one Whombat found bad before it watched never did). */
+async function outagePushed(tx: Tx, burrowId: string, thing: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: incidents.id })
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.burrowId, burrowId),
+        eq(incidents.thingId, thing),
+        isNull(incidents.endedAt),
+        isNotNull(incidents.pushGroup),
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
 
 /** The burrow's research of every look that is still there, by the look's key. */

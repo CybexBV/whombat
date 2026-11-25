@@ -239,6 +239,13 @@
       "when": 1795573572128,
       "tag": "0033_quiet_window_owner_work",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795575018486,
+      "tag": "0034_incident_down_stretches",
+      "breakpoints": true
     }
   ]
 }

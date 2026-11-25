@@ -1713,11 +1713,14 @@ Setup and operation: `docs/github.md`.
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;
   amber opens none, a problem that goes down becomes a `down` one; a pass that couldn't read a thing between two that
-  saw its look keeps its run. The incident keeps when it stopped answering (`down_since`), which starts the delay for
-  `thing.down` automations and counts toward downtime. Whether it is over is read from the thing itself, not its dot (`observeThings`): a server
-  from the hosts service's own list (online, without an open critical alert whoever ignored or snoozed it; one still
-  being added says nothing), a connection's last check (its outcome and lines, before the quiet rows; one that answered
-  without reading a check the incident is about says nothing), a device's last read, made after any hold over it ended,
+  saw its look keeps its run, and down time starts after the last such pass. The incident keeps when it stopped
+  answering (`down_since`), which starts the delay for `thing.down` automations and counts toward downtime; once the
+  thing answers again while a problem keeps the incident open, it keeps each stretch it didn't answer
+  (`down_stretches`), and only those count. Whether it is over is read from the thing itself, not its dot
+  (`observeThings`), and only by the incident's own checks: a server from the hosts service's own list (online, without
+  an open critical alert of one of those checks whoever ignored or snoozed it; one still being added says nothing), a
+  connection's last check (its outcome and its lines of those checks, before the quiet rows; one that answered without
+  reading a check the incident is about says nothing), a device's last read, made after any hold over it ended,
   and the person's accounts from their own records (Google, Microsoft 365 and Email signed in; GitHub and Website
   feedback there). Two passes in a row that see it fine end it, at the first of them; one that sees it still bad
   underneath (not answering, a line someone quieted or switched off, kept quiet, down because of something else) starts
@@ -1733,11 +1736,13 @@ Setup and operation: `docs/github.md`.
   because of its server, or not seen) happens when the watcher sees it answering again. Whombat replies once in the same
   thread, also when a watch expires, without starting an agent turn. A watch of a state already seen answers
   immediately. An incident open 10 minutes about which no research finding pushed is pushed once as the person's
-  “Needs you” row (“Plex is down”, “3 things are down: …”), with the others that started within 5 minutes of it (up to
-  200 in one push); only while its thing is still bad on that pass, never while it is kept quiet or down because of
-  something else (`DeskLook.causedBy`, checked again in the push's commit, whose words name only what is left), nor one
-  more than an hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold
-  over it ended when that is later. The Inbox row and its realtime frame commit with the incidents' push marks,
+  “Needs you” row (“Plex is down”, “3 things are down: …”, worded as each thing's look is on that pass), with the
+  others that started within 5 minutes of it (up to 200 in one push); only while its thing is still bad on that pass,
+  never while it is kept quiet or down because of something else (`DeskLook.causedBy`), nor once a research finding
+  pushed about it (both checked again in the push's commit, whose words name only what is left), nor one more than an
+  hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold over it
+  ended or the last pass that couldn't read it when that is later. A research finding that comes after its thing's
+  outage pushed lands in the Inbox without a push. The Inbox row and its realtime frame commit with the incidents' push marks,
   leaving a failed insert for a later pass to retry. The phone uses the usual background push sender.
   The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's

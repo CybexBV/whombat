@@ -1,0 +1,1 @@
+ALTER TABLE "incidents" ADD COLUMN "down_stretches" jsonb DEFAULT '[]'::jsonb NOT NULL;

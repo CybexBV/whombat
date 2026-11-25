@@ -5,7 +5,7 @@
  * wasn't read, or a server still being added, says nothing; the person's accounts are read from their own records; a
  * thing no longer there is gone.
  */
-import type { HostAlert, HostServer } from '@whombat/core';
+import { type HostAlert, type HostServer, hostAlertCheck } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { type DeskFleet, deskFleetOf } from '../desk/glance';
 import { type LiveLooks, observedOf, type RawFacts, rawSeen, unreadChecks } from './looks';
@@ -84,6 +84,19 @@ describe('a server itself', () => {
     expect(read([server('nas', 'ok')], [alert('check.down')])).toBe('fine');
     expect(read([server('new-box', 'pending')], [])).toBe('unread');
     expect(read([server('nas', 'offline')], [])).toBe('down');
+    // An outage is judged by its own checks: the ignored disk says nothing of the NAS having been offline.
+    const about = (checks: string[]) =>
+      rawSeen(
+        { ...live({}), fleet: deskFleetOf([server('nas', 'ok')], [alert('disk.smart_failing')]) },
+        'server:nas',
+        facts(),
+        NOW,
+        checks,
+      );
+    const offline = hostAlertCheck('agent.heartbeat_missing').check;
+    const disk = hostAlertCheck('disk.smart_failing').check;
+    expect(about([offline])).toBe('fine');
+    expect(about([offline, disk])).toBe('answering');
   });
 });
 
@@ -106,6 +119,34 @@ describe('a connection itself', () => {
       'answering',
     );
     expect(seen({ connections: connection({ status: 'ok', facts: [], lines: [] }) })).toBe('fine');
+  });
+
+  it('judges an incident by its own checks: another bad line says nothing of it, not answering always does', () => {
+    const disk = {
+      check: 'machine.disk',
+      tone: 'bad',
+      nature: 'problem',
+      title: 'The disk is almost full',
+    } as const;
+    const about = (lines: object[], checks: string[]) =>
+      rawSeen(
+        live({}),
+        'connection:plex',
+        facts({ connections: connection({ status: 'ok', facts: [], lines }) }),
+        NOW,
+        checks,
+      );
+    expect(about([disk], ['conn.answers'])).toBe('fine');
+    expect(about([disk], ['conn.answers', 'machine.disk'])).toBe('answering');
+    expect(about([disk], [])).toBe('answering');
+    const down = {
+      check: 'conn.answers',
+      tone: 'bad',
+      nature: 'problem',
+      title: 'Not answering',
+      offline: true,
+    };
+    expect(about([down], ['machine.disk'])).toBe('down');
   });
 
   it('says nothing from a check made before a hold ended, nor one that couldn’t run', () => {
