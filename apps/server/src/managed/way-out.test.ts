@@ -160,6 +160,35 @@ describe('nextWayOut', () => {
     const change = nextWayOut(memory, 'router', at(WAY_OUT_CONFIRM_MS), { step: 'internet' });
     expect(change).toMatchObject({ open: { step: 'router' }, close: true });
   });
+
+  it('the internet back while name lookups fail ends the internet’s outage at once; lookups confirm on their own', () => {
+    const memory = { failing: { step: 'internet' as const, since: t0 } };
+    const back = at(10 * 60_000);
+    const change = nextWayOut(memory, 'names', back, { step: 'internet' });
+    expect(change).toMatchObject({
+      open: null,
+      close: true,
+      memory: { failing: { step: 'names', since: back } },
+    });
+    // The next passes have no outage open; the lookups' own opens after its two minutes, from when they first failed.
+    const later = nextWayOut(change.memory, 'names', at(10 * 60_000 + WAY_OUT_CONFIRM_MS), null);
+    expect(later).toMatchObject({ open: { step: 'names', startedAt: back }, close: false });
+    // The router answering again while the internet is still down ends the router's outage at once too.
+    expect(
+      nextWayOut({ failing: { step: 'router', since: t0 } }, 'internet', back, { step: 'router' }),
+    ).toMatchObject({
+      open: null,
+      close: true,
+    });
+  });
+
+  it('a step before the open one failing keeps it open until that step confirms', () => {
+    const memory = { failing: { step: 'internet' as const, since: t0 } };
+    expect(nextWayOut(memory, 'router', at(10 * 60_000), { step: 'internet' })).toMatchObject({
+      open: null,
+      close: false,
+    });
+  });
 });
 
 describe('the words', () => {

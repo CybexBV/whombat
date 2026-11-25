@@ -416,6 +416,9 @@ export function connectionThing(
     ...(partOf ? { partOf } : {}),
     ...(row.lastWorkedAt ? { usedAt: row.lastWorkedAt.toISOString() } : {}),
   };
+  // Kept quiet says so whatever else the thing shows, signing in again included.
+  const window = activeWindow(quiet.of.windows, quiet.now);
+  const quietUntil = window ? { quietUntil: window.endsAt.toISOString() } : {};
   if (row.status === 'needs_reauth') {
     const status = v?.status ?? 'bad';
     return withNotice(
@@ -425,6 +428,7 @@ export function connectionThing(
         line: 'Needs you to sign in again',
         ...(status !== 'ok' ? { reason: 'Needs you to sign in again' } : {}),
         facts: [],
+        ...quietUntil,
       },
       v?.notice,
       v?.asking,
@@ -437,7 +441,6 @@ export function connectionThing(
       v?.held?.kind === 'cause' && v.held.cause
         ? thingCause(v.held.cause, causeHref(v.held.cause.causeThing))
         : null;
-    const window = activeWindow(quiet.of.windows, quiet.now);
     const down = cause && cause.kind !== 'quiet' ? cause : null;
     const status = down ? 'unknown' : (v?.status ?? glance.status);
     const reason = v ? v.reason : glance.reason;
@@ -456,13 +459,13 @@ export function connectionThing(
               : {}),
         facts: glance.facts.slice(0, 8),
         ...(cause ? { causedBy: cause } : {}),
-        ...(window ? { quietUntil: window.endsAt.toISOString() } : {}),
+        ...quietUntil,
       },
       v?.notice,
       v?.asking,
     );
   }
-  return { ...base, status: 'unknown', line: 'Not checked yet', facts: [] };
+  return { ...base, status: 'unknown', line: 'Not checked yet', facts: [], ...quietUntil };
 }
 
 const KIND_ORDER = { server: 0, connection: 1, device: 2 } as const;
