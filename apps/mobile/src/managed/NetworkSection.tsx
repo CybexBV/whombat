@@ -5,7 +5,7 @@
  *
  * - “Can’t reach Whombat right now” first when the box couldn't; each cable (“Cable · Connected” and its address); the
  *   Wi-Fi (“Wi-Fi · Home · Strong signal” with its bars) or why there is none (“No Wi-Fi card”; “This Wi-Fi card has no
- *   driver yet.” with **See hardware**, which opens About at HARDWARE);
+ *   driver yet.” with **See hardware**, which opens the Hardware screen);
  * - a change while it runs (“Joining Home…”, “Checking that … reaches the internet there…”), and how it ended;
  * - the saved networks, the one in use first, each with **Forget** (asked first);
  * - **Join a Wi-Fi network** across the bottom, which opens the Wi-Fi sheet (`WifiSheet`);
@@ -44,7 +44,7 @@ import { WifiSheet } from './WifiSheet';
 
 const T = NETWORK_TEXT;
 
-/** NETWORK, or nothing (no manager here). `onHardware` opens About at HARDWARE, `onRepoint` Point them here. */
+/** NETWORK, or nothing (no manager here). `onHardware` opens the Hardware screen, `onRepoint` Point them here. */
 export function NetworkSection({
   machine,
   onHardware,

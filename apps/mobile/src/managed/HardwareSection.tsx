@@ -199,7 +199,8 @@ function Hardware({
   };
 
   return (
-    <Card label={T.section}>
+    // The screen is titled Hardware already, so the card has no label of its own.
+    <Card>
       {read === null ? <SkeletonRows count={3} lines={2} /> : null}
       {read && !v ? <Unavailable onRetry={() => void ask()} /> : null}
       {v ? (
