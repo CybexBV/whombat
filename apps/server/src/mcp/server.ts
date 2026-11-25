@@ -451,7 +451,7 @@ export async function callTool(
   // A Looks ahead check reads the person's calendar and mail only where the keys say Allowed: nobody is there to ask
   // (looks-ahead.md).
   if (dispatch.trigger === 'ahead') {
-    const refusal = await aheadToolRefusal(services, dispatch, name, parsed.data);
+    const refusal = await aheadToolRefusal(services, dispatch, name);
     if (refusal) return errorResult('forbidden', refusal);
   }
   const ctx: ToolContext = {

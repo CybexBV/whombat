@@ -110,7 +110,6 @@ export async function aheadToolRefusal(
   services: Services,
   dispatch: DispatchRow,
   name: McpToolName,
-  input: unknown,
 ): Promise<string | null> {
   if (name === 'ahead_report') return null;
   const row = await aheadCheckOfTurn(services.db, dispatch);

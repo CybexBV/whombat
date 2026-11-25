@@ -253,8 +253,8 @@ const DATE_OR_TIME =
  */
 export function keepingDatesAndTimes(text: string, change: (text: string) => string): string {
   const kept: string[] = [];
-  const hidden = text.replace(DATE_OR_TIME, (m) => `\u0000${kept.push(m) - 1}\u0000`);
-  return change(hidden).replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? '');
+  const hidden = text.replace(DATE_OR_TIME, (m) => `\uE000${kept.push(m) - 1}\uE001`);
+  return change(hidden).replace(/\uE000(\d+)\uE001/g, (_m, i: string) => kept[Number(i)] ?? '');
 }
 
 /** Words that never go into a search: an address, a link, a phone number, a code or number from a booking. */
