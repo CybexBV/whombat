@@ -234,7 +234,15 @@ describe('a place saved before the Work screen went (work-removal-android.md AP-
 
 describe('This Whombat’s parts (this-whombat-sections-android.md AP-1250)', () => {
   const managedWorld: RestoreWorld = { ...world, managed: true };
-  const parts = ['Whombat', 'WhombatBackups', 'Devices', 'WhombatAbout', 'WhombatHardware', 'BackupFile'];
+  const parts = [
+    'Whombat',
+    'WhombatBackups',
+    'Devices',
+    'WhombatAbout',
+    'WhombatHardware',
+    'WhombatRemoteHelp',
+    'BackupFile',
+  ];
 
   it('are restored in a managed build only', () => {
     for (const name of parts) {

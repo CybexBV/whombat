@@ -1,12 +1,15 @@
 /**
- * REMOTE HELP on This Whombat → About (Whombat remote-help.md RH-01…RH-12; app remote-help.md AP-4470…), above
- * DIAGNOSTICS: the web's card (AP-4448…AP-4451) in the phone's grouped-card language. Off: the intro, HOW MUCH as
- * radio cards (Look, Look and fix), FOR HOW LONG as the segmented control (Forever only on a test Whombat), “Turn on
- * remote help” with the passkey hint under it; the confirmation is this phone's passkey, or Android's dialog without
- * one. On: the state line on NEEDS YOU's warm wash with Stop, the help code a customer's Whombat needs,
- * who is connected. Always: WHAT SUPPORT DID, a visit's command line behind Show in a sheet with Share and Download. An
+ * REMOTE HELP (Whombat remote-help.md RH-01…RH-12; app remote-help.md AP-4470…), the web's card (AP-4448…AP-4451) in
+ * the phone's grouped-card language, in two sizes (docs/app/decisions/about-page.md). On This Whombat → About,
+ * `RemoteHelpSummary`: while it's off one row (“Off”, how many visits there were) that opens the Remote help screen;
+ * while it's on the state line with Stop, the help code and who is connected, then a row to the screen. On that screen
+ * (and the demo world's This Whombat), `RemoteHelpSection`: off, the intro, HOW MUCH as radio cards (Look, Look and
+ * fix), FOR HOW LONG as the segmented control (Forever only on a test Whombat), “Turn on remote help” with the passkey
+ * hint under it, the confirmation this phone's passkey, or the system's dialog without one; on, as About shows it. Then
+ * WHAT SUPPORT DID, one block per visit (who, how much, when, how many steps), the newest three visits and each one's
+ * last three steps, the rest behind Show all; a visit's command line opens in a sheet with Share and Download. An
  * older runtime, or a box without a support key, says it isn't available yet. The flow, the states and the words are
- * the shared client's (`useRemoteHelp`, `remoteHelpCard`, `remoteHelpVisitRows`).
+ * the shared client's (`useRemoteHelp`, `remoteHelpCard`, `remoteHelpVisitGroups`).
  */
 import { useIsFocused } from '@react-navigation/native';
 import {
@@ -18,9 +21,10 @@ import {
   type RemoteHelpChoice,
   type RemoteHelpStepRow,
   type RemoteHelpTranscript,
+  type RemoteHelpVisitGroup,
   remoteHelpCard,
   remoteHelpChoice,
-  remoteHelpVisitRows,
+  remoteHelpVisitGroups,
 } from '@whombat/client/managed';
 import { type RemoteHelpModel, useRemoteHelp } from '@whombat/client/react';
 import { type ReactNode, useMemo, useState } from 'react';
@@ -29,6 +33,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
+import { Eye, LifeBuoy, SquareTerminal, Wrench } from '../ui/icons';
 import { Button, SkeletonRows, StatusDot } from '../ui/primitives';
 import { RadioCards } from '../ui/radioCards';
 import { Segmented } from '../ui/Segmented';
@@ -45,7 +50,7 @@ import {
   transcriptShown,
 } from './remoteHelp';
 import { transcriptFiles } from './remoteHelpFiles';
-import { Card, Row } from './ui';
+import { Card, IconTile, LinkRow, Row } from './ui';
 import { useForeground } from './useHostStatus';
 import type { RemoteHelpHere } from './useRemoteHelpHere';
 
@@ -55,61 +60,135 @@ const T = REMOTE_HELP_TEXT;
 type OffCard = Extract<RemoteHelpCard, { kind: 'off' }>;
 type OnCard = Extract<RemoteHelpCard, { kind: 'on' }>;
 
-export function RemoteHelpSection({
-  here,
-  onLayout,
-}: {
-  here: RemoteHelpHere;
-  onLayout?: (event: LayoutChangeEvent) => void;
-}) {
-  const theme = useTheme();
+/** How many visits and steps show before Show all. */
+const VISITS_SHOWN = 3;
+const STEPS_SHOWN = 3;
+
+/** The card's state, asked only while the screen is in front and the app in the foreground. */
+function useRemoteHelpHereCard(here: RemoteHelpHere) {
   // Asked (and every 10 s while it's on) only while this screen is in front and the app in the foreground, as the
   // phone's other live parts are (AP-4471); back in front, it reads again.
   const focused = useIsFocused();
   const foreground = useForeground();
   const model = useRemoteHelp(here.api, focused && foreground);
   const { timeZone } = useBurrowBase();
-  if (!here.shown) return null;
   const card = remoteHelpCard({
     state: model.state,
     hasPasskey: model.hasPasskey,
     now: new Date(),
     timeZone,
   });
+  return { model, card, timeZone };
+}
+
+/** The card's top when it can't show the controls: not available here, couldn't load, or loading. */
+function NotReady({ card, model }: { card: RemoteHelpCard; model: RemoteHelpModel }) {
+  const theme = useTheme();
+  if (card.kind === 'unavailable')
+    return (
+      <Part first>
+        <Text size={14} lh={1.45} color={theme.colors.ink2}>
+          {card.text}
+        </Text>
+      </Part>
+    );
+  if (model.loadError && !model.state)
+    return (
+      <Row
+        first
+        dot="mut"
+        title={T.loadError}
+        action={
+          <Button
+            label={T.retry}
+            variant="secondary"
+            onPress={model.reload}
+            style={{ paddingHorizontal: 14 }}
+          />
+        }
+      />
+    );
+  return <SkeletonRows count={1} lines={2} />;
+}
+
+/**
+ * REMOTE HELP on About: short, so a long history doesn't fill the page. Off: one row to the Remote help screen. On: the
+ * state with Stop, the help code and who is connected stay here, then a row to what support did.
+ */
+export function RemoteHelpSummary({
+  here,
+  onOpen,
+  onLayout,
+}: {
+  here: RemoteHelpHere;
+  onOpen: () => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+}) {
+  const { model, card } = useRemoteHelpHereCard(here);
+  if (!here.shown) return null;
+  const visits = model.visits?.length ?? 0;
+  const count = visits > 0 ? T.visitCount(visits) : null;
   return (
     <View onLayout={onLayout}>
       <Card label={W.title.toUpperCase()}>
-        {card.kind === 'unavailable' ? (
-          <Part first>
-            <Text size={14} lh={1.45} color={theme.colors.ink2}>
-              {card.text}
-            </Text>
-          </Part>
-        ) : model.loadError && !model.state ? (
-          <Row
+        {card.kind === 'off' ? (
+          <LinkRow
             first
-            dot="mut"
-            title={T.loadError}
-            action={
-              <Button
-                label={T.retry}
-                variant="secondary"
-                onPress={model.reload}
-                style={{ paddingHorizontal: 14 }}
-              />
-            }
+            icon={LifeBuoy}
+            title={T.offTitle}
+            body={T.offLine}
+            meta={count}
+            label={[W.title, T.offTitle, T.offLine, count].filter(Boolean).join(', ')}
+            onPress={onOpen}
           />
-        ) : card.kind === 'loading' ? (
-          <SkeletonRows count={2} lines={2} />
-        ) : card.kind === 'off' ? (
-          <OffPart card={card} model={model} here={here} />
+        ) : card.kind === 'on' ? (
+          <>
+            <OnPart card={card} model={model} />
+            <LinkRow
+              icon={LifeBuoy}
+              title={W.visits}
+              meta={count}
+              label={[W.visits, count].filter(Boolean).join(', ')}
+              onPress={onOpen}
+            />
+          </>
         ) : (
-          <OnPart card={card} model={model} />
+          <NotReady card={card} model={model} />
         )}
-        {card.kind === 'off' || card.kind === 'on' ? (
-          <VisitsPart model={model} api={here.api} timeZone={timeZone} />
-        ) : null}
       </Card>
+    </View>
+  );
+}
+
+/**
+ * REMOTE HELP in full (the Remote help screen, the demo world's This Whombat), then WHAT SUPPORT DID. `titled`: the
+ * card's own label, left out where the screen's title says Remote help already.
+ */
+export function RemoteHelpSection({
+  here,
+  titled = true,
+  onLayout,
+}: {
+  here: RemoteHelpHere;
+  titled?: boolean;
+  onLayout?: (event: LayoutChangeEvent) => void;
+}) {
+  const { model, card, timeZone } = useRemoteHelpHereCard(here);
+  if (!here.shown) return null;
+  return (
+    <View onLayout={onLayout} style={{ gap: 14 }}>
+      <Card {...(titled ? { label: W.title.toUpperCase() } : {})}>
+        {card.kind === 'off' ? (
+          <OffPart card={card} model={model} here={here} />
+        ) : card.kind === 'on' ? (
+          <OnPart card={card} model={model} />
+        ) : (
+          <NotReady card={card} model={model} />
+        )}
+      </Card>
+      {card.kind === 'off' || card.kind === 'on' ? (
+        <VisitsCard model={model} api={here.api} timeZone={timeZone} />
+      ) : null}
     </View>
   );
 }
@@ -305,8 +384,11 @@ function OnPart({ card, model }: { card: OnCard; model: RemoteHelpModel }) {
   );
 }
 
-/** WHAT SUPPORT DID (AP-4475): every visit's steps, Show opening a command line in the sheet. */
-function VisitsPart({
+/**
+ * WHAT SUPPORT DID (AP-4475): one block per visit, the newest three, the rest behind “Show N earlier visits”. A
+ * visit's Command line opens what the command line showed in the sheet.
+ */
+function VisitsCard({
   model,
   api,
   timeZone,
@@ -319,8 +401,9 @@ function VisitsPart({
   const [open, setOpen] = useState<{ visitId: string; transcript: RemoteHelpTranscript } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const rows = useMemo(
-    () => (model.visits ? remoteHelpVisitRows(model.visits, { now: new Date(), timeZone }) : null),
+  const [all, setAll] = useState(false);
+  const groups = useMemo(
+    () => (model.visits ? remoteHelpVisitGroups(model.visits, { now: new Date(), timeZone }) : null),
     [model.visits, timeZone],
   );
   const show = async (visitId: string) => {
@@ -335,91 +418,194 @@ function VisitsPart({
       setLoading(null);
     }
   };
+  const shown = groups ? (all ? groups : groups.slice(0, VISITS_SHOWN)) : [];
+  const hidden = groups ? groups.length - shown.length : 0;
   return (
-    <Part>
-      <PartLabel>{W.visits}</PartLabel>
-      {rows === null ? null : rows.length === 0 ? (
-        <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-          {W.noVisits}
-        </Text>
+    <Card label={W.visits.toUpperCase()}>
+      {groups === null ? (
+        <SkeletonRows count={1} lines={2} />
+      ) : groups.length === 0 ? (
+        <Part first>
+          <Text size={13.5} lh={1.45} color={theme.colors.mut}>
+            {W.noVisits}
+          </Text>
+        </Part>
       ) : (
-        <View>
-          {rows.map((r) => (
-            <Step key={r.key} row={r} loading={loading === r.transcript} onShow={show} />
-          ))}
-        </View>
+        shown.map((g, i) => (
+          <Visit key={g.key} group={g} first={i === 0} loading={loading === g.visitId} onShow={show} />
+        ))
       )}
-      {failed ? <Problem text={T.transcriptFailed} /> : null}
+      {hidden > 0 ? (
+        <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.line, paddingHorizontal: 16 }}>
+          <TextLink label={T.earlierVisits(hidden)} onPress={() => setAll(true)} />
+        </View>
+      ) : null}
+      {failed ? (
+        <Part>
+          <Problem text={T.transcriptFailed} />
+        </Part>
+      ) : null}
       <TranscriptSheet open={open} onClose={() => setOpen(null)} />
-    </Part>
+    </Card>
   );
 }
 
-/** A step: its time in mono, its words (a command line in code style), Show at the end where there is a record. */
-function Step({
-  row,
+/**
+ * One visit: an eye (Look) or a wrench (Look and fix), green while it lasts, with who came and “Now”; when it started,
+ * how much they could do and how many steps; then its last three steps, Show all for the rest, and Command line where
+ * one was kept.
+ */
+function Visit({
+  group: g,
+  first,
   loading,
   onShow,
 }: {
-  row: RemoteHelpStepRow;
+  group: RemoteHelpVisitGroup;
+  first: boolean;
   loading: boolean;
   onShow: (visitId: string) => Promise<void>;
 }) {
   const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  // “Earlier steps aren’t shown.” isn't a step: only real ones count toward Show all.
+  const more = g.stepCount > STEPS_SHOWN;
+  const steps = open || !more ? g.steps : g.steps.slice(-STEPS_SHOWN);
   return (
     <View
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        minHeight: 36,
-        paddingVertical: 7,
-        borderTopWidth: 1,
+        gap: 10,
+        paddingTop: 14,
+        paddingBottom: more || g.transcript ? 4 : 14,
+        paddingHorizontal: 16,
+        borderTopWidth: first ? 0 : 1,
         borderTopColor: theme.colors.line,
       }}
     >
       <View
         accessible
-        accessibilityLabel={remoteHelpStepLabel(row)}
-        style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', gap: 12 }}
+        accessibilityRole="header"
+        accessibilityLabel={[g.who, g.ongoing ? T.now : null, g.when, g.line].filter(Boolean).join(', ')}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
       >
+        <IconTile icon={g.level === 'fix' ? Wrench : Eye} tone={g.ongoing ? 'ok' : null} />
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text size={15} weight={600} lh={1.35} style={{ flexShrink: 1 }}>
+              {g.who}
+            </Text>
+            {g.ongoing ? (
+              <View
+                style={{
+                  paddingVertical: 1,
+                  paddingHorizontal: 7,
+                  borderRadius: 999,
+                  backgroundColor: tint(theme.colors.ok, 0.14),
+                }}
+              >
+                <Text size={11.5} weight={600} color={theme.colors.ok}>
+                  {T.now}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Text size={12.5} lh={1.4} color={theme.colors.mut}>
+            {`${g.when} · ${g.line}`}
+          </Text>
+        </View>
+      </View>
+      {/* The steps under the words, past the icon. */}
+      <View style={{ paddingLeft: 48 }}>
+        {steps.map((r) => (
+          <Step key={r.key} row={r} />
+        ))}
+      </View>
+      {more || g.transcript ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 20, paddingLeft: 48 }}>
+          {/* Command line first, so it stays put when Show all becomes Show fewer. */}
+          {g.transcript ? (
+            <TextLink
+              label={W.transcript.title}
+              icon={SquareTerminal}
+              busy={loading}
+              onPress={() => void onShow(g.transcript as string)}
+            />
+          ) : null}
+          {more ? (
+            <TextLink
+              label={open ? T.fewerSteps : T.allSteps(g.stepCount)}
+              onPress={() => setOpen((o) => !o)}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** A link-styled button, 44 high: Show all, Command line. */
+function TextLink({
+  label,
+  onPress,
+  icon: Icon,
+  busy = false,
+}: {
+  label: string;
+  onPress: () => void;
+  icon?: typeof SquareTerminal;
+  busy?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <Touchable
+      onPress={onPress}
+      disabled={busy}
+      feedback="fade"
+      ringRadius={8}
+      accessibilityRole="button"
+      accessibilityState={{ busy }}
+      accessibilityLabel={label}
+      style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: busy ? 0.45 : 1 }}
+    >
+      {Icon ? <Icon size={15} color={theme.colors.brand} strokeWidth={2} /> : null}
+      <Text size={13.5} weight={600} color={theme.colors.brand}>
+        {label}
+      </Text>
+    </Touchable>
+  );
+}
+
+/** A step: its time in mono, its words (a command line in code style). */
+function Step({ row }: { row: RemoteHelpStepRow }) {
+  const theme = useTheme();
+  return (
+    <View
+      accessible
+      accessibilityLabel={remoteHelpStepLabel(row)}
+      style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, paddingVertical: 4 }}
+    >
+      {row.time ? (
         <Text size={12} mono color={theme.colors.mut} style={{ minWidth: 42 }}>
           {row.time}
         </Text>
-        <Text
-          size={13.5}
-          lh={1.45}
-          color={row.muted ? theme.colors.mut : theme.colors.ink2}
-          style={{ flex: 1, minWidth: 0 }}
-        >
-          {row.text}
-          {row.code ? (
-            <>
-              {' '}
-              <Text size={12.5} mono color={theme.colors.ink} style={{ backgroundColor: theme.colors.sf2 }}>
-                {/* Kept off the line's ends when it wraps: the padding is part of the code's wash. */}
-                {`\u00a0${row.code}\u00a0`}
-              </Text>
-            </>
-          ) : null}
-        </Text>
-      </View>
-      {row.transcript ? (
-        <Touchable
-          onPress={() => void onShow(row.transcript as string)}
-          disabled={loading}
-          feedback="fade"
-          ringRadius={8}
-          accessibilityRole="button"
-          accessibilityState={{ busy: loading }}
-          accessibilityLabel={`${W.transcript.show} ${W.transcript.title.toLowerCase()}`}
-          style={{ minHeight: 44, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' }}
-        >
-          <Text size={13.5} weight={600} color={theme.colors.brand} style={{ opacity: loading ? 0.45 : 1 }}>
-            {W.transcript.show}
-          </Text>
-        </Touchable>
       ) : null}
+      <Text
+        size={13.5}
+        lh={1.45}
+        color={row.muted ? theme.colors.mut : theme.colors.ink2}
+        style={{ flex: 1, minWidth: 0 }}
+      >
+        {row.text}
+        {row.code ? (
+          <>
+            {' '}
+            <Text size={12.5} mono color={theme.colors.ink} style={{ backgroundColor: theme.colors.sf2 }}>
+              {/* Kept off the line's ends when it wraps: the padding is part of the code's wash. */}
+              {`\u00a0${row.code}\u00a0`}
+            </Text>
+          </>
+        ) : null}
+      </Text>
     </View>
   );
 }

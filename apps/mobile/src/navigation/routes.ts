@@ -165,6 +165,8 @@ export type RootStackParamList = {
   WhombatAbout: { at?: 'hardware' | 'reach' } | undefined;
   /** The machine and every part (About's HARDWARE row, NETWORK's and BLUETOOTH's See hardware); `back` names the way back. */
   WhombatHardware: { back?: string } | undefined;
+  /** Remote help in full: turning it on, and what support did visit by visit (About's REMOTE HELP card). */
+  WhombatRemoteHelp: undefined;
   BackupFile: undefined;
   /**
    * Backups' options and one backup (backup-options-android.md AP-6853, AP-6856), from Backups; on a Whombat and in the
