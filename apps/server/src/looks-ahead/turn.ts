@@ -121,7 +121,7 @@ export async function aheadToolRefusal(
 ): Promise<string | null> {
   if (name === 'ahead_report') return null;
   const row = await aheadCheckOfTurn(services.db, dispatch);
-  if (!row || row.state !== 'checking') return 'This check has ended.';
+  if (row?.state !== 'checking') return 'This check has ended.';
   if (!(await aheadSettingsOf(services.db, dispatch.burrowId)).on)
     return 'Looks ahead was switched off: end with ahead_report, found false.';
   if (name === 'calendar_events') {
