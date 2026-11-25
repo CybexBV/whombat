@@ -16,6 +16,7 @@ import {
   type LinkRef,
   MessageId,
   parseThingId,
+  TeamReportId,
   thingId,
 } from '@whombat/core';
 import type { ConversationFilesTarget } from '../data/files';
@@ -144,6 +145,15 @@ export type RootStackParamList = {
   ShareLink: { rootId: string; fromMessageId?: string };
   /** Settings → You → Shared links. */
   SharedLinks: undefined;
+  /**
+   * Reports to the Whombat Team (Whombat team-reports.md), from Settings → You and About: the person's reports
+   * (`whombat://reports`), a new one (`reports/new`; `draftId` the assistant's draft its card's Edit opens, the web's
+   * `/reports/new?draft=`) and one report (`reports/<reportId>`, where its Inbox item and push lead; `sent` says once
+   * that it went). `back` names the page under it. Strings as a link gives them: the screens check them.
+   */
+  TeamReports: { back?: string } | undefined;
+  TeamReportNew: { draftId?: string; back?: string } | undefined;
+  TeamReport: { reportId: string; sent?: boolean; back?: string };
   /** Settings → You → Prompts (prompts-phone.md): the person's prompts. */
   SettingsPrompts: undefined;
   /**
@@ -294,6 +304,8 @@ export const SCREEN_IDS = {
   Approval: ({ params }: { params?: RootStackParamList['Approval'] }) =>
     params ? String(params.number) : undefined,
   Thread: ({ params }: { params?: RootStackParamList['Thread'] }) => params?.messageId,
+  // Another report opened from a push while one is open is a screen of its own.
+  TeamReport: ({ params }: { params?: RootStackParamList['TeamReport'] }) => params?.reportId,
   Conversation: ({ params }: { params?: ConversationParams }) =>
     !params
       ? undefined
@@ -543,6 +555,10 @@ export const LINKING_SCREENS = {
   Thing: 'things/:thingId',
   // Everything I did (AP-2261): the web's `/done`.
   Done: 'done',
+  // Reports to the Whombat Team (team-reports.md): the web's `/reports`, `/reports/new` and `/reports/<reportId>`.
+  TeamReports: 'reports',
+  TeamReportNew: 'reports/new',
+  TeamReport: 'reports/:reportId',
   // Add a server (AP-1697): `servers/add?address=…&user=…&control=…`.
   AddServer: 'servers/add',
   // Point them here (AP-4421): BF-16's Needs you item.
@@ -790,9 +806,28 @@ export function appScreenUrlForPath(path: string): string | null {
     case 'skills':
       // The agent's skills (Settings → Skills, AP-4947, AP-4967, AP-5571).
       return `${base}skills`;
+    case 'reports':
+      return reportsScreenUrl(id, query);
     // `/search` has no screen on the phone (one-layout-android.md AP-2645): it stays on the web.
   }
   return null;
+}
+
+/** An assistant's draft of a report, as `teamReports.draft` names it. */
+const DRAFT_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * Reports to the Whombat Team (Whombat team-reports.md): `/reports` the list, `/reports/new?draft=<id>` the form with
+ * the assistant's draft (`?draft=` on the list's address too), `/reports/<reportId>` one report, where its Inbox item
+ * and push lead. Anything else under `/reports` opens the list.
+ */
+function reportsScreenUrl(id: string | undefined, query: Map<string, string>): string {
+  const base = `${APP_SCHEME}://reports`;
+  const draft = query.get('draft');
+  const draftParam = draft && DRAFT_ID.test(draft) ? `?draftId=${draft}` : '';
+  if (id === 'new' || (id === undefined && draftParam)) return `${base}/new${draftParam}`;
+  if (id && TeamReportId.safeParse(id).success) return `${base}/${id}`;
+  return base;
 }
 
 /**
