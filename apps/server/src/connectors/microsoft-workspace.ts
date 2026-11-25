@@ -327,6 +327,10 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     // Deleted Items too.
     if (input.query.trim().toLowerCase() === 'in:inbox') {
       q.$orderby = 'receivedDateTime desc';
+      // Only what a summary holds: 50 full bodies every 15 minutes would be read for nothing and could pass the size
+      // bound.
+      q.$select =
+        'id,conversationId,from,toRecipients,subject,bodyPreview,receivedDateTime,createdDateTime,isRead,categories,webLink';
       return arr((await this.call(token, `/me/mailFolders/inbox/messages?${query(q)}`)).value).map(mail);
     }
     if (input.query) q.$search = `"${input.query.replace(/["\\]/g, '')}"`;

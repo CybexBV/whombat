@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import { type DateInput, daysAgo, toDate, zonedParts } from '../text/time.js';
+import { zonedInstant } from './notify.js';
 import type { CalendarEvent } from './workspace.js';
 
 /* Limits ------------------------------------------------------------------------------------------------------------ */
@@ -112,6 +113,8 @@ export const AHEAD_MATTER_NO_ANSWER_MS = 5 * 24 * 3600_000;
 export const AHEAD_MATTER_DUE_LEAD_MS = 24 * 3600_000;
 /** A follow-up that is due stays due this long; a Whombat that was off doesn't follow up weeks late. */
 export const AHEAD_MATTER_FOLLOW_WINDOW_MS = 3 * 24 * 3600_000;
+/** A thing kept an eye on has a date from today to this many days ahead, never further. */
+export const AHEAD_MATTER_DUE_MAX_DAYS = 366;
 /** Sender words one thing kept an eye on matches mail by, at most. */
 export const AHEAD_MATTER_SENDERS_MAX = 3;
 /** Subject words one thing kept an eye on matches mail by, at most. */
@@ -512,25 +515,77 @@ const MAIL_STRONG_SIGNAL =
 /** What an address must look like: `local@domain.tld`. */
 const MAIL_ADDRESS = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/;
 
+/** The longest From line read: one longer than this is no one's address. */
+const FROM_LINE_MAX = 4000;
+
 /**
- * The address a From line came from, lowercased, or null (pure). A sender chooses their display name, so it can hold
- * anything, another address too (`"Refund <boss@company.example>" <attacker@evil.example>`): the address is the last
- * one in angle brackets once quoted parts and comments are set aside, or, with no brackets, the one bare address on the
- * line. It must look like `local@domain.tld`; otherwise there is none.
+ * A From line without its quoted strings and comments (each a space), or null when it can't be read for sure: a quote
+ * or a comment that isn't closed, a `)` without its `(`, or a backslash outside them. Quoted strings and comments honour
+ * backslash escapes, and comments nest, as RFC 5322 has them.
+ */
+function fromLineBare(from: string): string | null {
+  if (from.length > FROM_LINE_MAX) return null;
+  let out = '';
+  let i = 0;
+  while (i < from.length) {
+    const c = from[i] as string;
+    if (c === '"') {
+      i++;
+      for (;;) {
+        if (i >= from.length) return null;
+        const q = from[i] as string;
+        if (q === '\\') i += 2;
+        else if (q === '"') break;
+        else i++;
+      }
+      i++;
+      out += ' ';
+    } else if (c === '(') {
+      let depth = 1;
+      i++;
+      while (depth > 0) {
+        if (i >= from.length) return null;
+        const q = from[i] as string;
+        if (q === '\\') i += 2;
+        else {
+          if (q === '(') depth++;
+          else if (q === ')') depth--;
+          i++;
+        }
+      }
+      out += ' ';
+    } else if (c === ')' || c === '\\') return null;
+    else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
+ * The address a From line came from, lowercased, or null (pure). A sender chooses their display name and comments, so
+ * they can hold anything, another address too (`"Refund <boss@company.example>" <attacker@evil.example>`): quoted
+ * strings and comments (nested, with escapes) are set aside first, and what is left must hold exactly one `<…>`, which is
+ * the address, or, without brackets, be exactly one address. Anything else (an unclosed quote or comment, two bracketed
+ * addresses, a stray `<` or `>`) has none. It must look like `local@domain.tld`. When in doubt: none.
  */
 export function mailFromAddress(from: string): string | null {
-  const line = from
-    .slice(0, 1000)
-    .replace(/"(?:[^"\\]|\\.)*"/g, ' ')
-    .replace(/\([^()]*\)/g, ' ');
-  const bracketed = [...line.matchAll(/<([^<>]*)>/g)];
-  let address: string | undefined;
-  if (bracketed.length) address = bracketed[bracketed.length - 1]?.[1];
-  else if (!/[<>"]/.test(line)) {
-    const bare = line.split(/[\s,;]+/).filter((w) => w.includes('@'));
-    if (bare.length === 1) address = bare[0];
+  const line = fromLineBare(from);
+  if (line === null) return null;
+  const opens = line.split('<').length - 1;
+  const closes = line.split('>').length - 1;
+  let address: string;
+  if (opens === 0 && closes === 0) {
+    address = line.trim();
+    if (/\s/.test(address)) return null;
+  } else {
+    if (opens !== 1 || closes !== 1) return null;
+    const m = /^[^<>]*<([^<>]*)>\s*$/.exec(line);
+    if (!m) return null;
+    address = (m[1] ?? '').trim();
   }
-  const lower = address?.trim().toLowerCase() ?? '';
+  const lower = address.toLowerCase();
   return lower.length <= 254 && MAIL_ADDRESS.test(lower) ? lower : null;
 }
 
@@ -621,8 +676,8 @@ export const AheadMatterReason = z.enum(['due', 'no_answer']);
 export type AheadMatterReason = z.infer<typeof AheadMatterReason>;
 
 /**
- * How mail is matched to a thing kept an eye on: the mail threads it is in, words of its senders' addresses, and words of
- * its subject (which narrow a sender, or match on their own when it has no sender).
+ * How mail is matched to a thing kept an eye on: the mail threads it is in, its senders (full addresses or sites,
+ * `aheadSenderKind`), and words of its subject (which narrow a sender, or match on their own when it has no sender).
  */
 export const AheadMatterMatch = z.object({
   threads: z.array(z.object({ connectionId: z.string().max(64), threadId: z.string().max(200) })).max(10),
@@ -631,30 +686,72 @@ export const AheadMatterMatch = z.object({
 });
 export type AheadMatterMatch = z.infer<typeof AheadMatterMatch>;
 
-/** Words of an address everyone shares: a public mailbox provider, a bare top-level word, a mailbox's role. */
-const COMMON_SENDER_WORDS: ReadonlySet<string> = new Set([
-  'gmail',
-  'googlemail',
-  'outlook',
-  'hotmail',
-  'live',
-  'msn',
-  'icloud',
-  'me',
-  'mac',
-  'yahoo',
-  'aol',
+/** What a site must look like: `domain.tld`, labels of letters, digits and dashes. */
+const MAIL_SITE = /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/;
+
+/**
+ * A sender word as a matter matches mail by, or null when it is none (pure): a full address (`jan@example.com`, matched
+ * when the mail's address is that one) or a site (`notaris-jansen.example`: a dot and no `@`, matched when the address
+ * is at that site or a part of it). A bare word (`klm`) or a fragment (`info@`, `@shop.example`) is none.
+ */
+export function aheadSenderKind(word: string): 'address' | 'site' | null {
+  const w = word.trim().toLowerCase();
+  if (w.length > 254) return null;
+  if (w.includes('@')) return MAIL_ADDRESS.test(w) ? 'address' : null;
+  return MAIL_SITE.test(w) ? 'site' : null;
+}
+
+/** Sites of public mailbox providers: an address there is anyone's, so the site matches almost everyone's mail. */
+const PUBLIC_MAIL_SITES: ReadonlySet<string> = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'msn.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'ymail.com',
+  'aol.com',
+  'proton.me',
+  'pm.me',
+  'protonmail.com',
+  'protonmail.ch',
+  'tutanota.com',
+  'tuta.io',
+  'fastmail.com',
+  'zoho.com',
+  'mail.com',
+  'mail.ru',
+  'web.de',
+  't-online.de',
+  'freenet.de',
+  'orange.fr',
+  'wanadoo.fr',
+  'free.fr',
+  'laposte.net',
+  'libero.it',
+  'kpnmail.nl',
+  'kpnplanet.nl',
+  'planet.nl',
+  'ziggo.nl',
+  'xs4all.nl',
+  'hetnet.nl',
+  'home.nl',
+  'telenet.be',
+  'skynet.be',
+]);
+
+/** Providers with a site in many countries (`gmx.de`, `yahoo.co.uk`, `hotmail.nl`): every one of them is public. */
+const PUBLIC_MAIL_FAMILIES: ReadonlySet<string> = new Set([
   'gmx',
-  'proton',
-  'protonmail',
-  'pm',
-  'kpnmail',
-  'kpnplanet',
-  'ziggo',
-  'xs4all',
-  'hetnet',
-  'telenet',
-  'skynet',
+  'yahoo',
+  'hotmail',
+  'outlook',
+  'live',
+  'yandex',
+]);
+
+/** Labels of a site everyone shares: a top-level word or a mailbox's role, never someone's own site on their own. */
+const COMMON_SITE_LABELS: ReadonlySet<string> = new Set([
   'com',
   'net',
   'org',
@@ -669,26 +766,49 @@ const COMMON_SENDER_WORDS: ReadonlySet<string> = new Set([
   'info',
   'mail',
   'email',
-  'noreply',
-  'no-reply',
-  'donotreply',
   'www',
 ]);
 
 /**
- * Whether a sender word is too common to match mail by (pure): a public mailbox provider (`gmail`, `outlook.com`) or a
- * bare top-level word (`nl`, `com`), alone or together, so every friend's or shop's mail would match. A full address
- * (`jan@gmail.com`) or a site of its own (`notaris-jansen.nl`) is fine.
+ * Whether a site is too common to match mail by (pure): a public mailbox provider's (`gmail.com`, `gmx.de`,
+ * `yahoo.co.uk`, a part of one) or only top-level words (`co.uk`), so every friend's mail would match. A full address
+ * at a public provider (`jan@gmail.com`) is fine: it is that one person's.
  */
 export function aheadCommonSender(word: string): boolean {
+  const w = word.trim().toLowerCase().replace(/^@/, '');
+  if (w.includes('@')) return false;
+  const labels = w.split('.').filter((p) => p.length > 0);
+  if (labels.length === 0 || labels.every((p) => COMMON_SITE_LABELS.has(p))) return true;
+  for (let i = 0; i < labels.length - 1; i++) {
+    const tail = labels.slice(i);
+    if (PUBLIC_MAIL_SITES.has(tail.join('.'))) return true;
+    // `gmx.de`, `yahoo.co.uk`: the family's name followed only by top-level words.
+    if (
+      PUBLIC_MAIL_FAMILIES.has(tail[0] as string) &&
+      tail.length <= 3 &&
+      tail.slice(1).every((p) => p.length <= 3)
+    )
+      return true;
+  }
+  return false;
+}
+
+/** Why a sender word can't be matched by, or null when it can (pure): it is none, or a public provider's site. */
+export function aheadSenderRefusal(word: string): 'not_sender' | 'public' | null {
+  const kind = aheadSenderKind(word);
+  if (!kind) return 'not_sender';
+  return kind === 'site' && aheadCommonSender(word) ? 'public' : null;
+}
+
+/** Whether an address is the sender a sender word names (pure): the same address, or one at that site or a part of it. */
+export function aheadSenderMatches(word: string, address: string): boolean {
   const w = word.trim().toLowerCase();
-  const at = w.indexOf('@');
-  if (at > 0) return false;
-  const parts = w
-    .replace(/^@/, '')
-    .split('.')
-    .filter((p) => p.length > 0);
-  return parts.length === 0 || parts.every((p) => COMMON_SENDER_WORDS.has(p));
+  const kind = aheadSenderKind(w);
+  if (!kind) return false;
+  const a = address.trim().toLowerCase();
+  if (kind === 'address') return a === w;
+  const domain = a.slice(a.lastIndexOf('@') + 1);
+  return a.includes('@') && (domain === w || domain.endsWith(`.${w}`));
 }
 
 /** How a mail matched a thing kept an eye on: by its thread, its sender's address, or the thing's subject words. */
@@ -700,15 +820,31 @@ function matchWordsOf(words: readonly string[]): string[] {
 }
 
 /**
- * How a mail belongs to a thing kept an eye on, or null (pure; words match whatever their case): it is in one of its
- * threads (`thread`); or a sender word is in the address it came from (never the display name a stranger chose) and,
- * when the thing also has subject words, one of them is in the subject or the snippet (`sender`); or the thing has no
- * sender words and one of its subject words is in the subject or the snippet (`words`).
+ * A mail as a thing kept an eye on is matched against. `address`, when given, is the sender's address Whombat read from
+ * the whole From line when the mail came (null: it has none); without it, it is read from `from` here.
  */
-export function aheadMatterMatchBy(
-  match: AheadMatterMatch,
-  mail: { connectionId: string; threadId: string; from: string; subject: string; snippet: string },
-): AheadMatchedBy | null {
+export interface AheadMailToMatch {
+  connectionId: string;
+  threadId: string;
+  from: string;
+  address?: string | null;
+  subject: string;
+  snippet: string;
+}
+
+/** The sender's address of a mail to match: the one read when it came, or else read from its From line. */
+function addressOf(mail: AheadMailToMatch): string | null {
+  return mail.address !== undefined ? mail.address : mailFromAddress(mail.from);
+}
+
+/**
+ * How a mail belongs to a thing kept an eye on, or null (pure; words match whatever their case): it is in one of its
+ * threads (`thread`); or its sender's address (never the display name a stranger chose) is a sender word's address or
+ * at its site (`aheadSenderMatches`) and, when the thing also has subject words, one of them is in the subject or the
+ * snippet (`sender`); or the thing has no sender words and one of its subject words is in the subject or the snippet
+ * (`words`).
+ */
+export function aheadMatterMatchBy(match: AheadMatterMatch, mail: AheadMailToMatch): AheadMatchedBy | null {
   if (
     mail.threadId &&
     match.threads.some((t) => t.connectionId === mail.connectionId && t.threadId === mail.threadId)
@@ -719,18 +855,15 @@ export function aheadMatterMatchBy(
   const text = `${mail.subject}\n${mail.snippet}`.toLowerCase();
   const worded = words.some((w) => text.includes(w));
   if (senders.length > 0) {
-    const address = mailFromAddress(mail.from);
-    if (!address || !senders.some((s) => address.includes(s))) return null;
+    const address = addressOf(mail);
+    if (!address || !senders.some((s) => aheadSenderMatches(s, address))) return null;
     return words.length === 0 || worded ? 'sender' : null;
   }
   return worded ? 'words' : null;
 }
 
 /** Whether a mail belongs to a thing kept an eye on (pure; `aheadMatterMatchBy`). */
-export function aheadMatterMatches(
-  match: AheadMatterMatch,
-  mail: { connectionId: string; threadId: string; from: string; subject: string; snippet: string },
-): boolean {
+export function aheadMatterMatches(match: AheadMatterMatch, mail: AheadMailToMatch): boolean {
   return aheadMatterMatchBy(match, mail) !== null;
 }
 
@@ -748,20 +881,12 @@ export interface AheadMatterToMatch {
  * The thing kept an eye on a new mail is news on, and how it matched, or null (pure). Only mail that came after the
  * thing began. A mail in its thread counts whatever it looks like; a sender or word match counts for a thing the person
  * asked for even when the mail looks like bulk mail, and not for one a check opened. When several match, a thread match
- * wins, then the person's own, then the newest. The caller leaves out the person's own mail and the things whose
- * `AHEAD_MATTER_CHECKS_PER_DAY` are used today.
+ * wins, then the person's own, then the newest. The caller leaves out the person's own mail; when the thing chosen used
+ * its `AHEAD_MATTER_CHECKS_PER_DAY` today, the mail goes to a look through new mail, never to another thing.
  */
 export function aheadMatterForMail<M extends AheadMatterToMatch>(
   matters: readonly M[],
-  mail: {
-    connectionId: string;
-    threadId: string;
-    from: string;
-    subject: string;
-    snippet: string;
-    at: DateInput;
-    bulk: boolean;
-  },
+  mail: AheadMailToMatch & { at: DateInput; bulk: boolean },
 ): { matter: M; by: AheadMatchedBy } | null {
   const at = toDate(mail.at).getTime();
   const hits = matters.flatMap((matter) => {
@@ -798,7 +923,8 @@ export function aheadMatterExpired(
  * `AHEAD_MATTER_DUE_LEAD_MS` before that date until it (`due`). Waiting on someone else: from its date, or else from
  * `AHEAD_MATTER_NO_ANSWER_MS` after the last news, for `AHEAD_MATTER_FOLLOW_WINDOW_MS` (`no_answer`). Never a reason it
  * was already followed up for, and never within `AHEAD_MATTER_QUIET_MS` of its start or its last news, so what was just
- * told isn't told again.
+ * told isn't told again. A `due` follow-up whose first try failed (`retry.failed`) may still start until the end of the
+ * day's hours (`AHEAD_DAY_UNTIL`) on its date in `retry.timeZone`, though its first window ends at the date's noon.
  */
 export function aheadMatterDue(
   matter: {
@@ -810,6 +936,7 @@ export function aheadMatterDue(
     followedUp: readonly AheadMatterReason[];
   },
   now: DateInput,
+  retry?: { timeZone: string; failed: readonly AheadMatterReason[] },
 ): AheadMatterReason | null {
   const at = toDate(now).getTime();
   const quietUntil =
@@ -818,7 +945,17 @@ export function aheadMatterDue(
   if (matter.waitingOn === 'you') {
     if (!matter.dueAt || matter.followedUp.includes('due')) return null;
     const due = matter.dueAt.getTime();
-    return at >= due - AHEAD_MATTER_DUE_LEAD_MS && at < due ? 'due' : null;
+    let until = due;
+    if (retry?.failed.includes('due')) {
+      const p = zonedParts(matter.dueAt, retry.timeZone);
+      const evening = zonedInstant(
+        { year: p.year, month: p.month, day: p.day },
+        `${String(AHEAD_DAY_UNTIL).padStart(2, '0')}:00`,
+        retry.timeZone,
+      ).getTime();
+      until = Math.max(due, evening);
+    }
+    return at >= due - AHEAD_MATTER_DUE_LEAD_MS && at < until ? 'due' : null;
   }
   if (matter.followedUp.includes('no_answer')) return null;
   const from = matter.dueAt
@@ -837,14 +974,44 @@ export function aheadMatterTry(
   reason: AheadMatterReason,
   earlier: readonly { version: string; failed: boolean }[],
 ): string | null {
-  const tries = [reason, `${reason}.again`];
-  const mine = earlier.filter((e) => tries.some((t) => e.version === aheadStageVersion(t, 'matter')));
+  return aheadTry(reason, 'matter', earlier);
+}
+
+/**
+ * The version of a one-shot check to start, or null (pure): `version` the first time, `<version>.again` once when the
+ * first one's turn failed, never more, and never again once one is going on or reported. `earlier`: the rows of the same
+ * item, with their stored (stage-suffixed) versions. A mail check and a follow-up are tried this way.
+ */
+export function aheadTry(
+  version: string,
+  stage: AheadStage,
+  earlier: readonly { version: string; failed: boolean }[],
+): string | null {
+  const tries = [version, `${version}.again`];
+  const mine = earlier.filter((e) => tries.some((t) => e.version === aheadStageVersion(t, stage)));
   if (mine.some((e) => !e.failed)) return null;
   return tries[mine.length] ?? null;
 }
 
 /** A date as `YYYY-MM-DD`. */
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Whether a matter's date (`YYYY-MM-DD`) is a real day from today to `AHEAD_MATTER_DUE_MAX_DAYS` ahead in `timeZone`
+ * (pure): a date in the past or years ahead is no date to follow up by.
+ */
+export function aheadMatterDayOk(day: string, now: DateInput, timeZone: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim());
+  if (!m) return false;
+  const [year, month, date] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = Date.UTC(year, month - 1, date);
+  const check = new Date(at);
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== date)
+    return false;
+  const n = zonedParts(now, timeZone);
+  const today = Date.UTC(n.year, n.month - 1, n.day);
+  return at >= today && at <= today + AHEAD_MATTER_DUE_MAX_DAYS * 86_400_000;
+}
 
 /**
  * `ahead_report`'s `matter`: open a thing to keep an eye on (no `ref`: `title` and `waitingOn` needed), or update or
@@ -1165,14 +1332,14 @@ export const AheadWatchInput = z
       .max(AHEAD_MATTER_SENDERS_MAX)
       .optional()
       .describe(
-        'The sender’s address or site to match new mail by (“notaris-jansen.example”, “jan@example.com”): matched against the address only, never the name shown. Not a public mailbox provider (gmail, outlook) or a bare ending (com, nl).',
+        'Each a full address (“jan@example.com”: matches mail from exactly that address) or a site (“notaris-jansen.example”: a dot and no @; matches addresses at that site or a part of it). Matched against the sender’s address only, never the name shown. Not a bare word (“klm”), a piece of an address (“info@”) or a public mailbox provider’s site (gmail.com, outlook.com); a full address there is fine. Don’t know it: look it up in the mail, or use words instead.',
       ),
     words: z
       .array(z.string().trim().min(AHEAD_MATCH_WORD_MIN).max(40))
       .max(AHEAD_MATTER_WORDS_MAX)
       .optional()
       .describe(
-        'Words of the subject or the opening lines: with senders, a mail must have one of them too; without, they match on their own.',
+        'Words of the subject or the opening lines, at least 3 characters each: with senders, a mail must have one of them too; without, they match on their own.',
       ),
     waitingOn: AheadWaitingOn.default('them').describe(
       'them: the person waits for someone else (the usual). you: it waits on the person.',
@@ -1181,7 +1348,9 @@ export const AheadWatchInput = z
       .string()
       .regex(DAY)
       .optional()
-      .describe('A date it is due, as YYYY-MM-DD, if the person named one.'),
+      .describe(
+        `A date it is due, as YYYY-MM-DD, if the person named one: from today to ${AHEAD_MATTER_DUE_MAX_DAYS} days ahead.`,
+      ),
     id: z.string().min(1).max(64).optional().describe('The one to stop, as list gave it.'),
   })
   .refine((v) => v.action !== 'start' || Boolean(v.title && (v.senders?.length || v.words?.length)), {
@@ -1283,6 +1452,16 @@ export const AheadMatterContext = z.object({
   lastNews: z.string().max(40).optional(),
   /** In a follow-up: why it is followed up now. */
   reason: AheadMatterReason.optional(),
+  /**
+   * In a follow-up or a mail check about it: where to look, from what Whombat knows rather than its title: the sender
+   * words or address it is matched by, and the message ids of the mails its earlier checks were about, newest first.
+   */
+  anchors: z
+    .object({
+      senders: z.array(z.string().max(200)).max(5).optional(),
+      messageIds: z.array(z.string().max(200)).max(5).optional(),
+    })
+    .optional(),
 });
 export type AheadMatterContext = z.infer<typeof AheadMatterContext>;
 

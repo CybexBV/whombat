@@ -13,8 +13,8 @@ import {
   type LooksAheadCheckItem,
   type LooksAheadView,
 } from '@whombat/core';
-import { and, desc, eq, gte, ne, sql } from 'drizzle-orm';
-import { aheadChecks } from '../db/schema/index';
+import { and, desc, eq, gte, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { aheadChecks, messages } from '../db/schema/index';
 import { isThePerson, thePerson } from '../domain/the-person';
 import { forbidden } from '../lib/errors';
 import { commitAs } from '../routes/burrows';
@@ -88,6 +88,20 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
     .orderBy(desc(aheadChecks.startedAt))
     .limit(AHEAD_RECENT_MAX);
 
+  // “Open thread” opens the thread a finding is in: a finding told as a reply (in an event's, a matter's or the person's
+  // own thread) has that thread's root, not its own message; null once the message is gone.
+  const told = rows.flatMap((r) => (r.state === 'told' ? [r.threadRootId] : []));
+  const rootOf = new Map(
+    told.length
+      ? (
+          await services.db
+            .select({ id: messages.id, threadRootId: messages.threadRootId })
+            .from(messages)
+            .where(and(inArray(messages.id, told), isNull(messages.deletedAt)))
+        ).map((m) => [m.id, m.threadRootId ?? m.id])
+      : [],
+  );
+
   const recent: LooksAheadCheckItem[] = rows.map((r) => ({
     id: r.id,
     // Older apps know only calendar and mail rows in the four old stages: a triage pass and a follow-up are mail rows
@@ -108,7 +122,7 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
     at: r.startedAt.toISOString(),
     state: r.state,
     kind: r.kind,
-    threadRootId: r.state === 'told' ? r.threadRootId : null,
+    threadRootId: r.state === 'told' ? (rootOf.get(r.threadRootId) ?? null) : null,
     feedback: r.feedback,
   }));
 

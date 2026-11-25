@@ -14,9 +14,9 @@ import {
   type AheadMatterContext,
   type AheadMatterReason,
   AheadWaitingOn,
-  aheadCommonSender,
+  aheadMatterDayOk,
+  aheadSenderRefusal,
   type LooksAheadMatter,
-  mailFromAddress,
   newId,
   zonedInstant,
   zonedParts,
@@ -79,43 +79,72 @@ function localDay(at: Date, timeZone: string): string {
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 }
 
-/** A matter as a turn reads it, by its number in that turn (`k1`…): its date as a day, when it began as a moment. */
+/** The most of each anchor a follow-up or a matter's mail check is given. */
+const ANCHORS_MAX = 5;
+/** The longest anchor kept: a longer message id is left out rather than cut into one that isn't. */
+const ANCHOR_LONGEST = 200;
+
+/**
+ * A matter as a turn reads it, by its number in that turn (`k1`…): its date as a day, when it began as a moment.
+ * - `list`: as a triage pass sees it among others: title, who, waiting on, date, asked and since, never its note.
+ * - `own`: the matter a mail check or a follow-up is about: its note, when the last news came, why a follow-up runs, and
+ *   where to look (`anchors`: its senders and the message ids of the mails its earlier checks were about).
+ */
 export function matterContext(
   row: AheadMatterRow,
   ref: string,
   timeZone: string,
-  reason?: AheadMatterReason,
+  own?: { reason?: AheadMatterReason; messageIds?: readonly string[] },
 ): AheadMatterContext {
+  const senders = row.match.senders.filter((s) => s.length <= ANCHOR_LONGEST).slice(0, ANCHORS_MAX);
+  const messageIds = [...new Set(own?.messageIds ?? [])]
+    .filter((id) => id.length > 0 && id.length <= ANCHOR_LONGEST)
+    .slice(0, ANCHORS_MAX);
   return {
     ref,
     title: row.title.slice(0, AHEAD_MATTER_TITLE_MAX),
     ...(row.who ? { who: row.who.slice(0, AHEAD_MATTER_WHO_MAX) } : {}),
     waitingOn: row.waitingOn,
     ...(row.dueAt ? { due: localDay(row.dueAt, timeZone) } : {}),
-    ...(row.note ? { note: row.note } : {}),
     asked: row.origin === 'person',
     since: row.createdAt.toISOString(),
-    lastNews: row.lastNewsAt.toISOString(),
-    ...(reason ? { reason } : {}),
+    ...(own
+      ? {
+          ...(row.note ? { note: row.note } : {}),
+          lastNews: row.lastNewsAt.toISOString(),
+          ...(own.reason ? { reason: own.reason } : {}),
+          ...(senders.length || messageIds.length
+            ? {
+                anchors: {
+                  ...(senders.length ? { senders } : {}),
+                  ...(messageIds.length ? { messageIds } : {}),
+                },
+              }
+            : {}),
+        }
+      : {}),
   };
 }
 
-/** A matter's date (`YYYY-MM-DD`) as an instant: noon that day in the Whombat's zone. Null when it isn't a real day. */
-export function matterDueAt(day: string | undefined, timeZone: string): Date | null {
-  const m = day ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(day) : null;
-  if (!m) return null;
-  const [year, month, date] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const check = new Date(Date.UTC(year, month - 1, date));
-  if (check.getUTCMonth() !== month - 1 || check.getUTCDate() !== date) return null;
+/**
+ * A matter's date (`YYYY-MM-DD`) as an instant: noon that day in the Whombat's zone. Null when it isn't a real day, or
+ * isn't from today to a year ahead (`aheadMatterDayOk`).
+ */
+export function matterDueAt(day: string | undefined, timeZone: string, now: Date): Date | null {
+  if (!day || !aheadMatterDayOk(day, now, timeZone)) return null;
+  const [year, month, date] = day.trim().split('-').map(Number) as [number, number, number];
   return zonedInstant({ year, month, day: date }, '12:00', timeZone);
 }
 
+/** What the assistant hears when the person's date is no date to follow up by. */
+export const MATTER_DATE_REFUSED =
+  'That date can’t be used: give one from today to a year ahead as YYYY-MM-DD, or leave it out.';
+
 /**
- * The address a mail came from, lowercased (`notary@example.com`), as a matter keeps it: never one a display name holds
- * (`mailFromAddress`). Null when it carries none, or one too long to keep.
+ * The address a matter a check opened keeps (`notary@example.com`), read from the whole From line when the mail came:
+ * never a parse of the cut-down line. Null when there is none, or one too long to keep.
  */
-export function senderAddress(from: string): string | null {
-  const address = mailFromAddress(from);
+export function senderAddress(address: string | undefined): string | null {
   return address && address.length <= 80 ? address : null;
 }
 
@@ -224,14 +253,20 @@ function matchWords(words: readonly string[] | undefined, max: number, longest: 
 
 /** What the assistant hears when a sender word would match everyone's mail. */
 export function commonSenderRefusal(word: string): string {
-  return `“${word}” is in almost everyone’s address: give the sender’s own address or site instead.`;
+  return `“${word}” is a public mailbox provider that almost everyone’s mail comes from: give the sender’s full address or their own site, or subject words instead.`;
+}
+
+/** What the assistant hears when a sender word is neither an address nor a site. */
+export function notSenderRefusal(word: string): string {
+  return `“${word}” isn’t a sender’s address or site: give the sender’s full address or their site (the part after the @), or subject words instead.`;
 }
 
 /**
  * The person asked the assistant to keep an eye on something in their mail (`ahead_watch` `start`, in their own turn):
  * a matter they own, matched by their own sender and subject words, told in the conversation and thread they asked in.
  * An open one of theirs with the same title is answered instead of a second one; one with the same title a check opened
- * becomes theirs (told where they asked, their words added to what it is matched by).
+ * becomes theirs on their terms (told where they asked; their who, waiting on, date, senders and words replace the
+ * check's, and its mail threads are kept).
  */
 export const startAheadMatter = defineCommand({
   name: 'ahead.matter_start',
@@ -255,26 +290,33 @@ export const startAheadMatter = defineCommand({
     const senders = matchWords(input.senders, AHEAD_MATTER_SENDERS_MAX, 80);
     // Subject words narrow a sender, or match on their own without one (`aheadMatterMatchBy`).
     const words = matchWords(input.words, AHEAD_MATTER_WORDS_MAX, 40);
-    const common = senders.find(aheadCommonSender);
-    if (common) throw badRequest(commonSenderRefusal(common));
+    for (const sender of senders) {
+      const refused = aheadSenderRefusal(sender);
+      if (refused === 'public') throw badRequest(commonSenderRefusal(sender));
+      if (refused) throw badRequest(notSenderRefusal(sender));
+    }
+    const dueAt = input.due ? matterDueAt(input.due, ctx.burrow.timeZone, ctx.now) : null;
+    if (input.due && !dueAt) throw badRequest(MATTER_DATE_REFUSED);
+    const who = cleanShortLabel(input.who, AHEAD_MATTER_WHO_MAX) ?? '';
     const open = await openMatters(tx, ctx.burrow.id);
     const same = open.find((m) => m.title.toLowerCase() === title.toLowerCase());
     if (same?.origin === 'person') return { matter: same, created: false };
     const conversation = await loadConversationRow(tx, input.conversationId);
     if (!conversation || conversation.burrowId !== ctx.burrow.id) throw notFound('Conversation');
     if (same) {
-      // A check already keeps an eye on it: now the person asked, it is theirs, told where they asked.
+      // A check already keeps an eye on it: now the person asked, it is theirs, on their terms and told where they
+      // asked. The mail threads the check found it in stay; what the mail's sender said about it doesn't.
       const matter: AheadMatterRow = {
         ...same,
         origin: 'person',
         personId: input.personId,
+        title,
+        who,
+        waitingOn: input.waitingOn,
+        dueAt,
         conversationId: conversation.id,
         threadRootId: input.threadRootId,
-        match: {
-          threads: same.match.threads,
-          senders: [...new Set([...same.match.senders, ...senders])].slice(0, AHEAD_MATTER_SENDERS_MAX),
-          words: [...new Set([...same.match.words, ...words])].slice(0, AHEAD_MATTER_WORDS_MAX),
-        },
+        match: { threads: same.match.threads, senders, words },
         updatedAt: ctx.now,
       };
       await tx
@@ -282,6 +324,10 @@ export const startAheadMatter = defineCommand({
         .set({
           origin: matter.origin,
           personId: matter.personId,
+          title: matter.title,
+          who: matter.who,
+          waitingOn: matter.waitingOn,
+          dueAt: matter.dueAt,
           conversationId: matter.conversationId,
           threadRootId: matter.threadRootId,
           match: matter.match,
@@ -306,9 +352,9 @@ export const startAheadMatter = defineCommand({
       personId: input.personId,
       origin: 'person',
       title,
-      who: cleanShortLabel(input.who, AHEAD_MATTER_WHO_MAX) ?? '',
+      who,
       waitingOn: input.waitingOn,
-      dueAt: matterDueAt(input.due, ctx.burrow.timeZone),
+      dueAt,
       note: null,
       match: { threads: [], senders, words },
       state: 'open',

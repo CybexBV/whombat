@@ -10,6 +10,7 @@
  */
 import {
   AHEAD_CHECKS_PER_DAY,
+  AHEAD_FINDINGS_PER_DAY,
   AHEAD_MAIL_CALENDAR_MS,
   AHEAD_MATTER_CHECKS_PER_DAY,
   AHEAD_MATTERS_MAX,
@@ -17,10 +18,12 @@ import {
   AHEAD_READ_MS,
   type AheadCandidate,
   type AheadChecked,
+  AheadMatterReason,
   type AheadScheduleEntry,
   type AheadStage,
   aheadMatterDue,
   aheadMatterForMail,
+  aheadMatterMatchBy,
   aheadMatterTry,
   aheadPriority,
   aheadSkip,
@@ -29,6 +32,7 @@ import {
   aheadStartHours,
   aheadTriageDue,
   aheadTriageSince,
+  aheadTry,
   aheadVersion,
   type CalendarEvent,
   planAheadPass,
@@ -321,6 +325,8 @@ interface MailFacts {
   messageId: string;
   threadId: string;
   from: string;
+  /** The sender's address read from the whole From line when it came; null when it has none. */
+  address: string | null;
   subject: string;
   date: string;
   snippet: string;
@@ -337,6 +343,7 @@ function factsOfSwept(m: SweptMail): MailFacts {
     messageId: m.message.id,
     threadId: m.message.threadId,
     from: m.message.from,
+    address: m.address,
     subject: m.message.subject,
     date: m.message.date,
     snippet: m.message.snippet,
@@ -354,19 +361,23 @@ function factsOfListed(m: TriageMail): MailFacts {
     messageId: m.messageId,
     threadId: m.threadId,
     from: m.from,
+    address: m.address ?? null,
     subject: m.subject,
     date: m.date,
     snippet: m.snippet,
   };
 }
 
-/** A mail check of one mail, with the next 14 days of plans and the matter it is about, if any. */
+/**
+ * A mail check of one mail, with the next 14 days of plans and the matter it is about, if any (`matched`: the mail
+ * really matches it).
+ */
 function mailCheck(
   m: MailFacts,
   timeZone: string,
   schedule: readonly AheadScheduleEntry[],
   priority: number,
-  matterId?: string,
+  matter?: { id: string; matched: boolean },
   asked?: boolean,
 ): Found {
   const stage: AheadStage = 'mail';
@@ -406,8 +417,9 @@ function mailCheck(
         date: m.date.slice(0, 64),
         snippet: m.snippet.slice(0, 600),
         ...(m.threadId ? { threadId: m.threadId.slice(0, 200) } : {}),
+        ...(m.address ? { address: m.address } : {}),
       },
-      ...(matterId ? { matterId } : {}),
+      ...(matter ? { matterId: matter.id, ...(matter.matched ? { matterMatched: true } : {}) } : {}),
     },
   };
 }
@@ -449,8 +461,23 @@ export async function watchAhead(
     .where(eq(aheadChecks.burrowId, burrowId));
   const checksToday = counts?.today ?? 0;
   if ((counts?.busy ?? 0) > 0 || checksToday >= AHEAD_CHECKS_PER_DAY) return null;
-  // The day's findings don't stop the pass: news on a matter the person asked for may still start.
+  // The day's findings don't stop the pass while a matter the person asked for is open: news on it may still start.
+  // Without one, nothing could start, so nothing is read.
   const findingsToday = await findingsSince(services.db, burrowId, dayStart);
+  if (findingsToday >= AHEAD_FINDINGS_PER_DAY) {
+    const [theirs] = await services.db
+      .select({ id: aheadMatters.id })
+      .from(aheadMatters)
+      .where(
+        and(
+          eq(aheadMatters.burrowId, burrowId),
+          eq(aheadMatters.state, 'open'),
+          eq(aheadMatters.origin, 'person'),
+        ),
+      )
+      .limit(1);
+    if (!theirs) return null;
+  }
   // A check's turn still at work (one past its two hours, hung) holds the next back too.
   const [working] = await services.db
     .select({ id: dispatches.id })
@@ -617,23 +644,26 @@ async function mailFound(
       if (mail) picked.push({ mail, rank, ...(p.matterId ? { matterId: p.matterId } : {}) });
     });
   }
-  // Which of these mails already have a check: a mail is checked once.
+  // Which of these mails already have a check: a mail is checked once, and once more when its turn failed (a watched
+  // reply no runner took at night isn't lost for good because its row is there).
   const keys = [
     ...new Set([
       ...swept.map((m) => m.key),
       ...picked.map((p) => mailEventKey(p.mail.connectionId, p.mail.messageId)),
     ]),
   ];
-  const hasRow = new Set(
-    keys.length
-      ? (
-          await db
-            .select({ key: aheadChecks.eventKey })
-            .from(aheadChecks)
-            .where(and(eq(aheadChecks.burrowId, burrowId), inArray(aheadChecks.eventKey, keys)))
-        ).map((r) => r.key)
-      : [],
-  );
+  const rowsByKey = new Map<string, { version: string; failed: boolean }[]>();
+  if (keys.length)
+    for (const r of await db
+      .select({ key: aheadChecks.eventKey, version: aheadChecks.version, state: aheadChecks.state })
+      .from(aheadChecks)
+      .where(and(eq(aheadChecks.burrowId, burrowId), inArray(aheadChecks.eventKey, keys)))) {
+      const list = rowsByKey.get(r.key) ?? [];
+      list.push({ version: r.version, failed: r.state === 'failed' });
+      rowsByKey.set(r.key, list);
+    }
+  /** The version of a mail check to start now, or null when it has one going, done or tried twice. */
+  const versionFor = (key: string, version: string) => aheadTry(version, 'mail', rowsByKey.get(key) ?? []);
 
   const out = new Map<string, Found>();
   // Mail that is news on a matter: checked at once, without a triage pass, up to the matter's checks for the day; more
@@ -668,45 +698,67 @@ async function mailFound(
   const matched = new Set<string>();
   // Oldest first, so the first reply takes the day's first check.
   for (const m of [...swept].reverse()) {
-    if (hasRow.has(m.key)) continue;
-    const hit = aheadMatterForMail(
-      matters.filter((x) => (left.get(x.id) ?? 0) > 0),
-      {
-        connectionId: m.account.connectionId,
-        threadId: m.message.threadId,
-        from: m.message.from,
-        subject: m.message.subject,
-        snippet: m.message.snippet,
-        at: m.start,
-        bulk: m.bulk,
-      },
-    );
+    const version = versionFor(m.key, m.version);
+    if (!version) continue;
+    const hit = aheadMatterForMail(matters, {
+      connectionId: m.account.connectionId,
+      threadId: m.message.threadId,
+      from: m.message.from,
+      address: m.address,
+      subject: m.message.subject,
+      snippet: m.message.snippet,
+      at: m.start,
+      bulk: m.bulk,
+    });
     if (!hit) continue;
     const { matter } = hit;
+    // The matter is chosen first; when it used its checks today, the mail goes through a pass like other mail, never
+    // to another matter that happens to match by sender.
+    if ((left.get(matter.id) ?? 0) <= 0) continue;
     left.set(matter.id, (left.get(matter.id) ?? 0) - 1);
     matched.add(m.key);
     out.set(
       m.key,
       mailCheck(
-        factsOfSwept(m),
+        { ...factsOfSwept(m), version },
         timeZone,
         schedule,
         MATTER_MAIL_PRIORITY[matter.origin],
-        matter.id,
+        { id: matter.id, matched: true },
         matter.origin === 'person',
       ),
     );
   }
-  // The picks of earlier triage passes, one at a time as the budget allows; one about a matter the person asked for is
-  // theirs as much as a mail that matched it.
+  // The picks of earlier triage passes, one at a time as the budget allows. One linked to a matter is checked with it
+  // either way, but is news the person asked for only when its mail really matches their matter: a pass's say-so,
+  // steered by a stranger's subject line, isn't enough.
   const openById = new Map(matters.map((m) => [m.id, m]));
   for (const p of picked) {
     const facts = factsOfListed(p.mail);
-    if (hasRow.has(facts.key) || out.has(facts.key)) continue;
+    if (out.has(facts.key)) continue;
+    const version = versionFor(facts.key, facts.version);
+    if (!version) continue;
     const about = p.matterId ? openById.get(p.matterId) : undefined;
+    const really = about
+      ? aheadMatterMatchBy(about.match, {
+          connectionId: facts.connectionId,
+          threadId: facts.threadId,
+          from: facts.from,
+          address: facts.address,
+          subject: facts.subject,
+          snippet: facts.snippet,
+        }) !== null
+      : false;
     out.set(
       facts.key,
-      mailCheck(facts, timeZone, schedule, PICK_PRIORITY - p.rank, about?.id, about?.origin === 'person'),
+      mailCheck(
+        { ...facts, version },
+        timeZone,
+        schedule,
+        PICK_PRIORITY - p.rank,
+        about ? { id: about.id, matched: really } : undefined,
+        about?.origin === 'person' && really,
+      ),
     );
   }
   // A follow-up of a matter whose time came: once per reason, a failed one tried once more.
@@ -725,6 +777,14 @@ async function mailFound(
         )
     : [];
   for (const matter of matters) {
+    const key = `matter:${matter.id}`;
+    const earlier = followUps
+      .filter((f) => f.key === key)
+      .map((f) => ({ version: f.version, failed: f.state === 'failed' }));
+    // A reason whose first try failed may be tried a little longer (a `due` one until the evening of its date).
+    const failed = AheadMatterReason.options.filter((r) =>
+      earlier.some((e) => e.failed && e.version === aheadStageVersion(r, 'matter')),
+    );
     const reason = aheadMatterDue(
       {
         waitingOn: matter.waitingOn,
@@ -734,15 +794,10 @@ async function mailFound(
         followedUp: matter.followedUp,
       },
       now,
+      { timeZone, failed },
     );
     if (!reason) continue;
-    const key = `matter:${matter.id}`;
-    const version = aheadMatterTry(
-      reason,
-      followUps
-        .filter((f) => f.key === key)
-        .map((f) => ({ version: f.version, failed: f.state === 'failed' })),
-    );
+    const version = aheadMatterTry(reason, earlier);
     if (!version) continue;
     const start = (matter.dueAt ?? now).toISOString();
     out.set(key, {
@@ -781,7 +836,7 @@ async function mailFound(
   const fresh = swept.filter(
     (m) =>
       !m.bulk &&
-      !hasRow.has(m.key) &&
+      !rowsByKey.has(m.key) &&
       !matched.has(m.key) &&
       !listed.has(m.key) &&
       Date.parse(m.start) >= since.getTime(),
@@ -798,8 +853,12 @@ async function mailFound(
   ) {
     const at = now.toISOString();
     const key = `triage:${at}`;
-    // A mailbox that couldn't be read now keeps this pass from moving the window past its mail.
-    const sweptAt = sweep.partial ? since : sweep.readAt;
+    const mails = triageMailList(fresh, pass.rules);
+    // A mailbox that couldn't be read now keeps this pass from moving the window past its mail; so does mail the list
+    // had no room for: the next pass covers it, and leaves out what this one listed by its keys.
+    const shown = new Set(mails.map((m) => mailEventKey(m.connectionId, m.messageId)));
+    let sweptAt = (sweep.partial ? since : sweep.readAt).getTime();
+    for (const m of fresh) if (!shown.has(m.key)) sweptAt = Math.min(sweptAt, Date.parse(m.start));
     out.set(key, {
       candidate: { key, version: 'pass', start: at, stage: 'triage', source: 'triage' },
       event: {
@@ -821,9 +880,9 @@ async function mailFound(
         ...(schedule.length ? { daySchedule: [...schedule] } : {}),
         triage: {
           since: since.toISOString(),
-          sweptAt: new Date(Math.min(sweptAt.getTime(), now.getTime())).toISOString(),
-          count: fresh.length,
-          mails: triageMailList(fresh, pass.rules),
+          sweptAt: new Date(Math.min(sweptAt, now.getTime())).toISOString(),
+          count: mails.length,
+          mails,
           matters: matters.slice(0, AHEAD_MATTERS_MAX).map((m, i) => ({ ref: `k${i + 1}`, id: m.id })),
         },
       },

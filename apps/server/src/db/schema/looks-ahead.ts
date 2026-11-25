@@ -151,6 +151,8 @@ export const aheadChecks = pgTable(
           snippet: string;
           /** The thread it is in: what a thing kept an eye on is matched by. */
           threadId?: string;
+          /** The sender's address, read from the whole From line when it came: what a matter is opened by. */
+          address?: string;
         };
         /** A look through new mail: what it covered, the mails it listed (by number) and what it picked. */
         triage?: {
@@ -175,14 +177,20 @@ export const aheadChecks = pgTable(
             date: string;
             snippet: string;
             unread?: boolean;
+            /** The sender's address, read from the whole From line when it came. */
+            address?: string;
           }[];
           /** The things kept an eye on it was shown (`k1`…), so a pick's matter maps back to its id. */
           matters?: { ref: string; id: string }[];
           /** Its picks, which wait here as mail checks for 48 hours. */
           picks?: { ref: string; matterId?: string }[];
         };
-        /** The thing kept an eye on a mail check or a follow-up is about, and why a follow-up runs. */
-        matter?: { id: string; reason?: AheadMatterReason };
+        /**
+         * The thing kept an eye on a mail check or a follow-up is about, and why a follow-up runs. `matched`: a mail
+         * check's mail really matches it (by its thread, sender or words), not only a triage pass's say-so: only then
+         * is news on a matter the person asked for told beyond the day's findings.
+         */
+        matter?: { id: string; reason?: AheadMatterReason; matched?: boolean };
       }>()
       .notNull(),
     state: text('state').$type<'checking' | 'quiet' | 'told' | 'failed'>().notNull(),

@@ -168,6 +168,12 @@ describe('Microsoft unread mail', () => {
     expect(urls[0]?.searchParams.get('$orderby')).toBe('receivedDateTime desc');
     expect(urls[0]?.searchParams.get('$search')).toBeNull();
     expect(urls[0]?.searchParams.get('$top')).toBe('50');
+    // Only the fields a summary holds, never the bodies.
+    const fields = urls[0]?.searchParams.get('$select')?.split(',') ?? [];
+    expect(fields).toEqual(
+      expect.arrayContaining(['id', 'conversationId', 'from', 'subject', 'bodyPreview']),
+    );
+    expect(fields).not.toContain('body');
     expect(urls[1]?.pathname).toBe('/v1.0/me/messages');
     expect(urls[1]?.searchParams.get('$search')).toBe('"invoice"');
   });

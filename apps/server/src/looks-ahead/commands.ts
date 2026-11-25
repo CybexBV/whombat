@@ -126,6 +126,7 @@ const TriageMailInput = z.object({
   date: z.string().max(64),
   snippet: z.string().max(600),
   unread: z.boolean().optional(),
+  address: z.string().max(254).optional(),
 });
 
 export const AheadEventInput = z.object({
@@ -150,10 +151,18 @@ export const AheadEventInput = z.object({
   allDay: z.boolean().optional(),
   /** Same-day accepted schedule (calendar) or next 14 days (mail, follow-up, triage). */
   daySchedule: z.array(AheadScheduleEntry).max(30).optional(),
-  /** Incoming mail payload when `source === 'mail'`, with the thread a matter is matched by. */
-  mail: AheadMailContext.extend({ threadId: z.string().max(200).optional() }).optional(),
+  /**
+   * Incoming mail payload when `source === 'mail'`, with the thread a matter is matched by and the sender's address read
+   * from the whole From line.
+   */
+  mail: AheadMailContext.extend({
+    threadId: z.string().max(200).optional(),
+    address: z.string().max(254).optional(),
+  }).optional(),
   /** The matter a mail check is about (a mail that matched it, or a triage pick that named it). */
   matterId: z.string().min(1).max(64).optional(),
+  /** The mail really matches that matter (not only a triage pass's say-so). */
+  matterMatched: z.boolean().optional(),
   /** A follow-up: the matter and why it is followed up now. */
   matter: z.object({ id: z.string().min(1).max(64), reason: AheadMatterReason }).optional(),
   /** A triage pass: what it covers, the mails it lists and the matters it is shown (`k1`… → id). */
@@ -315,7 +324,7 @@ export const startAheadCheck = defineCommand({
         ...(event.source === 'matter' && matterId && event.matter
           ? { matter: { id: matterId, reason: event.matter.reason } }
           : matterId
-            ? { matter: { id: matterId } }
+            ? { matter: { id: matterId, ...(event.matterMatched ? { matched: true } : {}) } }
             : {}),
       },
       state: 'checking',
@@ -423,7 +432,9 @@ async function checkAgainInTheMorning(
  * A mail check opens a matter (`ahead_report`'s `matter` without `ref`): only when the check has none, fewer than
  * `AHEAD_MATTERS_MAX` are open and checks opened fewer than `AHEAD_MATTERS_OPENED_PER_DAY` today; otherwise nothing,
  * silently. Its words are scrubbed like a finding's, and it is matched only by what Whombat knows of the mail it checked
- * (its thread and its sender's address), never by words the model chose. Its id, or null.
+ * (its thread and its sender's address, read from the whole From line when it came), never by words the model chose. A
+ * date that isn't from today to a year ahead is left out. When an open matter has that title already, no second one
+ * opens: the mail's thread is added to it, and the check is linked to it. Its id, or null.
  */
 async function openMatterFromCheck(
   ctx: ApplyContext,
@@ -435,6 +446,42 @@ async function openMatterFromCheck(
   if (row.source !== 'mail' || !wanted.waitingOn) return null;
   const title = cleanShortLabel(wanted.title, AHEAD_MATTER_TITLE_MAX);
   if (!title) return null;
+  const mail = row.event.mail;
+  const mailThread =
+    mail?.threadId && row.event.connectionId
+      ? { connectionId: row.event.connectionId, threadId: mail.threadId }
+      : null;
+  // The same title as one open already: that one goes on with this mail's thread, the person's own too; nothing else of
+  // it changes.
+  const [same] = await tx
+    .select()
+    .from(aheadMatters)
+    .where(
+      and(
+        eq(aheadMatters.burrowId, ctx.burrow.id),
+        eq(aheadMatters.state, 'open'),
+        sql`lower(${aheadMatters.title}) = ${title.toLowerCase()}`,
+      ),
+    )
+    .orderBy(desc(aheadMatters.createdAt))
+    .limit(1)
+    .for('update');
+  if (same) {
+    if (
+      mailThread &&
+      !same.match.threads.some(
+        (t) => t.connectionId === mailThread.connectionId && t.threadId === mailThread.threadId,
+      )
+    )
+      await tx
+        .update(aheadMatters)
+        .set({
+          match: { ...same.match, threads: [...same.match.threads, mailThread].slice(-10) },
+          updatedAt: ctx.now,
+        })
+        .where(eq(aheadMatters.id, same.id));
+    return same.id;
+  }
   const [open] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(aheadMatters)
@@ -442,8 +489,7 @@ async function openMatterFromCheck(
   if ((open?.n ?? 0) >= AHEAD_MATTERS_MAX) return null;
   const dayStart = startOfLocalDay(ctx.now, ctx.burrow.timeZone);
   if ((await mattersOpenedByChecks(tx, ctx.burrow.id, dayStart)) >= AHEAD_MATTERS_OPENED_PER_DAY) return null;
-  const mail = row.event.mail;
-  const sender = mail ? senderAddress(mail.from) : null;
+  const sender = senderAddress(mail?.address);
   const id = newId('aheadMatter');
   await tx.insert(aheadMatters).values({
     id,
@@ -453,13 +499,10 @@ async function openMatterFromCheck(
     title,
     who: cleanShortLabel(wanted.who, AHEAD_MATTER_WHO_MAX) ?? '',
     waitingOn: wanted.waitingOn,
-    dueAt: matterDueAt(wanted.due, ctx.burrow.timeZone),
+    dueAt: matterDueAt(wanted.due, ctx.burrow.timeZone, ctx.now),
     note: cleanShortLabel(wanted.note, AHEAD_NOTE_MAX),
     match: {
-      threads:
-        mail?.threadId && row.event.connectionId
-          ? [{ connectionId: row.event.connectionId, threadId: mail.threadId }]
-          : [],
+      threads: mailThread ? [mailThread] : [],
       senders: sender ? [sender] : [],
       words: [],
     },
@@ -512,13 +555,17 @@ export const reportAhead = defineCommand({
     const given = row.matterId ? await matterForUpdate(tx, ctx.burrow.id, row.matterId) : null;
     const matter = given?.state === 'open' ? given : null;
     const daytime = aheadHours(ctx.now, timeZone);
+    // News the person asked for: their matter's follow-up, or mail that really matches it. A triage pick linked to it
+    // whose mail doesn't match is checked with it as context, but its finding follows the ordinary rules.
+    const theirs =
+      matter?.origin === 'person' && (row.source === 'matter' || row.event.matter?.matched === true);
     // News the person asked for is never told at night, and never lost to it.
-    if (matter?.origin === 'person' && !daytime) return checkAgainInTheMorning(ctx, row, matter);
+    if (matter && theirs && !daytime) return checkAgainInTheMorning(ctx, row, matter);
     // A check that was given a matter reports on it, unless it says its finding is about something else: a watched
     // sender also writes about other things, and those are told as any other mail's finding.
     const about = matter && !(row.source === 'mail' && report.found && report.unrelated) ? matter : null;
     // They asked for it: told whatever the kinds and the day's count say.
-    const asked = about?.origin === 'person';
+    const asked = !!about && theirs;
     const calendarOff =
       !fromMail && settings.calendarsOff.includes(calendarKey(row.event.connectionId, row.event.calendarId));
     const mailOff = fromMail && !settings.mailOn;
@@ -592,7 +639,8 @@ export const reportAhead = defineCommand({
     if (about) {
       const byRef = change?.ref ? change : undefined;
       const matterNote = cleanShortLabel(byRef?.note, AHEAD_NOTE_MAX);
-      const due = byRef?.due ? matterDueAt(byRef.due, timeZone) : null;
+      // A date outside today to a year ahead is ignored; the rest of the change stands.
+      const due = byRef?.due ? matterDueAt(byRef.due, timeZone, ctx.now) : null;
       const set: Partial<AheadMatterRow> = {
         ...(matterNote ? { note: matterNote } : {}),
         ...(due ? { dueAt: due } : {}),
@@ -862,6 +910,32 @@ export const tidyAhead = defineCommand({
         );
       const rootOf = new Map(msgRows.map((m) => [m.id, m.threadRootId ?? m.id]));
       const waiting = new Set(pending.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId));
+      // Only a thread a finding of its own began is Looks ahead's to settle: one the person began (their ask, where a
+      // matter they asked for is told) is their conversation.
+      const replyRoots = [
+        ...new Set(
+          passed.flatMap((p) => {
+            const root = rootOf.get(p.threadRootId);
+            return root && root !== p.threadRootId ? [root] : [];
+          }),
+        ),
+      ];
+      const ownRoots = new Set(
+        replyRoots.length
+          ? (
+              await tx
+                .select({ id: aheadChecks.threadRootId })
+                .from(aheadChecks)
+                .where(
+                  and(eq(aheadChecks.burrowId, ctx.burrow.id), inArray(aheadChecks.threadRootId, replyRoots)),
+                )
+            ).map((r) => r.id)
+          : [],
+      );
+      const began = (p: AheadCheckRow) => {
+        const root = rootOf.get(p.threadRootId);
+        return root === p.threadRootId || (root !== undefined && ownRoots.has(root));
+      };
       const actualRoots = [...new Set(passed.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId))];
       const wrote = new Set(
         actualRoots.length
@@ -884,7 +958,7 @@ export const tidyAhead = defineCommand({
       const byChat = new Map<string, Set<string>>();
       for (const p of passed) {
         const rootId = rootOf.get(p.threadRootId) ?? p.threadRootId;
-        if (wrote.has(rootId) || waiting.has(rootId)) continue;
+        if (!began(p) || wrote.has(rootId) || waiting.has(rootId)) continue;
         const set = byChat.get(p.conversationId) ?? new Set<string>();
         set.add(rootId);
         byChat.set(p.conversationId, set);

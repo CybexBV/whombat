@@ -46,6 +46,7 @@ export function triageMailList(mails: readonly SweptMail[], rules: readonly stri
     date: m.start,
     snippet: m.message.snippet.slice(0, 600),
     ...(m.message.unread ? { unread: true } : {}),
+    ...(m.address ? { address: m.address } : {}),
   }));
 }
 

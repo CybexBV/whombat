@@ -25,6 +25,7 @@ import {
   aheadMailBulk,
   aheadMailNoise,
   aheadMailSignal,
+  aheadMatterDayOk,
   aheadMatterDue,
   aheadMatterExpired,
   aheadMatterForMail,
@@ -33,12 +34,16 @@ import {
   aheadMatterTry,
   aheadPriority,
   aheadQueryRefusal,
+  aheadSenderKind,
+  aheadSenderMatches,
+  aheadSenderRefusal,
   aheadSkip,
   aheadStage,
   aheadStageVersion,
   aheadStartHours,
   aheadTriageDue,
   aheadTriageSince,
+  aheadTry,
   aheadVersion,
   LOOKS_AHEAD_WORDS,
   LooksAheadCheckItem,
@@ -426,27 +431,86 @@ describe('keeping an eye on', () => {
     expect(
       aheadMatterMatches({ ...none, threads: [{ connectionId: 'con_m', threadId: 'th_1' }] }, mail),
     ).toBe(false);
-    expect(aheadMatterMatchBy({ ...none, senders: ['NOTARIS'] }, mail)).toBe('sender');
-    expect(aheadMatterMatches({ ...none, senders: ['coolblue'] }, mail)).toBe(false);
+    expect(aheadMatterMatchBy({ ...none, senders: ['NOTARIS-SMIT.example'] }, mail)).toBe('sender');
+    expect(aheadMatterMatchBy({ ...none, senders: ['info@notaris-smit.example'] }, mail)).toBe('sender');
+    expect(aheadMatterMatches({ ...none, senders: ['coolblue.example'] }, mail)).toBe(false);
+    // A sender word is a whole address or a site, never a piece of one.
+    expect(aheadMatterMatches({ ...none, senders: ['notaris'] }, mail)).toBe(false);
+    expect(aheadMatterMatches({ ...none, senders: ['smit.example'] }, mail)).toBe(false);
     expect(aheadMatterMatchBy({ ...none, words: ['akte'] }, mail)).toBe('words');
     expect(aheadMatterMatches({ ...none, words: ['concept'] }, mail)).toBe(true);
     // With senders, words alone don't match, and they narrow a sender that matches.
-    expect(aheadMatterMatches({ ...none, senders: ['coolblue'], words: ['akte'] }, mail)).toBe(false);
-    expect(aheadMatterMatchBy({ ...none, senders: ['notaris-smit'], words: ['akte'] }, mail)).toBe('sender');
-    expect(aheadMatterMatches({ ...none, senders: ['notaris-smit'], words: ['factuur'] }, mail)).toBe(false);
+    expect(aheadMatterMatches({ ...none, senders: ['coolblue.example'], words: ['akte'] }, mail)).toBe(false);
+    expect(aheadMatterMatchBy({ ...none, senders: ['notaris-smit.example'], words: ['akte'] }, mail)).toBe(
+      'sender',
+    );
+    expect(aheadMatterMatches({ ...none, senders: ['notaris-smit.example'], words: ['factuur'] }, mail)).toBe(
+      false,
+    );
     // Only the address counts: a display name a stranger chose matches nothing.
-    expect(aheadMatterMatches({ ...none, senders: ['notariskantoor'] }, mail)).toBe(false);
+    expect(aheadMatterMatches({ ...none, senders: ['notariskantoor.example'] }, mail)).toBe(false);
     const forged = { ...mail, from: '"Notaris <info@notaris-smit.example>" <x@evil.example>' };
-    expect(aheadMatterMatches({ ...none, senders: ['notaris-smit'] }, forged)).toBe(false);
+    expect(aheadMatterMatches({ ...none, senders: ['notaris-smit.example'] }, forged)).toBe(false);
+    // The address read when the mail came wins over its From line; null means it has none.
+    expect(
+      aheadMatterMatches(
+        { ...none, senders: ['notaris-smit.example'] },
+        { ...forged, address: 'a@notaris-smit.example' },
+      ),
+    ).toBe(true);
+    expect(
+      aheadMatterMatches({ ...none, senders: ['notaris-smit.example'] }, { ...mail, address: null }),
+    ).toBe(false);
     // Words shorter than three characters match nothing.
     expect(aheadMatterMatches({ ...none, words: ['ak'] }, mail)).toBe(false);
   });
 
   it('refuses sender words that are in almost everyone’s address', () => {
-    for (const w of ['gmail', 'Outlook.com', '@hotmail.com', 'nl', 'com', 'noreply', 'yahoo.co.uk', 'me.com'])
-      expect(aheadCommonSender(w)).toBe(true);
-    for (const w of ['notaris-jansen.nl', 'jan@gmail.com', 'coolblue', 'ziggodome.nl'])
-      expect(aheadCommonSender(w)).toBe(false);
+    for (const w of [
+      'gmail.com',
+      'Outlook.com',
+      'hotmail.nl',
+      'co.uk',
+      'yahoo.co.uk',
+      'yahoo.fr',
+      'me.com',
+      'gmx.de',
+      'gmx.net',
+      'web.de',
+      't-online.de',
+      'orange.fr',
+      'mail.ru',
+      'protonmail.ch',
+      'home.nl',
+    ]) {
+      expect(aheadCommonSender(w), w).toBe(true);
+      expect(aheadSenderRefusal(w), w).toBe('public');
+    }
+    for (const w of ['notaris-jansen.nl', 'jan@gmail.com', 'ziggodome.nl', 'live-nation.example'])
+      expect(aheadCommonSender(w), w).toBe(false);
+  });
+
+  it('takes a full address or a site as a sender word, nothing else, and matches it on its boundaries', () => {
+    expect(aheadSenderKind('Jan@Example.com')).toBe('address');
+    expect(aheadSenderKind('notaris-jansen.example')).toBe('site');
+    for (const w of ['klm', 'info@', '@shop.example', 'notaris jansen.example', 'com', 'x@y'])
+      expect(aheadSenderKind(w), w).toBeNull();
+    expect(aheadSenderRefusal('klm')).toBe('not_sender');
+    expect(aheadSenderRefusal('info@')).toBe('not_sender');
+    expect(aheadSenderRefusal('jan@gmail.com')).toBeNull();
+    expect(aheadSenderRefusal('notaris-jansen.example')).toBeNull();
+    // A site matches its own addresses and a part of it, never a longer site that ends with its words.
+    const site = 'notaris-jansen.example';
+    expect(aheadSenderMatches(site, 'office@notaris-jansen.example')).toBe(true);
+    expect(aheadSenderMatches(site, 'office@mail.notaris-jansen.example')).toBe(true);
+    expect(aheadSenderMatches(site, 'x@notaris-jansen.example.evil.example')).toBe(false);
+    expect(aheadSenderMatches(site, 'x@evil-notaris-jansen.example')).toBe(false);
+    expect(aheadSenderMatches('notaris-jansen.example.evil.example', 'x@notaris-jansen.example')).toBe(false);
+    // An address matches only itself.
+    expect(aheadSenderMatches('jan@example.com', 'jan@example.com')).toBe(true);
+    expect(aheadSenderMatches('jan@example.com', 'marjan@example.com')).toBe(false);
+    expect(aheadSenderMatches('marjan@example.com', 'jan@example.com')).toBe(false);
+    expect(aheadSenderMatches('klm', 'klm@klm.example')).toBe(false);
   });
 
   it('reads the From line’s own address, never one a display name holds', () => {
@@ -455,13 +519,42 @@ describe('keeping an eye on', () => {
     expect(mailFromAddress('"Refund <boss@company.example>" <attacker@evil.example>')).toBe(
       'attacker@evil.example',
     );
-    expect(mailFromAddress('Refund <boss@company.example> <attacker@evil.example>')).toBe(
-      'attacker@evil.example',
-    );
+    // Two bracketed addresses: which one is the sender's isn't sure, so none.
+    expect(mailFromAddress('Refund <boss@company.example> <attacker@evil.example>')).toBeNull();
     expect(mailFromAddress('boss@company.example attacker@evil.example')).toBeNull();
     expect(mailFromAddress('Notaris')).toBeNull();
     expect(mailFromAddress('<not-an-address>')).toBeNull();
     expect(mailFromAddress('<x@localhost>')).toBeNull();
+  });
+
+  it('sets nested comments and escapes aside before it reads the address', () => {
+    // A nested comment hides another address: it is set aside whole.
+    expect(mailFromAddress('<attacker@evil.example> (x (y) <office@notaris.example>)')).toBe(
+      'attacker@evil.example',
+    );
+    // An escaped parenthesis doesn't end the comment.
+    expect(mailFromAddress('<attacker@evil.example> (x \\) <office@notaris.example>)')).toBe(
+      'attacker@evil.example',
+    );
+    // An escaped quote doesn't end the quoted name.
+    expect(mailFromAddress('"Office \\" <office@notaris.example>" <attacker@evil.example>')).toBe(
+      'attacker@evil.example',
+    );
+    expect(mailFromAddress('Office (the notary) <office@notaris.example>')).toBe('office@notaris.example');
+    expect(mailFromAddress('office@notaris.example (Office)')).toBe('office@notaris.example');
+    // Unbalanced quotes or parentheses, a stray bracket or a bare address beside a bracketed one: none.
+    for (const line of [
+      '"Office <office@notaris.example>',
+      '<attacker@evil.example> (x <office@notaris.example>',
+      '<attacker@evil.example> x) <office@notaris.example>',
+      '(x <attacker@evil.example>',
+      'Office <office@notaris.example',
+      'Office office@notaris.example>',
+      '<<office@notaris.example>>',
+      '<office@notaris.example> trailing',
+      'Office \\ <office@notaris.example>',
+    ])
+      expect(mailFromAddress(line), line).toBeNull();
   });
 
   it('picks the thing a mail is news on: a thread first, then the person’s, then the newest; bulk only for theirs', () => {
@@ -474,7 +567,7 @@ describe('keeping an eye on', () => {
       ...base,
       id: 'sender',
       origin: 'check' as const,
-      match: { ...base.match, senders: ['notaris-smit'] },
+      match: { ...base.match, senders: ['notaris-smit.example'] },
     };
     const byThread = {
       ...base,
@@ -519,6 +612,29 @@ describe('keeping an eye on', () => {
     ).toBe(true);
   });
 
+  it('tries a mail check whose turn failed once more, as a follow-up', () => {
+    expect(aheadTry('a1b2c3d4', 'mail', [])).toBe('a1b2c3d4');
+    expect(aheadTry('a1b2c3d4', 'mail', [{ version: 'a1b2c3d4:mail', failed: true }])).toBe('a1b2c3d4.again');
+    expect(
+      aheadTry('a1b2c3d4', 'mail', [
+        { version: 'a1b2c3d4:mail', failed: true },
+        { version: 'a1b2c3d4.again:mail', failed: true },
+      ]),
+    ).toBeNull();
+    expect(aheadTry('a1b2c3d4', 'mail', [{ version: 'a1b2c3d4:mail', failed: false }])).toBeNull();
+  });
+
+  it('takes a date from today to a year ahead, in the Whombat’s zone', () => {
+    const now = new Date('2026-12-14T23:30:00Z'); // 00:30 on the 15th in Amsterdam
+    expect(aheadMatterDayOk('2026-12-15', now, TZ)).toBe(true);
+    expect(aheadMatterDayOk('2026-12-14', now, TZ)).toBe(false);
+    expect(aheadMatterDayOk('2026-12-14', now, 'UTC')).toBe(true);
+    expect(aheadMatterDayOk('2027-12-16', now, TZ)).toBe(true);
+    expect(aheadMatterDayOk('2027-12-17', now, TZ)).toBe(false);
+    expect(aheadMatterDayOk('2027-02-30', now, TZ)).toBe(false);
+    expect(aheadMatterDayOk('15-12-2026', now, TZ)).toBe(false);
+  });
+
   it('tries a follow-up whose turn failed once more, never one that reported or is going on', () => {
     expect(aheadMatterTry('no_answer', [])).toBe('no_answer');
     expect(aheadMatterTry('no_answer', [{ version: 'no_answer:matter', failed: true }])).toBe(
@@ -550,6 +666,17 @@ describe('keeping an eye on', () => {
     expect(aheadMatterDue(you, dueAt)).toBeNull();
     expect(aheadMatterDue({ ...you, followedUp: ['due'] }, new Date(dueAt.getTime() - 3600_000))).toBeNull();
     expect(aheadMatterDue({ ...you, dueAt: null }, dueAt)).toBeNull();
+    // A failed first try of a date at noon may start again until 21:00 that day in the Whombat's zone.
+    const noon = new Date('2026-12-18T12:00:00+01:00');
+    const atNoon = { ...you, dueAt: noon };
+    const retry = { timeZone: TZ, failed: ['due' as const] };
+    expect(aheadMatterDue(atNoon, new Date('2026-12-18T15:00:00+01:00'))).toBeNull();
+    expect(aheadMatterDue(atNoon, new Date('2026-12-18T15:00:00+01:00'), retry)).toBe('due');
+    expect(aheadMatterDue(atNoon, new Date('2026-12-18T20:59:00+01:00'), retry)).toBe('due');
+    expect(aheadMatterDue(atNoon, new Date('2026-12-18T21:00:00+01:00'), retry)).toBeNull();
+    expect(
+      aheadMatterDue(atNoon, new Date('2026-12-18T15:00:00+01:00'), { timeZone: TZ, failed: ['no_answer'] }),
+    ).toBeNull();
 
     // Quiet for a while after it began or after news: a date tomorrow doesn't repeat what was just told.
     const fresh = { ...you, createdAt: new Date(dueAt.getTime() - 3600_000) };
@@ -603,7 +730,10 @@ describe('keeping an eye on', () => {
   });
 
   it('the person starts, lists and stops one in their own words', () => {
-    const start = AheadWatchInput.safeParse({ title: 'Answer from the notary', senders: ['notaris'] });
+    const start = AheadWatchInput.safeParse({
+      title: 'Answer from the notary',
+      senders: ['notaris.example'],
+    });
     expect(start.success && start.data).toMatchObject({ action: 'start', waitingOn: 'them' });
     expect(AheadWatchInput.safeParse({ title: 'Answer from the notary', words: ['akte'] }).success).toBe(
       true,
@@ -651,6 +781,25 @@ describe('keeping an eye on', () => {
         matter: { ...matter, reason: 'no_answer' },
       }).success,
     ).toBe(true);
+    // A follow-up is told where to look: its senders and the mails its earlier checks were about.
+    expect(
+      AheadDispatchContext.safeParse({
+        ...base,
+        source: 'matter',
+        matter: {
+          ...matter,
+          reason: 'no_answer',
+          anchors: { senders: ['notaris.example'], messageIds: ['m_1', 'm_0'] },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      AheadDispatchContext.safeParse({
+        ...base,
+        source: 'matter',
+        matter: { ...matter, anchors: { messageIds: ['1', '2', '3', '4', '5', '6'] } },
+      }).success,
+    ).toBe(false);
   });
 });
 

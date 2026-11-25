@@ -23,7 +23,7 @@ import {
   type McpToolName,
   mailFromAddress,
 } from '@whombat/core';
-import { and, desc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
 import { aheadChecks, aheadMatters, burrows, connections, principals } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
@@ -189,6 +189,7 @@ export async function aheadContextOf(
           )
       : [];
     const byId = new Map(shown.map((m) => [m.id, m]));
+    // As a list: never a matter's note, which a check wrote from a mail, beside other strangers' mail.
     const matters = refs.flatMap((r) => {
       const m = byId.get(r.id);
       return m ? [matterContext(m, r.ref, timeZone)] : [];
@@ -248,6 +249,9 @@ export async function aheadContextOf(
 
   const { mail } = row.event;
   const openMatter = matter?.state === 'open' ? matter : null;
+  // Where a follow-up or a matter's mail check looks: the mails its earlier checks were about, newest first, rather than
+  // a search by a title written from mail.
+  const messageIds = openMatter ? await matterMessageIds(db, dispatch.burrowId, openMatter.id, row.id) : [];
   return {
     ...base,
     ...(mail ? { mail: mailContext(mail) } : {}),
@@ -257,8 +261,38 @@ export async function aheadContextOf(
     ...(recentDismissed.length ? { recentDismissed } : {}),
     ...(priorChecks.length ? { priorChecks } : {}),
     // The matter it is about is always `k1` in this check.
-    ...(openMatter ? { matter: matterContext(openMatter, 'k1', timeZone, row.event.matter?.reason) } : {}),
+    ...(openMatter
+      ? {
+          matter: matterContext(openMatter, 'k1', timeZone, {
+            ...(row.event.matter?.reason ? { reason: row.event.matter.reason } : {}),
+            messageIds,
+          }),
+        }
+      : {}),
   };
+}
+
+/** The message ids of the mails a matter's earlier checks were about, newest first, without this check's own. */
+async function matterMessageIds(
+  db: Db,
+  burrowId: string,
+  matterId: string,
+  rowId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ messageId: sql<string | null>`${aheadChecks.event}->'mail'->>'messageId'` })
+    .from(aheadChecks)
+    .where(
+      and(
+        eq(aheadChecks.burrowId, burrowId),
+        eq(aheadChecks.matterId, matterId),
+        ne(aheadChecks.id, rowId),
+        isNotNull(sql`${aheadChecks.event}->'mail'->>'messageId'`),
+      ),
+    )
+    .orderBy(desc(aheadChecks.startedAt))
+    .limit(10);
+  return [...new Set(rows.flatMap((r) => (r.messageId ? [r.messageId] : [])))];
 }
 
 /** A mail as a check reads it: what the row keeps, without the thread a matter is matched by. */
@@ -282,6 +316,7 @@ async function dismissedOf(
 ): Promise<NonNullable<AheadDispatchContext['recentDismissed']>> {
   const dismissed = await db
     .select({
+      source: aheadChecks.source,
       summary: aheadChecks.summary,
       kind: aheadChecks.kind,
       feedbackNote: aheadChecks.feedbackNote,
@@ -299,7 +334,8 @@ async function dismissedOf(
   return dismissed
     .filter((d): d is typeof d & { kind: AheadKind } => d.kind !== null)
     .map((d) => ({
-      title: d.summary.slice(0, 300),
+      // A mail's subject (or a matter's title from mail) never rides along into later checks: only a plan's title does.
+      title: d.source === 'calendar' ? d.summary.slice(0, 300) : '',
       kind: d.kind,
       ...(d.feedbackNote ? { reason: d.feedbackNote } : {}),
     }));

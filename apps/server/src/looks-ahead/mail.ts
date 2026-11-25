@@ -5,7 +5,13 @@
  * it. Plain bulk mail is marked (`aheadMailBulk`): a look through new mail leaves it out, while it may still be news on a
  * thing the person asked to keep an eye on. Which of the rest is checked is the triage pass's choice, or a matter's.
  */
-import { AHEAD_MAIL_SWEEP_LIMIT, aheadMailBulk, aheadMailOwn, type MailSummary } from '@whombat/core';
+import {
+  AHEAD_MAIL_SWEEP_LIMIT,
+  aheadMailBulk,
+  aheadMailOwn,
+  type MailSummary,
+  mailFromAddress,
+} from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { providerMode, providerWorkspace } from '../connectors/providers';
 import type { Db, Tx } from '../db/client';
@@ -107,6 +113,11 @@ export interface SweptMail {
   start: string;
   account: MailAccount;
   message: MailSummary;
+  /**
+   * The sender's address, read from the whole From line when it came (`mailFromAddress`), or null when it has none for
+   * sure: what a matter is matched and opened by, never a cut-down copy of the line.
+   */
+  address: string | null;
   /** Plain bulk mail (`aheadMailBulk`): never in a look through new mail. */
   bulk: boolean;
 }
@@ -162,6 +173,7 @@ export async function sweepMail(
         start: Number.isFinite(at) ? new Date(at).toISOString() : now.toISOString(),
         account,
         message: m,
+        address: mailFromAddress(m.from),
         bulk: aheadMailBulk({ subject: m.subject, snippet: m.snippet }),
       });
     }

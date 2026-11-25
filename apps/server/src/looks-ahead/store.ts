@@ -27,8 +27,9 @@ export async function aheadSettingsOf(tx: Pick<Tx, 'select'>, burrowId: string):
 }
 
 /**
- * Findings told since `since`. News on something the person asked Whombat to keep an eye on isn't counted: they asked
- * for it, so it never uses up the day's findings.
+ * Findings told since `since`. News on something the person asked Whombat to keep an eye on (its follow-up, or mail
+ * that really matches it) isn't counted: they asked for it, so it never uses up the day's findings. A triage pick only
+ * linked to it is counted like any finding.
  */
 export async function findingsSince(tx: Pick<Tx, 'select'>, burrowId: string, since: Date): Promise<number> {
   const [row] = await tx
@@ -39,7 +40,7 @@ export async function findingsSince(tx: Pick<Tx, 'select'>, burrowId: string, si
         eq(aheadChecks.burrowId, burrowId),
         eq(aheadChecks.state, 'told'),
         gte(aheadChecks.reportedAt, since),
-        sql`not exists (select 1 from ${aheadMatters} where ${aheadMatters.id} = ${aheadChecks.matterId} and ${aheadMatters.origin} = 'person')`,
+        sql`not (exists (select 1 from ${aheadMatters} where ${aheadMatters.id} = ${aheadChecks.matterId} and ${aheadMatters.origin} = 'person') and (${aheadChecks.source} = 'matter' or coalesce((${aheadChecks.event}->'matter'->>'matched') = 'true', false)))`,
       ),
     );
   return row?.n ?? 0;
