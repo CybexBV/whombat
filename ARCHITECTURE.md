@@ -850,8 +850,8 @@ published automation details read their definition and publisher from one versio
   claim survives a restart and runs only while the incident is still open, independent and not kept quiet at its
   deadline (a window that came and went meanwhile doesn't count), and, as the
   incident watcher reads the thing then, a `down` one only while it still doesn't answer and a `problem` one only while
-  the check it waited on (the trigger's, else the event's) is still bad. If the thing or its check is unread, the
-  engine reads it again each minute for up to an hour past the deadline. Until the release a box would go back to
+  the check it waited on (the trigger's, else the event's) is still bad, however late the engine reaches it. If the
+  thing or its check is unread, the engine reads it again each minute and gives up an hour past the deadline. Until the release a box would go back to
   knows them (`0027_incident_automation_watches` in
   `runtime_releases`), such automations aren't made, events claim no incident and start no run, and their runs wait. Webhook triggers are refused: nothing from outside reaches the box. Runs
   are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
@@ -1477,8 +1477,8 @@ Setup and operation: `docs/github.md`.
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
   from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.
-  Saving edited check settings clears its result, line states and cause in the same commit. Home shows “Not checked
-  yet” until the next reading.
+  Saving edited check settings clears its result, line states and cause, and ends its open outage quietly, in the
+  same commit. Home shows “Not checked yet” until the next reading.
   Name lookups succeed when the chosen runner finds an IPv4 or IPv6 address. The hub stores the dual-family
   setting separately from the A record type a rolled-back hub reads. The health pass reads the current result,
   counts any probes the hub recorded as failed since the last pass in uptime history, including HTTP errors,
@@ -1725,7 +1725,10 @@ Setup and operation: `docs/github.md`.
   feedback there). Two passes in a row that see it fine end it, at the first of them; one that sees it still bad
   underneath (not answering, a line someone quieted or switched off, kept quiet, down because of something else) starts
   the count again; one that couldn't read it counts neither way. A thing that was removed ends its incident at once
-  without `thing.back`, and its watches stop with a short line.
+  without `thing.back`, and its watches stop with a short line. Saving a Website or address check's new settings ends
+  its open incident the same quiet way in the edit's commit (its push withdrawn, its delayed starts dropped), and the
+  watcher counts the new target's looks from the start. A pass that can't read Home keeps only what the watcher knew
+  of the open incidents, as a pass that couldn't read their things.
   On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
   update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
   then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,
@@ -1742,7 +1745,7 @@ Setup and operation: `docs/github.md`.
   pushed about it (both checked again in the push's commit, whose words name only what is left), nor one more than an
   hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold over it
   ended or the last pass that couldn't read it when that is later. A research finding that comes after its thing's
-  outage pushed lands in the Inbox without a push. The Inbox row and its realtime frame commit with the incidents' push marks,
+  outage pushed, while that outage is open or once it ended during the research, lands in the Inbox without a push. The Inbox row and its realtime frame commit with the incidents' push marks,
   leaving a failed insert for a later pass to retry. The phone uses the usual background push sender.
   The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's
