@@ -1746,7 +1746,8 @@ Setup and operation: `docs/github.md`.
   hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold over it
   ended or the last pass that couldn't read it when that is later. A research finding that comes after its thing's
   outage pushed, while that outage is open or once it ended during the research, lands in the Inbox without a push and
-  doesn't count as pushed; while an outage of the thing that hasn't pushed is open, the finding's push stands in for it. The Inbox row and its realtime frame commit with the incidents' push marks,
+  doesn't count as pushed; while an outage of the thing that hasn't pushed is open, the finding's push stands in for it.
+  A finding's Inbox row commits with its report; an incident push's row and its realtime frame commit with the incidents' push marks,
   leaving a failed insert for a later pass to retry. The phone uses the usual background push sender.
   The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's

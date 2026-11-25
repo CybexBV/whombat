@@ -54,7 +54,6 @@ import type { ApplyContext } from '../commit/types';
 import { defineCommand } from '../commit/types';
 import type { Db, Tx } from '../db/client';
 import {
-  burrows,
   catalogConnections,
   dispatches,
   incidents,
@@ -67,7 +66,7 @@ import {
 } from '../db/schema/index';
 import { linkOfMessage } from '../domain/links';
 import { postMessage } from '../domain/messages';
-import { notify } from '../domain/notify';
+import { notifyInCommit } from '../domain/notify';
 import { ensurePersonalDm } from '../domain/personal-dm';
 import { threadPushGroup } from '../domain/push-preview';
 import { wakeQuietly } from '../domain/wake';
@@ -269,7 +268,8 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
   const conversation = await loadConversationRow(ctx.tx, row.conversationId);
   if (!text || !messageId || !conversation) return;
   const dedupKey = `look-finding:${row.id}`;
-  // Held on an earlier report: its Inbox row stands, and a later report neither buzzes nor counts as a buzz.
+  // Held on an earlier report: its Inbox row stands, and a later report neither buzzes nor counts as a buzz. The row is
+  // saved with the report that decided it, so a later report always sees it.
   const [had] = await ctx.tx
     .select({ id: notifications.id })
     .from(notifications)
@@ -280,13 +280,9 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
   if (!quiet)
     await ctx.tx.update(lookResearches).set({ pushedAt: ctx.now }).where(eq(lookResearches.id, row.id));
   const link = await linkOfMessage(ctx.tx, conversation, messageId, row.threadRootId);
-  const [burrow] = await ctx.tx
-    .select({ slug: burrows.slug })
-    .from(burrows)
-    .where(eq(burrows.id, ctx.burrow.id));
-  const draft = {
+  await notifyInCommit(ctx, {
     burrowId: ctx.burrow.id,
-    ...(burrow ? { burrowSlug: burrow.slug } : {}),
+    burrowSlug: ctx.burrow.slug,
     principalId: row.personId,
     kind: 'needs_you' as const,
     actorId: row.agentId,
@@ -298,9 +294,7 @@ async function pushFinding(ctx: ApplyContext, row: LookResearchRow): Promise<voi
     messageId,
     group: threadPushGroup(row.conversationId, row.threadRootId),
     ...(quiet ? { pushHeld: true } : {}),
-  };
-  const services = ctx.services;
-  ctx.background('look finding push', () => notify(services, [draft]));
+  });
 }
 
 /**
