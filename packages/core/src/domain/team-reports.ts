@@ -223,6 +223,24 @@ export function teamReportCanConfirm(status: TeamReportStatus): boolean {
   return status === 'available' || status === 'closed';
 }
 
+/**
+ * How many days after a report closed the person may still say the fix works or still happens: the team's Whombat stops
+ * watching a closed report then, so control refuses a later answer.
+ */
+export const TEAM_REPORT_ANSWER_DAYS = 30;
+
+/**
+ * Whether the report's page offers It works and Still happening now (`nowSeconds`): as `teamReportCanConfirm`, but not
+ * for a report closed (its last change, `updatedAt`) more than `TEAM_REPORT_ANSWER_DAYS` ago.
+ */
+export function teamReportCanConfirmNow(
+  report: { status: TeamReportStatus; updatedAt: number },
+  nowSeconds: number,
+): boolean {
+  if (!teamReportCanConfirm(report.status)) return false;
+  return report.status !== 'closed' || nowSeconds - report.updatedAt <= TEAM_REPORT_ANSWER_DAYS * 86_400;
+}
+
 /** The approval action's name when the assistant asks to send its draft (`custom`, its data the draft's id and words). */
 export const TEAM_REPORT_DRAFT_ACTION = 'report_to_whombat_team';
 

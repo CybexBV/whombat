@@ -108,7 +108,13 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
         context,
         ...(shownDraft && !shownDraft.done ? { draftId: shownDraft.id } : {}),
       });
-      void navigate({ to: '/reports/$reportId', params: { reportId: report.id }, search: { sent: 1 } });
+      // The form is done with: Back from the report goes to where the person came from, not to a sent form.
+      void navigate({
+        to: '/reports/$reportId',
+        params: { reportId: report.id },
+        search: { sent: 1 },
+        replace: true,
+      });
     } catch (error) {
       setProblem(teamReportErrorText(error));
     }

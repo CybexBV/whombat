@@ -1,7 +1,7 @@
 /**
  * One report to the Whombat Team on the phone (Whombat docs/decisions/team-reports.md), where its Inbox item and push
  * lead: its number and kind, its title, its status in words and the four-step track; It works / Still happening once
- * a fix is there for the person or the report was closed; then the conversation, oldest first (a quiet line above it
+ * a fix is there for the person or the report was closed (until 30 days after closing); then the conversation, oldest first (a quiet line above it
  * when the oldest messages of a long one were left out) — what the person sent, their messages and the Whombat Team's,
  * status changes as quiet lines — and, while the report is open, the reply box. The team's words are plain
  * text: no formatting, no links to tap, no pictures. Withdraw report is in the ⋯, asked first. Opening it reads it.
@@ -27,12 +27,12 @@ import {
   type TeamReport,
   type TeamReportAction,
   TeamReportId,
-  teamReportCanConfirm,
+  teamReportCanConfirmNow,
   teamReportOpen,
 } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, TextInput, View } from 'react-native';
-import { useBurrowBase, useNow } from '../data/BurrowProvider';
+import { useBurrowBase, useNow, useNowStore } from '../data/BurrowProvider';
 import { teamReportTone } from '../data/teamReports';
 import { ErrorLine } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
@@ -67,6 +67,7 @@ export function TeamReportScreen({ navigation, route }: Props) {
     if (route.params.sent !== undefined) navigation.setParams({ sent: undefined });
   }, [route.params.sent, navigation]);
   const scroller = useRef<ScrollView>(null);
+  const clock = useNowStore();
 
   const goBack = () =>
     navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TeamReports', undefined);
@@ -171,7 +172,7 @@ export function TeamReportScreen({ navigation, route }: Props) {
             </View>
           </View>
           <ReportTrack status={report.status} />
-          {teamReportCanConfirm(report.status) ? (
+          {teamReportCanConfirmNow(report, Math.floor(clock.get().getTime() / 1000)) ? (
             <View
               style={{
                 gap: 10,

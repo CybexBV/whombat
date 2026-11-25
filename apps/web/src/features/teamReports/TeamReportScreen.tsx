@@ -4,7 +4,8 @@
  * messages of a long one were left out) — what the person sent, the team's
  * answers as “Whombat Team”, status changes as quiet lines — and a box to write to the team. The team's words are plain
  * text only: no formatting, links not clickable, no pictures. It works / Still happening once a fix is available or
- * the report was closed; Withdraw report in ⋯, after asking. Opening the page reads the report (the box marks it read).
+ * the report was closed, until 30 days after closing; Withdraw report in ⋯, after asking. Opening the page reads the
+ * report (the box marks it read).
  */
 import { useNavigate } from '@tanstack/react-router';
 import { WhombatLogo } from '@whombat/brand/react';
@@ -30,7 +31,7 @@ import {
   TEAM_REPORT_STATUS_WORDS,
   type TeamReport,
   type TeamReportAction,
-  teamReportCanConfirm,
+  teamReportCanConfirmNow,
   teamReportNeedsYou,
   teamReportOpen,
 } from '@whombat/core';
@@ -113,6 +114,7 @@ function ReportPage({
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawProblem, setWithdrawProblem] = useState<string | null>(null);
   const needsYou = teamReportNeedsYou(report.status);
+  const now = useNow(60_000);
 
   const press = async (action: TeamReportAction) => {
     try {
@@ -156,7 +158,7 @@ function ReportPage({
         </p>
       ) : null}
       <ReportTrack status={report.status} />
-      {teamReportCanConfirm(report.status) ? (
+      {teamReportCanConfirmNow(report, Math.floor(now / 1000)) ? (
         <div className={styles.confirm} data-report-confirm="">
           <p>{TEAM_REPORT_WORDS.confirmQuestion}</p>
           <Button variant="primary" disabled={act.isPending} onClick={() => void press('works')}>
@@ -210,16 +212,23 @@ function ReportPage({
   );
 }
 
-/** ⋯ at the end of the head: Withdraw report. Escape or a click elsewhere closes it. */
+/**
+ * ⋯ at the end of the head: Withdraw report. Escape or a click elsewhere closes it; Escape and the choice give the focus
+ * back to ⋯ (the dialog the choice opens gives it back there too).
+ */
 function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
-      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !wrap.current?.contains(e.target as Node))
+      if (e instanceof KeyboardEvent) {
+        if (e.key !== 'Escape') return;
         setOpen(false);
+        button.current?.focus();
+      } else if (!wrap.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
@@ -231,6 +240,7 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
   return (
     <div ref={wrap} className={styles.menuWrap}>
       <button
+        ref={button}
         type="button"
         className={styles.more}
         aria-label={TEAM_REPORT_WORDS.more}
@@ -250,6 +260,7 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
             role="menuitem"
             onClick={() => {
               setOpen(false);
+              button.current?.focus();
               onWithdraw();
             }}
           >
