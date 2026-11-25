@@ -24,6 +24,7 @@ import {
   deskToneOf,
   fillDeskWords,
   type HomeRef,
+  type HostAlert,
   type HostServer,
   hostOsMark,
   LookResearch,
@@ -40,7 +41,7 @@ import { homeReads, needsYou, SNOOZE_HOUR, things, workingTask } from '../home/o
 import type { SourceReads } from '../home/registry';
 import { startOfLocalDay, tomorrowAt } from '../home/time';
 import { homeWidgetsNow, type WidgetNow } from '../home/widgets';
-import { serverLines, serverNotice, verdictOf } from '../hosts/quiet-lines';
+import { alertLine, serverLines, serverNotice, verdictOf } from '../hosts/quiet-lines';
 import { HostsUnavailable, hostsFor } from '../hosts/service';
 import { fleetFor } from '../hosts/sources';
 import { type LookLine, lookLines } from '../looks/lines';
@@ -49,6 +50,7 @@ import { type ApprovalRow, approvalByNumber, approvalForViewer } from '../read/w
 import type { Services } from '../services';
 import { thingLines, thingNotice } from '../things/quiet/connection';
 import type { GlanceNotice } from '../things/quiet/glance';
+import { takenFrom, takenWords } from '../things/quiet/windows';
 import type {
   DeskAsk,
   DeskBox,
@@ -679,6 +681,8 @@ export function deskLooks(
   max = DESK_LOOKS_MAX,
 ): DeskLook[] {
   const looks: DeskLook[] = [];
+  // What a server that is down takes with it, from the things down because of it.
+  const taken = takenFrom(thingList);
   for (const s of servers) {
     const state = SERVER_LOOK[s.state];
     if (!state) continue;
@@ -686,7 +690,8 @@ export function deskLooks(
     // card only warm (a heads-up); a card read some other way keeps its look without one.
     const notice = cardNotice(s);
     if (notice === null) continue;
-    const reason = lookReason(s.note);
+    const takes = state === 'down' && s.id ? takenWords(taken.get(`server:${s.id}`) ?? []) : null;
+    const reason = lookReason(takes ?? s.note);
     const look: DeskLook = {
       key: screenText(`server:${s.id ?? s.name}`, 120),
       kind: 'server',
@@ -709,6 +714,9 @@ export function deskLooks(
     const notice = thingNotice(t);
     if (notice?.nature === 'fyi') continue;
     const reason = lookReason(t.reason);
+    const cause = t.causedBy
+      ? { thing: screenText(t.causedBy.thing, 120), name: screenText(t.causedBy.name, 40) }
+      : null;
     const look: DeskLook = {
       key,
       kind: t.kind,
@@ -716,6 +724,7 @@ export function deskLooks(
       state,
       ...(reason ? { reason } : {}),
       ...lookNotice(notice),
+      ...(cause?.thing && cause.name ? { causedBy: cause } : {}),
     };
     LOOK_LINES.set(look, lookLines(thingLines(t)));
     looks.push(look);
@@ -757,10 +766,28 @@ export function cardNotice(card: DeskServer): GlanceNotice | null | undefined {
 export interface DeskFleet {
   cards: DeskServer[];
   rows: Map<string, HostServer>;
+  /**
+   * Every server the hosts service lists by its id, also one without a card (still being added), as it is before
+   * anything quieted it: what the end of an outage is read from. Absent when the fleet was read without its alerts.
+   */
+  raw?: ReadonlyMap<string, RawServer>;
 }
 
-/** The servers as cards (DK-S08) and their rows; none when there is nothing to show. */
-export function deskFleetOf(servers: readonly HostServer[]): DeskFleet {
+/** A server as the hosts service has it, before Whombat's quiet rows and the person's Ignore or snooze. */
+export interface RawServer {
+  status: HostServer['status'];
+  /**
+   * The checks of its own critical alerts that are open, whoever ignored or snoozed them: what on it is still wrong.
+   * An outage is judged only by its own checks among them.
+   */
+  critical: ReadonlySet<string>;
+}
+
+/**
+ * The servers as cards (DK-S08) and their rows; none when there is nothing to show. With the fleet's alerts, also
+ * each server as it is underneath (`raw`).
+ */
+export function deskFleetOf(servers: readonly HostServer[], alerts?: readonly HostAlert[]): DeskFleet {
   const rows = new Map<string, HostServer>();
   const cards: DeskServer[] = [];
   for (const row of servers) {
@@ -773,7 +800,16 @@ export function deskFleetOf(servers: readonly HostServer[]): DeskFleet {
     cards.push(card);
     if (card.id) rows.set(card.id, row);
   }
-  return { cards: sortServers(cards), rows };
+  if (!alerts) return { cards: sortServers(cards), rows };
+  const raw = new Map(servers.map((s) => [s.id, { status: s.status, critical: new Set<string>() }]));
+  for (const a of alerts) {
+    const server = a.serverId ? raw.get(a.serverId) : undefined;
+    // A heads-up never colours a server; a check's alert is its connection's, whose own lines say it.
+    if (!server || a.state !== 'open' || a.severity !== 'critical' || a.rule.startsWith('check.')) continue;
+    const line = alertLine(a);
+    if (line.nature !== 'fyi') server.critical.add(line.check);
+  }
+  return { cards: sortServers(cards), rows, raw };
 }
 
 /**
@@ -790,8 +826,8 @@ export async function deskFleet(
   const hosts = hostsFor(services);
   if (!(await hosts.serves(burrowId).catch(() => false))) return null;
   const read = fleetFor(hosts, burrowId, reads);
-  const fleet = ms === undefined ? read : within(read, ms);
-  return deskFleetOf((await fleet).servers);
+  const fleet = await (ms === undefined ? read : within(read, ms));
+  return deskFleetOf(fleet.servers, fleet.alerts);
 }
 
 /** How long the screen waits for the hosts service (DK-S83): the console asks again in 10 s. */

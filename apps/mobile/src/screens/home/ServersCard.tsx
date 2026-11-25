@@ -16,6 +16,7 @@ import {
   type OverviewSectionView,
   readState,
   type StatusLevel,
+  serverQuietWords,
   thingRenameTarget,
 } from '@whombat/client';
 import {
@@ -31,6 +32,7 @@ import {
   TILE_SEGMENTS,
 } from '@whombat/client/hosts';
 import { useHostsFleet, useHostsStatus } from '@whombat/client/hosts/react';
+import { useHomeOverview } from '@whombat/client/react';
 import { thingId } from '@whombat/core';
 import { type ReactNode, useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -47,7 +49,7 @@ import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard, OneRow, ThingIcon } from '../../ui/assistant';
 import { tint } from '../../ui/glanceColors';
-import { Clock, Plus } from '../../ui/icons';
+import { BellOff, Clock, Plus } from '../../ui/icons';
 import { InlineRename } from '../../ui/inlineRename';
 import { hasNativeMenu, MenuSheet, NativeMenu } from '../../ui/nativeMenu';
 import { Button } from '../../ui/primitives';
@@ -95,6 +97,12 @@ export function ServersCard({
     sortKey,
   );
   const rename = useThingRename(slug);
+  // A server kept quiet says so on its card: Home's thing has until when.
+  const home = useHomeOverview({ params: { burrow: slug } });
+  const quietWords = useMemo(
+    () => serverQuietWords(home.data?.things, now, timeZone),
+    [home.data?.things, now, timeZone],
+  );
   // Elsewhere than iPhone a held card's menu is a sheet, for the card it was held on.
   const [menuFor, setMenuFor] = useState<OverviewServerRow | null>(null);
   if (!present && !isHostsUnavailable(status.error)) return null;
@@ -146,6 +154,7 @@ export function ServersCard({
                 onPick={(id) => pick(row, id)}
                 onMenu={() => setMenuFor(row)}
                 renaming={renameBox(row, name, rename)}
+                quiet={quietWords.get(thing(row)) || null}
               />
             );
           })}
@@ -219,6 +228,7 @@ function ServerCard({
   onPick,
   onMenu,
   renaming,
+  quiet = null,
 }: {
   row: OverviewServerRow;
   /** The name it shows (the one just saved while the list catches up). */
@@ -232,6 +242,8 @@ function ServerCard({
   onMenu: () => void;
   /** The box its name is while it is renamed. */
   renaming: ReactNode;
+  /** “Quiet until 23:00” while it is kept quiet. */
+  quiet?: string | null;
 }) {
   const theme = useTheme();
   // Where the elbow ends: the middle of the name block, measured, as the mock's `bottom: 50%`.
@@ -296,6 +308,7 @@ function ServerCard({
             </Text>
           ) : null}
           {row.seen || row.stale ? <ClockLine text={row.seen ?? row.stale ?? ''} /> : null}
+          {quiet ? <ClockLine text={quiet} icon={BellOff} /> : null}
         </View>
       </View>
       <Figures row={row} />
@@ -313,7 +326,7 @@ function ServerCard({
         {...(hasNativeMenu ? null : { onLongPress: onMenu })}
         feedback="wash"
         accessibilityRole="button"
-        accessibilityLabel={row.label}
+        accessibilityLabel={quiet ? `${row.label}. ${quiet}` : row.label}
         ringRadius={16}
         accessibilityHint={HOME_SERVERS_COPY.opens}
         accessibilityState={{ selected }}
@@ -422,11 +435,11 @@ function Tag({ text }: { text: string }) {
 }
 
 /** “Read 12 min ago”, “Last seen 2 d ago” (the mock's `.stale`): a 12dp clock and mono 11.5 in `mut`. */
-function ClockLine({ text }: { text: string }) {
+function ClockLine({ text, icon: Icon = Clock }: { text: string; icon?: typeof Clock }) {
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
-      <Clock size={12} color={theme.colors.mut} strokeWidth={1.75} />
+      <Icon size={12} color={theme.colors.mut} strokeWidth={1.75} />
       <Text size={11.5} mono color={theme.colors.mut} numberOfLines={1} style={{ flexShrink: 1 }}>
         {text}
       </Text>

@@ -51,6 +51,8 @@ export interface ConnectionGlance {
   reason?: string;
   /** The machine's own name as the service reports it (Unraid's hostname): what it is part of (SB-09, CP-10). */
   hostname?: string;
+  /** First health pass whose check answered and whose details could not be read. */
+  readFailedSince?: string;
   /**
    * How the last check went when it didn't answer properly (quiet-notices.md QN-S06): no answer, or an error. `status`
    * and `reason` are what the lines came to, so they say “fine” for an outage someone ignored; this stays true.
@@ -67,6 +69,11 @@ export interface ConnectionGlance {
    * or the last check couldn't read it.
    */
   activity?: ConnectionActivity;
+  /**
+   * The server or machine it runs on, as the last check that found it said: kept while it doesn't
+   * answer, since a stopped machine is no longer found by its address. What the causes job reads.
+   */
+  machine?: { serverId: string; guestId: string | null; name: string };
 }
 
 /** A connection's activity now (`ConnectionGlance.activity`). */

@@ -1,7 +1,8 @@
 package store
 
-// migrations are applied in order; PRAGMA user_version is the number
-// applied. Statements are separated by lines containing only "--;".
+// migrations are applied in order. PRAGMA user_version counts the changes
+// an older hub must understand. These are backed up before upgrading.
+// Statements are separated by lines containing only "--;".
 // Times are unix milliseconds, except metric timestamps (unix seconds).
 var migrations = []string{
 	// 1: initial schema.
@@ -404,4 +405,40 @@ CREATE TABLE server_disk_usage (
 	PRIMARY KEY (server_id, mount)
 ) WITHOUT ROWID
 `,
+}
+
+type additiveMigration struct {
+	id  string
+	sql string
+}
+
+// Additive migrations keep the same user_version so the previous hub can
+// open and write the database after a host rollback. Only add tables,
+// add nullable or defaulted columns, or fill new columns here. Keep IDs
+// stable and append new entries in dependency order.
+var additiveMigrations = []additiveMigration{
+	{"check_owners_and_watch_limits", `
+ALTER TABLE checks ADD COLUMN owner TEXT NOT NULL DEFAULT ''
+--;
+ALTER TABLE checks ADD COLUMN probe_rev TEXT NOT NULL DEFAULT ''
+--;
+CREATE TABLE watch_limits (
+	server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+	rule      TEXT NOT NULL,
+	entity    TEXT NOT NULL DEFAULT '',
+	value     REAL NOT NULL,
+	PRIMARY KEY (server_id, rule, entity)
+) WITHOUT ROWID
+`},
+	{"check_probe_changed_at", `
+ALTER TABLE checks ADD COLUMN probe_changed_at INTEGER NOT NULL DEFAULT 0
+--;
+UPDATE checks SET probe_changed_at = created_at
+`},
+	{"check_dns_any_address", `
+ALTER TABLE checks ADD COLUMN dns_any_address INTEGER NOT NULL DEFAULT 0
+--;
+UPDATE checks SET dns_any_address = 1, options = json_set(options, '$.dns_type', 'A')
+WHERE lower(CASE WHEN json_valid(options) THEN json_extract(options, '$.dns_type') END) = 'any'
+`},
 }

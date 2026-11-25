@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -121,6 +122,21 @@ func (e *Engine) Load(alerts []Alert) {
 // alerts whose rule satisfies managed can be resolved by this call (so the
 // report rules and the heartbeat rule can be evaluated independently).
 func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule string) bool, now time.Time) Changes {
+	return e.EvaluateScoped(server, conds, func(rule, _ string) bool { return managed(rule) }, now)
+}
+
+// EvaluateScoped checks whether an individual alert can resolve.
+func (e *Engine) EvaluateScoped(server string, conds []Condition, managed func(rule, entity string) bool, now time.Time) Changes {
+	return e.evaluate(server, conds, managed, false, now)
+}
+
+// EvaluateChange applies a settings change. Conditions that disappear in its
+// scope resolve right away because the settings changed, not the readings.
+func (e *Engine) EvaluateChange(server string, conds []Condition, managed func(rule, entity string) bool, now time.Time) Changes {
+	return e.evaluate(server, conds, managed, true, now)
+}
+
+func (e *Engine) evaluate(server string, conds []Condition, managed func(rule, entity string) bool, changed bool, now time.Time) Changes {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	var ch Changes
@@ -135,6 +151,7 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 		e.open[server] = open
 	}
 	off := func(rule, entity string) bool { return server != "" && e.Off != nil && e.Off(server, rule, entity) }
+	cleared := func(rule, entity string) bool { return off(rule, entity) || (changed && managed(rule, entity)) }
 	if server != "" && e.Off != nil {
 		kept := make([]Condition, 0, len(conds))
 		for _, c := range conds {
@@ -181,10 +198,11 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 		}
 	}
 	for k, a := range open {
-		if _, ok := desired[k]; ok || a.Severity != SevCritical || off(a.Rule, a.Entity) {
+		if _, ok := desired[k]; ok || a.Severity != SevCritical || cleared(a.Rule, a.Entity) {
 			continue
 		}
-		if t := tr[k]; t != nil && now.Sub(t.lastTrue) < a.ClearAfter {
+		// A settings edit leaves other open critical alerts in charge of their entity.
+		if t := tr[k]; (changed && !managed(a.Rule, a.Entity)) || (t != nil && now.Sub(t.lastTrue) < a.ClearAfter) {
 			critical[a.Rule[:dot(a.Rule)]+"|"+a.Entity] = true
 		}
 	}
@@ -243,11 +261,11 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 	sort.Strings(okeys)
 	for _, k := range okeys {
 		a := open[k]
-		if _, ok := desired[k]; ok || !managed(a.Rule) {
+		if _, ok := desired[k]; ok || !managed(a.Rule, a.Entity) {
 			continue
 		}
 		t := tr[k]
-		if !suppressed[k] && !off(a.Rule, a.Entity) && t != nil && now.Sub(t.lastTrue) < a.ClearAfter {
+		if !suppressed[k] && !cleared(a.Rule, a.Entity) && t != nil && now.Sub(t.lastTrue) < a.ClearAfter {
 			continue
 		}
 		r := now
@@ -264,7 +282,7 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 		if c := open[k]; c != nil && now.Sub(t.lastTrue) < c.ClearAfter {
 			continue
 		}
-		if r := ruleOfKey(k); managed(r) {
+		if rule, entity, _ := strings.Cut(k, ":"); managed(rule, entity) {
 			delete(tr, k)
 		}
 	}
@@ -278,15 +296,6 @@ func dot(rule string) int {
 		}
 	}
 	return len(rule)
-}
-
-func ruleOfKey(k string) string {
-	for i := 0; i < len(k); i++ {
-		if k[i] == ':' {
-			return k[:i]
-		}
-	}
-	return k
 }
 
 // ResolveOff resolves at once the server's open alerts that Off switches

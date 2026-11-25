@@ -146,3 +146,38 @@
   color: var(--mut);
   font: 400 14px var(--font-sans);
 }
+
+/* Change the limit after a check's limit (monitoring.md MON-15): a text link like Undo's. */
+.limitBtn {
+  padding: 0 2px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--brand);
+  font: 500 13px / 20px var(--font-sans);
+  cursor: pointer;
+}
+
+.limitBtn:hover {
+  color: var(--ink);
+}
+
+.limitBtn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* What happened: the small heading over a server's own alerts, as a strip's band words. */
+.historyGroup {
+  margin: 0;
+  padding: 12px 20px 8px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.historyGroup + * {
+  border-top: none;
+}

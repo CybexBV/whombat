@@ -2,7 +2,10 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"maps"
 	"net/http"
 	"sort"
 	"strconv"
@@ -12,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"rackoon/internal/hub/store"
+	"rackoon/internal/proto"
 	"rackoon/internal/rules"
 )
 
@@ -30,17 +34,26 @@ type watchKey struct{ server, rule, entity string }
 // watchSet is the in-memory copy of the watch settings, read by the alert
 // engine on every evaluation.
 type watchSet struct {
-	mu  sync.RWMutex
-	off map[watchKey]bool
+	change sync.Mutex
+	mu     sync.RWMutex
+	off    map[watchKey]bool
+	limits map[string]map[watchKey]float64
 }
 
-func (w *watchSet) set(l []store.WatchOff) {
+func (w *watchSet) set(l []store.WatchOff, limits []store.WatchLimit) {
 	m := make(map[watchKey]bool, len(l))
 	for _, o := range l {
 		m[watchKey{o.Server, o.Rule, o.Entity}] = true
 	}
+	byServer := map[string]map[watchKey]float64{}
+	for _, l := range limits {
+		if byServer[l.Server] == nil {
+			byServer[l.Server] = map[watchKey]float64{}
+		}
+		byServer[l.Server][watchKey{l.Server, l.Rule, l.Entity}] = l.Value
+	}
 	w.mu.Lock()
-	w.off = m
+	w.off, w.limits = m, byServer
 	w.mu.Unlock()
 }
 
@@ -55,10 +68,32 @@ func (w *watchSet) isOff(server, rule, entity string) bool {
 	return w.off[watchKey{server, rule, ""}] || (entity != "" && w.off[watchKey{server, rule, entity}])
 }
 
+// Each evaluation gets one snapshot, even if the settings change mid-report.
+func (w *watchSet) limitsFor(server string) rules.LimitLookup {
+	w.mu.RLock()
+	limits := w.limits[server]
+	w.mu.RUnlock()
+	return watchLimitLookup(limits, server)
+}
+
+func watchLimitLookup(limits map[watchKey]float64, server string) rules.LimitLookup {
+	if len(limits) == 0 {
+		return nil
+	}
+	return func(rule, entity string) (float64, bool) {
+		if value, ok := limits[watchKey{server, rule, entity}]; ok {
+			return value, true
+		}
+		value, ok := limits[watchKey{server, rule, ""}]
+		return value, ok
+	}
+}
+
 // forget drops a deleted server's settings (the database cascades).
 func (w *watchSet) forget(server string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	delete(w.limits, server)
 	for k := range w.off {
 		if k.server == server {
 			delete(w.off, k)
@@ -71,7 +106,11 @@ func (h *Hub) reloadWatch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	h.watch.set(l)
+	limits, err := h.store.ListWatchLimits(ctx, "")
+	if err != nil {
+		return err
+	}
+	h.watch.set(l, limits)
 	return nil
 }
 
@@ -95,8 +134,15 @@ type watchRule struct {
 	At     string `json:"at"`
 }
 
+type watchLimit struct {
+	Rule   string  `json:"rule"`
+	Entity string  `json:"entity,omitempty"`
+	Value  float64 `json:"value"`
+}
+
 type watchJSON struct {
-	Rules []watchRule `json:"rules"`
+	Rules  []watchRule  `json:"rules"`
+	Limits []watchLimit `json:"limits"`
 }
 
 func (h *Hub) watchOf(ctx context.Context, server string) (watchJSON, error) {
@@ -104,7 +150,14 @@ func (h *Hub) watchOf(ctx context.Context, server string) (watchJSON, error) {
 	if err != nil {
 		return watchJSON{}, err
 	}
-	out := watchJSON{Rules: make([]watchRule, 0, len(l))}
+	limits, err := h.store.ListWatchLimits(ctx, server)
+	if err != nil {
+		return watchJSON{}, err
+	}
+	out := watchJSON{Rules: make([]watchRule, 0, len(l)), Limits: make([]watchLimit, 0, len(limits))}
+	for _, l := range limits {
+		out.Limits = append(out.Limits, watchLimit{Rule: l.Rule, Entity: l.Entity, Value: l.Value})
+	}
 	for _, o := range l {
 		out.Rules = append(out.Rules, watchRule{Rule: o.Rule, Entity: o.Entity, Off: true, By: o.By,
 			At: o.At.UTC().Format(time.RFC3339)})
@@ -156,9 +209,11 @@ func (h *Hub) apiPutWatch(w http.ResponseWriter, r *http.Request, p *principal) 
 		return err
 	}
 	var req struct {
-		Rule   string  `json:"rule"`
-		Entity *string `json:"entity"`
-		Off    *bool   `json:"off"`
+		Rule     string          `json:"rule"`
+		Entity   *string         `json:"entity"`
+		Off      *bool           `json:"off"`
+		Limit    json.RawMessage `json:"limit"`
+		Expected json.RawMessage `json:"expected_limit"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		return err
@@ -166,8 +221,8 @@ func (h *Hub) apiPutWatch(w http.ResponseWriter, r *http.Request, p *principal) 
 	if !rules.IsServerRule(req.Rule) {
 		return apiErr(http.StatusBadRequest, "invalid_rule", "No server alert rule "+strconv.Quote(req.Rule)+".")
 	}
-	if req.Off == nil {
-		return apiErr(http.StatusBadRequest, "invalid_value", "off must be true or false.")
+	if (req.Off == nil) == (req.Limit == nil) || (req.Expected != nil && req.Limit == nil) {
+		return apiErr(http.StatusBadRequest, "invalid_value", "Choose whether to watch the rule or change its limit.")
 	}
 	entity := ""
 	if req.Entity != nil && *req.Entity != "" {
@@ -177,6 +232,12 @@ func (h *Hub) apiPutWatch(w http.ResponseWriter, r *http.Request, p *principal) 
 		}
 		entity = *req.Entity
 	}
+	h.watch.change.Lock()
+	defer h.watch.change.Unlock()
+	if req.Limit != nil {
+		return h.putWatchLimit(w, r, p, id, req.Rule, entity, req.Limit, req.Expected)
+	}
+
 	ctx := r.Context()
 	now := h.now()
 	var changed bool
@@ -224,6 +285,190 @@ func (h *Hub) apiPutWatch(w http.ResponseWriter, r *http.Request, p *principal) 
 	}
 	writeJSON(w, r, http.StatusOK, out)
 	return nil
+}
+
+func (h *Hub) putWatchLimit(w http.ResponseWriter, r *http.Request, p *principal, id, rule, entity string, raw, expectedRaw json.RawMessage) error {
+	var value, expected *float64
+	if !rules.ValidLimitRule(rule) || json.Unmarshal(raw, &value) != nil ||
+		(value != nil && !rules.ValidLimit(rule, *value)) ||
+		(expectedRaw != nil && json.Unmarshal(expectedRaw, &expected) != nil) {
+		return apiErr(http.StatusBadRequest, "invalid_limit", "Give a limit within this check’s range, or clear it.")
+	}
+
+	ctx := r.Context()
+	h.watch.mu.RLock()
+	limits := h.watch.limits[id]
+	before, exists := limits[watchKey{id, rule, entity}]
+	h.watch.mu.RUnlock()
+	matches := func(v *float64) bool {
+		if v == nil {
+			return !exists
+		}
+		return exists && *v == before
+	}
+	if expectedRaw != nil && !matches(expected) {
+		return apiErr(http.StatusConflict, "limit_changed", "The limit changed meanwhile.")
+	}
+	if !matches(value) {
+		h.mu.RLock()
+		var report *proto.Report
+		if s := h.servers[id]; s != nil {
+			report = s.report
+		}
+		h.mu.RUnlock()
+		key := watchKey{id, rule, entity}
+		if err := validateWatchLimit(limits, key, value, report); err != nil {
+			return err
+		}
+		var err error
+		if value == nil {
+			err = h.store.DeleteWatchLimit(ctx, id, rule, entity)
+		} else {
+			if !exists && len(limits) >= maxWatchOffs {
+				return apiErr(http.StatusConflict, "too_many", "A server has at most 500 custom limits.")
+			}
+			err = h.store.PutWatchLimit(ctx, store.WatchLimit{Server: id, Rule: rule, Entity: entity, Value: *value})
+		}
+		if err != nil {
+			return err
+		}
+		if err := h.reloadWatch(ctx); err != nil {
+			return err
+		}
+		h.evaluateWatchLimitChange(ctx, key, report, limits)
+		details := map[string]string{"rule": rule, "limit": string(raw)}
+		ev := map[string]any{"server": id, "rule": rule, "limit": value}
+		if entity != "" {
+			details["entity"], ev["entity"] = entity, entity
+		}
+		h.auditReq(r, p, store.AuditRecord{Event: "server.watch_changed", Outcome: "ok", Server: id, Details: details})
+		h.bus.Publish("watch.changed", ev)
+		h.publishServerUpdated(id)
+	}
+	out, err := h.watchOf(ctx, id)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, r, http.StatusOK, out)
+	return nil
+}
+
+func validateWatchLimit(limits map[watchKey]float64, key watchKey, value *float64, report *proto.Report) error {
+	warning, critical := rules.LimitPair(key.rule)
+	if warning == "" {
+		return nil
+	}
+	proposed := maps.Clone(limits)
+	if proposed == nil {
+		proposed = map[watchKey]float64{}
+	}
+	if value == nil {
+		delete(proposed, key)
+	} else {
+		proposed[key] = *value
+	}
+	find := watchLimitLookup(proposed, key.server)
+	if find == nil {
+		return nil
+	}
+	temperature := warning == rules.RuleTempHigh
+	sensors := map[string]proto.Sensor{}
+	if temperature && report != nil {
+		for _, sensor := range report.Sensors {
+			sensors[sensor.ID] = sensor
+		}
+	}
+	entities := map[string]bool{key.entity: true}
+	if key.entity == "" {
+		for id := range sensors {
+			entities[id] = true
+		}
+		for item := range limits {
+			if item.entity != "" && (item.rule == warning || item.rule == critical) {
+				entities[item.entity] = true
+			}
+		}
+		if temperature && len(entities) > 1 {
+			delete(entities, "")
+		}
+	}
+	unit := "%"
+	if temperature {
+		unit = "°C"
+	}
+	var bound float64
+	for entity := range entities {
+		if key.entity == "" && entity != "" {
+			if _, overrides := limits[watchKey{key.server, key.rule, entity}]; overrides {
+				continue
+			}
+		}
+		high, custom := find(warning, entity)
+		if !custom {
+			if temperature {
+				continue
+			}
+			high = rules.WearWarnPct
+		}
+		serious, custom := find(critical, entity)
+		if !custom {
+			serious = rules.WearSeriousPct
+			if temperature {
+				sensor := sensors[entity]
+				sensor.ID = entity
+				serious = rules.SensorLimit(sensor)
+			}
+		}
+		if high >= serious {
+			if key.rule == warning && (bound == 0 || serious < bound) {
+				bound = serious
+			} else if key.rule == critical && high > bound {
+				bound = high
+			}
+		}
+	}
+	if bound == 0 {
+		return nil
+	}
+	direction, level := "below", "critical"
+	if key.rule == critical {
+		direction, level = "above", "warning"
+	}
+	return apiErr(http.StatusBadRequest, "invalid_limit",
+		fmt.Sprintf("Set it %s the %s limit of %s %s.", direction, level, strconv.FormatFloat(bound, 'f', -1, 64), unit))
+}
+
+func (h *Hub) evaluateWatchLimitChange(ctx context.Context, key watchKey, report *proto.Report, before map[watchKey]float64) {
+	if report == nil {
+		return
+	}
+	warning, critical := rules.LimitPair(key.rule)
+	affected := func(rule, entity string) bool {
+		if rule != key.rule && rule != warning && rule != critical {
+			return false
+		}
+		if key.entity != "" {
+			return entity == key.entity
+		}
+		_, overrides := before[watchKey{key.server, key.rule, entity}]
+		return entity == "" || !overrides
+	}
+	wasTrue := map[string]bool{}
+	for _, c := range rules.HostConditionsWithLimits(report, watchLimitLookup(before, key.server)) {
+		if affected(c.Rule, c.Entity) {
+			wasTrue[c.Key()] = true
+		}
+	}
+	var conditions []rules.Condition
+	for _, c := range rules.HostConditionsWithLimits(report, h.watch.limitsFor(key.server)) {
+		if affected(c.Rule, c.Entity) {
+			conditions = append(conditions, c)
+		}
+	}
+	resolve := func(rule, entity string) bool {
+		return affected(rule, entity) && (rule == key.rule || wasTrue[rule+":"+entity])
+	}
+	h.applyAlerts(ctx, h.alerts.EvaluateChange(key.server, conditions, resolve, h.now()))
 }
 
 // isExactly reports whether exactly this rule and entity is switched off

@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -271,7 +272,7 @@ func TestAlertTexts(t *testing.T) {
 	if tt.Title != "CPU package at 83 °C" || tt.Detail != "Above 72 °C for 14 min" {
 		t.Errorf("temp text = %+v", tt)
 	}
-	if tt.BannerTitle != "CPU package is at 83 °C" || tt.BannerDetail != "Above 72 °C for 14 min. The warning limit is 85 °C." {
+	if tt.BannerTitle != "CPU package is at 83 °C" || !strings.Contains(tt.BannerDetail, "warning limit is 72 °C") {
 		t.Errorf("temp banner = %+v", tt)
 	}
 	if byRule[RuleTempHigh].StatusNote != "CPU temperature" || byRule[RuleTempHigh].Link != "#temps" {

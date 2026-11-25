@@ -59,6 +59,8 @@ import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
 import { NO_QUIET, type QuietBook, quietBook, type ThingQuiet } from '../things/quiet/store';
+import { activeWindow, thingCause } from '../things/quiet/windows';
+import { causeHref } from '../things/quiet/wire';
 import { featureRequestItems } from '../trackers/features';
 import { arrangedOf } from './arrange';
 import { assistantCalled } from './assistant-name';
@@ -414,6 +416,9 @@ export function connectionThing(
     ...(partOf ? { partOf } : {}),
     ...(row.lastWorkedAt ? { usedAt: row.lastWorkedAt.toISOString() } : {}),
   };
+  // Kept quiet says so whatever else the thing shows, signing in again included.
+  const window = activeWindow(quiet.of.windows, quiet.now);
+  const quietUntil = window ? { quietUntil: window.endsAt.toISOString() } : {};
   if (row.status === 'needs_reauth') {
     const status = v?.status ?? 'bad';
     return withNotice(
@@ -423,32 +428,44 @@ export function connectionThing(
         line: 'Needs you to sign in again',
         ...(status !== 'ok' ? { reason: 'Needs you to sign in again' } : {}),
         facts: [],
+        ...quietUntil,
       },
       v?.notice,
       v?.asking,
     );
   }
   if (glance) {
-    const status = v?.status ?? glance.status;
+    // Down because of something else: grey, its line saying why, no reason of its own; quiet
+    // with a server kept quiet keeps its dot and line.
+    const cause =
+      v?.held?.kind === 'cause' && v.held.cause
+        ? thingCause(v.held.cause, causeHref(v.held.cause.causeThing))
+        : null;
+    const down = cause && cause.kind !== 'quiet' ? cause : null;
+    const status = down ? 'unknown' : (v?.status ?? glance.status);
     const reason = v ? v.reason : glance.reason;
     return withNotice(
       {
         ...base,
         status,
         // Why it isn't fine (sidebar.md SB-03), for the sidebar's dot.
-        ...(status !== 'ok' && reason ? { reason: clip(reason, 160) } : {}),
-        ...(glance.line
-          ? { line: clip(glance.line, 160) }
-          : row.glanceAt
-            ? { line: `Last checked ${localTime(row.glanceAt, timeZone)}` }
-            : {}),
+        ...(status !== 'ok' && !down && reason ? { reason: clip(reason, 160) } : {}),
+        ...(down
+          ? { line: clip(down.words, 160) }
+          : glance.line
+            ? { line: clip(glance.line, 160) }
+            : row.glanceAt
+              ? { line: `Last checked ${localTime(row.glanceAt, timeZone)}` }
+              : {}),
         facts: glance.facts.slice(0, 8),
+        ...(cause ? { causedBy: cause } : {}),
+        ...quietUntil,
       },
       v?.notice,
       v?.asking,
     );
   }
-  return { ...base, status: 'unknown', line: 'Not checked yet', facts: [] };
+  return { ...base, status: 'unknown', line: 'Not checked yet', facts: [], ...quietUntil };
 }
 
 const KIND_ORDER = { server: 0, connection: 1, device: 2 } as const;
@@ -798,6 +815,11 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
     githubThing(services, viewer.burrow.id).catch(() => null),
     feedbackThing(services, { burrowId: viewer.burrow.id, principal: viewer.principal }).catch(() => null),
   ]);
+  // The accounts (mail, GitHub, Website feedback) say they are kept quiet as any connection does.
+  const kept = (thing: ThingSummary): ThingSummary => {
+    const window = activeWindow(book.of(thing.id).windows, now);
+    return window ? { ...thing, quietUntil: window.endsAt.toISOString() } : thing;
+  };
   return sortThings([
     ...connections.map((r) =>
       connectionThing(r, viewer.burrow.timeZone, partOf.get(r.id), {
@@ -805,9 +827,9 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
         now,
       }),
     ),
-    ...mail,
-    ...(github ? [github] : []),
-    ...(feedback ? [feedback] : []),
+    ...mail.map(kept),
+    ...(github ? [kept(github)] : []),
+    ...(feedback ? [kept(feedback)] : []),
     ...others.items,
   ]).slice(0, 200);
 }

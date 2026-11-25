@@ -404,6 +404,9 @@ the Mac's facts, below). Proxmox VE wins over unRAID. Every view has
 `backup_place` ("Backup places" under "Manage"; `null` from an older
 agent).
 
+After a server reports, `server.first_report_at` gives the time of its earliest retained reading.
+For rolled-up history it gives the start of the bucket.
+
 A Mac's `macos` block (`null` where the Mac doesn't say; snake_case of
 the agent's `Report.MacOS`):
 
@@ -618,7 +621,9 @@ offline; `attention`: open and none of acknowledged, muted, suppressed.
 | `severity` | `critical` or `warning` |
 | `rule` | exact rule, or a prefix ending in `.` (`check.`) |
 | `q` | substring of title or detail |
-| `since`, `until`, `before` | RFC 3339; `resolved` and `all` only |
+| `since` | opened at or after this RFC 3339 time (for `resolved` and `all`) |
+| `overlaps_since` | still open or resolved at or after this RFC 3339 time (for `resolved` and `all`) |
+| `until`, `before` | opened before this RFC 3339 time (for `resolved` and `all`) |
 | `limit` | 1 to 1000 (other values give 200); `resolved` and `all` only |
 
 `open` lists the open alerts, most severe first, without paging.
@@ -664,12 +669,13 @@ switched-off `sensor.temp_high`, can show). The settings are in the
 database: they survive restarts, are in backups and go with a deleted
 server.
 
-**`GET /servers/{id}/watch`**: what is switched off, by rule, then entity
+**`GET /servers/{id}/watch`** returns rules switched off and custom limits, by rule and entity
 (the whole rule first):
 
 ```json
 {"rules": [{"rule": "disk.wear_high", "off": true, "by": "John Doe (pe_8f2c)", "at": "2026-10-22T09:30:00Z"},
-           {"rule": "net.link_down", "entity": "net:eno2", "off": true, "by": "John Doe (pe_8f2c)", "at": "…"}]}
+           {"rule": "net.link_down", "entity": "net:eno2", "off": true, "by": "John Doe (pe_8f2c)", "at": "…"}],
+ "limits": [{"rule": "disk.space_high", "entity": "fs:/srv", "value": 95}]}
 ```
 
 `entity` is absent when the whole rule is off; `off` is always `true`
@@ -693,10 +699,31 @@ the alert is off), `sensor.temp_high`, `sensor.temp_critical`,
 `hypervisor.memory_assigned`, `pve.quorum_lost`,
 `pve.replication_failed`, `backup.failed`, `ceph.health`,
 `time.unsynced`, `ups.on_battery`, `net.link_down`, `host.oom`,
-`guest.restart_loop`. Errors: 400 `invalid_rule`, 400 `invalid_value`
+`guest.restart_loop` and `guest.stopped`. Errors: 400 `invalid_rule`, 400 `invalid_value`
 (`off` missing), 400 `invalid_entity` (more than 200 bytes or control
 characters), 400 `bad_request`, 403 `forbidden` (viewers), 404
 `server_not_found`, 409 `too_many` (500 per server).
+
+**`PUT /servers/{id}/watch`** also takes `{"rule": string, "entity"?: string, "limit": number | null}`.
+Omit `entity` for a whole server. An item's limit takes precedence over the
+server's limit, and clearing either with `null` restores what it inherits.
+The hub checks its latest report as soon as the limit changes. An alert
+that falls below its new limit resolves right away. Alerts still open with
+the rule's usual delay. A server can keep up to 500 custom limits.
+A change sends `watch.changed` and `server.updated`
+and is audited with `limit` in the details.
+
+| Rules | Limit |
+|---|---|
+| `disk.space_high`, `fs.inodes_high`, `disk.wear_high`, `disk.wear_critical` | 1 to 100 % |
+| `sensor.temp_high`, `sensor.temp_critical` | 1 to 150 °C |
+
+An optional `expected_limit` checks the old value, with `null` meaning no
+custom limit at that scope. A mismatch gives 409 `limit_changed`.
+A limit outside the range or on any other rule gives 400 `invalid_limit`.
+Temperature and SSD wear warning limits must be below each affected item's
+critical limit. A change that would violate that order also gives
+400 `invalid_limit`, with the limit to stay above or below in `detail`.
 
 ## Maintenance
 
@@ -768,7 +795,7 @@ Server-Sent Events. Each event is `id: <n>`, `event: <name>`,
 | `guest.state_changed` | everyone | `{"server", "id", "state"}` |
 | `alert.opened`, `alert.updated`, `alert.resolved` | everyone | the alert object; `alert.updated` when it is acknowledged or unacknowledged, a snooze lapses, or its severity changes (a rise also ends the acknowledgement) |
 | `maintenance.changed` | everyone | `{}` |
-| `watch.changed` | everyone | `{"server", "rule", "entity"?, "off"}` ([Watch settings](#watch-settings)) |
+| `watch.changed` | everyone | `{"server", "rule", "entity"?, "off" or "limit"}` ([Watch settings](#watch-settings)) |
 | `checks.changed` | everyone | `{}` or `{"id"}` |
 | `action.finished` | everyone | `{"action_id", "server", "guest", "action", "result": "ok"\|"error", "message", "state", "noop", "code"}` |
 | `task.finished` | everyone | `{"server", "guest", "task", "op", "result": "ok"\|"warning"\|"error", "message", "new_id"?, "code"?}` ([Manage](#manage)) |
@@ -2009,6 +2036,7 @@ Audited as `diagnose.ran`, `exec.requested` / `exec.finished`, and
 | Route | Role | Reauth | Success |
 |---|---|---|---|
 | `GET /checks` | viewer | | 200 |
+| `GET /checks/{id}` | viewer | | 200 |
 | `POST /checks` | admin | | 201 |
 | `PATCH /checks/{id}` | admin | | 200 |
 | `DELETE /checks/{id}` | admin | | 204 |
@@ -2017,21 +2045,33 @@ Audited as `diagnose.ran`, `exec.requested` / `exec.finished`, and
 Probes (`http`, `tcp`, `ping`, `dns`) run from the hub or from an agent;
 `heartbeat` checks wait for pings. A probe that fails twice in a row, or an
 overdue heartbeat, opens the hub-level alert `check.down` (critical); a
-certificate close to expiry opens `check.cert_expiring` (warning).
+certificate close to expiry opens `check.cert_expiring` (warning). For
+checks with an owner starting with `whombat:connection:`, Whombat's
+connection handles those alerts.
 
 ```json
 {"id": "ck_7d3a…", "name": "Website", "kind": "http", "target": "https://example.com", "runner": "hub",
  "interval_s": 60, "timeout_s": 10, "grace_s": 0, "options": {"keyword": "Welcome"}, "enabled": true,
- "status": "up", "since": "…",
+ "status": "up", "stale": false, "since": "…",
  "last": {"at": "…", "ok": true, "latency_ms": 84, "status_code": 200, "cert_not_after": "…"},
  "last_ping": null, "uptime_24h": 100, "latency_24h": [82.1, null], "ping_url": null, "created_by": "john"}
 ```
 
 `status` is `up`, `down`, `pending` (no result yet, or one failure) or
-`disabled`. `last` also has `error` and `answer` (DNS) when set.
-`uptime_24h` is a percentage and `latency_24h` 96 points over 24 hours (in
-`GET /checks` only; POST and PATCH answer `null` and `[]`). `ping_url` is
-set for heartbeat checks when the caller is an admin.
+`disabled`. If the runner's reports or results stop coming, `stale` is
+`true` and the check is `pending`. Its last result and timestamp stay
+visible, and its alerts keep their state until a fresh result arrives.
+The hub corrects result times for the agent's clock skew.
+`last` also has `error` and `answer` (DNS) when set.
+`uptime_24h` is a percentage and `latency_24h` holds 96 points over 24
+hours. `GET /checks` includes both. The other routes answer `null` and
+`[]`. `ping_url` is set for heartbeat checks when the caller is an admin.
+
+`GET /checks/{id}?since=&until=` also reports `period_status` for the
+retained samples in that period. Both times are RFC 3339. At second
+precision the start is exclusive and the end inclusive. The status is
+`down` if any sample failed, `up` if all recorded samples succeeded, or
+`unseen` if the period contains no samples.
 
 **`POST /checks`** and **`PATCH /checks/{id}`** (every field optional in
 PATCH):
@@ -2047,15 +2087,22 @@ PATCH):
 | `grace_s` | int | heartbeat: 0 to 604800 |
 | `options` | object | replaces all options, see below |
 | `enabled` | bool | default true |
+| `owner` | string | optional at creation, up to 160 bytes, returned by both GET routes |
 
 `options`: `expect_status` (http, e.g. `"200-299,301"`, default
 `200-399`), `keyword` (http: must appear in the body), `tls` (tcp: TLS
-handshake), `insecure` (skip certificate verification), `dns_type` (`A`,
-`AAAA`, `CNAME`, `MX`, `TXT`), `dns_server` (`host[:port]`), `expect` (dns:
+handshake), `insecure` (skip certificate verification), `dns_type` (`A`
+by default, `AAAA`, `CNAME`, `MX`, `TXT`, or `any` for either an A or AAAA
+answer on the chosen runner), `dns_server` (`host[:port]`), `expect` (dns:
 substring of an answer), `cert_warn_days` (0 to 365, 0 = 14).
+An `any` check uses two of the runner's probe slots.
 
+A probe change resolves alerts for its previous settings and waits for a
+new result. Until the first result, freshness counts from the change and
+only newer report gaps count. A check-in gets its period plus grace from
+when it is set up or resumed, until its first successful ping.
 Response: the check. Errors: 400 `invalid_name`, `invalid_option`,
-`invalid_interval`, `invalid_grace`, `invalid_runner`, `invalid_check`
+`invalid_interval`, `invalid_grace`, `invalid_runner`, `invalid_owner`, `invalid_check`
 (kind, target, interval, timeout or options rejected); 404 `not_found`
 (PATCH).
 

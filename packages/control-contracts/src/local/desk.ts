@@ -723,6 +723,11 @@ export const DeskLook = z.object({
    * in Talk; `fixing` and `fixed` say where the step is. Absent or `failed`: the card as before.
    */
   research: LookResearch.optional(),
+  /**
+   * What it is down because of: its server or machine (`server:pve-02`) or the internet
+   * (`box:network`), with its name. Such a thing makes no look of its own; one that still shows carries this.
+   */
+  causedBy: z.object({ thing: text(120), name: text(40) }).optional(),
 });
 export type DeskLook = z.infer<typeof DeskLook>;
 

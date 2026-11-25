@@ -846,10 +846,23 @@
 /* The heads-ups' own row, folded until asked for (overview-server-connection-final.md). */
 .stripHeadsUps {
   display: block;
+  width: 100%;
   min-height: 44px;
   padding: 4px 14px 4px 62px;
   border-top: 1px solid var(--line);
   text-align: left;
+}
+
+/* Right under the band: its own rule is the band's. */
+.stripHead + .stripHeadsUps {
+  border-top: none;
+}
+
+/* No line above it (everything is on hold): no icon to line up with, so it starts where the band's words do, as on
+   the phone. */
+.stripHead + .stripHeadsUps,
+.stripHead + .stripHeadsUps + .stripHeadsUps {
+  padding-left: 14px;
 }
 
 .stripMore:focus-visible {

@@ -12,6 +12,7 @@ import {
   homeSections,
   homeThingRows,
   homeWebSlots,
+  notAnswering,
   thingsLine,
   usedPhrase,
   usedShort,
@@ -234,6 +235,25 @@ describe('your things (HR-23, AP-2208, AP-2270)', () => {
     expect(thingsLine(of('ok', 'ok', 'unknown', 'learning'))).toBe('3 working · 1 learning');
     expect(thingsLine(of('ok', 'warn', 'warn', 'offline'))).toBe('1 working · 2 need a look · 1 offline');
     expect(thingsLine(of('warn', 'bad'))).toBe('1 needs a look · 1 with a problem');
+  });
+
+  it('marks a thing down because of something else as not answering, unless it is kept quiet', () => {
+    const cause = { thing: 'server:pve-02', name: 'pve-02', words: 'Not answering while pve-02 is down' };
+    const later = new Date(NOW.getTime() + 60 * 60_000).toISOString();
+    const earlier = new Date(NOW.getTime() - 60 * 60_000).toISOString();
+    expect(notAnswering({ causedBy: cause }, NOW)).toBe(true);
+    // Kept quiet: it counts as its dot says, whatever stopped it, until the window ends.
+    expect(notAnswering({ causedBy: cause, quietUntil: later }, NOW)).toBe(false);
+    expect(notAnswering({ causedBy: cause, quietUntil: earlier }, NOW)).toBe(true);
+    // Only quiet with its server, or nothing holding it: not down.
+    expect(notAnswering({ causedBy: { ...cause, kind: 'quiet' } }, NOW)).toBe(false);
+    expect(notAnswering({}, NOW)).toBe(false);
+    const [row] = homeThingRows(
+      [thing({ status: 'unknown', causedBy: cause, line: cause.words, facts: [] })],
+      NOW,
+      TZ,
+    );
+    expect(row).toMatchObject({ level: 'connected', notAnswering: true });
   });
 
   it('turns a figure into a phrase of a line', () => {

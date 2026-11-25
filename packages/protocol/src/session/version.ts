@@ -75,13 +75,25 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * `connections.disconnect`'s `vaultEntries`, a Vault entry's `source` and the Inbox's `onepassword_removals` button,
  * which a box offers only to a session at minor 8 or later (Whombat onepassword-sync.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 8 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 9 };
+
+/**
+ * Session protocol minor (major 5) that reads a thing's history (`things.history`) and its week in one line (a page's
+ * `uptime`); an app checks it before it asks.
+ */
+export const THING_HISTORY_MINOR = 9;
+
+/** Session protocol minor that reads incident automations and one-time thing watch cards. */
+export const THING_AUTOMATIONS_MINOR = 9;
 
 /**
  * Session protocol minor (major 5) that links a 1Password vault (the catalog's 1Password entry and its connection
  * page); an older session's catalog leaves 1Password out.
  */
 export const ONEPASSWORD_SYNC_MINOR = 8;
+
+/** Session protocol minor that reads check ownership and freshness and changes server alert limits. */
+export const HOST_MONITORING_MINOR = 9;
 
 /**
  * Session protocol minor (major 5) that opens an account's own page (`things.page` for Google, Microsoft 365, Email,
@@ -97,6 +109,13 @@ export const OWN_ADDRESS_NAMES_MINOR = 6;
 
 /** Session protocol minor (major 5) that reads automations started by Find My (the `findmy` trigger and source). */
 export const FIND_MY_MINOR = 4;
+
+/**
+ * Session protocol minor (major 5) that keeps things quiet for a while (`things.keepQuiet`, `things.endQuiet`, a page's
+ * `keptQuiet` and `causedBy`, a quiet line's `held`). An older app gets the same
+ * words as a heads-up line and reads quiet lines as snoozed or ignored.
+ */
+export const KEEP_QUIET_MINOR = 9;
 
 /** Session protocol minor (major 5) that draws a Find My connection's Timeline tab (`connections.findMyTimeline…`). */
 export const FIND_MY_TIMELINE_MINOR = 5;

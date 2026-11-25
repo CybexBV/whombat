@@ -29,11 +29,13 @@ import {
   type ThingSummary,
   thingHref,
   thingId,
+  UPTIME_ID,
   type WatchItem,
 } from '@whombat/core';
-import { eq } from 'drizzle-orm';
-import { principals } from '../db/schema/index';
+import { and, eq, isNotNull } from 'drizzle-orm';
+import { catalogConnections, principals } from '../db/schema/index';
 import {
+  readOnce,
   registerNeedsYouSource,
   registerSubjectResolver,
   registerThingsSource,
@@ -42,6 +44,7 @@ import {
   type SourceReads,
 } from '../home/registry';
 import type { Services } from '../services';
+import { addTaken } from '../things/causes';
 import { type AddressChange, addressChangeOf, addressNeedsYou, agentAddresses } from './address';
 import { HOSTS_API } from './client';
 import { toHubInfo } from './hub';
@@ -106,6 +109,8 @@ export function serverThing(s: HostServer): ThingSummary {
     ...(status !== 'ok' && s.statusNote?.trim() ? { reason: reasonWords(s.statusNote).slice(0, 160) } : {}),
     facts,
     href: thingHref('server', s.id),
+    // Kept quiet until a time, as Home's connections and devices say it.
+    ...(verdict?.quietUntil ? { quietUntil: verdict.quietUntil } : {}),
   };
 }
 
@@ -153,10 +158,12 @@ export function alertNeedsYou(a: HostAlert): NeedsYouItem {
 
 /**
  * An alert on Watch, with its acknowledgement or snooze (QN-22): an open one only while it asks for attention; muted
- * by maintenance or held back while its parent is offline, it was put aside too (`acknowledged`).
+ * by maintenance or held back while its parent is offline, it was put aside too (`acknowledged`). Its server kept quiet
+ * snoozes it until the window ends.
  */
 export function alertWatch(a: HostAlert, now: Date): WatchItem {
-  const until = a.acknowledged?.until ?? null;
+  const held = a.quiet?.held === 'window' ? (a.quiet.until ?? null) : null;
+  const until = held ?? a.acknowledged?.until ?? null;
   const snoozed = until !== null && Date.parse(until) > now.getTime();
   const line = alertLine(a);
   const nature = line.nature;
@@ -170,13 +177,16 @@ export function alertWatch(a: HostAlert, now: Date): WatchItem {
     body: a.detail.slice(0, 600),
     at: a.openedAt,
     ...(a.serverId ? { serverId: a.serverId, href: thingHref('server', a.serverId) } : {}),
-    state: a.acknowledged
-      ? snoozed
+    state:
+      held && snoozed
         ? 'snoozed'
-        : 'acknowledged'
-      : a.attention || a.state !== 'open'
-        ? 'open'
-        : 'acknowledged',
+        : a.acknowledged
+          ? snoozed
+            ? 'snoozed'
+            : 'acknowledged'
+          : a.attention || a.state !== 'open'
+            ? 'open'
+            : 'acknowledged',
     ...(snoozed && until ? { snoozedUntil: until } : {}),
     nature,
     ...(watch ? { watch } : {}),
@@ -376,6 +386,26 @@ export async function hostsAddressChange(services: Services, now: Date): Promise
   return addressChangeOf(hub, arr(fleet.servers), now, { addresses: agentAddresses(agents) });
 }
 
+/** The connection's own lines cover these hub checks in both Inbox and Watch. */
+async function connectionCheckAlerts(ctx: SourceCtx, alerts: readonly HostAlert[]) {
+  const isCheck = (a: HostAlert) => a.rule.startsWith('check.') && a.entity?.startsWith('check:') === true;
+  if (!alerts.some(isCheck)) return alerts;
+  const ids = await readOnce(
+    ctx,
+    'connection-owned hub checks',
+    async () =>
+      new Set(
+        (
+          await ctx.db
+            .select({ id: catalogConnections.hubCheckId })
+            .from(catalogConnections)
+            .where(and(eq(catalogConnections.catalogId, UPTIME_ID), isNotNull(catalogConnections.hubCheckId)))
+        ).map((row) => row.id),
+      ),
+  );
+  return alerts.filter((a) => !isCheck(a) || !ids.has(a.entity?.slice('check:'.length) ?? null));
+}
+
 export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
   const services = await homeServices(ctx);
   if (!services) return [];
@@ -388,11 +418,13 @@ export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
   const held = new Set(
     shaped.servers.filter((s) => s.status === 'offline' && verdictOf(s)?.dot === false).map((s) => s.id),
   );
-  const items = shaped.alerts
+  const items = (await connectionCheckAlerts(ctx, shaped.alerts))
     .filter((a) => a.state === 'open' && a.attention && a.severity === 'critical')
     .filter((a) => alertLine(a).nature !== 'fyi')
     .filter((a) => !(a.rule === HEARTBEAT_RULE && a.serverId && held.has(a.serverId)))
     .map(alertNeedsYou);
+  // A server that is down names what it takes with it.
+  await addTaken(ctx.db, ctx.burrowId, items, shaped.alerts, ctx.now).catch(() => undefined);
   const manages = await managesServers(ctx);
   // Servers that haven't found a new address (BF-16): the person points them here.
   if (manages) {
@@ -441,7 +473,9 @@ export async function hostsWatch(ctx: SourceCtx): Promise<WatchItem[]> {
   // check nobody watches left out. Heads-ups come marked: only the Needs you list shows them, folded (NYL-03).
   const [raw, fleet] = await Promise.all([hosts.fleetRaw(), fleetFor(hosts, ctx.burrowId, ctx.reads)]);
   const at = ts(raw.as_of) ?? ctx.now.toISOString();
-  const alerts = fleet.alerts.filter((a) => a.state === 'open').map((a) => alertWatch(a, ctx.now));
+  const alerts = (await connectionCheckAlerts(ctx, fleet.alerts))
+    .filter((a) => a.state === 'open')
+    .map((a) => alertWatch(a, ctx.now));
   const hints = fleet.hints;
   const kinds = new Map(
     arr(raw.servers).map((c) => [String(obj(c).id), String(obj(c).detail_view ?? 'standard')] as const),

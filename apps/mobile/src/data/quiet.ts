@@ -21,6 +21,8 @@ export const QUIET_COPY = {
   readOnly: 'Only those who manage it change what Whombat watches.',
   showMore: (n: number) => `Show ${n} more`,
   showFewer: 'Show fewer',
+  /** A check's limit's button. */
+  change: 'Change',
 } as const;
 
 /** How many checks a server's Summary shows before “Show N more” (its card sits under everything else). */

@@ -112,9 +112,17 @@ export function quietMenu(n: QuietLine): QuietMenuView | null {
   };
 }
 
-/** A quiet line's grey words (QN-14): “Ignored by John until it’s back online”; null when the line isn't quiet. */
+/**
+ * A quiet line's grey words (QN-14): “Ignored by John until it’s back online”; a line quiet with the whole thing says
+ * why: “Kept quiet by Mara until 23:00” for a window someone kept, “On hold while
+ * homeassistant is stopped” for a cause, which nobody kept quiet. Null when the line isn't quiet.
+ */
 export function quietLineText(n: Pick<ThingPageNotice, 'quiet'>): string | null {
-  return n.quiet ? quietLine(n.quiet) : null;
+  const q = n.quiet;
+  if (!q) return null;
+  if (q.held === 'window') return q.by ? `Kept quiet by ${q.by.name} ${q.words}` : `Kept quiet ${q.words}`;
+  if (q.held === 'cause') return `On hold ${q.words}`;
+  return quietLine(q);
 }
 
 /** Whether a quiet line offers Undo: to who may quiet it (the line carries `ignore` for them). */
@@ -249,16 +257,24 @@ export function noticeGroups<
     } else if (n.action) shown.push(n);
     else fyi.push(n);
   }
-  const snoozed = quiet.filter((n) => n.quiet?.state === 'snoozed').length;
-  const quietWords = !quiet.length
+  // Lines quiet with the whole thing (kept quiet, or down because of something else) are counted apart.
+  const held = quiet.filter((n) => n.quiet?.held).length;
+  const own = quiet.filter((n) => !n.quiet?.held);
+  const snoozed = own.filter((n) => n.quiet?.state === 'snoozed').length;
+  const quietWords = !own.length
     ? null
-    : snoozed === quiet.length
-      ? `${quiet.length} snoozed`
+    : snoozed === own.length
+      ? `${own.length} snoozed`
       : snoozed
-        ? `${quiet.length} ignored or snoozed`
-        : `${quiet.length} ignored`;
-  const parts = [fyi.length ? `${fyi.length} heads-up${fyi.length === 1 ? '' : 's'}` : null, quietWords];
-  const words = parts.filter(Boolean).join(' and ');
+        ? `${own.length} ignored or snoozed`
+        : `${own.length} ignored`;
+  const parts = [
+    fyi.length ? `${fyi.length} heads-up${fyi.length === 1 ? '' : 's'}` : null,
+    quietWords,
+    held ? `${held} on hold` : null,
+  ];
+  const said = parts.filter((p): p is string => !!p);
+  const words = said.length > 2 ? `${said.slice(0, -1).join(', ')} and ${said.at(-1)}` : said.join(' and ');
   return { shown, asking, folded: [...fyi, ...quiet], foldLabel: words ? `Show ${words}` : null };
 }
 

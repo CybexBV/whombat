@@ -22,6 +22,9 @@
 
 import type { MarkLike } from '@whombat/brand';
 import {
+  holdView,
+  type LimitView,
+  lineLimit,
   OVERVIEW_WORDS,
   readingsMoment,
   readingTime,
@@ -59,14 +62,24 @@ import {
   useHostsStatus,
   useServerDashboard,
 } from '@whombat/client/hosts/react';
-import { useHomeOverview, useLookResearch, useQuietActions, useThingWatch } from '@whombat/client/react';
+import {
+  useHomeOverview,
+  useKeepQuiet,
+  useLookResearch,
+  useQuietActions,
+  useSessionProtocol,
+  useSetWatchLimit,
+  useThingWatch,
+} from '@whombat/client/react';
 import { type ChatSubject, type HostGuest, type HostSeriesRange, thingId } from '@whombat/core';
+import { KEEP_QUIET_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow, useNowLabel } from '../data/BurrowProvider';
 import { rangeOptions } from '../data/dashboard';
+import { parseMonitoringPick, serverMoreMenu } from '../data/monitoring';
 import { QUIET_COPY, quietNote, WATCH_FIRST } from '../data/quiet';
-import { isOwnId, parseThingRowPick, RENAME_COPY, serverHeadMenu } from '../data/rename';
+import { isOwnId, parseThingRowPick, RENAME_COPY } from '../data/rename';
 import { serverAsksRow } from '../data/serverAsks';
 import { type ServerTab, serverLinkTarget, serverPhoneTabs, serverTabFor } from '../data/serverSummary';
 import { SERVER_COPY, serverGuestList, type serverThingStatus, verdictDot } from '../data/servers';
@@ -103,6 +116,7 @@ import { useUnraidOp } from './server/UnraidSheets';
 import { UpdatesCard, useServerUpdatesView } from './server/Updates';
 import { BackupsKeptHere } from './thing/KeptHere';
 import { LookCard } from './thing/LookCard';
+import { KeepQuietSheet, KeptQuietLine, LimitSheet, WhatHappenedCard } from './thing/Monitoring';
 import { type PanelContext, SummaryPanels } from './thing/Panels';
 import { useWidePage } from './thing/parts';
 import { useHandOver } from './thing/useHandOver';
@@ -140,6 +154,11 @@ export function ServerScreen({
   const watch = useThingWatch({ params: { burrow: slug, thing } }, { retry: false });
   const quiet = useQuietActions(slug, thing, { timeZone, note: quietNote(showToast) });
   const agent = useAgentWords();
+  // Keep quiet for a while and a check's limit: on a Whombat at session minor 9.
+  const keepsQuiet = protocolAtLeast(useSessionProtocol(), KEEP_QUIET_MINOR);
+  const [keeping, setKeeping] = useState(false);
+  const [limitFor, setLimitFor] = useState<LimitView | null>(null);
+  const limits = useSetWatchLimit(slug, thing, { note: quietNote(showToast), assistantName: agent.name });
   const fleetName = fleet.data?.servers.find((s) => s.id === serverId)?.name;
   // What the assistant found out about the server and the plan it offers (handle-it.md); none on an older Whombat.
   const look = useLookResearch({ params: { burrow: slug }, query: { key: thing } }, { retry: false });
@@ -200,6 +219,9 @@ export function ServerScreen({
   );
   const rows = list.rows;
   const unraidOp = useUnraidOp(serverId, shown);
+  const keep = useKeepQuiet(slug, thing, { name: shown, timeZone, note: quietNote(showToast) });
+  const hold = keepsQuiet && d ? holdView(d) : null;
+  const canKeepQuiet = keepsQuiet && (!!watch.data?.mayChange || !!d?.keptQuiet?.canEnd);
   const subject: ChatSubject = { kind: 'server', id: serverId, name: shown };
   const askAbout = useAskAbout(subject, shown, () => setAsking({ text: null }));
   const updates = useServerUpdatesView(d, shown);
@@ -280,6 +302,11 @@ export function ServerScreen({
     quiet,
     research,
     onHandle: handOver,
+    endQuiet: d?.keptQuiet?.canEnd ? { run: () => void keep.end(), busy: keep.busy } : null,
+    limits:
+      keepsQuiet && watch.data?.mayChange
+        ? { of: (line) => lineLimit(line, watch.data?.checks), open: setLimitFor }
+        : null,
   };
   const panels = useMemo(() => shownPanels(dash.panels ?? []), [dash.panels]);
   const ranges = useMemo(() => rangeOptions(SERVER_DASHBOARD_PHONE_RANGES), []);
@@ -304,7 +331,11 @@ export function ServerScreen({
         onPress={onBack}
         right={
           target && (d || row) && !absent ? (
-            <ServerMenu name={shown} onRename={() => rename.start(thing)} />
+            <ServerMenu
+              name={shown}
+              onRename={() => rename.start(thing)}
+              onKeepQuiet={canKeepQuiet ? () => setKeeping(true) : null}
+            />
           ) : undefined
         }
       />
@@ -349,6 +380,7 @@ export function ServerScreen({
           // When its readings were taken: the page's own report, else the fleet's for it (the same server's report).
           readAt={d ? serverReportAt(d) : (row?.lastSeen ?? null)}
           here={thisWhombatFact(hostsThisWhombat, known)?.value ?? null}
+          week={d?.uptime?.text ?? null}
           fallback={
             row
               ? {
@@ -360,6 +392,16 @@ export function ServerScreen({
               : null
           }
         />
+        {hold?.kind === 'window' ? (
+          // Kept quiet until a time: its words, who, and End now; its banner waits meanwhile.
+          <KeptQuietLine
+            words={hold.words}
+            who={hold.who}
+            endNow={hold.endNow}
+            busy={keep.busy}
+            onEnd={() => void keep.end()}
+          />
+        ) : null}
         {absent ? (
           <QuietText>{SERVER_COPY.absent}</QuietText>
         ) : failed ? (
@@ -489,6 +531,8 @@ export function ServerScreen({
                     wide={widePage.wide}
                   />
                 )}
+                {/* The last 30 days: its outages and problems, and its own alerts folded under them. */}
+                <WhatHappenedCard thing={thing} />
                 {/* When it keeps this Whombat's backups (backup-places.md AP-6721). */}
                 <BackupsKeptHere thing={thing} />
                 {dash.head ? (
@@ -521,6 +565,7 @@ export function ServerScreen({
                       first={WATCH_FIRST}
                       divider="top"
                       inset={14}
+                      onLimit={keepsQuiet ? setLimitFor : null}
                     />
                   </OneCard>
                 ) : null}
@@ -637,17 +682,28 @@ export function ServerScreen({
         back={shown}
         initialText={asking?.text ?? null}
       />
+      <KeepQuietSheet visible={keeping} name={shown} actions={keep} onClose={() => setKeeping(false)} />
+      <LimitSheet view={limitFor} actions={limits} onClose={() => setLimitFor(null)} />
     </Screen>
   );
 }
 
-/** The head's ⋯ (44dp): Rename. iOS's own menu from the button on iPhone, a sheet elsewhere. */
-function ServerMenu({ name, onRename }: { name: string; onRename: () => void }) {
+/** The head's ⋯ (44dp): Rename, and Keep quiet…. iOS's own menu from the button on iPhone, a sheet elsewhere. */
+function ServerMenu({
+  name,
+  onRename,
+  onKeepQuiet,
+}: {
+  name: string;
+  onRename: () => void;
+  onKeepQuiet: (() => void) | null;
+}) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const spec = serverHeadMenu();
+  const spec = serverMoreMenu(!!onKeepQuiet);
   const onPick = (id: string) => {
     if (parseThingRowPick(id) === 'rename') onRename();
+    if (parseMonitoringPick(id) === 'keep_quiet') onKeepQuiet?.();
   };
   const face = <Ellipsis size={22} color={theme.colors.ink2} strokeWidth={1.75} />;
   const box = {
@@ -701,6 +757,7 @@ function ServerHead({
   mark,
   readAt,
   here,
+  week,
   fallback,
 }: {
   head: ServerDashboardHead | null;
@@ -716,6 +773,8 @@ function ServerHead({
   readAt: string | null;
   /** “Runs here, in whombat”: this Whombat runs on it. */
   here: string | null;
+  /** Its week in one line: “Up 99.6 % this week · down once, 12 min”. */
+  week: string | null;
   fallback: { status: Parameters<typeof serverThingStatus>[0]; words: string } | null;
 }) {
   const theme = useTheme();
@@ -734,7 +793,7 @@ function ServerHead({
           ? null
           : {
               accessibilityRole: 'header' as const,
-              accessibilityLabel: [name, idLine, badge, readExact].filter(Boolean).join(', '),
+              accessibilityLabel: [name, idLine, badge, readExact, week].filter(Boolean).join(', '),
             })}
       >
         <View style={{ flexDirection: 'row', alignItems: renaming ? 'flex-start' : 'center', gap: 10 }}>
@@ -772,6 +831,12 @@ function ServerHead({
               {read}
             </Text>
           </View>
+          {/* The row's gap sets it apart: a “·” of its own would start the next line when it wraps. */}
+          {week ? (
+            <Text size={12} mono color={theme.colors.mut} numberOfLines={2} style={{ flexShrink: 1 }}>
+              {week}
+            </Text>
+          ) : null}
         </View>
       </View>
       {verdict ? (

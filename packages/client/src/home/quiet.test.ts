@@ -122,6 +122,19 @@ describe('a quiet line (QN-14; AP-4802)', () => {
     expect(quietLineText(hallway)).toBeNull();
   });
 
+  it('says a line is quiet with the whole thing: kept quiet, or because of its cause', () => {
+    const window = {
+      state: 'snoozed' as const,
+      words: 'until 23:00',
+      by: { id: 'prn_mara', name: 'Mara' },
+      at: AT,
+    };
+    expect(quietLineText({ quiet: { ...window, held: 'window' } })).toBe('Kept quiet by Mara until 23:00');
+    expect(
+      quietLineText({ quiet: { state: 'ignored', words: 'while pve-02 is down', at: AT, held: 'cause' } }),
+    ).toBe('On hold while pve-02 is down');
+  });
+
   it('is expected at once: ignored in Ignore’s words, snoozed until 09:00 tomorrow', () => {
     expect(expectedQuiet('ignore', hallway.ignore, NOW, TZ)).toEqual({
       state: 'ignored',
@@ -351,6 +364,11 @@ describe('Worth a look in two parts', () => {
     expect(g.foldLabel).toBe('Show 2 heads-ups and 1 ignored');
     expect(noticeGroups([updates]).foldLabel).toBe('Show 1 heads-up');
     expect(noticeGroups([failed]).foldLabel).toBeNull();
+    const held = line('Disk 3 failed', {
+      nature: 'problem',
+      quiet: { state: 'snoozed', words: 'until 23:00', at: AT, held: 'window' },
+    });
+    expect(noticeGroups([updates, ignored, held]).foldLabel).toBe('Show 1 heads-up, 1 ignored and 1 on hold');
   });
 
   it('keeps a heads-up with a button of its own in sight, without counting it', () => {

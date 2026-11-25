@@ -12,6 +12,9 @@ import {
   newerRun,
   rollbackTarget,
   schemaKnowsFindMy,
+  schemaKnowsThings,
+  THING_AUTOMATIONS_LATER,
+  THING_SCHEMA,
 } from './release-gate';
 
 const OLD = 'whombat-20261121.4';
@@ -213,5 +216,49 @@ describe('Find My automations', () => {
     expect(schemaKnowsFindMy(null)).toBe(false);
     // Development boxes and tests have them.
     expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, lookup).findMyReady()).toBe(true);
+  });
+});
+
+describe('automations started by something going down or coming back', () => {
+  const production = { NODE_ENV: 'production' as const, WHOMBAT_RELEASE_ID: NEXT };
+  const thing = {
+    triggers: [{ kind: 'thing', event: 'problem', thing: 'server:nas', forMinutes: 10 }],
+    steps: [{ id: 'off', kind: 'connection_actions' }],
+  };
+  const run = { trigger: { kind: 'thing' }, definition: thing };
+  const schemas = (bySchema: Record<string, string | null>) => async (id: string) => bySchema[id] ?? null;
+  const update = facts({
+    current: NEXT,
+    lastUpdate: { release: NEXT, from: ME, at: '2026-11-24T06:00:00Z' },
+  });
+
+  it('are newer definitions and runs, refused with their own words', () => {
+    expect(newerDefinition({ triggers: thing.triggers, steps: [] })).toBe(true);
+    expect(newerDefinition({ recipe: { when: { kind: 'thing' } }, triggers: [], steps: [] })).toBe(true);
+    expect(newerRun({ trigger: { kind: 'thing' }, definition: { triggers: [], steps: [] } })).toBe(true);
+    expect(laterWords({ triggers: thing.triggers, steps: [] })).toBe(THING_AUTOMATIONS_LATER);
+  });
+
+  it('wait, and hold a run they started, until the release a box would go back to knows them', async () => {
+    const { lookup } = releases([ME]);
+    // Updated from a release before them: it can't read the definition, so none is made and no run goes on.
+    const before = new NewerAutomationsGate(production, lookup, schemas({ [ME]: '0026_quiet_windows' }));
+    before.follow(() => update);
+    expect(await before.ready()).toBe(true);
+    expect(await before.findMyReady()).toBe(true);
+    expect(await before.thingsReady()).toBe(false);
+    await expect(before.refuse({ triggers: thing.triggers, steps: [] })).rejects.toThrow(
+      THING_AUTOMATIONS_LATER,
+    );
+    expect(await before.holdsRun(run)).toBe(true);
+    for (const schema of [THING_SCHEMA, '0028_later']) {
+      const after = new NewerAutomationsGate(production, lookup, schemas({ [ME]: schema }));
+      after.follow(() => update);
+      expect(await after.thingsReady()).toBe(true);
+      expect(await after.holdsRun(run)).toBe(false);
+      await expect(after.refuse({ triggers: thing.triggers, steps: [] })).resolves.toBeUndefined();
+    }
+    expect(schemaKnowsThings(null)).toBe(false);
+    expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, lookup).thingsReady()).toBe(true);
   });
 });

@@ -82,7 +82,7 @@ var ServerRules = []string{
 	RuleHeartbeatMissing, RuleTempHigh, RuleTempCritical, RuleWearHigh, RuleWearCritical, RuleSpaceHigh,
 	RuleOvercommit, RuleMemAssigned, RuleSMARTFailing, RuleSMARTErrors, RulePoolDegraded, RulePoolErrors,
 	RuleRAIDDegraded, RuleReadOnlyFS, RuleInodesHigh, RuleQuorumLost, RuleBackupFailed, RuleReplication,
-	RuleCeph, RuleTimeUnsynced, RuleUPSOnBattery, RuleLinkDown, RuleFanFailed, RuleOOM, RuleRestartLoop,
+	RuleCeph, RuleTimeUnsynced, RuleUPSOnBattery, RuleLinkDown, RuleFanFailed, RuleOOM, RuleRestartLoop, RuleGuestStopped,
 	RuleDiskFullSoon,
 }
 
@@ -104,6 +104,10 @@ func pct0(f float64) string { return fmt.Sprintf("%.0f", math.Round(f)) }
 // HostConditions evaluates the report-based default rules for one host.
 // The heartbeat rule is evaluated separately (HeartbeatCondition).
 func HostConditions(r *proto.Report) []Condition {
+	return HostConditionsWithLimits(r, nil)
+}
+
+func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 	if r == nil {
 		return nil
 	}
@@ -116,8 +120,11 @@ func HostConditions(r *proto.Report) []Condition {
 		}
 		s := s
 		limit := SensorLimit(s)
-		lvl := TempLevel(s.TempC, limit)
-		if lvl == Good {
+		critical, customCritical := limits.threshold(RuleTempCritical, s.ID, limit)
+		thr, customHigh := warningThreshold(limits, RuleTempHigh, s.ID, TempWarnThreshold(limit), critical)
+		high := (customHigh || limit > 0) && s.TempC >= thr-eps
+		serious := (customCritical || limit > 0) && s.TempC >= critical-eps
+		if !high && !serious {
 			continue
 		}
 		label := s.Label
@@ -127,22 +134,31 @@ func HostConditions(r *proto.Report) []Condition {
 		note := SensorShortName(s.ID) + " temperature"
 		title := fmt.Sprintf("%s at %s", label, FormatTemp(s.TempC))
 		bannerTitle := fmt.Sprintf("%s is at %s", label, FormatTemp(s.TempC))
-		thr := TempWarnThreshold(limit)
-		out = append(out, Condition{
-			Rule: RuleTempHigh, Entity: s.ID, Severity: SevWarning,
-			For: TempHighFor, ClearAfter: TempClearAfter, Link: LinkTemps, StatusNote: note,
-			Render: func(held time.Duration) Text {
-				d := fmt.Sprintf("Above %s for %s", FormatTemp(math.Floor(thr)), FormatDuration(held))
-				return Text{Title: title, Detail: d, BannerTitle: bannerTitle,
-					BannerDetail: fmt.Sprintf("%s. The warning limit is %s.", d, FormatTemp(limit))}
-			},
-		})
-		if lvl == Serious {
+		if high {
+			out = append(out, Condition{
+				Rule: RuleTempHigh, Entity: s.ID, Severity: SevWarning,
+				For: TempHighFor, ClearAfter: TempClearAfter, Link: LinkTemps, StatusNote: note,
+				Render: func(held time.Duration) Text {
+					warning := FormatTemp(math.Floor(thr))
+					d := fmt.Sprintf("Above %s for %s", warning, FormatDuration(held))
+					bd := fmt.Sprintf("%s. The warning limit is %s.", d, warning)
+					if customHigh {
+						d = limitWords(s.TempC, thr, "°C") + " for " + FormatDuration(held)
+						bd = d + "."
+					}
+					return Text{Title: title, Detail: d, BannerTitle: bannerTitle, BannerDetail: bd}
+				},
+			})
+		}
+		if serious {
 			out = append(out, Condition{
 				Rule: RuleTempCritical, Entity: s.ID, Severity: SevCritical,
 				For: TempCriticalFor, ClearAfter: TempClearAfter, Link: LinkTemps, StatusNote: note,
 				Render: func(held time.Duration) Text {
-					d := fmt.Sprintf("At or above the %s limit for %s", FormatTemp(limit), FormatDuration(held))
+					d := fmt.Sprintf("At or above the %s limit for %s", FormatTemp(critical), FormatDuration(held))
+					if customCritical {
+						d = limitWords(s.TempC, critical, "°C") + " for " + FormatDuration(held)
+					}
 					return Text{Title: title, Detail: d, BannerTitle: bannerTitle,
 						BannerDetail: d + ". Check cooling and load."}
 				},
@@ -156,8 +172,9 @@ func HostConditions(r *proto.Report) []Condition {
 		if !ok {
 			continue
 		}
-		lvl := WearLevel(w)
-		if lvl == Good {
+		critical, customCritical := limits.threshold(RuleWearCritical, d.Device, WearSeriousPct)
+		warning, customWarning := warningThreshold(limits, RuleWearHigh, d.Device, WearWarnPct, critical)
+		if w < warning-eps && w < critical-eps {
 			continue
 		}
 		dev := d.Device
@@ -165,9 +182,12 @@ func HostConditions(r *proto.Report) []Condition {
 		bannerTitle := title
 		evidence := wearEvidence(d)
 		rule, sev, advice := RuleWearHigh, SevWarning, "Plan to replace it."
-		if lvl == Serious {
+		threshold, custom := warning, customWarning
+		if w >= critical-eps {
 			rule, sev, advice = RuleWearCritical, SevCritical, "Replace the disk soon."
+			threshold, custom = critical, customCritical
 		}
+		evidence = withLimitWords(evidence, w, threshold, "%", custom)
 		bd := advice
 		if evidence != "" {
 			bd = evidence + ". " + advice
@@ -184,10 +204,11 @@ func HostConditions(r *proto.Report) []Condition {
 	// Proxmox storages.
 	for _, v := range spaceEntities(r) {
 		p := v.usedPct()
-		if p < DiskUsedSeriousPct-eps {
+		threshold, custom := limits.threshold(RuleSpaceHigh, v.entity, DiskUsedSeriousPct)
+		if p < threshold-eps {
 			continue
 		}
-		ev := v.evidence()
+		ev := withLimitWords(v.evidence(), p, threshold, "%", custom)
 		name := PlainVolume(v.entity, v.label)
 		title := fmt.Sprintf("%s %s%% full", name, pct0(p))
 		bt := fmt.Sprintf("%s is %s%% full", name, pct0(p))
@@ -236,7 +257,7 @@ func HostConditions(r *proto.Report) []Condition {
 			})
 		}
 	}
-	return append(out, healthConditions(r)...)
+	return append(out, healthConditions(r, limits)...)
 }
 
 // ssdWear returns the wear of an SSD (capped at 100 for display); ok is

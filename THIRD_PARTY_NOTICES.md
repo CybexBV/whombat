@@ -145,6 +145,7 @@ CC0 1.0 Universal. The others:
 | Sonarr | Sonarr's logo (<https://github.com/Sonarr/Sonarr>, a GPL-3.0 project) as 24-unit path data; not from Simple Icons, which has no Sonarr, and where the path data came from isn't recorded | not verified yet |
 | T3 Code | the “T3” of T3 Code's `assets/prod/logo.svg` (<https://github.com/pingdotgg/t3code>), without its black tile | MIT, Copyright (c) 2026 T3 Tools Inc. (the licence text under T3 Code above) |
 | Report tracker | Lucide `inbox` (a tracker connection shows its driver's own logo instead) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
+| Website or address | Lucide `activity` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 
 The marks and the names are trademarks of their owners; showing them names the service or system and implies no
 endorsement.
@@ -316,7 +317,7 @@ Fetched by the Go toolchain; each module's own licence applies.
 
 ### Hermes Agent and agent-browser
 
-`pnpm hermes:install` installs, for development, Hermes Agent 0.23.3 (Nous Research,
+`pnpm hermes:install` installs, for development, Hermes Agent 0.23.4 (Nous Research,
 <https://github.com/NousResearch/hermes-agent>, MIT, below) from its git tag with the Python packages its `uv.lock`
 pins, each under its own licence, and agent-browser 0.26.0 (Vercel, <https://github.com/vercel-labs/agent-browser>,
 Apache-2.0) from the npm registry (`packages/hermes-whombat/agent-browser.json`). The appliance image builds both in

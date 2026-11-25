@@ -157,6 +157,20 @@ describe('Worth a look (CP-06)', () => {
       null,
     );
     expect(quietOutage.map((n) => n.check)).toEqual(['conn.answers']);
+    // A “Website or address” check says it with its own line (`uptime.down`): no second one.
+    expect(
+      genericNotices(
+        {
+          status: 'active',
+          catalogId: 'uptime',
+          glance: { status: 'ok', outcome: 'offline', lines: [], facts: [] },
+          checks: [],
+          label: 'Shop',
+        },
+        0,
+        null,
+      ),
+    ).toEqual([]);
     // Another set of new tools is newer.
     const a = genericNotices({ status: 'active', glance: ok, checks: [], label: 'G' }, 2, null, ['a', 'b']);
     const b = genericNotices({ status: 'active', glance: ok, checks: [], label: 'G' }, 2, null, ['a', 'c']);

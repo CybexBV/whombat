@@ -8,6 +8,7 @@ import type { TrackerItemKind } from '../domain/tracker.js';
 import { globMatch } from '../keys/engine.js';
 import { type FindMyTriggerFacts, findMyTriggerMatches } from './findmy.js';
 import { type MailTriggerFacts, mailTriggerMatches } from './mail.js';
+import { type ThingTriggerFacts, thingTriggerMatches } from './thing.js';
 
 export type TriggerFacts =
   | {
@@ -40,7 +41,8 @@ export type TriggerFacts =
   /** A matching incoming email in a connected mailbox. */
   | MailTriggerFacts
   /** A person's place changed on a Find My connection: the `findmy.place_changed` event. */
-  | FindMyTriggerFacts;
+  | FindMyTriggerFacts
+  | ThingTriggerFacts;
 
 export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts): boolean {
   switch (trigger.kind) {
@@ -82,6 +84,8 @@ export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts):
       );
     case 'mail':
       return facts.kind === 'mail' && mailTriggerMatches(trigger, facts);
+    case 'thing':
+      return facts.kind === 'thing' && thingTriggerMatches(trigger, facts);
     case 'findmy':
       return facts.kind === 'findmy' && findMyTriggerMatches(trigger, facts);
     default:

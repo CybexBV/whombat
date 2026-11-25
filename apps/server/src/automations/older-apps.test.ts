@@ -24,7 +24,9 @@ const kindOf = (o: unknown) => (o as Member).shape.kind.value;
 const union = (members: unknown[]) =>
   z.discriminatedUnion('kind', members as unknown as [Member, ...Member[]]);
 const OlderDefinition = AutomationDefinition.extend({
-  triggers: z.array(union(AutomationTrigger.options.filter((o) => kindOf(o) !== 'mail'))).min(1),
+  triggers: z
+    .array(union(AutomationTrigger.options.filter((o) => !['mail', 'thing'].includes(kindOf(o)))))
+    .min(1),
   steps: z
     .array(
       union(
@@ -276,5 +278,30 @@ describe('what an app below minor 4 gets of Find My automations', () => {
         run: ran,
       });
     }
+  });
+});
+
+it('shows monitoring as plain text on a session below minor 9', () => {
+  const monitoring = AutomationDefinition.parse({
+    ...definition,
+    recipe: undefined,
+    triggers: [{ kind: 'thing', event: 'down', thing: 'server:pve-02', name: 'pve-02' }],
+  });
+  const withThing = {
+    ...automation,
+    definition: monitoring,
+    draft: null,
+    glance: { ...automation.glance, source: 'thing' },
+  };
+  expect(answerFor('automations.get', { automation: withThing }, 8)).toMatchObject({
+    automation: { definition: null, glance: { source: 'message' } },
+  });
+  expect(answerFor('automations.get', { automation: withThing }, 9)).toMatchObject({
+    automation: { definition: monitoring, glance: { source: 'thing' } },
+  });
+  const message = { text: 'I’ll tell you if pve-02 goes down.', card: { kind: 'thing_watch' } };
+  expect(answerFor('messages.thread', { root: message, replies: [message] }, 8)).toEqual({
+    root: { ...message, card: null },
+    replies: [{ ...message, card: null }],
   });
 });

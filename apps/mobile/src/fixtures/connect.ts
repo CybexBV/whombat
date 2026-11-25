@@ -264,6 +264,16 @@ export function createConnectFixtures({ now, json, burrowId }: ConnectFixtureOpt
         `Its certificate can’t be verified: it’s self-signed, expired or for another name. It presents ${DEMO_CERTIFICATE}; if ${entry.name} shows the same fingerprint, use it as the certificate fingerprint.`,
         { certificateSha256: DEMO_CERTIFICATE },
       );
+    // Website or address: a probe runs from this Whombat or a server it watches, asked as
+    // Moneybird's administration is; a check-in always reports to this Whombat.
+    if (catalogId === 'uptime' && (fields.kind ?? 'http') !== 'heartbeat' && !fields.runner)
+      return refusal(json, 409, 'field_choice_needed', 'Choose where Whombat checks it from.', {
+        field: 'runner',
+        options: [
+          { value: 'hub', label: 'This Whombat' },
+          ...['pve-01', 'pve-02', 'thetitan', 'the-falcon'].map((id) => ({ value: id, label: id })),
+        ],
+      });
     if (catalogId === 'moneybird' && !fields.administration)
       return refusal(
         json,

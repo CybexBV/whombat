@@ -40,7 +40,7 @@ import { refreshOf, verdictField } from '../page';
 import { BADGE, layout, SUMMARY_TAB } from '../panels';
 import { thingQuiet, thingStates } from '../quiet/store';
 import type { KindCheck, LooseNotice } from '../quiet/types';
-import { markLines } from '../quiet/wire';
+import { heldPage, markLines } from '../quiet/wire';
 import { clip } from '../words';
 import { feedbackShown, feedbackView, readFeedback } from './feedback';
 import { githubView, readGithub } from './github';
@@ -296,11 +296,20 @@ export async function accountPage(
   if (misplaced.length)
     services.log.warn({ catalogId, problems: misplaced }, 'account page: slots out of place');
   // Worth a look with what is quiet now, and the head from its active lines, as on every connection's page.
-  const marked = await markLines(services.db, view.notices, { quiet, states, now, timeZone });
-  const status: { status: ThingStatus; badge: string } =
+  const marked = await markLines(services.db, view.notices, {
+    quiet,
+    states,
+    now,
+    timeZone,
+    mayEnd: viewer.principal.kind === 'person',
+  });
+  const held = heldPage(
+    marked,
     marked.status === 'ok'
       ? { status: 'ok', badge: FINE }
-      : { status: marked.status, badge: (marked.badge ?? BADGE[marked.status]).slice(0, 60) };
+      : { status: marked.status, badge: (marked.badge ?? BADGE[marked.status]).slice(0, 60) },
+  );
+  const status: { status: ThingStatus; badge: string } = held.head;
   const summary: ThingPagePanel[] = [];
   if (marked.items.length)
     summary.push({
@@ -332,5 +341,6 @@ export async function accountPage(
     readAt: view.readAt ? view.readAt.toISOString() : null,
     ...(view.problem ? { problem: clip(view.problem, 200) } : {}),
     refreshS: refreshOf(view),
+    ...held.fields,
   };
 }

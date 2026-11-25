@@ -57,6 +57,8 @@ export function hostsErrorText(err: HostsError, names: HostsNames = {}): string 
       return `${server} can’t do that: it isn’t a Mac, or its Whombat helper needs an update.`;
   }
   switch (err.code) {
+    case 'limit_changed':
+      return 'The limit changed meanwhile.';
     case 'agent_offline':
       return `${server} isn’t connected right now, so it can’t do that.`;
     case 'server_not_found':

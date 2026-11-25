@@ -158,6 +158,7 @@ func (h *Hub) apiAction(w http.ResponseWriter, r *http.Request, p *principal) er
 	platform, guestID := t.g.Platform, t.g.ID
 	conn := t.conn
 	h.bg.Add(1)
+	h.notePlannedStop(serverID, gid, req.Action)
 	go func() {
 		defer h.bg.Done()
 		start := time.Now()

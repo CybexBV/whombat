@@ -27,7 +27,7 @@ import type { ThingTarget } from './page';
 import { accessItems, BADGE, layout, rangeFields, SUMMARY_TAB } from './panels';
 import { readingKey, readPoints } from './points';
 import { thingQuiet, thingStates } from './quiet/store';
-import { markLines } from './quiet/wire';
+import { heldPage, markLines } from './quiet/wire';
 import {
   avgPeakLines,
   DEFAULT_RANGE,
@@ -190,6 +190,7 @@ export async function devicePage(
     states,
     now,
     timeZone,
+    mayEnd: viewer.principal.kind === 'person',
   });
   const entry = catalogEntry(row.catalogId);
   const slug = slugOf(row);
@@ -258,13 +259,15 @@ export async function devicePage(
     catalogId: 'device',
     name: clip(skill.name, 120),
     icon: deviceIcon(`${skill.name} ${skill.profile.model ?? ''}`),
-    status: marked.status !== 'ok' ? marked.status : status === 'offline' ? 'unknown' : status,
-    badge:
-      marked.status !== 'ok'
-        ? (marked.badge ?? BADGE[marked.status])
-        : skill.lastReadError
-          ? 'Not answering'
-          : BADGE[status],
+    ...heldPage(marked, {
+      status: marked.status !== 'ok' ? marked.status : status === 'offline' ? 'unknown' : status,
+      badge:
+        marked.status !== 'ok'
+          ? (marked.badge ?? BADGE[marked.status])
+          : skill.lastReadError
+            ? 'Not answering'
+            : BADGE[status],
+    }).head,
     facts: facts.slice(0, 6),
     address: `${skill.host}:${skill.port}`,
     runsOn: null,
@@ -272,6 +275,7 @@ export async function devicePage(
     tabs: [{ ...SUMMARY_TAB, panels: layout(summary) }],
     actions: [],
     readAt: readAt ? readAt.toISOString() : null,
+    ...heldPage(marked, { status: 'ok', badge: '' }).fields,
     ...rangeFields(range),
   };
 }

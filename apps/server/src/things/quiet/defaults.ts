@@ -11,6 +11,7 @@
  */
 import { hostCheckStartsOn } from '@whombat/core';
 import type { ThingQuiet } from './store';
+import { holdOf } from './windows';
 
 const table = new Map<string, boolean>();
 
@@ -53,9 +54,17 @@ export function unwatchedIn(quiet: Pick<ThingQuiet, 'ons'>): (check: string) => 
   return (check) => !checkStartsOn(check) && !quiet.ons.some((o) => o.checkId === check);
 }
 
-/** What `applyQuiet` leaves out of a thing: the checks and items switched off, and the checks that start off. */
-export function notWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons'>) {
-  return { offs: quiet.offs, unwatched: unwatchedIn(quiet) };
+/**
+ * What `applyQuiet` leaves out of a thing — the checks and items switched off, and the checks that start off — and what
+ * may hold the whole thing quiet (its windows and its cause).
+ */
+export function notWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons' | 'windows' | 'cause'>) {
+  return {
+    offs: quiet.offs,
+    unwatched: unwatchedIn(quiet),
+    windows: quiet.windows ?? [],
+    cause: quiet.cause ?? null,
+  };
 }
 
 /** Whether a check is currently watched for this thing (starts on unless switched off, or starts off and turned on). */
@@ -66,11 +75,14 @@ export function checkWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons'>, check: str
 
 /**
  * Whether a line is quiet now by its rows alone (no line to compare: a message about it, QN-S19): its check starts off
- * and nobody turned it on, an off of the check or of the item, or an Ignore or snooze of the item still in its time.
+ * and nobody turned it on, the thing is held quiet, an off of the check or of the item, or an Ignore or snooze of the
+ * item still in its time.
  * Worse and newer can't be told here.
  */
 export function quietNow(quiet: ThingQuiet, check: string, subject: string, now: Date): boolean {
   if (unwatchedIn(quiet)(check)) return true;
+  // Kept quiet, or down because of something else: every line of it.
+  if (holdOf(quiet, now)) return true;
   if (quiet.offs.some((o) => o.checkId === check && (o.subject === '' || o.subject === subject))) return true;
   return quiet.quiets.some(
     (q) =>

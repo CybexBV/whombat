@@ -321,6 +321,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'look_report',
       'pin_widget',
       'propose_device_skill',
+      // Keeping a thing quiet for a while, on the person's word.
+      'quiet_until',
       // What the assistant finished, for the desk's Done today (Whombat done-today.md DN-01).
       'report_done',
       'set_chat_title',
@@ -332,12 +334,16 @@ describe('the assistant’s tools (AG-18)', () => {
       // Sharing a thread by link, always on the person's yes (Whombat share-links.md).
       'share_link',
       'start_guide',
+      'thing_watch',
       // 0.112.0 (CT-782): the assistant runs its person's Vault.
       'vault_add_server',
       'vault_ask',
       'vault_save',
       // What Whombat watches, switched on the person's word (Whombat on-purpose.md).
       'watch_checks',
+      // How everything is and what went wrong, read-only.
+      'watch_history',
+      'watch_status',
       // This Whombat's own backups, on the person's yes (Whombat first-day.md).
       'whombat_backup',
     ]);

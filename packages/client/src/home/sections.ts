@@ -131,6 +131,22 @@ export interface HomeThingRow {
   word: string;
   /** Why it isn't connected, in a few plain words (at most `STATUS_REASON_MAX`); null when it is or nobody knows. */
   reason: string | null;
+  /** Down because of something else and not kept quiet (`notAnswering`): grey, yet it doesn't work. */
+  notAnswering: boolean;
+}
+
+/**
+ * Whether a thing is down because of something else (its server down, its machine stopped, the internet down) and not
+ * kept quiet now. Its dot is grey, since the problem is its cause's, but it doesn't work, so Overview's counts take it
+ * as not answering. A thing kept quiet counts as its dot says whatever stopped it: the person chose not to hear about
+ * it until then, and its tile says the window. One only quiet with its server isn't down.
+ */
+export function notAnswering(
+  thing: Pick<ThingSummary, 'causedBy' | 'quietUntil'>,
+  now: Date | number,
+): boolean {
+  if (!thing.causedBy || thing.causedBy.kind === 'quiet') return false;
+  return !(thing.quietUntil && Date.parse(thing.quietUntil) > toDate(now).getTime());
 }
 
 /** A row's figure in words: its value, its note and its label (“169 of 171 integrations”, “38 devices”). */
@@ -187,6 +203,7 @@ export function homeThingRows(
       status: t.status,
       href: t.href,
       ...thingStatusView(t),
+      notAnswering: notAnswering(t, now),
       label: [
         t.name,
         figures.length ? state?.toLowerCase() : null,

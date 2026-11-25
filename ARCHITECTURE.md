@@ -844,7 +844,16 @@ published automation details read their definition and publisher from one versio
   merge); the agent proposes one when it fits.
 - **Triggers** read the signed `events` table after a durable cursor (messages, reactions, mirrored pull requests
   and issues of watched repositories, report trackers' reports, matched incoming emails of watched mailboxes), plus
-  schedules (cron in a time zone) and Run now. Webhook triggers are refused: nothing from outside reaches the box. Runs
+  schedules (cron in a time zone) and Run now. A `thing` trigger listens to signed starts, escalations or ends of
+  incidents for one thing or selected kinds; one that names a check starts on any event carrying it (the incident's
+  own, or a bad check that began counting on it later). The engine claims each incident once per automation. A delayed
+  claim survives a restart and runs only while the incident is still open, independent and not kept quiet at its
+  deadline (a window that came and went meanwhile doesn't count), and, as the
+  incident watcher reads the thing then, a `down` one only while it still doesn't answer and a `problem` one only while
+  the check it waited on (the trigger's, else the event's) is still bad, however late the engine reaches it. If the
+  thing or its check is unread, the engine reads it again each minute and gives up an hour past the deadline. Until the release a box would go back to
+  knows them (`0027_incident_automation_watches` in
+  `runtime_releases`), such automations aren't made, events claim no incident and start no run, and their runs wait. Webhook triggers are refused: nothing from outside reaches the box. Runs
   are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
   start nothing.
   Cron catch-up parses once per call, reuses at most three days' computed instants and searches them by position,
@@ -1403,8 +1412,18 @@ Setup and operation: `docs/github.md`.
   name ([accounts.md](docs/decisions/accounts.md)).
 - **Servers** (`apps/server/src/hosts/`): the hosts service (`hosts/`, the program `whombat-hosts`) owns the agents on monitored servers, their
   history, alerts and consoles; the server talks to it over its socket, signs every change the person makes, relays
-  consoles through the session, and gives the agent the built-in Servers connection, which acts without asking
-  unless the person sets a server to ask before risky actions; powering off, restarting or updating the server this
+  consoles through the session. The hub's SQLite database tracks additive migrations by id and keeps
+  `user_version` for schema changes the previous hub cannot use. A new or edited probe waits for a result from its
+  current settings. The hub measures that wait from when the settings took effect and corrects agent result times for
+  clock skew.
+  It holds alerts when a result goes stale and closes the previous probe's alerts when its settings change.
+  A check-in gets a full period and grace time when it starts or resumes. Temperature warning text reports the
+  effective warning limit.
+  Connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
+  automatically runs out of memory or an autostart libvirt VM crashes and stays stopped. Stops the hub requested
+  stay quiet, and a report showing the guest running clears its planned-stop note. The server gives the agent the
+  built-in Servers connection, which acts without asking unless the person sets a server to ask before risky actions. Powering off,
+  restarting or updating the server this
   Whombat runs on always asks. A server's name, which the person can give it (“Attic server”), is Whombat's own
   (`server_names`, `hosts/names.ts`): read into memory with every fleet read, so every word a person reads uses it
   (`serverLabel`), while links, the hosts service and the tools keep the id and also find the server by the name
@@ -1455,6 +1474,20 @@ Setup and operation: `docs/github.md`.
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
   ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md),
   [findmy-timeline.md](docs/decisions/findmy-timeline.md), [findmy-watch.md](docs/decisions/findmy-watch.md)).
+- **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
+  port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
+  from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.
+  Saving edited check settings clears its result, line states and cause, and ends its open outage quietly, in the
+  same commit. Home shows “Not checked yet” until the next reading.
+  Name lookups succeed when the chosen runner finds an IPv4 or IPv6 address. The hub stores the dual-family
+  setting separately from the A record type a rolled-back hub reads. The health pass reads the current result,
+  counts any probes the hub recorded as failed since the last pass in uptime history, including HTTP errors,
+  and repairs a missing check. Check again reports the saved check's current result. Disconnect removes the connection
+  and tries to delete its hub check. The health pass removes checks whose connection is gone. Its hub id is kept on the connection
+  and the hub knows its owner, so only the connection's own lines reach Inbox and Watch. The assistant can ask the
+  person to start one on a chat card (`connection_add`) and read the latest result (`uptime_status`). The page's
+  Summary has its status and answer time. The person's check-in page also shows the command for the LAN listener,
+  using the listener's pinned public key. The catalog offers this form from session minor 9.
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly
@@ -1503,6 +1536,12 @@ Setup and operation: `docs/github.md`.
   heads-ups said once ([plain-words.md](docs/decisions/plain-words.md)). The web draws what is wrong now first, the worst
   first, and the heads-ups after it under SOON, each line's way forward only “Ask {assistant}” or “Show”
   ([ui-refresh-chat.md](docs/decisions/ui-refresh-chat.md)).
+  The health pass filters to eligible connections before it takes a batch. A check that answers while its kind's
+  details stay unreadable for an hour gets a heads-up until a read works. A known machine's card says when it was
+  last backed up, when its last attempt failed, or that no job covers it. The overdue line uses the last successful
+  backup from the job or its stored backup volumes. A covered machine with a failed attempt and an empty inventory
+  of usable backups also gets the line. A failed inventory read skips the overdue check. When the machine lookup
+  times out or fails, the health pass keeps the last mapping for cause matching.
 - **What Whombat watches** starts calm: every check of a kind, a device, a mail account or a server says whether it
   starts on (`startsOn`), and only the very important ones Whombat can act on do. A check that starts off is left out
   everywhere, as one switched off, until the person turns it on (`watch_ons`); `things/quiet/defaults.ts` keeps the
@@ -1511,8 +1550,55 @@ Setup and operation: `docs/github.md`.
   An Ignore ends when its line gets worse or is gone for 12 passes in a row (`FIXED_PASSES`, about an hour). The
   assistant reads and switches checks with `watch_checks` (`things/quiet/agent.ts`), switching only when the person's own
   message started the turn; the switch is the person's, recorded with the assistant on it (`things.watch`) and an Undo.
+  Each server can set or clear alert limits for disk use, inodes, SSD wear and temperatures
+  (`things.setWatchLimit` or `watch_checks` on the person's word). An item can have its own limit. The hosts service
+  keeps the limits with the server's watch settings and applies changes to its latest readings. Alerts that fall
+  below their new limit resolve right away. Temperature and SSD wear warnings must use a lower limit than their
+  critical alerts. SSD wear uses its 75 % default warning when there is no custom warning, and temperature defaults
+  follow their sensor. Whombat signs the change with Undo.
   Inbox items carry the check behind them (`watch`) for *Stop watching this*.
   [on-purpose.md](docs/decisions/on-purpose.md)
+- **Keep quiet for a while** (`things/quiet/windows.ts`, `window-service.ts`, `window-commands.ts`,
+  `window-work.ts`): a server, connection or device is kept quiet until a time with an optional note
+  (`things.keepQuiet`, End now `things.endQuiet`, the assistant's `quiet_until` only on the person's word), a signed
+  change of the person's (`quiet_windows`). Keeping quiet again changes the person's own window, never Whombat's; the
+  answer carries the change, and its Undo (`changes.undo`) puts the person's earlier window back, or ends the one it
+  made, unless the window changed again since (its count of changes, `revision`, moved on). While a window holds, `applyQuiet` keeps every line of the
+  thing quiet with it, so pages, dots, the desk's looks and the Inbox follow, and the health pass forgets the lines'
+  counts: what is still wrong when it ends counts again from the start. The page carries `keptQuiet` and a heads-up
+  first line (“Quiet until 23:00 · Moving the NAS”); Home's thing carries `quietUntil` (servers, devices and accounts
+  too). A server's window is also a maintenance window in the hosts service, made before the commit for its end and
+  given back when it ends (End now, or the minute's sweep); one a window no longer names (it got a new end, with a new
+  one or none when the hub couldn't make it) stays in `quiet_maintenance_left`,
+  written with the change, until the hub confirms it is gone; whether or not the hub muted them, the server's open alerts are held with the window
+  (`NoticeQuiet.held`, no longer asking for attention, out of the Inbox), and Undo on one ends the window. Whombat's own
+  restarts (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends)
+  keep the server or machine quiet the same way, in a window of their own beside the person's, noted “Whombat is
+  updating it” (the same work again on this Whombat moves its end; a later end gets a new maintenance window); End now
+  ends every window holding the thing. GitHub's and Website feedback's quiet rows stay through the hourly sweep while they are
+  connected. Every window write goes through the commit pipeline, and
+  Home hears when a work's end moves or a window runs out (the minute's sweep).
+  [monitoring.md](docs/decisions/monitoring.md)
+- **One cause, one message** (`things/causes.ts`): every minute a job finds what each connection is down because of —
+  its server offline, its machine stopped, its server or machine kept quiet, or the box's way out failing for one on an
+  internet address — from the machine its last health pass found it on (`ConnectionGlance.machine`, kept while it
+  doesn't answer; a “Website or address” check by its own address field), and keeps it in `thing_causes`. A connection
+  that answers, also with an error, is down because of nothing. A fleet or a
+  server's machines that can't be read leave the kept causes as they are until they age out. The quiet reads bring it
+  with the thing's quiet rows: its lines are
+  quiet with the cause's words, its dot is grey and its page and Home's thing say “Not answering while pve-02 is down”
+  (`causedBy`; Overview's counts take it as not answering unless it is kept quiet), and the cause's Inbox item and
+  desk look name what it takes with it (“Plex and 4 more are down with
+  it”), counting only causes the job confirmed lately, as the things themselves do. Servers held by a parent stay grouped by the hosts service.
+- **Whombat's own way out** (`managed/way-out.ts`): every minute the server process checks its router (the default
+  gateway from its own `/proc/self/net/route`, which the unit's `ProcSubset=pid` keeps; a TCP connect where a refusal
+  counts) and the internet (TCP connects to Whombat's own service and an anycast address, by their last address) at the
+  same time, and name lookups (the system resolver, always with one fixed name). The internet is down when nothing
+  outside answers, the router's fault only when a known gateway doesn't answer either; without a gateway the router
+  isn't judged. With only name targets, none ever resolved, failing lookups are name lookups' fault. A step failing for two minutes is an outage (`way_out_outages`, included in all-things `watch_history`) and one Inbox item
+  that starts on (“The internet is down since 14:02”), listing the connections down with it. It ends at the first pass
+  where its own step works: every step working, or a later step failing instead, which confirms on its own. A development box and
+  tests never probe unless `WHOMBAT_WAY_OUT=on`.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
   addresses only, the resolved address pinned, no redirects, a size cap); link previews and the Vault add their own
   destination rules. A single UDP datagram and its answer (a console's discovery) go through `outboundDatagram` under
@@ -1623,6 +1709,62 @@ Setup and operation: `docs/github.md`.
   it while it waits, leaves the server's missing backups to it, and never counts it against the day. A look that goes, gets worse or gains a line it didn't cover ends its research, and its
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
   back at once, without a message or a turn.
+- **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
+  beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
+  for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;
+  amber opens none, a problem that goes down becomes a `down` one; a pass that couldn't read a thing between two that
+  saw its look keeps its run, and down time starts after the last such pass. The incident keeps when it stopped
+  answering (`down_since`), which starts the delay for `thing.down` automations and counts toward downtime; once the
+  thing answers again while a problem keeps the incident open, it keeps each stretch it didn't answer
+  (`down_stretches`), and only those count. Whether it is over is read from the thing itself, not its dot
+  (`observeThings`), and only by the incident's own checks: a server from the hosts service's own list (online, without
+  an open critical alert of one of those checks whoever ignored or snoozed it; one still being added says nothing), a
+  connection's last check (its outcome and its lines of those checks, before the quiet rows; one that answered without
+  reading a check the incident is about says nothing), a device's last read, made after any hold over it ended,
+  and the person's accounts from their own records (Google, Microsoft 365 and Email signed in; GitHub and Website
+  feedback there). Two passes in a row that see it fine end it, at the first of them; one that sees it still bad
+  underneath (not answering, a line someone quieted or switched off, kept quiet, down because of something else) starts
+  the count again; one that couldn't read it counts neither way. A thing that was removed ends its incident at once
+  without `thing.back`, and its watches stop with a short line. Saving a Website or address check's new settings ends
+  its open incident the same quiet way in the edit's commit (its push withdrawn, its delayed starts dropped), and the
+  watcher counts the new target's looks from the start, also a run that began before the edit without an incident
+  yet; the check keeps when its target changed (`hub_check_changed_at`) when Whombat makes the hub's check again. A
+  pass that can't read Home keeps only what the watcher knew of the open incidents, as a pass that couldn't read their
+  things; right after a restart it starts that from the open incidents themselves.
+  On a Whombat's first incidents, what the watcher's first pass after its start already saw opens as told, so the
+  update itself pushes nothing. Opening signs `thing.down` or `thing.problem`, every other bad check counting on it,
+  then or later, `thing.problem` once with that check (`incidents.checks`), ending `thing.back` (`ThingIncidentEvent`,
+  by the Servers signer, no text), for automations and one-time watches, and tells Home's `things` (an open page's
+  “What happened” reads again). In the
+  person's Chat, `thing_watch` adds a Cancel card and stores a watch for one thing to go down or come back. Matching
+  incidents claim it in the same commit as the event. A `back` watch of a thing without an outage of its own (down
+  because of its server, or not seen) happens when the watcher sees it answering again. Whombat replies once in the same
+  thread, also when a watch expires, without starting an agent turn. A watch of a state already seen answers
+  immediately. An incident open 10 minutes about which no research finding pushed is pushed once as the person's
+  “Needs you” row (“Plex is down”, “3 things are down: …”, worded as each thing's look is on that pass), with the
+  others that started within 5 minutes of it (up to 200 in one push); only while its thing is still bad on that pass,
+  never while it is kept quiet or down because of something else (`DeskLook.causedBy`), nor once a research finding
+  pushed about it (both checked again in the push's commit, whose words name only what is left), nor one more than an
+  hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold over it
+  ended or the last pass that couldn't read it when that is later. A research finding that comes after its thing's
+  outage pushed, while that outage is open or once it ended during the research, lands in the Inbox without a push and
+  doesn't count as pushed; while an outage of the thing that hasn't pushed is open, the finding's push stands in for it.
+  A finding's Inbox row commits with its report; an incident push's row and its realtime frame commit with the incidents' push marks,
+  leaving a failed insert for a later pass to retry. The phone uses the usual background push sender.
+  The tap opens the thing's look thread, else its page (the Inbox
+  for several). When the last incident a push named ends, its row is read and a managed box clears the phone's
+  notification. The connection health pass and device reader store whether each check answered (`up`, 1 or 0).
+  Fresh account reads from the page, desk and mail count, and GitHub's own repository sync, keep one sample
+  per five minutes in `account_uptime_points`. Website feedback reads local reports and has no reachability check.
+  The hourly roll-up keeps the average and the reading count. Live points weigh up to seven and a half minutes.
+  A rolled hour weighs five minutes per reading, up to an hour. Older hourly points without a count weigh one reading.
+  Each page with uptime data says its week in one line (`uptime`, also one of a page's facts).
+  A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
+  Each uptime line counts down stretches and minutes from the start it shows.
+  `things.history` lists a thing's incidents over 30 or 90 days. A server's history includes alerts that were open
+  during the period, including alerts that began earlier, or says when its own alerts couldn't be read.
+  The assistant reads this with `watch_status` and `watch_history` (`incidents/agent.ts`).
+  `watch_status` lists quiet windows for whole things.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the

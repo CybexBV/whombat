@@ -176,6 +176,7 @@ func (h *Hub) dataRoutes(handle func(pattern, role string, f handlerFunc)) {
 	handle("POST /api/v1/servers/{id}/exec", viewer, h.apiExec)
 	handle("POST /api/v1/servers/{id}/screen", viewer, h.apiScreen)
 	handle("GET /api/v1/checks", viewer, h.apiChecks)
+	handle("GET /api/v1/checks/{id}", viewer, h.apiGetCheck)
 	handle("POST /api/v1/checks", admin, h.apiCreateCheck)
 	handle("PATCH /api/v1/checks/{id}", admin, h.apiPatchCheck)
 	handle("DELETE /api/v1/checks/{id}", admin, h.apiDeleteCheck)
@@ -285,6 +286,16 @@ func (h *Hub) apiServer(w http.ResponseWriter, r *http.Request, p *principal) er
 	}
 	d := model.BuildDetail(st, now, model.DetailInput{Range: spec.Name, SensorMax: max, RoleRank: p.rank(),
 		NodeAgents: h.nodeAgents(), HubVersion: Version, InsecureTransport: h.consoleTransport(r) != nil})
+	if !st.ReportAt.IsZero() {
+		first, err := h.store.FirstMetricAt(r.Context(), st.ID, proto.SeriesCPU)
+		if err != nil {
+			return err
+		}
+		if first.IsZero() || first.After(st.ReportAt) {
+			first = st.ReportAt
+		}
+		d.Server.FirstReportAt = model.T(first)
+	}
 	if d.MacOS != nil {
 		// Whombat Helper: the hub's build and how this Mac's follows it.
 		man, manErr := h.manifest()

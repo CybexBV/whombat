@@ -5,7 +5,7 @@
  * server's sentence.
  */
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { AgentScheduleView, Burrow, FindMyWatchView } from '@whombat/core';
+import type { AgentScheduleView, Burrow, FindMyWatchView, ThingWatchView } from '@whombat/core';
 import { type AnyEndpoint, api } from '@whombat/core/contracts';
 import type { CallInput, CommitResult, ResponseData } from '../http/types';
 import { patchMessages } from '../query/apply';
@@ -97,6 +97,14 @@ export function applyFindMyWatch(qc: QueryClient, watch: FindMyWatchView): void 
  */
 export function useFindMyWatchCancel() {
   return useWrite(api.connections.findMyWatchCancel, applyFindMyWatch);
+}
+
+export function applyThingWatch(qc: QueryClient, watch: ThingWatchView): void {
+  patchMessages({ qc }, (m) => patchCard(m, cardPatchers.thingWatch(watch)));
+}
+
+export function useThingWatchCancel() {
+  return useWrite(api.things.cancelWatch, applyThingWatch);
 }
 
 /* The LAN switch (RA-41) ------------------------------------------------------------------------------------------ */

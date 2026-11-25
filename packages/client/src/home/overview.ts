@@ -7,6 +7,7 @@
 import type { ThingSummary } from '@whombat/core';
 import type { HostServer } from '@whombat/core/domain';
 import { overviewServersLine } from '../hosts/overview';
+import { thingStateWords } from './monitoring';
 import { type HomeSection, type HomeThingRow, thingFigurePhrase, usedPhrase } from './sections';
 import { sortByStatusLevel, statusSummary } from './statusLevel';
 import { type ConnectionsTab, type ConnectionsTabView, connectionsTabs, OVERVIEW_WORDS } from './tabs';
@@ -55,10 +56,32 @@ export function overviewSections(
     }
     if (tab.key === 'services') {
       const rows = sections.find((s) => s.kind === 'things')?.rows ?? [];
-      return { ...tab, anchor: ANCHORS.services, summary: statusSummary(rows.map((r) => r.level)) };
+      // One down because of something else is grey, but it isn't connected: the line says so as the count does.
+      const down = rows.filter((r) => r.notAnswering && r.level === 'connected');
+      const rest = rows.filter((r) => !down.includes(r)).map((r) => r.level);
+      return { ...tab, anchor: ANCHORS.services, summary: statusSummary(rest, down.length) };
     }
     return { ...tab, anchor: ANCHORS.pinned, summary: OVERVIEW_WORDS.fromYourChats };
   });
+}
+
+/**
+ * “Quiet until 23:00” for each server kept quiet now, by its thing id (`server:pve-02`), from Home's things: the fleet's
+ * rows don't carry a window. A server's row or card says it under its system line.
+ */
+export function serverQuietWords(
+  things: readonly Pick<ThingSummary, 'id' | 'kind' | 'quietUntil'>[] | null | undefined,
+  now: Date | number,
+  timeZone: string,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const at = typeof now === 'number' ? now : now.getTime();
+  for (const t of things ?? []) {
+    if (t.kind !== 'server' || !t.quietUntil || Date.parse(t.quietUntil) <= at) continue;
+    const words = thingStateWords({ quietUntil: t.quietUntil }, now, timeZone);
+    if (words) out.set(t.id, words);
+  }
+  return out;
 }
 
 /**
@@ -91,6 +114,11 @@ export interface OverviewTile {
   used: string | null;
   /** The tile's accessible name: its name, its state when not fine, the line, what it is and when it was used. */
   label: string;
+  /**
+   * Down because of something else (`cause`: “Not answering while pve-02 is down”) or kept quiet (`quiet`: “Quiet until
+   * 23:00”): the line says so whatever else the tile could show. Null otherwise.
+   */
+  held: 'cause' | 'quiet' | null;
 }
 
 /** What a tile says when the Whombat didn't say why: something the person can act on. A tile's line has no full stop. */
@@ -118,16 +146,23 @@ export function learningLine(assistant: string | null | undefined): string {
  */
 export function overviewTiles(
   rows: readonly HomeThingRow[],
-  things: readonly Pick<ThingSummary, 'id' | 'usedAt'>[],
+  things: readonly Pick<ThingSummary, 'id' | 'usedAt' | 'causedBy' | 'quietUntil'>[],
   now: Date | number,
   timeZone: string,
   assistantName: string | null | undefined,
 ): OverviewTile[] {
-  const usedAt = new Map(things.map((t) => [t.id, t.usedAt]));
+  const byId = new Map(things.map((t) => [t.id, t]));
   return sortByStatusLevel(rows, (r) => r.level).map((row) => {
     let line: OverviewTile['line'];
     let usedSubtitle = false;
-    if (row.level === 'notWorking' || row.level === 'needsLook') {
+    const thing = byId.get(row.id);
+    const heldWords =
+      thing && (thing.causedBy || thing.quietUntil) ? thingStateWords(thing, now, timeZone) : null;
+    // Its cause's grey only when the cause's words are what it says: a window someone chose comes first.
+    const held = heldWords ? (heldWords === thing?.causedBy?.words ? 'cause' : 'quiet') : null;
+    if (heldWords) {
+      line = { text: heldWords, tone: 'mut' };
+    } else if (row.level === 'notWorking' || row.level === 'needsLook') {
       const tone: OverviewTileTone = row.tone === 'bad' ? 'bad' : row.tone === 'warn' ? 'warn' : 'mut';
       const text = row.reason ? tileReason(row.reason) : (NO_REASON[row.status] ?? row.word);
       line = { text, tone };
@@ -141,12 +176,22 @@ export function overviewTiles(
     } else {
       line = { text: 'Connected', tone: 'plain' };
     }
-    const at = usedAt.get(row.id);
+    const at = thing?.usedAt;
     const used = at ? upFirst(usedPhrase(at, now, timeZone)) : null;
-    const what = usedSubtitle ? null : row.subtitle;
+    // The held words are the line already: the foot doesn't say them again (a thing down because of something else
+    // has them as its own line too).
+    const what = usedSubtitle
+      ? null
+      : heldWords && row.subtitle
+        ? row.subtitle
+            .split(' · ')
+            .filter((part) => part !== heldWords)
+            .join(' · ') || null
+        : row.subtitle;
     return {
       row,
       line,
+      held,
       what,
       used,
       label: [row.name, row.level === 'connected' ? null : row.word.toLowerCase(), line.text, what, used]

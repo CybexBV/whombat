@@ -17,6 +17,7 @@ import {
   resolveCheckPath,
   type SignInKind,
   sessionCredential,
+  type UptimeHubCheck,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { catalogConnections } from '../db/schema/index';
@@ -41,6 +42,7 @@ import {
 import { socketLogin } from './socket/call';
 import { socketCheck, socketCheckOf } from './socket/check';
 import type { CatalogConnectionRow } from './types';
+import { pollUptimeCheck, uptimeRunners, uptimeState, uptimeUnseen } from './uptime';
 
 /** How one request proves who it is (`tokenCredential`, or an OAuth access token as bearer). */
 export interface CheckCredential {
@@ -61,6 +63,8 @@ export interface CheckCredential {
 export const NO_CREDENTIAL: CheckCredential = { headers: {}, query: {} };
 
 export interface CheckOutcome {
+  /** The hub's reading for a saved Website or address connection. */
+  uptime?: UptimeHubCheck | null;
   ok: boolean;
   /** The service refused the credential (401/403): the token is wrong or was revoked. */
   refused: boolean;
@@ -88,6 +92,11 @@ export interface CheckOutcome {
    * every later check that passed (`recordFromCheck`).
    */
   fromCheck?: Record<string, string>;
+  /**
+   * Whombat couldn't run the check now (the server it runs from isn't reporting): the time counts neither as up nor as
+   * down.
+   */
+  unseen?: true;
 }
 
 function withQuery(url: string, query: Record<string, string>): string {
@@ -214,7 +223,7 @@ async function mcpCheck(
 export function checkKindFor(
   entry: CatalogEntry,
   kind: SignInKind,
-): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | 'mac' | 'onepassword' | null {
+): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | 'mac' | 'onepassword' | 'uptime' | null {
   if (socketCheckOf(entry)) return 'socket';
   if (kind === 'mcp_oauth' || (kind === 'none' && connectionTransport(entry, kind) === 'mcp')) return 'mcp';
   return entry.check?.kind ?? null;
@@ -227,6 +236,9 @@ export interface RunCheckInput {
   mcpUrl: string | null;
   fields: Readonly<Record<string, string>>;
   credential: CheckCredential;
+  burrowId?: string;
+  connectionId?: string;
+  uptimePassAt?: Date;
 }
 
 /** Runs the entry's check once with this credential. Never throws for the service's answers. */
@@ -242,6 +254,7 @@ export async function runCatalogCheck(services: Services, input: RunCheckInput):
   if (kind === 'driver') return runDriverCheck(services, input);
   // A connection through a Mac (Find My) is checked against the hosts fleet, never over the network.
   if (kind === 'mac') return runMacConnectionCheck(services, input);
+  if (kind === 'uptime') return runUptimeConnectionCheck(services, input);
   // 1Password signs in only through its own SDK, in the sync's worker process: nothing is sent to its base URL.
   if (kind === 'onepassword') return runOnePasswordCheck(services, input);
   // A secret of another shape may have its own request (SG-12: Mollie's access tokens); a password never does.
@@ -327,6 +340,32 @@ async function runMacConnectionCheck(services: Services, input: RunCheckInput): 
     message: null,
     json,
     checks: [{ id: 'credential', state: 'ok', message: null }],
+  };
+}
+
+async function runUptimeConnectionCheck(services: Services, input: RunCheckInput): Promise<CheckOutcome> {
+  if (!input.connectionId) {
+    const json = await uptimeRunners(services, input.burrowId ?? '');
+    return { ok: true, refused: false, status: null, message: null, json, checks: [] };
+  }
+  const check = await pollUptimeCheck(services, input.connectionId, input.uptimePassAt);
+  const unseen = uptimeUnseen(check);
+  const ok = !unseen && check?.status === 'up';
+  return {
+    ok,
+    ...(unseen ? { unseen: true } : {}),
+    uptime: check,
+    refused: false,
+    status: null,
+    message: null,
+    json: null,
+    checks: [
+      {
+        id: 'destination',
+        state: unseen ? 'warning' : ok ? 'ok' : 'error',
+        message: uptimeState(check, input.fields.kind === 'heartbeat'),
+      },
+    ],
   };
 }
 

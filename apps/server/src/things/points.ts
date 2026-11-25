@@ -1,14 +1,15 @@
 /**
  * Figures over time per connection (connection-pages.md CP-15; dashboards.md DS-11; dashboards-server.md DS-S03): the
- * health pass stores its check's response time (`rtt_ms`, null when it failed), the machine's disk (`disk_pct`,
+ * health pass stores its check's response time (`rtt_ms`, null when it failed) and whether it answered (`up`), the machine's disk (`disk_pct`,
  * `disk_gb`), Home Assistant's log errors and database (`log_err`, `log_err_top`, `db_mb`), UniFi's internet line,
  * gateway and clients, a NAS's used space (`nas_used_gb`), a device's numeric readings (`r_<key>`). Kept 30 days: 5-minute points for 48 hours, then one an
  * hour (their average, on the hour); the hourly job rolls them up and removes older ones. A page reads them back on its
  * range's grid (`series.ts`).
  */
 import { and, asc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { outsideCommandScope } from '../commit/scope';
 import type { Db, Tx } from '../db/client';
-import { connectionPoints } from '../db/schema/index';
+import { accountUptimePoints, connectionPoints } from '../db/schema/index';
 import type { Services } from '../services';
 import type { RawPoint } from './series';
 
@@ -16,11 +17,25 @@ export type { RawPoint } from './series';
 
 /** How long points are kept (DS-11). */
 export const POINTS_KEEP_MS = 30 * 24 * 3600_000;
+/** How often the health pass records a point. */
+export const HEALTH_POINT_MS = 5 * 60_000;
 /** How long 5-minute points stay before they are rolled into hours. */
 export const POINTS_FINE_MS = 48 * 3600_000;
+const HOUR_MS = 3600_000;
+
+/** An hour rolls up once it is old enough in full. */
+export const pointRollupBefore = (now: Date) =>
+  Math.floor((now.getTime() - POINTS_FINE_MS) / HOUR_MS) * HOUR_MS;
 
 /** The response time key (ms; null: the check failed). */
 export const RTT_KEY = 'rtt_ms';
+/**
+ * Whether the check answered: 1 or 0 each pass, none when Whombat couldn't run
+ * it. An hour rolled up keeps the share it answered, so short outages stay in the uptime.
+ */
+export const UP_KEY = 'up';
+/** How many readings an hourly uptime point covers. */
+export const UP_COUNT_KEY = 'up_n';
 /** The machine it runs on: its disk used, in percent and in GB (CP-08). */
 export const DISK_PCT_KEY = 'disk_pct';
 export const DISK_GB_KEY = 'disk_gb';
@@ -100,33 +115,105 @@ export async function readPoints(
   return out;
 }
 
+type AccountUptimeOwner = { connectionId: string } | { githubBurrowId: string };
+
+/** A fresh account read counts at most once per five minutes, even when several parts are read. */
+export async function recordAccountUptime(
+  services: Services,
+  owner: AccountUptimeOwner,
+  up: 0 | 1,
+): Promise<void> {
+  const at = new Date(Math.floor(services.clock().getTime() / HEALTH_POINT_MS) * HEALTH_POINT_MS);
+  const points = accountUptimePoints;
+  await outsideCommandScope(() =>
+    services.pipeline.transactAccount(async (tx) => {
+      await tx
+        .insert(points)
+        .values({ ...owner, at, up })
+        .onConflictDoUpdate({
+          target: [points.connectionId, points.githubBurrowId, points.at],
+          set: { up: sql`greatest(${points.up}, excluded.up)` },
+          // Concurrent reads can finish in either order. One working read establishes that the account answered.
+          setWhere: sql`${points.samples} is null and ${points.up} < excluded.up`,
+        });
+    }),
+  ).catch((err) => services.log.debug({ err: String(err) }, 'account uptime: reading could not be saved'));
+}
+
+export async function readAccountUptime(db: Db, owner: AccountUptimeOwner, from: Date) {
+  const points = accountUptimePoints;
+  return db
+    .select({ at: points.at, value: points.up, samples: points.samples })
+    .from(points)
+    .where(
+      and(
+        'connectionId' in owner
+          ? eq(points.connectionId, owner.connectionId)
+          : eq(points.githubBurrowId, owner.githubBurrowId),
+        gte(points.at, from),
+      ),
+    )
+    .orderBy(asc(points.at))
+    .limit(2000);
+}
+
 /**
- * The hourly job (DS-11): points older than 30 days go; points older than 48 hours become one an hour per key — their
- * average (null when none of them had a value), on the hour. An hour already rolled up stays as it is.
+ * Points older than 30 days go. Points older than 48 hours become hourly averages. Keep the number of uptime
+ * readings too, so an hour with just one reading doesn't weigh as much as an hour with twelve.
  */
 export async function rollUpPoints(services: Services, now = services.clock()): Promise<void> {
   const keepFrom = new Date(now.getTime() - POINTS_KEEP_MS);
-  const fineFrom = new Date(now.getTime() - POINTS_FINE_MS);
+  const fineFrom = new Date(pointRollupBefore(now));
   await services.pipeline.transactAccount(async (tx) => {
     await tx.delete(connectionPoints).where(lt(connectionPoints.at, keepFrom));
-    // Each hour (UTC, whatever the session's zone) with more than one point, or one point off the hour, becomes one
-    // point on the hour. The deleted rows feed the insert: the same statement, so an hour is never half rolled up.
+    await tx.delete(accountUptimePoints).where(lt(accountUptimePoints.at, keepFrom));
+    // The deleted rows feed the insert, so the average and the count are saved together.
     await tx.execute(sql`
-      WITH hours AS (
-        SELECT connection_id, key, date_bin('1 hour', at, TIMESTAMPTZ '2000-01-01 00:00:00+00') AS hour
-        FROM connection_points
-        WHERE at < ${fineFrom.toISOString()}::timestamptz
+      WITH old_points AS (
+        SELECT connection_id, key, at, date_bin('1 hour', at, TIMESTAMPTZ '2000-01-01 00:00:00+00') AS hour
+        FROM connection_points WHERE at < ${fineFrom.toISOString()}::timestamptz AND key <> ${UP_COUNT_KEY}
+      ), hours AS (
+        SELECT connection_id, key, hour FROM old_points p
         GROUP BY 1, 2, 3
-        HAVING count(*) > 1 OR bool_or(at <> date_bin('1 hour', at, TIMESTAMPTZ '2000-01-01 00:00:00+00'))
+        HAVING count(*) > 1 OR bool_or(at <> hour)
+          OR (key = ${UP_KEY} AND NOT EXISTS (
+            SELECT 1 FROM connection_points n WHERE n.connection_id = p.connection_id
+              AND n.key = ${UP_COUNT_KEY} AND n.at = p.hour
+          ))
       ), moved AS (
         DELETE FROM connection_points p
         USING hours h
         WHERE p.connection_id = h.connection_id AND p.key = h.key
           AND date_bin('1 hour', p.at, TIMESTAMPTZ '2000-01-01 00:00:00+00') = h.hour
-        RETURNING p.connection_id, p.key, h.hour, p.value
+        RETURNING p.connection_id, p.key, h.hour, p.at, p.value
+      ), totals AS (
+        SELECT m.connection_id, m.key, m.hour,
+          sum(m.value * coalesce(n.value, 1)) / nullif(sum(coalesce(n.value, 1)) FILTER (WHERE m.value IS NOT NULL), 0) AS average,
+          coalesce(sum(coalesce(n.value, 1)) FILTER (WHERE m.value IS NOT NULL), 0) AS samples
+        FROM moved m
+        LEFT JOIN connection_points n ON m.key = ${UP_KEY} AND n.connection_id = m.connection_id
+          AND n.key = ${UP_COUNT_KEY} AND n.at = m.at
+        GROUP BY m.connection_id, m.key, m.hour
       )
       INSERT INTO connection_points (connection_id, key, at, value)
-      SELECT connection_id, key, hour, avg(value) FROM moved GROUP BY connection_id, key, hour
+      SELECT connection_id, key, hour, average FROM totals
+      UNION ALL
+      SELECT connection_id, ${UP_COUNT_KEY}, hour, samples FROM totals WHERE key = ${UP_KEY}
+      ON CONFLICT (connection_id, key, at) DO UPDATE SET value = excluded.value
+    `);
+    await tx.execute(sql`
+      WITH moved AS (
+        DELETE FROM account_uptime_points WHERE at < ${fineFrom.toISOString()}::timestamptz AND samples IS NULL
+        RETURNING connection_id, github_burrow_id, at, up
+      )
+      INSERT INTO account_uptime_points (connection_id, github_burrow_id, at, up, samples)
+      SELECT connection_id, github_burrow_id, date_bin('1 hour', at, TIMESTAMPTZ '2000-01-01 00:00:00+00'),
+        avg(up), count(*)
+      FROM moved GROUP BY 1, 2, 3
+      ON CONFLICT ON CONSTRAINT account_uptime_slot DO UPDATE SET
+        up = (account_uptime_points.up * account_uptime_points.samples + excluded.up * excluded.samples)
+          / (account_uptime_points.samples + excluded.samples),
+        samples = account_uptime_points.samples + excluded.samples
     `);
   });
 }

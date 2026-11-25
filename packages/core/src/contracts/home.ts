@@ -21,10 +21,21 @@ import {
 import { DESK_SCREEN_VIEWS_MAX, DeskCatalog, DeskWidgetRef, DeskWidgetView } from '../domain/desk-screens.js';
 import { DeviceActionChoice, DeviceSkillCard } from '../domain/devices.js';
 import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain/home.js';
+import { ThingHistory, ThingHistoryQuery } from '../domain/incidents.js';
 import { LookResearch } from '../domain/look-research.js';
 import { Message, MessageTextInput } from '../domain/message.js';
 import { ArrangeOverviewBody, OverviewLayout, OverviewViewsQuery } from '../domain/overview-layout.js';
-import { NoticeCheck, NoticeQuiet, NoticeRef, NoticeSubject, ThingWatch } from '../domain/quiet.js';
+import {
+  KEEP_QUIET_MAX_MINUTES,
+  KEEP_QUIET_MIN_MINUTES,
+  KeptQuiet,
+  NoticeCheck,
+  NoticeQuiet,
+  NoticeRef,
+  NoticeSubject,
+  ThingWatch,
+  WatchLimitValue,
+} from '../domain/quiet.js';
 import {
   ThingButtonValue,
   ThingImageRef,
@@ -32,12 +43,14 @@ import {
   ThingPageKey,
   ThingPageQuery,
 } from '../domain/thing-page.js';
+import { ThingWatchView } from '../domain/thing-watch.js';
 import {
   ChangeId,
   ConnectionId,
   ConversationId,
   DeviceSkillProposalId,
   MessageId,
+  ThingWatchId,
   WidgetId,
 } from '../ids.js';
 import { API_PREFIX, BurrowParam, endpoint, limitQuery, QueryBool } from './endpoint.js';
@@ -432,7 +445,56 @@ export const SetThingWatchBody = z.object({
 });
 export type SetThingWatchBody = z.infer<typeof SetThingWatchBody>;
 
+export const SetThingWatchLimitBody = z.object({
+  check: NoticeCheck,
+  subject: NoticeSubject.optional(),
+  /** Null restores the server's limit for one item, or the check's default for a whole server. */
+  limit: WatchLimitValue.nullable(),
+});
+export type SetThingWatchLimitBody = z.infer<typeof SetThingWatchLimitBody>;
+
+export const SetThingWatchLimitResponse = z.object({
+  watch: ThingWatch,
+  changeId: ChangeId.optional(),
+});
+export type SetThingWatchLimitResponse = z.infer<typeof SetThingWatchLimitResponse>;
+/**
+ * Keep a server, connection or device quiet (`things.keepQuiet`): until `until`, or for
+ * `minutes`, with an optional `note` (“Moving the NAS”). A thing kept quiet already gets the new end and note. Session
+ * minor 9.
+ */
+export const KeepQuietBody = z
+  .object({
+    until: Timestamp.optional(),
+    minutes: z.number().int().min(KEEP_QUIET_MIN_MINUTES).max(KEEP_QUIET_MAX_MINUTES).optional(),
+    note: z.string().trim().min(1).max(120).optional(),
+  })
+  .refine((b) => (b.until === undefined) !== (b.minutes === undefined), {
+    message: 'Say until when, or for how long',
+    path: ['until'],
+  });
+export type KeepQuietBody = z.infer<typeof KeepQuietBody>;
+/**
+ * The thing as it is kept quiet now; null after `things.endQuiet`. `changeId` (from `things.keepQuiet`): the change it
+ * made, whose `changes.undo` puts the person's window back as it was, or ends the one it made; it never ends Whombat's
+ * own window for its work.
+ */
+export const KeepQuietResponse = z.object({
+  keptQuiet: KeptQuiet.nullable(),
+  changeId: ChangeId.optional(),
+});
+export type KeepQuietResponse = z.infer<typeof KeepQuietResponse>;
+
 export const thingEndpoints = {
+  cancelWatch: endpoint({
+    id: 'things.cancelWatch',
+    method: 'POST',
+    path: '/burrows/:burrow/thing-watches/:watchId/cancel',
+    summary: 'Stop a one-time watch started in Chat.',
+    params: z.object({ burrow: BurrowParam, watchId: ThingWatchId }),
+    body: z.object({}),
+    response: ThingWatchView,
+  }),
   page: endpoint({
     id: 'things.page',
     method: 'GET',
@@ -473,6 +535,16 @@ export const thingEndpoints = {
     params: B.extend({ thing: ThingParam }),
     response: ThingWatch,
   }),
+  history: endpoint({
+    id: 'things.history',
+    method: 'GET',
+    path: '/burrows/:burrow/things/:thing/history',
+    summary:
+      'What happened to a server, connection or device over the last 30 or 90 days (session minor 9): its incidents (down or a problem, when, how long, what and their cause), its uptime over the period, and for a server the alerts the hosts service had.',
+    params: B.extend({ thing: ThingParam }),
+    query: ThingHistoryQuery,
+    response: ThingHistory,
+  }),
   setWatch: endpoint({
     id: 'things.setWatch',
     method: 'POST',
@@ -482,6 +554,34 @@ export const thingEndpoints = {
     params: B.extend({ thing: ThingParam }),
     body: SetThingWatchBody,
     response: ThingWatch,
+  }),
+  setWatchLimit: endpoint({
+    id: 'things.setWatchLimit',
+    method: 'PUT',
+    path: '/burrows/:burrow/things/:thing/watch/limit',
+    summary: 'Set or clear a custom alert limit for a server or one item.',
+    params: B.extend({ thing: ThingParam }),
+    body: SetThingWatchLimitBody,
+    response: SetThingWatchLimitResponse,
+  }),
+  keepQuiet: endpoint({
+    id: 'things.keepQuiet',
+    method: 'POST',
+    path: '/burrows/:burrow/things/:thing/keep-quiet',
+    summary:
+      'Keep a server, connection or device quiet until a time or for some minutes, with an optional note (session minor 9): its lines colour nothing and make no look, Inbox item, incident or push until then; a server’s alerts are muted in the hosts service too. Signed as the person with Undo. `not_allowed` where the person may not manage the thing.',
+    params: B.extend({ thing: ThingParam }),
+    body: KeepQuietBody,
+    response: KeepQuietResponse,
+  }),
+  endQuiet: endpoint({
+    id: 'things.endQuiet',
+    method: 'POST',
+    path: '/burrows/:burrow/things/:thing/keep-quiet/end',
+    summary:
+      'End now: a thing kept quiet is watched again at once, and what is still wrong counts from the start (session minor 9). `not_found` when it isn’t kept quiet.',
+    params: B.extend({ thing: ThingParam }),
+    response: KeepQuietResponse,
   }),
 };
 

@@ -11,11 +11,8 @@ import (
 // (migration 13); rules switch off and on per server and entity, and go
 // with their server (HS-194).
 func TestWatchOffs(t *testing.T) {
-	orig := migrations
-	t.Cleanup(func() { migrations = orig })
 	path := filepath.Join(t.TempDir(), "hub.db")
-	migrations = orig[:12]
-	s, err := Open(path)
+	s, err := open(path, migrations[:12], nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +24,6 @@ func TestWatchOffs(t *testing.T) {
 		}
 	}
 	s.Close()
-	migrations = orig
 	if s, err = Open(path); err != nil {
 		t.Fatal(err)
 	}

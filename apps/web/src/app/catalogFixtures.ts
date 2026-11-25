@@ -791,6 +791,17 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
               ],
             },
           );
+        // A website, port, ping or name lookup is checked from this Whombat or a server it watches: picked after the
+        // address, as the runtime asks; a check-in always reports to this Whombat.
+        if (catalogId === 'uptime' && (fields.kind ?? 'http') !== 'heartbeat' && !fields.runner)
+          return refuse(409, 'field_choice_needed', 'Choose where Whombat checks it from.', {
+            field: 'runner',
+            options: [
+              { value: 'hub', label: 'This Whombat' },
+              { value: 'pve-02', label: 'pve-02' },
+              { value: 'thetitan', label: 'thetitan' },
+            ],
+          });
         if (catalogId === 'moneybird' && !fields.administration)
           return refuse(
             409,

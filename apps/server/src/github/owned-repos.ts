@@ -10,7 +10,8 @@ import { defineCommand } from '../commit/types';
 import { repos } from '../db/schema/index';
 import { githubScope } from '../managed/providers/github-adapter';
 import type { Services } from '../services';
-import type { GhRepo } from './adapter';
+import { recordAccountUptime } from '../things/points';
+import { type GhRepo, GitHubNotConnectedError } from './adapter';
 import { insertRepoRow, RepoInput } from './commands';
 import { renameRepoInAutomations, renameRepoRows } from './rename';
 
@@ -114,7 +115,15 @@ export async function syncOwnedRepos(
   actorId: string,
 ): Promise<{ added: string[]; updated: number; renamed: { from: string; to: string }[] }> {
   const adapter = services.github.require();
-  const list = await githubScope.run({ burrowId }, () => adapter.listRepos(OWNED_REPOS_MAX, { owned: true }));
+  const owner = { githubBurrowId: burrowId };
+  const list = await githubScope
+    .run({ burrowId }, () => adapter.listRepos(OWNED_REPOS_MAX, { owned: true }))
+    .catch(async (err) => {
+      // This error also covers missing local credentials, so it can't tell us if GitHub answered.
+      if (!(err instanceof GitHubNotConnectedError)) await recordAccountUptime(services, owner, 0);
+      throw err;
+    });
+  await recordAccountUptime(services, owner, 1);
   const res = await services.pipeline.commit(
     bringInOwnedRepos,
     { repos: ownedInput(list.repos) },

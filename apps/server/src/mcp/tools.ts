@@ -59,6 +59,7 @@ import { startGuide } from '../guides/commands';
 import { doneInputFor, reportDoneCommand } from '../home/done';
 import { reportChange } from '../home/reports';
 import { pinWidget } from '../home/widgets';
+import { thingWatchTool, watchHistoryTool, watchStatusTool } from '../incidents/agent';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK, reportLook } from '../looks/research';
 import { whombatBackupTool } from '../managed/backup-tool';
@@ -80,6 +81,7 @@ import type { Services } from '../services';
 import { SETTINGS_TOOL_HANDLERS } from '../settings/tools';
 import { shareLinkTool } from '../shares/tool';
 import { watchChecksTool } from '../things/quiet/agent';
+import { quietUntilTool } from '../things/quiet/window-service';
 import { trackerItemTool, trackerReadTool } from '../trackers/access';
 import { vaultAddServerTool } from '../vault/add-server';
 import { vaultAskTool } from '../vault/ask';
@@ -664,6 +666,12 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     run(ctx, reportDoneCommand, await doneInputFor(ctx.services.db, ctx.dispatch, input.summary), () => ({})),
   // What Whombat watches, switched only on the person's word (on-purpose.md).
   watch_checks: (ctx, input) => watchChecksTool(ctx, input),
+  // How everything is and what went wrong, read-only.
+  thing_watch: thingWatchTool,
+  watch_status: (ctx) => watchStatusTool(ctx),
+  watch_history: (ctx, input) => watchHistoryTool(ctx, input),
+  // Keep a thing quiet for a while, only on the person's word.
+  quiet_until: (ctx, input) => quietUntilTool(ctx, input),
   // What the assistant found out about a look (look-research.md LR-05): listed and run only in a look's turns.
   look_report: async (ctx, input) => {
     if (!(await looksInTurn(ctx.services.db, ctx.agentId, ctx.dispatch.id))) throw forbidden(NOT_A_LOOK);

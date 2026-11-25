@@ -8,7 +8,13 @@
  * show, the rest behind “Show N more”. Two or more lines that ask get the one button that hands them to the assistant.
  * A strip with no line draws nothing: the server leaves it out then.
  */
-import { handleTheseView, NEEDS_YOU_WORDS, noticeLink, quietLineText } from '@whombat/client';
+import {
+  handleTheseView,
+  KEEP_QUIET_WORDS,
+  NEEDS_YOU_WORDS,
+  noticeLink,
+  quietLineText,
+} from '@whombat/client';
 import { useTheAgent } from '@whombat/client/react';
 import type { ThingPageLink, ThingPageNotice, ThingPagePanel } from '@whombat/core';
 import { Info } from 'lucide-react';
@@ -20,7 +26,7 @@ import { NoticeMenu, QuietUndo } from '../quiet/NoticeMenu';
 import things from '../Things.module.css';
 import { NOTICE_ICONS } from '../thingIcons';
 import { ThingButton } from './Buttons';
-import { type DashboardContext, PageLink } from './Panels';
+import { type DashboardContext, lineExtras, PageLink } from './Panels';
 import styles from './Slots.module.css';
 import { stripLines } from './slots';
 
@@ -47,6 +53,7 @@ function rowLink(link: ThingPageLink, ask: string): ThingPageLink {
 export function NoticeStrip({ panel, ctx }: { panel: NoticesPanel; ctx: DashboardContext }) {
   const [open, setOpen] = useState(false);
   const [headsUps, setHeadsUps] = useState(false);
+  const [kept, setKept] = useState(false);
   const { words } = useTheAgent(ctx.burrow);
   const strip = stripLines(panel.items);
   if (!strip.lines.length) return null;
@@ -84,7 +91,11 @@ export function NoticeStrip({ panel, ctx }: { panel: NoticesPanel; ctx: Dashboar
             <PageLink link={link} ctx={ctx} look="button" className={styles.stripButton} />
           ) : null}
           {n.action && !quiet ? <ThingButton button={n.action} buttons={ctx.buttons} /> : null}
-          {quiet ? <QuietUndo line={n} actions={ctx.quiet} /> : <NoticeMenu line={n} actions={ctx.quiet} />}
+          {quiet ? (
+            <QuietUndo line={n} actions={ctx.quiet} onEnd={ctx.endQuiet} ending={ctx.endingQuiet} />
+          ) : (
+            <NoticeMenu line={n} actions={ctx.quiet} extra={lineExtras(n, ctx)} />
+          )}
         </div>
       </li>
     );
@@ -112,6 +123,18 @@ export function NoticeStrip({ panel, ctx }: { panel: NoticesPanel; ctx: Dashboar
       ) : null}
       {soon.length ? <ul className={styles.stripLines}>{soon.map(line)}</ul> : null}
       {quiet.length ? <ul className={styles.stripLines}>{quiet.map(line)}</ul> : null}
+      {strip.held.length ? (
+        // Quiet with the whole thing: the line under the page's head says why, so they fold under one row.
+        <button
+          type="button"
+          className={cx(styles.stripMore, styles.stripHeadsUps)}
+          aria-expanded={kept}
+          onClick={() => setKept((o) => !o)}
+        >
+          {kept ? KEEP_QUIET_WORDS.hideHeld : KEEP_QUIET_WORDS.showHeld(strip.held.length)}
+        </button>
+      ) : null}
+      {kept && strip.held.length ? <ul className={styles.stripLines}>{strip.held.map(line)}</ul> : null}
       {strip.more > 0 || all?.label || all?.busy ? (
         <div className={styles.stripFoot}>
           {strip.more > 0 ? (

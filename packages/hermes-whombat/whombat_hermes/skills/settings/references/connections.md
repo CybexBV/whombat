@@ -68,6 +68,7 @@ Every server and service with its own page: how it is doing, what Whombat watche
 - Read what the assistant runs on the box — `services.list` · read
 - Stop a service the assistant runs — `services.stop` · change, always asks
 - Change a service’s setting, or run an action on it like Restart — `things.action` · change, always asks
+- Read what went wrong with a server, connection or device lately — `things.history` · read
 - Read how a connection or device is doing — `things.page` · read
 - Ignore or snooze a Worth a look line — `things.quiet` · change
 - Stop or start watching a check on a connection or device — `things.setWatch` · change

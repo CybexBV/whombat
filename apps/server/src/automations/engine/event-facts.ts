@@ -8,7 +8,14 @@ import {
   findMyTriggerFacts,
   type GitHubTriggerEvent,
   type JsonObject,
+  THING_INCIDENT_EVENTS,
+  ThingIncidentEvent,
   type TriggerFacts,
+  thingIncidentDurationWords,
+  thingIncidentMinutes,
+  thingTriggerFacts,
+  thingTriggerSummary,
+  thingWatchResultText,
 } from '@whombat/core';
 import { and, eq, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
@@ -23,6 +30,7 @@ import {
 } from '../../db/schema/index';
 import { isFeedbackPrincipal, isReportThread } from '../../feedback/principal';
 import { findMyPrincipal, placeChangeScope, placeChangeSummary } from '../../hosts/findmy-places';
+import { SYSTEM_SERVERS } from '../../hosts/principal';
 import {
   mailHeadline,
   mailItemKey,
@@ -70,6 +78,7 @@ export const EVENT_TYPES = [
   'mail.received',
   // Someone's place changed on a Find My connection a live automation listens to (findmy-connection.md).
   FIND_MY_PLACE_CHANGED,
+  ...THING_INCIDENT_EVENTS,
 ];
 
 export interface EventFacts {
@@ -255,6 +264,43 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
       info: (e) => ({
         kind: 'findmy',
         summary: placeChangeSummary(change).slice(0, 200),
+        actorId: actor.id,
+        eventId: e.id,
+        messageId: null,
+        scheduledFor: null,
+      }),
+    };
+  }
+  if ((THING_INCIDENT_EVENTS as readonly string[]).includes(event.type)) {
+    const parsed = ThingIncidentEvent.safeParse(payload);
+    if (!parsed.success || actor.system !== SYSTEM_SERVERS) return null;
+    const incident = parsed.data;
+    const facts = thingTriggerFacts(event.type, incident);
+    const summary = thingTriggerSummary(facts);
+    const minutes = thingIncidentMinutes(incident);
+    const text =
+      facts.event === 'back'
+        ? thingWatchResultText({ name: incident.name, event: 'back' }, incident)
+        : `${summary}.`;
+    return {
+      facts,
+      conversationId: null,
+      threadRootId: null,
+      itemKey: null,
+      scope: {
+        kind: 'thing',
+        event: facts.event,
+        thing: incident.thing,
+        name: incident.name,
+        words: incident.words,
+        since: incident.startedAt,
+        minutes,
+        downFor: minutes === null ? '' : thingIncidentDurationWords(minutes),
+        text,
+      },
+      info: (e) => ({
+        kind: 'thing',
+        summary: summary.slice(0, 200),
         actorId: actor.id,
         eventId: e.id,
         messageId: null,

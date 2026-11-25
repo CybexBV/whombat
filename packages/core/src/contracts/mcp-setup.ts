@@ -14,6 +14,7 @@
  */
 import { z } from 'zod';
 import { ConnectionAccessLevel } from '../domain/connections-catalog/shared.js';
+import { UptimeFields } from '../domain/connections-catalog/uptime.js';
 import { GuideVaultKind, GuideVaultServerReason } from '../domain/guides.js';
 import { MessageId } from '../ids.js';
 import { VaultEntryDescription, VaultEntryName, VaultUrl, VaultUsername } from '../vault/schemas.js';
@@ -75,11 +76,14 @@ export const ConnectionAddInput = z.object({
   access: ConnectionAccessLevel.optional().describe(
     'read (Look only) or manage; leave out and Whombat chooses by risk (Manage for Home Assistant or Pi-hole, Look only for a NAS)',
   ),
-  name: z.string().trim().min(1).max(80).optional().describe('custom_*: what to call it'),
+  name: z.string().trim().min(1).max(80).optional().describe('custom_* or uptime: what to call it'),
   signIn: z
     .enum(CONNECTION_ADD_SIGN_INS)
     .optional()
     .describe('custom_api: bearer (default), header, basic or query; custom_mcp: leave out'),
+  uptime: UptimeFields.optional().describe(
+    'For service uptime: kind http (website), tcp (port), ping, dns (name lookup), or heartbeat (check-in). Put the target in uptime.address and leave it out for a heartbeat. every is 1, 5 or 15 minutes, as a string. late gives a heartbeat extra minutes. runner is hub or a watched server id. keyword is optional for a website.',
+  ),
   keyName: z
     .string()
     .trim()
@@ -222,7 +226,7 @@ export const SETUP_MCP_TOOLS = {
     name: 'connection_add',
     title: 'Ask the person to connect a service',
     description:
-      'Put a card in this thread to connect a service; the person signs in on it and you never get the password. A catalog service: the card opens its connect form filled in (Proxmox VE, Proxmox Backup Server and Unraid are added as servers first). Anything else you set up yourself from its documentation: custom_mcp (a remote MCP server) or custom_api (an HTTP API), with name and address; ask the person only what only they know. The card takes the key and checks it, and you are woken once it is connected. The card says it all: don’t repeat it, end your turn.',
+      'Put a card in this thread to connect a service; the person signs in on it and you never get the password. For “watch my website” or “tell me if my backup script doesn’t check in”, use service uptime with the uptime settings: the card asks the person to start the check. For other catalog services the card opens the connect form filled in (Proxmox VE, Proxmox Backup Server and Unraid are added as servers first). Anything else you set up yourself from its documentation: custom_mcp (a remote MCP server) or custom_api (an HTTP API), with name and address; ask the person only what only they know. The card takes the key and checks it, and you are woken once it is connected. The card says it all: don’t repeat it, end your turn.',
     input: ConnectionAddInput,
     output: ConnectionAddOutput,
     requiredKey: null,

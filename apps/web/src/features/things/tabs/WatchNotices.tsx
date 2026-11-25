@@ -1,7 +1,8 @@
 /**
  * What needs a look on a server (its open alerts, a tab's hints) as notices: the alert's own words, then “Look into
  * it” (a chat with Whombat about it, in the Ask pane) for a problem only, and the ⋯ menu (Ignore, Remind me tomorrow,
- * Stop watching); quiet ones greyed with who quieted them until when and Undo (Whombat quiet-notices.md
+ * Stop watching); quiet ones greyed with who quieted them until when and Undo, or End now while the server is kept quiet
+ * (Whombat quiet-notices.md
  * QN-02, QN-10, QN-14, QN-23; AP-4828). On a Whombat without `things.quiet` an alert keeps “Remind me tomorrow”, the
  * hosts service's acknowledgement for a day, as before (ONE-07).
  */
@@ -40,6 +41,8 @@ export function WatchNotices({
   rows,
   subject,
   quiet,
+  onEnd = null,
+  ending = false,
 }: {
   burrow: string;
   rows: readonly WatchRowView[];
@@ -47,6 +50,9 @@ export function WatchNotices({
   subject?: { id: string; name: string };
   /** Ignore, Remind me tomorrow, Stop watching and Undo (a Whombat with `things.quiet`); none: as before. */
   quiet?: QuietActions | null;
+  /** End now on a line held because the server is kept quiet: it ends the whole window (`things.endQuiet`). */
+  onEnd?: (() => void) | null;
+  ending?: boolean;
 }) {
   const [, set] = useThingSearch();
   const ack = useHostsChange(api.hosts.ackAlert);
@@ -139,7 +145,11 @@ export function WatchNotices({
                 </div>
               ) : null}
             </div>
-            {greyed ? <QuietUndo line={line} actions={quiet} /> : <NoticeMenu line={line} actions={quiet} />}
+            {greyed ? (
+              <QuietUndo line={line} actions={quiet} onEnd={onEnd} ending={ending} />
+            ) : (
+              <NoticeMenu line={line} actions={quiet} />
+            )}
           </div>
         );
       })}

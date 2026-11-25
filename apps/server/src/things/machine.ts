@@ -5,6 +5,7 @@
  * Supervisor's figures when Whombat doesn't watch its machine. Pure.
  */
 import type { ThingPageBar, ThingPageKpi, ThingPagePanel } from '@whombat/core';
+import { DAY_MS } from './backup-rhythm';
 import type { ChartPanel } from './kinds/types';
 import type { KindNotice } from './quiet/types';
 import type { MachineFigures } from './runs-on';
@@ -19,7 +20,7 @@ import {
   statFigure,
   statsOf,
 } from './series';
-import { clip, figure, figure1, pct, plural } from './words';
+import { clip, figure, figure1, pct, plural, span } from './words';
 
 /** What the machine's panels need: its figures now and its CPU and memory over the range. */
 export type MachineNow = Pick<
@@ -229,6 +230,62 @@ export function diskNotice(
   };
 }
 
+type MachineBackup = Pick<
+  MachineFigures,
+  'lastBackup' | 'lastSuccessfulBackupAt' | 'backupJob' | 'backupRhythmMs' | 'name'
+>;
+
+function backupAge(at: string | null | undefined, now: Date): number | null {
+  const age = now.getTime() - Date.parse(at ?? '');
+  return Number.isFinite(age) && age >= 0 ? age : null;
+}
+
+const ageWords = (age: number) => (age < 60_000 ? 'just now' : `${span(age)} ago`);
+
+function backupWords(backup: MachineBackup | null, now: Date): string | null {
+  const age = backupAge(backup?.lastBackup?.at, now);
+  if (age !== null)
+    return backup?.lastBackup?.result === 'error'
+      ? `Backup failed ${ageWords(age)}`
+      : `Backed up ${ageWords(age)}`;
+  if (backup?.backupJob === false) return 'Nothing backs this up';
+  return backup?.backupJob ? 'No backup seen yet' : null;
+}
+
+/** A failed read can't confirm whether a failed attempt has a usable backup behind it. */
+export function backupReadMissing(backup: MachineBackup | null): boolean {
+  return (
+    !!backup?.backupJob &&
+    backup.lastBackup?.result === 'error' &&
+    backup.lastSuccessfulBackupAt === undefined
+  );
+}
+
+/** A machine covered by a job with an old backup or a failure and no known successful backup. */
+export function backupNotice(backup: MachineBackup | null, now: Date): KindNotice | null {
+  if (!backup?.backupJob || backupReadMissing(backup)) return null;
+  const failed = backup.lastBackup?.result === 'error';
+  const age = backupAge(failed ? backup.lastSuccessfulBackupAt : backup.lastBackup?.at, now);
+  const limit = backup.backupRhythmMs ? 2 * backup.backupRhythmMs : 8 * DAY_MS;
+  if (age === null ? !failed : age <= limit) return null;
+  const words = backupWords(backup, now);
+  return {
+    id: 'backup-old',
+    tone: 'warn',
+    icon: 'backup',
+    title: 'The machine’s backup is overdue',
+    ...(words ? { detail: clip(`${backup.name} · ${words}`, 200) } : {}),
+    check: 'machine.backup_old',
+    nature: 'problem',
+    link: {
+      kind: 'ask',
+      label: 'Look into it',
+      question: clip(`Why is the backup of ${backup.name} overdue?`, 300),
+    },
+    ignore: { lifts: 'fixed', words: 'Until it’s backed up again.' },
+  };
+}
+
 /** Gigabytes as a size: “870 GB”, “7.1 TB” from a thousand up. */
 function size(gb: number): string {
   return gb >= 1000 ? `${figure1(gb / 1000)} TB` : `${figure(Math.round(gb))} GB`;
@@ -252,6 +309,7 @@ export function machineCard(
   full: Date | null,
   now: Date,
   own: readonly ThingPageBar[] = [],
+  backup: MachineBackup | null = null,
 ): Extract<ThingPagePanel, { kind: 'bars' }> | null {
   const items: ThingPageBar[] = [];
   const cpu = m.cpuPct ?? lastValue(m.series?.cpu ?? []);
@@ -283,6 +341,8 @@ export function machineCard(
       ...(full ? { sub: `Full ${inAbout(full, now)}`, ...(tone ? { subTone: tone } : {}) } : {}),
     });
   }
+  const backedUp = backupWords(backup, now);
+  if (backedUp) items.push({ id: 'backup', label: backedUp });
   if (!items.length) return null;
   return {
     kind: 'bars',

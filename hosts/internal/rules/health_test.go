@@ -57,7 +57,7 @@ func TestHealthConditions(t *testing.T) {
 		},
 		Fans: []proto.Fan{{Label: "CPU fan", Source: "nct · fan1", RPM: 0, MinRPM: 300}, {Label: "GPU", Source: "amdgpu", RPM: 0}},
 	}
-	m := byRule(healthConditions(r))
+	m := byRule(healthConditions(r, nil))
 	want := map[string]string{
 		"disk.smart_failing:sda":            "SMART overall health check failed",
 		"disk.smart_failing:nvme0n1":        "Spare capacity below threshold, reliability degraded by media errors",

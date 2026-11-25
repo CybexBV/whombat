@@ -22,6 +22,13 @@ import { itemThread } from '../github-items';
 import { createRun, runsToday } from '../runs';
 import { ACTIVE_RUN_STATUSES, listensToEvents, readsEvents } from '../store';
 import { EVENT_TYPES, eventCause, eventFacts } from './event-facts';
+import {
+  claimIncidentTrigger,
+  dropIncidentTrigger,
+  dueIncidentTriggers,
+  liveChecks,
+  skipDueIncidentTriggers,
+} from './incident-triggers';
 import type { EngineOptions } from './options';
 
 /** The engine's limits a scan applies, read as they are at each event (the engine's own options). */
@@ -82,9 +89,6 @@ export async function scanBurrow(
   limits: TriggerLimits,
   burrowId: string,
 ): Promise<number> {
-  const live = (await liveAutomations(services.db, burrowId)).filter((r) =>
-    r.v.definition.triggers.some(readsEvents),
-  );
   const { result } = await services.pipeline.transact(burrowId, async (session) => {
     const tx = session.tx;
     const [cursor] = await tx
@@ -93,21 +97,34 @@ export async function scanBurrow(
       .where(eq(automationCursors.burrowId, burrowId))
       .for('update');
     if (!cursor) return 0;
+    const live = (await liveAutomations(tx, burrowId)).filter((r) =>
+      r.v.definition.triggers.some(readsEvents),
+    );
     const batch = await tx
       .select()
       .from(events)
       .where(and(eq(events.burrowId, burrowId), gt(events.seq, cursor.seq)))
       .orderBy(asc(events.seq))
       .limit(500);
-    if (batch.length === 0) return 0;
     let created = 0;
     const now = services.clock();
-    for (const event of batch) {
-      if (!live.length || !EVENT_TYPES.includes(event.type)) continue;
+    // While the release the box would go back to can't run thing automations, something going down or coming back
+    // claims no incident and starts nothing; a delayed start already waiting keeps its time.
+    const things = await services.newerAutomations.thingsReady();
+    const due = things ? await dueIncidentTriggers(tx, burrowId, now) : [];
+    const active = liveChecks(services, burrowId, now);
+    const work = [
+      ...due,
+      ...batch.filter((event) => EVENT_TYPES.includes(event.type)).map((event) => ({ event, pending: null })),
+    ];
+    for (const { event, pending } of work) {
+      if (pending) await dropIncidentTrigger(tx, pending);
+      if (!live.length) continue;
       const facts = await eventFacts(tx, event);
       if (!facts) continue;
       const cause = await eventCause(tx, event, facts);
       for (const { a, v } of live) {
+        if (pending && (pending.automationId !== a.id || pending.version !== v.n)) continue;
         if (!v.definition.triggers.some((t) => triggerMatches(t, facts.facts))) continue;
         // Mail already present when this automation's mail trigger became active must never start it (allow 5 s for
         // provider/box clock skew on freshly arrived mail).
@@ -128,6 +145,12 @@ export async function scanBurrow(
           event.actorId === a.principalId
         )
           continue;
+        if (facts.facts.kind === 'thing') {
+          if (!things || event.createdAt < (a.thingActiveAt ?? v.publishedAt)) continue;
+          const triggers = v.definition.triggers.filter((t) => t.kind === 'thing');
+          if (!(await claimIncidentTrigger(tx, a.id, v.n, triggers, facts.facts, event, now, active)))
+            continue;
+        }
         const conversationId = facts.conversationId ?? v.definition.conversationId;
         // The publisher must still be allowed, and still read the room the event happened in (BP-C20): otherwise
         // nothing of it reaches a step. It shows as a Blocked, skipped run (at most one an hour).
@@ -202,7 +225,8 @@ export async function scanBurrow(
           version: v.n,
           publishedById: v.publishedById,
           trigger: facts.info(event),
-          triggerKey: `evt:${event.id}`,
+          triggerKey:
+            facts.facts.kind === 'thing' ? `incident:${facts.facts.incident.incidentId}` : `evt:${event.id}`,
           scope: facts.scope,
           conversationId,
           threadRootId,
@@ -245,6 +269,7 @@ export async function skipEventCursors(services: Services, now: Date): Promise<n
   let moved = 0;
   for (const burrowId of await eventBurrows(services.db)) {
     await services.pipeline.transact(burrowId, async ({ tx }) => {
+      await skipDueIncidentTriggers(tx, burrowId, now);
       const [head] = await tx
         .select({ seq: sql<number | null>`max(${events.seq})` })
         .from(events)

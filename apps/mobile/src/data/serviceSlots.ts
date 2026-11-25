@@ -49,6 +49,17 @@ export function stripOrder<T extends NoticesPanel['items'][number]>(items: reado
   return [...groups.shown, ...groups.folded];
 }
 
+/**
+ * The strip's lines apart from those quiet with the whole thing (kept quiet, or down because of something else): the
+ * line under the page's head says why, so they fold under their own “Show N on hold”, as on a server's page and the
+ * web, and don't count in “Show N more”.
+ */
+export function splitHeld<T extends { held: 'window' | 'cause' | null }>(
+  rows: readonly T[],
+): { lines: T[]; held: T[] } {
+  return { lines: rows.filter((r) => !r.held), held: rows.filter((r) => !!r.held) };
+}
+
 /** The first three, the rest behind “Show N more” (opened in place). */
 export function foldStrip<T>(rows: readonly T[], open: boolean): { shown: readonly T[]; more: number } {
   if (open || rows.length <= STRIP_FIRST) return { shown: rows, more: 0 };

@@ -117,6 +117,7 @@ export interface RowHandlers {
   decideReport(reportId: string, option: number): void;
   /** A Find My watch card's Cancel (findmy-watch.md). */
   cancelFindMyWatch(watchId: string): void;
+  cancelThingWatch(watchId: string): void;
   /** A council's or a delegation's Change something (council.md CNL-20): the cursor in the message's thread's reply box. */
   replyHere(message: Message): void;
   loadEarlier(): void;
@@ -360,9 +361,9 @@ export const MessageRow = memo(function MessageRow({
     };
   };
 
-  // A Find My watch while it watches (findmy-watch.md): Cancel, a 44dp button as the run's Try again is.
+  // A running watch has a 44dp Cancel button.
   const watchCardProps = (card: CardSummary) => {
-    const watch = card.findMyWatch;
+    const watch = card.thingWatch ?? card.findMyWatch;
     if (!watch) return {};
     return {
       buttons: [
@@ -370,7 +371,8 @@ export const MessageRow = memo(function MessageRow({
           label: FIND_MY_WATCH_WORDS.cancel,
           variant: 'secondary' as const,
           busy: watchCancelling,
-          onPress: () => on.cancelFindMyWatch(watch.watchId),
+          onPress: () =>
+            card.thingWatch ? on.cancelThingWatch(watch.watchId) : on.cancelFindMyWatch(watch.watchId),
         },
       ],
     };
@@ -477,7 +479,7 @@ export const MessageRow = memo(function MessageRow({
       shown = (
         <SettledLineView
           line={item.line}
-          onOpen={card.kind === 'findmy_watch' ? undefined : collapse}
+          onOpen={card.kind === 'findmy_watch' || card.kind === 'thing_watch' ? undefined : collapse}
           lines={card.task ? 2 : 1}
         />
       );

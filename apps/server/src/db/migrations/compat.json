@@ -153,6 +153,72 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "How the Overview is arranged (docs/decisions/overview-arranged.md): one nullable jsonb column on burrows. The release before it never reads or writes it, and a row it wrote reads as before there."
+    },
+    "0024_uptime_checks": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The hub check id and when the hub last took new probe settings, in two nullable columns on catalog_connections."
+    },
+    "0025_incidents": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Incidents (docs/decisions/monitoring.md MON-06, MON-09): a new table incidents, one row per stretch a server, connection or device was down or had a bad dot, with its words, cause and the push to withdraw, cascading with the burrow and kept 90 days. The release before it never reads the table."
+    },
+    "0026_quiet_windows": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Keeping things quiet for a while, causes and the way out (docs/decisions/monitoring.md MON-04…MON-08): three new tables. The release before it never reads or writes them."
+    },
+    "0027_incident_automation_watches": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Automations started by something going down or coming back, and one-time watches (docs/decisions/monitoring.md MON-90…MON-99): two new tables, incident_triggers (one claim per automation and incident, with a delayed start's due time) and thing_watches (each watch the assistant started, its thread and card), cascading with the burrow, and one nullable column on automations (thing_active_at). The release before it never reads or writes the two tables and reads and writes automations past the column. It can't read a definition with a thing trigger, though, yet would advance a run one started: this schema marks the first release that runs them, and a box makes, turns on and runs them only while the release it would go back to recorded at least this schema in runtime_releases."
+    },
+    "0028_account_uptime": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A new table keeps uptime samples for connected accounts and the burrow's GitHub connection."
+    },
+    "0029_quiet_maintenance_left": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Maintenance windows still to give back to the hosts service after a quiet window got a new one (docs/decisions/monitoring.md): one new table, quiet_maintenance_left. The release before it never reads or writes it."
+    },
+    "0030_incident_checks": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The checks an incident signed an event for (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column, and a row it opens reads as one that signed only its own check."
+    },
+    "0031_incident_down_since": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A nullable timestamp on incidents for when the thing stopped answering. Rows from earlier writers still use the incident's start when it is unknown."
+    },
+    "0032_quiet_window_revision": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Which change a quiet window is at, for Undo (docs/decisions/monitoring.md): one integer column on quiet_windows that defaults to 0. The release before it reads and writes quiet_windows past the column; a change it records carries no count, and Undo of that change compares the window's end as before."
+    },
+    "0033_quiet_window_owner_work": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The quiet_windows work index permits the same work key for different owners. Window rows stay readable and writable with the same columns. The release before monitoring does not use this table."
+    },
+    "0034_incident_down_stretches": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The stretches an incident's thing didn't answer (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column; an empty list reads as one stretch from down_since to the end, as before."
     }
   }
 }

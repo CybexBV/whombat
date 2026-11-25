@@ -562,7 +562,8 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   if ((AUTOMATION_CHAT_TOOLS as readonly string[]).includes(name) && sel.automationStep) return false;
   if (name === 'schedule' && sel.automationStep) return false;
   // What Whombat watches is the person's to change: never from an automation's own step (on-purpose.md).
-  if (name === 'watch_checks' && sel.automationStep) return false;
+  if ((name === 'watch_checks' || name === 'quiet_until' || name === 'thing_watch') && sel.automationStep)
+    return false;
   // A council runs on T3 Code, when the person asks: never from an automation's step (council.md CNL-05).
   // Tasks handed to T3 Code from a checklist card are the person's too (delegate.md).
   if (

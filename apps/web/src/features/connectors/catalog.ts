@@ -205,6 +205,20 @@ export function catalogTileState(status: CatalogEntryStatus | undefined): TileSt
   return { action: 'Set up', note: 'Set it up once, then you can connect.' };
 }
 
+/**
+ * An entry's tile from what this Whombat's catalog says (`connections.catalog`): an entry it doesn't list is newer than
+ * it (an older box), so nothing there could connect it, and it is left out, as the phone does. Until the catalog
+ * answers, or when it fails, every entry is offered as it is.
+ */
+export function catalogTileFor(
+  statuses: readonly CatalogEntryStatus[] | undefined,
+  catalogId: string,
+): TileState | null {
+  const status = statuses?.find((e) => e.catalogId === catalogId);
+  if (statuses && !status) return null;
+  return catalogTileState(status);
+}
+
 /** Whether a text has every word of the search box in it, in any order (an empty box matches everything). */
 export function matchesWords(text: string, q: string): boolean {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);

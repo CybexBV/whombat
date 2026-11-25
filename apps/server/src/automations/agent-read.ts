@@ -27,7 +27,12 @@ import { personMailConnections } from '../mail-triggers/index';
 import type { ToolContext } from '../mcp/tools';
 import { outsidersTurn } from '../runtime/person';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
-import { ACTION_AUTOMATIONS_LATER, FIND_MY_AUTOMATIONS_LATER, MAIL_AUTOMATIONS_LATER } from './release-gate';
+import {
+  ACTION_AUTOMATIONS_LATER,
+  FIND_MY_AUTOMATIONS_LATER,
+  MAIL_AUTOMATIONS_LATER,
+  THING_AUTOMATIONS_LATER,
+} from './release-gate';
 import { loadAutomationRow, toAutomation } from './store';
 
 function summaryOf(a: Automation): AgentAutomationSummary {
@@ -110,12 +115,22 @@ async function findMyPeopleOf(ctx: ToolContext): Promise<AgentFindMyPerson[]> {
  * The guide while automations the release before them can't run wait for the next update (release-gate.ts): what the
  * person is told when they ask for one, before the rest. draft_automation refuses them with the same line.
  */
-const LATER_GUIDE = `Not on this Whombat yet: ${MAIL_AUTOMATIONS_LATER} ${ACTION_AUTOMATIONS_LATER} Draft neither until then; when the person asks for one, tell them that line.
+const LATER_GUIDE = `Not on this Whombat yet: ${MAIL_AUTOMATIONS_LATER} ${ACTION_AUTOMATIONS_LATER} ${THING_AUTOMATIONS_LATER} Draft none of these until then; when the person asks for one, tell them that line.
 
 ${AUTOMATION_AUTHORING_GUIDE}`;
 
 /** The guide while only findmy automations wait for the next update. */
 const FIND_MY_LATER_GUIDE = `Not on this Whombat yet: ${FIND_MY_AUTOMATIONS_LATER} Don’t draft one until then; when the person asks for one, tell them that line.
+
+${AUTOMATION_AUTHORING_GUIDE}`;
+
+/** The guide while automations started by something going down or coming back wait for the next update. */
+const THING_LATER_GUIDE = `Not on this Whombat yet: ${THING_AUTOMATIONS_LATER} Don’t draft one until then; when the person asks for one, tell them that line.
+
+${AUTOMATION_AUTHORING_GUIDE}`;
+
+/** Both of those. */
+const FIND_MY_AND_THING_LATER_GUIDE = `Not on this Whombat yet: ${FIND_MY_AUTOMATIONS_LATER} ${THING_AUTOMATIONS_LATER} Draft neither until then; when the person asks for one, tell them that line.
 
 ${AUTOMATION_AUTHORING_GUIDE}`;
 
@@ -156,10 +171,17 @@ export async function automationsForAgent(
     trackerConnections: await trackerConnectionsOf(db, ctx.burrowId),
     mailConnections: await mailConnectionsOf(db, ctx.burrowId),
     findMyPeople: await findMyPeopleOf(ctx),
-    guide: !(await ctx.services.newerAutomations.ready())
-      ? LATER_GUIDE
-      : (await ctx.services.newerAutomations.findMyReady())
-        ? AUTOMATION_AUTHORING_GUIDE
-        : FIND_MY_LATER_GUIDE,
+    guide: await guideNow(ctx),
   };
+}
+
+/** The authoring guide, led by what waits for the next update on this Whombat. */
+async function guideNow(ctx: ToolContext): Promise<string> {
+  const gate = ctx.services.newerAutomations;
+  if (!(await gate.ready())) return LATER_GUIDE;
+  const findMy = await gate.findMyReady();
+  const things = await gate.thingsReady();
+  if (findMy && things) return AUTOMATION_AUTHORING_GUIDE;
+  if (!findMy && !things) return FIND_MY_AND_THING_LATER_GUIDE;
+  return findMy ? THING_LATER_GUIDE : FIND_MY_LATER_GUIDE;
 }

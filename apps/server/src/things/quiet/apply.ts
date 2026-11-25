@@ -10,6 +10,7 @@
 import type { ThingPageNotice } from '@whombat/core';
 import type { NoticeQuietRow, NoticeStateRow, WatchOffRow } from '../../db/schema/quiet';
 import { defaultNature, type NoticeNature, type NoticeWatch } from './types';
+import { type CauseLike, type Hold, heldRow, holdOf, type WindowLike } from './windows';
 
 /** What `applyQuiet` needs of a line: a page's (`LooseNotice`, `KindNotice`) or a glance's (`GlanceLine`). */
 export type ApplyLine = Pick<ThingPageNotice, 'tone' | 'title' | 'link'> & Partial<NoticeWatch>;
@@ -91,6 +92,12 @@ export interface ApplyInput<L extends ApplyLine> {
    * `defaults.ts` `notWatched`): their lines are dropped like those of a check switched off.
    */
   unwatched?: (check: string) => boolean;
+  /**
+   * The thing's quiet windows and its cause: while one holds at `now`, every watched line
+   * is quiet with it, and a pass keeps no line's count, so what is still wrong when it ends counts from the start.
+   */
+  windows?: readonly WindowLike[];
+  cause?: CauseLike | null;
 }
 
 export interface QuietLine<L extends ApplyLine, R extends QuietRow = QuietRow> {
@@ -123,6 +130,8 @@ export interface ApplyResult<L extends ApplyLine, R extends QuietRow = QuietRow>
   states: StateRow[];
   /** Pass only: states of lines gone (read and not there, or not watched). */
   gone: StateRow[];
+  /** What holds the whole thing quiet now (a window or a cause); null when nothing does. */
+  held: Hold | null;
 }
 
 function worse(line: ApplyLine, row: QuietRow): boolean {
@@ -158,6 +167,7 @@ export function applyQuiet<L extends ApplyLine, R extends QuietRow = QuietRow>(
   input: Omit<ApplyInput<L>, 'quiets'> & { quiets: readonly R[] },
 ): ApplyResult<L, R> {
   const { now, pass } = input;
+  const held = holdOf(input, now);
   const dropped: L[] = [];
   const watched: L[] = [];
   for (const line of input.lines) {
@@ -201,7 +211,8 @@ export function applyQuiet<L extends ApplyLine, R extends QuietRow = QuietRow>(
   const before = new Map(input.states.map((s) => [keyOfRow(s), s]));
   const states: StateRow[] = [];
   const seenNow = new Map<string, number>();
-  if (pass) {
+  // Held quiet, a pass counts no line and forgets what was counted (it counts again from the start).
+  if (pass && !held) {
     for (const [key, line] of byKey) {
       const prev = before.get(key);
       const next: StateRow = {
@@ -215,10 +226,11 @@ export function applyQuiet<L extends ApplyLine, R extends QuietRow = QuietRow>(
       states.push(next);
       seenNow.set(key, next.seenPasses);
     }
-  } else for (const [key, s] of before) seenNow.set(key, s.seenPasses);
+  } else if (!pass) for (const [key, s] of before) seenNow.set(key, s.seenPasses);
   const gone = pass
     ? input.states.filter((s) => {
         const key = keyOfRow(s);
+        if (held) return true;
         if (byKey.has(key)) return false;
         return droppedKeys.has(key) || !isSkipped(input.skipped, s.checkId);
       })
@@ -230,6 +242,8 @@ export function applyQuiet<L extends ApplyLine, R extends QuietRow = QuietRow>(
     const key = keyOfLine(line);
     const row = key ? holding.get(key) : undefined;
     if (row) quiet.push({ line, row });
+    // A line held with the whole thing is drawn with a row of its own kind (`held`): every reader keeps it quiet.
+    else if (held) quiet.push({ line, row: heldRow(line, held) as unknown as R });
     else active.push(line);
   }
 
@@ -259,6 +273,7 @@ export function applyQuiet<L extends ApplyLine, R extends QuietRow = QuietRow>(
     cleared,
     states,
     gone,
+    held,
   };
 }
 

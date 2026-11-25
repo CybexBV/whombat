@@ -97,7 +97,7 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 8 });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 9 });
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });

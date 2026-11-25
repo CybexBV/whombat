@@ -11,6 +11,7 @@ import {
   handleTheseView,
   itemWhen,
   keepHereQuestion,
+  LIMIT_WORDS,
   noticeGroups,
   noticeLink,
   OVERVIEW_WORDS,
@@ -43,6 +44,7 @@ import type {
 } from '@whombat/core';
 import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, Info } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useId, useState } from 'react';
+import type { ContextMenuItem } from '../../../app/shell/ContextMenu';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
@@ -115,6 +117,23 @@ export interface DashboardContext {
   putBack?: (changeId: string) => void;
   /** The change being put back now (its row's link is busy). */
   puttingBack?: string | null;
+  /**
+   * End now on a line quiet because the thing is kept quiet: `things.endQuiet`. None: the line's
+   * Undo ends it.
+   */
+  endQuiet?: (() => void) | null;
+  endingQuiet?: boolean;
+  /**
+   * A line's “Change the limit” in its ⋯ (a server's check with a limit): the limit now in words and how to open
+   * its sheet; null: the line has none.
+   */
+  limitFor?: ((line: ThingPageNotice) => { now: string; open: () => void } | null) | null;
+}
+
+/** A line's own extras in its ⋯ menu: Change the limit with the limit now under it, where its check has one. */
+export function lineExtras(n: ThingPageNotice, ctx: DashboardContext): ContextMenuItem[] {
+  const limit = ctx.limitFor?.(n);
+  return limit ? [{ label: LIMIT_WORDS.menu, description: limit.now, onSelect: limit.open }] : [];
 }
 
 type PanelOf<K extends ThingPagePanel['kind']> = Extract<ThingPagePanel, { kind: K }>;
@@ -573,12 +592,19 @@ function NoticesPanel({ panel, ctx }: { panel: PanelOf<'notices'>; ctx: Dashboar
               />
             ) : null}
             {n.action && !quiet ? <ThingButton button={n.action} buttons={ctx.buttons} /> : null}
-            {quiet ? null : <NoticeMenu line={n} actions={ctx.quiet} className={styles.watchEnd} />}
+            {quiet ? null : (
+              <NoticeMenu
+                line={n}
+                actions={ctx.quiet}
+                extra={lineExtras(n, ctx)}
+                className={styles.watchEnd}
+              />
+            )}
           </div>
         ) : quiet ? (
-          <QuietUndo line={n} actions={ctx.quiet} />
+          <QuietUndo line={n} actions={ctx.quiet} onEnd={ctx.endQuiet} ending={ctx.endingQuiet} />
         ) : (
-          <NoticeMenu line={n} actions={ctx.quiet} />
+          <NoticeMenu line={n} actions={ctx.quiet} extra={lineExtras(n, ctx)} />
         )}
       </div>
     );

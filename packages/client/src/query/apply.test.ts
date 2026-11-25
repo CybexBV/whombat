@@ -1860,14 +1860,19 @@ describe('applyRealtimeEvent', () => {
     expect(qc.getQueryState(k.home)?.isInvalidated).toBe(false);
   });
 
-  it('home.changed about things reads the thing pages again, and only then', () => {
+  it('home.changed about things reads the thing pages and their history again, and only then', () => {
     const qc = new QueryClient();
-    const page = endpointKey(api.things.page, { params: { ...B, thing: 'connection:con_ha' } });
+    const params = { ...B, thing: 'connection:con_ha' };
+    const page = endpointKey(api.things.page, { params });
+    const history = endpointKey(api.things.history, { params, query: { days: 30 } });
     qc.setQueryData(page, {} as never);
+    qc.setQueryData(history, {} as never);
     applyRealtimeEvent(qc, { type: 'home.changed', parts: ['needsYou', 'watch'] }, { at: t(1) });
     expect(qc.getQueryState(page)?.isInvalidated).toBe(false);
+    expect(qc.getQueryState(history)?.isInvalidated).toBe(false);
     applyRealtimeEvent(qc, { type: 'home.changed', parts: ['needsYou', 'things'] }, { at: t(2) });
     expect(qc.getQueryState(page)?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(history)?.isInvalidated).toBe(true);
   });
 
   it('reports stale and duplicate events as not applied', () => {

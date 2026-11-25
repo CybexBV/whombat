@@ -22,7 +22,7 @@ func (h *Hub) buildAlert(a rules.Alert) model.Alert {
 }
 
 // apiAlerts is GET /alerts?state=open|resolved|all&server=&group=
-// &severity=&rule=&q=&since=&until=&before=&limit= → array, newest first
+// &severity=&rule=&q=&since=&overlaps_since=&until=&before=&limit= → array, newest first
 // for resolved/all (open: most severe first). For paging, pass the
 // opened_at of the last item as before=; the X-Next-Before header carries
 // it when more may follow.
@@ -53,6 +53,10 @@ func (h *Hub) apiAlerts(w http.ResponseWriter, r *http.Request, p *principal) er
 		return t, nil
 	}
 	since, err := parseT("since")
+	if err != nil {
+		return err
+	}
+	overlapsSince, err := parseT("overlaps_since")
 	if err != nil {
 		return err
 	}
@@ -114,7 +118,7 @@ func (h *Hub) apiAlerts(w http.ResponseWriter, r *http.Request, p *principal) er
 			st = ""
 		}
 		list, err := h.store.QueryAlerts(r.Context(), store.AlertFilter{State: st, Servers: inGroup, Severity: severity,
-			Rule: rule, Query: text, Since: since, Until: until, Before: before, Limit: limit})
+			Rule: rule, Query: text, Since: since, OverlapsSince: overlapsSince, Until: until, Before: before, Limit: limit})
 		if err != nil {
 			return err
 		}

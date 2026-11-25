@@ -437,7 +437,7 @@ describe('servers (CT-1066)', () => {
   it('has one check per rule and hint kind, each valid', () => {
     const rules = HOST_WATCH_CHECKS.filter((c) => c.rule);
     const hints = HOST_WATCH_CHECKS.filter((c) => c.hint);
-    expect(rules).toHaveLength(29);
+    expect(rules).toHaveLength(30);
     expect(hints).toHaveLength(49);
     expect(new Set(HOST_WATCH_CHECKS.map((c) => c.check)).size).toBe(HOST_WATCH_CHECKS.length);
     for (const c of HOST_WATCH_CHECKS) {
@@ -458,10 +458,10 @@ describe('servers (CT-1066)', () => {
     }
   });
 
-  it('has the catalogue’s kinds: alerts 19 · 8 · 2, the hub’s hints 7 · 12 · 26 and Whombat’s four', () => {
+  it('has the catalogue’s kinds: alerts 20 · 8 · 2, the hub’s hints 7 · 12 · 26 and Whombat’s four', () => {
     const count = (cs: readonly (typeof HOST_WATCH_CHECKS)[number][]) =>
       Object.fromEntries(NOTICE_NATURES.map((n) => [n, cs.filter((c) => c.nature === n).length]));
-    expect(count(HOST_WATCH_CHECKS.filter((c) => c.rule))).toEqual({ problem: 19, you: 8, fyi: 2 });
+    expect(count(HOST_WATCH_CHECKS.filter((c) => c.rule))).toEqual({ problem: 20, you: 8, fyi: 2 });
     const own = ['agent.update_failed', 'agent.needs_install', 'backup_place.cleanup', 'backup_place.space'];
     expect(count(HOST_WATCH_CHECKS.filter((c) => c.hint && !own.includes(c.hint)))).toEqual({
       problem: 7,
@@ -475,6 +475,12 @@ describe('servers (CT-1066)', () => {
 
   it('finds a check by rule or kind, and names one a newer hub has', () => {
     expect(hostAlertCheck('disk.space_high').check).toBe('host.disk.space_high');
+    expect(hostAlertCheck('guest.stopped')).toMatchObject({
+      check: 'host.guest.stopped',
+      startsOn: true,
+      perItem: true,
+      nature: 'problem',
+    });
     expect(hostAlertCheck('agent.heartbeat_missing').words).toBe('Until it checks in again.');
     expect(hostHintCheck('system.updates').nature).toBe('fyi');
     const newer = hostAlertCheck('gpu.temp_high');

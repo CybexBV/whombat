@@ -23,6 +23,9 @@ import {
   ApiError,
   CHAT_WORDS,
   headFacts,
+  holdSaysBadge,
+  holdView,
+  KEEP_QUIET_WORDS,
   LOOK_PLAN_WORDS,
   OVERVIEW_WORDS,
   parseThingTab,
@@ -39,6 +42,7 @@ import {
   thingTabs,
   threadToOpen,
   undoOutcome,
+  withoutHoldLine,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo, parseDashboardRange } from '@whombat/client/hosts';
 import { queryKeys } from '@whombat/client/query';
@@ -50,6 +54,7 @@ import {
   useThingAction,
   useThingButtons,
   useThingPage,
+  useThingWatch,
   useUndoChange,
 } from '@whombat/client/react';
 import {
@@ -93,7 +98,9 @@ import { FindMyTimelineTab } from '../findmy/FindMyTimelineTab';
 import { BackupsKeptHere } from '../KeptHere';
 import { AppLink, ConfirmDialog, Skeleton, useChangeRunner } from '../parts';
 import { PAGE_FRESH_MS, thingPageInput } from '../prefetch';
+import { HoldLine, KeepQuietDialog, useKeepsQuiet, useThingKeepQuiet } from '../quiet/KeepQuiet';
 import { useThingQuiet } from '../quiet/useQuiet';
+import { WhatHappened } from '../quiet/WhatHappened';
 import { useThingSearch } from '../search';
 import things from '../Things.module.css';
 import { THING_ICONS } from '../thingIcons';
@@ -148,6 +155,15 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
   });
   // Ignore, Remind me tomorrow, Stop watching and Undo on its lines (quiet-notices.md AP-4822).
   const quiet = useThingQuiet(burrow, thing);
+  // Keep quiet for a while and End now, for who may manage it on a Whombat that has it.
+  const keeps = useKeepsQuiet();
+  const watch = useThingWatch(keeps ? { params: { burrow, thing } } : null, {
+    retry: false,
+    staleTime: 60_000,
+  });
+  const mayKeep = keeps && !!watch.data?.mayChange;
+  const keepQuiet = useThingKeepQuiet(burrow, thing, page?.name ?? '');
+  const [keeping, setKeeping] = useState(false);
   // Ask {assistant} to handle these (handle-it.md); a Whombat without it, or nothing left to look into: the question in
   // the Ask pane, as before.
   const handleQuestion = useRef('');
@@ -202,6 +218,8 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
         },
         putBack: putBack.run,
         puttingBack: putBack.busy,
+        endQuiet: keeps ? () => void keepQuiet.end() : null,
+        endingQuiet: keepQuiet.busy,
       }
     : null;
 
@@ -248,10 +266,22 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
     // A tab about a server the page draws from that server's own reads (Find My's names its Mac).
     const about = tabs.find((t) => t.key === tab)?.server ?? null;
     const summary = tab === tabs[0]?.key;
-    const panels = serverTab(page, tab)?.panels ?? [];
+    // The hold's heads-up line is for an app that doesn't draw the line under the head.
+    const hold = keeps ? holdView(page) : null;
+    const panels = (serverTab(page, tab)?.panels ?? []).map((p) =>
+      hold && p.kind === 'notices' ? { ...p, items: [...withoutHoldLine(p.items, page)] } : p,
+    );
     body = (
       <>
-        <Head burrow={burrow} page={page} buttons={buttons} onPickRunsOn={() => setPicking(true)} />
+        <Head
+          burrow={burrow}
+          page={page}
+          buttons={buttons}
+          onPickRunsOn={() => setPicking(true)}
+          onKeepQuiet={mayKeep ? () => setKeeping(true) : null}
+          stateInHold={!!hold && holdSaysBadge(page)}
+        />
+        {hold ? <HoldLine view={hold} onEnd={() => void keepQuiet.end()} busy={keepQuiet.busy} /> : null}
         {query.error && !query.isPlaceholderData ? (
           // A refresh failed: the saved page stays, its status and problems with it; its controls may have changed.
           <ReadNote
@@ -322,6 +352,8 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
               {summary && page.catalogId && placeKindOfCatalog(page.catalogId) ? (
                 <BackupsKeptHere thing={page.id} />
               ) : null}
+              {/* Its outages and problems over the last 30 days. */}
+              {summary ? <WhatHappened burrow={burrow} thing={page.id} /> : null}
             </>
           )}
         </div>
@@ -355,6 +387,15 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
       ) : null}
       {picking && page ? (
         <RunsOnDialog burrow={burrow} page={page} onClose={() => setPicking(false)} />
+      ) : null}
+      {page && mayKeep ? (
+        <KeepQuietDialog
+          open={keeping}
+          burrow={burrow}
+          name={page.name}
+          actions={keepQuiet}
+          onClose={() => setKeeping(false)}
+        />
       ) : null}
       <ThingButtonQuestion buttons={buttons} />
     </div>
@@ -401,11 +442,17 @@ function Head({
   page,
   buttons,
   onPickRunsOn,
+  onKeepQuiet,
+  stateInHold = false,
 }: {
   burrow: string;
   page: ThingPage;
   buttons: ThingButtons;
   onPickRunsOn: () => void;
+  /** Keep quiet… in ⋯; null where the viewer may not or the Whombat can't. */
+  onKeepQuiet: (() => void) | null;
+  /** The hold's line under the head says the state pill's words: the pill is left out, as on the phone. */
+  stateInHold?: boolean;
 }) {
   const headButtons = page.buttons ?? [];
   // Restart's question, from ⋯.
@@ -424,7 +471,7 @@ function Head({
     <PageHead
       {...headLook(page)}
       name={page.name}
-      badge={{ tone: thingBadgeTone(page.status), text: page.badge }}
+      badge={stateInHold ? null : { tone: thingBadgeTone(page.status), text: page.badge }}
       statusFirst
       verdict={page.verdict ?? null}
       detail={detail.length ? detail.map((line) => <Fact key={factKey(line)} line={line} />) : null}
@@ -468,6 +515,15 @@ function Head({
                   serious: view.tone === 'danger',
                 };
               }),
+              ...(onKeepQuiet
+                ? [
+                    {
+                      key: 'keep-quiet',
+                      label: KEEP_QUIET_WORDS.menu,
+                      onSelect: onKeepQuiet,
+                    } satisfies HeadMenuItem,
+                  ]
+                : []),
             ]}
           />
           <ActionDialog burrow={burrow} page={page} action={asking} onClose={() => setAsking(null)} />

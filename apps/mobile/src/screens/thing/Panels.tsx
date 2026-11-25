@@ -18,13 +18,16 @@
 import {
   handleTheseView,
   keepHereQuestion,
+  LIMIT_WORDS,
+  type LimitView,
+  limitNow,
   noticeGroups,
   OVERVIEW_WORDS,
   thingImageInitial,
   widgetChart,
 } from '@whombat/client';
 import { litSegments, TILE_SEGMENTS_PHONE } from '@whombat/client/hosts';
-import { type QuietActions, useWidgets } from '@whombat/client/react';
+import { type QuietActions, type QuietTarget, useWidgets } from '@whombat/client/react';
 import type { HostSeriesRange, LookResearch, ThingNoticeIcon, ThingPagePanel, Widget } from '@whombat/core';
 import { Fragment, type ReactNode, useContext, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -48,6 +51,7 @@ import {
   wideLayout,
 } from '../../data/dashboard';
 import type { ChartSwatch, HostReadout } from '../../data/hostStatus';
+import { MONITORING_COPY } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
 import { LINE_PICTURE_WIDTH, SERVICE_COPY } from '../../data/servicePanels';
 import { panelAsk } from '../../data/serviceSettings';
@@ -139,6 +143,16 @@ export interface PanelContext {
    * sheet. None: no Put it back there.
    */
   putBack?: ((changeId: string) => void) | null;
+  /**
+   * End now on a line held because the thing is kept quiet: ends the whole window. None
+   * on a Whombat without it, or for who may not end it.
+   */
+  endQuiet?: { run: () => void; busy: boolean } | null;
+  /**
+   * Change the limit in a line's ⋯: the limit of a server's check the line comes from, for its
+   * item, and what opens its sheet. None where nothing has a limit.
+   */
+  limits?: { of: (line: QuietTarget) => LimitView | null; open: (view: LimitView) => void } | null;
 }
 
 type ChartPanel = Extract<ThingPagePanel, { kind: 'chart' }>;
@@ -791,7 +805,8 @@ function NoticesCard({
   };
   const badge = noticesBadge(panel);
   const openMenu = quiet
-    ? (r: NoticeRowView) => (r.menu ? setMenuFor({ menu: r.menu, line: r.line }) : undefined)
+    ? (r: NoticeRowView) =>
+        r.menu ? setMenuFor({ menu: r.menu, line: r.line, limit: ctx.limits?.of(r.line) ?? null }) : undefined
     : null;
   const line = (r: NoticeRowView) =>
     r.button || r.menu || r.quiet ? (
@@ -865,7 +880,14 @@ function NoticesCard({
           onPress={() => setUnfolded(!unfolded)}
         />
       ) : null}
-      {quiet ? <QuietMenuSheet target={menuFor} actions={quiet} onClose={() => setMenuFor(null)} /> : null}
+      {quiet ? (
+        <QuietMenuSheet
+          target={menuFor}
+          actions={quiet}
+          onLimit={ctx.limits?.open ?? null}
+          onClose={() => setMenuFor(null)}
+        />
+      ) : null}
     </OneCard>
   );
 }
@@ -894,12 +916,24 @@ function NoticeLine({
   const quiet = ctx.quiet ?? null;
   const menu = row.menu && onMenu ? () => onMenu(row) : null;
   // On iPhone the menu is iOS's own, from the line held or its ⋯ tapped.
-  const native = menu && row.menu && quiet && hasNativeMenu ? quietLineMenu(row.menu, row.line.title) : null;
+  // A server's line whose check has a limit offers Change the limit in its ⋯ too.
+  const limit = menu && ctx.limits ? ctx.limits.of(row.line) : null;
+  const native =
+    menu && row.menu && quiet && hasNativeMenu
+      ? quietLineMenu(
+          row.menu,
+          row.line.title,
+          limit ? { label: LIMIT_WORDS.menu, words: limitNow(limit) } : null,
+        )
+      : null;
   const pick = (id: string) => {
+    if (id === 'limit' && limit) return ctx.limits?.open(limit);
     const p = parseQuietPick(id);
     if (p && quiet) quiet[p](row.line);
   };
   const undo = row.undo && quiet ? row.undo : null;
+  // A line held because the whole thing is kept quiet ends with it: End now, not Undo.
+  const endQuiet = row.endNow ? (ctx.endQuiet ?? null) : null;
   const inner = (
     <>
       <View style={{ width: 20, alignItems: 'center' }}>
@@ -935,7 +969,12 @@ function NoticeLine({
   return (
     <View style={{ paddingLeft: 14, borderTopWidth: 1, borderTopColor: theme.colors.line }}>
       <View
-        style={{ flexDirection: 'row', alignItems: 'center', paddingRight: menu || undo ? 4 : 14, gap: 4 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingRight: menu || undo || endQuiet ? 4 : 14,
+          gap: 4,
+        }}
       >
         {native ? (
           <NativeMenu spec={native} onPick={pick} style={GROWS}>
@@ -1000,6 +1039,21 @@ function NoticeLine({
             </Text>
           </Touchable>
         ) : null}
+        {endQuiet ? (
+          <Touchable
+            onPress={endQuiet.run}
+            disabled={endQuiet.busy}
+            feedback="fade"
+            ringRadius={10}
+            accessibilityLabel={`${MONITORING_COPY.endNow}: ${row.title}`}
+            accessibilityHint={MONITORING_COPY.endNowHint}
+            style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
+          >
+            <Text size={13} weight={600} color={theme.colors.brand}>
+              {MONITORING_COPY.endNow}
+            </Text>
+          </Touchable>
+        ) : null}
       </View>
       {row.button && ctx.act ? (
         <View style={{ paddingLeft: MARK_ROOM, paddingRight: 14, paddingBottom: 12, marginTop: -3 }}>
@@ -1022,7 +1076,7 @@ const MENU_DOT = {
 } as const;
 
 /** “Show 4 more” at a card's foot: `brand` words on a 44dp row that opens (or closes) the rest in place. */
-function FoldRow({ label, onPress }: { label: string; onPress: () => void }) {
+export function FoldRow({ label, onPress }: { label: string; onPress: () => void }) {
   const theme = useTheme();
   return (
     <Touchable

@@ -4,13 +4,14 @@
  * the step the assistant offered, which posts their go-ahead). The switch is the person's choice, made as them with the
  * assistant named on the change, so it is in what the assistant did with Undo; Undo puts the check back as it was.
  */
-import { type McpToolOutput, parseThingId, thingId } from '@whombat/core';
+import { type McpToolInput, type McpToolOutput, parseThingId, thingId } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { connectionByHandle } from '../../connections/context';
 import type { ConnectionViewer } from '../../connections/store';
 import { burrows } from '../../db/schema/index';
 import { turnPerson } from '../../domain/turn-person';
 import type { DirectUndoCtx, DirectUndoResult, RecordedChange } from '../../home/registry';
+import { setServerWatchLimit } from '../../hosts/quiet';
 import { ApiError, badRequest, forbidden, notFound } from '../../lib/errors';
 import type { ToolContext } from '../../mcp/tools';
 import { loadPrincipalRow, type PrincipalRow } from '../../read/principals';
@@ -61,6 +62,7 @@ function agentChecks(watch: WireWatch): McpToolOutput<'watch_checks'> {
         nature: c.nature,
         on: c.on,
         ...(except.length ? { except } : {}),
+        ...(c.limit ? { limit: c.limit } : {}),
       };
     }),
   };
@@ -69,7 +71,7 @@ function agentChecks(watch: WireWatch): McpToolOutput<'watch_checks'> {
 /** `watch_checks` (on-purpose.md): list a thing's checks; switch one when the person said so in this turn. */
 export async function watchChecksTool(
   ctx: ToolContext,
-  input: { thing: string; check?: string; subject?: string; subjectName?: string; watched?: boolean },
+  input: McpToolInput<'watch_checks'>,
 ): Promise<McpToolOutput<'watch_checks'>> {
   const { services, burrowId, agentId } = ctx;
   if (outsidersTurn(ctx.dispatch))
@@ -79,13 +81,29 @@ export async function watchChecksTool(
   const viewer = viewerOf(person);
   const timeZone = await timeZoneOf(services, burrowId);
   const thing = await thingOf(ctx, input.thing);
+  const subject = input.subject
+    ? { id: input.subject, name: (input.subjectName ?? input.subject).slice(0, 80) }
+    : undefined;
+  if (input.limit !== undefined) {
+    if (ctx.onBehalfOf.principalId !== person.id)
+      throw forbidden(
+        'Ask the person before changing a limit. Change it when they say so in this conversation.',
+      );
+    if (!input.check || input.watched !== undefined)
+      throw badRequest('Name the check and change its limit in a separate call.');
+    const parsed = parseThingId(thing);
+    if (parsed?.kind !== 'server') throw badRequest('Choose a server to change its alert limit.');
+    const result = await setServerWatchLimit(
+      services,
+      { burrowId, actorId: person.id, serverId: parsed.id, agentId },
+      { check: input.check, ...(subject ? { subject } : {}), limit: input.limit },
+    );
+    return agentChecks(result.watch);
+  }
   if (input.watched !== undefined) {
-    if (!input.check) throw badRequest('Name the check to switch: without watched, watch_checks lists them.');
+    if (!input.check) throw badRequest('Name the check to switch.');
     // Their own message started this turn: their words, or the go-ahead their press of the step posted.
     if (ctx.onBehalfOf.principalId !== person.id) throw forbidden(ASK_FIRST_TEXT);
-    const subject = input.subject
-      ? { id: input.subject, name: (input.subjectName ?? input.subject).slice(0, 80) }
-      : undefined;
     const watch = await setThingWatch(
       services,
       viewer,

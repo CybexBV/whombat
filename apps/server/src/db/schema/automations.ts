@@ -49,6 +49,7 @@ export const automations = pgTable(
     scheduleAnchor: ts('schedule_anchor'),
     /** When this automation's mail trigger became active (mail received before it, minus skew, never fires). */
     mailActiveAt: ts('mail_active_at'),
+    thingActiveAt: ts('thing_active_at'),
     /**
      * Deleted (`automations.delete`, docs/decisions/automation-recipes.md): switched off, its webhook and keys gone; it
      * leaves every list and never runs again. Its runs still show it.

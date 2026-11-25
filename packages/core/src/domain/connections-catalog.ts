@@ -139,6 +139,15 @@ export {
   TokenAuth,
 } from './connections-catalog/shared.js';
 export { TASKS_TOOLS } from './connections-catalog/todoist.js';
+export {
+  UPTIME_HUB_NAME,
+  UPTIME_HUB_RUNNER,
+  UPTIME_ID,
+  UPTIME_KINDS,
+  UptimeFields,
+  UptimeHubCheck,
+  uptimeFields,
+} from './connections-catalog/uptime.js';
 export { SERVERS_SENSITIVE, SERVERS_TOOLS } from './connections-catalog/whombat_servers.js';
 
 import { entry as adguardEntry } from './connections-catalog/adguard.js';
@@ -201,6 +210,13 @@ import { entry as unifiAccessEntry } from './connections-catalog/unifi_access.js
 import { entry as unifiNetworkEntry } from './connections-catalog/unifi_network.js';
 import { entry as unifiProtectEntry } from './connections-catalog/unifi_protect.js';
 import { entry as unraidEntry } from './connections-catalog/unraid.js';
+import {
+  UPTIME_ID,
+  UptimeFields,
+  entry as uptimeEntry,
+  uptimeFields,
+  uptimeWebsiteHost,
+} from './connections-catalog/uptime.js';
 import { entry as whombatServersEntry } from './connections-catalog/whombat_servers.js';
 
 const ENTRIES = [
@@ -243,6 +259,7 @@ const ENTRIES = [
   piholeEntry,
   opnsenseEntry,
   nginxProxyManagerEntry,
+  uptimeEntry,
   tailscaleEntry,
   cloudflareEntry,
   portainerEntry,
@@ -327,6 +344,7 @@ export const CATALOG_IDS = [
   'pihole',
   'opnsense',
   'nginx_proxy_manager',
+  'uptime',
   'tailscale',
   'cloudflare',
   'portainer',
@@ -518,6 +536,22 @@ export function fieldsFor(entry: CatalogEntry, kind: SignInKind): z.output<typeo
 }
 
 /**
+ * Whether a field is asked with the values typed so far (`shownWhen`): always without one, else while the field it
+ * follows has one of its values (its default while it is empty).
+ */
+export function fieldShown(
+  entry: Pick<CatalogEntry, 'fields'>,
+  field: Pick<CatalogField, 'shownWhen'>,
+  values: Readonly<Record<string, string>>,
+): boolean {
+  const when = field.shownWhen;
+  if (!when) return true;
+  const other = entry.fields.find((f) => f.id === when.field);
+  const value = values[when.field]?.trim() || other?.default || '';
+  return when.values.includes(value);
+}
+
+/**
  * The values of the entry's `fromCheck` fields in a check's JSON answer (0.111, CT-737; SG-15a): each field's first
  * string or number at its path, trimmed, when it is there and fits a field (at most `CONNECTION_FIELD_VALUE_MAX`, no
  * control characters); fields the answer doesn't hold are left out. The server merges them into the connection's fields
@@ -668,6 +702,12 @@ export function resolveTokenUrl(
 
 /** The host a connection is on (“home.lan”, “home.lan:8123”), for its label and row; null for fixed services. */
 export function connectionHost(entry: CatalogEntry, fields: Readonly<Record<string, string>>): string | null {
+  if (entry.id === UPTIME_ID) {
+    const parsed = UptimeFields.safeParse(fields);
+    if (!parsed.success) return null;
+    const { address } = uptimeFields(parsed.data);
+    return address && parsed.data.kind === 'http' ? uptimeWebsiteHost(address) : (address ?? null);
+  }
   if (!entry.baseUrl || !templateFields(entry.baseUrl).includes('url')) return null;
   const url = fieldValue(entry, 'url', fields);
   if (url === null) return null;
@@ -754,6 +794,17 @@ export function fieldsProblems(
   for (const f of fieldsFor(entry, kind)) {
     const problem = fieldProblem(f, fields[f.id]);
     if (problem) out[f.id] = problem;
+  }
+  if (entry.id === UPTIME_ID) {
+    const result = UptimeFields.safeParse(fields);
+    if (!result.success)
+      for (const issue of result.error.issues) {
+        const id = String(issue.path[0]);
+        out[id] ??=
+          issue.code === 'custom'
+            ? issue.message
+            : `Check the value for ${entry.fields.find((f) => f.id === id)?.label.toLowerCase() ?? id}.`;
+      }
   }
   for (const id of Object.keys(fields))
     if (!entry.fields.some((f) => f.id === id)) out[id] = 'This connection has no such field.';

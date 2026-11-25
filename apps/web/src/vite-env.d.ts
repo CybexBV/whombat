@@ -81,6 +81,7 @@ interface ImportMetaEnv {
   readonly VITE_FIXTURE_DELEGATION?: string;
   /** `1`: looks Neo looked into, on Home, their pages and in Chat (`lookFixtures.ts`, AP-5909). */
   readonly VITE_FIXTURE_LOOKS?: string;
+  readonly VITE_FIXTURE_MONITORING?: string;
   /** `good`: nothing open and every thing fine, for the status sentence (`statusFixtures.ts`, status-line.md). */
   readonly VITE_FIXTURE_STATUS?: string;
   /** `0`: Neo finished nothing today, so nothing was fixed today (`statusFixtures.ts`). */

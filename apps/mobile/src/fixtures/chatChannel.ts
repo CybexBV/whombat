@@ -73,9 +73,11 @@ import {
   type RealtimeEvent,
   signedReply,
   type TaskCard,
+  type ThingWatchView,
   type ThreadSettle,
   type ThreadWork,
   taskCardLine,
+  thingWatchStartText,
   VAULT_BLANKED,
 } from '@whombat/core';
 import { vaultAskCard, vaultAskLockedLabel } from '@whombat/core/vault';
@@ -121,6 +123,7 @@ export const CHAT_ROOTS = {
   tasks: 'msg_chat-tasks',
   watchNoor: 'msg_chat-watch-noor',
   watchRuben: 'msg_chat-watch-ruben',
+  watchPlex: 'msg_chat-watch-plex',
   prod1: 'msg_chat-prod1',
   githubCode: 'msg_chat-github-code',
   nas: 'msg_chat-nas',
@@ -825,24 +828,48 @@ export function createChatChannelFixtures(options: ChatChannelOptions) {
       [assistantId, ruben.startedAt, findMyWatchStartText(ruben), card(ruben)],
       [assistantId, ruben.endedAt ?? ago(45), findMyWatchEndText(ruben) ?? ''],
     ]);
+    const plex: ThingWatchView = {
+      id: 'thw_plex',
+      thing: 'connection:con_plex',
+      name: 'Plex',
+      event: 'down',
+      status: 'watching',
+      startedAt: ago(9),
+      endsAt: later(180),
+      endedAt: null,
+    };
+    thread(
+      chat,
+      msg(CHAT_ROOTS.watchPlex, chatId, mara.id, ago(10), 'Let me know if Plex goes down tonight'),
+      [
+        [
+          assistantId,
+          plex.startedAt,
+          thingWatchStartText(plex),
+          { card: { kind: 'thing_watch', watchId: plex.id, watch: plex } },
+        ],
+      ],
+    );
   }
 
   /** The watch card's Cancel: the watch cancelled on its message, out to the room; one that ended answers as it is. */
-  function cancelWatch(watchId: string): FindMyWatchView | null {
+  function cancelWatch(watchId: string, kind: 'findmy_watch' | 'thing_watch') {
     for (const [rootId, list] of chat.replies) {
-      const i = list.findIndex((m) => m.card?.kind === 'findmy_watch' && m.card.watchId === watchId);
+      const i = list.findIndex((m) => m.card?.kind === kind && m.card.watchId === watchId);
       const was = list[i];
-      if (was?.card?.kind !== 'findmy_watch' || !was.card.watch) continue;
+      if (was?.card?.kind !== kind || !was.card.watch) continue;
       const watch = was.card.watch;
       if (watch.status !== 'watching') return watch;
-      const next: FindMyWatchView = { ...watch, status: 'cancelled', endedAt: now().toISOString() };
-      const message: Message = { ...was, card: { ...was.card, watch: next } };
+      const ended = { status: 'cancelled' as const, endedAt: now().toISOString() };
+      const card = { ...was.card };
+      card.watch = { ...watch, ...ended };
+      const message: Message = { ...was, card };
       chat.replies.set(
         rootId,
         list.map((m, j) => (j === i ? message : m)),
       );
       emit(`conv:${chatId}`, { type: 'message.updated', message });
-      return next;
+      return card.watch;
     }
     return null;
   }
@@ -1191,8 +1218,12 @@ export function createChatChannelFixtures(options: ChatChannelOptions) {
             ...(before ? {} : { settledCount: here.filter((t) => t.settled).length }),
           });
         }
+        case 'things.cancelWatch':
         case 'connections.findMyWatchCancel': {
-          const watch = cancelWatch(params.watchId ?? '');
+          const watch = cancelWatch(
+            params.watchId ?? '',
+            id === 'things.cancelWatch' ? 'thing_watch' : 'findmy_watch',
+          );
           return watch ? json(watch) : notFound('No such watch');
         }
         case 'chats.place': {

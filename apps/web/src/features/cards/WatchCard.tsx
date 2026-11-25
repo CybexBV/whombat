@@ -1,14 +1,18 @@
 import { FIND_MY_WATCH_WORDS } from '@whombat/client';
-import { type FindMyWatchView, findMyWatchCardLines } from '@whombat/core';
+import {
+  type FindMyWatchView,
+  findMyWatchCardLines,
+  type ThingWatchView,
+  thingWatchCardLines,
+} from '@whombat/core';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { StatusDot } from '../../components/StatusDot';
 import scheduleStyles from '../schedules/Schedules.module.css';
 import cardStyles from './Card.module.css';
 
-export interface FindMyWatchCardProps {
-  /** A watch that is still watching: an ended one is its line (`findMyWatchLine`). */
-  watch: FindMyWatchView;
+export interface WatchCardProps {
+  watch: FindMyWatchView | ThingWatchView;
   timeZone: string;
   /** Now, for “Until 14:05” against “Until tomorrow at 14:05”. */
   nowMs: number;
@@ -20,24 +24,18 @@ export interface FindMyWatchCardProps {
 }
 
 /**
- * A one-time Find My watch while it watches (findmy-watch.md): what it waits for, until when, and Cancel. Not in the
- * mocks: it is drawn as the schedule card is, the other card an assistant posts about something still to come, so
- * the two read as one family. Every word is core's `findMyWatchCardLines`.
+ * While a watch runs, show what it waits for, until when, and Cancel.
  */
-export function FindMyWatchCard({
-  watch,
-  timeZone,
-  nowMs,
-  onCancel,
-  busy = false,
-  problem,
-}: FindMyWatchCardProps) {
-  const lines = findMyWatchCardLines(watch, timeZone, nowMs);
+export function WatchCard({ watch, timeZone, nowMs, onCancel, busy = false, problem }: WatchCardProps) {
+  const thing = 'event' in watch;
+  const lines = thing
+    ? thingWatchCardLines(watch, timeZone, nowMs)
+    : findMyWatchCardLines(watch, timeZone, nowMs);
   return (
     <section
       className={cx(cardStyles.card, scheduleStyles.card)}
       aria-label={lines.title}
-      data-card="findmy_watch"
+      data-card={thing ? 'thing_watch' : 'findmy_watch'}
       data-watch-status={watch.status}
     >
       <span className={cardStyles.title}>{lines.title}</span>
@@ -50,6 +48,7 @@ export function FindMyWatchCard({
       {lines.canCancel && onCancel && (
         <div className={cardStyles.actions}>
           <Button
+            className={cardStyles.watchCancel}
             variant="secondary"
             size="lg"
             disabled={busy}

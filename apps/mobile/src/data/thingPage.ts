@@ -10,6 +10,7 @@
  */
 import {
   doneWhen,
+  heldLine,
   type LookPlanCardView,
   type LookResearchView,
   lineNature,
@@ -361,6 +362,13 @@ export interface NoticeRowView {
   quiet: string | null;
   /** Undo on a quiet line, for who may quiet it: the line it takes back. */
   undo: NoticeRef | null;
+  /**
+   * End now on a line held by the thing kept quiet: it ends the whole window, not this
+   * line's quiet. A line held by a cause has neither: it lifts when the cause is back.
+   */
+  endNow: boolean;
+  /** Quiet with the whole thing (kept quiet, or down because of something else); null for its own or none. */
+  held: 'window' | 'cause' | null;
   spoken: string;
 }
 
@@ -391,7 +399,8 @@ export function noticeRows(
     const action = linkRun(noticeLink(n, askLabel), tabs);
     const words = quietText ? null : NOTICE_TONE_WORDS[n.tone];
     const detail = n.detail?.trim() || null;
-    const ref = quiet && quietUndo(n) ? noticeRef(n) : null;
+    const held = heldLine(n);
+    const ref = quiet && !held && quietUndo(n) ? noticeRef(n) : null;
     return {
       id: n.id,
       tone: n.tone === 'info' || quietText ? null : n.tone,
@@ -410,6 +419,8 @@ export function noticeRows(
       menu: quiet ? quietMenu(n) : null,
       quiet: quietText,
       undo: ref,
+      endNow: quiet && held === 'window',
+      held,
       spoken: (quietText ? [n.title, quietText] : [words, n.title, detail]).filter(Boolean).join('. '),
     };
   });

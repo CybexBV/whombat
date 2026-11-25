@@ -50,6 +50,16 @@ describe('the Worth a look strip (SLT-08)', () => {
     expect(stripLines([]).lines).toEqual([]);
   });
 
+  it('folds lines quiet with the whole thing apart, out of the room the others leave', () => {
+    const held = notice('held', {
+      quiet: { state: 'snoozed', words: 'until 23:00', at: AT, held: 'window' },
+    });
+    const s = stripLines([notice('problem', { tone: 'bad', nature: 'problem' }), held]);
+    expect(s.held.map((n) => n.id)).toEqual(['held']);
+    expect(s.shown.map((n) => n.id)).toEqual(['problem']);
+    expect(s.lines.map((n) => n.id)).toEqual(['problem', 'held']);
+  });
+
   it('takes the colour of its most serious line that isn’t quiet', () => {
     expect(stripTone([notice('a', { tone: 'info' }), notice('b', { tone: 'warn' })])).toBe('warn');
     expect(stripTone([notice('a', { tone: 'bad' }), notice('b', { tone: 'warn' })])).toBe('bad');

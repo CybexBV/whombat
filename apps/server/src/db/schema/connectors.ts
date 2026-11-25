@@ -14,9 +14,19 @@ import type {
   ReauthReason,
 } from '@whombat/core';
 import { sql } from 'drizzle-orm';
-import { index, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  check,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { ts } from './common';
-import { accounts } from './tenancy';
+import { accounts, burrows } from './tenancy';
 
 /** The OAuth client the person set up on this Whombat, per provider (CN-02). */
 export const connectorApps = pgTable('connector_apps', {
@@ -75,6 +85,25 @@ export const connections = pgTable(
     mailSettings: jsonb('mail_settings').$type<StoredMailSettings>(),
   },
   (t) => [uniqueIndex('connections_account_provider_idx').on(t.accountId, t.provider)],
+);
+
+/** Whether a connected account answered. GitHub is connected for the whole burrow. */
+export const accountUptimePoints = pgTable(
+  'account_uptime_points',
+  {
+    connectionId: text('connection_id').references(() => connections.id, { onDelete: 'cascade' }),
+    githubBurrowId: text('github_burrow_id').references(() => burrows.id, { onDelete: 'cascade' }),
+    at: ts('at').notNull(),
+    up: doublePrecision('up').notNull(),
+    /** Null for a live reading. An hourly average keeps how many readings it covers. */
+    samples: integer('samples'),
+  },
+  (t) => [
+    check('account_uptime_owner', sql`num_nonnulls(${t.connectionId}, ${t.githubBurrowId}) = 1`),
+    unique('account_uptime_slot').on(t.connectionId, t.githubBurrowId, t.at).nullsNotDistinct(),
+    index('account_uptime_at_idx').on(t.at),
+    index('account_uptime_github_at_idx').on(t.githubBurrowId, t.at),
+  ],
 );
 
 /** A pending OAuth sign-in: `id` is the `state` sent to the provider. Single use, 10 minutes (CN-04). */

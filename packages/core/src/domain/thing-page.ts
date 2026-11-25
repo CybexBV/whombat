@@ -46,8 +46,17 @@ import { ChangeId, ConnectionId, DeviceSkillProposalId } from '../ids.js';
 import { Timestamp } from './common.js';
 import { HomeHref, ThingKind, ThingStatus } from './home.js';
 import { HostSeriesRange } from './hosts.js';
+import { ThingUptime } from './incidents.js';
 import { LookResearch } from './look-research.js';
-import { NoticeCheck, NoticeIgnore, NoticeNature, NoticeQuiet, NoticeSubject } from './quiet.js';
+import {
+  KeptQuiet,
+  NoticeCheck,
+  NoticeIgnore,
+  NoticeNature,
+  NoticeQuiet,
+  NoticeSubject,
+  ThingCause,
+} from './quiet.js';
 import { ThingLogo } from './thing-logo.js';
 
 /** A tab's, panel's, figure's or series' key: `overview`, `integrations`, `cpu`. */
@@ -938,6 +947,18 @@ export const ThingPage = z.object({
    * looked (an older Whombat).
    */
   research: LookResearch.optional(),
+  /**
+   * Its week in one line (session minor 9): “Up 99.6 % this week · down 3 times, 41 min”.
+   * The same words are one of `facts`, so an older app shows them too. Absent: Whombat has nothing to tell yet.
+   */
+  uptime: ThingUptime.optional(),
+  /**
+   * Kept quiet until a time: the page draws its words under the head with End
+   * now when `canEnd`. Worth a look also carries the words as a heads-up for an app that doesn't draw this.
+   */
+  keptQuiet: KeptQuiet.optional(),
+  /** Down because of something else: the badge says it (“Not answering while pve-02 is down”). */
+  causedBy: ThingCause.optional(),
 });
 export type ThingPage = z.infer<typeof ThingPage>;
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -13,19 +14,22 @@ const CheckHeartbeat = "heartbeat" // a cron job or script pings the hub
 
 // Check is a configured availability check.
 type Check struct {
-	ID        string
-	Name      string
-	Kind      string // http | tcp | ping | dns | heartbeat
-	Target    string
-	Runner    string // "hub" or a server id (the agent runs it from its network)
-	IntervalS int    // probes: how often; heartbeat: the expected period
-	TimeoutS  int
-	Options   CheckOptions
-	Token     string // heartbeat: the secret in the ping URL
-	GraceS    int    // heartbeat: tolerated lateness
-	Enabled   bool
-	CreatedBy string
-	CreatedAt time.Time
+	ID             string
+	Name           string
+	Kind           string // http | tcp | ping | dns | heartbeat
+	Target         string
+	Runner         string // "hub" or a server id (the agent runs it from its network)
+	IntervalS      int    // probes: how often; heartbeat: the expected period
+	TimeoutS       int
+	Options        CheckOptions
+	Token          string // heartbeat: the secret in the ping URL
+	GraceS         int    // heartbeat: tolerated lateness
+	Enabled        bool
+	ProbeRev       string // changes when a probe needs new results
+	ProbeChangedAt time.Time
+	Owner          string // optional owner assigned when the check is created
+	CreatedBy      string
+	CreatedAt      time.Time
 }
 
 // CheckOptions are the kind-specific settings.
@@ -40,21 +44,30 @@ type CheckOptions struct {
 	CertWarnDays int    `json:"cert_warn_days,omitempty"` // default 14
 }
 
-const checkCols = `id, name, kind, target, runner, interval_s, timeout_s, options, token, grace_s, enabled, created_by, created_at`
+const checkCols = `id, name, kind, target, runner, interval_s, timeout_s, options, token, grace_s, enabled, created_by, created_at, owner, probe_rev, probe_changed_at, dns_any_address`
 
 func scanCheck(row interface{ Scan(...any) error }) (Check, error) {
 	var c Check
 	var opts string
-	var ca int64
+	var ca, probeChangedAt int64
+	var anyAddress bool
 	err := row.Scan(&c.ID, &c.Name, &c.Kind, &c.Target, &c.Runner, &c.IntervalS, &c.TimeoutS, &opts, &c.Token, &c.GraceS,
-		&c.Enabled, &c.CreatedBy, &ca)
+		&c.Enabled, &c.CreatedBy, &ca, &c.Owner, &c.ProbeRev, &probeChangedAt, &anyAddress)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
 	}
 	if opts != "" {
 		_ = json.Unmarshal([]byte(opts), &c.Options)
 	}
+	if anyAddress && c.Options.DNSType == "A" {
+		c.Options.DNSType = "any"
+	}
 	c.CreatedAt = fromMS(ca)
+	c.ProbeChangedAt = fromMS(probeChangedAt)
+	if c.ProbeChangedAt.IsZero() {
+		// An older hub can create a check after the additive migration ran.
+		c.ProbeChangedAt = c.CreatedAt
+	}
 	return c, err
 }
 
@@ -78,13 +91,23 @@ func (s *Store) ListChecks(ctx context.Context) ([]Check, error) {
 
 // PutCheck inserts or replaces a check.
 func (s *Store) PutCheck(ctx context.Context, c Check) error {
-	opts, _ := json.Marshal(c.Options)
-	_, err := s.w.ExecContext(ctx, `INSERT INTO checks(`+checkCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	if c.ProbeChangedAt.IsZero() {
+		c.ProbeChangedAt = c.CreatedAt
+	}
+	options := c.Options
+	anyAddress := strings.EqualFold(options.DNSType, "any")
+	if anyAddress {
+		// A rolled-back hub reads these options and sends the type to its runner.
+		options.DNSType = "A"
+	}
+	opts, _ := json.Marshal(options)
+	_, err := s.w.ExecContext(ctx, `INSERT INTO checks(`+checkCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, target = excluded.target,
 		runner = excluded.runner, interval_s = excluded.interval_s, timeout_s = excluded.timeout_s, options = excluded.options,
-		token = excluded.token, grace_s = excluded.grace_s, enabled = excluded.enabled`,
+		token = excluded.token, grace_s = excluded.grace_s, enabled = excluded.enabled, probe_rev = excluded.probe_rev,
+		probe_changed_at = excluded.probe_changed_at, dns_any_address = excluded.dns_any_address`,
 		c.ID, c.Name, c.Kind, c.Target, c.Runner, c.IntervalS, c.TimeoutS, string(opts), c.Token, c.GraceS, b2i(c.Enabled),
-		c.CreatedBy, ms(c.CreatedAt))
+		c.CreatedBy, ms(c.CreatedAt), c.Owner, c.ProbeRev, ms(c.ProbeChangedAt), b2i(anyAddress))
 	return err
 }
 
@@ -102,6 +125,16 @@ func (s *Store) DeleteCheck(ctx context.Context, id string) error {
 
 // CheckSeriesOwner is the series owner of a check's history ("check:<id>").
 func CheckSeriesOwner(id string) string { return "check:" + id }
+
+// CheckPeriod reports whether samples were taken and whether any failed.
+// Check samples have second precision, and adjacent periods share a boundary.
+func (s *Store) CheckPeriod(ctx context.Context, id string, since, until time.Time) (seen, failed bool, err error) {
+	var lowest sql.NullFloat64
+	err = s.r.QueryRowContext(ctx, `SELECT MIN(value) FROM metrics_raw
+		WHERE series_id = (SELECT id FROM series WHERE server_id = ? AND name = 'up')
+		AND ts > ? AND ts <= ?`, CheckSeriesOwner(id), since.Unix(), until.Unix()).Scan(&lowest)
+	return lowest.Valid, lowest.Valid && lowest.Float64 == 0, err
+}
 
 // SaveCheckState stores a check's latest result (JSON) and since when its
 // state (ok / failing) holds.

@@ -62,7 +62,7 @@ import {
   type CatalogRow,
   CONNECTABLE,
   catalogRows,
-  catalogTileState,
+  catalogTileFor,
   connectableEntry,
 } from '../connectors/catalog';
 import {
@@ -517,7 +517,7 @@ function useCatalogOverview(burrow: string): CatalogOverview | undefined {
   const rows: CatalogRow[] = catalogRows(list.data?.connections ?? []);
   const tiles: CatalogTile[] = [];
   for (const entry of CONNECTABLE) {
-    const state = catalogTileState(catalog.data?.entries.find((e) => e.catalogId === entry.id));
+    const state = catalogTileFor(catalog.data?.entries, entry.id);
     if (!state) continue;
     tiles.push({
       catalogId: entry.id,

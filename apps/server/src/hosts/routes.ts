@@ -27,6 +27,8 @@ import {
   VAULT_SSH_SERVERS_MAX,
 } from '@whombat/core';
 import { externalEffect, outsideCommandScope } from '../commit/scope';
+import { hostsAlertsOverlapping, serverFirstReportAt, serverUptime } from '../incidents/history';
+import { UPTIME_WEEK_MS } from '../incidents/uptime';
 import { ApiError, forbidden, notAllowed, notFound } from '../lib/errors';
 import type { PrincipalRow } from '../read/principals';
 import { commitAs } from '../routes/burrows';
@@ -86,6 +88,7 @@ import { nameClash, renameServer } from './names';
 import { serverNameOf as givenNameOf, loadServerNames } from './names-store';
 import { canManageServers, ONLY_YOU_CHANGE_SERVERS_TEXT } from './person';
 import { quietAlertById } from './quiet';
+import { HEARTBEAT_RULE } from './quiet-lines';
 import { REPOINT_TEXT, RepointBusy, type RepointView, repointsFor } from './repoint';
 import {
   destructiveActionText,
@@ -1060,7 +1063,8 @@ export const hostsRoutes: RouteDef[] = [
   route(api.hosts.getServer, async (ctx) => {
     const g = await guard(ctx);
     const { serverId } = ctx.params;
-    const [raw, alerts, agent] = await Promise.all([
+    const now = ctx.services.clock();
+    const [raw, alerts, agent, offline] = await Promise.all([
       hostsCall(
         () =>
           g.hosts.call<unknown>({
@@ -1072,11 +1076,28 @@ export const hostsRoutes: RouteDef[] = [
       ),
       g.hosts.openAlertsRaw().catch(() => []),
       g.hosts.agentOf(serverId),
+      // Its offline stretches this week, for its week in one line.
+      hostsAlertsOverlapping(ctx.services, ctx.access.burrow.id, g.actor, {
+        server: serverId,
+        rule: HEARTBEAT_RULE,
+        since: new Date(now.getTime() - UPTIME_WEEK_MS),
+        limit: 200,
+      }),
     ]);
     // What is quiet (QN-14, QN-23): alerts and hints marked, hints nobody watches left out, the head from the rest.
-    const detail = await g.hosts.quietDetail(toHostServerDetail(raw, alerts, agent, ctx.services.clock()));
+    const detail = await g.hosts.quietDetail(toHostServerDetail(raw, alerts, agent, now));
+    const week = await serverUptime(
+      ctx.services,
+      ctx.access.burrow.id,
+      serverId,
+      offline,
+      serverFirstReportAt(raw),
+      now,
+      ctx.access.burrow.timeZone,
+    ).catch(() => null);
     return {
       ...detail,
+      ...(week ? { uptime: week.uptime } : {}),
       asksFirst: await serverAsksOf(ctx.services.db, ctx.access.burrow.id, serverId),
     };
   }),
@@ -1493,7 +1514,17 @@ export const hostsRoutes: RouteDef[] = [
     const raw = await hostsCall(() =>
       g.hosts.call<unknown>({
         path: `${HOSTS_API}/alerts`,
-        query: { state: q.state, server: q.server, severity: q.severity, limit: q.limit, before: q.before },
+        query: {
+          state: q.state,
+          server: q.server,
+          severity: q.severity,
+          limit: q.limit,
+          before: q.before,
+          since: q.since,
+          until: q.until,
+          rule: q.rule,
+          q: q.q,
+        },
         actor: g.actor,
       }),
     );
@@ -1578,6 +1609,15 @@ export const hostsRoutes: RouteDef[] = [
         .map(toHostCheck)
         .map((c) => (g.manages ? c : { ...c, pingUrl: null })),
     };
+  }),
+
+  route(api.hosts.getCheck, async (ctx) => {
+    const g = await guard(ctx);
+    const raw = await hostsCall(() =>
+      g.hosts.call<unknown>({ path: `${HOSTS_API}/checks/${seg(ctx.params.checkId)}`, actor: g.actor }),
+    );
+    const check = toHostCheck(raw);
+    return g.manages ? check : { ...check, pingUrl: null };
   }),
 
   route(api.hosts.createCheck, async (ctx) => {
@@ -2071,6 +2111,7 @@ function checkBody(b: {
   graceS?: number;
   options?: Record<string, unknown>;
   enabled?: boolean;
+  owner?: string;
 }): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const map: Record<string, string> = { intervalS: 'interval_s', timeoutS: 'timeout_s', graceS: 'grace_s' };

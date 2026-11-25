@@ -23,6 +23,7 @@
  * quiet rows of that moment. A failed check reads none of the kind's checks (`skipped`): nothing ends for them.
  */
 import {
+  CATALOG,
   type CatalogEntry,
   catalogEntry,
   isAgentConnection,
@@ -30,20 +31,23 @@ import {
   resolveMcpUrl,
   type SignInKind,
   thingId,
+  UPTIME_ID,
 } from '@whombat/core';
-import { and, eq, isNull, lt, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 import { outsideCommandScope } from '../commit/scope';
 import { recordFromCheck, runCatalogCheck } from '../connections/checks';
 import { credentialFor } from '../connections/credentials';
 import { confirmRefusedCredential } from '../connections/refused';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/types';
-import { burrows, catalogConnections } from '../db/schema/index';
+import { sweepUptimeChecks, uptimeHttpError, uptimePoint } from '../connections/uptime';
+import { burrows, catalogConnections, thingCauses } from '../db/schema/index';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
+import { uptimeSeen } from '../things/kinds/infra/uptime';
 import type { KindSeen } from '../things/kinds/registry';
-import { diskNotice, diskNow, type MachineNow } from '../things/machine';
-import { answerCheckOf, genericNotices, signinNotice } from '../things/panels';
+import { backupNotice, backupReadMissing, diskNotice, diskNow, type MachineNow } from '../things/machine';
+import { answerCheckOf, genericNotices, readFailedNotice, signinNotice } from '../things/panels';
 import { within } from '../things/part-of';
 import {
   DISK_GB_KEY,
@@ -52,6 +56,7 @@ import {
   RTT_KEY,
   readPoints,
   recordPoints,
+  UP_KEY,
 } from '../things/points';
 import { applyQuiet, isSkipped, lineKey, type Skipped } from '../things/quiet/apply';
 import { notWatched } from '../things/quiet/defaults';
@@ -65,7 +70,7 @@ import {
   writePass,
 } from '../things/quiet/store';
 import type { LooseNotice } from '../things/quiet/types';
-import { readMachine, resolveRunsOn } from '../things/runs-on';
+import { type ResolvedMachine, readMachine, resolveRunsOn } from '../things/runs-on';
 import { forecastFull } from '../things/series';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
 import { homeAudience, publishHomeChanged } from './notify';
@@ -79,6 +84,10 @@ import type { ConnectionGlance } from './types';
 function watched(entry: CatalogEntry): boolean {
   return isAgentConnection(entry) || isGatewayConnection(entry) || entry.id === TRACKER_CATALOG_ID;
 }
+
+const WATCHED_IDS = CATALOG.filter((entry) => entry.transport !== 'builtin' && watched(entry)).map(
+  (entry) => entry.id,
+);
 
 /** Connections looked at in one pass (the rest wait for the next). */
 const PASS_MAX = 50;
@@ -100,6 +109,15 @@ export function diskPoints(m: MachineNow | null): Record<string, number> {
   };
 }
 
+/** A lookup that ran out of time leaves the previous mapping usable. */
+async function lookupMachine(
+  services: Services,
+  row: CatalogConnectionRow,
+): Promise<ResolvedMachine | null | undefined> {
+  if (!row.burrowId) return null;
+  return within(resolveRunsOn(services, row.burrowId, row), 5_000, undefined);
+}
+
 /**
  * The disk of the machine a connection runs on, when Whombat knows it (a few seconds at most; nothing otherwise), or of
  * the machine as its kind sees it (Home Assistant OS's Supervisor's): its points, and the line its page shows about it
@@ -110,11 +128,17 @@ async function machineDisk(
   row: CatalogConnectionRow,
   now: Date,
   seen?: KindSeen['machine'],
-): Promise<{ points: Record<string, number>; line: LooseNotice | null; read: boolean }> {
-  const at = row.burrowId ? await within(resolveRunsOn(services, row.burrowId, row), 5_000, null) : null;
+): Promise<{
+  points: Record<string, number>;
+  lines: LooseNotice[];
+  read: boolean;
+  backupRead: boolean;
+  at: ResolvedMachine | null | undefined;
+}> {
+  const at = await lookupMachine(services, row);
   const figures = at ? await within(readMachine(services, at, null), 5_000, null) : null;
   const m = seen ? seen(figures) : figures;
-  if (!m) return { points: {}, line: null, read: false };
+  if (!m) return { points: {}, lines: [], read: false, backupRead: false, at };
   const pct =
     (await readPoints(services.db, row.id, [DISK_PCT_KEY], now, POINTS_KEEP_MS)).get(DISK_PCT_KEY) ?? [];
   const name = figures?.name ?? null;
@@ -126,7 +150,14 @@ async function machineDisk(
       ? `The disk of ${name} is filling up. What takes the space, and what can go?`
       : `The disk ${row.label} runs on is filling up. What takes the space, and what can go?`,
   });
-  return { points: diskPoints(m), line, read: true };
+  const backup = backupNotice(figures, now);
+  return {
+    points: diskPoints(m),
+    lines: [line, backup].filter((item) => item !== null),
+    read: true,
+    backupRead: at === null || (figures !== null && !backupReadMissing(figures)),
+    at,
+  };
 }
 
 /**
@@ -202,6 +233,8 @@ function failed(
     facts: previous?.facts ?? [],
     reason: words,
     ...(previous?.hostname ? { hostname: previous.hostname } : {}),
+    // Where it ran stays: a machine that stopped isn't found by its address any more.
+    ...(previous?.machine ? { machine: previous.machine } : {}),
   };
 }
 
@@ -261,6 +294,8 @@ export async function checkConnectionHealth(
     : Promise.all([thingQuiet(services.db, burrowId, thing), thingStates(services.db, thing)]);
   let glance: ConnectionGlance;
   let points: Record<string, number | null> = { [RTT_KEY]: null };
+  // Whether it answered: 1 or 0, none when the check couldn't run or Whombat couldn't ask.
+  let up: 0 | 1 | undefined;
   // Its lines as its page would show them (QN-S03), and the checks this pass didn't read (QN-S04).
   let lines: LooseNotice[] = [];
   let skipped: Skipped = [];
@@ -286,8 +321,29 @@ export async function checkConnectionHealth(
       mcpUrl: resolveMcpUrl(entry, row.fields, row.signIn as SignInKind),
       fields: row.fields,
       credential,
+      connectionId: row.id,
+      ...(row.catalogId === UPTIME_ID ? { uptimePassAt: now } : {}),
     });
-    if (outcome.refused) {
+    up = outcome.unseen ? undefined : outcome.ok || outcome.refused ? 1 : 0;
+    // A check Whombat couldn't run says nothing of how it answers: no response time either.
+    if (outcome.unseen) points = {};
+    if (outcome.uptime !== undefined) {
+      up = uptimePoint(outcome.uptime);
+      const seen = uptimeSeen(outcome.uptime, row, now, await zoneOf(services, row));
+      if (!outcome.unseen) points = seen.points;
+      glance = { ...seen.glance, status: outcome.unseen ? 'unknown' : 'ok' };
+      // The causes job needs the raw outcome even while a cause quiets the line.
+      if (!outcome.unseen && outcome.uptime?.status === 'down' && row.fields.kind !== 'heartbeat')
+        glance.outcome = uptimeHttpError(outcome.uptime) ? 'error' : 'offline';
+      // What it runs on, as for any connection; kept while it doesn't answer or can't be checked, since a stopped
+      // machine isn't found by its address.
+      const at = await lookupMachine(services, row);
+      if (at) glance.machine = { serverId: at.serverId, guestId: at.guestId, name: at.runsOn.name };
+      else if ((at === undefined || glance.outcome === 'offline' || outcome.unseen) && previous?.machine)
+        glance.machine = previous.machine;
+      lines = seen.notices ?? [];
+      skipped = seen.skipped ?? [];
+    } else if (outcome.refused) {
       await outsideCommandScope(() => confirmRefusedCredential(services, row.id));
       glance = failed('bad', 'Needs you to sign in again', previous);
       lines = [signinNotice(row.label)];
@@ -316,8 +372,16 @@ export async function checkConnectionHealth(
           status: 'ok',
           ...(previous?.line ? { line: previous.line } : {}),
           facts: previous?.facts ?? [],
+          readFailedSince: previous?.readFailedSince ?? now.toISOString(),
           ...(previous?.hostname ? { hostname: previous.hostname } : {}),
         };
+        const readFailed = readFailedNotice(
+          row.label,
+          glance.readFailedSince,
+          now,
+          await zoneOf(services, row),
+        );
+        if (readFailed) lines.push(readFailed);
         skipped = (check) => !check.startsWith('conn.');
       } else {
         Object.assign(points, seen?.points ?? {});
@@ -340,12 +404,18 @@ export async function checkConnectionHealth(
       }
       const disk = await machineDisk(services, row, now, seen?.machine).catch(() => null);
       Object.assign(points, disk?.points ?? {});
+      if (disk?.at)
+        glance.machine = { serverId: disk.at.serverId, guestId: disk.at.guestId, name: disk.at.runsOn.name };
+      else if (disk?.at === undefined && previous?.machine) glance.machine = previous.machine;
       // A kind that draws its machine says its disk itself (Home Assistant's Supervisor); one line per check.
       const own = new Set(lines.map((l) => l.check).filter(Boolean));
-      if (disk?.line && !own.has(disk.line.check)) lines.push(disk.line);
+      for (const line of disk?.lines ?? []) if (!own.has(line.check)) lines.push(line);
       if (!disk?.read) {
         const before = skipped;
         skipped = (check) => check.startsWith('machine.') || isSkipped(before, check);
+      } else if (!disk.backupRead) {
+        const before = skipped;
+        skipped = (check) => check === 'machine.backup_old' || isSkipped(before, check);
       }
     }
   } catch (err) {
@@ -354,6 +424,8 @@ export async function checkConnectionHealth(
       lines = [signinNotice(row.label)];
       skipped = onlyRead('conn.signin');
     } else {
+      // A check that answered and failed after stays answered.
+      up ??= 0;
       glance = {
         ...failed('offline', (await unansweredWords(services, row, now)) ?? 'Couldn’t reach it', previous),
         outcome: 'offline',
@@ -363,10 +435,12 @@ export async function checkConnectionHealth(
     }
   }
   const [quiet, states] = await kept;
+  const answeredWithError = row.catalogId === UPTIME_ID && glance.outcome === 'error';
   const result = applyQuiet({
     lines,
     quiets: quiet.quiets,
     ...notWatched(quiet),
+    ...(answeredWithError && quiet.cause?.kind === 'down' ? { cause: null } : {}),
     states,
     now,
     pass: true,
@@ -377,7 +451,13 @@ export async function checkConnectionHealth(
     l.check ? seenPasses.get(lineKey(l.check, l.subject?.id)) : undefined;
   glance = {
     ...glance,
-    status: result.worst ? (result.worst.offline ? 'offline' : result.status) : 'ok',
+    status: result.worst
+      ? result.worst.offline
+        ? 'offline'
+        : result.status
+      : glance.status === 'unknown'
+        ? 'unknown'
+        : 'ok',
     ...(result.reason ? { reason: result.reason } : {}),
     lines: [...result.active, ...result.quiet.map((q) => q.line)]
       .filter(colours)
@@ -385,15 +465,39 @@ export async function checkConnectionHealth(
       .map((l) => glanceLine(l, passesOf(l))),
   };
   if (!result.reason) delete glance.reason;
+  if (glance.status === 'unknown') delete glance.lines;
   const changed = shownText(previous) !== shownText(glance);
   // Read before the transaction: it doesn't wait on another connection while it holds one.
   const audience = changed && pass ? await pass.audience(row.burrowId) : null;
   await services.pipeline.transact(row.burrowId, async (session) => {
-    await session.tx
+    const [updated] = await session.tx
       .update(catalogConnections)
       .set({ glance, glanceAt: now, checkedAt: now })
-      .where(eq(catalogConnections.id, row.id));
-    await recordPoints(session.tx, row.id, now, points);
+      .where(
+        and(
+          eq(catalogConnections.id, row.id),
+          row.catalogId === UPTIME_ID
+            ? and(
+                eq(catalogConnections.updatedAt, row.updatedAt),
+                eq(catalogConnections.credentialVersion, row.credentialVersion),
+              )
+            : undefined,
+        ),
+      )
+      .returning({ id: catalogConnections.id });
+    if (!updated) return;
+    // An HTTP response ends a hold for not answering even if the causes job has yet to run.
+    if (answeredWithError)
+      await session.tx
+        .delete(thingCauses)
+        .where(
+          and(
+            eq(thingCauses.ownerId, burrowId),
+            eq(thingCauses.thingId, thing),
+            eq(thingCauses.kind, 'down'),
+          ),
+        );
+    await recordPoints(session.tx, row.id, now, { ...points, [UP_KEY]: up });
     await writePass(session.tx, burrowId, thing, result);
     if (!changed) return;
     publishHomeChanged(session, audience ?? (await homeAudience(session, row.burrowId)), ['things', 'watch']);
@@ -430,18 +534,22 @@ const pruned = new WeakMap<Services, number>();
 
 /** One pass of the poller (`home.connection-health`): connections not looked at for a while. Returns how many. */
 export async function pollConnectionHealth(services: Services, now = services.clock()): Promise<number> {
+  await sweepUptimeChecks(services, now).catch((err) =>
+    services.log.warn({ err: String(err) }, 'connection health: sweeping old hub checks failed'),
+  );
   if (now.getTime() - (pruned.get(services) ?? 0) >= PRUNE_EVERY_MS) {
     pruned.set(services, now.getTime());
     await pruneGoneThings(services.db).catch((err) =>
       services.log.warn({ err: String(err) }, 'connection health: sweeping quiet rows failed'),
     );
   }
-  const rows = await services.db
+  const due = await services.db
     .select()
     .from(catalogConnections)
     .where(
       and(
         eq(catalogConnections.status, 'active'),
+        inArray(catalogConnections.catalogId, WATCHED_IDS),
         or(
           isNull(catalogConnections.glanceAt),
           lt(catalogConnections.glanceAt, new Date(now.getTime() - FRESH_MS)),
@@ -450,10 +558,6 @@ export async function pollConnectionHealth(services: Services, now = services.cl
     )
     .orderBy(catalogConnections.glanceAt)
     .limit(PASS_MAX);
-  const due = rows.filter((row) => {
-    const entry = catalogEntry(row.catalogId);
-    return !!entry && entry.transport !== 'builtin' && watched(entry);
-  });
   // The quiet rows, line states and people once for the pass, not four reads and a person per connection.
   const pass = due.length ? await healthPass(services, due) : null;
   // Side by side (page-speed.md PS-04): one slow service doesn't hold up the others' tiles.

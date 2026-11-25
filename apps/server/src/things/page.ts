@@ -33,6 +33,7 @@ import {
   type ThingPageTab,
   type ThingStatus,
   thingId,
+  UPTIME_ID,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { logoOf } from '../connections/look';
@@ -42,6 +43,7 @@ import { connectorsOf } from '../connections/views';
 import { catalogConnections } from '../db/schema/index';
 import { DEVICE_CATALOG_ID, type DeviceSkillRow, skillById, skillOfConnection } from '../devices/store';
 import { listChanges } from '../home/changes';
+import { withUptime } from '../incidents/history';
 import { notFound } from '../lib/errors';
 import { liveResearches } from '../looks/research';
 import type { Services } from '../services';
@@ -52,7 +54,15 @@ import { kindFor } from './kinds/index';
 import { SERVICE_SETTINGS_TAB_KEY } from './kinds/settings';
 import { slotProblems } from './kinds/slots';
 import type { KindCtx, KindView } from './kinds/types';
-import { diskNotice, itselfCard, type MachineNow, machineCard, machineCharts, machineKpis } from './machine';
+import {
+  backupNotice,
+  diskNotice,
+  itselfCard,
+  type MachineNow,
+  machineCard,
+  machineCharts,
+  machineKpis,
+} from './machine';
 import {
   accessItems,
   BADGE,
@@ -69,10 +79,18 @@ import {
   SUMMARY_TAB,
 } from './panels';
 import { displayName, PART_OF, partOfServer, within } from './part-of';
-import { DISK_GB_KEY, DISK_PCT_KEY, POINTS_KEEP_MS, RTT_KEY, readPoints } from './points';
+import {
+  DISK_GB_KEY,
+  DISK_PCT_KEY,
+  POINTS_KEEP_MS,
+  RTT_KEY,
+  readPoints,
+  UP_COUNT_KEY,
+  UP_KEY,
+} from './points';
 import { thingQuiet, thingStates } from './quiet/store';
 import type { LooseNotice } from './quiet/types';
-import { type MarkedLines, markLines } from './quiet/wire';
+import { heldPage, type MarkedLines, markLines } from './quiet/wire';
 import {
   hostsServing,
   type MachineFigures,
@@ -212,7 +230,13 @@ export async function connectionPage(
   const [resolved, points, quiet] = await Promise.all([
     within(resolveRunsOn(services, viewer.burrowId, row), 5_000, null as ResolvedMachine | null),
     // The response time over the range (at least a day, for Problems) and the disk over 30 days (its forecast).
-    readPoints(services.db, row.id, [RTT_KEY, DISK_PCT_KEY, DISK_GB_KEY], now, POINTS_KEEP_MS),
+    readPoints(
+      services.db,
+      row.id,
+      [RTT_KEY, UP_KEY, UP_COUNT_KEY, DISK_PCT_KEY, DISK_GB_KEY],
+      now,
+      POINTS_KEEP_MS,
+    ),
     thingQuiet(services.db, row.burrowId, id),
   ]);
   const figures: MachineFigures | null = resolved
@@ -253,7 +277,7 @@ export async function connectionPage(
     : lead
       ? { panels: view?.panels ?? [] }
       : !view || bareView(view)
-        ? genericSlots(row, rtt, now, timeZone)
+        ? genericSlots(row, rtt, now, timeZone, points.get(UP_KEY), points.get(UP_COUNT_KEY))
         : null;
   const problem = view?.problem ?? null;
 
@@ -296,19 +320,30 @@ export async function connectionPage(
   // Worth a look with what is quiet now, and the head from its active lines (quiet-notices.md QN-14, QN-S13).
   const newTools = tools.filter((t) => t.isNew);
   const kindChecks = new Set((view?.notices ?? []).map((n) => n.check).filter(Boolean));
+  const backup = backupNotice(figures, now);
   const lines: LooseNotice[] = [
     ...(view?.notices ?? []),
+    ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
     ...genericNotices(
       row,
       newTools.length,
       problem,
       newTools.map((t) => t.name),
+      { now, timeZone },
     ),
   ];
   linesSink?.(lines);
-  const marked = await markLines(services.db, lines, { quiet, states, now, timeZone });
-  const status = headStatus(row, view, marked);
+  const marked = await markLines(services.db, lines, {
+    quiet,
+    states,
+    now,
+    timeZone,
+    mayEnd: viewer.principal.kind === 'person',
+  });
+  // Kept quiet, or down because of something else.
+  const held = heldPage(marked, headStatus(row, view, marked));
+  const status = held.head;
   // Worth a look is a strip on top, there only while it has a line (quiet ones too, so Undo stays in reach).
   if (marked.items.length)
     summary.push({
@@ -334,7 +369,7 @@ export async function connectionPage(
   const card = slotted?.slots
     ? slotCard(
         slotted.slots,
-        machine && resolved ? { figures: machine, at: resolved.runsOn } : null,
+        machine && resolved ? { figures: machine, at: resolved.runsOn, backup: figures } : null,
         full,
         now,
         displayName(row),
@@ -377,7 +412,7 @@ export async function connectionPage(
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];
   if (connected) facts.push(connected);
-  const checked = row.glanceAt ?? row.checkedAt;
+  const checked = row.catalogId === UPTIME_ID ? view?.readAt : (row.glanceAt ?? row.checkedAt);
   if (!view?.facts.length && checked)
     facts.push(line(`Checked **${span(now.getTime() - checked.getTime())}** ago`));
   if (!gateway) facts.push(accessLine(row));
@@ -386,7 +421,7 @@ export async function connectionPage(
   const address = isVaultSyncConnection(entry)
     ? undefined
     : (connectionHost(entry, row.fields) ?? row.externalName ?? undefined);
-  const readAt = view?.readAt ?? row.glanceAt ?? null;
+  const readAt = view?.readAt ?? (row.catalogId === UPTIME_ID ? null : row.glanceAt);
   return {
     id,
     kind: 'connection',
@@ -411,6 +446,7 @@ export async function connectionPage(
     ...(partOf ? { partOf } : {}),
     ...rangeFields(range, slotted && !followsRange(tabs[0]?.panels ?? []) ? [range] : kind?.ranges),
     ...(view ? { refreshS: refreshOf(view) } : {}),
+    ...held.fields,
   };
 }
 
@@ -429,7 +465,7 @@ export function bareView(view: Pick<KindView, 'kpis' | 'panels' | 'charts' | 'sl
  */
 export function slotCard(
   slots: NonNullable<KindView['slots']>,
-  known: { figures: MachineNow; at: { name: string; href?: string } } | null,
+  known: { figures: MachineNow; at: { name: string; href?: string }; backup?: MachineFigures | null } | null,
   full: Date | null,
   now: Date,
   name: string,
@@ -441,6 +477,7 @@ export function slotCard(
       full,
       now,
       slots.machine,
+      known.backup,
     );
     if (card) return card;
   } else if (slots.own) {
@@ -495,7 +532,7 @@ export function headStatus(
   const older = view?.status && view.status.status !== 'ok' && !view.notices.some((n) => n.check);
   if (older && view?.status) return view.status;
   if (marked.status !== 'ok') return { status: marked.status, badge: marked.badge ?? BADGE[marked.status] };
-  if (view?.status?.status === 'ok') return view.status;
+  if (view?.status?.status === 'ok' || view?.status?.status === 'unknown') return view.status;
   if (row.glance || view?.readAt) return { status: 'ok', badge: BADGE.ok };
   return connectionStatus(row);
 }
@@ -518,16 +555,26 @@ export async function thingPage(
   range: PageRange = DEFAULT_RANGE,
 ): Promise<ThingPage> {
   const target = await findThing(services, viewer, value);
+  // Every page but a device still being learned says its week in one line.
+  const told = (page: ThingPage) => withUptime(services, viewer.burrowId, page, timeZone);
   if (target.kind === 'connection')
     return withPageResearch(
       services,
       viewer,
-      await connectionPage(services, viewer, target.row, timeZone, range),
+      await told(await connectionPage(services, viewer, target.row, timeZone, range)),
     );
   if (target.kind === 'device')
-    return withPageResearch(services, viewer, await devicePage(services, viewer, target, timeZone, range));
+    return withPageResearch(
+      services,
+      viewer,
+      await told(await devicePage(services, viewer, target, timeZone, range)),
+    );
   if (target.kind === 'account')
-    return withPageResearch(services, viewer, await accountPage(services, viewer, target.account, timeZone));
+    return withPageResearch(
+      services,
+      viewer,
+      await told(await accountPage(services, viewer, target.account, timeZone)),
+    );
   return learningPage(services, target, timeZone);
 }
 

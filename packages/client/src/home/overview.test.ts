@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { learningLine, overviewSectionForTab, overviewSections, overviewTiles } from './overview';
+import {
+  learningLine,
+  overviewSectionForTab,
+  overviewSections,
+  overviewTiles,
+  serverQuietWords,
+} from './overview';
 import type { HomeSection, HomeThingRow } from './sections';
 
 const NOW = Date.parse('2026-10-19T10:00:00.000Z');
@@ -23,6 +29,7 @@ const row = (patch: Partial<HomeThingRow> = {}): HomeThingRow => ({
   level: 'connected',
   word: 'Connected',
   reason: null,
+  notAnswering: false,
   ...patch,
 });
 
@@ -51,6 +58,36 @@ describe('Overview’s sections (OVP-01)', () => {
     expect(views[0]?.summary).toContain('1 offline');
     expect(views[1]?.summary).toContain('1 needs a look');
     expect(views[2]?.summary).toBe('From your chats');
+  });
+
+  it('says a connection down because of something else isn’t answering, not that it is connected', () => {
+    const down: HomeSection[] = [
+      {
+        kind: 'things',
+        rows: [row(), row({ status: 'unknown', notAnswering: true }), row({ level: 'learning' })],
+        add: true,
+      },
+    ];
+    expect(overviewSections(down).find((v) => v.key === 'services')?.summary).toBe(
+      '1 not answering · 1 connected · 1 learning',
+    );
+  });
+
+  it('says until when each server kept quiet is quiet, for its row on the web and its card on the phone', () => {
+    const at = (min: number) => new Date(NOW + min * 60_000).toISOString();
+    const words = serverQuietWords(
+      [
+        { id: 'server:pve-02', kind: 'server', quietUntil: '2026-10-19T21:00:00.000Z' },
+        // Ended already, a connection's window, or none: nothing.
+        { id: 'server:old', kind: 'server', quietUntil: at(-5) },
+        { id: 'connection:con_unifi', kind: 'connection', quietUntil: at(60) },
+        { id: 'server:blackbox', kind: 'server' },
+      ],
+      NOW,
+      TZ,
+    );
+    expect([...words]).toEqual([['server:pve-02', 'Quiet until 23:00']]);
+    expect(serverQuietWords(undefined, NOW, TZ).size).toBe(0);
   });
 
   it('keeps the servers’ section from Home’s without the fleet', () => {
@@ -84,6 +121,49 @@ describe('a connection’s tile (OVP-09)', () => {
     expect(first?.row.id).toBe('ha');
     expect(first?.line).toEqual({ text: '4 things need a look', tone: 'warn' });
     expect(second?.line.tone).toBe('plain');
+  });
+
+  it('says a thing is down because of something else, or kept quiet, whatever else it could show', () => {
+    const rows = [
+      row({ id: 'plex', figures: [{ label: 'Streams', value: '2', note: null }] }),
+      row({ id: 'nas', figures: [{ label: 'Disks', value: '4', note: null }] }),
+      row({ id: 'ha' }),
+    ];
+    const cause = { thing: 'server:pve-02', name: 'pve-02', words: 'Not answering while pve-02 is down' };
+    const out = overviewTiles(
+      rows,
+      [
+        { id: 'plex', causedBy: cause },
+        { id: 'nas', quietUntil: '2026-10-19T21:00:00.000Z' },
+        { id: 'ha', quietUntil: '2026-10-19T09:00:00.000Z' },
+      ],
+      NOW,
+      TZ,
+      'Dusty',
+    );
+    const by = new Map(out.map((t) => [t.row.id, t]));
+    expect(by.get('plex')).toMatchObject({ held: 'cause', line: { text: cause.words, tone: 'mut' } });
+    // Its subtitle carries the same words as its own line: the foot leaves them out.
+    const [again] = overviewTiles(
+      [row({ id: 'plex', subtitle: `Media · ${cause.words}` })],
+      [{ id: 'plex', causedBy: cause }],
+      NOW,
+      TZ,
+      'Dusty',
+    );
+    expect(again?.what).toBe('Media');
+    expect(by.get('nas')).toMatchObject({ held: 'quiet', line: { text: 'Quiet until 23:00', tone: 'mut' } });
+    // A quiet time that is over says nothing of it.
+    expect(by.get('ha')?.held).toBeNull();
+    // Kept quiet and down because of something else: the window someone chose, as its page says.
+    const [both] = overviewTiles(
+      [row({ id: 'plex' })],
+      [{ id: 'plex', causedBy: cause, quietUntil: '2026-10-19T21:00:00.000Z' }],
+      NOW,
+      TZ,
+      'Dusty',
+    );
+    expect(both).toMatchObject({ held: 'quiet', line: { text: 'Quiet until 23:00' } });
   });
 
   it('falls back to words the person can act on when nobody said why', () => {

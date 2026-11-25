@@ -5,18 +5,27 @@
  * until it’s back”, who and when under it) with Undo. The shared `thingWatchView`; the switches and Undo run through
  * the thing's `useQuietActions` (the toast says so). Look only and guests read the same rows with “On” or “Off” instead
  * of a switch and no Undo. Only the rows: the caller puts them in its card (a connection's settings, a server's Summary).
+ * A server's check with a limit says when it warns (“Warns above 90 %”, and each item
+ * with its own) with Change, which opens Change the limit; someone who can't change it reads the limits without Change.
  */
-import { thingWatchView, type WatchCheckView, type WatchExceptionView } from '@whombat/client';
+import {
+  type LimitView,
+  thingWatchView,
+  type WatchCheckView,
+  type WatchExceptionView,
+} from '@whombat/client';
 import type { QuietActions } from '@whombat/client/react';
 import type { ThingWatch } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { Switch, View } from 'react-native';
+import { MONITORING_COPY, type WatchLimitLine, watchLimitLines } from '../../data/monitoring';
 import { checkToastName, exceptionText, foldWatchRows, QUIET_COPY, watchRowSpoken } from '../../data/quiet';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ErrorState, SkeletonRows } from '../../ui/primitives';
 import { switchColors } from '../../ui/switchColors';
 import { Touchable } from '../../ui/Touchable';
+import { hitSlopFor } from '../../ui/touchTarget';
 
 /** Where the rows' hairlines go: on top (a OneCard's rows) or under them (a settings section's). */
 type Divider = 'top' | 'bottom';
@@ -32,6 +41,7 @@ export function WhatWhombatWatches({
   first = null,
   divider,
   inset,
+  onLimit = null,
 }: {
   watch: ThingWatch | undefined;
   pending: boolean;
@@ -45,9 +55,15 @@ export function WhatWhombatWatches({
   divider: Divider;
   /** The rows' side padding: the card's. */
   inset: number;
+  /**
+   * Opens Change the limit for a check's limit, or one item's (a server's); none: limits aren't shown. Someone who can't
+   * change them reads them without Change.
+   */
+  onLimit?: ((view: LimitView) => void) | null;
 }) {
   const theme = useTheme();
   const view = useMemo(() => (watch ? thingWatchView(watch, timeZone, now) : null), [watch, timeZone, now]);
+  const checks = useMemo(() => new Map((watch?.checks ?? []).map((c) => [c.check as string, c])), [watch]);
   const [open, setOpen] = useState(false);
   if (!view)
     return failed ? (
@@ -78,6 +94,10 @@ export function WhatWhombatWatches({
           actions={actions}
           border={border}
           inset={inset}
+          limit={(() => {
+            const c = onLimit ? checks.get(row.check) : undefined;
+            return c ? { check: c, open: view.mayChange ? onLimit : null } : null;
+          })()}
         />
       ))}
       {more || open ? (
@@ -110,12 +130,15 @@ function CheckRow({
   actions,
   border,
   inset,
+  limit,
 }: {
   row: WatchCheckView;
   mayChange: boolean;
   actions: QuietActions;
   border: object;
   inset: number;
+  /** Its limit, and what opens Change the limit for who may change it (null: read only). */
+  limit: { check: ThingWatch['checks'][number]; open: ((view: LimitView) => void) | null } | null;
 }) {
   const theme = useTheme();
   const busy = actions.busy({ check: row.check });
@@ -153,6 +176,7 @@ function CheckRow({
           </Text>
         )}
       </View>
+      {limit && row.on ? <LimitLines check={limit.check} open={limit.open} /> : null}
       {row.exceptions.length ? (
         <View style={{ paddingBottom: 4 }}>
           <Text size={12} mono color={theme.colors.mut} style={{ paddingTop: 2 }}>
@@ -217,6 +241,66 @@ function ExceptionLine({
         >
           <Text size={13} weight={600} color={theme.colors.brand}>
             {QUIET_COPY.undo}
+          </Text>
+        </Touchable>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * A check's limit: “Warns above 90 %” (or what applies without one) and each item with its own, each with Change for
+ * who may change it.
+ */
+function LimitLines({
+  check,
+  open,
+}: {
+  check: ThingWatch['checks'][number];
+  open: ((view: LimitView) => void) | null;
+}) {
+  const lines = watchLimitLines(check, !!open);
+  if (!lines.length) return null;
+  return (
+    <View style={{ paddingBottom: 4 }}>
+      {lines.map((line) => (
+        <LimitLine key={line.key} line={line} open={open} />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * One limit's words in mono under the check's name, as “Off since …” is, and Change at the switch's edge for who may
+ * change it: 32 tall with slop to 44, so the lines sit close to the check they belong to.
+ */
+function LimitLine({ line, open }: { line: WatchLimitLine; open: ((view: LimitView) => void) | null }) {
+  const theme = useTheme();
+  const view = line.view;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32, marginTop: -6 }}>
+      <Text size={12} mono color={theme.colors.mut} style={{ flex: 1, minWidth: 0 }}>
+        {line.text}
+      </Text>
+      {view && open ? (
+        <Touchable
+          onPress={() => open(view)}
+          feedback="fade"
+          ringRadius={10}
+          accessibilityRole="button"
+          accessibilityLabel={MONITORING_COPY.changeLimit}
+          accessibilityHint={line.spoken}
+          hitSlop={hitSlopFor(32)}
+          style={{
+            minHeight: 32,
+            minWidth: 44,
+            paddingLeft: 10,
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+          }}
+        >
+          <Text size={13} weight={600} color={theme.colors.brand}>
+            {QUIET_COPY.change}
           </Text>
         </Touchable>
       ) : null}

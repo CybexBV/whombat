@@ -19,6 +19,7 @@ import { useNow } from '../../messaging/useRoom';
 import { BackupsKeptHere } from '../KeptHere';
 import { LookCard } from '../page/LookCard';
 import { ErrorLine, Skeleton } from '../parts';
+import { WhatHappened } from '../quiet/WhatHappened';
 import { useThingSearch } from '../search';
 import { Dashboard } from './Dashboard';
 import type { DashboardContext } from './Panels';
@@ -42,6 +43,9 @@ export function ServerSummary({
   technical = null,
   status,
   links = null,
+  endQuiet = null,
+  endingQuiet = false,
+  limitFor = null,
 }: {
   burrow: string;
   serverId: string;
@@ -59,6 +63,11 @@ export function ServerSummary({
   status?: HostServerStatus;
   /** Links to what reads through this server, after its panels (a Mac's Find My). */
   links?: ReactNode;
+  /** End now on a line quiet because the server is kept quiet. */
+  endQuiet?: (() => void) | null;
+  endingQuiet?: boolean;
+  /** Change the limit in a line's ⋯. */
+  limitFor?: DashboardContext['limitFor'];
 }) {
   const [, set] = useThingSearch();
   const now = useNow(60_000);
@@ -107,6 +116,9 @@ export function ServerSummary({
       question.current = q;
       handle.mutate(thing);
     },
+    endQuiet,
+    endingQuiet,
+    limitFor,
   };
   return (
     <>
@@ -121,6 +133,8 @@ export function ServerSummary({
       {links}
       {/* When it keeps this Whombat's backups (backup-places.md AP-6710). */}
       <BackupsKeptHere thing={thing} />
+      {/* Its outages and its alerts over the last 30 days. */}
+      <WhatHappened burrow={burrow} thing={thing} />
       <TechnicalDetails
         rows={technical?.rows ?? []}
         extra={technical?.extra}

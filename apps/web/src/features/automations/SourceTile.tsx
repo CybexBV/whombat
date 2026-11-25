@@ -9,6 +9,7 @@ import type { AutomationTileView } from '@whombat/client';
 import { useGitHubAvatar } from '@whombat/client/react';
 import type { AutomationSource } from '@whombat/core';
 import {
+  Activity,
   Clock,
   Inbox,
   type LucideIcon,
@@ -30,6 +31,7 @@ const AVATAR_STALE_MS = 6 * 60 * 60 * 1000;
 const SOURCE_ICONS: Record<Exclude<AutomationSource, 'github'>, LucideIcon> = {
   tracker: Inbox,
   mail: Mail,
+  thing: Activity,
   findmy: MapPin,
   schedule: Clock,
   message: MessageSquare,

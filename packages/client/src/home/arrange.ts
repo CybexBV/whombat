@@ -364,7 +364,7 @@ export function viewFace(view: DeskWidgetView): FigureFace | null {
 export function ownFace(
   own: OverviewOwnFigure,
   data: Pick<HomeOverview, 'summary' | 'doneToday'>,
-  things: readonly Pick<HomeThingRow, 'id' | 'level'>[],
+  things: readonly Pick<HomeThingRow, 'id' | 'level' | 'notAnswering'>[],
   fleet: readonly Pick<HostServer, 'status'>[] | null,
   assistant: string | null,
 ): FigureFace {
@@ -396,18 +396,29 @@ export function ownFace(
       const mine = things.filter((t) => isTileThing(t.id));
       const bad = mine.filter((t) => t.level === 'notWorking').length;
       const warn = mine.filter((t) => t.level === 'needsLook').length;
-      const ok = mine.length - bad - warn;
+      // Down because of something else: its tile stays grey (the problem is its cause's), but it doesn't work.
+      const off = mine.filter(
+        (t) => t.notAnswering && t.level !== 'notWorking' && t.level !== 'needsLook',
+      ).length;
+      const ok = mine.length - bad - warn - off;
       return face({
         value: String(ok),
         unit: `of ${mine.length}`,
         label,
-        line: bad ? `${bad} not working` : warn ? `${warn} need${warn === 1 ? 's' : ''} a look` : 'All fine',
-        tone: bad ? 'bad' : warn ? 'warn' : 'ok',
+        line: bad
+          ? `${bad} not working`
+          : off
+            ? `${off} not answering`
+            : warn
+              ? `${warn} need${warn === 1 ? 's' : ''} a look`
+              : 'All fine',
+        tone: bad ? 'bad' : off ? 'off' : warn ? 'warn' : 'ok',
         parts: mine.length
           ? [
               { tone: 'ok', n: ok },
               { tone: 'warn', n: warn },
               { tone: 'bad', n: bad },
+              { tone: 'off', n: off },
             ]
           : null,
       });

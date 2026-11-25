@@ -53,15 +53,16 @@ func (s *Store) SetAlertAck(ctx context.Context, id string, ack *rules.Ack) erro
 
 // AlertFilter narrows QueryAlerts.
 type AlertFilter struct {
-	State    string   // open | resolved | "" (all)
-	Servers  []string // nil: any (an empty non-nil list matches nothing)
-	Severity string
-	Rule     string // exact, or a prefix ending in "."
-	Query    string // substring of title or detail
-	Since    time.Time
-	Until    time.Time
-	Before   time.Time // opened strictly before (paging, newest first)
-	Limit    int
+	State         string   // open | resolved | "" (all)
+	Servers       []string // nil: any (an empty non-nil list matches nothing)
+	Severity      string
+	Rule          string    // exact, or a prefix ending in "."
+	Query         string    // substring of title or detail
+	Since         time.Time // opened at or after
+	OverlapsSince time.Time // unresolved or resolved at or after
+	Until         time.Time
+	Before        time.Time // opened strictly before (paging, newest first)
+	Limit         int
 }
 
 // QueryAlerts returns alerts newest first, filtered in SQL.
@@ -98,6 +99,9 @@ func (s *Store) QueryAlerts(ctx context.Context, f AlertFilter) ([]rules.Alert, 
 	}
 	if !f.Since.IsZero() {
 		where, args = append(where, "opened_at >= ?"), append(args, ms(f.Since))
+	}
+	if !f.OverlapsSince.IsZero() {
+		where, args = append(where, "(resolved_at IS NULL OR resolved_at >= ?)"), append(args, ms(f.OverlapsSince))
 	}
 	if !f.Until.IsZero() {
 		where, args = append(where, "opened_at < ?"), append(args, ms(f.Until))

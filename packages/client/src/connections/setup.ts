@@ -39,17 +39,23 @@ export const SETUP_STEP_TITLES: Record<SetupStep, string> = {
 /** The sign-in step of an entry read through a Mac (Find My): nothing to sign in to, only how it reads. */
 export const READ_THROUGH_MAC_STEP_TITLE = 'How should Whombat read it?';
 
+/** The sign-in step of an entry without an address and nothing to sign in to (“Website or address”): what it checks. */
+export const WHAT_TO_CHECK_STEP_TITLE = 'What should Whombat check?';
+
 /**
  * A step's title for this entry: an entry checked through a Mac (Find My) has nothing to sign in to, so its sign-in
- * step asks how Whombat reads it. `access` is the caller's, by the assistant's name.
+ * step asks how Whombat reads it; one with neither an address nor a sign-in asks what Whombat checks. `access` is the
+ * caller's, by the assistant's name.
  */
 export function setupStepTitle(
-  entry: Pick<CatalogEntry, 'check'>,
+  entry: Pick<CatalogEntry, 'check' | 'signIn' | 'fields'>,
   step: Exclude<SetupStep, 'access'>,
 ): string {
-  return step === 'signIn' && entry.check?.kind === 'mac'
-    ? READ_THROUGH_MAC_STEP_TITLE
-    : SETUP_STEP_TITLES[step];
+  if (step !== 'signIn') return SETUP_STEP_TITLES[step];
+  if (entry.check?.kind === 'mac') return READ_THROUGH_MAC_STEP_TITLE;
+  const nothingToSignIn = entry.signIn.length > 0 && entry.signIn.every((m) => m.kind === 'none');
+  if (nothingToSignIn && !entry.fields.some((f) => f.id === 'url')) return WHAT_TO_CHECK_STEP_TITLE;
+  return SETUP_STEP_TITLES[step];
 }
 
 /** Whether the entry is somewhere on the person's network or server (it has an address): cloud services have none. */
@@ -87,7 +93,9 @@ export function asksAccess(choice: Pick<SignInChoice, 'kind'>): boolean {
  * An entry only automations use (a report tracker, Whombat TA-02) has no level to choose: agents never use it.
  */
 export function setupSteps(entry: CatalogEntry): SetupStep[] {
-  const access: SetupStep[] = isAgentConnection(entry) ? ['access'] : [];
+  // Nothing to choose when both levels let the assistant do the same (“Website or address” only reads).
+  const same = !!entry.access && entry.access.read === entry.access.manage;
+  const access: SetupStep[] = isAgentConnection(entry) && !same ? ['access'] : [];
   return hasAddress(entry) ? ['where', ...access, 'signIn'] : [...access, 'signIn'];
 }
 

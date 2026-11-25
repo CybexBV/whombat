@@ -10,7 +10,8 @@ import { z } from 'zod';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
 import { JsonObject, Timestamp } from './common.js';
-import { NoticeQuiet } from './quiet.js';
+import { ThingUptime } from './incidents.js';
+import { KeptQuiet, NoticeQuiet } from './quiet.js';
 
 const N = z.number().nullable();
 const OptN = N.optional();
@@ -246,6 +247,15 @@ export const HostAlertAck = z.object({
   until: Timestamp.nullable(),
 });
 export type HostAlertAck = z.infer<typeof HostAlertAck>;
+
+/** Whombat's history read of the hub's alert list over its socket. */
+export const HostAlertOverlapQuery = z.object({
+  state: z.literal('all'),
+  server: Id.optional(),
+  rule: z.string().optional(),
+  overlaps_since: Timestamp,
+  limit: z.number().int().min(1).max(1000),
+});
 
 export const HostAlert = z.object({
   id: Id,
@@ -1336,6 +1346,16 @@ export const HostServerDetail = z.object({
   libvirt: HostLibvirtDetail.optional(),
   /** A Mac's own facts, its screen and its helper: on a Mac. */
   macos: HostMacosDetail.optional(),
+  /**
+   * Its week in one line (session minor 9), from its offline alerts and Whombat's
+   * incidents: “Up 99.6 % this week · down 3 times, 41 min”. Absent: Whombat has nothing to tell.
+   */
+  uptime: ThingUptime.optional(),
+  /**
+   * Kept quiet until a time: the page draws its words with End now when
+   * `canEnd`; its alerts are muted by a maintenance window meanwhile.
+   */
+  keptQuiet: KeptQuiet.optional(),
 });
 export type HostServerDetail = z.infer<typeof HostServerDetail>;
 
@@ -1556,6 +1576,8 @@ export const HostCheck = z.object({
   graceS: z.number().int(),
   options: HostCheckOptions,
   enabled: z.boolean(),
+  owner: z.string().max(160).optional(),
+  stale: z.boolean().optional(),
   status: z.enum(['up', 'down', 'pending', 'disabled']),
   since: Timestamp.nullable(),
   last: z

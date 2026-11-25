@@ -450,6 +450,23 @@
                           "state",
                           "at"
                         ]
+                      },
+                      "causedBy": {
+                        "type": "object",
+                        "properties": {
+                          "thing": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                          }
+                        },
+                        "required": [
+                          "thing",
+                          "name"
+                        ]
                       }
                     },
                     "required": [

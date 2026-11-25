@@ -167,7 +167,7 @@ export function SetupForm({
   /** The address last identified (or being identified), so one address is asked once. */
   const asked = useRef<{ url: string; done: boolean } | null>(null);
   const codeInput = useRef<HTMLInputElement>(null);
-  const shown = visibleFields(entry, choice);
+  const shown = visibleFields(entry, choice, fields);
   const methodFields = shown.filter((f) => !PLACED_FIELDS.has(f.id));
   const busy =
     create.isPending ||

@@ -17,9 +17,12 @@ import {
   hostAlertCheck,
   hostEntityName,
   hostNoticeSubjectId,
+  hostWatchLimit,
   type NoticeQuiet,
   type NoticeRef,
   type NoticeSubject,
+  type SetThingWatchLimitBody,
+  type SetThingWatchLimitResponse,
   type ThingWatch,
   type ThingWatchCheck,
 } from '@whombat/core';
@@ -29,6 +32,7 @@ import type { Tx } from '../db/client';
 import { noticeQuiets, noticeStates, watchOffs, watchOns } from '../db/schema/index';
 import { addQuietExceptions, watchList } from '../domain/quiet-watch';
 import { homeAudience, publishHomeChanged } from '../home/notify';
+import type { DirectUndoCtx, DirectUndoResult, RecordedChange } from '../home/registry';
 import { ApiError, badRequest, conflict, notAllowed, notFound } from '../lib/errors';
 import { loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import type { Services } from '../services';
@@ -36,11 +40,12 @@ import { applyQuiet } from '../things/quiet/apply';
 import { quietNotice, setWatch } from '../things/quiet/commands';
 import { notWatched } from '../things/quiet/defaults';
 import { type QuietBook, quietBook, thingQuiet, writePass } from '../things/quiet/store';
+import { activeWindow } from '../things/quiet/windows';
 import { quietNames, quietOf } from '../things/quiet/wire';
 import { lowerWords, quietTitle, snoozeUntil, untilWords, watchTitle } from '../things/quiet/words';
 import { fleetHints } from './agent-updates';
 import { HOSTS_API, HostsError, HostsUnavailable, seg } from './client';
-import { recordServerQuiet } from './commands';
+import { committed, recordServerQuiet, recordServerWatchLimit, ServerWatchLimitUndo } from './commands';
 import { hostsCall, refusedBeforeActing, toApiError } from './errors';
 import { arr, hintGuests, obj, toHostAlert, toHostHint } from './map';
 import { alertLine, alertQuiet, HUB_LEVEL, hintLine, hintRefId, hubBy, serverThingId } from './quiet-lines';
@@ -244,9 +249,20 @@ export async function quietServerNotice(
     const l = alertLine(a);
     return l.check === check && sameItem(l.subject, subject);
   });
-  if (alerts.length) return quietAlerts(services, w, alerts, ctx.how, ctx.until);
-  if (!check.startsWith('host.hint.')) throw notFound(ctx.how === 'undo' ? 'Quiet' : 'Notice');
-  return quietHint(services, w, ctx.serverId, fleet.hints, ctx.notice, ctx.how, ctx.until);
+  try {
+    if (alerts.length) return await quietAlerts(services, w, alerts, ctx.how, ctx.until);
+    if (!check.startsWith('host.hint.')) throw notFound(ctx.how === 'undo' ? 'Quiet' : 'Notice');
+    return await quietHint(services, w, ctx.serverId, fleet.hints, ctx.notice, ctx.how, ctx.until);
+  } catch (err) {
+    // A line quiet with the whole server kept quiet: Undo there (an app that has no End now) ends the window.
+    if (ctx.how !== 'undo' || !(err instanceof ApiError) || err.code !== 'not_found') throw err;
+    const quiet = await thingQuiet(services.db, w.burrowId, serverThingId(ctx.serverId));
+    if (!activeWindow(quiet.windows, services.clock())) throw err;
+    const { endThingQuiet } = await import('../things/quiet/window-service');
+    const viewer = { accountId: w.person.accountId ?? '', burrowId: w.burrowId, principal: w.person };
+    await endThingQuiet(services, viewer, serverThingId(ctx.serverId), w.timeZone);
+    return null;
+  }
 }
 
 /** The thing a server's hint rows belong to (the store's `QuietThing`). */
@@ -338,9 +354,9 @@ async function quietHint(
 /* What Whombat watches --------------------------------------------------------------------------------------------- */
 
 /** The hub's watch settings, its refusals in Whombat's words (`server_not_found` → not found). */
-async function hubOffs(w: Who, serverId: string) {
+async function hubSettings(w: Who, serverId: string) {
   try {
-    return await w.hosts.watchRaw(serverId);
+    return await w.hosts.watchSettingsRaw(serverId);
   } catch (err) {
     if (err instanceof HostsError && err.status === 404) throw notFound('Thing');
     throw toApiError(err);
@@ -358,8 +374,8 @@ export async function serverWatch(
 
 async function watchOf(services: Services, w: Who, serverId: string): Promise<ThingWatch> {
   const now = services.clock();
-  const [offs, fleet, quiet] = await Promise.all([
-    hubOffs(w, serverId),
+  const [{ rules: offs, limits }, fleet, quiet] = await Promise.all([
+    hubSettings(w, serverId),
     hostsCall(() => w.hosts.fleet()),
     thingQuiet(services.db, w.burrowId, serverThingId(serverId)),
   ]);
@@ -407,6 +423,19 @@ async function watchOf(services: Services, w: Who, serverId: string): Promise<Th
     }
     return c;
   };
+  for (const known of SERVER_CHECKS) {
+    const range = hostWatchLimit(known.rule);
+    if (!range) continue;
+    const c = at(known.check, known.name);
+    c.limit = { ...range, value: null, items: [] };
+    for (const limit of limits) {
+      if (limit.rule !== known.rule) continue;
+      if (limit.entity) {
+        const id = hostNoticeSubjectId(known, limit.entity);
+        if (id) c.limit.items.push({ subject: { id, name: hostEntityName(id) || id }, value: limit.value });
+      } else c.limit.value = limit.value;
+    }
+  }
   for (const off of offs) {
     const known = hostAlertCheck(off.rule);
     const c = at(known.check, known.name);
@@ -480,7 +509,7 @@ export async function setServerWatch(
     const rule = c.rule;
     const entity = ctx.subject?.id;
     w.hosts.forget(`watch:${ctx.serverId}`);
-    const before = await hubOffs(w, ctx.serverId);
+    const { rules: before } = await hubSettings(w, ctx.serverId);
     const wasOff = before.some((o) => o.rule === rule && (o.entity ?? '') === (entity ?? ''));
     try {
       await onHub('setWatch', () =>
@@ -510,6 +539,89 @@ export async function setServerWatch(
       });
   } else await commitWatch(services, w, ctx.serverId, c, ctx.watched, ctx.subject, ctx.agentId);
   return watchOf(services, w, ctx.serverId);
+}
+
+/** Changes a limit as the person and signs the change after the hosts service accepts it. */
+export async function setServerWatchLimit(
+  services: Services,
+  ctx: {
+    burrowId: string;
+    actorId: string;
+    serverId: string;
+    agentId?: string;
+    undo?: { changeId: string; expected: number | null };
+  },
+  input: SetThingWatchLimitBody,
+): Promise<SetThingWatchLimitResponse> {
+  const w = await who(services, ctx.burrowId, ctx.actorId);
+  const c = checkOf(input.check);
+  const rule = c?.rule;
+  if (!c || !rule) throw notFound('Check');
+  const range = hostWatchLimit(rule);
+  if (!range) throw badRequest('This check has no limit to change.');
+  if (input.limit !== null && (input.limit < range.min || input.limit > range.max)) {
+    throw badRequest(`Choose a limit from ${range.min} to ${range.max} ${range.unit}.`);
+  }
+  const entity = input.subject?.id;
+  w.hosts.forget(`watch:${ctx.serverId}`);
+  const { limits } = await hubSettings(w, ctx.serverId);
+  const before = limits.find((l) => l.rule === rule && l.entity === entity)?.value ?? null;
+  if (ctx.undo && before !== ctx.undo.expected) {
+    throw conflict('The limit changed meanwhile.');
+  }
+  if (before === input.limit) return { watch: await watchOf(services, w, ctx.serverId) };
+
+  await onHub('setWatchLimit', () =>
+    w.hosts.setWatchLimit(
+      ctx.serverId,
+      { rule, entity, limit: input.limit, expectedLimit: before },
+      actorOf(w.person, 'operator'),
+    ),
+  );
+  const { changeId } = committed(
+    await services.pipeline.commit(
+      recordServerWatchLimit,
+      {
+        serverId: ctx.serverId,
+        check: c.check,
+        name: input.subject?.name ?? c.name,
+        ...(input.subject ? { subject: input.subject } : {}),
+        ...(ctx.agentId ? { agentId: ctx.agentId } : {}),
+        previous: before,
+        limit: input.limit,
+        ...(ctx.undo ? { undoes: ctx.undo.changeId } : {}),
+      },
+      { burrowId: ctx.burrowId, actorId: w.person.id },
+    ),
+  );
+  return { watch: await watchOf(services, w, ctx.serverId), changeId };
+}
+
+export async function undoServerWatchLimit(
+  ctx: DirectUndoCtx,
+  change: RecordedChange,
+): Promise<DirectUndoResult> {
+  const undo = ServerWatchLimitUndo.safeParse(change.undo.payload);
+  if (!undo.success) return { ok: false, reason: 'This can’t be undone any more.' };
+  const { serverId, check, subject, previous, limit } = undo.data;
+  try {
+    await setServerWatchLimit(
+      ctx.services,
+      {
+        burrowId: ctx.burrowId,
+        actorId: ctx.person.id,
+        serverId,
+        undo: { changeId: change.id, expected: limit },
+      },
+      { check, ...(subject ? { subject } : {}), limit: previous },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && ['conflict', 'not_found', 'not_allowed'].includes(err.code)) {
+      return { ok: false, reason: err.message };
+    }
+    throw err;
+  }
+  return { ok: true, state: 'undone' };
 }
 
 /** The quiet store's side of a server's switch: a hint kind's off or on, or who turned on a rule that starts off. */

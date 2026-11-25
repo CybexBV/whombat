@@ -14,6 +14,7 @@ import {
   type ThingPageTab,
   type ThingPanelPlace,
   type ThingStatus,
+  UPTIME_ID,
 } from '@whombat/core';
 import { toolRowAlwaysAsks } from '../connections/sync';
 import type { CatalogConnectionRow, ConnectionToolRow } from '../connections/types';
@@ -243,6 +244,20 @@ export const GENERIC_CHECKS: readonly KindCheck[] = [
   },
   { check: 'conn.check', name: 'Its sign-in and tools', nature: 'problem', perItem: true, startsOn: true },
   { check: 'conn.new_tools', name: 'New tools to decide on', nature: 'you', perItem: false, startsOn: false },
+  {
+    check: 'conn.read_failed',
+    name: 'When details stay unreadable',
+    nature: 'fyi',
+    perItem: false,
+    startsOn: true,
+  },
+  {
+    check: 'machine.backup_old',
+    name: 'Whether its machine is backed up on time',
+    nature: 'problem',
+    perItem: false,
+    startsOn: true,
+  },
   { check: 'conn.read', name: 'Reading its details', nature: 'fyi', perItem: false, startsOn: false },
   { check: 'machine.disk', name: 'Its disk', nature: 'problem', perItem: false, startsOn: true },
   {
@@ -259,7 +274,28 @@ registerChecks(GENERIC_CHECKS);
 export const answerCheckOf = (catalogId?: string) => (catalogId === 'ps5' ? 'ps5.available' : 'conn.answers');
 
 export function genericChecksFor(catalogId: string): readonly KindCheck[] {
-  return catalogId === 'ps5' ? GENERIC_CHECKS.filter((c) => c.check !== 'conn.answers') : GENERIC_CHECKS;
+  return catalogId === 'ps5' || catalogId === 'uptime'
+    ? GENERIC_CHECKS.filter((c) => c.check !== 'conn.answers')
+    : GENERIC_CHECKS;
+}
+
+export function readFailedNotice(
+  label: string,
+  since: string | undefined,
+  now: Date,
+  timeZone: string,
+): KindNotice | null {
+  if (!since || now.getTime() - Date.parse(since) < 3_600_000 || !Number.isFinite(Date.parse(since)))
+    return null;
+  return {
+    id: 'read-failed',
+    tone: 'info',
+    icon: 'info',
+    title: clip(`Whombat couldn’t read ${label}’s details since ${clock(new Date(since), timeZone)}`, 120),
+    nature: 'fyi',
+    check: 'conn.read_failed',
+    ignore: { lifts: 'fixed', words: 'Until Whombat can read its details again.' },
+  };
 }
 
 /** How the last check went, from the glance: `outcome` since 0136, else what an older glance said. */
@@ -281,9 +317,11 @@ export function genericNotices(
   newTools: number,
   problem: string | null,
   newToolNames: readonly string[] = [],
+  reading?: { now: Date; timeZone: string },
 ): KindNotice[] {
   const out: KindNotice[] = [];
-  const answer = answerOf(row.glance as ConnectionGlance | null);
+  // A “Website or address” check says it doesn't answer with its own line (`uptime.down`), not a second one here.
+  const answer = row.catalogId === UPTIME_ID ? null : answerOf(row.glance as ConnectionGlance | null);
   const homebrewNotReady =
     row.catalogId === 'ps5' &&
     (answer || row.checks.some((c) => c.id === 'credential' && c.state === 'error'));
@@ -335,7 +373,8 @@ export function genericNotices(
       confirm: 2,
       badge: 'It answered with an error',
     });
-  if (row.status !== 'needs_reauth')
+  // Website or address has its own live lines. Its stored result belongs in Settings.
+  if (row.status !== 'needs_reauth' && row.catalogId !== UPTIME_ID)
     for (const c of row.checks.filter((x) => x.state === 'error').slice(0, 3)) {
       // This unauthenticated service calls its readiness probe “credential” too.
       if (row.catalogId === 'ps5' && c.id === 'credential') continue;
@@ -366,7 +405,12 @@ export function genericNotices(
       ignore: { lifts: 'newer', words: 'Until more new tools come.' },
       ...(newToolNames.length ? { episode: shortHash(newToolNames) } : {}),
     });
-  if (problem && row.status !== 'needs_reauth')
+  const readFailed =
+    reading && row.status === 'active'
+      ? readFailedNotice(row.label, row.glance?.readFailedSince, reading.now, reading.timeZone)
+      : null;
+  if (readFailed) out.push(readFailed);
+  else if (problem && row.status !== 'needs_reauth')
     out.push({
       id: 'unread',
       tone: 'info',

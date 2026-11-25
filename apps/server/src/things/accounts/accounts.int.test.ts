@@ -2,7 +2,8 @@
  * Account pages on a real database: Postgres is the point. A Google account's page is only its own person's (another
  * account's person gets not_found), what Whombat watches on it reads the connector row, GitHub's page comes from the
  * mirror's tables, Website feedback's from the burrow's report rows (by the reporter's name, never their email), and
- * Home's account things open their pages.
+ * Home's account things open their pages. Accounts kept quiet say so on Home, and GitHub's and Website feedback's quiet
+ * rows outlast the hourly sweep while they stay connected.
  */
 import {
   FEEDBACK_THING_ID,
@@ -13,11 +14,22 @@ import {
   thingHref,
   thingId,
 } from '@whombat/core';
-import { eq } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { and, eq } from 'drizzle-orm';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ConnectionViewer } from '../../connections/store';
 import { storeGoogleConnection } from '../../connectors/store';
-import { accounts, feedbackReports, principals, prReviewers } from '../../db/schema/index';
+import {
+  accounts,
+  feedbackReports,
+  githubConnections,
+  noticeStates,
+  principals,
+  prReviewers,
+  quietWindows,
+  watchOffs,
+} from '../../db/schema/index';
+import { syncOwnedRepos } from '../../github/owned-repos';
+import { pollMailGlances } from '../../home/mail-glance';
 import { homeOverview } from '../../home/overview';
 import { ApiError } from '../../lib/errors';
 import type { PrincipalRow } from '../../read/principals';
@@ -26,7 +38,11 @@ import { createIntegration, filed, submission } from '../../test/feedback';
 import { useTestServer } from '../../test/harness';
 import { FAKE_ACCESS_TOKEN, FAKE_REFRESH_TOKEN } from '../../test/personal';
 import { thingPage, thingVisible } from '../page';
+import { readAccountUptime, rollUpPoints } from '../points';
 import { thingWatch } from '../quiet/service';
+import { pruneGoneThings } from '../quiet/store';
+import { keepThingQuiet } from '../quiet/window-service';
+import { feedbackShown } from './feedback';
 
 const t = useTestServer({ seed: true });
 const TZ = 'Europe/Amsterdam';
@@ -74,9 +90,41 @@ describe('a Google account’s page', () => {
     expect(page.address).toBe('mara@example.com');
     expect(ids(page)).toEqual(expect.arrayContaining(['today', 'account', 'unread-mail', 'files']));
     expect(page.problem).toBeUndefined();
+    expect(page.uptime).toMatchObject({ upPct: 100 });
     await expect(thingPage(t.services, someone, google, TZ)).rejects.toBeInstanceOf(ApiError);
     expect(await thingVisible(t.services, mara, google)).toBe(true);
     expect(await thingVisible(t.services, someone, google)).toBe(false);
+  });
+
+  it('keeps one uptime sample for the shared reads per slot and rolls up the actual coverage', async () => {
+    const { services } = t;
+    const originalClock = services.clock;
+    const now = originalClock();
+    const hour = Math.floor(now.getTime() / 3600_000) * 3600_000 - 60 * 3600_000;
+    const failure = vi.spyOn(services.google.workspace, 'inboxUnread');
+    try {
+      services.clock = () => new Date(hour);
+      failure.mockRejectedValueOnce(new Error('No answer'));
+      expect(await pollMailGlances(services)).toBe(0);
+      services.clock = () => new Date(hour + 5 * 60_000);
+      await thingPage(services, mara, google, TZ);
+      // The health pass and page both read mail in this slot, and a failed part cannot erase a working one.
+      failure.mockRejectedValueOnce(new Error('No answer'));
+      await pollMailGlances(services);
+      await rollUpPoints(services, now);
+      await rollUpPoints(services, now);
+      const points = await readAccountUptime(
+        services.db,
+        { connectionId: google.slice('connection:'.length) },
+        new Date(hour),
+      );
+      expect(points.filter((p) => p.at.getTime() < hour + 3600_000)).toEqual([
+        { at: new Date(hour), value: 0.5, samples: 2 },
+      ]);
+    } finally {
+      failure.mockRestore();
+      services.clock = originalClock;
+    }
   });
 
   it('watches its sign-in from the start and Drive almost full once turned on', async () => {
@@ -104,6 +152,8 @@ describe('GitHub’s page', () => {
         ['failing', '1'],
       ]),
     );
+    await syncOwnedRepos(t.services, t.burrowId, IDS.mara);
+    expect((await thingPage(t.services, mara, GITHUB_THING_ID, TZ)).uptime).toMatchObject({ upPct: 100 });
   });
 });
 
@@ -120,6 +170,7 @@ describe('Website feedback’s page and Home', () => {
       .set({ status: 'resolved' })
       .where(eq(feedbackReports.id, first.id));
     const page = await thingPage(t.services, mara, FEEDBACK_THING_ID, TZ);
+    expect(page.uptime).toBeUndefined();
     expect(ThingPage.safeParse(page).error).toBeUndefined();
     expect(page).toMatchObject({ id: FEEDBACK_THING_ID, catalogId: 'feedback', name: 'Website feedback' });
     const fresh = page.tabs[0]?.panels.find((p) => p.id === 'new');
@@ -138,5 +189,60 @@ describe('Website feedback’s page and Home', () => {
     expect(href(GITHUB_THING_ID)).toBe(thingHref('connection', 'github'));
     expect(href(FEEDBACK_THING_ID)).toBe(thingHref('connection', 'feedback'));
     expect(home.things.find((x) => x.id === FEEDBACK_THING_ID)?.line).toBe('1 new report · 1 site');
+  });
+});
+
+describe('accounts kept quiet', () => {
+  const kept = [() => google, () => GITHUB_THING_ID, () => FEEDBACK_THING_ID];
+
+  it('say so on Home, mail, GitHub and Website feedback alike', async () => {
+    if (!(await feedbackShown(t.services, mara))) await createIntegration(t);
+    const burrow = await t.services.db.query.burrows.findFirst();
+    if (!burrow) throw new Error('burrow');
+    for (const id of kept) await keepThingQuiet(t.services, mara, id(), { minutes: 60 }, TZ);
+    const home = await homeOverview(t.services, { principal: mara.principal, burrow });
+    for (const id of kept) {
+      const [w] = await t.services.db
+        .select()
+        .from(quietWindows)
+        .where(and(eq(quietWindows.ownerId, t.burrowId), eq(quietWindows.thingId, id())));
+      expect(home.things.find((x) => x.id === id())?.quietUntil).toBe(w?.endsAt.toISOString());
+    }
+  });
+
+  it('keep GitHub’s and Website feedback’s quiet rows through the hourly sweep while connected', async () => {
+    await t.services.db
+      .insert(githubConnections)
+      .values({ burrowId: t.burrowId, login: 'mara', connectedById: IDS.mara })
+      .onConflictDoNothing();
+    const at = t.services.clock();
+    for (const thingId of [GITHUB_THING_ID, FEEDBACK_THING_ID]) {
+      await t.services.db
+        .insert(watchOffs)
+        .values({ ownerId: t.burrowId, thingId, checkId: 'conn.check', byId: IDS.mara, at })
+        .onConflictDoNothing();
+      await t.services.db
+        .insert(noticeStates)
+        .values({ thingId, checkId: 'conn.check', firstSeen: at, lastSeen: at, seenPasses: 1, tone: 'bad' })
+        .onConflictDoNothing();
+    }
+    const rows = async (thingId: string) => ({
+      windows: (await t.services.db.select().from(quietWindows).where(eq(quietWindows.thingId, thingId)))
+        .length,
+      offs: (await t.services.db.select().from(watchOffs).where(eq(watchOffs.thingId, thingId))).length,
+      states: (await t.services.db.select().from(noticeStates).where(eq(noticeStates.thingId, thingId)))
+        .length,
+    });
+    // The window kept by the test before, a check switched off and a health state each.
+    const all = { windows: 1, offs: 1, states: 1 };
+    await pruneGoneThings(t.services.db);
+    expect(await rows(GITHUB_THING_ID)).toEqual(all);
+    expect(await rows(FEEDBACK_THING_ID)).toEqual(all);
+
+    // GitHub disconnected: its rows go with the next sweep; Website feedback's stay.
+    await t.services.db.delete(githubConnections).where(eq(githubConnections.burrowId, t.burrowId));
+    await pruneGoneThings(t.services.db);
+    expect(await rows(GITHUB_THING_ID)).toEqual({ windows: 0, offs: 0, states: 0 });
+    expect(await rows(FEEDBACK_THING_ID)).toEqual(all);
   });
 });

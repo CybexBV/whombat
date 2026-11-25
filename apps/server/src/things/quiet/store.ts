@@ -5,13 +5,18 @@
  * are the commands in `commands.ts`; which checks start off, and whether a line is quiet by its rows alone, are
  * `defaults.ts`'s.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { FEEDBACK_THING_ID, GITHUB_THING_ID } from '@whombat/core';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../../db/client';
 import {
   type NoticeQuietRow,
   type NoticeStateRow,
   noticeQuiets,
   noticeStates,
+  type QuietWindowRow,
+  quietWindows,
+  type ThingCauseRow,
+  thingCauses,
   type WatchOffRow,
   type WatchOnRow,
   watchOffs,
@@ -24,6 +29,39 @@ export interface ThingQuiet {
   quiets: NoticeQuietRow[];
   offs: WatchOffRow[];
   ons: WatchOnRow[];
+  /** Its quiet windows not ended early: `applyQuiet` asks which holds at its time. */
+  windows?: QuietWindowRow[];
+  /** What it is down because of, as the causes job last found it. */
+  cause?: ThingCauseRow | null;
+}
+
+/** Windows not ended early and causes of some owners (and things): the reads every quiet read adds. */
+async function holds(
+  db: Db | Tx,
+  owners: readonly string[],
+  things?: readonly string[],
+): Promise<[QuietWindowRow[], ThingCauseRow[]]> {
+  return Promise.all([
+    db
+      .select()
+      .from(quietWindows)
+      .where(
+        and(
+          inArray(quietWindows.ownerId, [...owners]),
+          isNull(quietWindows.endedAt),
+          ...(things ? [inArray(quietWindows.thingId, [...things])] : []),
+        ),
+      ),
+    db
+      .select()
+      .from(thingCauses)
+      .where(
+        and(
+          inArray(thingCauses.ownerId, [...owners]),
+          ...(things ? [inArray(thingCauses.thingId, [...things])] : []),
+        ),
+      ),
+  ]);
 }
 
 export const NO_QUIET: ThingQuiet = { quiets: [], offs: [], ons: [] };
@@ -39,10 +77,11 @@ export async function quietBook(
 ): Promise<QuietBook> {
   const ids = [...new Set(owners.filter((o): o is string => !!o))];
   if (!ids.length) return { of: () => NO_QUIET };
-  const [quiets, offs, ons] = await Promise.all([
+  const [quiets, offs, ons, [windows, causes]] = await Promise.all([
     db.select().from(noticeQuiets).where(inArray(noticeQuiets.ownerId, ids)),
     db.select().from(watchOffs).where(inArray(watchOffs.ownerId, ids)),
     db.select().from(watchOns).where(inArray(watchOns.ownerId, ids)),
+    holds(db, ids),
   ]);
   const by = new Map<string, ThingQuiet>();
   const at = (thing: string) => {
@@ -55,12 +94,26 @@ export async function quietBook(
   for (const q of quiets) at(q.thingId).quiets.push(q);
   for (const o of offs) at(o.thingId).offs.push(o);
   for (const o of ons) at(o.thingId).ons.push(o);
+  addHolds(at, windows, causes);
   return { of: (thing) => by.get(thing) ?? NO_QUIET };
+}
+
+/** Puts each window and cause with its thing. */
+function addHolds(
+  at: (thing: string) => ThingQuiet,
+  windows: readonly QuietWindowRow[],
+  causes: readonly ThingCauseRow[],
+): void {
+  for (const w of windows) {
+    const q = at(w.thingId);
+    q.windows = [...(q.windows ?? []), w];
+  }
+  for (const c of causes) at(c.thingId).cause = c;
 }
 
 /** One thing's quiet rows, offs and ons (also inside a pipeline transaction: `thingQuiet(session.tx, …)`). */
 export async function thingQuiet(db: Db | Tx, owner: string, thingId: string): Promise<ThingQuiet> {
-  const [quiets, offs, ons] = await Promise.all([
+  const [quiets, offs, ons, [windows, causes]] = await Promise.all([
     db
       .select()
       .from(noticeQuiets)
@@ -73,8 +126,9 @@ export async function thingQuiet(db: Db | Tx, owner: string, thingId: string): P
       .select()
       .from(watchOns)
       .where(and(eq(watchOns.ownerId, owner), eq(watchOns.thingId, thingId))),
+    holds(db, [owner], [thingId]),
   ]);
-  return { quiets, offs, ons };
+  return { quiets, offs, ons, windows, cause: causes[0] ?? null };
 }
 
 export async function thingStates(db: Db | Tx, thingId: string): Promise<NoticeStateRow[]> {
@@ -100,7 +154,7 @@ export async function passQuiet(
   const owners = [...new Set(things.map((t) => t.owner))];
   const ids = [...new Set(things.map((t) => t.thingId))];
   if (!ids.length) return { of: () => NO_QUIET, states: () => [] };
-  const [quiets, offs, ons, states] = await Promise.all([
+  const [quiets, offs, ons, states, [windows, causes]] = await Promise.all([
     db
       .select()
       .from(noticeQuiets)
@@ -114,6 +168,7 @@ export async function passQuiet(
       .from(watchOns)
       .where(and(inArray(watchOns.ownerId, owners), inArray(watchOns.thingId, ids))),
     db.select().from(noticeStates).where(inArray(noticeStates.thingId, ids)),
+    holds(db, owners, ids),
   ]);
   const key = (owner: string, thingId: string) => `${owner}\u0000${thingId}`;
   const by = new Map<string, ThingQuiet>();
@@ -128,6 +183,11 @@ export async function passQuiet(
   for (const q of quiets) at(q.ownerId, q.thingId).quiets.push(q);
   for (const o of offs) at(o.ownerId, o.thingId).offs.push(o);
   for (const o of ons) at(o.ownerId, o.thingId).ons.push(o);
+  for (const w of windows) {
+    const q = at(w.ownerId, w.thingId);
+    q.windows = [...(q.windows ?? []), w];
+  }
+  for (const c of causes) at(c.ownerId, c.thingId).cause = c;
   const stateBy = new Map<string, NoticeStateRow[]>();
   for (const st of states) {
     const list = stateBy.get(st.thingId);
@@ -268,18 +328,28 @@ export async function writePass(
 
 /**
  * Rows of connections and devices that are gone (removed, or gone with their account or burrow: the rows have no foreign
- * key, a thing id names several kinds of row). Servers are the servers' part's.
+ * key, a thing id names several kinds of row). Servers are the servers' part's. GitHub and Website feedback have no
+ * connection row: theirs stay while that Whombat is connected to GitHub or has a feedback site (the health states,
+ * which have no owner, while any Whombat does).
  */
 export async function pruneGoneThings(tx: Tx | Db): Promise<void> {
-  const gone = (table: string) =>
-    sql.raw(`delete from ${table} t
+  const gone = (table: string, owned = true) => {
+    const mine = owned ? 'o.burrow_id = t.owner_id' : 'true';
+    return sql.raw(`delete from ${table} t
       where (t.thing_id like 'connection:%' or t.thing_id like 'device:%')
         and not exists (select 1 from catalog_connections c where c.id = split_part(t.thing_id, ':', 2))
-        and not exists (select 1 from connections c where c.id = split_part(t.thing_id, ':', 2))`);
+        and not exists (select 1 from connections c where c.id = split_part(t.thing_id, ':', 2))
+        and not (t.thing_id = '${GITHUB_THING_ID}'
+          and exists (select 1 from github_connections o where ${mine}))
+        and not (t.thing_id = '${FEEDBACK_THING_ID}'
+          and exists (select 1 from feedback_integrations o where ${mine}))`);
+  };
   await tx.execute(gone('notice_quiets'));
   await tx.execute(gone('watch_offs'));
   await tx.execute(gone('watch_ons'));
-  await tx.execute(gone('notice_states'));
+  await tx.execute(gone('notice_states', false));
+  await tx.execute(gone('quiet_windows'));
+  await tx.execute(gone('thing_causes'));
 }
 
 function sqlExcluded(column: string) {

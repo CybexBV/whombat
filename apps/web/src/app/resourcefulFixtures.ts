@@ -8,7 +8,7 @@
  * - the agent's schedules: weekdays at 08:30 (active, made in Mara's Chat with its card there), tomorrow at 09:00 (active),
  *   every 30 minutes (paused), the weekly summary (ran its 90 days).
  * - two one-time Find My watches in Mara's Chat (findmy-watch.md), each a thread of its own: Noor Visser leaving
- *   Keizersgracht (watching, with Cancel) and Ruben Dekker arriving at Home (it happened). Made-up people.
+ *   Keizersgracht (watching, with Cancel) and Ruben Dekker arriving at Home (it happened), plus a watch for Plex.
  *
  * State lives in the closure (one world per fetch); every answer is built to the contracts' schemas.
  */
@@ -25,6 +25,8 @@ import {
   type MessagePage,
   scheduleActions,
   scheduleEndsAt,
+  type ThingWatchView,
+  thingWatchStartText,
 } from '@whombat/core';
 import { type AnyEndpoint, API_ENDPOINTS, matchPath } from '@whombat/core/contracts';
 import type { Message } from '@whombat/core/domain';
@@ -58,6 +60,7 @@ const ENDPOINTS = API_ENDPOINTS.filter((e) =>
     'schedules.remove',
     'burrows.setAgentsReachLan',
     'connections.findMyWatchCancel',
+    'things.cancelWatch',
   ].includes(e.id),
 ) as readonly AnyEndpoint[];
 
@@ -197,6 +200,16 @@ function watchMessage(view: FindMyWatchView): Message {
   );
 }
 
+const PLEX_WATCH_MESSAGE = 'msg_thing_watch_plex';
+
+function thingWatchMessage(view: ThingWatchView): Message {
+  return chatMessage(PLEX_WATCH_MESSAGE, view.startedAt, thingWatchStartText(view), {
+    kind: 'thing_watch',
+    watchId: view.id,
+    watch: view,
+  });
+}
+
 function chatMessage(id: string, createdAt: string, text: string, card: MessageCard): Message {
   return {
     id,
@@ -230,6 +243,18 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
   const seed = options.seed ?? false;
   const schedules = seed ? seedSchedules() : new Map<string, AgentScheduleView[]>();
   const watches = seed ? seedWatches() : new Map<string, FindMyWatchView>();
+  let plexWatch: ThingWatchView | null = seed
+    ? {
+        id: 'thw_plex',
+        thing: 'connection:con_plex',
+        name: 'Plex',
+        event: 'down',
+        status: 'watching',
+        startedAt: T('11:12'),
+        endsAt: T('23:00'),
+        endedAt: null,
+      }
+    : null;
   let reachLan = true;
   /** Risk-row approvals decided with “Always allow” (RA-06): their scope reads `agent`. */
   const alwaysAllowed = new Set<number>();
@@ -295,6 +320,12 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
         w.status === 'watching' ? { ...w, status: 'cancelled', endedAt: now } : w;
       watches.set(w.id, changed);
       return json(changed);
+    },
+    'things.cancelWatch': (p) => {
+      if (!plexWatch || p.watchId !== plexWatch.id) return problem('not_found', 'No such watch.', 404);
+      if (plexWatch.status === 'watching')
+        plexWatch = { ...plexWatch, status: 'cancelled', endedAt: new Date().toISOString() };
+      return json(plexWatch);
     },
     'burrows.setAgentsReachLan': async (_p, body, req, inner) => {
       reachLan = body.agentsReachLan === true;
@@ -371,6 +402,19 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
           topic: null,
           more: null,
         });
+      if (
+        plexWatch &&
+        req.method === 'GET' &&
+        path === `/burrows/${burrow.slug}/messages/${PLEX_WATCH_MESSAGE}/thread`
+      )
+        return json({
+          root: thingWatchMessage(plexWatch),
+          replies: [],
+          conversationId: CHAT,
+          where: 'Chat',
+          topic: null,
+          more: null,
+        });
       const m = match(req);
       if (!m) return null;
       const route = routes[m.ep.id];
@@ -396,6 +440,7 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
       const roots = [
         ...(backups ? [scheduleMessage(backups)] : []),
         ...[...watches.values()].map(watchMessage),
+        ...(plexWatch ? [thingWatchMessage(plexWatch)] : []),
       ];
       // Chat's list of open threads has each as a thread of its own (chat-inbox-web.md).
       if (

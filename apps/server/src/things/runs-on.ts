@@ -12,14 +12,22 @@
  * seconds per machine and range, the last ones serving while new ones are slow (PS-03).
  */
 import { BlockList, isIP } from 'node:net';
-import { catalogEntry, type HostGuest, type HostServer, type ThingRunsOn, thingHref } from '@whombat/core';
+import {
+  catalogEntry,
+  type HostGuest,
+  type HostServer,
+  type ThingRunsOn,
+  thingHref,
+  UPTIME_ID,
+} from '@whombat/core';
 import type { CatalogConnectionRow } from '../connections/types';
 import type { StoredRunsOn } from '../db/schema/index';
 import { HOSTS_API, seg } from '../hosts/client';
-import { arr, obj, toHostGuest, toHostServer } from '../hosts/map';
+import { arr, obj, toHostBackupJob, toHostBackupVolumes, toHostGuest, toHostServer } from '../hosts/map';
 import { type HostsService, hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import type { Services } from '../services';
 import { resolveHost } from '../vault/net';
+import { backupRhythm } from './backup-rhythm';
 import { PAGE_WAIT_MS } from './kinds/read';
 import type { PageRange } from './series';
 import { list, num, rec, str } from './words';
@@ -238,10 +246,36 @@ export function addressIndexIfReady(hosts: HostsService): AddressIndex | null {
   return hit.settled;
 }
 
+/**
+ * The host a “Website or address” check talks to, from its address field: a website's host, a port's host, or the bare
+ * name or address a ping or name lookup is about; none for a check-in, which calls Whombat instead.
+ */
+export function uptimeHostname(
+  fields: Readonly<Record<string, string | undefined>> | null | undefined,
+): string | null {
+  const kind = fields?.kind;
+  const address = fields?.address?.trim();
+  if (!address || kind === 'heartbeat') return null;
+  if (kind === 'http') {
+    try {
+      return normal(new URL(address).hostname) || null;
+    } catch {
+      return null;
+    }
+  }
+  if (kind === 'tcp') {
+    const host = /^(\[[^\]]+\]|[^:/?#@]+):\d{1,5}$/.exec(address)?.[1];
+    return host ? normal(host) || null : null;
+  }
+  return normal(address).replace(/\.$/, '') || null;
+}
+
 /** The host a connection talks to, when a person typed its address (a fixed public API has none to match). */
 export function connectionHostname(
   row: Pick<CatalogConnectionRow, 'catalogId' | 'baseUrl' | 'fields'>,
 ): string | null {
+  // Its address is a field of its own; its entry's base address only names the hosts service.
+  if (row.catalogId === UPTIME_ID) return uptimeHostname(row.fields);
   const entry = catalogEntry(row.catalogId);
   const typed = row.fields?.url ?? (entry?.fields.some((f) => f.id === 'url') ? row.baseUrl : null);
   if (!typed && entry?.baseUrl && !entry.baseUrl.includes('{')) return null;
@@ -353,8 +387,12 @@ export interface MachineFigures {
   diskTotalGb: number | null;
   uptimeS: number | null;
   lastBackup: { at: string; result: string } | null;
+  /** A usable backup after a failed attempt. Null means none was found. Undefined means the read failed. */
+  lastSuccessfulBackupAt?: string | null;
   /** A Proxmox backup job covers it (null: unknown). */
   backupJob: boolean | null;
+  /** Longest normal gap of its most frequent known backup job. */
+  backupRhythmMs?: number | null;
   /** CPU (%) and memory (GB) over the page's range, oldest first, on the metrics' timestamps. */
   series: { timestamps: string[]; cpu: (number | null)[]; memoryGb: (number | null)[] } | null;
 }
@@ -497,15 +535,35 @@ async function loadMachine(
       if (!raw) return null;
       const guest = toHostGuest(raw, at.serverId);
       const G = `${S}/guests/${seg(at.guestId)}`;
-      const [config, metrics] = await Promise.all([
+      const [config, metrics, jobs, backups] = await Promise.all([
         guest.platform === 'pve'
           ? hosts
               .call<unknown>({ path: `${G}/config`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
               .catch(() => null)
           : Promise.resolve(null),
         metricsOf(`${G}/metrics`, 'cpu_pct,mem_mb'),
+        guest.platform === 'pve' && guest.backupJob
+          ? hosts
+              .call<unknown>({ path: `${S}/backup-jobs`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
+              .catch(() => null)
+          : null,
+        guest.platform === 'pve' && guest.backupJob && guest.lastBackup?.result === 'error'
+          ? hosts
+              .call<unknown>({ path: `${G}/backups`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
+              .catch(() => undefined)
+          : null,
       ]);
-      return { ...guestFigures(guest, at.serverId, config, metrics), name: at.runsOn.name };
+      return {
+        ...guestFigures(guest, at.serverId, config, metrics),
+        name: at.runsOn.name,
+        backupRhythmMs: backupRhythm(arr(obj(jobs).items).map(toHostBackupJob), guest),
+        lastSuccessfulBackupAt:
+          backups === undefined
+            ? undefined
+            : (toHostBackupVolumes(backups).find(
+                (b) => b.verified !== 'failed' && Number.isFinite(Date.parse(b.created ?? '')),
+              )?.created ?? null),
+      };
     }
     const fleet = await hosts.fleetRaw();
     const card = arr(fleet.servers).find((s) => obj(s).id === at.serverId);

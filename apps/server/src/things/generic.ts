@@ -7,11 +7,12 @@
  */
 import type { CatalogConnectionRow } from '../connections/types';
 import type { ConnectionGlance } from '../home/types';
+import { durationWords, percentWords, upPoints, upShare } from '../incidents/uptime';
 import { countLine, dayKey, daysWith, inventory, lastDays, trend, weekChange } from './kinds/slots';
 import type { KindView } from './kinds/types';
 import { answerOf } from './panels';
 import type { RawPoint } from './series';
-import { plural, span } from './words';
+import { span } from './words';
 
 const DAY = 86_400_000;
 
@@ -27,22 +28,18 @@ function median(values: readonly number[]): number | null {
 
 const ms = (n: number) => `${Math.round(n)} ms`;
 
-/** “100 %”, and never 100 % while one check went unanswered (“99.7 %”). */
-function share(answered: number, all: number): string {
-  if (answered === all) return '100 %';
-  const p = (answered / all) * 100;
-  return p >= 95 ? `${(Math.floor(p * 10) / 10).toFixed(1)} %` : `${Math.round(p)} %`;
-}
-
 /**
- * The page's own slots for a connection without a kind: “How it answers” and “Answer time” from the response-time
- * points the health pass keeps (`rtt_ms`, null when a check failed). Each is left out without the readings it needs.
+ * The page's own slots for a connection without a kind: “How it answers” from whether its checks answered (`up`, the
+ * response time's for older points) over the last 7 days, and “Answer time” from the response-time points the health
+ * pass keeps (`rtt_ms`, null when a check failed). Each is left out without the readings it needs.
  */
 export function genericSlots(
   row: Pick<CatalogConnectionRow, 'status' | 'glance'> & Partial<Pick<CatalogConnectionRow, 'lastUsedAt'>>,
   rtt: readonly RawPoint[],
   now: Date,
   timeZone: string,
+  up: readonly RawPoint[] = [],
+  upCounts: readonly RawPoint[] = [],
 ): Pick<KindView, 'panels' | 'slots' | 'kpis'> {
   const t = now.getTime();
   const week = rtt.filter((p) => p.at.getTime() > t - 7 * DAY && p.at.getTime() <= t);
@@ -50,7 +47,8 @@ export function genericSlots(
   const answers = (ps: readonly RawPoint[]) =>
     ps.filter((p) => p.value !== null && Number.isFinite(p.value)).map((p) => p.value as number);
   const answered = answers(week);
-  const missed = week.length - answered.length;
+  const weekShare = upShare(upPoints(up, rtt, upCounts), new Date(t - 7 * DAY + 1), now);
+  const missedMin = Math.round(weekShare.missedMs / 60_000);
   const today = dayKey(now, timeZone);
   const typicalToday = median(answers(week.filter((p) => dayKey(p.at, timeZone) === today)));
   const typicalWeek = median(answered);
@@ -67,18 +65,18 @@ export function genericSlots(
           : null;
 
   const items = [];
-  if (week.length)
+  if (weekShare.share !== null)
     items.push(
       countLine({
         id: 'answers',
         title: 'Answers',
         icon: 'network',
-        detail: `${plural(week.length, 'check')} in 7 days`,
-        value: share(answered.length, week.length),
+        detail: 'Over 7 days',
+        value: percentWords(weekShare.share),
         ...(lastCheck
           ? lastCheck
-          : missed
-            ? { note: `${missed} didn’t answer`, noteTone: 'warn' as const }
+          : weekShare.share < 1
+            ? { note: `Didn’t answer for ${durationWords(missedMin)}`, noteTone: 'warn' as const }
             : { note: 'All answered', noteTone: 'ok' as const }),
       }),
     );
