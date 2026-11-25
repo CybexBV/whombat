@@ -79,9 +79,9 @@ const renders: Render[] = [
     ground: brandColors.ink,
   },
   // Android adaptive foreground (also the themed-icon monochrome): paper on the Ink background colour. Launchers show
-  // the middle 72 of its 108 dp, cut to their own shape: the face is 48 dp wide, two thirds of that circle, as on the
-  // iPhone. It was 61 dp, nearly touching the edge, and looked too big beside other apps.
-  { file: join(mobile, 'assets/adaptive-icon.png'), size: 1024, width: 0.445, svg: packageSymbol('paper') },
+  // about the middle 72 of its 108 dp, Samsung's One UI less (about 56): the face is 38 dp wide, half of the usual tile
+  // and two thirds of Samsung's, like the apps beside it. At 61 dp and then 48 it still filled a Samsung tile.
+  { file: join(mobile, 'assets/adaptive-icon.png'), size: 1024, width: 0.35, svg: packageSymbol('paper') },
   // Splash: ink on the light `bg`, paper on the dark one.
   { file: join(mobile, 'assets/splash-icon.png'), size: 1024, width: 0.56, svg: packageSymbol('ink') },
   { file: join(mobile, 'assets/splash-icon-dark.png'), size: 1024, width: 0.56, svg: packageSymbol('paper') },
