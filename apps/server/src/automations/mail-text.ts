@@ -95,7 +95,7 @@ export async function forgetMailText(session: TxSession, run: AutomationRunRow):
  * at the top of a room, or in another room, asks in a thread of its own — for every attempt (`turnThreadsOf`) and the
  * turn a step names now.
  */
-async function turnThreads(
+export async function turnThreads(
   tx: TxSession['tx'],
   run: AutomationRunRow,
   steps: readonly { dispatchId: string | null; output: unknown }[],

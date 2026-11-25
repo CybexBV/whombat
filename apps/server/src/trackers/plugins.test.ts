@@ -56,6 +56,7 @@ describe('loading a driver module', () => {
           #seen = 0;
           ${CALLS.replaceAll('},\n', '}\n').replace('async check() { return { ok: true }; }', 'async check() { this.#seen++; return { ok: this.#seen > 0 }; }')}
           prLine(_conn, n) { return 'Acme ticket: #' + n; }
+          async erasures() { return { ids: [], next: null, more: this.#seen > 1 }; }
         }
         export default new Driver();`,
     });
@@ -66,6 +67,7 @@ describe('loading a driver module', () => {
     const cls = drivers.get('acme-class');
     expect(await cls?.check(conn)).toEqual({ ok: true });
     expect(cls?.prLine?.(conn, 7)).toBe('Acme ticket: #7');
+    expect(await cls?.erasures?.(conn, { after: null })).toEqual({ ids: [], next: null, more: false });
     // What it says about itself, as checked (defaults filled in).
     expect(drivers.get('acme-desk')?.info).toMatchObject({ id: 'acme-desk', words: INFO.words });
   });

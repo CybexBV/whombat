@@ -253,6 +253,13 @@
       "when": 1795605842510,
       "tag": "0035_team_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795609138169,
+      "tag": "0036_tracker_erasures",
+      "breakpoints": true
     }
   ]
 }

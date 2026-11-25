@@ -987,7 +987,13 @@ published automation details read their definition and publisher from one versio
   closed in the tracker meanwhile ends at the next poll (“The report was closed.”) and its run goes on. Each poll also fills in
   the tracker's organization id on reports mirrored before Whombat kept it, so a repeat is told by it; an intake that can't
   go on by itself — more new reports than a poll reads, or an hour of failed polls — is said once in the person's Chat
-  and Inbox (`trackers/stuck.ts`).
+  and Inbox (`trackers/stuck.ts`). A driver may say which reports its tracker erased (its optional `erasures`, read
+  each poll from a cursor kept on the connection, and also for a connection nothing listens to any more while it keeps
+  mirrored reports): for each one mirrored or run for here, `trackers/erase.ts` deletes the mirrored report, its
+  customer's answers and its feature request cards, blanks the words its runs kept (their trigger's summary and
+  scope), forgets their agents' Hermes sessions, stops the runs still working on it (turns, waiting cards and
+  approvals, a line in their thread) and stops following its fixes, so the customer hears nothing more. The run's
+  thread in Chat, step outputs, approvals already answered, T3 Code threads and pull requests keep what they said.
 - **Telling**: a run tells the person as it posts, like any message in its room; a failed run, an approval and a
   review always notify. A saved definition's `tell` is accepted and ignored
   ([brief-removed.md](docs/decisions/brief-removed.md)).
