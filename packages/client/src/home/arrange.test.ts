@@ -155,12 +155,36 @@ describe('what is read', () => {
       'connections',
       data,
       [
-        { id: 'connection:a', level: 'connected' },
-        { id: 'connection:b', level: 'needsLook' },
+        { id: 'connection:a', level: 'connected', notAnswering: false },
+        { id: 'connection:b', level: 'needsLook', notAnswering: false },
       ],
       null,
       null,
     );
     expect(cons).toMatchObject({ value: '1', unit: 'of 2', tone: 'warn' });
+  });
+
+  it('counts a connection down because of something else as not working, its part grey', () => {
+    const data = { summary: { needsYou: 0, working: 0, problems: 0 }, doneToday: [] };
+    const rows = (...down: boolean[]) =>
+      down.map((notAnswering, i) => ({ id: `connection:${i}`, level: 'connected' as const, notAnswering }));
+    const cons = ownFace('connections', data, rows(false, false, false, false, true), null, null);
+    expect(cons).toMatchObject({ value: '4', unit: 'of 5', line: '1 not answering', tone: 'off' });
+    expect(cons.parts).toContainEqual({ tone: 'off', n: 1 });
+    expect(cons.parts?.find((p) => p.tone === 'ok')?.n).toBe(4);
+    // What isn't working says so first; the total leaves out both.
+    const worse = ownFace(
+      'connections',
+      data,
+      [...rows(false, true), { id: 'connection:x', level: 'notWorking', notAnswering: false }],
+      null,
+      null,
+    );
+    expect(worse).toMatchObject({ value: '1', unit: 'of 3', line: '1 not working', tone: 'bad' });
+    expect(ownFace('connections', data, rows(false, false), null, null)).toMatchObject({
+      value: '2',
+      line: 'All fine',
+      tone: 'ok',
+    });
   });
 });

@@ -16,8 +16,8 @@ import {
   type OverviewSectionView,
   readState,
   type StatusLevel,
+  serverQuietWords,
   thingRenameTarget,
-  thingStateWords,
 } from '@whombat/client';
 import {
   isHostsUnavailable,
@@ -99,13 +99,10 @@ export function ServersCard({
   const rename = useThingRename(slug);
   // A server kept quiet says so on its card: Home's thing has until when.
   const home = useHomeOverview({ params: { burrow: slug } });
-  const quietWords = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const t of home.data?.things ?? [])
-      if (t.kind === 'server' && t.quietUntil && Date.parse(t.quietUntil) > now.getTime())
-        out.set(t.id, thingStateWords({ quietUntil: t.quietUntil }, now, timeZone) ?? '');
-    return out;
-  }, [home.data?.things, now, timeZone]);
+  const quietWords = useMemo(
+    () => serverQuietWords(home.data?.things, now, timeZone),
+    [home.data?.things, now, timeZone],
+  );
   // Elsewhere than iPhone a held card's menu is a sheet, for the card it was held on.
   const [menuFor, setMenuFor] = useState<OverviewServerRow | null>(null);
   if (!present && !isHostsUnavailable(status.error)) return null;

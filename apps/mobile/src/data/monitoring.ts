@@ -5,8 +5,17 @@
  * the facts, and the words a screen reader hears. Pure; the screens are `screens/thing/Monitoring.tsx`,
  * `ThingPageScreen` and `ServerScreen`.
  */
-import { KEEP_QUIET_WORDS, LIMIT_WORDS, withoutHoldLine } from '@whombat/client';
-import type { ThingPage } from '@whombat/core';
+import {
+  holdSaysBadge,
+  holdView,
+  KEEP_QUIET_WORDS,
+  LIMIT_WORDS,
+  type LimitView,
+  limitLine,
+  limitView,
+  withoutHoldLine,
+} from '@whombat/client';
+import type { ThingPage, ThingWatchCheck } from '@whombat/core';
 import { zonedParts } from '@whombat/core/text';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
 import { RENAME_COPY } from './rename';
@@ -107,6 +116,50 @@ export function withoutHoldLines(page: ThingPage): ThingPage {
       ),
     })),
   };
+}
+
+/**
+ * Whether the head draws the hold as a line under its state: kept quiet always (who and End now are there); held by a
+ * cause only when the state pill doesn't say it already. The pill's words are the cause's, cut to the badge's length,
+ * so a long cause still counts as said.
+ */
+export function holdLineShown(page: Pick<ThingPage, 'badge' | 'keptQuiet' | 'causedBy'>): boolean {
+  const hold = holdView(page);
+  return !!hold && (hold.kind === 'window' || !holdSaysBadge(page));
+}
+
+/** One limit line under a check in What Whombat watches. */
+export interface WatchLimitLine {
+  key: string;
+  /** “Warns above 90 %, the default”, “/mnt/backup above 95 %”. */
+  text: string;
+  /** Change's hint: what it changes. */
+  spoken: string;
+  /** What Change opens; null for someone who can't change it, who reads the line without Change. */
+  view: LimitView | null;
+}
+
+/**
+ * A check's limit as What Whombat watches lists it: the server's line, then each item with its own. Someone who can't
+ * change them still reads them, as on the web; only Change is left out. Empty without a limit.
+ */
+export function watchLimitLines(check: ThingWatchCheck, mayChange: boolean): WatchLimitLine[] {
+  const line = limitLine(check);
+  if (!line) return [];
+  return [
+    {
+      key: check.check,
+      text: line.words,
+      spoken: MONITORING_COPY.changeLimitHint(check.name),
+      view: mayChange ? limitView(check) : null,
+    },
+    ...line.items.map((item) => ({
+      key: `${check.check}|${item.subject.id}`,
+      text: `${item.subject.name} ${item.words}`,
+      spoken: MONITORING_COPY.changeLimitHint(`${check.name} · ${item.subject.name}`),
+      view: mayChange ? limitView(check, item.subject) : null,
+    })),
+  ];
 }
 
 export type MonitoringPick = 'keep_quiet';

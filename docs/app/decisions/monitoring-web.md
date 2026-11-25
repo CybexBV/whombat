@@ -134,3 +134,29 @@ the hosts service does (a sensor's own is 95 °C there; wear's default 90 %), so
 “Show N on hold” (and “Show N heads-ups”) right under Worth a look's band, with no line above it, starts where the
 band's words do (14 px), as on the phone, instead of at a line's text (62 px): with no icon above, the indent looked
 like a mistake. Under a line it keeps lining up with the line's text.
+
+
+## Council round 3 (2026-11-25)
+
+### AP-9948 Overview counts a thing down because of something else as not answering
+
+A connection down because of something else (its server down, its machine stopped, the internet down) keeps its grey
+tile with its cause's words, but Overview's counts don't take it as working: Connections working says “4 of 5” and
+“1 not answering” (after what isn't working, before what needs a look), its part of the bar grey, and the Connections
+heading's line says “1 not answering · 3 connected · …”. A thing kept quiet counts as its dot says, even when it is down
+because of something else too: the person chose not to hear about it until then, and its tile says the window. One only
+quiet with its server isn't down. The shared `notAnswering` (on `HomeThingRow`), `ownFace` and `overviewSections`, so
+the phone counts the same (AP-9919).
+
+### AP-9949 A server's row says it is kept quiet
+
+While a server is kept quiet its row on Overview says “Quiet until 23:00” under its system line, small and muted with a
+bell-off mark like the line of when it was read, and its name's link ends with it for a screen reader, as the phone's
+card does. The fleet's rows don't carry a window: the words come from Home's things (shared `serverQuietWords`).
+
+### AP-9950 The fixture world shows only outages Whombat makes
+
+An incident opens while a dot is red or a thing doesn't answer, never for a warning, so the fixture world's What
+happened lists only those: pve-02 was too hot for 47 minutes this morning (it is only warm now, which opens nothing),
+had a failing disk and stopped checking in; UniFi's gateway was offline once. No running warm, disk filling up or access
+point offline as an outage.

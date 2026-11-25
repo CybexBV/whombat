@@ -80,5 +80,8 @@ describe('status level', () => {
     );
     expect(statusSummary(['needsLook', 'notWorking'])).toBe('1 not working · 1 needs a look');
     expect(statusSummary([])).toBe('');
+    expect(statusSummary(['connected', 'notWorking'], 2)).toBe(
+      '1 not working · 2 not answering · 1 connected',
+    );
   });
 });

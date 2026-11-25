@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { learningLine, overviewSectionForTab, overviewSections, overviewTiles } from './overview';
+import {
+  learningLine,
+  overviewSectionForTab,
+  overviewSections,
+  overviewTiles,
+  serverQuietWords,
+} from './overview';
 import type { HomeSection, HomeThingRow } from './sections';
 
 const NOW = Date.parse('2026-10-19T10:00:00.000Z');
@@ -23,6 +29,7 @@ const row = (patch: Partial<HomeThingRow> = {}): HomeThingRow => ({
   level: 'connected',
   word: 'Connected',
   reason: null,
+  notAnswering: false,
   ...patch,
 });
 
@@ -51,6 +58,36 @@ describe('Overview’s sections (OVP-01)', () => {
     expect(views[0]?.summary).toContain('1 offline');
     expect(views[1]?.summary).toContain('1 needs a look');
     expect(views[2]?.summary).toBe('From your chats');
+  });
+
+  it('says a connection down because of something else isn’t answering, not that it is connected', () => {
+    const down: HomeSection[] = [
+      {
+        kind: 'things',
+        rows: [row(), row({ status: 'unknown', notAnswering: true }), row({ level: 'learning' })],
+        add: true,
+      },
+    ];
+    expect(overviewSections(down).find((v) => v.key === 'services')?.summary).toBe(
+      '1 not answering · 1 connected · 1 learning',
+    );
+  });
+
+  it('says until when each server kept quiet is quiet, for its row on the web and its card on the phone', () => {
+    const at = (min: number) => new Date(NOW + min * 60_000).toISOString();
+    const words = serverQuietWords(
+      [
+        { id: 'server:pve-02', kind: 'server', quietUntil: '2026-10-19T21:00:00.000Z' },
+        // Ended already, a connection's window, or none: nothing.
+        { id: 'server:old', kind: 'server', quietUntil: at(-5) },
+        { id: 'connection:con_unifi', kind: 'connection', quietUntil: at(60) },
+        { id: 'server:blackbox', kind: 'server' },
+      ],
+      NOW,
+      TZ,
+    );
+    expect([...words]).toEqual([['server:pve-02', 'Quiet until 23:00']]);
+    expect(serverQuietWords(undefined, NOW, TZ).size).toBe(0);
   });
 
   it('keeps the servers’ section from Home’s without the fleet', () => {

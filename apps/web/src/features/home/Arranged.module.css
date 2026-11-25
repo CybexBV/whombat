@@ -329,6 +329,11 @@
   background: var(--bad);
 }
 
+/* Down because of something else: grey, as its tile. */
+.stack i[data-tone="off"] {
+  background: var(--line2);
+}
+
 /* Sparks. */
 
 .sp {

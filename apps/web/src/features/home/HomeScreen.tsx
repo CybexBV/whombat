@@ -489,6 +489,7 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
                     timeZone={timeZone}
                     onAdd={() => set({ add: '1' })}
                     savedNoteShown={read === 'saved'}
+                    things={data?.things}
                   />
                 </Section>
               ) : null}

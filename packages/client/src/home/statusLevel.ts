@@ -118,13 +118,18 @@ export function sortByStatusLevel<T>(items: readonly T[], levelOf: (item: T) => 
     .map((x) => x.item);
 }
 
-/** How many of each level, in words: “2 connected · 2 need a look · 1 learning”, “1 not working” first. Empty for none. */
-export function statusSummary(levels: readonly StatusLevel[]): string {
+/**
+ * How many of each level, in words: “2 connected · 2 need a look · 1 learning”, “1 not working” first. `notAnswering`
+ * more are down because of something else (not among `levels`): “1 not answering” after what isn't working. Empty for
+ * none.
+ */
+export function statusSummary(levels: readonly StatusLevel[], notAnswering = 0): string {
   const count = (level: StatusLevel) => levels.filter((l) => l === level).length;
   const notWorking = count('notWorking');
   const look = count('needsLook');
   return [
     notWorking ? `${notWorking} not working` : null,
+    notAnswering ? `${notAnswering} not answering` : null,
     count('connected') ? `${count('connected')} connected` : null,
     look ? `${look} ${look === 1 ? 'needs' : 'need'} a look` : null,
     count('learning') ? `${count('learning')} learning` : null,
