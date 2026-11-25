@@ -2849,6 +2849,10 @@ export async function createFakeWorld(): Promise<FakeWorld> {
           save();
           return json(200, { release: input.release });
         }
+        case 'appliance.update.check': {
+          // “Check for updates” (check-for-updates.md): the fake box has no newer version to find.
+          return json(200, { outcome: a.updateFacts?.candidate ? 'nothingNewer' : 'upToDate' });
+        }
         case 'licence.refresh': {
           const v = licenceView(a);
           if (!v) return err(404, 'unknown_op', 'No operation licence.refresh');

@@ -69,6 +69,10 @@ test('updates: waiting for work, since when; then it moves and the page follows'
   await expect(
     updates.getByText('Faster replies in busy channels, and Spend shows each agent’s week.'),
   ).toBeVisible();
+
+  // Check for updates (check-for-updates.md): the box looks now and says what came of it.
+  await updates.getByRole('button', { name: 'Check for updates' }).click();
+  await expect(page.getByText('You’re up to date.')).toBeVisible();
 });
 
 test('updates: a failed one says why and that nothing changed; forward repair is worded', async ({
