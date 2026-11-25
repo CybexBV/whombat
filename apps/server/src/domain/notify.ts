@@ -1,8 +1,8 @@
 /**
  * Notifications (inbox rows for NEEDS YOU / MENTIONS / DIRECT / REPLIES / FROM AGENTS). Derived from committed changes
- * by post-commit hooks; each row is pushed to the recipient's `me:` topic and, when the recipient has a registered
- * device, as a push (web push / FCM / APNs, or control on a managed Whombat) carrying the same deep link — unless the
- * recipient is in Do not disturb or quiet hours then (the inbox still fills; essentials-people.md EP-14), or active
+ * by commands or post-commit hooks; each row is pushed to the recipient's `me:` topic and, when the recipient has a
+ * registered device, as a push (web push / FCM / APNs, or control on a managed Whombat) carrying the same deep link —
+ * unless the recipient is in Do not disturb or quiet hours (the inbox still fills; essentials-people.md EP-14), or active
  * on a client right now (NT-17; “needs you” always pushes).
  *
  * A push shows who and the start of the text (NT-14, `push-preview.ts`) unless the recipient turned previews off;
@@ -22,6 +22,7 @@ import {
   topics,
 } from '@whombat/core';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
+import type { TxSession } from '../commit/types';
 import { accounts, approvals, burrows, messages, notifications, principals } from '../db/schema/index';
 import { iso } from '../lib/time';
 import { devicesForPrincipal } from '../push/devices';
@@ -145,40 +146,73 @@ export function zoneOf(own: string | null | undefined, burrowZone: string | null
   return 'UTC';
 }
 
+type NotificationRow = typeof notifications.$inferSelect;
+
+function notificationValues(draft: NotificationDraft) {
+  return {
+    id: newId('notification'),
+    burrowId: draft.burrowId,
+    principalId: draft.principalId,
+    kind: draft.kind,
+    actorId: draft.actorId,
+    where: draft.where.slice(0, 120),
+    text: draft.text.slice(0, 500),
+    link: draft.link,
+    approvalId: draft.approvalId ?? null,
+    createdAt: draft.createdAt,
+    dedupKey: draft.dedupKey ?? null,
+    messageId: draft.messageId ?? null,
+  };
+}
+
+function inboxItem(row: NotificationRow, approval: InboxItem['approval'] = null): InboxItem {
+  return {
+    id: row.id,
+    burrowId: row.burrowId,
+    principalId: row.principalId,
+    kind: row.kind,
+    actorId: row.actorId,
+    where: row.where,
+    text: row.text,
+    link: row.link,
+    approvalId: row.approvalId,
+    createdAt: iso(row.createdAt),
+    readAt: null,
+    approval,
+  };
+}
+
+/** Saves a plain Inbox item with the state that caused it, then sends its push after the commit. */
+export async function notifyInCommit(
+  ctx: TxSession,
+  draft: NotificationDraft & { approvalId?: never },
+): Promise<void> {
+  const [row] = await ctx.tx.insert(notifications).values(notificationValues(draft)).returning();
+  if (!row) throw new Error('The notification was not saved.');
+  ctx.publish(topics.me(row.principalId), { type: 'notification.created', item: inboxItem(row) });
+  if (draft.burrowSlug)
+    ctx.background('push', async () => {
+      const prepare = await preparePush(ctx.services, [draft]);
+      const push = prepare(draft, row);
+      if (push) await sendPushes(ctx.services, [push]);
+    });
+}
+
 export async function notify(services: Services, all: readonly NotificationDraft[]): Promise<void> {
   const seen = new Set<string>();
-  const deduped = all.filter((d) => {
+  const drafts = all.filter((d) => {
     if (!d.dedupKey) return true;
     const key = `${d.principalId}\u0000${d.dedupKey}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  if (deduped.length === 0) return;
-  const { quiet, noPreviews } = await recipientsOf(services, deduped);
-  const drafts = deduped;
   if (drafts.length === 0) return;
-  const names = await actorNames(services, drafts);
-  const presence = presenceFor(services);
-  const ids = drafts.map(() => newId('notification'));
+  const prepare = await preparePush(services, drafts);
+  const entries = drafts.map((draft) => ({ draft, values: notificationValues(draft) }));
   const inserted = await services.db
     .insert(notifications)
-    .values(
-      drafts.map((d, i) => ({
-        id: ids[i] as string,
-        burrowId: d.burrowId,
-        principalId: d.principalId,
-        kind: d.kind,
-        actorId: d.actorId,
-        where: d.where.slice(0, 120),
-        text: d.text.slice(0, 500),
-        link: d.link,
-        approvalId: d.approvalId ?? null,
-        createdAt: d.createdAt,
-        dedupKey: d.dedupKey ?? null,
-        messageId: d.messageId ?? null,
-      })),
-    )
+    .values(entries.map(({ values }) => values))
     // A key the recipient already has: that notification was sent (WS-20).
     .onConflictDoNothing()
     .returning();
@@ -193,9 +227,9 @@ export async function notify(services: Services, all: readonly NotificationDraft
         ]),
       )
     : new Map<string, typeof approvals.$inferSelect>();
-  const pushes: { principalId: string; payload: PushPayload; options: ControlPushOptions }[] = [];
-  for (const [i, id] of ids.entries()) {
-    const row = byId.get(id);
+  const pushes: PendingPush[] = [];
+  for (const { draft, values } of entries) {
+    const row = byId.get(values.id);
     if (!row) continue;
     let approval: InboxItem['approval'] = null;
     if (row.approvalId) {
@@ -203,35 +237,37 @@ export async function notify(services: Services, all: readonly NotificationDraft
       // Its recipient may be an approver outside the conversation (SEC-PACK-ARGS).
       approval = a ? await approvalForViewer(services.db, row.principalId, a) : null;
     }
-    const item: InboxItem = {
-      id: row.id,
-      burrowId: row.burrowId,
-      principalId: row.principalId,
-      kind: row.kind,
-      actorId: row.actorId,
-      where: row.where,
-      text: row.text,
-      link: row.link,
-      approvalId: row.approvalId,
-      createdAt: iso(row.createdAt),
-      readAt: null,
-      approval,
-    };
     services.bus.publish({
       topic: topics.me(row.principalId),
-      event: { type: 'notification.created', item },
+      event: { type: 'notification.created', item: inboxItem(row, approval) },
       eventId: null,
       at: iso(row.createdAt),
       outboxId: null,
     });
-    const draft = drafts[i];
-    const burrowSlug = draft?.burrowSlug;
-    if (!draft || !burrowSlug) continue;
+    const push = prepare(draft, row);
+    if (push) pushes.push(push);
+  }
+  if (pushes.length) services.background.run('push', () => sendPushes(services, pushes));
+}
+
+interface PendingPush {
+  principalId: string;
+  payload: PushPayload;
+  options: ControlPushOptions;
+}
+
+async function preparePush(services: Services, drafts: readonly NotificationDraft[]) {
+  const { quiet, noPreviews } = await recipientsOf(services, drafts);
+  const names = await actorNames(services, drafts);
+  const presence = presenceFor(services);
+  return (draft: NotificationDraft, row: NotificationRow): PendingPush | null => {
+    const { burrowSlug } = draft;
+    if (!burrowSlug) return null;
     // Do not disturb and quiet hours hold push back; the row above is in the inbox already (EP-14). So does reading it
     // on the desk screen (DK-T13).
-    if (draft.pushHeld || quiet(row.principalId)) continue;
+    if (draft.pushHeld || quiet(row.principalId)) return null;
     // Someone who used a client in the last minute sees it there (NT-17); what needs them always buzzes.
-    if (row.kind !== 'needs_you' && presence.activeWithin(row.principalId, PUSH_HOLD_ACTIVE_MS)) continue;
+    if (row.kind !== 'needs_you' && presence.activeWithin(row.principalId, PUSH_HOLD_ACTIVE_MS)) return null;
     const preview = noPreviews.has(row.principalId)
       ? null
       : buildPushPreview({
@@ -240,7 +276,7 @@ export async function notify(services: Services, all: readonly NotificationDraft
           where: row.where,
           text: draft.previewText ?? row.text,
         });
-    pushes.push({
+    return {
       principalId: row.principalId,
       payload: {
         burrow: burrowSlug,
@@ -255,24 +291,22 @@ export async function notify(services: Services, all: readonly NotificationDraft
         ...(draft.group ? { group: draft.group } : {}),
         ...(preview ? { preview } : {}),
       },
-    });
+    };
+  };
+}
+
+/** Transports retry with backoff. A failure in one notification doesn't stop the others. */
+async function sendPushes(services: Services, pushes: readonly PendingPush[]): Promise<void> {
+  for (const { principalId, payload, options } of pushes) {
+    try {
+      // Managed: a request to control for the recipient's enrolled endpoints, the preview at most.
+      await services.push.control?.([principalId], payload, options);
+      const devices = await devicesForPrincipal(services.db, principalId);
+      if (devices.length) await services.push.sendAll(devices, payload);
+    } catch (err) {
+      services.log.warn({ err: String(err) }, 'push: a notification wasn’t sent');
+    }
   }
-  // Delivery doesn't hold up whoever caused the notification (server-efficiency.md SV-02): transports retry with
-  // backoff, and a slow one would hold the sender's response. In the order of the rows, as before; one that fails
-  // doesn't stop the rest.
-  if (pushes.length)
-    services.background.run('push', async () => {
-      for (const { principalId, payload, options } of pushes) {
-        try {
-          // Managed: a request to control for the recipient's enrolled endpoints, the preview at most (MR-13, NT-14).
-          await services.push.control?.([principalId], payload, options);
-          const devices = await devicesForPrincipal(services.db, principalId);
-          if (devices.length) await services.push.sendAll(devices, payload);
-        } catch (err) {
-          services.log.warn({ err: String(err) }, 'push: a notification wasn’t sent');
-        }
-      }
-    });
 }
 
 /** Approvals whose notifications were cleared, per push sender (once each, NT-16); the oldest go past the cap. */

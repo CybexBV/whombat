@@ -999,3 +999,23 @@ it('lists server alerts that were still open during the history period', async (
     for (const alert of alerts) fake.alerts.splice(fake.alerts.indexOf(alert), 1);
   }
 });
+
+it('marks server alerts unavailable when the fleet works but the alert list fails', async () => {
+  const hosts = hostsFor(t.services);
+  const callHost = hosts.call.bind(hosts);
+  const spy = vi.spyOn(hosts, 'call').mockImplementation(async (request) => {
+    if (request.path.endsWith('/alerts')) throw new Error('Alerts unavailable');
+    return callHost(request);
+  });
+  try {
+    const history = await call(mara, 'GET', '/things/server%3Ashale/history?days=30');
+    expect(history.status).toBe(200);
+    expect(history.body).toMatchObject({ incidents: [], alertsUnavailable: { serverName: 'shale' } });
+    expect(history.body).not.toHaveProperty('alerts');
+  } finally {
+    spy.mockRestore();
+  }
+  const history = await call(mara, 'GET', '/things/server%3Ashale/history?days=30');
+  expect(history.status).toBe(200);
+  expect(history.body).not.toHaveProperty('alertsUnavailable');
+});

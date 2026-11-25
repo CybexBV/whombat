@@ -8,6 +8,7 @@ import {
   type AutomationDefinitionInput,
   type AutomationTriggerInput,
   THING_BACK,
+  THING_DOWN,
   THING_PROBLEM,
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
@@ -32,6 +33,7 @@ import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import type { GlanceLine } from '../things/quiet/glance';
 import { thingWatchTool } from './agent';
+import { periodUptime } from './history';
 import { incidentsPass } from './store';
 import { cancelThingWatch, deliverThingWatches } from './thing-watch';
 import { watchIncidents } from './watch';
@@ -267,6 +269,47 @@ it('skips dependent, quiet and ended incidents, and settles expired or cancelled
   const thread = await replies(expired.messageId);
   expect(thread).toHaveLength(2);
   expect(thread.find((m) => m.card)?.card).toMatchObject({ watch: { status: 'expired' } });
+});
+
+it('waits the full down delay when a thing with an existing problem stops answering', async () => {
+  const thing = await connection('media-down');
+  const automation = await w.publish(definition([{ kind: 'thing', event: 'down', thing, forMinutes: 10 }]), {
+    name: 'Media is down',
+  });
+  const problemSince = w.now();
+  const incidentId = await open(thing, 'problem', null, 'machine.disk');
+  await w.settle();
+  w.advance(50 * MINUTE);
+  const downSince = w.now();
+  await lines(thing, [NOT_ANSWERING]);
+  await watchIncidents(w.services, w.burrowId, null);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(0);
+  const [row] = await w.services.db.select().from(incidents).where(eq(incidents.id, incidentId));
+  expect(row).toMatchObject({ startedAt: problemSince, downSince });
+  const downEvents = await w.services.db
+    .select()
+    .from(events)
+    .where(and(eq(events.type, THING_DOWN), eq(events.burrowId, w.burrowId)));
+  expect(downEvents.find((event) => event.payload.incidentId === incidentId)?.payload).toMatchObject({
+    incidentId,
+    startedAt: downSince.toISOString(),
+  });
+
+  w.advance(9 * MINUTE);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(0);
+  w.advance(MINUTE);
+  await w.settle();
+  expect(await w.runs(automation)).toHaveLength(1);
+  await close(incidentId);
+
+  const history = await periodUptime(w.services, w.burrowId, thing, {
+    now: w.now(),
+    days: 30,
+    timeZone: 'UTC',
+  });
+  expect(history?.uptime).toMatchObject({ downs: 1, downMinutes: 10 });
 });
 
 it('doesn’t start a delayed automation whose check cleared while another line keeps the incident open', async () => {

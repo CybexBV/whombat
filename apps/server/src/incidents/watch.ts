@@ -148,7 +148,9 @@ export async function watchIncidents(
       },
       { burrowId, actorId: await signer() },
     );
-  await pushDue(services, burrowId, burrow.timeZone, now, signer, withLook, observed.heldUntil);
+  await pushDue(services, burrowId, burrow.timeZone, now, signer, withLook, observed.heldUntil).catch((err) =>
+    services.log.warn({ err: String(err), burrowId }, 'incidents: the push could not be saved'),
+  );
   // “Tell me when Plex is back” while Plex had no outage of its own (it was down because of its server): seeing it
   // answer again is what it waits for. A watch on something removed stops and says so.
   const raw = observed.raw;

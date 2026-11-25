@@ -330,7 +330,7 @@ export interface HistoryView {
   rows: HistoryRow[];
   /** A server's alerts in the period, newest first (folded under the incidents). */
   alerts: HistoryRow[];
-  /** “Nothing went wrong in the last 30 days.” when there is neither an incident nor an alert. */
+  /** A note when the server's alerts couldn't be read or there is nothing to show. */
   empty: string | null;
 }
 
@@ -393,11 +393,16 @@ export function historyView(history: ThingHistory, now: Date | number, timeZone:
   const alerts = (history.alerts ?? [])
     .filter((a) => !sameOutage(a, history.incidents, now))
     .map((a, i) => alertRow(a, i, now, timeZone));
+  const empty = history.alertsUnavailable
+    ? `Whombat couldn’t read ${history.alertsUnavailable.serverName}’s own alerts just now.`
+    : rows.length || alerts.length
+      ? null
+      : HISTORY_WORDS.empty(history.days);
   return {
     uptime: history.uptime?.text ?? null,
     rows,
     alerts,
-    empty: rows.length || alerts.length ? null : HISTORY_WORDS.empty(history.days),
+    empty,
   };
 }
 

@@ -195,6 +195,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The checks an incident signed an event for (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column, and a row it opens reads as one that signed only its own check."
+    },
+    "0031_incident_down_since": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A nullable timestamp on incidents for when the thing stopped answering. Rows from earlier writers still use the incident's start when it is unknown."
     }
   }
 }
