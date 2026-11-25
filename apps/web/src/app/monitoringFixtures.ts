@@ -425,19 +425,22 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
           incident('inc_fx_ha_2', 'problem', '2 integrations aren’t loading', 3 * DAY + 4 * HOUR, 95),
           incident('inc_fx_ha_1', 'down', 'Not answering', 9 * DAY + 2 * HOUR, 15),
         ];
+      // Only what turns a dot red opens an incident: a problem is something bad (a gateway offline, a disk failing,
+      // too hot), never a warning such as an access point offline, running warm or a disk filling up.
       case UNIFI:
         return [
-          incident('inc_fx_unifi_2', 'problem', 'Attic AP is offline', 2 * HOUR + 10 * MIN, null),
+          incident('inc_fx_unifi_2', 'problem', 'The gateway is offline', 2 * DAY + 4 * HOUR, 6),
           incident('inc_fx_unifi_1', 'down', 'Not answering', 6 * DAY + 5 * HOUR, 12),
         ];
       case PVE02:
         return [
-          incident('inc_fx_pve02_4', 'problem', 'Running warm', 5 * HOUR + 12 * MIN, null),
+          // Too hot for 47 minutes this morning; it is only warm now, which opens nothing.
+          incident('inc_fx_pve02_4', 'problem', 'Running too hot', 5 * HOUR + 12 * MIN, 47),
           incident('inc_fx_pve02_3', 'down', 'Not checking in', 2 * DAY + 3 * HOUR, 22),
           incident('inc_fx_pve02_2', 'down', 'Not checking in', 4 * DAY + 7 * HOUR, 11),
           incident('inc_fx_pve02_1', 'down', 'Not checking in', 6 * DAY + 1 * HOUR, 8),
-          incident('inc_fx_pve02_0', 'problem', 'A disk is filling up', 19 * DAY, 3 * 60 + 5),
-          incident('inc_fx_pve02_x', 'problem', 'Running warm', 26 * DAY, 47),
+          incident('inc_fx_pve02_0', 'problem', 'A disk is failing', 19 * DAY, 3 * 60 + 5),
+          incident('inc_fx_pve02_x', 'down', 'Not checking in', 26 * DAY, 9),
         ];
       case BLACKBOX:
         return [
@@ -453,10 +456,10 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
     if (!opts.seeded) return [];
     if (thing === PVE02)
       return [
-        alert('CPU temperature above 72 °C', 'warning', 'sensor.temp_high', 5 * HOUR + 12 * MIN, null),
+        alert('CPU temperature above 95 °C', 'critical', 'sensor.temp_critical', 5 * HOUR + 12 * MIN, 47),
         alert('pve-02 isn’t checking in', 'critical', 'agent.heartbeat_missing', 2 * DAY + 3 * HOUR, 22),
         alert('pve-02 isn’t checking in', 'critical', 'agent.heartbeat_missing', 4 * DAY + 7 * HOUR, 11),
-        alert('Disk / is 91 % full', 'warning', 'disk.space_high', 19 * DAY, 3 * 60 + 5),
+        alert('Disk sdb is failing', 'critical', 'disk.smart_failing', 19 * DAY, 3 * 60 + 5),
       ];
     if (thing === BLACKBOX)
       return [

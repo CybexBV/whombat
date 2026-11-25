@@ -173,13 +173,16 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
 
   /* The week in one line, and what happened ------------------------------------------------------------------- */
 
-  /** Each thing's incidents, newest first: [nature, words, days ago at hh:mm, minutes]. */
+  /**
+   * Each thing's incidents, newest first: [nature, words, days ago at hh:mm, minutes]. Only what turns a dot red opens
+   * one: too hot, a gateway offline; never a warning such as running hot or an access point offline.
+   */
   const INCIDENTS: Record<string, [ThingIncident['nature'], string, number, string, number][]> = {
     'server:pve-02': [
-      ['problem', 'Running hot', 1, '15:40', 125],
+      ['problem', 'Running too hot', 1, '15:40', 125],
       ['down', 'Not answering', 4, '03:12', 12],
     ],
-    'connection:con_unifi': [['problem', 'An access point is offline', 3, '21:04', 41]],
+    'connection:con_unifi': [['problem', 'The gateway is offline', 3, '21:04', 41]],
     'connection:con_ha': [
       ['down', 'Not answering', 2, '06:31', 9],
       ['down', 'Not answering', 9, '22:15', 5],
@@ -190,7 +193,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
   /** A server's own alerts in the period: [title, severity, rule, days ago at hh:mm, minutes]. */
   const ALERTS: Record<string, [string, 'critical' | 'warning', string, number, string, number][]> = {
     'server:pve-02': [
-      ['CPU above 85 °C', 'warning', 'sensor.temp_high', 1, '15:42', 118],
+      ['CPU above 95 °C', 'critical', 'sensor.temp_critical', 1, '15:42', 118],
       ['pve-02 isn’t checking in', 'critical', 'agent.heartbeat_missing', 4, '03:13', 11],
       ['Disk sdb has errors', 'warning', 'disk.smart_errors', 12, '10:05', 1440],
     ],

@@ -151,6 +151,25 @@ describe('monitoring in the demo world', () => {
     expect(quiet.alerts).toEqual([]);
   });
 
+  it('lists only outages the product can make: red dots and things not answering, never a warning', async () => {
+    const { client } = setup();
+    const home = await ok(client.request(api.home.overview, { params: { burrow } }));
+    const words: string[] = [];
+    for (const thing of home.things) {
+      const history = await ok(
+        client.request(api.things.history, { params: { burrow, thing: thing.id }, query: { days: 90 } }),
+      );
+      for (const i of history.incidents) {
+        words.push(i.words);
+        // Running hot (a warning), a disk filling up, an access point offline: none of these opens an incident.
+        expect(i.words, thing.id).not.toMatch(/\bwarm\b|running hot$|filling up|access point is offline/i);
+        if (i.endedAt === null && !thing.quietUntil)
+          expect(['bad', 'offline', 'unknown'], `${thing.id} is ${thing.status}`).toContain(thing.status);
+      }
+    }
+    expect(words).toContain('Running too hot');
+  });
+
   it('changes a server check’s limit and puts it back with Undo', async () => {
     const { client } = setup();
     const thing = MONITORING_THINGS.pve02;
