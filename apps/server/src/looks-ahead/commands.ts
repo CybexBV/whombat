@@ -211,16 +211,25 @@ async function checkOfTurn(tx: Tx, burrowId: string, dispatchId: string) {
   return row ?? null;
 }
 
-/** The assistant's words as one plain paragraph: no links, pictures or markup of its own (its sources are Whombat's). */
+/**
+ * The assistant's words as one plain paragraph that can hold no link or picture: markup characters go first, then every
+ * address (`http:`, `https:`, `mailto:`, `data:`, `www.`), again until nothing changes, so no link can be put back
+ * together from what is left. Its sources are Whombat's.
+ */
 export function findingWords(text: string): string {
-  return text
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\bhttps?:\/\/\S+|\bwww\.\S+/gi, '')
-    .replace(/[`*_#>|~]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, AHEAD_TEXT_MAX);
+  let words = text;
+  for (let i = 0; i < 5; i++) {
+    const next = words
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/!(?=\[)/g, '')
+      .replace(/[`*_#>|~[\]]/g, '')
+      .replace(/\S*(?:https?:|mailto:|data:|www\.)\S*/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (next === words) break;
+    words = next;
+  }
+  return words.slice(0, AHEAD_TEXT_MAX);
 }
 
 /** A source as Whombat names it: the site with its link, or the mail's sender. */

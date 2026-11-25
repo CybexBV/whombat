@@ -252,22 +252,19 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const check = await row(second);
     expect(check).toMatchObject({ summary: 'The Script', state: 'checking' });
     const mcp = await inTurn(check.dispatchId ?? '');
-    // Mail first, as its lines say; the event's own links stay readable after it.
-    const box = await mcp.client.callTool({ name: 'mail_search', arguments: { query: '' } });
-    const mailId = (box.structuredContent as { messages: { id: string }[] }).messages[0]?.id ?? '';
-    const mail = await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: mailId } });
-    expect(mail.isError).toBeFalsy();
+    // The event's own links aren't opened (an invite's link may accept it or carry a personal key).
     const ticket = await mcp.client.callTool({
       name: 'read_web_page',
       arguments: { url: 'https://tickets.example.com/order/77' },
     });
-    expect(ticket.isError).toBeFalsy();
+    expect(ticket.isError).toBe(true);
     // Nothing private goes to the search engine.
     const leaky = await mcp.client.callTool({
       name: 'search_web',
       arguments: { query: 'The Script order 4471929' },
     });
     expect(leaky.isError).toBe(true);
+    // The web first, as its lines say.
     const results = await mcp.client.callTool({
       name: 'search_web',
       arguments: { query: 'The Script Ziggo Dome' },
@@ -278,6 +275,19 @@ describe('Looks ahead (looks-ahead.md)', () => {
       arguments: { url: 'https://venue.example.com/the-script' },
     });
     expect(said(page)).toContain('20:45');
+    // Then the mail; after it, nothing more goes to the web.
+    const box = await mcp.client.callTool({ name: 'mail_search', arguments: { query: '' } });
+    const mailId = (box.structuredContent as { messages: { id: string }[] }).messages[0]?.id ?? '';
+    const mail = await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: mailId } });
+    expect(mail.isError).toBeFalsy();
+    const late = await mcp.client.callTool({ name: 'search_web', arguments: { query: 'Ziggo Dome' } });
+    expect(late.isError).toBe(true);
+    // Only the event's own calendar is read.
+    const other = await mcp.client.callTool({
+      name: 'calendar_events',
+      arguments: { calendarId: 'family' },
+    });
+    expect(other.isError).toBe(true);
     // A source it never saw is refused, and a link it only saw (not read or found) is no source either.
     const unseen = await mcp.client.callTool({
       name: 'ahead_report',
@@ -410,11 +420,21 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect(kept?.settledAt).toBeNull();
     expect((await row(second)).settledAt).not.toBeNull();
 
-    // Off: nothing is checked.
+    // Switched off while a check works: it reads nothing more and tells nothing; then nothing is checked.
     now = new Date('2026-12-14T15:00:00Z');
     await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    const working = (await watchAhead(t.services, TEST_BURROW_ID, ready)) ?? '';
+    expect(working).toMatch(/^ahc_/);
     const res = await t.commit(IDS.mara, (await import('./commands')).updateLooksAhead, { on: false });
     expect(res.status).toBe('ok');
+    const mcp = await inTurn((await row(working)).dispatchId ?? '');
+    const read = await mcp.client.callTool({ name: 'mail_search', arguments: { query: '' } });
+    expect(read.isError).toBe(true);
+    const ended = await mcp.client.callTool({ name: 'ahead_report', arguments: { found: false } });
+    expect(ended.structuredContent).toMatchObject({ status: 'ok', told: false });
+    await mcp.close();
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
     expect(await watchAhead(t.services, TEST_BURROW_ID, ready)).toBeNull();
     expect((await looksAheadView(t.services, TEST_BURROW_ID)).on).toBe(false);
   });

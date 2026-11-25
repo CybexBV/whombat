@@ -52,9 +52,9 @@ import { ApiError, zodFields } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK } from '../looks/research';
 import {
   AHEAD_TOOL_REFUSED,
-  aheadKeyRefusal,
   aheadThreadOf,
   aheadToolRan,
+  aheadToolRefusal,
   NOT_AN_AHEAD_CHECK,
   NOT_AN_AHEAD_THREAD,
 } from '../looks-ahead/turn';
@@ -451,7 +451,7 @@ export async function callTool(
   // A Looks ahead check reads the person's calendar and mail only where the keys say Allowed: nobody is there to ask
   // (looks-ahead.md).
   if (dispatch.trigger === 'ahead') {
-    const refusal = await aheadKeyRefusal(services, auth.agentId, name);
+    const refusal = await aheadToolRefusal(services, dispatch, name, parsed.data);
     if (refusal) return errorResult('forbidden', refusal);
   }
   const ctx: ToolContext = {

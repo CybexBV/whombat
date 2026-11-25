@@ -32,7 +32,17 @@ import {
   reportAhead,
   toldCheckOfThread,
 } from './commands';
-import { forgetSeen, sawLink, sawLinks, sawSource, sawSourceOf, seenOf, takePage, takeSearch } from './seen';
+import {
+  forgetSeen,
+  sawLink,
+  sawLinks,
+  sawSource,
+  sawSourceOf,
+  seenOf,
+  takePage,
+  takeSearch,
+  webClosed,
+} from './seen';
 import { braveSearch, readPage, WebRefusal } from './web';
 
 export { NOT_AN_AHEAD_CHECK, NOT_AN_AHEAD_THREAD } from './commands';
@@ -83,11 +93,6 @@ export async function aheadContextOf(db: Db, dispatch: DispatchRow): Promise<Ahe
   };
 }
 
-/** The event's own words, where its links are. */
-function eventText(row: AheadCheckRow): string {
-  return `${row.location}\n${row.event.description}`;
-}
-
 /** The check's row, or a refusal: only while it is going on. */
 async function liveCheck(services: Services, dispatch: DispatchRow): Promise<AheadCheckRow> {
   const row = await aheadCheckOfTurn(services.db, dispatch);
@@ -103,19 +108,31 @@ export async function keyAllowed(services: Services, agentId: string, key: KeyId
 }
 
 /**
- * Before one of the person's own tools runs in a check (the calendar, the mail): only when its key is Allowed. Nobody
- * is there to say yes, and a card would land in a thread that isn't there. Null when it may run, else what the check
- * hears.
+ * Before any tool runs in a check: only while the check goes on and Looks ahead is on (else only `ahead_report`, to end
+ * it); the person's own tools (the calendar, the mail) only when their key is Allowed — nobody is there to say yes, and
+ * a card would land in a thread that isn't there — and the calendar only the check's own calendar. Null when it may
+ * run, else what the check hears.
  */
-export async function aheadKeyRefusal(
+export async function aheadToolRefusal(
   services: Services,
-  agentId: string,
+  dispatch: DispatchRow,
   name: McpToolName,
+  input: unknown,
 ): Promise<string | null> {
+  if (name === 'ahead_report') return null;
+  const row = await aheadCheckOfTurn(services.db, dispatch);
+  if (!row || row.state !== 'checking') return 'This check has ended.';
+  if (!(await aheadSettingsOf(services.db, dispatch.burrowId)).on)
+    return 'Looks ahead was switched off: end with ahead_report, found false.';
+  if (name === 'calendar_events') {
+    const calendarId = (input as { calendarId?: unknown } | null)?.calendarId ?? 'primary';
+    if (calendarId !== row.event.calendarId)
+      return `Read only the calendar this event is on (calendarId ${row.event.calendarId}).`;
+  }
   const key = MCP_TOOLS[name].requiredKey;
   // A key that depends on the input is never one of a check's tools (calendar and mail read have fixed keys).
   if (!key || key === 'by_input') return null;
-  return (await keyAllowed(services, agentId, key))
+  return (await keyAllowed(services, dispatch.agentId, key))
     ? null
     : 'This needs the person’s yes, and nobody is there to ask while you check ahead: go on without it.';
 }
@@ -123,19 +140,24 @@ export async function aheadKeyRefusal(
 /** The most of one mail's text a check reads. */
 const AHEAD_MAIL_BODY_MAX = 8000;
 
-/** A sender as a finding names them: their name, else their address (“Ticketmaster”). */
-function senderName(from: unknown): string {
-  const text = typeof from === 'string' ? from.trim() : '';
+/**
+ * A sender as a finding names them: their name as plain words (“Ticketmaster”), never an address or a link; “mail” when
+ * nothing of it is left.
+ */
+export function senderName(from: unknown): string {
+  const text = typeof from === 'string' ? from : '';
   const name = text
-    .replace(/<[^>]*>/g, '')
-    .replace(/["']/g, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\S*(?:@|:\/\/|www\.)\S*/gi, ' ')
+    .replace(/[^\p{L}\p{N} &'.-]/gu, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
-  return (name || text || 'mail').slice(0, 60);
+  return (name || 'mail').slice(0, 60);
 }
 
 /**
- * After one of the person's tools ran in a check: the mails it read may be named as sources, by their sender, and each
- * mail's text it gets is cut to `AHEAD_MAIL_BODY_MAX`.
+ * After one of the person's tools ran in a check: once it read mail, its web is closed; the mails it read may be named
+ * as sources, by their sender, and each mail's text it gets is cut to `AHEAD_MAIL_BODY_MAX`.
  */
 export async function aheadToolRan(
   services: Services,
@@ -143,13 +165,14 @@ export async function aheadToolRan(
   name: McpToolName,
   out: unknown,
 ): Promise<void> {
-  if (dispatch.trigger !== 'ahead' || name !== 'mail_read') return;
-  const row = await aheadCheckOfTurn(services.db, dispatch);
-  if (!row) return;
+  if (dispatch.trigger !== 'ahead' || (name !== 'mail_read' && name !== 'mail_search')) return;
+  const seen = seenOf(services, dispatch.id);
+  // Strangers' words are in its context now: nothing more of this check goes to the web.
+  seen.mailRead = true;
+  if (name !== 'mail_read') return;
   const found =
     (out as { messages?: { id?: unknown; from?: unknown; body?: unknown; bodyTruncated?: unknown }[] } | null)
       ?.messages ?? [];
-  const seen = seenOf(services, dispatch.id, () => eventText(row));
   for (const m of found) {
     if (typeof m.id === 'string') seen.mails.set(m.id, senderName(m.from));
     // A check needs the gist of a mail, not all of a newsletter: what it reads stays small.
@@ -171,8 +194,14 @@ async function privateWords(services: Services, burrowId: string): Promise<strin
   return [...person.name.split(/\s+/), ...addresses].filter((w) => w.length >= 3);
 }
 
+/** What a check hears when it reaches for the web after reading mail. */
+const WEB_CLOSED =
+  'You read mail in this check, so nothing more goes to the web: decide with what you found, then ahead_report.';
+
 export async function searchWebTool(services: Services, dispatch: DispatchRow, query: string) {
-  const row = await liveCheck(services, dispatch);
+  await liveCheck(services, dispatch);
+  const seen = seenOf(services, dispatch.id);
+  if (webClosed(seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
   const refusal = aheadQueryRefusal(query, await privateWords(services, dispatch.burrowId));
   if (refusal) throw forbidden(refusal);
   const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, dispatch.burrowId));
@@ -186,7 +215,6 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
   } catch {
     throw forbidden('The web search key can’t be used right now: go on with the calendar and the mail.');
   }
-  const seen = seenOf(services, dispatch.id, () => eventText(row));
   if (!takeSearch(seen))
     throw forbidden('That was the last search for this check: decide with what you found.');
   try {
@@ -204,11 +232,12 @@ export async function searchWebTool(services: Services, dispatch: DispatchRow, q
 }
 
 export async function readWebPageTool(services: Services, dispatch: DispatchRow, url: string) {
-  const row = await liveCheck(services, dispatch);
-  const seen = seenOf(services, dispatch.id, () => eventText(row));
+  await liveCheck(services, dispatch);
+  const seen = seenOf(services, dispatch.id);
+  if (webClosed(seen, dispatch.claimedAt)) throw forbidden(WEB_CLOSED);
   if (!sawLink(seen, url))
     throw forbidden(
-      'Only a link exactly as you saw it in the event, a search result or a page you read; mail links aren’t opened.',
+      'Only a link exactly as you saw it in a search result or on a page you read: links in the event or a mail aren’t opened.',
     );
   if (!takePage(seen)) throw forbidden('That was the last page for this check: decide with what you found.');
   try {
@@ -247,9 +276,9 @@ export async function aheadReportSources(
   dispatch: DispatchRow,
   report: AheadReportInput,
 ): Promise<NamedSource[]> {
-  const row = await liveCheck(services, dispatch);
+  await liveCheck(services, dispatch);
   if (!report.found) return [];
-  const seen = seenOf(services, dispatch.id, () => eventText(row));
+  const seen = seenOf(services, dispatch.id);
   const named: NamedSource[] = [];
   for (const source of report.sources ?? []) {
     if ('url' in source) {
@@ -268,12 +297,13 @@ export async function aheadReportSources(
 }
 
 /**
- * Whether the event is still as the check began it, read from the calendar just before a finding is told: gone or
- * changed, the finding is kept quiet. A read that fails says yes (a hiccup shouldn't lose a finding).
+ * Whether the event is still as the check began it, read from the calendar just before a finding is told: gone,
+ * changed, unreadable or no longer the assistant's to read (its key), the finding is kept quiet.
  */
 export async function aheadEventCurrent(services: Services, dispatch: DispatchRow): Promise<boolean> {
   const row = await aheadCheckOfTurn(services.db, dispatch);
-  if (!row?.event.connectionId) return true;
+  if (!row?.event.connectionId) return false;
+  if (!(await keyAllowed(services, dispatch.agentId, 'calendar.read'))) return false;
   const person = await thePerson(services.db, dispatch.burrowId);
   const account = person?.accountId
     ? (await calendarAccounts(services.db, person.accountId)).find(
@@ -285,7 +315,7 @@ export async function aheadEventCurrent(services: Services, dispatch: DispatchRo
     const event = await currentEvent(services, account, row.event.calendarId, row.event.eventId);
     return !!event && !aheadSkip(event) && aheadVersion(event) === row.version;
   } catch {
-    return true;
+    return false;
   }
 }
 

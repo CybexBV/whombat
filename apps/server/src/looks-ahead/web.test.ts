@@ -5,7 +5,19 @@
 import { AHEAD_PAGES_MAX, AHEAD_SEARCHES_MAX } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { Services } from '../services';
-import { forgetSeen, linksIn, sawLink, sawLinks, seenOf, takePage, takeSearch } from './seen';
+import { findingWords } from './commands';
+import {
+  forgetSeen,
+  sawLink,
+  sawLinks,
+  sawSource,
+  sawSourceOf,
+  seenOf,
+  takePage,
+  takeSearch,
+  webClosed,
+} from './seen';
+import { senderName } from './turn';
 import {
   braveSearch,
   httpUrl,
@@ -46,32 +58,33 @@ describe('links', () => {
         'https://example.com/',
       ),
     ).toEqual(['https://example.com/x', 'https://example.org/y']);
-    expect(linksIn('Tickets: https://tickets.example.com/order/1. Doors at 19:00')).toEqual([
-      'https://tickets.example.com/order/1',
-    ]);
   });
 });
 
 describe('what a check has seen', () => {
-  it('starts with the event’s links, adds what it found, and reads nothing it made up', () => {
+  it('reads only links it found, names only pages it read or found, and closes the web once it read mail', () => {
     const { services } = fakeServices(() => html(''));
-    const seen = seenOf(services, 'dsp_1', () => 'Ziggo Dome https://example.com/event');
-    expect(sawLink(seen, 'https://example.com/event')).toBe(true);
-    expect(sawLink(seen, 'https://example.com/event?who=john')).toBe(false);
+    const seen = seenOf(services, 'dsp_1');
+    expect(sawLink(seen, 'https://example.com/event')).toBe(false);
     sawLinks(seen, ['https://example.org/news/']);
     expect(sawLink(seen, 'https://example.org/news')).toBe(true);
+    expect(sawLink(seen, 'https://example.org/news?who=john')).toBe(false);
+    // A link it only saw is no source; a page it read is.
+    expect(sawSourceOf(seen, 'https://example.org/news')).toBe(false);
+    sawSource(seen, 'https://example.org/news');
+    expect(sawSourceOf(seen, 'https://example.org/news/')).toBe(true);
+    expect(webClosed(seen, new Date())).toBe(false);
+    seen.mailRead = true;
+    expect(webClosed(seen, new Date())).toBe(true);
+    // A check begun before this server started may have read mail it doesn't know of.
+    expect(webClosed(seenOf(services, 'dsp_3'), new Date(0))).toBe(true);
     forgetSeen(services, 'dsp_1');
-    expect(
-      sawLink(
-        seenOf(services, 'dsp_1', () => ''),
-        'https://example.com/event',
-      ),
-    ).toBe(false);
+    expect(sawLink(seenOf(services, 'dsp_1'), 'https://example.org/news')).toBe(false);
   });
 
   it('counts its searches and pages', () => {
     const { services } = fakeServices(() => html(''));
-    const seen = seenOf(services, 'dsp_2', () => '');
+    const seen = seenOf(services, 'dsp_2');
     for (let i = 0; i < AHEAD_SEARCHES_MAX; i++) expect(takeSearch(seen)).toBe(true);
     expect(takeSearch(seen)).toBe(false);
     for (let i = 0; i < AHEAD_PAGES_MAX; i++) expect(takePage(seen)).toBe(true);
@@ -143,5 +156,22 @@ describe('the search and the page', () => {
     await expect(readPage(services, 'https://example.com/a.png', () => true)).rejects.toBeInstanceOf(
       WebRefusal,
     );
+  });
+});
+
+describe('what a finding may show', () => {
+  it('the assistant’s words carry no link or picture, however they are spelt', () => {
+    const words = findingWords(
+      'It starts at **20:45**. See [here](https://evil.example.net/a) ![x](https://evil.example.net/p.png) ht*tps://evil.example.net/b www.evil.example.net mailto:a@b.example <b>bold</b>',
+    );
+    expect(words).toContain('It starts at 20:45.');
+    expect(words).not.toMatch(/https?:|mailto:|www\.|evil/);
+    expect(words).not.toMatch(/[[\]<>*]/);
+  });
+
+  it('a mail is named by its sender’s plain name, never an address or a link', () => {
+    expect(senderName('"Ticketmaster" <noreply@ticketmaster.example>')).toBe('Ticketmaster');
+    expect(senderName('https://evil.example.net/x <a@b.example>')).toBe('mail');
+    expect(senderName('noreply@ticketmaster.example')).toBe('mail');
   });
 });

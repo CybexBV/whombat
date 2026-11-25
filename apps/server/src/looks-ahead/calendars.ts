@@ -40,14 +40,15 @@ export function calendarKey(connectionId: string, calendarId: string): string {
 }
 
 /**
- * One event, whichever calendar of the account shows it: its iCalendar id where the provider gives one (an event on the
- * person's calendar and the family's is one event), else `<calendar id>:<event id>`; after the connection's id.
+ * One event, whichever calendar or account shows it: its iCalendar id where the provider gives one (an event on the
+ * person's calendar and the family's, or an invite on their Google and their Microsoft 365, is one event), else
+ * `<connection id>:<calendar id>:<event id>`. Where to read it again is kept apart.
  */
 export function eventKey(
   connectionId: string,
   event: { calendarId: string; id: string; uid?: string | undefined },
 ): string {
-  return event.uid ? `${connectionId}:uid:${event.uid}` : `${connectionId}:${event.calendarId}:${event.id}`;
+  return event.uid ? `uid:${event.uid}` : `${connectionId}:${event.calendarId}:${event.id}`;
 }
 
 /** On by default: the main calendar, and any other the person can add to and shows. */

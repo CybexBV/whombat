@@ -1,20 +1,23 @@
 /**
- * What one Looks ahead check has seen so far (docs/decisions/looks-ahead.md): the links it may read and the mails it
- * read, by its dispatch, in this server's memory. `read_web_page` reads only a link the check saw — in the event, in
- * a search result or on a page it read — never one it made up, so nothing private leaves in an address; a finding names
- * only pages and mails the check really saw. After a restart a check starts with what its event says.
+ * What one Looks ahead check has seen so far (docs/decisions/looks-ahead.md), by its dispatch, in this server's memory:
+ * the links it may read (search results and links on pages it read, never one it made up, so nothing private leaves in
+ * an address), the pages it may name as sources (search results and pages it read), the mails it read (by their
+ * sender), and whether it read mail at all: after that nothing more goes to the web, so a stranger's mail can't steer
+ * what leaves the Whombat. A server that restarted during a check doesn't know: that check's web is closed.
  */
 import { AHEAD_PAGES_MAX, AHEAD_SEARCHES_MAX } from '@whombat/core';
 import type { Services } from '../services';
 import { httpUrl } from './web';
 
-interface CheckSeen {
-  /** Links it may read: in the event, a search result, on a page it read. */
+export interface CheckSeen {
+  /** Links it may read: a search result, or a link on a page it read. */
   urls: Set<string>;
   /** Pages it may name as a source: a search result, or a page it read (not a link it only saw). */
   sources: Set<string>;
   /** The mails it read, by id, with the sender's name a finding names them by. */
   mails: Map<string, string>;
+  /** It searched or read mail: the web is closed for the rest of the check. */
+  mailRead: boolean;
   searches: number;
   pages: number;
   at: number;
@@ -24,22 +27,13 @@ interface CheckSeen {
 const KEEP_MS = 3 * 3600_000;
 /** Links remembered per check, at most. */
 const URLS_MAX = 400;
+/** When this server started: a check begun before it may have read mail this memory doesn't know of. */
+const STARTED_AT = Date.now();
 
 const seenBy = new WeakMap<Services, Map<string, CheckSeen>>();
 
-/** Every http(s) link in a text, at most `max`. */
-export function linksIn(text: string, max = 40): string[] {
-  const out = new Set<string>();
-  for (const match of text.matchAll(/\bhttps?:\/\/[^\s<>"'()]+/gi)) {
-    const link = httpUrl(match[0].replace(/[.,;:!?]+$/, ''));
-    if (link) out.add(link);
-    if (out.size >= max) break;
-  }
-  return [...out];
-}
-
-/** The check's memory, made with the event's own links the first time it is asked for. */
-export function seenOf(services: Services, dispatchId: string, eventText: () => string): CheckSeen {
+/** The check's memory, empty the first time it is asked for. */
+export function seenOf(services: Services, dispatchId: string): CheckSeen {
   let all = seenBy.get(services);
   if (!all) {
     all = new Map();
@@ -50,9 +44,10 @@ export function seenOf(services: Services, dispatchId: string, eventText: () => 
   let seen = all.get(dispatchId);
   if (!seen) {
     seen = {
-      urls: new Set(linksIn(eventText())),
+      urls: new Set(),
       sources: new Set(),
       mails: new Map(),
+      mailRead: false,
       searches: 0,
       pages: 0,
       at: now,
@@ -60,6 +55,11 @@ export function seenOf(services: Services, dispatchId: string, eventText: () => 
     all.set(dispatchId, seen);
   }
   return seen;
+}
+
+/** Whether the check's web is closed: it read mail, or it began before this server did (it may have). */
+export function webClosed(seen: CheckSeen, claimedAt: Date | null): boolean {
+  return seen.mailRead || (claimedAt !== null && claimedAt.getTime() < STARTED_AT);
 }
 
 /** Remembers links the check may now read. */
@@ -71,13 +71,16 @@ export function sawLinks(seen: CheckSeen, links: readonly string[]): void {
   }
 }
 
-/** Whether the check saw this link (as given, or without a trailing slash's difference). */
-export function sawLink(seen: CheckSeen, url: string): boolean {
+/** Whether a set holds this link (as given, or without a trailing slash's difference). */
+function holds(set: ReadonlySet<string>, url: string): boolean {
   const link = httpUrl(url);
   if (!link) return false;
-  if (seen.urls.has(link)) return true;
-  const other = link.endsWith('/') ? link.slice(0, -1) : `${link}/`;
-  return seen.urls.has(other);
+  return set.has(link) || set.has(link.endsWith('/') ? link.slice(0, -1) : `${link}/`);
+}
+
+/** Whether the check saw this link. */
+export function sawLink(seen: CheckSeen, url: string): boolean {
+  return holds(seen.urls, url);
 }
 
 /** Remembers a page the check may name as a source. */
@@ -86,11 +89,9 @@ export function sawSource(seen: CheckSeen, url: string): void {
   if (link) seen.sources.add(link);
 }
 
-/** Whether the check may name this page as a source (as given, or without a trailing slash's difference). */
+/** Whether the check may name this page as a source. */
 export function sawSourceOf(seen: CheckSeen, url: string): boolean {
-  const link = httpUrl(url);
-  if (!link) return false;
-  return seen.sources.has(link) || seen.sources.has(link.endsWith('/') ? link.slice(0, -1) : `${link}/`);
+  return holds(seen.sources, url);
 }
 
 /** One more search, or false when the check used its searches. */

@@ -268,7 +268,7 @@ export const AheadPageInput = z.strictObject({
     .string()
     .url()
     .max(2048)
-    .describe('Exactly as it appeared in the event, a mail you read, a search result or a page you read.'),
+    .describe('Exactly as it appeared in a search result or on a page you read.'),
 });
 
 /** `ahead_feedback`'s input: the person's word on a finding, in its thread. */
