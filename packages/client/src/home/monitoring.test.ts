@@ -221,6 +221,15 @@ describe('what happened', () => {
     expect(view.empty).toBeNull();
   });
 
+  it('says when server alerts could not be read and keeps the incident rows', () => {
+    const partial = { ...history, alerts: undefined, alertsUnavailable: { serverName: 'pve-02' } };
+    const empty = historyView({ ...partial, incidents: [] }, NOW, ZONE);
+    expect(empty.empty).toContain('couldn’t read pve-02’s own alerts');
+    const withIncidents = historyView(partial, NOW, ZONE);
+    expect(withIncidents.empty).toBe(empty.empty);
+    expect(withIncidents.rows.map((row) => row.id)).toEqual(history.incidents.map((row) => row.id));
+  });
+
   it('leaves out a server’s offline alert that is the same outage as an incident', () => {
     const offline = {
       title: 'pve-02 isn’t checking in',

@@ -10,8 +10,8 @@
  *   quietly: its inbox row is read, and on a managed Whombat the phone's notification goes (a content-free clear).
  *   Nothing says it's back. Home's `things` hears of each opening, worsening and end, so an open page's “What happened”
  *   reads again.
- * - **`incidents.push`** (the watcher): marks the incidents one push names as pushed, then sends it through the
- *   notifications (Do not disturb and quiet hours hold it as any other). Whether each is still open and not kept quiet
+ * - **`incidents.push`** (the watcher): saves the Inbox notification and marks the incidents pushed in one commit,
+ *   then uses the usual push delivery. Whether each is still open and not kept quiet
  *   or down because of something else is checked again in its commit, and its words name only those left.
  */
 import {
@@ -39,7 +39,7 @@ import {
 } from '../db/schema/index';
 import { linkOfMessage } from '../domain/links';
 import { publishNotificationsRead } from '../domain/notification-read';
-import { notify } from '../domain/notify';
+import { notifyInCommit } from '../domain/notify';
 import { GENERIC_PUSH_TITLE } from '../domain/push-preview';
 import { thePerson } from '../domain/the-person';
 import { homeAudience, publishHomeChanged } from '../home/notify';
@@ -84,6 +84,7 @@ const Changed = z.object({
   words: z.string().min(1).max(200),
   cause: Cause,
   worse: z.boolean(),
+  downSince: z.iso.datetime({ offset: true }).optional(),
   check: z.string().max(80).nullable().optional(),
   subject: z.string().max(160).optional(),
 });
@@ -128,7 +129,7 @@ async function sign(
     words: (about?.words || row.words).slice(0, 200),
     ...(connection ? { catalogId: connection.catalogId } : {}),
     ...(about ? { check: about.check } : row.checkId ? { check: row.checkId } : {}),
-    startedAt: (about?.since ?? row.startedAt).toISOString(),
+    startedAt: (about?.since ?? (type === THING_DOWN ? row.downSince : null) ?? row.startedAt).toISOString(),
     ...(row.endedAt ? { endedAt: row.endedAt.toISOString() } : {}),
     ...(row.causeThing && row.causeName ? { cause: { thing: row.causeThing, name: row.causeName } } : {}),
   });
@@ -237,6 +238,7 @@ export const incidentsPass = defineCommand({
           checkId: o.check,
           subject: o.subject,
           startedAt: new Date(o.startedAt),
+          downSince: o.nature === 'down' ? new Date(o.startedAt) : null,
           causeThing: o.cause?.thing ?? null,
           causeName: o.cause?.name ?? null,
           checks,
@@ -258,14 +260,16 @@ export const incidentsPass = defineCommand({
     }
     for (const c of input.changed) {
       const [was] = await tx
-        .select({ checks: incidents.checks, checkId: incidents.checkId })
+        .select({ checks: incidents.checks, checkId: incidents.checkId, nature: incidents.nature })
         .from(incidents)
         .where(and(eq(incidents.id, c.id), eq(incidents.burrowId, ctx.burrow.id)));
+      const wentDown = c.worse && was?.nature === 'problem' && c.nature === 'down';
       const [row] = await tx
         .update(incidents)
         .set({
           nature: c.nature,
           words: c.words,
+          ...(wentDown ? { downSince: c.downSince ? new Date(c.downSince) : ctx.now } : {}),
           ...(c.check === undefined
             ? {}
             : {
@@ -277,7 +281,7 @@ export const incidentsPass = defineCommand({
         })
         .where(and(eq(incidents.id, c.id), eq(incidents.burrowId, ctx.burrow.id), isNull(incidents.endedAt)))
         .returning();
-      if (row && c.worse) {
+      if (row && wentDown) {
         await sign(ctx, THING_DOWN, row);
         signed++;
       }
@@ -360,7 +364,7 @@ async function pushLink(ctx: ApplyContext, group: readonly IncidentRow[]) {
 }
 
 /**
- * Marks the incidents one push names as pushed (one group), then sends it: one inbox row and one push for the person,
+ * Saves one Inbox row in the commit marking its incidents as pushed (one group), then sends the person a push,
  * “Needs you”. Incidents already pushed, ended, with a cause, or kept quiet or down because of something else meanwhile
  * are left out, and the words name only those still in it.
  */
@@ -397,7 +401,7 @@ export const incidentsPush = defineCommand({
     ).sort((a, b) => pushOrder(openIncidentOf(a), openIncidentOf(b)));
     if (!rows.length) return { pushed: 0 };
     const { link, messageId } = { messageId: undefined, ...(await pushLink(ctx, rows)) };
-    const draft = {
+    await notifyInCommit(ctx, {
       burrowId: ctx.burrow.id,
       burrowSlug: ctx.burrow.slug,
       principalId: person.id,
@@ -410,9 +414,7 @@ export const incidentsPush = defineCommand({
       dedupKey: pushKey(group),
       ...(messageId ? { messageId } : {}),
       group: pushKey(group),
-    };
-    const services = ctx.services;
-    ctx.background('incident push', () => notify(services, [draft]));
+    });
     return { pushed: rows.length };
   },
 });

@@ -109,6 +109,7 @@ export interface IncidentPassPlan {
     words: string;
     cause: SeenLook['cause'];
     worse: boolean;
+    downSince?: string;
     check?: string | null;
     subject?: string;
   }[];
@@ -143,7 +144,16 @@ export function planIncidents(input: IncidentPassInput): IncidentPassPlan {
           words: worse ? look.words : inc.words,
           cause,
           worse,
-          ...(worse ? { check: look.check, subject: look.subject } : {}),
+          ...(worse
+            ? {
+                check: look.check,
+                subject: look.subject,
+                downSince: (look.since && look.since > inc.startedAt && look.since <= now
+                  ? look.since
+                  : now
+                ).toISOString(),
+              }
+            : {}),
         });
       // A bad check counting on it now that it never signed for (the UPS on battery while a disk keeps the server's
       // incident open) is news to an automation that names that check. What something else took down starts nothing.

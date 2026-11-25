@@ -1702,8 +1702,9 @@ Setup and operation: `docs/github.md`.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;
-  amber opens none, a problem that goes down becomes a `down` one. Whether it is over is read from the thing itself,
-  not its dot (`observeThings`): a server's fleet row online, a connection's last check (its outcome and lines, before
+  amber opens none, a problem that goes down becomes a `down` one. The incident keeps when it stopped answering
+  (`down_since`), which starts the delay for `thing.down` automations and counts toward downtime. Whether it is over
+  is read from the thing itself, not its dot (`observeThings`): a server's fleet row online, a connection's last check (its outcome and lines, before
   the quiet rows) or a device's last read, made after any hold over it ended. Two passes in a row that see it fine end
   it, at the first of them; one that sees it still bad underneath (not answering, a line someone quieted or switched
   off, kept quiet, down because of something else) starts the count again; one that couldn't read it counts neither
@@ -1722,7 +1723,9 @@ Setup and operation: `docs/github.md`.
   200 in one push); only while its thing is still bad on that pass, never while it is kept quiet or down because of
   something else (`DeskLook.causedBy`, checked again in the push's commit, whose words name only what is left), nor one
   more than an hour old, nor past 6 pushes a day and 2 of a thing. Those times count from its start, or from when a hold
-  over it ended when that is later. The tap opens the thing's look thread, else its page (the Inbox
+  over it ended when that is later. The Inbox row and its realtime frame commit with the incidents' push marks,
+  leaving a failed insert for a later pass to retry. The phone uses the usual background push sender.
+  The tap opens the thing's look thread, else its page (the Inbox
   for several). When the last incident a push named ends, its row is read and a managed box clears the phone's
   notification. The connection health pass and device reader store whether each check answered (`up`, 1 or 0).
   Fresh account reads from the page, desk and mail count, and GitHub's own repository sync, keep one sample
@@ -1731,9 +1734,11 @@ Setup and operation: `docs/github.md`.
   A rolled hour weighs five minutes per reading, up to an hour. Older hourly points without a count weigh one reading.
   Each page with uptime data says its week in one line (`uptime`, also one of a page's facts).
   A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
+  Each uptime line counts down stretches and minutes from the start it shows.
   `things.history` lists a thing's incidents over 30 or 90 days. A server's history includes alerts that were open
-  during the period, including alerts that began earlier. The assistant reads this with `watch_status` and
-  `watch_history` (`incidents/agent.ts`).
+  during the period, including alerts that began earlier, or says when its own alerts couldn't be read.
+  The assistant reads this with `watch_status` and `watch_history` (`incidents/agent.ts`).
+  `watch_status` lists quiet windows for whole things.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the

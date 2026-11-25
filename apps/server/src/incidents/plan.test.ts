@@ -336,6 +336,19 @@ describe('incidents from the looks', () => {
       ['inc_connectionplex', 'down', true, null],
       ['inc_connectionha', 'down', false, 'pve-02'],
     ]);
+    expect(plan.changed[0]?.downSince).toBe(at(6).toISOString());
+  });
+
+  it('uses the server’s known offline time when it went down during a problem', () => {
+    const server = 'server:pve-02';
+    const plan = planIncidents({
+      looks: [look(server, { since: at(48) })],
+      open: [incident(server, { kind: 'server', nature: 'problem' })],
+      before: null,
+      serversRead: true,
+      now: at(50),
+    });
+    expect(plan.changed[0]?.downSince).toBe(at(48).toISOString());
   });
 
   it('weighs a desk look: amber opens nothing, its cause comes along', () => {

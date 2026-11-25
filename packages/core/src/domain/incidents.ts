@@ -91,6 +91,8 @@ export const ThingHistory = z.object({
   uptime: ThingUptime.nullable(),
   incidents: z.array(ThingIncident).max(500),
   alerts: z.array(ThingHistoryAlert).max(500).optional(),
+  /** When present, the server's own alerts couldn't be read. */
+  alertsUnavailable: z.object({ serverName: z.string().min(1).max(120) }).optional(),
 });
 export type ThingHistory = z.infer<typeof ThingHistory>;
 
@@ -112,8 +114,8 @@ export const THING_INCIDENT_EVENTS = [THING_DOWN, THING_PROBLEM, THING_BACK] as 
 
 /**
  * The payload of `thing.down`, `thing.problem` and `thing.back`: the thing (its thingId, kind and name), the incident,
- * its nature and words, when it started, when it ended (`thing.back` only) and its cause when another thing being down
- * took it with it. No address, id of an item or log: what an automation's condition and its words need.
+ * its nature and words, when the reported state began, when it ended (`thing.back` only) and its cause when another
+ * thing being down took it with it. No address, id of an item or log: what an automation's condition and its words need.
  */
 export const ThingIncidentEvent = z.strictObject({
   incidentId: z.string().min(1).max(80),

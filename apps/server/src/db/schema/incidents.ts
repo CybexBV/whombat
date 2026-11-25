@@ -39,6 +39,8 @@ export const incidents = pgTable(
      */
     checks: jsonb('checks').$type<string[]>().notNull().default([]),
     startedAt: ts('started_at').notNull(),
+    /** When it stopped answering, which may be later than the first problem. */
+    downSince: ts('down_since'),
     endedAt: ts('ended_at'),
     /** Down because what it runs on was down: that thing's id and name. Such an incident never pushes. */
     causeThing: text('cause_thing'),

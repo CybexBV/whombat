@@ -21,6 +21,7 @@ import type { IncidentRow } from '../db/schema/index';
 import { HOSTS_API, type HostsActor, seg } from '../hosts/client';
 import { arr, obj, toHostAlert } from '../hosts/map';
 import { HEARTBEAT_RULE } from '../hosts/quiet-lines';
+import { serverLabel } from '../hosts/self';
 import { WHOMBAT_ACTOR } from '../hosts/service';
 import { notFound } from '../lib/errors';
 import type { Services } from '../services';
@@ -43,7 +44,9 @@ const LATE_START_MS = 6 * 60 * 60_000;
 
 /** An incident's down stretch, when it was a `down` one. */
 function downStretches(rows: readonly IncidentRow[]): DownStretch[] {
-  return rows.filter((r) => r.nature === 'down').map((r) => ({ from: r.startedAt, to: r.endedAt }));
+  return rows
+    .filter((r) => r.nature === 'down')
+    .map((r) => ({ from: r.downSince ?? r.startedAt, to: r.endedAt }));
 }
 
 /** A server's offline stretches from its heartbeat alerts. */
@@ -167,13 +170,14 @@ export async function periodUptime(
     return readAccountUptime(services.db, { connectionId: parsed.id }, keptFrom);
   })();
   const share = upShare(points, from, now);
-  const downs = downTime(downStretches(rows), from, now);
+  // Watched for less than the period (or its points are kept less long): “since …”.
+  const start = share.first && share.first.getTime() - from.getTime() > LATE_START_MS ? share.first : from;
+  const downs = downTime(downStretches(rows), start, now);
   return thingUptime({
     share: share.share,
     downs: downs.count,
     downMinutes: downs.minutes,
-    // Watched for less than the period (or its points are kept less long): “since …”.
-    from: share.first && share.first.getTime() - from.getTime() > LATE_START_MS ? share.first : from,
+    from: start,
     now,
     timeZone,
     days,
@@ -293,5 +297,8 @@ export async function thingHistory(
     uptime: said?.uptime ?? null,
     incidents: rows.map((r) => thingIncident(r, now)),
     ...(alerts ? { alerts: alerts.slice(0, 500).map(historyAlert) } : {}),
+    ...(parsed.kind === 'server' && alerts === null
+      ? { alertsUnavailable: { serverName: serverLabel(parsed.id) } }
+      : {}),
   };
 }

@@ -29,7 +29,7 @@ export function thingTriggerMatches(trigger: ThingTrigger, { event, incident }: 
   );
 }
 
-/** The first matching trigger due on this incident. A later transition may move a waiting run earlier. */
+/** The first matching trigger due from the state reported by the event. A later transition may move a run earlier. */
 export function thingTriggerDueAt(
   triggers: readonly ThingTrigger[],
   facts: ThingTriggerFacts,

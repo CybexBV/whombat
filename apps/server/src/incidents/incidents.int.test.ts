@@ -9,10 +9,11 @@
  * them.
  */
 import { topics } from '@whombat/core';
-import { and, eq, inArray, like } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { and, eq, inArray, like, sql } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   catalogConnections,
+  connectionPoints,
   events,
   incidents,
   notifications,
@@ -29,6 +30,7 @@ import { mcpClient } from '../test/mcp';
 import { addPersonalAgent, type PersonalSetup } from '../test/personal';
 import { agentTokenFor } from '../test/tokens';
 import { thingPage } from '../things/page';
+import { UP_KEY } from '../things/points';
 import { thingHistory } from './history';
 import type { PassBefore } from './plan';
 import { incidentsPass, incidentsPush, pushKey } from './store';
@@ -187,27 +189,49 @@ describe('an outage, its push and its history', () => {
     expect(down?.text).toBeNull();
   });
 
-  it('pushes once after ten minutes, as the person’s Needs you row', async () => {
+  it('retries a failed Inbox insert on the next pass and pushes only once', async () => {
     await passAt(5);
     expect((await rows())[0]?.pushedAt).toBeNull();
-    await passAt(11);
-    const [row] = await rows();
-    expect(row?.pushedAt).toEqual(now);
-    const person = await thePerson(t.services.db, TEST_BURROW_ID);
-    const pushed = await t.services.db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.dedupKey, pushKey(row?.pushGroup ?? '')));
-    expect(pushed).toHaveLength(1);
-    expect(pushed[0]).toMatchObject({ principalId: person?.id, kind: 'needs_you', readAt: null });
-    expect(pushed[0]?.text).toContain('Plex');
-    // Once: the next pass pushes nothing more.
-    await passAt(12);
-    const all = await t.services.db
-      .select()
-      .from(notifications)
-      .where(inArray(notifications.dedupKey, [pushKey(row?.pushGroup ?? '')]));
-    expect(all).toHaveLength(1);
+    const control = t.services.push.control;
+    const deliver = vi.fn(async () => {});
+    t.services.push.control = deliver;
+    try {
+      await t.services.db.execute(sql`
+        alter table notifications add constraint incident_push_unavailable check (dedup_key not like 'incident:%')
+      `);
+      try {
+        await passAt(11);
+        expect((await rows())[0]).toMatchObject({ pushedAt: null, pushGroup: null });
+        expect(await incidentPushes()).toEqual([]);
+        expect(deliver).not.toHaveBeenCalled();
+      } finally {
+        await t.services.db.execute(sql`alter table notifications drop constraint incident_push_unavailable`);
+      }
+      await passAt(12);
+      const [row] = await rows();
+      expect(row?.pushedAt).toEqual(now);
+      const person = await thePerson(t.services.db, TEST_BURROW_ID);
+      const pushed = await incidentPushes();
+      expect(pushed).toHaveLength(1);
+      const key = pushKey(row?.pushGroup ?? '');
+      expect(pushed[0]).toMatchObject({
+        principalId: person?.id,
+        kind: 'needs_you',
+        readAt: null,
+        dedupKey: key,
+      });
+      expect(pushed[0]?.text).toContain('Plex');
+      expect(deliver).toHaveBeenCalledWith(
+        [person?.id],
+        expect.objectContaining({ notificationId: pushed[0]?.id }),
+        expect.objectContaining({ group: key }),
+      );
+      await passAt(13);
+      expect(await incidentPushes()).toHaveLength(1);
+      expect(deliver).toHaveBeenCalledTimes(1);
+    } finally {
+      t.services.push.control = control;
+    }
   });
 
   it('ends after two passes without, signs thing.back and withdraws the push quietly', async () => {
@@ -257,6 +281,39 @@ describe('an outage, its push and its history', () => {
     await mcp.close();
   });
 
+  it('reports whole-thing quiet windows without presenting a guest window as a quiet server', async () => {
+    const startsAt = new Date(now.getTime() - MIN);
+    const endsAt = new Date(now.getTime() + MIN);
+    const windows = [
+      { id: 'qw_status_guest', thingId: 'server:pve-02', guestId: 'pve:200' },
+      { id: 'qw_status_thing', thingId: thing(), guestId: null },
+    ];
+    await t.services.db.insert(quietWindows).values(
+      windows.map((window) => ({
+        ...window,
+        ownerId: TEST_BURROW_ID,
+        startsAt,
+        endsAt,
+        createdAt: startsAt,
+      })),
+    );
+    const token = await agentTokenFor(t.services, TEST_BURROW_ID, mine.agentId, mine.dmId);
+    const mcp = await mcpClient(t.baseUrl, token.token);
+    try {
+      const status = await mcp.client.callTool({ name: 'watch_status', arguments: {} });
+      expect(status.isError).toBeFalsy();
+      expect(status.structuredContent).toMatchObject({ quiet: [{ thing: thing(), name: 'Plex' }] });
+    } finally {
+      await mcp.close();
+      await t.services.db.delete(quietWindows).where(
+        inArray(
+          quietWindows.id,
+          windows.map((w) => w.id),
+        ),
+      );
+    }
+  });
+
   it('includes saved internet outages in all-things history', async () => {
     await t.services.pipeline.transactAccount((tx) =>
       tx.insert(wayOutOutages).values({
@@ -285,6 +342,49 @@ describe('an outage, its push and its history', () => {
     } finally {
       await mcp.close();
     }
+  });
+});
+
+it('clips the 90-day uptime line to its first reading while keeping older incidents in the list', async () => {
+  const connectionId = await insertConnection(t.services, {
+    catalogId: 'homeassistant',
+    burrowId: TEST_BURROW_ID,
+    label: 'Archive',
+    handle: 'archive',
+    fields: { url: 'http://127.0.0.1:9' },
+    secret: 'token-archive',
+  });
+  const id = `connection:${connectionId}`;
+  const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * MIN);
+  await t.services.pipeline.transact(TEST_BURROW_ID, async ({ tx }) => {
+    await tx.insert(connectionPoints).values({ connectionId, at: daysAgo(28), key: UP_KEY, value: 1 });
+    const base = {
+      burrowId: TEST_BURROW_ID,
+      thingId: id,
+      kind: 'connection' as const,
+      name: 'Archive',
+      nature: 'down' as const,
+      words: 'Not answering',
+    };
+    await tx.insert(incidents).values([
+      { ...base, id: 'inc_archive_old', startedAt: daysAgo(55), endedAt: daysAgo(54) },
+      { ...base, id: 'inc_archive_recent', startedAt: daysAgo(29), endedAt: daysAgo(27) },
+    ]);
+  });
+  const person = await thePerson(t.services.db, TEST_BURROW_ID);
+  if (!person) throw new Error('Missing person');
+  const history = await thingHistory(
+    t.services,
+    { burrowId: TEST_BURROW_ID, principal: person, accountId: person.accountId ?? '' },
+    id,
+    90,
+    'Europe/Amsterdam',
+  );
+  expect(history.incidents.map((i) => i.id)).toEqual(['inc_archive_recent', 'inc_archive_old']);
+  expect(history.uptime).toMatchObject({
+    from: daysAgo(28).toISOString(),
+    downs: 1,
+    downMinutes: 24 * 60,
   });
 });
 

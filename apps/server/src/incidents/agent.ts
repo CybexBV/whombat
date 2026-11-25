@@ -97,6 +97,7 @@ export async function quietWindowsFor(
     .where(
       and(
         eq(quietWindows.ownerId, burrowId),
+        isNull(quietWindows.guestId),
         isNull(quietWindows.endedAt),
         lte(quietWindows.startsAt, now),
         gt(quietWindows.endsAt, now),
