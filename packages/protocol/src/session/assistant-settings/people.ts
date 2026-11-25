@@ -128,6 +128,10 @@ export const PEOPLE_SETTINGS = {
   'me.updatePreferences': change('you.profile', 'Change your theme or time zone'),
   'me.updateProfile': change('you.profile', 'Change your name and title'),
 
+  // Looks ahead (looks-ahead.md): what the assistant checks ahead is the person's to switch, as they ask.
+  'looksAhead.get': read('agent.ahead', 'Read what Looks ahead checks'),
+  'looksAhead.update': change('agent.ahead', 'Turn Looks ahead, a calendar or a kind of finding on or off'),
+
   // Replacing the notes or a memory file loses the old text, so it asks.
   'memory.clear': never('agent.memory', 'Make the assistant forget what it remembers about you'),
   'memory.mine': read('agent.memory', 'Read what the assistant remembers about you'),

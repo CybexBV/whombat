@@ -102,11 +102,17 @@ export class TurnReply {
   #postedTexts = new Set<string>();
   #earlierUsage: TurnUsage | undefined;
   readonly #ctx: DispatchContext;
+  /**
+   * A Looks ahead check (Whombat looks-ahead.md): nothing shows it at work and its final text is never posted; what it
+   * found reaches the person only through `ahead_report`.
+   */
+  readonly #quiet: boolean;
 
   constructor(ctx: DispatchContext) {
     this.#ctx = ctx;
+    this.#quiet = ctx.dispatch.trigger === 'ahead';
     const postedBefore = ctx.dispatch.postedAt != null;
-    this.thinking = ctx.dispatch.mode === 'reply' && !postedBefore;
+    this.thinking = ctx.dispatch.mode === 'reply' && !postedBefore && !this.#quiet;
   }
 
   /** A tool call; true when the turn thinks again, which a beat should say soon. */
@@ -117,7 +123,7 @@ export class TurnReply {
       this.thinking = false;
     } else {
       if (!BOOKKEEPING_TOOLS.has(ev.name)) this.#workedSincePost = true;
-      if (this.thinking || this.#ctx.dispatch.mode !== 'reply') return false;
+      if (this.thinking || this.#ctx.dispatch.mode !== 'reply' || this.#quiet) return false;
       // Still at work after it said something (“I’m using the health-report skill …”): thinking again, or
       // nothing on screen says so until its answer (working-signal.md WG-01).
       this.thinking = true;
@@ -185,7 +191,7 @@ export class TurnReply {
   beginRecovery(): void {
     this.#earlierUsage = this.usage;
     this.#finalText = '';
-    this.thinking = true;
+    this.thinking = !this.#quiet;
   }
 
   /**
@@ -201,7 +207,7 @@ export class TurnReply {
     this.#handedToRun = false;
     this.#answeredByCard = false;
     this.posted = false;
-    this.thinking = this.#ctx.dispatch.mode === 'reply';
+    this.thinking = this.#ctx.dispatch.mode === 'reply' && !this.#quiet;
   }
 
   /**
@@ -231,7 +237,7 @@ export class TurnReply {
    * (`turnPrompt`); a scheduled check that found nothing.
    */
   #unposted(): string | null {
-    if (this.#answeredByCard) return null;
+    if (this.#answeredByCard || this.#quiet) return null;
     // Runs and search answers have their own completion tools and keep their delivery rules.
     if (this.#ctx.dispatch.mode !== 'reply' && this.posted) return null;
     const text = this.#finalText.trim();

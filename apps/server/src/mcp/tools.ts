@@ -62,6 +62,16 @@ import { pinWidget } from '../home/widgets';
 import { thingWatchTool, watchHistoryTool, watchStatusTool } from '../incidents/agent';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { looksInTurn, NOT_A_LOOK, reportLook } from '../looks/research';
+import {
+  aheadFeedback,
+  aheadReportReady,
+  aheadThreadOf,
+  forgetSeen,
+  NOT_AN_AHEAD_THREAD,
+  readWebPageTool,
+  reportAhead,
+  searchWebTool,
+} from '../looks-ahead/turn';
 import { whombatBackupTool } from '../managed/backup-tool';
 import { tailnetDevicesTool } from '../managed/tailnet-tool';
 import { PAGES_TOOL_HANDLERS } from '../pages/tool';
@@ -676,6 +686,23 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   look_report: async (ctx, input) => {
     if (!(await looksInTurn(ctx.services.db, ctx.agentId, ctx.dispatch.id))) throw forbidden(NOT_A_LOOK);
     return run(ctx, reportLook, { dispatchId: ctx.dispatch.id, report: input }, () => ({}));
+  },
+  // Looks ahead (looks-ahead.md): a check's own tools, and the person's word on a finding in its thread.
+  search_web: (ctx, input) => searchWebTool(ctx.services, ctx.dispatch, input.query),
+  read_web_page: (ctx, input) => readWebPageTool(ctx.services, ctx.dispatch, input.url),
+  ahead_report: async (ctx, input) => {
+    await aheadReportReady(ctx.services, ctx.dispatch, input);
+    const out = await run(ctx, reportAhead, { dispatchId: ctx.dispatch.id, report: input }, (r) => ({
+      told: r.told,
+    }));
+    forgetSeen(ctx.services, ctx.dispatch.id);
+    return out;
+  },
+  ahead_feedback: async (ctx, input) => {
+    if (!(await aheadThreadOf(ctx.services.db, ctx.dispatch))) throw forbidden(NOT_AN_AHEAD_THREAD);
+    return run(ctx, aheadFeedback, { dispatchId: ctx.dispatch.id, verdict: input.verdict }, (r) => ({
+      kind: r.kind,
+    }));
   },
 };
 

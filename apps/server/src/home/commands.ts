@@ -10,6 +10,7 @@ import { undoConnectionChange } from '../connections/undo';
 import { WATCH_LIMIT_CHANGE } from '../hosts/commands';
 import { undoServerWatchLimit } from '../hosts/quiet';
 import { LOOK_COMMANDS } from '../looks/research';
+import { AHEAD_COMMANDS } from '../looks-ahead/commands';
 import { THING_ACTION_UNDO_KIND, THING_COMMANDS, undoThingAction } from '../things/actions';
 import { undoAgentWatch } from '../things/quiet/agent';
 import { AGENT_WATCH_CHANGE_KIND, QUIET_COMMANDS } from '../things/quiet/commands';
@@ -50,4 +51,6 @@ export const ONE_WHOMBAT_COMMANDS: CommandDef[] = [
   ...(LOOK_COMMANDS as CommandDef[]),
   // A care plan when a server is added, and the quiet hours for changes (care-plan.md).
   ...(CARE_COMMANDS as CommandDef[]),
+  // Checking what is on the person's calendar ahead, and its setting (looks-ahead.md).
+  ...(AHEAD_COMMANDS as CommandDef[]),
 ];

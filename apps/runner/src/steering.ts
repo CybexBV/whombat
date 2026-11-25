@@ -59,7 +59,8 @@ export function followUpPrompt(ctx: DispatchContext, m: Message): string {
 export function takesFollowUps(ctx: DispatchContext): boolean {
   const d = ctx.dispatch;
   if (d.mode === 'answer') return false;
-  return !['feedback', 'search', 'expand', 'automation'].includes(d.trigger);
+  // A Looks ahead check takes none: nobody's words may join a turn that reads strangers' text (looks-ahead.md).
+  return !['feedback', 'search', 'expand', 'automation', 'ahead'].includes(d.trigger);
 }
 
 /** The follow-ups of a turn whose provider can take them (`capabilities().steering`); null otherwise. */

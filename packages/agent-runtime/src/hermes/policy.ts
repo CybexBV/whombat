@@ -176,8 +176,28 @@ export interface HermesPolicyOptions {
   pod?: { browser: boolean; vault: readonly { name: string; tools: readonly string[] }[] } | null;
 }
 
+/**
+ * A Looks ahead check (Whombat looks-ahead.md) reads strangers' text — mail, web pages — while it holds the person's:
+ * Whombat's own tools only (the server serves it just the calendar, the mail, its web tools and its report), nothing of
+ * Hermes's: no memory, skills or sessions (the post-answer review inherits this, so nothing it read is remembered), no
+ * commands, files, browser, web of its own, Vault or helpers.
+ */
+export const AHEAD_REFUSED =
+  'While checking ahead you use only Whombat’s tools: the calendar, the mail, search_web, read_web_page and ahead_report.';
+
+/** Whombat's own MCP tools, as Claude Code and Hermes name them: not the Vault's. */
+const WHOMBAT_OWN_PATTERNS = ['mcp__whombat__*', 'mcp__editor_whombat_*'];
+
 /** The turn's policy from its context: see the file comment. */
 export function hermesPolicy(ctx: DispatchContext, options: HermesPolicyOptions = {}): HermesPolicy {
+  if (ctx.dispatch.trigger === 'ahead' && !options.replyOnly)
+    return {
+      default: 'block',
+      rules: [
+        { tools: [...WHOMBAT_OWN_PATTERNS], action: 'allow' },
+        { tools: ['*'], action: 'block', message: AHEAD_REFUSED },
+      ],
+    };
   if (options.replyOnly)
     return {
       default: 'block',

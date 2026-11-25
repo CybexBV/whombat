@@ -35,9 +35,15 @@ export function usesSessions(
   d: Pick<DispatchRow, 'mode' | 'runId' | 'search'> & { trigger?: string },
 ): boolean {
   // A Feedback assessment never resumes or records a session, nor does an automation's step: each is a fresh turn of
-  // the agent.
+  // the agent. Nor does a Looks ahead check (looks-ahead.md): it read mail and web pages, and the person's reply in its
+  // thread starts fresh from what it posted, so what those said can't steer a turn that may act.
   return (
-    d.mode === 'reply' && !d.runId && !d.search && d.trigger !== 'feedback' && d.trigger !== 'automation'
+    d.mode === 'reply' &&
+    !d.runId &&
+    !d.search &&
+    d.trigger !== 'feedback' &&
+    d.trigger !== 'automation' &&
+    d.trigger !== 'ahead'
   );
 }
 
@@ -60,7 +66,7 @@ const sessionTurn = and(
   eq(dispatches.mode, 'reply'),
   isNull(dispatches.runId),
   isNull(dispatches.search),
-  sql`${dispatches.trigger} not in ('feedback', 'automation')`,
+  sql`${dispatches.trigger} not in ('feedback', 'automation', 'ahead')`,
   like(dispatches.providerSessionId, `${HERMES_SESSION}%`),
 );
 

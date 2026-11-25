@@ -141,6 +141,8 @@ export const ID_PREFIXES = {
   mailTriggerItem: 'mlm',
   /** A one-time watch: tell the person once when someone leaves where they are or arrives somewhere (findmy-watch.md). */
   findMyWatch: 'fmw',
+  /** One Looks ahead check of an event (Whombat looks-ahead.md). */
+  aheadCheck: 'ahc',
   thingWatch: 'thw',
 } as const;
 

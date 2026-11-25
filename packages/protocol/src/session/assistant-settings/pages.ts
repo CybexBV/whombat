@@ -55,6 +55,12 @@ export const SETTINGS_PAGES = {
     path: 'settings?tab=agent&part=may',
     about: 'every permission: servers, connections, the Vault, the local network and the risky keys',
   },
+  'agent.ahead': {
+    where: 'Settings → {assistant} → Looks ahead',
+    path: 'settings?tab=agent&part=ahead',
+    about:
+      'whether {assistant} checks what is on your calendar the afternoon before, which calendars, and what it no longer checks for',
+  },
   'agent.council': {
     where: 'Settings → {assistant} → Council',
     path: 'settings?tab=agent&part=council',

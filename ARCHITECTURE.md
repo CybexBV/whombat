@@ -590,8 +590,9 @@ Automations. Code finds it by kind
 - **What wakes it**: the person's message in their Chat (or one that mentions it in any room), a search
   question, a yes or no on its approval, a schedule, Whombat's own signers (GitHub's checks, automations,
   Feedback, the report trackers), a server task or a T3 Code thread it handed work to that finished or asks something, a member of
-  a council it started whose lead thread is done, a task of a delegation that needs a decision, and a look
-  Whombat sees on a server, connection or device (below). The agent never wakes itself.
+  a council it started whose lead thread is done, a task of a delegation that needs a decision, a look
+  Whombat sees on a server, connection or device, and something on the person's calendar Whombat has it check ahead
+  (below). The agent never wakes itself.
 - **The person's turns** (everything except below) read every room of the burrow, the memory, the notes, every
   connection and the Vault entries switched on for the agent.
 - **An outsiders' turn** — a Feedback assessment, what a tracker customer's report or reply starts, incoming mail —
@@ -1709,6 +1710,24 @@ Setup and operation: `docs/github.md`.
   it while it waits, leaves the server's missing backups to it, and never counts it against the day. A look that goes, gets worse or gains a line it didn't cover ends its research, and its
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
   back at once, without a message or a turn.
+- **Looks ahead** (`apps/server/src/looks-ahead/`, [looks-ahead.md](docs/decisions/looks-ahead.md)): every five minutes
+  a home job reads the calendars of the person's Google and Microsoft 365 accounts that are on (by default the ones
+  they can add to and show: their own and a shared Family calendar; `looks_ahead_settings` keeps the switch, the changes
+  from that default and the kinds of finding they stopped) and, from 08:00 to 21:00, one at a time, at most 4 a day and
+  none after 2 findings that day, begins the check of the soonest due event: a timed, one-off event with a real place,
+  tomorrow's from 14:00, today's at once. A check (`ahead_checks`, one row per event version) is a quiet `ahead` turn of
+  the person's on the background model in their Chat, in a thread whose root is a message id the row holds until a
+  finding gets it: no “is thinking”, its final text never posted, no failure card, no session kept or resumed, no
+  follow-ups, no other turn merging with it. It is served only `AHEAD_TOOLS` (`mcp/served.ts`): the calendar and the
+  mail where their keys are Allowed, `search_web` (Brave on the person's key) and `read_web_page` (a public page through
+  `lib/outbound.ts`, only a link the check saw: in the event, a search result or a page it read; `looks-ahead/seen.ts`),
+  and `ahead_report`; Hermes's policy blocks everything else, its memory and the post-answer review among them.
+  `ahead_report` ends it: nothing found keeps only the row; a finding whose sources the check saw is posted by the
+  assistant as the thread's first message, with its sources and the quick replies “Not useful” and “Stop checking for
+  this”, and the person's Chat tells them (inbox and push). In the person's own turn in that thread the assistant keeps
+  their word with `ahead_feedback`; a stopped kind is never told again. The thread settles two hours after the event
+  when the person didn't write in it; rows go a month after it. Settings → {assistant} → Looks ahead
+  (`looksAhead.get`, `looksAhead.update`) shows and switches it.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;

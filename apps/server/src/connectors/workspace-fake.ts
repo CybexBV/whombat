@@ -8,6 +8,7 @@ import {
   type CalendarEvent,
   type CalendarEventInput,
   type CalendarEventPatch,
+  type CalendarInfo,
   type ConnectionCheck,
   type ConnectorBinary,
   type ConnectorService,
@@ -130,6 +131,10 @@ export interface FakeGoogleState {
   mailSeq: number;
   /** Tests only: when set, the next `mailChanges` call behaves as if the provider cursor expired and resyncs. */
   expireNextCursor?: boolean;
+  /** The names of calendars other than the main one, by id (“Family”). */
+  calendarNames?: Record<string, string>;
+  /** Calendars the person can only read (holidays, birthdays). */
+  readOnlyCalendars?: string[];
 }
 
 const HOUR = 3_600_000;
@@ -401,6 +406,7 @@ const SERVICE_OF: Partial<Record<keyof GoogleWorkspace, ConnectorService>> = {
   mailOrganize: 'mail',
   mailTrash: 'mail',
   calendarEvents: 'calendar',
+  calendarList: 'calendar',
   calendarGetEvent: 'calendar',
   calendarCreateEvent: 'calendar',
   calendarUpdateEvent: 'calendar',
@@ -868,6 +874,22 @@ export class FakeGoogleWorkspace implements GoogleWorkspace {
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
       .slice(0, input.limit)
       .map((e) => ({ ...e, guests: e.guests.map((g) => ({ ...g })) }));
+  }
+
+  async calendarList(accessToken: string): Promise<CalendarInfo[]> {
+    const state = this.use(accessToken, 'calendarList');
+    // The main calendar, then every other calendar an event is on (a shared Family calendar in the demo and tests).
+    const ids = [
+      'primary',
+      ...new Set(state.events.map((e) => e.calendarId).filter((id) => id !== 'primary')),
+    ];
+    return ids.map((id) => ({
+      id,
+      name: id === 'primary' ? state.email : (state.calendarNames?.[id] ?? id),
+      primary: id === 'primary',
+      writable: !state.readOnlyCalendars?.includes(id),
+      hidden: false,
+    }));
   }
 
   async calendarGetEvent(

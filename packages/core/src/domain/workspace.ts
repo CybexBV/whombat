@@ -186,8 +186,30 @@ export const CalendarEvent = z.object({
   webUrl: z.string().url().max(2048).nullable(),
   /** Video call link, when the event has one. */
   meetUrl: z.string().url().max(2048).nullable(),
+  /** One occurrence of a repeating event (Whombat looks-ahead.md). Absent: not known, or not one. */
+  recurring: z.boolean().optional(),
+  /**
+   * The person's own answer to it: `accepted` when they organise it; absent when they aren't on its guest list (an
+   * event on a calendar they share, like a family's).
+   */
+  response: GuestResponse.optional(),
+  /** The organiser cancelled it (Microsoft 365 keeps a cancelled meeting until it is removed). Absent: no. */
+  cancelled: z.boolean().optional(),
 });
 export type CalendarEvent = z.infer<typeof CalendarEvent>;
+
+/** One of the calendars an account has (Whombat looks-ahead.md): the person's own, shared ones, subscriptions. */
+export const CalendarInfo = z.object({
+  id: z.string().min(1).max(1024),
+  name: z.string().max(200),
+  /** The account's main calendar. */
+  primary: z.boolean(),
+  /** The person may add events to it (owner or writer): their own and shared calendars, not holidays or birthdays. */
+  writable: z.boolean(),
+  /** Hidden in the provider's own calendar view. */
+  hidden: z.boolean(),
+});
+export type CalendarInfo = z.infer<typeof CalendarInfo>;
 
 /** An event to create (and, all fields optional, the change to an existing one). */
 export const CalendarEventInput = z.object({

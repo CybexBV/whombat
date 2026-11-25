@@ -181,3 +181,31 @@ describe('delivering the answer after a progress message', () => {
     expect(own.needsCompletion).toBe(true);
   });
 });
+
+describe('a Looks ahead check (Whombat looks-ahead.md)', () => {
+  it('shows no thinking and never posts its final text: only ahead_report tells the person', async () => {
+    const ctx = testContext();
+    const reply = new TurnReply({
+      ...ctx,
+      conversation: { ...ctx.conversation, kind: 'dm' },
+      dispatch: { ...ctx.dispatch, trigger: 'ahead', threadRootId: root },
+    });
+    expect(reply.thinking).toBe(false);
+    expect(reply.toolCall(worked)).toBe(false);
+    expect(reply.thinking).toBe(false);
+    const calls: unknown[] = [];
+    const mcp: WhombatMcp = {
+      async call(name, args) {
+        calls.push({ name, args });
+        return { ok: true, isError: false, body: { status: 'ok' } };
+      },
+      async close() {},
+    };
+    const deps = { serverUrl: 'http://whombat.test', connectMcp: async () => mcp, log: () => {} };
+    reply.final({ type: 'final', text: 'Nothing to tell: the times match.' });
+    await reply.answered(deps);
+    await reply.postFinal(deps);
+    expect(calls).toEqual([]);
+    expect(reply.needsCompletion).toBe(false);
+  });
+});

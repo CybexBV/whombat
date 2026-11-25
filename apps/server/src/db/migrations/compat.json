@@ -219,6 +219,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The stretches an incident's thing didn't answer (docs/decisions/monitoring.md), in one jsonb column on incidents that defaults to an empty list. The release before it reads and writes incidents past the column; an empty list reads as one stretch from down_since to the end, as before."
+    },
+    "0035_looks_ahead": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Looks ahead (docs/decisions/looks-ahead.md): two new tables, looks_ahead_settings and ahead_checks. The release before it never reads or writes them."
     }
   }
 }

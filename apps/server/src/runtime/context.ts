@@ -55,6 +55,7 @@ import { iso, isoOrNull } from '../lib/time';
 import { localModelDispatch } from '../local-model/check';
 import { localModelKeyOf } from '../local-model/store';
 import { lookContextOf } from '../looks/research';
+import { aheadContextOf } from '../looks-ahead/turn';
 import { agentNotesText } from '../memory/notes';
 import { loadConversationRow } from '../read/conversations';
 import { hydrateMessageCandidates, loadMessage, type MessageCandidate } from '../read/messages';
@@ -228,7 +229,10 @@ export async function buildDispatchContext(
       roomWindow
         ? contextWindowCandidates(db, conversation.id, WINDOW_SIZE, conversation.roomClearedAt)
         : ([] as MessageCandidate[]),
-      row.threadRootId ? contextThreadCandidates(db, agent.id, row.threadRootId, THREAD_REPLIES) : null,
+      // A Looks ahead check works in a thread that is there only once it found something (looks-ahead.md).
+      row.threadRootId && row.trigger !== 'ahead'
+        ? contextThreadCandidates(db, agent.id, row.threadRootId, THREAD_REPLIES)
+        : null,
     ]);
     trigger = message ?? null;
     // The thread's Hermes session (HE-18, HE-40): a resumed one has the conversation already and gets only what is new
@@ -391,6 +395,7 @@ export async function buildDispatchContext(
     delegation,
     undoRequest,
     look,
+    ahead,
     facts,
     topic,
     link,
@@ -428,6 +433,8 @@ export async function buildDispatchContext(
     outside ? null : side(async () => undoRequestOf(db, services, row, trigger)),
     // What needs a look, or the step the person let it take on one.
     outside ? null : side(async () => lookContextOf(db, row)),
+    // Something on the person's calendar to check ahead, or what such a check told them (looks-ahead.md).
+    outside ? null : side(async () => aheadContextOf(db, row)),
     outside ? [] : side(async () => burrowFacts(services, row.burrowId, principalRows)),
     // A task chat tells the turn its title and what it is about (“This chat is about the server pve-02.”), a person's
     // Chat whose it is and what the thread is about; for the agent only.
@@ -530,7 +537,12 @@ export async function buildDispatchContext(
     localModel,
     // The person's Brave Search key for Hermes's `web_search`: their own turns only, never an assessment's or an
     // outsiders' turn.
-    webSearch: webSearchDispatch(services.custody, burrowRow, !assessing && !outsidersTurn(row)),
+    // A Looks ahead check searches through Whombat's own `search_web` instead (looks-ahead.md).
+    webSearch: webSearchDispatch(
+      services.custody,
+      burrowRow,
+      !assessing && !outsidersTurn(row) && row.trigger !== 'ahead',
+    ),
     browser,
     logins,
     ...(assessing ? { feedback: assessing.feedback } : {}),
@@ -548,6 +560,7 @@ export async function buildDispatchContext(
     ...(delegation ? { delegation } : {}),
     ...(undoRequest ? { undoRequest } : {}),
     ...(look ? { look } : {}),
+    ...(ahead ? { ahead } : {}),
     // The quiet hours for changes (care-plan.md): when the person's changes that can wait happen. Not in outsiders' turns.
     ...(person ? { changeWindow: changeWindowOf(burrowRow) } : {}),
     // A question asked at the desk screen, spoken or typed there (desk-display-talk.md DK-T05): the runner asks for an

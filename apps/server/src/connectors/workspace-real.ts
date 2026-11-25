@@ -10,6 +10,7 @@ import {
   type CalendarEvent,
   type CalendarEventInput,
   type CalendarEventPatch,
+  type CalendarInfo,
   CONNECTOR_BINARY_MAX_BYTES,
   type ConnectionCheck,
   type ConnectorBinary,
@@ -191,6 +192,9 @@ interface GoogleAttendee {
 
 interface GoogleEvent {
   recurrence?: string[];
+  /** Set on one occurrence of a repeating event (lists with `singleEvents`). */
+  recurringEventId?: string;
+  status?: string;
   id: string;
   summary?: string;
   description?: string;
@@ -198,7 +202,7 @@ interface GoogleEvent {
   start?: GoogleEventTime;
   end?: GoogleEventTime;
   attendees?: GoogleAttendee[];
-  organizer?: { email?: string };
+  organizer?: { email?: string; self?: boolean };
   htmlLink?: string;
   hangoutLink?: string;
   conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
@@ -245,7 +249,27 @@ function calendarEvent(e: GoogleEvent, calendarId: string): CalendarEvent {
     organizer: e.organizer?.email ?? null,
     webUrl: httpsUrl(e.htmlLink),
     meetUrl: httpsUrl(e.hangoutLink ?? video),
+    ...(e.recurringEventId ? { recurring: true } : {}),
+    ...ownResponse(e),
+    ...(e.status === 'cancelled' ? { cancelled: true } : {}),
   };
+}
+
+/** The person's own answer (looks-ahead.md): they organise it, or their place on its guest list; none when neither. */
+function ownResponse(e: GoogleEvent): { response?: GuestResponse } {
+  if (e.organizer?.self) return { response: 'accepted' };
+  const self = e.attendees?.find((a) => a.self);
+  return self ? { response: RESPONSES[self.responseStatus ?? ''] ?? 'needs_action' } : {};
+}
+
+interface GoogleCalendarListEntry {
+  id?: string;
+  summary?: string;
+  summaryOverride?: string;
+  primary?: boolean;
+  accessRole?: string;
+  hidden?: boolean;
+  selected?: boolean;
 }
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -858,6 +882,29 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
       },
     );
     return (res.items ?? []).slice(0, input.limit).map((e) => calendarEvent(e, input.calendarId));
+  }
+
+  async calendarList(accessToken: string): Promise<CalendarInfo[]> {
+    const res = await this.json<{ items?: GoogleCalendarListEntry[] }>(
+      accessToken,
+      'GET',
+      `${CALENDAR_API}/users/me/calendarList`,
+      { query: { maxResults: 100 } },
+    );
+    return (res.items ?? []).flatMap((c) =>
+      c.id
+        ? [
+            {
+              id: c.primary ? 'primary' : clip(c.id, 1024),
+              name: clip(c.summaryOverride || c.summary || c.id, 200),
+              primary: !!c.primary,
+              writable: c.accessRole === 'owner' || c.accessRole === 'writer',
+              // Hidden from the list, or not shown in Calendar's own view.
+              hidden: !!c.hidden || c.selected === false,
+            },
+          ]
+        : [],
+    );
   }
 
   private async googleEvent(token: string, calendarId: string, eventId: string): Promise<GoogleEvent> {
