@@ -40,6 +40,13 @@ Every permission: servers, connections, the Vault, the local network and the ris
 - Read the websites kept signed in between chats and until when — `keptSites.list` · read
 - Stop keeping a website signed in — `keptSites.stop` · change, always asks
 
+## Settings → (your name) → Looks ahead (`agent.ahead`)
+
+Whether (your name) checks what is on your calendar the afternoon before, which calendars, and what it no longer checks for.
+
+- Read what Looks ahead checks — `looksAhead.get` · read
+- Turn Looks ahead, a calendar or a kind of finding on or off — `looksAhead.update` · change
+
 ## Settings → (your name) → Council (`agent.council`)
 
 The councils (your name) can ask: which AIs sit on each, with which model and effort, and the default.
