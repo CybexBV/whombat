@@ -59,6 +59,10 @@ func scanCheck(row interface{ Scan(...any) error }) (Check, error) {
 	}
 	c.CreatedAt = fromMS(ca)
 	c.ProbeChangedAt = fromMS(probeChangedAt)
+	if c.ProbeChangedAt.IsZero() {
+		// An older hub can create a check after the additive migration ran.
+		c.ProbeChangedAt = c.CreatedAt
+	}
 	return c, err
 }
 

@@ -27,7 +27,7 @@ import {
   VAULT_SSH_SERVERS_MAX,
 } from '@whombat/core';
 import { externalEffect, outsideCommandScope } from '../commit/scope';
-import { hostsAlertsSince, serverFirstReportAt, serverUptime } from '../incidents/history';
+import { hostsAlertsOverlapping, serverFirstReportAt, serverUptime } from '../incidents/history';
 import { UPTIME_WEEK_MS } from '../incidents/uptime';
 import { ApiError, forbidden, notAllowed, notFound } from '../lib/errors';
 import type { PrincipalRow } from '../read/principals';
@@ -1077,7 +1077,7 @@ export const hostsRoutes: RouteDef[] = [
       g.hosts.openAlertsRaw().catch(() => []),
       g.hosts.agentOf(serverId),
       // Its offline stretches this week, for its week in one line.
-      hostsAlertsSince(ctx.services, ctx.access.burrow.id, g.actor, {
+      hostsAlertsOverlapping(ctx.services, ctx.access.burrow.id, g.actor, {
         server: serverId,
         rule: HEARTBEAT_RULE,
         since: new Date(now.getTime() - UPTIME_WEEK_MS),

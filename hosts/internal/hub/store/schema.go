@@ -1,7 +1,8 @@
 package store
 
-// migrations are applied in order; PRAGMA user_version is the number
-// applied. Statements are separated by lines containing only "--;".
+// migrations are applied in order. PRAGMA user_version counts the changes
+// an older hub must understand. These are backed up before upgrading.
+// Statements are separated by lines containing only "--;".
 // Times are unix milliseconds, except metric timestamps (unix seconds).
 var migrations = []string{
 	// 1: initial schema.
@@ -404,8 +405,19 @@ CREATE TABLE server_disk_usage (
 	PRIMARY KEY (server_id, mount)
 ) WITHOUT ROWID
 `,
-	// 15: check ownership and per-server alert limits.
-	`
+}
+
+type additiveMigration struct {
+	id  string
+	sql string
+}
+
+// Additive migrations keep the same user_version so the previous hub can
+// open and write the database after a host rollback. Only add tables,
+// add nullable or defaulted columns, or fill new columns here. Keep IDs
+// stable and append new entries in dependency order.
+var additiveMigrations = []additiveMigration{
+	{"check_owners_and_watch_limits", `
 ALTER TABLE checks ADD COLUMN owner TEXT NOT NULL DEFAULT ''
 --;
 ALTER TABLE checks ADD COLUMN probe_rev TEXT NOT NULL DEFAULT ''
@@ -417,11 +429,10 @@ CREATE TABLE watch_limits (
 	value     REAL NOT NULL,
 	PRIMARY KEY (server_id, rule, entity)
 ) WITHOUT ROWID
-`,
-	// 16: when the current probe settings took effect.
-	`
+`},
+	{"check_probe_changed_at", `
 ALTER TABLE checks ADD COLUMN probe_changed_at INTEGER NOT NULL DEFAULT 0
 --;
 UPDATE checks SET probe_changed_at = created_at
-`,
+`},
 }

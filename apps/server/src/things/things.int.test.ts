@@ -854,3 +854,40 @@ it('starts server uptime at its first report on the page and in history', async 
     delete server.first_report_at;
   }
 });
+
+it('lists server alerts that were still open during the history period', async () => {
+  const now = t.services.clock().getTime();
+  const daysAgo = (d: number) => new Date(now - d * 86_400_000).toISOString();
+  const alerts = [
+    { id: 'history-open', title: '/srv full', opened_at: daysAgo(40) },
+    {
+      id: 'history-crossed',
+      title: '/data full',
+      opened_at: daysAgo(42),
+      state: 'resolved',
+      resolved_at: daysAgo(22),
+    },
+    {
+      id: 'history-too-early',
+      title: '/archive full',
+      opened_at: daysAgo(42),
+      state: 'resolved',
+      resolved_at: daysAgo(32),
+    },
+  ].map((alert) =>
+    fake.openAlert({ server: 'shale', rule: 'disk.space_high', severity: 'warning', ...alert }),
+  );
+  try {
+    const history = await call(mara, 'GET', '/things/server%3Ashale/history?days=30');
+    expect(history.status).toBe(200);
+    expect(history.body.alerts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: '/srv full', openedAt: daysAgo(40), resolvedAt: null }),
+        expect.objectContaining({ title: '/data full', openedAt: daysAgo(42), resolvedAt: daysAgo(22) }),
+      ]),
+    );
+    expect(history.body.alerts).not.toContainEqual(expect.objectContaining({ title: '/archive full' }));
+  } finally {
+    for (const alert of alerts) fake.alerts.splice(fake.alerts.indexOf(alert), 1);
+  }
+});

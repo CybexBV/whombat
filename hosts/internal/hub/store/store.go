@@ -42,6 +42,10 @@ type seriesKey struct{ server, name string }
 
 // Open opens (and migrates) the database at path.
 func Open(path string) (*Store, error) {
+	return open(path, migrations, additiveMigrations)
+}
+
+func open(path string, strict []string, additive []additiveMigration) (*Store, error) {
 	dsn := func(txlock string) string {
 		q := url.Values{}
 		q.Add("_pragma", "busy_timeout(10000)")
@@ -69,7 +73,7 @@ func Open(path string) (*Store, error) {
 	r.SetMaxOpenConns(8)
 	r.SetMaxIdleConns(8)
 	s := &Store{w: w, r: r, seriesID: map[seriesKey]int64{}, path: path}
-	if err := s.migrate(context.Background()); err != nil {
+	if err := s.migrate(context.Background(), strict, additive); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -80,7 +84,7 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-// SchemaVersion is the schema this build migrates to.
+// SchemaVersion is the strict schema version this build migrates to.
 func SchemaVersion() int { return len(migrations) }
 
 // tune sets the pragmas that keep the file small: a bounded WAL after
@@ -168,29 +172,29 @@ func (s *Store) Check(ctx context.Context) error {
 // ErrNewerSchema means the database was written by a newer hub.
 var ErrNewerSchema = errors.New("the database schema is newer than this hub")
 
-func (s *Store) migrate(ctx context.Context) error {
+func (s *Store) migrate(ctx context.Context, strict []string, additive []additiveMigration) error {
 	var v int
 	if err := s.w.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil {
 		return err
 	}
-	if v > len(migrations) {
-		return fmt.Errorf("%w (database v%d, this hub v%d): run the newer hub or restore a backup", ErrNewerSchema, v, len(migrations))
+	if v > len(strict) {
+		return fmt.Errorf("%w (database v%d, this hub v%d): run the newer hub or restore a backup", ErrNewerSchema, v, len(strict))
 	}
-	if v > 0 && v < len(migrations) && s.path != "" {
+	if v > 0 && v < len(strict) && s.path != "" {
 		// Keep a copy of the database as it was before the migration, so a
 		// failed or unwanted upgrade can be undone (`whombat-hosts restore`).
-		bak := fmt.Sprintf("%s.pre-v%d-%s.bak", s.path, len(migrations), time.Now().UTC().Format("20060102-150405.000"))
+		bak := fmt.Sprintf("%s.pre-v%d-%s.bak", s.path, len(strict), time.Now().UTC().Format("20060102-150405.000"))
 		if err := s.Snapshot(ctx, bak); err != nil {
 			return fmt.Errorf("snapshot before migration: %w", err)
 		}
 		pruneSnapshots(s.path, 3)
 	}
-	for i := v; i < len(migrations); i++ {
+	for i := v; i < len(strict); i++ {
 		tx, err := s.w.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
-		for _, stmt := range splitSQL(migrations[i]) {
+		for _, stmt := range splitSQL(strict[i]) {
 			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d: %w\n%s", i+1, err, stmt)
@@ -204,7 +208,43 @@ func (s *Store) migrate(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	if len(additive) == 0 {
+		return nil
+	}
+	return s.migrateAdditive(ctx, additive)
+}
+
+func (s *Store) migrateAdditive(ctx context.Context, migrations []additiveMigration) error {
+	// The writer takes the lock before reading the ledger. A retry sees
+	// both the changes and their records, even if an upgrade was cut short.
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS additive_migrations (
+		id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL
+	) WITHOUT ROWID`); err != nil {
+		return err
+	}
+	for _, m := range migrations {
+		var applied bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM additive_migrations WHERE id = ?)`, m.id).Scan(&applied); err != nil {
+			return err
+		}
+		if applied {
+			continue
+		}
+		for _, stmt := range splitSQL(m.sql) {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("additive migration %s: %w\n%s", m.id, err, stmt)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO additive_migrations (id, applied_at) VALUES (?, ?)`, m.id, ms(time.Now())); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // splitSQL splits a migration on lines containing only "--;" (statements

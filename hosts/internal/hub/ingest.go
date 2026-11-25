@@ -184,9 +184,7 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 				"host_power": onOff(pol.HostPower), "update": onOff(pol.Update), "manage": onOff(pol.Manage)}})
 	}
 
-	for _, cr := range r.Checks {
-		h.checkResult(ctx, id, cr)
-	}
+	h.checkResults(ctx, id, r.Checks)
 	for _, c := range changes {
 		h.bus.Publish("guest.state_changed", map[string]string{"server": id, "id": c.guest, "state": c.state})
 	}

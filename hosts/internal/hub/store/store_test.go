@@ -409,8 +409,7 @@ func TestAuditRetentionNeverHitsTheTrigger(t *testing.T) {
 // Opening a database from an older schema migrates it and keeps a snapshot
 // of the version before (at most three snapshots).
 func TestMigrationKeepsSnapshot(t *testing.T) {
-	orig := migrations
-	t.Cleanup(func() { migrations = orig })
+	strict := append([]string(nil), migrations...)
 	path := filepath.Join(t.TempDir(), "hub.db")
 	s, err := Open(path)
 	if err != nil {
@@ -419,8 +418,8 @@ func TestMigrationKeepsSnapshot(t *testing.T) {
 	s.Close()
 	for i := 0; i < 5; i++ {
 		// A newer build with one more migration opens the database.
-		migrations = append(migrations, fmt.Sprintf("CREATE TABLE test_migration_%d (x INTEGER)", i))
-		s, err := Open(path)
+		strict = append(strict, fmt.Sprintf("CREATE TABLE test_migration_%d (x INTEGER)", i))
+		s, err := open(path, strict, additiveMigrations)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -433,42 +432,103 @@ func TestMigrationKeepsSnapshot(t *testing.T) {
 	}
 }
 
-func TestCheckProbeTimeMigration(t *testing.T) {
-	original := migrations
-	t.Cleanup(func() { migrations = original })
-	migrations = original[:15]
+func TestAdditiveMigrationsAllowRollback(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hub.db")
-	s, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
+	openHub := func(strict []string, additive []additiveMigration) *Store {
+		t.Helper()
+		s, err := open(path, strict, additive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { s.Close() })
+		return s
 	}
+	writeOldCheck := func(s *Store, id, name string, at time.Time) {
+		t.Helper()
+		if _, err := s.w.ExecContext(ctx, `INSERT INTO checks(id, name, kind, created_by, created_at)
+			VALUES (?, ?, 'http', 'john', ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name`, id, name, ms(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const previousVersion = 14
 	at := time.Date(2026, 11, 21, 9, 30, 0, 0, time.UTC)
-	if _, err := s.w.ExecContext(ctx, `INSERT INTO checks(id, name, kind, created_by, created_at, probe_rev)
-		VALUES ('ck_1', 'Website', 'http', 'john', ?, 'abc')`, ms(at)); err != nil {
-		s.Close()
-		t.Fatal(err)
+	changedAt := at.Add(time.Hour)
+	rollbackAt := at.Add(2 * time.Hour)
+	old := openHub(migrations[:previousVersion], nil)
+	writeOldCheck(old, "ck_1", "Website", at)
+	old.Close()
+
+	upgraded := openHub(migrations, additiveMigrations)
+	var v int
+	if err := upgraded.r.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil || v != previousVersion {
+		t.Fatalf("user_version = %d (%v), want %d", v, err, previousVersion)
 	}
-	s.Close()
-	migrations = original
-	s, err = Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	checks, err := s.ListChecks(ctx)
-	if err != nil || len(checks) != 1 || !checks[0].ProbeChangedAt.Equal(at) || checks[0].ProbeRev != "abc" {
+	checks, err := upgraded.ListChecks(ctx)
+	if err != nil || len(checks) != 1 || !checks[0].ProbeChangedAt.Equal(at) {
 		t.Fatalf("migrated checks: %+v, %v", checks, err)
+	}
+	var storedAt int64
+	if err := upgraded.r.QueryRowContext(ctx, `SELECT probe_changed_at FROM checks WHERE id = 'ck_1'`).Scan(&storedAt); err != nil || storedAt != ms(at) {
+		t.Fatalf("backfilled probe time = %d (%v), want %d", storedAt, err, ms(at))
+	}
+	check := checks[0]
+	check.Owner, check.ProbeRev, check.ProbeChangedAt = "whombat:connection:example", "abc", changedAt
+	// Ownership is set on creation, so set it here before the rollback.
+	if _, err := upgraded.w.ExecContext(ctx, `UPDATE checks SET owner = ? WHERE id = ?`, check.Owner, check.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := upgraded.PutCheck(ctx, check); err != nil {
+		t.Fatal(err)
+	}
+	appliedAt := func(s *Store, m additiveMigration) int64 {
+		t.Helper()
+		var recorded int64
+		if err := s.r.QueryRowContext(ctx, `SELECT applied_at FROM additive_migrations WHERE id = ?`, m.id).Scan(&recorded); err != nil || recorded <= 0 {
+			t.Fatalf("applied %s at %d: %v", m.id, recorded, err)
+		}
+		return recorded
+	}
+	firstApplied := make(map[string]int64)
+	for _, m := range additiveMigrations {
+		firstApplied[m.id] = appliedAt(upgraded, m)
+	}
+	upgraded.Close()
+
+	// The previous hub opens the same file, using only its strict list.
+	rolledBack := openHub(migrations[:previousVersion], nil)
+	var name string
+	if err := rolledBack.r.QueryRowContext(ctx, `SELECT name FROM checks WHERE id = 'ck_1'`).Scan(&name); err != nil || name != "Website" {
+		t.Fatalf("old read = %q, %v", name, err)
+	}
+	writeOldCheck(rolledBack, "ck_1", "Website renamed", rollbackAt)
+	writeOldCheck(rolledBack, "ck_2", "Another website", rollbackAt)
+	rolledBack.Close()
+
+	upgraded = openHub(migrations, additiveMigrations)
+	for _, m := range additiveMigrations {
+		if got := appliedAt(upgraded, m); got != firstApplied[m.id] {
+			t.Fatalf("migration %s ran again: %d, was %d", m.id, got, firstApplied[m.id])
+		}
+	}
+	checks, err = upgraded.ListChecks(ctx)
+	if err != nil || len(checks) != 2 {
+		t.Fatalf("checks after rollback: %+v, %v", checks, err)
+	}
+	if got := checks[0]; got.ID != "ck_2" || got.Owner != "" || got.ProbeRev != "" || !got.ProbeChangedAt.Equal(rollbackAt) {
+		t.Fatalf("check created during rollback: %+v", got)
+	}
+	if got := checks[1]; got.ID != "ck_1" || got.Name != "Website renamed" || got.Owner != check.Owner ||
+		got.ProbeRev != check.ProbeRev || !got.ProbeChangedAt.Equal(changedAt) {
+		t.Fatalf("check updated during rollback: %+v", got)
 	}
 }
 
 // TestManageSwitchMigration upgrades a database of the previous schema:
 // existing servers get the Manage switch off, and it can be turned on.
 func TestManageSwitchMigration(t *testing.T) {
-	orig := migrations
-	t.Cleanup(func() { migrations = orig })
 	path := filepath.Join(t.TempDir(), "hub.db")
-	migrations = orig[:9]
-	s, err := Open(path)
+	s, err := open(path, migrations[:9], nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +537,6 @@ func TestManageSwitchMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	migrations = orig
 	s, err = Open(path)
 	if err != nil {
 		t.Fatal(err)

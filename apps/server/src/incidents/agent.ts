@@ -33,7 +33,7 @@ import { loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import { outsidersTurn } from '../runtime/person';
 import type { Services } from '../services';
 import { thingVisible } from '../things/page';
-import { hostsAlertsSince, periodUptime } from './history';
+import { hostsAlertsOverlapping, periodUptime } from './history';
 import { observedOf } from './looks';
 import { incidentsSince, openIncidents } from './store';
 import { cancelThingWatch, runningThingWatches, startThingWatch } from './thing-watch';
@@ -216,7 +216,7 @@ export async function watchHistoryTool(
     incidentsSince(services.db, burrowId, from, thing),
     // The servers' alerts: one server's, or every server's when no thing was named.
     !thing || parsed?.kind === 'server'
-      ? hostsAlertsSince(services, burrowId, actor, {
+      ? hostsAlertsOverlapping(services, burrowId, actor, {
           ...(parsed?.kind === 'server' ? { server: parsed.id } : {}),
           since: from,
         })

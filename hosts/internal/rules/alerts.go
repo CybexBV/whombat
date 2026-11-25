@@ -139,8 +139,9 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 				Rule: RuleTempHigh, Entity: s.ID, Severity: SevWarning,
 				For: TempHighFor, ClearAfter: TempClearAfter, Link: LinkTemps, StatusNote: note,
 				Render: func(held time.Duration) Text {
-					d := fmt.Sprintf("Above %s for %s", FormatTemp(math.Floor(thr)), FormatDuration(held))
-					bd := fmt.Sprintf("%s. The warning limit is %s.", d, FormatTemp(limit))
+					warning := FormatTemp(math.Floor(thr))
+					d := fmt.Sprintf("Above %s for %s", warning, FormatDuration(held))
+					bd := fmt.Sprintf("%s. The warning limit is %s.", d, warning)
 					if customHigh {
 						d = limitWords(s.TempC, thr, "°C") + " for " + FormatDuration(held)
 						bd = d + "."

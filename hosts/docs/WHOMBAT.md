@@ -402,6 +402,10 @@ REST-API "Alerts", "Watch settings", "Maintenance", "Checks".
 | `hosts.checks.create` | `POST /checks {name, kind: http\|tcp\|ping\|dns\|heartbeat, target, runner?, interval_s?, timeout_s?, grace_s?, options?, owner?}` and `PATCH /checks/{id}` | admin |
 | `hosts.checks.remove` | `DELETE /checks/{id}` | admin |
 
+For history, pass `state=all&overlaps_since=<RFC 3339>` to `GET /alerts`.
+The list includes alerts that stayed open into the period. The `since`
+filter selects alerts by when they opened.
+
 **Quiet notices** (Whombat QN-23; decisions HS-190…HS-197). A server's
 `status` is `warning` only while one of its open alerts asks for attention
 (`attention: true`), and its `status_note` is that alert's; `offline` is
@@ -432,8 +436,9 @@ single-check route to read `last`, including latency and the certificate's
 end date. A stale check has no current answer. Its previous `last.at`
 stays available for “Not checked since …”. A new or edited probe waits
 for its own first result, and its wait counts from when the settings took
-effect. A check-in gets its full period and grace time from that point
-until its first ping.
+effect. A check-in gets its full period and grace time when set up or
+resumed, until its first successful ping. For a name lookup, set
+`options.dns_type` to `any` to accept an A or AAAA answer. The default is A.
 
 Hints (conditions near a limit, not alerts yet) are `hints[]` of `GET
 /fleet` and `GET /servers/{id}`. Headless, a heartbeat check's `ping_url`

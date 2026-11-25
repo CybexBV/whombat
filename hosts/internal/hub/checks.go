@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,10 +33,11 @@ const (
 
 // checkState is a check's latest result and how long its state holds.
 type checkState struct {
-	Result   proto.CheckResult `json:"result"`
-	ProbeRev string            `json:"probe_rev,omitempty"`
-	HubAt    time.Time         `json:"hub_at,omitzero"`
-	Fails    int               `json:"fails"` // consecutive failures
+	Result    proto.CheckResult `json:"result"`
+	ProbeRev  string            `json:"probe_rev,omitempty"`
+	HubAt     time.Time         `json:"hub_at,omitzero"`
+	Fails     int               `json:"fails"` // consecutive failures
+	AddressAt [2]time.Time      `json:"address_at,omitzero"`
 	// Heartbeat checks.
 	LastPing *time.Time `json:"last_ping,omitempty"` // last successful ping
 	Started  *time.Time `json:"started,omitempty"`   // the job said it started
@@ -115,7 +117,12 @@ func (h *Hub) specsFor(runner string) []proto.CheckSpec {
 	var out []proto.CheckSpec
 	for _, c := range h.checks.list {
 		if c.Enabled && c.Runner == runner && c.Kind != store.CheckHeartbeat {
-			out = append(out, specOf(c))
+			if isAddressLookup(c) {
+				specs := addressProbeSpecs(c)
+				out = append(out, specs[:]...)
+			} else {
+				out = append(out, specOf(c))
+			}
 		}
 	}
 	return out
@@ -159,9 +166,7 @@ func (h *Hub) runChecks(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			for _, r := range h.checks.runner.Results() {
-				h.checkResult(ctx, "hub", r)
-			}
+			h.checkResults(ctx, "hub", h.checks.runner.Results())
 			h.checks.config.Lock()
 			h.heartbeatChecks(ctx)
 			h.evaluateCheckAlerts(ctx)
@@ -186,32 +191,74 @@ func (s *checkSet) byID(id string) (store.Check, bool) {
 	return store.Check{}, false
 }
 
-// checkResult records a result from a runner ("hub" or the server whose
-// report carried it). Results for checks the runner does not own are
-// ignored; repeated results (same time) are recorded once.
-func (h *Hub) checkResult(ctx context.Context, runner string, r proto.CheckResult) {
-	id, _, _ := strings.Cut(r.ID, ".")
-	c, ok := h.checkByID(id)
-	if !ok || r.ID != probeID(c) || c.Runner != runner || c.Kind == store.CheckHeartbeat || !c.Enabled {
-		return
+// checkResults records a runner's latest results. A runner reports its
+// cached results together, so both halves of an address lookup arrive here.
+func (h *Hub) checkResults(ctx context.Context, runner string, results []proto.CheckResult) {
+	var pairs map[string]*addressProbePair
+	for _, r := range results {
+		id, _, _ := strings.Cut(r.ID, ".")
+		c, ok := h.checkByID(id)
+		if !ok || c.Runner != runner || c.Kind == store.CheckHeartbeat || !c.Enabled {
+			continue
+		}
+		if !isAddressLookup(c) {
+			if r.ID == probeID(c) {
+				h.recordCheck(ctx, c, checkObservation{result: cleanCheckResult(r, id)}, nil)
+			}
+			continue
+		}
+		specs := addressProbeSpecs(c)
+		for i, spec := range specs {
+			if r.ID != spec.ID {
+				continue
+			}
+			if pairs == nil {
+				pairs = make(map[string]*addressProbePair)
+			}
+			pair := pairs[probeID(c)]
+			if pair == nil {
+				pair = &addressProbePair{check: c}
+				pairs[probeID(c)] = pair
+			}
+			pair.results[i] = cleanCheckResult(r, id)
+		}
 	}
+	for _, pair := range pairs {
+		if observation, ok := pair.observation(); ok {
+			h.recordCheck(ctx, pair.check, observation, nil)
+		}
+	}
+}
+
+func cleanCheckResult(r proto.CheckResult, id string) proto.CheckResult {
 	r.ID = id
 	r.Error = cleanText(r.Error, 300)
-	if len(r.Answer) > 8 {
-		r.Answer = r.Answer[:8]
-	}
+	r.Answer = slices.Clone(r.Answer[:min(len(r.Answer), 8)])
 	for i, a := range r.Answer {
 		r.Answer[i] = cleanText(a, 200)
 	}
 	if r.LatencyMs != nil && (*r.LatencyMs < 0 || *r.LatencyMs > 3600e3 || *r.LatencyMs != *r.LatencyMs) {
 		r.LatencyMs = nil
 	}
-	h.recordCheck(ctx, c, r, nil)
+	return r
 }
 
-func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResult, mutate func(*checkState)) {
+type checkObservation struct {
+	result    proto.CheckResult
+	addressAt [2]time.Time
+}
+
+func (h *Hub) recordCheck(ctx context.Context, c store.Check, observation checkObservation, mutate func(*checkState)) {
+	r := observation.result
 	now := h.now()
 	at := r.At
+	if observation.addressAt != [2]time.Time{} {
+		// Both answers need to be fresh, including across an agent report gap.
+		at = observation.addressAt[0]
+		if observation.addressAt[1].Before(at) {
+			at = observation.addressAt[1]
+		}
+	}
 	if r.At.IsZero() {
 		r.At, at = now, now
 	} else if c.Runner != "hub" {
@@ -238,6 +285,14 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResul
 	if !r.At.IsZero() && !st.Result.At.IsZero() && !r.At.After(st.Result.At) && mutate == nil {
 		h.checks.mu.Unlock()
 		return
+	}
+	if observation.addressAt != [2]time.Time{} {
+		// Count a new lookup only once both families have run again.
+		if !observation.addressAt[0].After(st.AddressAt[0]) || !observation.addressAt[1].After(st.AddressAt[1]) {
+			h.checks.mu.Unlock()
+			return
+		}
+		st.AddressAt = observation.addressAt
 	}
 	wasOK, had := st.Result.OK, !st.Result.At.IsZero()
 	if c.Runner != "hub" && had && (at.Sub(st.resultTime()) > h.checkResultWindow(c) || h.checkStale(c, st, now)) {
@@ -309,7 +364,7 @@ func (h *Hub) heartbeatChecks(ctx context.Context) {
 	}
 	h.checks.mu.RUnlock()
 	for _, d := range list {
-		h.recordCheck(ctx, d.c, proto.CheckResult{ID: d.c.ID, At: now, Error: d.msg}, nil)
+		h.recordCheck(ctx, d.c, checkObservation{result: proto.CheckResult{ID: d.c.ID, At: now, Error: d.msg}}, nil)
 	}
 }
 
@@ -464,7 +519,7 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 		d := float64(now.Sub(*started).Milliseconds())
 		res.LatencyMs = &d // the job's run time
 	}
-	h.recordCheck(r.Context(), c, res, func(st *checkState) {
+	h.recordCheck(r.Context(), c, checkObservation{result: res}, func(st *checkState) {
 		if ok {
 			st.LastPing = &now
 		}
@@ -685,7 +740,11 @@ func (h *Hub) applyCheck(c *store.Check, req checkReq) error {
 	if c.IntervalS == 0 {
 		c.IntervalS = 60
 	}
-	if err := checks.Validate(specOf(*c)); err != nil {
+	spec := specOf(*c)
+	if isAddressLookup(*c) {
+		spec = addressProbeSpecs(*c)[0]
+	}
+	if err := checks.Validate(spec); err != nil {
 		return apiErr(http.StatusBadRequest, "invalid_check", err.Error())
 	}
 	return nil
@@ -739,8 +798,8 @@ func (h *Hub) apiPatchCheck(w http.ResponseWriter, r *http.Request, p *principal
 	if err := h.applyCheck(&c, req); err != nil {
 		return err
 	}
-	if old.Kind != c.Kind || (c.Kind != store.CheckHeartbeat &&
-		(old.Runner != c.Runner || old.Enabled != c.Enabled || specOf(old) != specOf(c))) {
+	if old.Kind != c.Kind || old.Enabled != c.Enabled ||
+		(c.Kind != store.CheckHeartbeat && (old.Runner != c.Runner || specOf(old) != specOf(c))) {
 		c.ProbeRev = newID("")
 		c.ProbeChangedAt = h.now()
 	} else if c.Kind == store.CheckHeartbeat && (old.IntervalS != c.IntervalS || old.GraceS != c.GraceS) {

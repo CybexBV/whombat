@@ -74,6 +74,19 @@ describe('Website or address', () => {
     expect(name).not.toMatch(/[\n�]/);
   });
 
+  it('asks the selected runner for either address family in a name lookup', () => {
+    const spec = uptimeSpec({
+      ...row,
+      fields: { kind: 'dns', address: 'example.com.', runner: 'server-example' },
+    });
+    expect(spec).toMatchObject({
+      kind: 'dns',
+      target: 'example.com.',
+      runner: 'server-example',
+      options: { dns_type: 'any' },
+    });
+  });
+
   it('uses the hub latency and ignores observations from before an edit or from a stale runner', () => {
     expect(uptimeSeen(check, row, now, 'UTC').points.rtt_ms).toBe(82);
     const stale = uptimeSeen({ ...check, stale: true }, row, now, 'UTC');

@@ -3,11 +3,14 @@ package hub
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"rackoon/internal/checks"
 	"rackoon/internal/proto"
 	"rackoon/internal/rules"
 )
@@ -31,7 +34,7 @@ func TestStaleCheckKeepsLastResultAndHoldsAlerts(t *testing.T) {
 	result := func(at time.Time, ok bool) {
 		latency := 23.5
 		cert := now.Add(30 * 24 * time.Hour)
-		e.h.checkResult(ctx, "basalt", proto.CheckResult{ID: check.ID, At: at, OK: ok, LatencyMs: &latency, CertNotAfter: &cert})
+		e.h.checkResults(ctx, "basalt", []proto.CheckResult{{ID: check.ID, At: at, OK: ok, LatencyMs: &latency, CertNotAfter: &cert}})
 	}
 	status := func(want string, stale bool) {
 		t.Helper()
@@ -92,7 +95,7 @@ func TestStaleCheckKeepsLastResultAndHoldsAlerts(t *testing.T) {
 		t.Fatalf("the previous target's result came back: %+v", check)
 	}
 	cNew, _ := e.h.checkByID(check.ID)
-	e.h.checkResult(ctx, "basalt", proto.CheckResult{ID: probeID(cNew), At: now.Add(time.Second), OK: true})
+	e.h.checkResults(ctx, "basalt", []proto.CheckResult{{ID: probeID(cNew), At: now.Add(time.Second), OK: true}})
 	admin.json(http.MethodGet, checkPath, nil, 200, &check)
 	if check.Status != "up" || check.Last == nil {
 		t.Fatalf("the new target's result was not accepted: %+v", check)
@@ -110,7 +113,7 @@ func TestStaleCheckKeepsLastResultAndHoldsAlerts(t *testing.T) {
 		t.Fatalf("owned check after patch: %+v", owned)
 	}
 	c, _ := e.h.checkByID(owned.ID)
-	e.h.recordCheck(ctx, c, proto.CheckResult{ID: c.ID, At: now, OK: false}, nil)
+	e.h.recordCheck(ctx, c, checkObservation{result: proto.CheckResult{ID: c.ID, At: now, OK: false}}, nil)
 	e.h.evaluateCheckAlerts(ctx)
 	for _, a := range e.h.alerts.Open("") {
 		if a.Entity == "check:"+owned.ID {
@@ -200,9 +203,9 @@ func TestCheckResultFreshnessCorrectsBothClockDirections(t *testing.T) {
 		read := func(age time.Duration, wantStale bool) {
 			t.Helper()
 			at := now.Add(-age)
-			e.h.checkResult(ctx, "basalt", proto.CheckResult{
+			e.h.checkResults(ctx, "basalt", []proto.CheckResult{{
 				ID: check.ID, At: at.Add(time.Duration(skew) * time.Second), OK: true,
-			})
+			}})
 			admin.json(http.MethodGet, "/api/v1/checks/"+check.ID, nil, 200, &check)
 			if check.Stale != wantStale || check.Last == nil || check.Last.At != at.Format(time.RFC3339) {
 				t.Fatalf("skew %v, age %s: %+v, last %+v", skew, age, check, check.Last)
@@ -240,6 +243,145 @@ func TestHeartbeatFirstDeadlineStartsAtKindChange(t *testing.T) {
 	status(0, "pending")
 	status(75*time.Second, "pending")
 	status(76*time.Second, "down")
+}
+
+func TestResumedHeartbeatGetsFullDeadline(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&start)
+	e, admin := adminEnv(t, func(c *Config) {
+		c.Now = func() time.Time { return *clock.Load() }
+		c.PublicURL = "https://example.com"
+	})
+	var check checkJSON
+	admin.json(http.MethodPost, "/api/v1/checks", map[string]any{
+		"name": "Backup", "kind": "heartbeat", "interval_s": 60, "grace_s": 15,
+	}, http.StatusCreated, &check)
+	if check.PingURL == nil {
+		t.Fatal("missing ping URL")
+	}
+	ping, err := url.Parse(*check.PingURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := admin.req(http.MethodGet, ping.Path, nil, nil); code != http.StatusOK {
+		t.Fatalf("first ping: HTTP %d", code)
+	}
+	path := "/api/v1/checks/" + check.ID
+	admin.json(http.MethodPatch, path, map[string]any{"enabled": false}, http.StatusOK, &check)
+	resumed := start.Add(24 * time.Hour)
+	clock.Store(&resumed)
+	admin.json(http.MethodPatch, path, map[string]any{"enabled": true}, http.StatusOK, &check)
+	for _, tc := range []struct {
+		elapsed time.Duration
+		want    string
+	}{{0, "pending"}, {75 * time.Second, "pending"}, {76 * time.Second, "down"}} {
+		at := resumed.Add(tc.elapsed)
+		clock.Store(&at)
+		e.h.heartbeatChecks(context.Background())
+		admin.json(http.MethodGet, path, nil, http.StatusOK, &check)
+		if check.Status != tc.want {
+			t.Fatalf("after %s: status %s, want %s", tc.elapsed, check.Status, tc.want)
+		}
+	}
+}
+
+func TestAddressLookupAcceptsIPv6OnlyOnExistingRunners(t *testing.T) {
+	e, admin := adminEnv(t, nil)
+	e.enroll(admin, "basalt", "Lab")
+	ctx, now := context.Background(), e.h.now()
+	e.h.mu.Lock()
+	e.h.servers["basalt"].reportAt = now
+	e.h.mu.Unlock()
+	var check checkJSON
+	admin.json(http.MethodPost, "/api/v1/checks", map[string]any{
+		"name": "Name lookup", "kind": "dns", "target": "v6.example.com.", "runner": "basalt",
+		"options": map[string]any{"dns_type": "any"},
+	}, http.StatusCreated, &check)
+	specs := e.h.specsFor("basalt")
+	if len(specs) != 2 || specs[0].DNSType != "A" || specs[1].DNSType != "AAAA" {
+		t.Fatalf("address lookup specs: %+v", specs)
+	}
+	for _, spec := range specs {
+		if err := checks.Validate(spec); err != nil || spec.Target != "v6.example.com." {
+			t.Fatalf("invalid agent spec: %+v, %v", spec, err)
+		}
+	}
+	read := func(want string) {
+		t.Helper()
+		admin.json(http.MethodGet, "/api/v1/checks/"+check.ID, nil, http.StatusOK, &check)
+		if check.Status != want {
+			t.Fatalf("status = %s, want %s; result %+v", check.Status, want, check.Last)
+		}
+	}
+	a := proto.CheckResult{ID: specs[0].ID, At: now.Add(-10 * time.Second), Error: "no records"}
+	aaaa := proto.CheckResult{ID: specs[1].ID, At: now.Add(-9 * time.Second), OK: true, Answer: []string{"2001:db8::1"}}
+	e.h.checkResults(ctx, "basalt", []proto.CheckResult{a})
+	read("pending")
+	e.h.checkResults(ctx, "basalt", []proto.CheckResult{a, aaaa})
+	read("up")
+	if check.Last == nil || !slices.Equal(check.Last.Answer, aaaa.Answer) {
+		t.Fatalf("IPv6 answer: %+v", check.Last)
+	}
+	aaaa.OK, aaaa.Answer, aaaa.Error = false, nil, "no records"
+	for i, want := range []string{"pending", "down"} {
+		a.At = now.Add(time.Duration(-8+i*2) * time.Second)
+		e.h.checkResults(ctx, "basalt", []proto.CheckResult{a, aaaa})
+		if i == 0 {
+			read("up")
+		}
+		aaaa.At = a.At.Add(time.Second)
+		e.h.checkResults(ctx, "basalt", []proto.CheckResult{a, aaaa})
+		e.h.checkResults(ctx, "basalt", []proto.CheckResult{a, aaaa})
+		read(want)
+	}
+	admin.json(http.MethodPatch, "/api/v1/checks/"+check.ID, map[string]any{"options": map[string]any{}}, http.StatusOK, &check)
+	if specs := e.h.specsFor("basalt"); len(specs) != 1 || specs[0].DNSType != "" {
+		t.Fatalf("default lookup specs: %+v", specs)
+	}
+}
+
+func TestAlertHistoryCanIncludeAlertsOpenAtStart(t *testing.T) {
+	e, admin := adminEnv(t, nil)
+	e.enroll(admin, "basalt", "Lab")
+	since := e.h.now().Truncate(time.Second).Add(-30 * 24 * time.Hour)
+	before, after := since.Add(-time.Hour), since.Add(time.Hour)
+	for _, alert := range []struct {
+		id       string
+		opened   time.Time
+		resolved *time.Time
+	}{
+		{"al_old_resolved", since.Add(-10 * time.Hour), &before},
+		{"al_old_open", since.Add(-9 * time.Hour), nil},
+		{"al_resolved_on_boundary", since.Add(-8 * time.Hour), &since},
+		{"al_new_open", after, nil},
+	} {
+		state := rules.AlertOpen
+		if alert.resolved != nil {
+			state = rules.AlertResolved
+		}
+		if err := e.h.store.InsertAlert(context.Background(), rules.Alert{
+			ID: alert.id, Key: alert.id, Server: "basalt", Rule: rules.RuleSpaceHigh, Severity: rules.SevWarning,
+			State: state, OpenedAt: alert.opened, ResolvedAt: alert.resolved,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for field, want := range map[string][]string{
+		"since":          {"al_new_open"},
+		"overlaps_since": {"al_new_open", "al_resolved_on_boundary", "al_old_open"},
+	} {
+		q := url.Values{"state": {"all"}, "server": {"basalt"}, field: {since.Format(time.RFC3339)}}
+		var got []struct{ ID string }
+		admin.json(http.MethodGet, "/api/v1/alerts?"+q.Encode(), nil, http.StatusOK, &got)
+		ids := make([]string, 0, len(got))
+		for _, a := range got {
+			ids = append(ids, a.ID)
+		}
+		if !slices.Equal(ids, want) {
+			t.Fatalf("%s: got %v, want %v", field, ids, want)
+		}
+	}
 }
 
 func TestWatchLimitsPersistAndClearAtTheirScope(t *testing.T) {
