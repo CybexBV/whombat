@@ -105,6 +105,10 @@ test('a test Whombat: look and fix until stopped, what Support did, the command 
     timeout: 20_000,
   });
   const log = card.getByRole('list', { name: 'What support did' });
+  // One block per visit: who came and how much; its older steps fold behind Show all.
+  await expect(log.getByText(/Look and fix · \d+ steps/)).toBeVisible();
+  const all = log.getByRole('button', { name: /^Show all \d+ steps$/ });
+  if (await all.isVisible()) await all.click();
   await expect(log.getByText('Support connected')).toBeVisible();
   await expect(log.getByText('Read the logs of voice')).toBeVisible();
   await expect(log.getByText('Restarted voice')).toBeVisible();

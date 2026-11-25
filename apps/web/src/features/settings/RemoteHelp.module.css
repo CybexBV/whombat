@@ -152,7 +152,10 @@
   font-size: 14.5px;
 }
 
-/* WHAT SUPPORT DID: one line per step, its time in mono, Show at the end. */
+/*
+ * WHAT SUPPORT DID: one block per visit — an icon tile, who and “Now”, when · how much · how many steps — over its
+ * last steps (each its time in mono), then Command line and Show all; visits apart by a line.
+ */
 .visits {
   display: flex;
   flex-direction: column;
@@ -166,7 +169,7 @@
   color: var(--mut);
 }
 
-.log {
+.visitList {
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -174,12 +177,103 @@
   list-style: none;
 }
 
+.visit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--line);
+}
+
+.visit:first-child {
+  padding-top: 4px;
+  border-top: none;
+}
+
+.visitHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.visitIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-button);
+  background: var(--sf2);
+  color: var(--ink2);
+}
+
+/* A visit still going: in the green of “connected”, as on the phone. */
+.visitIcon[data-ongoing] {
+  background: color-mix(in srgb, var(--ok) 14%, var(--sf));
+  color: var(--ok);
+}
+
+.visitWho {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.now {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ok) 14%, var(--sf));
+  color: var(--ok);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.visitMeta {
+  color: var(--mut);
+  font-size: 12.5px;
+}
+
+/* The steps and the links under the words, past the icon. */
+.log {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 0 0 48px;
+  list-style: none;
+}
+
+.visitActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+  padding-left: 48px;
+}
+
+/* The link look puts no gap between an icon and its words. */
+.visitActions > button {
+  gap: 6px;
+}
+
+.more {
+  align-self: flex-start;
+}
+
 .step {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding: 8px 0;
-  border-top: 1px solid var(--line);
+  padding: 3px 0;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--ink2);
@@ -210,11 +304,6 @@
   background: var(--sf2);
   color: var(--ink);
   font: 400 12.5px var(--font-mono);
-}
-
-.show {
-  flex: none;
-  margin-left: auto;
 }
 
 /* The command line's record in the modal. */
