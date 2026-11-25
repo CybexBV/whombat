@@ -2,8 +2,8 @@ import { replaceEqualDeep } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BrandMark } from '@whombat/brand/react';
 import type { ThingRenameTarget, ThingRow } from '@whombat/client';
-import { SETTINGS_GROUP_TEXT, thingRenameTarget } from '@whombat/client';
-import { useRenameThing } from '@whombat/client/react';
+import { SETTINGS_GROUP_TEXT, TEAM_REPORT_WORDS, thingRenameTarget } from '@whombat/client';
+import { useRenameThing, useTeamReportsEntry } from '@whombat/client/react';
 import {
   Folder,
   Inbox,
@@ -458,7 +458,8 @@ function useThingRename(burrow: string): ThingRenaming {
 /**
  * The person at the bottom: their face and name, a button that opens the account menu above it — their own settings
  * (Profile, Notifications, and on a box Devices and Shared links), then the app on a phone, notifications in this
- * browser, the theme, signing out and the version.
+ * browser, the theme, Report a problem or idea (where the person may send one or has some), signing out and the
+ * version.
  */
 function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
@@ -467,6 +468,8 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
   const { theme, toggleTheme } = useTheme();
   const { me } = model;
   const you = useYouParts(model.burrowSlug);
+  // Asked with the sidebar, not when the menu opens, so the line is there at once (and nothing moves under the pointer).
+  const teamReports = useTeamReportsEntry(model.burrowSlug);
   const close = () => setOpen(false);
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && open) {
@@ -516,6 +519,12 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
           <button type="button" className={styles.menuItem} onClick={toggleTheme}>
             {theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           </button>
+          {/* Reports to the Whombat Team (Whombat team-reports.md TR-01): only where one can be sent or some exist. */}
+          {teamReports ? (
+            <Link to="/reports" className={styles.menuItem} onClick={close} data-account-reports="">
+              {TEAM_REPORT_WORDS.entry}
+            </Link>
+          ) : null}
           <button type="button" className={styles.menuItem} onClick={onSignOut}>
             Sign out
           </button>
