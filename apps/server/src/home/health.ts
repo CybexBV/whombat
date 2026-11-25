@@ -39,8 +39,8 @@ import { recordFromCheck, runCatalogCheck } from '../connections/checks';
 import { credentialFor } from '../connections/credentials';
 import { confirmRefusedCredential } from '../connections/refused';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/types';
-import { sweepUptimeChecks, uptimePoint } from '../connections/uptime';
-import { burrows, catalogConnections } from '../db/schema/index';
+import { sweepUptimeChecks, uptimeHttpError, uptimePoint } from '../connections/uptime';
+import { burrows, catalogConnections, thingCauses } from '../db/schema/index';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
@@ -332,15 +332,14 @@ export async function checkConnectionHealth(
       const seen = uptimeSeen(outcome.uptime, row, now, await zoneOf(services, row));
       if (!outcome.unseen) points = seen.points;
       glance = { ...seen.glance, status: outcome.unseen ? 'unknown' : 'ok' };
-      // A probe that is down doesn't answer, also while a cause quiets its line: the causes job reads this, so the
-      // cause holds instead of ending the next minute.
-      const down = !outcome.unseen && outcome.uptime?.status === 'down' && row.fields.kind !== 'heartbeat';
-      if (down) glance.outcome = 'offline';
+      // The causes job needs the raw outcome even while a cause quiets the line.
+      if (!outcome.unseen && outcome.uptime?.status === 'down' && row.fields.kind !== 'heartbeat')
+        glance.outcome = uptimeHttpError(outcome.uptime) ? 'error' : 'offline';
       // What it runs on, as for any connection; kept while it doesn't answer or can't be checked, since a stopped
       // machine isn't found by its address.
       const at = await lookupMachine(services, row);
       if (at) glance.machine = { serverId: at.serverId, guestId: at.guestId, name: at.runsOn.name };
-      else if ((at === undefined || down || outcome.unseen) && previous?.machine)
+      else if ((at === undefined || glance.outcome === 'offline' || outcome.unseen) && previous?.machine)
         glance.machine = previous.machine;
       lines = seen.notices ?? [];
       skipped = seen.skipped ?? [];
@@ -436,10 +435,12 @@ export async function checkConnectionHealth(
     }
   }
   const [quiet, states] = await kept;
+  const answeredWithError = row.catalogId === UPTIME_ID && glance.outcome === 'error';
   const result = applyQuiet({
     lines,
     quiets: quiet.quiets,
     ...notWatched(quiet),
+    ...(answeredWithError && quiet.cause?.kind === 'down' ? { cause: null } : {}),
     states,
     now,
     pass: true,
@@ -475,11 +476,27 @@ export async function checkConnectionHealth(
       .where(
         and(
           eq(catalogConnections.id, row.id),
-          row.catalogId === UPTIME_ID ? eq(catalogConnections.updatedAt, row.updatedAt) : undefined,
+          row.catalogId === UPTIME_ID
+            ? and(
+                eq(catalogConnections.updatedAt, row.updatedAt),
+                eq(catalogConnections.credentialVersion, row.credentialVersion),
+              )
+            : undefined,
         ),
       )
       .returning({ id: catalogConnections.id });
     if (!updated) return;
+    // An HTTP response ends a hold for not answering even if the causes job has yet to run.
+    if (answeredWithError)
+      await session.tx
+        .delete(thingCauses)
+        .where(
+          and(
+            eq(thingCauses.ownerId, burrowId),
+            eq(thingCauses.thingId, thing),
+            eq(thingCauses.kind, 'down'),
+          ),
+        );
     await recordPoints(session.tx, row.id, now, { ...points, [UP_KEY]: up });
     await writePass(session.tx, burrowId, thing, result);
     if (!changed) return;

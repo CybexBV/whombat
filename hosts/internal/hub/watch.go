@@ -405,7 +405,10 @@ func validateWatchLimit(limits map[watchKey]float64, key watchKey, value *float6
 		}
 		high, custom := find(warning, entity)
 		if !custom {
-			continue
+			if temperature {
+				continue
+			}
+			high = rules.WearWarnPct
 		}
 		serious, custom := find(critical, entity)
 		if !custom {

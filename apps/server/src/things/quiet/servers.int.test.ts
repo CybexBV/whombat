@@ -12,6 +12,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   catalogConnections,
+  connectionPoints,
   principals,
   quietMaintenanceLeft,
   quietWindows,
@@ -29,7 +30,8 @@ import { IDS } from '../../seed/test-world';
 import { useTestServer } from '../../test/harness';
 import { sessionFor } from '../../test/tokens';
 import { useVaultNetForTests } from '../../vault/net';
-import { passCauses } from '../causes';
+import { keepCauses, passCauses } from '../causes';
+import { UP_KEY } from '../points';
 import { endThingQuiet } from './window-service';
 import { keepQuietForWork, sweepQuietWindows, workEnded } from './window-work';
 
@@ -289,7 +291,7 @@ describe('End now and Whombat’s own work', () => {
 
     // The work's end still finds Whombat's window.
     const at = t.services.clock();
-    await workEnded(t.services, 'update:basalt/task-4', at);
+    await workEnded(t.services, t.burrowId, 'update:basalt/task-4', at);
     expect((await workWindow('update:basalt/task-4'))?.endsAt.getTime()).toBe(at.getTime() + 15 * 60_000);
 
     // The toast's Undo takes back that change only: the person's window ends when it did before, Whombat's stays.
@@ -388,7 +390,7 @@ describe('End now and Whombat’s own work', () => {
     expect(await t.services.db.select().from(quietMaintenanceLeft)).toEqual([]);
   });
 
-  it('a work window of another Whombat with the same work is left alone', async () => {
+  it('keeps both work windows when two Whombats use the same work key', async () => {
     const work = 'update:basalt/task-7';
     const at = t.services.clock();
     const theirs = {
@@ -413,9 +415,17 @@ describe('End now and Whombat’s own work', () => {
       work,
       expectedMs: 60 * 60_000,
     });
-    expect(await workWindow(work)).toMatchObject({ ownerId: 'burrow-other', endsAt: theirs.endsAt });
-    // No maintenance window is left on the hub for a window that wasn’t written.
-    expect(fake.maintenance).toEqual([]);
+    const windows = async () => t.services.db.select().from(quietWindows).where(eq(quietWindows.work, work));
+    const before = await windows();
+    expect(before).toHaveLength(2);
+    const ours = before.find((w) => w.ownerId === t.burrowId);
+    expect(ours?.maintenanceId).toBeTruthy();
+    expect(fake.maintenance.map((m) => m.id)).toEqual([ours?.maintenanceId]);
+
+    await workEnded(t.services, t.burrowId, work, at);
+    const after = await windows();
+    expect(after.find((w) => w.ownerId === theirs.ownerId)).toMatchObject(theirs);
+    expect(after.find((w) => w.ownerId === t.burrowId)?.endsAt.getTime()).toBe(at.getTime() + 15 * 60_000);
   });
 
   it('a replaced maintenance window the hub didn’t remove is given back by the sweep', async () => {
@@ -452,7 +462,7 @@ describe('End now and Whombat’s own work', () => {
     const heard = homeChanged();
     try {
       const at = t.services.clock();
-      await workEnded(t.services, 'update:basalt/task-3', at);
+      await workEnded(t.services, t.burrowId, 'update:basalt/task-3', at);
       expect(heard.parts.at(-1)).toContain('things');
       const [w] = await t.services.db
         .select()
@@ -496,7 +506,7 @@ describe('End now and Whombat’s own work', () => {
 });
 
 describe('one cause with the real hosts service', () => {
-  it('a website check down while the internet is down stays down because of it', async () => {
+  it('groups an unreachable website under a name lookup outage until the website answers', async () => {
     const added = await call('POST', '/connections', {
       catalogId: 'uptime',
       signIn: 'none',
@@ -524,7 +534,7 @@ describe('one cause with the real hosts service', () => {
     });
     await t.services.db
       .insert(wayOutOutages)
-      .values({ id: 'wo_servers_test', step: 'internet', startedAt: new Date(at.getTime() - 5 * 60_000) });
+      .values({ id: 'wo_servers_test', step: 'names', startedAt: new Date(at.getTime() - 5 * 60_000) });
 
     expect((await checkConnectionHealth(t.services, await load(), at))?.outcome).toBe('offline');
     await passCauses(t.services, at);
@@ -542,9 +552,33 @@ describe('one cause with the real hosts service', () => {
     const held = await checkConnectionHealth(t.services, await load(), later);
     expect(held?.outcome).toBe('offline');
     await passCauses(t.services, later);
-    expect(await cause()).toMatchObject({ causeThing: 'box:network' });
+    const keptCause = await cause();
+    expect(keptCause).toMatchObject({ causeThing: 'box:network' });
     const outage = (await needsYou(t.services, await viewer())).find((i) => i.ref.kind === 'way_out');
     expect(outage?.body).toContain('Shop');
+
+    const answered = new Date(at.getTime() + 5 * 60_000);
+    check.last = { at: answered.toISOString(), ok: false, status_code: 503 };
+    expect(await checkConnectionHealth(t.services, await load(), answered)).toMatchObject({
+      outcome: 'error',
+      status: 'bad',
+    });
+    expect(await cause()).toBeUndefined();
+    if (!keptCause) throw new Error('Missing the previous cause');
+    await keepCauses(t.services, t.burrowId, new Map([[keptCause.thingId, keptCause]]), answered);
+    expect(await cause()).toBeUndefined();
+    await passCauses(t.services, answered);
+    expect(await cause()).toBeUndefined();
+    const shop = (await things(t.services, await viewer(), answered)).find(
+      (item) => item.id === thingId('connection', connection.id),
+    );
+    expect(shop).toMatchObject({ status: 'bad', line: expect.stringContaining('answered with an error') });
+    expect(shop?.causedBy).toBeUndefined();
+    const points = await t.services.db
+      .select()
+      .from(connectionPoints)
+      .where(and(eq(connectionPoints.connectionId, connection.id), eq(connectionPoints.key, UP_KEY)));
+    expect(points).toContainEqual(expect.objectContaining({ value: 0, at: answered }));
   });
 
   it('leaves kept causes alone while the fleet can’t be read', async () => {

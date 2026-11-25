@@ -345,6 +345,11 @@ export function uptimeUnseen(check: UptimeHubCheck | null): boolean {
   return !check || check.stale === true || check.status === 'pending' || check.status === 'disabled';
 }
 
+/** Whether a failed website check got an HTTP response. */
+export function uptimeHttpError(check: UptimeHubCheck | null): boolean {
+  return check?.kind === 'http' && check.status === 'down' && !!check.last?.statusCode;
+}
+
 /** For history, include a failure the hub saw even if the probe has since recovered. */
 export function uptimePoint(check: UptimeHubCheck | null): 0 | 1 | undefined {
   if (!check || check.status === 'disabled') return undefined;
@@ -357,7 +362,12 @@ export function uptimeState(check: UptimeHubCheck | null, heartbeat: boolean): s
   if (!check || check.stale) return 'Not checked';
   if (check.status === 'disabled') return 'Paused';
   if (check.status === 'up') return heartbeat ? 'Checking in' : 'Answering';
-  if (check.status === 'down') return heartbeat ? 'Check-in late' : 'Not answering';
+  if (check.status === 'down')
+    return heartbeat
+      ? 'Check-in late'
+      : uptimeHttpError(check)
+        ? 'It answered with an error'
+        : 'Not answering';
   if (check.last) return 'Waiting for another check';
   return heartbeat ? 'Waiting for its first check-in' : 'Waiting for its first check';
 }

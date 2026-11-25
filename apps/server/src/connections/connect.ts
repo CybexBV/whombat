@@ -1430,7 +1430,7 @@ async function updateConnectionRow(
     }
   }
   if (!what.length) return { row, eventId: null };
-  if (entry.id === UPTIME_ID && (set.label !== undefined || fieldsChanged)) set.glanceAt = null;
+  if (entry.id === UPTIME_ID && set.label !== undefined) set.glanceAt = null;
   const res = await applyChanges(services, viewer, row, set, what);
   if (!fieldsChanged) {
     if (set.access !== undefined)

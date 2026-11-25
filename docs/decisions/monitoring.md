@@ -55,6 +55,8 @@ Everything here keeps “What Whombat watches starts calm” (`watch-defaults.md
 | MON-35 | An hourly uptime average keeps the number of readings that went into it. The hour weighs five minutes per reading, capped at an hour. Older hourly points without a count weigh one reading. This refines MON-30. | An isolated failed read followed by a gap stands for five minutes of downtime. |
 | MON-36 | A failed read of backup storage skips the overdue check. A successful inventory with no usable backup still raises the line when a covered machine's latest attempt failed. This refines MON-33. | Whombat needs an answer from the storage to know whether there is a usable copy. |
 | MON-37 | A timed-out or failed machine lookup keeps the last mapping in the connection's glance. A completed lookup can clear the mapping when the connection answers and matches no machine. | Cause matching can still use the last machine during a slow lookup. |
+| MON-37a | Saving edits to check settings clears the previous glance and line states in the connection's commit. Home shows “Not checked yet” until the edited check has a result. | Home and delayed starts need a reading for the saved settings. |
+| MON-37b | An HTTP answer that fails the check counts as a problem on the website and as a failed reading in uptime history. Its HTTP response rules out a down cause. | A website can answer with an error during an outage of name lookups. |
 
 ## Incidents, uptime and history (MON-40…MON-59)
 
@@ -131,6 +133,7 @@ built.
 | MON-79i | **Accounts kept quiet stay kept quiet.** GitHub's and Website feedback's rows (windows, Ignore, checks switched off and on, causes) stay through the hourly sweep while that Whombat is connected to GitHub or has a feedback site; their health states, which have no owner, while any Whombat does. Home's accounts (mail, GitHub, Website feedback) carry `quietUntil` as any connection does. | Neither has a connection row, so the sweep removed their rows within the hour; Home never said an account was kept quiet. |
 | MON-79j | **Name targets that never resolved: name lookups.** With no address to try (only names, none resolved now or before) and every lookup failing, the step said is name lookups; the router still comes first when a known gateway doesn't answer either. | Nothing was tried on the internet, so blaming it said the wrong thing about an outage of name lookups. |
 | MON-79k | **An answer with an error is an answer, for the causes as for the incidents.** Only a connection that doesn't answer at all is down because of its server, its machine or the way out; one kept quiet with its server or machine is quiet with it whatever it answers. | The causes counted an error as no answer while the incidents counted it as answering, so the two disagreed on the same service. |
+| MON-79l | A planned-work key is unique within a Whombat. The work's end updates the window of that Whombat. | Two Whombats can keep their own windows for identical work keys. |
 
 ## The hosts service (MON-80…MON-89)
 
@@ -153,6 +156,7 @@ built.
 | MON-89e | A “Website or address” name lookup sets `dns_type: any`. The hub pairs fresh A and AAAA results from the chosen runner, and either family can make the lookup succeed. An unset type means A. | IPv6-only names work with agents already installed. |
 | MON-89f | The hub stores dual-family DNS checks with `dns_type: A` in the options and keeps the dual-family setting in the additive `dns_any_address` column. It converts saved `any` options on opening the database. | A hub rolled back to the previous version can read the same check and run it as an A lookup. |
 | MON-89g | A successful platform report showing a guest running clears its planned-stop note. | A crash shortly after the guest comes back from a planned restart can open its own alert. |
+| MON-89h | An SSD wear critical limit must exceed the effective warning, including the default of 75 %. Lowering the warning first allows a lower critical limit. Temperature defaults continue to scale with the sensor. | SSD wear uses the warning shown in the watch settings. |
 
 ## Automations and one-time watches (MON-90…MON-99)
 
@@ -172,3 +176,4 @@ built.
 | MON-99b | **A delayed `down` start needs the thing still down at its deadline** (its look is `down`, not answering) as well as its check counting; a delayed `problem` start needs its check still bad on the thing, not only amber. | A connection that went from unreachable to answering with an HTTP error kept the same check, so “down for 10 minutes” ran on something that answered. |
 | MON-99c | **While thing automations wait for the next update, nothing claims or starts for them.** The trigger scan claims no incident and starts no run from `thing.*` events, and keeps the delayed starts already waiting; the run advancer holds runs of them like Find My's; `automation_read`'s guide leads with “Automations that start when something goes down or comes back come with the next update.” | A box whose release to go back to had Find My's migrations but not these advanced such runs and claimed incidents. |
 | MON-99d | **A thing whose dot is bad but answers counts as answering** for a watch waiting for it (`observedOf('bad')` is `up`). | Waiting for a return, “bad” (a critical line on a thing that answers) said nothing, so a watch on a thing down because of its server waited past its return. |
+| MON-99e | A delayed start uses the incident watcher's unread result for the thing and its check. It tries again each minute for up to an hour after its original deadline. | The runner or a service reader can miss a report while the fault continues. The start has a bounded time to get a fresh reading. |

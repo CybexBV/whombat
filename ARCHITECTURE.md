@@ -850,8 +850,9 @@ published automation details read their definition and publisher from one versio
   claim survives a restart and runs only while the incident is still open, independent and not kept quiet at its
   deadline (a window that came and went meanwhile doesn't count), and, as the
   incident watcher reads the thing then, a `down` one only while it still doesn't answer and a `problem` one only while
-  the check it waited on (the trigger's, else the event's) is still bad; a thing it can't read then is asked again a
-  minute later. Until the release a box would go back to knows them (`0027_incident_automation_watches` in
+  the check it waited on (the trigger's, else the event's) is still bad. If the thing or its check is unread, the
+  engine reads it again each minute for up to an hour past the deadline. Until the release a box would go back to
+  knows them (`0027_incident_automation_watches` in
   `runtime_releases`), such automations aren't made, events claim no incident and start no run, and their runs wait. Webhook triggers are refused: nothing from outside reaches the box. Runs
   are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
   start nothing.
@@ -1476,9 +1477,11 @@ Setup and operation: `docs/github.md`.
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
   from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.
+  Saving edited check settings clears its result, line states and cause in the same commit. Home shows “Not checked
+  yet” until the next reading.
   Name lookups succeed when the chosen runner finds an IPv4 or IPv6 address. The hub stores the dual-family
   setting separately from the A record type a rolled-back hub reads. The health pass reads the current result,
-  counts any probes the hub recorded as failed since the last pass in uptime history,
+  counts any probes the hub recorded as failed since the last pass in uptime history, including HTTP errors,
   and repairs a missing check. Check again reports the saved check's current result. Disconnect removes the connection
   and tries to delete its hub check. The health pass removes checks whose connection is gone. Its hub id is kept on the connection
   and the hub knows its owner, so only the connection's own lines reach Inbox and Watch. The assistant can ask the
@@ -1551,7 +1554,8 @@ Setup and operation: `docs/github.md`.
   (`things.setWatchLimit` or `watch_checks` on the person's word). An item can have its own limit. The hosts service
   keeps the limits with the server's watch settings and applies changes to its latest readings. Alerts that fall
   below their new limit resolve right away. Temperature and SSD wear warnings must use a lower limit than their
-  critical alerts. Whombat signs the change with Undo.
+  critical alerts. SSD wear uses its 75 % default warning when there is no custom warning, and temperature defaults
+  follow their sensor. Whombat signs the change with Undo.
   Inbox items carry the check behind them (`watch`) for *Stop watching this*.
   [on-purpose.md](docs/decisions/on-purpose.md)
 - **Keep quiet for a while** (`things/quiet/windows.ts`, `window-service.ts`, `window-commands.ts`,
@@ -1570,8 +1574,8 @@ Setup and operation: `docs/github.md`.
   (`NoticeQuiet.held`, no longer asking for attention, out of the Inbox), and Undo on one ends the window. Whombat's own
   restarts (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends)
   keep the server or machine quiet the same way, in a window of their own beside the person's, noted “Whombat is
-  updating it” (the same work again moves its end; a later end gets a new maintenance window); End now ends every
-  window holding the thing. GitHub's and Website feedback's quiet rows stay through the hourly sweep while they are
+  updating it” (the same work again on this Whombat moves its end; a later end gets a new maintenance window); End now
+  ends every window holding the thing. GitHub's and Website feedback's quiet rows stay through the hourly sweep while they are
   connected. Every window write goes through the commit pipeline, and
   Home hears when a work's end moves or a window runs out (the minute's sweep).
   [monitoring.md](docs/decisions/monitoring.md)

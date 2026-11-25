@@ -1,5 +1,11 @@
 import { UPTIME_HUB_NAME, UPTIME_HUB_RUNNER, UPTIME_KINDS, type UptimeHubCheck } from '@whombat/core';
-import { checkInCommand, readUptimeCheck, uptimeState, uptimeUnseen } from '../../../connections/uptime';
+import {
+  checkInCommand,
+  readUptimeCheck,
+  uptimeHttpError,
+  uptimeState,
+  uptimeUnseen,
+} from '../../../connections/uptime';
 import { serverLabel } from '../../../hosts/self';
 import { hostsFor } from '../../../hosts/service';
 import { POINTS_KEEP_MS, RTT_KEY, readPoints } from '../../points';
@@ -59,6 +65,7 @@ export function uptimeNotices(
     ];
 
   const out: KindNotice[] = [];
+  const answered = uptimeHttpError(check);
   if (check.status === 'down')
     out.push(
       heartbeat
@@ -79,17 +86,20 @@ export function uptimeNotices(
             id: 'down',
             tone: 'bad',
             icon: 'network',
-            title: check.last?.statusCode ? 'It answered with an error' : 'It isn’t answering',
+            title: answered ? 'It answered with an error' : 'It isn’t answering',
             check: 'uptime.down',
             nature: 'problem',
-            offline: true,
-            badge: 'Not answering',
+            ...(!answered ? { offline: true } : {}),
+            badge: answered ? 'Check failed' : 'Not answering',
             link: {
               kind: 'ask',
               label: 'Look into it',
               question: clip(`Why isn’t ${label} passing its check?`, 300),
             },
-            ignore: { lifts: 'fixed', words: 'Until it answers again.' },
+            ignore: {
+              lifts: 'fixed',
+              words: answered ? 'Until it passes its check.' : 'Until it answers again.',
+            },
           },
     );
 

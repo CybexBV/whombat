@@ -50,7 +50,7 @@ export const quietWindows = pgTable(
   (t) => [
     index('quiet_windows_thing_idx').on(t.ownerId, t.thingId),
     index('quiet_windows_ends_idx').on(t.endsAt),
-    uniqueIndex('quiet_windows_work_idx').on(t.work),
+    uniqueIndex('quiet_windows_work_idx').on(t.ownerId, t.work),
   ],
 );
 
