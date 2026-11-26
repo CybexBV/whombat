@@ -6,7 +6,9 @@
 set -euo pipefail
 checks=()
 eval "$(grep '^checks=' scripts/ci/nix-checks.sh)"
-flake="git+file://$(git rev-parse --show-toplevel)?rev=$(scripts/ci/eval-commit.sh)&dir=$(git rev-parse --show-prefix | sed 's|/$||')"
+# A shallow copy (fast-test's on the build server) is fine: the flake reads its commit's date, never how many came before.
+shallow=; [ "$(git rev-parse --is-shallow-repository)" = false ] || shallow='&shallow=1'
+flake="git+file://$(git rev-parse --show-toplevel)?rev=$(scripts/ci/eval-commit.sh)&dir=$(git rev-parse --show-prefix | sed 's|/$||')$shallow"
 set --
 for check in "${checks[@]}"; do
   [ "$check" = eval-aarch64 ] || set -- "$@" "$flake#checks.x86_64-linux.$check"

@@ -53,14 +53,16 @@
     },
     {
       "name": "server-int-all",
-      "about": "Every server integration test, when the database, commit pipeline or test harness changed: in a throwaway Postgres of this run's own, so it neither waits for nor fails on the connections other suites hold in the shared one (which allows 100).",
+      "about": "Every server integration test, when the database, commit pipeline or test harness changed: on the build server, with a throwaway Postgres inside the run's container (scripts/ci/fast-test-postgres.sh), so it neither waits for nor fails on the connections other suites hold in the shared one (which allows 100).",
       "when": [
         "apps/server/src/{db,commit,test,seed}/**",
         "apps/server/vitest.int.config.ts",
         "apps/server/drizzle/**"
       ],
       "timeout": 20,
-      "run": "fast-test with-postgres --user whombat --password whombat --db whombat -- pnpm test:server",
+      "where": "beast",
+      "run": "scripts/ci/fast-test-postgres.sh pnpm test:server",
+      "inFull": false,
       "retry": false
     },
     {
@@ -156,7 +158,7 @@
     },
     {
       "name": "appliance-nix-eval",
-      "about": "Evaluates the appliance's Nix checks without building them (about 2 minutes): for a change to the Nix files, and to the few files of the other folders that Nix reads while it evaluates (the runtime's version, the Hermes pin, the schema's numbers, Whombat Helper).",
+      "about": "Evaluates the appliance's Nix checks without building them (about 2 minutes, in The Beast's Nix container): for a change to the Nix files, and to the few files of the other folders that Nix reads while it evaluates (the runtime's version, the Hermes pin, the schema's numbers, Whombat Helper).",
       "when": [
         "appliance/nix/**",
         "appliance/flake.nix",
@@ -173,7 +175,8 @@
         "appliance/nix/packages/hosts/manifest-check/**/*.go"
       ],
       "timeout": 15,
-      "run": "cd appliance && scripts/ci/nix-eval.sh"
+      "where": "beast-nix",
+      "run": "cd appliance && scripts/ci/nix-tools.sh scripts/ci/nix-eval.sh"
     },
     {
       "name": "appliance-source-matrix",
@@ -184,7 +187,8 @@
         "appliance/scripts/ci/source-matrix.sh"
       ],
       "timeout": 20,
-      "run": "appliance/scripts/ci/source-matrix.sh --nothing",
+      "where": "beast-nix",
+      "run": "cd appliance && scripts/ci/nix-tools.sh scripts/ci/source-matrix.sh --nothing",
       "retry": false
     },
     {
