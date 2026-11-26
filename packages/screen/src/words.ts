@@ -12,6 +12,8 @@ export const SCREEN_WORDS = {
     work: { name: '{assistant}’s work' },
     coming: { name: 'Coming up' },
     done: { name: 'Done today' },
+    weather: { name: 'Weather' },
+    news: { name: 'News' },
   },
   pill: { one: '1 thing needs you', many: '{n} things need you' },
   locked: { ask: '{assistant} has a question', hidden: 'Unlock to see it' },

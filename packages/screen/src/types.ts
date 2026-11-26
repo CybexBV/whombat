@@ -180,6 +180,45 @@ export interface DeskBoardView extends DeskViewBase {
   empty?: string | undefined;
 }
 
+export interface DeskWeatherHour {
+  at: string;
+  temp: number;
+  symbol: string;
+  rainMm?: number | undefined;
+}
+
+export interface DeskWeatherDay {
+  date: string;
+  high: number;
+  low: number;
+  symbol: string;
+  rainMm?: number | undefined;
+}
+
+export interface DeskWeatherView extends DeskViewBase {
+  kind: 'weather';
+  place?: string | undefined;
+  unit: 'C' | 'F';
+  now?:
+    | {
+        temp: number;
+        symbol: string;
+        text: string;
+        wind?: string | undefined;
+        feels?: number | undefined;
+      }
+    | undefined;
+  today?:
+    | { high: number; low: number; rainMm?: number | undefined; rainChance?: number | undefined }
+    | undefined;
+  hours: DeskWeatherHour[];
+  days: DeskWeatherDay[];
+  sun?:
+    | { rise?: string | undefined; set?: string | undefined; polar?: 'day' | 'night' | undefined }
+    | undefined;
+  credit: string;
+}
+
 export type DeskWidgetView =
   | DeskFiguresView
   | DeskListView
@@ -189,7 +228,8 @@ export type DeskWidgetView =
   | DeskServerView
   | DeskTextView
   | DeskPhotoView
-  | DeskBoardView;
+  | DeskBoardView
+  | DeskWeatherView;
 
 export type DeskWidgetViewKind = DeskWidgetView['kind'];
 

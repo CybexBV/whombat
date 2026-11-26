@@ -27,6 +27,14 @@ const both = {
     (x: Mine.DeskWidgetView): Core.DeskWidgetView => x,
   ],
   image: [(x: Core.DeskImage): Mine.DeskImage => x, (x: Mine.DeskImage): Core.DeskImage => x],
+  weatherHour: [
+    (x: Core.DeskWeatherHour): Mine.DeskWeatherHour => x,
+    (x: Mine.DeskWeatherHour): Core.DeskWeatherHour => x,
+  ],
+  weatherDay: [
+    (x: Core.DeskWeatherDay): Mine.DeskWeatherDay => x,
+    (x: Mine.DeskWeatherDay): Core.DeskWeatherDay => x,
+  ],
   item: [
     (x: Core.DeskAttentionItem): Mine.DeskAttentionItem => x,
     (x: Mine.DeskAttentionItem): Core.DeskAttentionItem => x,

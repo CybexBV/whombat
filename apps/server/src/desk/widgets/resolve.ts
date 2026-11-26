@@ -456,6 +456,8 @@ export function trimView(
       return { kind: 'photo', ...base, items: [] };
     case 'board':
       return { kind: 'board', ...base, items: [] };
+    case 'weather':
+      return { kind: 'weather', ...base, unit: v.unit, hours: [], days: [], credit: v.credit };
   }
 }
 
