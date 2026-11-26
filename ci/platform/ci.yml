@@ -73,6 +73,7 @@ jobs:
           fi
 
   # The apps' builds and browser journeys, as whombat-app's own check ran them before it moved here.
+  # ci-platform runs it for pull requests and every night on main: fast-test and public-ci don't run the journeys.
   app:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
