@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { testContext } from './test-context';
+import { runsInPod } from './turn/sandbox';
 import { agentWorkFolder, prepareCwd } from './workspace';
 
 let root: string;
@@ -56,5 +57,46 @@ describe('the work folder (AC-24)', () => {
     const outside = await prepare({ commands: null, outside: true });
     expect(outside.cwd).not.toBe(dir);
     expect(outside.workFolder).toBeUndefined();
+  });
+});
+
+describe('a turn in the person’s pod without commands (a Looks ahead check)', () => {
+  // The pod mounts the agent's home and the workspaces, not the runner's scratch space: a folder there doesn't exist for
+  // Hermes, the pod refuses the turn, and every Looks ahead check failed so.
+  const ahead = () => {
+    const base = testContext({ commands: null });
+    return { ...base, dispatch: { ...base.dispatch, trigger: 'ahead' as const } };
+  };
+  const options = (pod: boolean) => ({
+    root: join(root, 'workspaces'),
+    checkout: true,
+    host: host(),
+    ...(pod ? { pod } : {}),
+  });
+
+  it('works in the agent’s work folder there, which stays after the turn', async () => {
+    const dir = agentWorkFolder(join(root, 'agent', 'home'));
+    const inPod = await prepareCwd(ahead(), options(true));
+    expect(inPod.cwd).toBe(dir);
+    await inPod.release();
+    expect(statSync(dir).isDirectory()).toBe(true);
+    // Outside a pod it keeps its empty folder in the runner's scratch space, removed after the turn.
+    const alone = await prepareCwd(ahead(), options(false));
+    expect(alone.cwd.startsWith(join(root, 'runner-tmp', 'scratch'))).toBe(true);
+    await alone.release();
+    expect(() => statSync(alone.cwd)).toThrow();
+  });
+
+  it('is in the pod only for the person’s turns on a provider with pods', () => {
+    const pods = { pods: {} as never };
+    const hermes = { podNeeds: async () => null };
+    expect(runsInPod(pods, hermes, ahead())).toBe(true);
+    expect(runsInPod({}, hermes, ahead())).toBe(false);
+    expect(runsInPod(pods, {}, ahead())).toBe(false);
+    expect(runsInPod(pods, hermes, testContext({ outside: true }))).toBe(false);
+    const base = testContext();
+    expect(runsInPod(pods, hermes, { ...base, dispatch: { ...base.dispatch, trigger: 'feedback' } })).toBe(
+      false,
+    );
   });
 });
