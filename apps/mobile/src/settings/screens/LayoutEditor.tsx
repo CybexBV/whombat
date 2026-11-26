@@ -4,7 +4,8 @@
  * screen's name with what it is, its grid and pages, and *Not saved yet* while it isn't; the pages as chips with *+
  * Page*; *Rearranged for 10 × 6.* when the page has no layout of its own for this shape; the grid as labelled tiles
  * (touch one for its sheet: Move, Size, its settings, Remove); what didn't fit; *Add a widget* (a sheet) and *Try on
- * the screen*; then THIS PAGE (its name, its place, Delete page) and THIS SCREEN (Size, Pages turn). Everything is a
+ * the screen*; then THIS PAGE (its name, its times, its place, Delete page) and THIS SCREEN (Size, Pages turn); *Ask
+ * {assistant}* beside *+ Page* starts a thread asking for a page. Everything is a
  * draft until Save (`desk.screen.update {layout, show}`; a refused layout said plainly); leaving with changes asks
  * first. The rules are `@whombat/client/desk`'s editor, the web's too; the draft around them is `draft.ts`.
  */
@@ -20,6 +21,7 @@ import {
   DESK_TURNS,
   DESK_WORDS,
   type DeskApi,
+  type DeskPageShow,
   type DeskScreenDetail,
   type DeskSize,
   type DeskTurn,
@@ -30,6 +32,8 @@ import {
   fillDeskWords,
   gridText,
   type NewWidget,
+  pageShowSaid,
+  pageWhenText,
   refusalText,
   sameLayout,
   screenLines,
@@ -46,17 +50,19 @@ import {
 } from '@whombat/client/desk/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
+import { useBurrowBase } from '../../data/BurrowProvider';
 import { TOAST_COPY, toasts } from '../../data/toast';
 import { useAgentWords } from '../../data/useAgent';
 import { Field } from '../../managed/ui';
 import { useDeskApi } from '../../managed/useDesk';
 import { useAppNavigation } from '../../navigation/hooks';
 import type { RootStackParamList } from '../../navigation/routes';
+import { NewChatSheet } from '../../screens/NewChatSheet';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { BackBar, Screen } from '../../ui/headers';
 import { KeyboardAvoidingView } from '../../ui/keyboard';
-import { Button, Chip, ErrorState, Loading, SectionLabel } from '../../ui/primitives';
+import { Button, ErrorState, Loading, SectionLabel } from '../../ui/primitives';
 import { Segmented } from '../../ui/Segmented';
 import { useBottomRoom } from '../../ui/screenBottom';
 import { Touchable } from '../../ui/Touchable';
@@ -88,6 +94,7 @@ import {
   draftNudge,
   draftOf,
   draftPage,
+  draftPageShow,
   draftRemove,
   draftRenamePage,
   draftSaved,
@@ -98,6 +105,7 @@ import {
   draftTurn,
   draftUndo,
 } from './draft';
+import { AskPageChip, PageChip, PageTimesSheet } from './PageTimes';
 import { TileGrid } from './TileGrid';
 import { didntFitLine, type KnownWidget, PHONE_SCREENS_TEXT, type TileLabel, tileLabel } from './tiles';
 import { WidgetSheet, type WidgetSheetActions } from './WidgetSheet';
@@ -137,6 +145,9 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
   const [draft, setDraft] = useState<Draft>(() => draftOf(screen));
   const [known, setKnown] = useState<Record<string, KnownWidget>>({});
   const [sheet, setSheet] = useState<'add' | 'widget' | null>(null);
+  const [timing, setTiming] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const { timeZone } = useBurrowBase();
   const [saving, setSaving] = useState(false);
   const [trying, setTrying] = useState<number | null>(null);
 
@@ -392,9 +403,9 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
             accessibilityLabel={DESK_SCREENS_TEXT.page.layout}
           >
             {draft.layout.pages.map((p, i) => (
-              <Chip
+              <PageChip
                 key={p.id}
-                label={p.name}
+                page={p}
                 active={i === draft.page}
                 onPress={() => setDraft(draftGoPage(draft, i))}
               />
@@ -406,6 +417,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
                 if (r.ok) toasts.show(M.newPage);
               }}
             />
+            <AskPageChip label={fillDeskWords(E.askPage, { assistant })} onPress={() => setAsking(true)} />
           </ScrollView>
           {page.rearranged ? (
             <View
@@ -459,6 +471,8 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
             name={pageName}
             index={draft.page}
             count={draft.layout.pages.length}
+            show={draft.layout.pages[draft.page]?.show ?? null}
+            onTimes={() => setTiming(true)}
             onRename={(name) => setDraft(draftRenamePage(draft, draft.page, name))}
             onMove={(by) => setDraft(draftMovePage(draft, draft.page, by))}
             onDelete={() => {
@@ -534,6 +548,32 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
         onAdd={addFromCatalog}
         onAddBack={addBack}
       />
+      <PageTimesSheet
+        visible={timing}
+        name={pageName}
+        show={draft.layout.pages[draft.page]?.show ?? null}
+        timeZone={timeZone}
+        onClose={() => setTiming(false)}
+        onSave={(show: DeskPageShow | null) => {
+          const next = draftPageShow(draft, draft.page, show);
+          if (!next) return E.times.noDays;
+          setDraft(next);
+          setTiming(false);
+          undoable(pageShowSaid(pageName, show ? (next.layout.pages[draft.page]?.show ?? show) : null));
+          return null;
+        }}
+      />
+      <NewChatSheet
+        visible={asking}
+        onClose={() => setAsking(false)}
+        back={screen.name}
+        initialText={fillDeskWords(E.askPageDraft, { screen: screen.name })}
+        words={{
+          title: fillDeskWords(E.askPage, { assistant }),
+          label: fillDeskWords(E.askPage, { assistant }),
+          placeholder: E.askPageField,
+        }}
+      />
     </Screen>
   );
 }
@@ -577,11 +617,16 @@ const NO_ACTIONS: WidgetSheetActions = {
   remove: () => {},
 };
 
-/** THIS PAGE: its name (kept when the field is left), Move left and Move right among the pages, Delete page. */
+/**
+ * THIS PAGE: its name (kept when the field is left), *Show at set times…* (with when it shows), Move left and Move right
+ * among the pages, Delete page.
+ */
 function PageCard({
   name,
   index,
   count,
+  show,
+  onTimes,
   onRename,
   onMove,
   onDelete,
@@ -589,6 +634,8 @@ function PageCard({
   name: string;
   index: number;
   count: number;
+  show: DeskPageShow | null;
+  onTimes: () => void;
   onRename: (name: string) => void;
   onMove: (by: -1 | 1) => void;
   onDelete: () => void;
@@ -620,6 +667,17 @@ function PageCard({
           maxLength={24}
           hint={M.pageNameHint}
         />
+        <Button
+          label={E.showAt}
+          variant="secondary"
+          onPress={onTimes}
+          accessibilityHint={show ? fillDeskWords(E.times.label, { when: pageWhenText(show) }) : undefined}
+        />
+        {show ? (
+          <Text size={13} lh={1.4} color={theme.colors.mut} style={{ marginTop: -4 }}>
+            {fillDeskWords(E.times.label, { when: pageWhenText(show) })}
+          </Text>
+        ) : null}
         {count > 1 ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button

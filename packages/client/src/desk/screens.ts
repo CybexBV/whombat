@@ -138,6 +138,7 @@ export const DESK_SCREENS_TEXT = {
     },
     askPage: 'Ask {assistant}',
     askPageDraft: 'Make a page on the {screen} screen that shows ',
+    askPageField: 'What should the page show?',
     newPage: 'A new page. Drag widgets onto it.',
     size: 'Size',
     turn: 'Pages turn',
