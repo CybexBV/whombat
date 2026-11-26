@@ -147,12 +147,13 @@ func RemoteHelpStepValid(s protocol.RemoteHelpStep) bool {
 }
 
 // SupportStateValid reports whether the support socket's state is consistent (CT-939), like supportStateValid: on prod
-// exactly a help code required and no Forever, otherwise neither; nobody connected without a grant; a grant only where
+// exactly a help code required, otherwise none and Forever allowed (a prod box root marked as a maintainer's test
+// Whombat allows Forever too, RH-17); nobody connected without a grant; a grant only where
 // available; a help code exactly when required; Forever only where allowed; each visit connected once. Validate the
 // JSON first.
 func SupportStateValid(s SupportState) bool {
 	prod := s.Environment == SupportEnvironmentProd
-	if s.HelpCodeRequired != prod || s.ForeverAllowed == prod {
+	if s.HelpCodeRequired != prod || (!prod && !s.ForeverAllowed) {
 		return false
 	}
 	seen := make(map[string]bool, len(s.Connected))

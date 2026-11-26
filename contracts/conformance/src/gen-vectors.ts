@@ -1656,6 +1656,8 @@ function supportStates(): SupportState[] {
     { ...prod, foreverAllowed: true, grant: { ...grant, helpCode: 'KQ72MX' } },
     { ...prod, grant: { ...grant, helpCode: null } },
     { ...prod, grant: { ...grant, helpCode: 'KQ72MX', until: null } },
+    // A maintainer's test Whombat on the prod image (RH-17): Forever allowed, the help code still required.
+    { ...prod, foreverAllowed: true, grant: { ...grant, helpCode: 'KQ72MX', until: null } },
     { ...base, grant: { ...grant, helpCode: 'KQ72MX' } },
     { ...base, grant: null },
     { ...base, available: false },

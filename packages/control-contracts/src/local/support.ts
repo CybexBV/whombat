@@ -233,11 +233,12 @@ export function supportEventValid(e: SupportEvent): boolean {
 /**
  * What the schema can't say of a state (Go `local.SupportStateValid`), as `remoteHelpStateValid`: nobody connected
  * without a grant, a grant only where `available`, a help code exactly when required, Forever only where allowed, each
- * visit connected once; and on `prod` exactly a help code required (RH-05) and no Forever (RH-03).
+ * visit connected once; on `prod` exactly a help code required (RH-05), elsewhere Forever always allowed (RH-03). A prod
+ box may allow Forever too: one root marked as a maintainer's test Whombat (RH-17).
  */
 export function supportStateValid(s: SupportState): boolean {
   const prod = s.environment === 'prod';
-  if (s.helpCodeRequired !== prod || s.foreverAllowed === prod) return false;
+  if (s.helpCodeRequired !== prod || (!prod && !s.foreverAllowed)) return false;
   if (new Set(s.connected.map((c) => c.visitId)).size !== s.connected.length) return false;
   if (s.grant === null) return s.connected.length === 0;
   if (!s.available) return false;

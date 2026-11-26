@@ -96,8 +96,12 @@ describe('the state (CT-939)', () => {
     expect(supportStateValid({ ...local, grant: null, connected: [] })).toBe(true);
   });
 
-  it('keeps Forever off and the help code on for customers', () => {
-    expect(supportStateValid({ ...prod, foreverAllowed: true })).toBe(false);
+  it('keeps the help code on for every prod box, Forever only on a marked one', () => {
+    // A maintainer's test Whombat on the prod image (RH-17): Forever, and still the help code.
+    const forever = { ...(prod.grant as NonNullable<SupportState['grant']>), until: null };
+    expect(supportStateValid({ ...prod, foreverAllowed: true, grant: forever })).toBe(true);
+    expect(supportStateValid({ ...prod, foreverAllowed: true })).toBe(true);
+    expect(supportStateValid({ ...prod, grant: forever })).toBe(false);
     expect(supportStateValid({ ...prod, helpCodeRequired: false })).toBe(false);
     expect(supportStateValid({ ...local, helpCodeRequired: true })).toBe(false);
     expect(supportStateValid({ ...local, environment: 'dev' })).toBe(true);
