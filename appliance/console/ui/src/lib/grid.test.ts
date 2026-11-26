@@ -233,6 +233,51 @@ describe('the screen of widgets as the page reads it', () => {
     });
   });
 
+  it('reads a row’s limits, its mark and its note (Fusebox’s subscriptions), and drops what isn’t right', () => {
+    const v = parseView({
+      kind: 'list',
+      id: 'w_subs',
+      title: 'Subscriptions',
+      rows: [
+        {
+          title: 'work@example.com',
+          detail: 'Claude · Ultra',
+          meta: 'Working',
+          note: 'used 2 min ago',
+          mark: 'claude',
+          progress: 92,
+          meters: [
+            { key: '5H', pct: 3, text: '3 % used' },
+            { key: 'WEEK', pct: 92, text: '92 % used', reset: 'resets 2 Dec', tone: 'warn' },
+            { pct: 140, text: 'too much' },
+            { pct: 5 },
+          ],
+        },
+        { title: 'old@example.com', mark: 'Not A Mark', meters: 'none' },
+      ],
+    });
+    expect(v).toEqual({
+      kind: 'list',
+      id: 'w_subs',
+      title: 'Subscriptions',
+      rows: [
+        {
+          title: 'work@example.com',
+          detail: 'Claude · Ultra',
+          meta: 'Working',
+          note: 'used 2 min ago',
+          mark: 'claude',
+          progress: 92,
+          meters: [
+            { key: '5H', pct: 3, text: '3 % used' },
+            { key: 'WEEK', pct: 92, text: '92 % used', reset: 'resets 2 Dec', tone: 'warn' },
+          ],
+        },
+        { title: 'old@example.com' },
+      ],
+    });
+  });
+
   it('checks every member of a view, and drops what isn’t right', () => {
     const v = parseView({
       kind: 'list',

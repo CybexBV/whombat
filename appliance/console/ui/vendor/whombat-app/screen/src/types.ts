@@ -65,13 +65,25 @@ export interface DeskViewFigure {
   tone?: DeskViewTone | undefined;
 }
 
+/** One of a row's limits, drawn as blocks: “WEEK ▮▮▮▯ 62 % used · resets 2 Dec”. */
+export interface DeskViewMeter {
+  key?: string | undefined;
+  pct: number;
+  text: string;
+  reset?: string | undefined;
+  tone?: DeskViewTone | undefined;
+}
+
 export interface DeskViewRow {
   title: string;
   detail?: string | undefined;
   meta?: string | undefined;
+  note?: string | undefined;
   time?: string | undefined;
   tone?: DeskViewTone | undefined;
   progress?: number | undefined;
+  meters?: DeskViewMeter[] | undefined;
+  mark?: string | undefined;
   state?: 'on' | 'off' | undefined;
   image?: DeskImage | undefined;
 }

@@ -18,6 +18,7 @@ import type {
   DeskPageShow,
   DeskSpotlight,
   DeskViewBase,
+  DeskViewMeter,
   DeskViewPoster,
   DeskViewRow,
   DeskWeatherDay,
@@ -239,17 +240,30 @@ export function parseLayout(v: unknown): DeskLayout | null {
 
 /* The views ------------------------------------------------------------------------------------------------------- */
 
+/** One of a row's limits (Fusebox's subscriptions): its short name, how many blocks are lit, its words, its reset. */
+function parseMeter(v: unknown): DeskViewMeter | null {
+  if (!isObj(v)) return null;
+  const at = pct(v.pct);
+  const said = text(v.text, 24);
+  if (at === undefined || !said) return null;
+  return defined({ key: text(v.key, 8), pct: at, text: said, reset: text(v.reset, 24), tone: tone(v.tone) });
+}
+
 function parseRow(v: unknown): DeskViewRow | null {
   if (!isObj(v)) return null;
   const title = text(v.title, 120);
   if (!title) return null;
+  const meters = some(v.meters, 3, parseMeter);
   return defined({
     title,
     detail: text(v.detail, 120),
     meta: text(v.meta, 40),
+    note: text(v.note, 40),
     time: text(v.time, 16),
     tone: tone(v.tone),
     progress: pct(v.progress),
+    meters: meters.length > 0 ? meters : undefined,
+    mark: matching(v.mark, MARK_RE),
     state: oneOf(v.state, ['on', 'off'] as const),
     image: parseImage(v.image),
   });

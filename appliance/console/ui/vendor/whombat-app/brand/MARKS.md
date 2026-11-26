@@ -31,6 +31,7 @@ implies no endorsement.
 | `custom_mcp.svg` | Model Context Protocol | Simple Icons `modelcontextprotocol` (<https://github.com/modelcontextprotocol/docs/blob/573dc60c2e7aab2605b29d0bf27194aa7b02e4fb/logo/light.svg>) | CC0-1.0 |
 | `debian.svg` | Debian | Simple Icons `debian` (<https://www.debian.org/logos>) | CC-BY-SA-3.0 |
 | `deepin.svg` | deepin | Simple Icons `deepin` (<https://commons.wikimedia.org/wiki/File:Deepin_logo.svg>) | CC0-1.0 |
+| `devin.svg` | Devin | LobeHub Icons `devin` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>) | MIT (LobeHub) |
 | `docker.svg` | Docker | Simple Icons `docker` (<https://www.docker.com/company/newsroom/media-resources>) | CC0-1.0 |
 | `dropbox.svg` | Dropbox | Simple Icons `dropbox` (<https://www.dropbox.com/branding>) | CC0-1.0 |
 | `elementary.svg` | elementary | Simple Icons `elementary` (<https://elementary.io/brand>) | CC0-1.0 |
@@ -43,6 +44,7 @@ implies no endorsement.
 | `freebsd.svg` | FreeBSD | Simple Icons `freebsd` (<https://www.freebsdfoundation.org/about/project/>) | CC0-1.0 |
 | `frigate.svg` | Frigate | Simple Icons `frigate` (<https://frigate.video>) | CC0-1.0 |
 | `fusebox.svg` | Fusebox | Fusebox's `assets/icon.svg` (John's own product) | Unlicense |
+| `gemini.svg` | Gemini | LobeHub Icons `gemini` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>), its colour gradients left out | MIT (LobeHub) |
 | `gentoo.svg` | Gentoo | Simple Icons `gentoo` (<https://wiki.gentoo.org/wiki/Project:Artwork/Artwork#Variations_of_the_.22g.22_logo>) | CC-BY-SA-2.5 |
 | `github.svg` | GitHub | Simple Icons `github` (<https://github.com/logos>) | CC0-1.0 |
 | `github_actions.svg` | GitHub Actions | Simple Icons `githubactions` (<https://github.com/features/actions>) | CC0-1.0 |
@@ -58,6 +60,7 @@ implies no endorsement.
 | `jellyfin.svg` | Jellyfin | Simple Icons `jellyfin` (<https://jellyfin.org/docs/general/contributing/branding.html>) | CC0-1.0 |
 | `kalilinux.svg` | Kali Linux | Simple Icons `kalilinux` (<https://www.kali.org/docs/policy/trademark/>) | CC0-1.0 |
 | `kdeneon.svg` | KDE neon | Simple Icons `kdeneon` (<https://community.kde.org/Neon>) | CC0-1.0 |
+| `kimi.svg` | Kimi | LobeHub Icons `kimi` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>), its white letter in `currentColor` | MIT (LobeHub) |
 | `kubuntu.svg` | Kubuntu | Simple Icons `kubuntu` (<https://kubuntu.org>) | CC0-1.0 |
 | `linux.svg` | Linux | Simple Icons `linux` (<https://www.linuxfoundation.org/the-linux-mark/>) | CC0-1.0 |
 | `linuxcontainers.svg` | Linux Containers | Simple Icons `linuxcontainers` (<https://github.com/lxc/linuxcontainers.org/blob/29d3299ddf8718099b6de1464570fbbadbaabecb/static/img/containers.svg>) | CC0-1.0 |
@@ -66,6 +69,7 @@ implies no endorsement.
 | `mac.svg` | Mac | Lucide `monitor` (Apple’s logo is a trademark and isn’t drawn) | ISC |
 | `mail.svg` | Email | Lucide `mail` | ISC |
 | `manjaro.svg` | Manjaro | Simple Icons `manjaro` (<https://manjaro.org>) | CC0-1.0 |
+| `meta.svg` | Meta | LobeHub Icons `meta` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>), its blue gradients drawn as flat blues | MIT (LobeHub) |
 | `microsoft.svg` | Microsoft | Microsoft's logo (four squares) | Microsoft brand terms |
 | `mollie.svg` | Mollie | the “m” of docs.mollie.com `Mollie-Logo-Black-2023-Clearspace.svg`, on its app icon’s tile | Mollie brand |
 | `moneybird.svg` | Moneybird | moneybird.nl `/assets/images/moneybird-logo-mark-blue.svg` | Moneybird brand |
@@ -124,6 +128,8 @@ implies no endorsement.
 | `unifi_protect.svg` | Ubiquiti | Simple Icons `ubiquiti` (<https://www.ui.com>) | CC0-1.0 |
 | `unraid.svg` | Unraid | Simple Icons `unraid` (<https://unraid.net>) | CC0-1.0 |
 | `uptime.svg` | Website or address | Lucide `activity` | ISC |
+| `vertex.svg` | Vertex AI | LobeHub Icons `vertexai` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>) | MIT (LobeHub) |
 | `voidlinux.svg` | Void Linux | Simple Icons `voidlinux` (<https://alpha.de.repo.voidlinux.org/logos/void-dark2.svg>) | CC0-1.0 |
+| `xai.svg` | Grok | LobeHub Icons `grok` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>) | MIT (LobeHub) |
 | `xubuntu.svg` | Xubuntu | Simple Icons `xubuntu` (<https://commons.wikimedia.org/wiki/File:Xubuntu_Icon.svg>) | CC0-1.0 |
 | `zorin.svg` | Zorin | Simple Icons `zorin` (<https://zorin.com/press>) | CC0-1.0 |
