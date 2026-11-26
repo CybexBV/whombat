@@ -812,7 +812,7 @@ export const FIXTURE_LIMITS_VIEWS: DeskWidgetView[] = [
     rows: [
       {
         title: 'work@example.com',
-        detail: 'Claude · Ultra',
+        detail: 'Claude · Ultra · Renews 9 Dec',
         meta: 'Working',
         note: 'used 2 min ago',
         tone: 'ok',
@@ -822,7 +822,7 @@ export const FIXTURE_LIMITS_VIEWS: DeskWidgetView[] = [
       },
       {
         title: 'home@example.com',
-        detail: 'Claude · Max',
+        detail: 'Claude · Max · Renews tomorrow',
         meta: 'Working',
         note: 'used 1 h ago',
         tone: 'ok',
@@ -832,7 +832,7 @@ export const FIXTURE_LIMITS_VIEWS: DeskWidgetView[] = [
       },
       {
         title: 'team@example.com',
-        detail: 'Claude · Max',
+        detail: 'Claude · Max · Renews 14 Dec',
         meta: 'Used up until Fri 09:00',
         tone: 'warn',
         mark: 'claude',
@@ -849,7 +849,7 @@ export const FIXTURE_LIMITS_VIEWS: DeskWidgetView[] = [
       },
       {
         title: 'home@example.com',
-        detail: 'ChatGPT · Pro',
+        detail: 'ChatGPT · Pro · Renews 3 Dec',
         meta: 'Working',
         note: 'used 5 min ago',
         tone: 'ok',
@@ -859,7 +859,7 @@ export const FIXTURE_LIMITS_VIEWS: DeskWidgetView[] = [
       },
       {
         title: 'muse@example.com',
-        detail: 'Meta · Muse Code Max',
+        detail: 'Meta · Muse Code Max · Renews 20 Dec',
         meta: 'Working',
         note: 'used yesterday',
         tone: 'ok',

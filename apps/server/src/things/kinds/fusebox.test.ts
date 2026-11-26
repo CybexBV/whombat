@@ -15,6 +15,7 @@ import {
   parseClients,
   parseMonth,
   parseOverview,
+  renewsWords,
   routingWords,
   share,
   usd,
@@ -633,6 +634,53 @@ describe('the page (FP-06…FP-11), in slots', () => {
     expect(inv?.kind === 'list' && inv.items[0]?.figure?.value).toBe('6');
     expect(JSON.stringify(v.facts[0])).toContain('1 Meta');
     expect(panel(v, 'limits')?.kind === 'gallery').toBe(true);
+  });
+
+  it('says after each plan when it renews, from the date ChatGPT gives or the day set in Fusebox', () => {
+    const more = parseAccountsMore(
+      [
+        { id: 'chatgpt', quota: { renewal: { at: '2026-11-03T15:34:42Z', estimated: false, ends: false } } },
+        { id: 'claude', quota: { renewal: { at: '2026-10-20T07:00:00Z', manual: true, ends: false } } },
+        { id: 'none', quota: {} },
+      ],
+      (id) => id,
+    );
+    expect(more.get('chatgpt')?.renews).toMatchObject({ day: false, ends: false });
+    expect(more.get('claude')?.renews).toMatchObject({ day: true });
+    expect(more.get('none')?.renews).toBeUndefined();
+
+    const words = (at: string, extra: { day?: boolean; ends?: boolean; estimated?: boolean } = {}) =>
+      renewsWords({ at: new Date(at), day: false, ends: false, estimated: false, ...extra }, now, TZ);
+    expect(words('2026-11-03T15:34:42Z')).toBe('Renews 3 Nov');
+    expect(words('2026-10-20T07:00:00Z', { day: true })).toBe('Renews tomorrow');
+    expect(words('2026-11-03T15:34:42Z', { estimated: true })).toBe('Renews about 3 Nov');
+    expect(words('2026-11-03T15:34:42Z', { ends: true })).toBe('Ends 3 Nov');
+    // A day set by hand is the next charge until it's over; a provider's time, until it comes.
+    expect(words('2026-10-19T07:00:00Z', { day: true })).toBe('Renews today');
+    expect(words('2026-10-19T07:00:00Z')).toBeNull();
+
+    const v = fuseboxView(
+      input({
+        snapshot: {
+          ...SNAPSHOT,
+          more: new Map([
+            [
+              JOHN,
+              {
+                lastUsed: null,
+                shares: [],
+                renews: { at: at(24 * 9), day: true, ends: false, estimated: false },
+              },
+            ],
+          ]),
+        },
+      }),
+    );
+    const subs = panel(v, 'subscriptions');
+    if (subs?.kind !== 'table') throw new Error('no subscriptions');
+    const note = subs.rows.find((r) => r.id === JOHN)?.cells.subscription?.note;
+    expect(note).toContain('Renews 28 Oct');
+    expect(subs.rows.find((r) => r.id === OPS)?.cells.subscription?.note).not.toContain('Renews');
   });
 
   it('draws the forecast only when it is within the range ahead (FP-S03)', () => {

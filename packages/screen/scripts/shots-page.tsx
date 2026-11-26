@@ -465,6 +465,7 @@ function Limits() {
       'Subscriptions',
       'half, small',
       [
+        ['w_fusebox_subs', 'panel', 5, 3],
         ['w_fusebox_subs', 'panel', 4, 2],
         ['w_fusebox_subs', 'panel', 4, 3],
         ['w_fusebox_subs', 'panel', 2, 2],
