@@ -464,6 +464,13 @@ const TABLE = {
   'looksAhead.get': READ,
   'looksAhead.update': RECEIPT,
   'looksAhead.checkNow': RECEIPT,
+  // Where the Whombat is and its news sites (weather-news.md). `place.find` asks OpenStreetMap and keeps nothing;
+  // `news.addSite` reads the site once to check it before its commit, which is harmless to repeat.
+  'place.find': READ,
+  'place.set': RECEIPT,
+  'news.sources': READ,
+  'news.setSources': RECEIPT,
+  'news.addSite': RECEIPT,
   'changes.list': READ,
   'changes.undo': DESTRUCTIVE_NEVER,
   // Arranging the Overview (overview-arranged.md): one layout written whole; views and figures only read.

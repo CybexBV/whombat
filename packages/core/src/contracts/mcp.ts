@@ -84,6 +84,7 @@ import { DELEGATE_MCP_TOOLS } from './mcp-delegate.js';
 import { DEPLOY_MCP_TOOLS } from './mcp-deploy.js';
 import { FEEDBACK_MCP_TOOLS } from './mcp-feedback.js';
 import { GUIDE_MCP_TOOLS } from './mcp-guides.js';
+import { NEWS_MCP_TOOLS } from './mcp-news.js';
 import { ONE_MCP_TOOLS } from './mcp-one.js';
 import { PAGES_MCP_TOOLS } from './mcp-pages.js';
 import { PREVIEW_MCP_TOOLS } from './mcp-preview.js';
@@ -95,6 +96,7 @@ import { TAILNET_MCP_TOOLS } from './mcp-tailnet.js';
 import { TEAM_REPORT_MCP_TOOLS } from './mcp-team-reports.js';
 import { TRACKER_MCP_TOOLS } from './mcp-tracker.js';
 import { VAULT_MCP_TOOLS } from './mcp-vault.js';
+import { WEATHER_MCP_TOOLS } from './mcp-weather.js';
 import { PlanStepLinkInput } from './work.js';
 
 export const MCP_PATH = '/mcp';
@@ -917,6 +919,10 @@ export const MCP_TOOLS = {
   // Whombat's settings, read and changed for the person as their tap would (Whombat assistant-settings.md): their turn.
   ...SETTINGS_MCP_TOOLS,
   ...TAILNET_MCP_TOOLS,
+  // The weather where this Whombat is and the headlines of the news sites the person turned on (Whombat
+  // weather-news.md): read-only.
+  ...WEATHER_MCP_TOOLS,
+  ...NEWS_MCP_TOOLS,
   // Showing what the agent built (CT-198, CT-1234): Hermes's browser does the rest of the web (Whombat HE-42).
   ...PREVIEW_MCP_TOOLS,
   // A folder of pages to look at, as one file on a message (Whombat page-sets.md): listed with the browser's tools.

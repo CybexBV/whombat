@@ -59,6 +59,7 @@ import { teamReportEndpoints } from './team-reports.js';
 import { trackerEndpoints } from './tracker.js';
 import { usageEndpoints } from './usage.js';
 import { vaultEndpoints, vaultNetworkEndpoints } from './vault.js';
+import { newsEndpoints, placeEndpoints } from './weather-news.js';
 import {
   activityEndpoints,
   approvalEndpoints,
@@ -112,6 +113,7 @@ export * from './mcp-delegate.js';
 export * from './mcp-deploy.js';
 export * from './mcp-feedback.js';
 export * from './mcp-guides.js';
+export * from './mcp-news.js';
 export * from './mcp-one.js';
 export * from './mcp-pages.js';
 export * from './mcp-preview.js';
@@ -123,6 +125,7 @@ export * from './mcp-tailnet.js';
 export * from './mcp-team-reports.js';
 export * from './mcp-tracker.js';
 export * from './mcp-vault.js';
+export * from './mcp-weather.js';
 export * from './me.js';
 export * from './memory.js';
 export * from './notifications.js';
@@ -141,6 +144,7 @@ export * from './team-reports.js';
 export * from './tracker.js';
 export * from './usage.js';
 export * from './vault.js';
+export * from './weather-news.js';
 export * from './work.js';
 
 /**
@@ -208,6 +212,8 @@ export interface Api {
   looks: typeof lookEndpoints;
   changeWindow: typeof changeWindowEndpoints;
   looksAhead: typeof looksAheadEndpoints;
+  place: typeof placeEndpoints;
+  news: typeof newsEndpoints;
   changes: typeof changeEndpoints;
   widgets: typeof widgetEndpoints;
   chats: typeof chatEndpoints;
@@ -325,6 +331,10 @@ export const api: Api = {
   changeWindow: changeWindowEndpoints,
   /** Looks ahead: its switch, calendars and stopped kinds (looks-ahead.md). */
   looksAhead: looksAheadEndpoints,
+  /** Where this Whombat is, for the weather and the suggested news (weather-news.md). */
+  place: placeEndpoints,
+  /** The news sites this Whombat reads, and the ones suggested for its place (weather-news.md). */
+  news: newsEndpoints,
   /** Done recently and Undo (ONE-08). */
   changes: changeEndpoints,
   /** Pinned widgets (ONE-09). */

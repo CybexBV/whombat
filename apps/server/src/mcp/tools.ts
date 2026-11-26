@@ -644,6 +644,15 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   ...DELEGATE_TOOL_HANDLERS,
   ...SETTINGS_TOOL_HANDLERS,
   tailnet_devices: (ctx, input) => tailnetDevicesTool(ctx, input),
+  // PLACEHOLDERS (weather-news phase 1): the contracts are in; the weather and news readers replace these.
+  weather_forecast: async () => ({
+    status: 'unavailable',
+    message: 'The weather isn’t ready on this Whombat yet.',
+  }),
+  news_headlines: async () => ({
+    status: 'unavailable',
+    message: 'The news isn’t ready on this Whombat yet.',
+  }),
   // Whombat's browser tools are gone for Hermes's (hermes-engine.md HE-20); `browser_preview` stays (HE-S142).
   ...BROWSER_TOOL_HANDLERS,
   ...PAGES_TOOL_HANDLERS,
