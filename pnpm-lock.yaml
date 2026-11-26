@@ -473,6 +473,9 @@ importers:
       nodemailer:
         specifier: ^10.0.10
         version: 10.1.7
+      pdfjs-dist:
+        specifier: ^5.7.284
+        version: 5.7.284
       pngjs:
         specifier: ^7.0.0
         version: 7.0.0

@@ -11,8 +11,8 @@
  * dist/whombat-runtime-<version>-linux-<arch>/                  the bundle, unpacked:
  *   bin/whombat                 the CLI (sh): node app/cli.mjs; the helper runs `schema-check` / `migrate` with it
  *   bin/whombat-server  bin/whombat-runner  bin/whombat-agent-net   the units' entry points (sh): node app/<name>.mjs
- *   app/cli.mjs server.mjs runner.mjs image-worker.mjs shots-worker.mjs onepassword-worker.mjs agent-net.mjs   esbuild
- *                               bundles (platform node, target node24, ESM)
+ *   app/cli.mjs server.mjs runner.mjs image-worker.mjs shots-worker.mjs pdf-worker.mjs onepassword-worker.mjs
+ *   app/agent-net.mjs           esbuild bundles (platform node, target node24, ESM)
  *   app/shim.mjs …              files the bundles open next to themselves (APP_FILES)
  *   migrations/                 the SQL migrations, their journal and compat.json
  *   node_modules/node-pty       what can't be bundled: the sign-in console's PTY with its native addon, and
@@ -82,6 +82,8 @@ export const ENTRIES = {
   'image-worker': 'apps/server/src/feedback/image-worker.ts',
   /** The council's picture worker the server starts next to it (apps/server/src/council/shots-pool.ts). */
   'shots-worker': 'apps/server/src/council/shots-worker.ts',
+  /** The PDF reader the server starts for each mailed PDF it opens (apps/server/src/connectors/pdf-read.ts). */
+  'pdf-worker': 'apps/server/src/connectors/pdf-worker.ts',
   /** The 1Password worker the server starts as a process of its own (apps/server/src/vault/onepassword/pool.ts). */
   'onepassword-worker': 'apps/server/src/vault/onepassword/worker.ts',
   /** The commands' network (docs/decisions/one-person.md OP-S106): `whombat-agent-net`, under its own uid. */

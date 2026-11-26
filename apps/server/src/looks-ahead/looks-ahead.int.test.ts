@@ -33,6 +33,7 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { grantKey } from '../test/grants';
 import { useTestServer } from '../test/harness';
 import { mcpClient } from '../test/mcp';
+import { minimalPdf } from '../test/pdf';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { metAnswer } from '../weather/testing';
 import { sealWebSearchKey } from '../web-search/store';
@@ -487,6 +488,8 @@ describe('Looks ahead (looks-ahead.md)', () => {
   });
 
   it('checks incoming mail proactively with web closed from the start and 14-day schedule context', async () => {
+    const booking = minimalPdf(['Hotel Chiado', 'Check-in 22 December 2026 from 15:00', 'Room 214']);
+    const terms = Buffer.from('Terms. '.repeat(5000));
     await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
     await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
     const google = (t.services.google.workspace as FakeGoogleWorkspace).stateFor(FAKE_ACCESS_TOKEN);
@@ -511,7 +514,22 @@ describe('Looks ahead (looks-ahead.md)', () => {
       date: new Date('2026-12-13T12:00:00Z'),
       body: 'Booking confirmed for 22 Dec 2026 at Hotel Chiado, Lisbon.',
       labelIds: ['INBOX', 'UNREAD'],
-      attachments: [],
+      attachments: [
+        {
+          id: 'att_booking',
+          name: 'booking.pdf',
+          mimeType: 'application/pdf',
+          size: booking.length,
+          contentBase64: booking.toString('base64'),
+        },
+        {
+          id: 'att_terms',
+          name: 'terms.txt',
+          mimeType: 'text/plain',
+          size: terms.length,
+          contentBase64: terms.toString('base64'),
+        },
+      ],
     });
 
     // New mail is looked through as a whole first; its pick is checked on its own on the next pass.
@@ -544,6 +562,20 @@ describe('Looks ahead (looks-ahead.md)', () => {
     });
     expect(webBlocked.isError).toBe(true);
     await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: 'msg_hotel_booking' } });
+    // What the mail's attachments say is read too: a PDF's text, a text file's cut as a mail body is.
+    const pdf = await mcp.client.callTool({
+      name: 'mail_attachment_open',
+      arguments: { messageId: 'msg_hotel_booking', attachmentId: 'att_booking' },
+    });
+    expect(pdf.structuredContent).toMatchObject({ status: 'ok', attachment: { shows: 'text', pages: 1 } });
+    expect(said(pdf)).toContain('Room 214');
+    const long = await mcp.client.callTool({
+      name: 'mail_attachment_open',
+      arguments: { messageId: 'msg_hotel_booking', attachmentId: 'att_terms' },
+    });
+    const cut = (long.structuredContent as { attachment: { text: string; truncated: boolean } }).attachment;
+    expect(cut.truncated).toBe(true);
+    expect(cut.text.length).toBeLessThan(terms.length / 3);
     const reported = await mcp.client.callTool({
       name: 'ahead_report',
       arguments: {

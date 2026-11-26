@@ -2,10 +2,13 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { verifySums } from '@whombat/cli/release';
 import { ReleaseManifest } from '@whombat/core';
 import * as esbuild from 'esbuild';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PDF_WORKER_ROLE } from '../../../apps/server/src/connectors/pdf-worker';
+import { minimalPdf } from '../../../apps/server/src/test/pdf';
 import {
   APP_FILES,
   addOnePasswordSdk,
@@ -139,6 +142,32 @@ describe('the release bundles load (MR-72, MR-76)', () => {
     );
     expect(load.status, load.stderr).toBe(0);
   }, 180_000);
+});
+
+describe('the PDF reader in the release', () => {
+  // PDF.js makes a DOMMatrix as it loads; Node has none and the release ships no canvas package, so the worker brings
+  // its own. Bundled, it must load and read a PDF's text with nothing beside it.
+  it('reads a PDF’s text from the bundle alone', async () => {
+    const build = { version: '0.0.0', gitSha: 'test', buildTime: new Date(0).toISOString() };
+    const out = join(dir, 'app', 'pdf-worker.mjs');
+    await esbuild.build({ ...bundleOptions(ENTRIES['pdf-worker'], out, build), logLevel: 'error' });
+    const reply = await new Promise<unknown>((resolve, reject) => {
+      const worker = new Worker(out, {
+        workerData: {
+          role: PDF_WORKER_ROLE,
+          bytes: new Uint8Array(minimalPdf(['Payment notice', 'EUR 45.00'])),
+          maxPages: 5,
+          maxChars: 1000,
+        },
+      });
+      worker.once('message', (m) => {
+        resolve(m);
+        void worker.terminate();
+      });
+      worker.once('error', reject);
+    });
+    expect(reply).toEqual({ ok: true, pages: 1, text: 'Payment notice\nEUR 45.00', truncated: false });
+  }, 120_000);
 });
 
 describe('the 1Password worker in the release (onepassword-sync.md)', () => {

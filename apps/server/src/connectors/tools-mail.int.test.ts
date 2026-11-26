@@ -11,8 +11,10 @@ import { decideApproval } from '../commands/approvals';
 import { sendMessage } from '../commands/messages';
 import { approvals, dispatches, events, grants, messages } from '../db/schema/index';
 import { IDS } from '../seed/test-world';
+import { makePng } from '../test/files';
 import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
+import { minimalPdf } from '../test/pdf';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { agentTokenFor, sessionFor } from '../test/tokens';
 import { GoogleApiError } from './types';
@@ -194,6 +196,56 @@ describe('mail', () => {
     expect(receipt?.body).toContain('Thank you for your payment');
     expect(receipt?.body).toContain('View your invoices (https://accounts.hetzner.example/invoices)');
     expect(receipt?.labels).toContain('Receipts');
+    expect(await eventsSince(before)).toEqual([]);
+  });
+
+  it('opens an attachment: a PDF’s text, and a picture beside the answer', async () => {
+    const before = await headSeq();
+    const pdf = minimalPdf(['Hetzner Online', 'Invoice 1042', 'Amount due EUR 12.34']);
+    const picture = makePng(12, 8);
+    const message = fake.stateFor(FAKE_ACCESS_TOKEN).messages.find((m) => m.id === 'msg_receipt');
+    if (!message) throw new Error('no receipt in the fake mailbox');
+    message.attachments = [
+      {
+        id: 'att_pdf',
+        name: 'invoice.pdf',
+        mimeType: 'application/pdf',
+        size: pdf.length,
+        contentBase64: pdf.toString('base64'),
+      },
+      {
+        id: 'att_png',
+        name: 'qr.png',
+        mimeType: 'image/png',
+        size: picture.length,
+        contentBase64: picture.toString('base64'),
+      },
+    ];
+    const maraMcp = await asMara();
+    const read = await maraMcp.call('mail_attachment_open', {
+      messageId: 'msg_receipt',
+      attachmentId: 'att_pdf',
+    });
+    expect(read).toMatchObject({
+      isError: false,
+      body: { status: 'ok', attachment: { shows: 'text', pages: 1 } },
+    });
+    expect((read.body.attachment as { text: string }).text).toContain('Amount due EUR 12.34');
+    const shown = await maraMcp.client.callTool({
+      name: 'mail_attachment_open',
+      arguments: { messageId: 'msg_receipt', attachmentId: 'att_png' },
+    });
+    expect(shown.structuredContent).toMatchObject({
+      status: 'ok',
+      attachment: { shows: 'picture', text: null },
+    });
+    expect(shown.content).toContainEqual({
+      type: 'image',
+      data: picture.toString('base64'),
+      mimeType: 'image/png',
+    });
+    // The picture goes as image content only, not again inside the answer's text.
+    expect(JSON.stringify(shown.structuredContent)).not.toContain(picture.toString('base64'));
     expect(await eventsSince(before)).toEqual([]);
   });
 

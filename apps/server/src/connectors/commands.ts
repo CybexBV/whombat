@@ -276,6 +276,7 @@ async function askOwner(
 
 export const READ_TOOLS = [
   'mail_attachment',
+  'mail_attachment_open',
   'files_download',
   'mail_search',
   'mail_read',
@@ -289,6 +290,7 @@ export type ReadTool = (typeof READ_TOOLS)[number];
 
 const READ_ATTEMPTS: Record<ReadTool, string> = {
   mail_attachment: 'read a mail attachment',
+  mail_attachment_open: 'open a mail attachment',
   files_download: 'download a file',
   mail_search: 'read mail',
   mail_read: 'read mail',

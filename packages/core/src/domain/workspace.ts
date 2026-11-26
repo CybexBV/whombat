@@ -34,6 +34,27 @@ export const MailAttachmentDigest = z.object({
 });
 export type MailAttachmentDigest = z.infer<typeof MailAttachmentDigest>;
 
+/** Longest text `mail_attachment_open` gives back (characters). */
+export const ATTACHMENT_TEXT_CAP = 100_000;
+
+/**
+ * A mail attachment opened to be read (`mail_attachment_open`): a PDF's or a text file's words, or a picture sent beside
+ * the answer for the model to look at. `shows: 'none'` when it has nothing to read, `reason` says why in a few words.
+ */
+export const OpenedAttachment = z.object({
+  name: z.string().max(500),
+  mimeType: z.string().max(200),
+  /** Bytes. */
+  size: z.number().int().nonnegative(),
+  shows: z.enum(['text', 'picture', 'none']),
+  text: z.string().max(ATTACHMENT_TEXT_CAP).nullable(),
+  truncated: z.boolean(),
+  /** A PDF's number of pages. */
+  pages: z.number().int().nonnegative().optional(),
+  reason: z.string().max(300).optional(),
+});
+export type OpenedAttachment = z.infer<typeof OpenedAttachment>;
+
 /** An email address as given by an agent or a person (`a@b.com`). */
 export const MailAddress = z.string().trim().toLowerCase().pipe(z.email()).describe('Email address');
 

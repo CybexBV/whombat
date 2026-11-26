@@ -49,6 +49,7 @@
     "lib0": "^0.2.117",
     "mailparser": "^3.9.46",
     "nodemailer": "^10.0.10",
+    "pdfjs-dist": "^5.7.284",
     "pngjs": "^7.0.0",
     "postgres": "^3.4.9",
     "ssh2": "1.17.0",

@@ -388,6 +388,7 @@ export async function keyAllowed(services: Services, agentId: string, key: KeyId
 const PRIVATE_READ_TOOLS = new Set<McpToolName>([
   'mail_search',
   'mail_read',
+  'mail_attachment_open',
   'files_search',
   'files_read',
   'ahead_read_docs',
@@ -464,7 +465,7 @@ export async function aheadToolRefusal(
   return null;
 }
 
-/** The most of one mail's or file's text a check reads. */
+/** The most of one mail's, attachment's or file's text a check reads. */
 const AHEAD_PRIVATE_BODY_MAX = 8000;
 
 /**
@@ -478,8 +479,8 @@ export function senderName(from: unknown): string {
 }
 
 /**
- * After one of the person's tools ran in a check: mails and files it read may be named as sources, and their text is
- * cut to `AHEAD_PRIVATE_BODY_MAX`.
+ * After one of the person's tools ran in a check: mails and files it read may be named as sources, and their text (an
+ * opened attachment's too) is cut to `AHEAD_PRIVATE_BODY_MAX`.
  */
 export async function aheadToolRan(
   services: Services,
@@ -502,6 +503,14 @@ export async function aheadToolRan(
         m.body = `${m.body.slice(0, AHEAD_PRIVATE_BODY_MAX)}…`;
         m.bodyTruncated = true;
       }
+    }
+    return;
+  }
+  if (name === 'mail_attachment_open') {
+    const opened = (out as { attachment?: { text?: unknown; truncated?: unknown } } | null)?.attachment;
+    if (opened && typeof opened.text === 'string' && opened.text.length > AHEAD_PRIVATE_BODY_MAX) {
+      opened.text = `${opened.text.slice(0, AHEAD_PRIVATE_BODY_MAX)}…`;
+      opened.truncated = true;
     }
     return;
   }
