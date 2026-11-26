@@ -4,7 +4,9 @@ import type {
   BackupCategoryId,
   LiveProvider,
   LocalModelCheck,
+  NewsSettings,
   OverviewLayout,
+  PlaceInput,
   Preferences,
   WebSearchCheck,
   WebSearchProvider,
@@ -119,6 +121,16 @@ export const burrows = pgTable('burrows', {
    * is new.
    */
   careBaselineDue: boolean('care_baseline_due').notNull().default(false),
+  /**
+   * Where this Whombat is (docs/decisions/weather-news.md): the place the person chose, its latitude and longitude kept
+   * to two decimals (the person or the assistant, `place.set`). Null: the time zone's guess (`placeFromTimeZone`).
+   */
+  place: jsonb('place').$type<PlaceInput>(),
+  /**
+   * The news sites this Whombat reads (docs/decisions/weather-news.md): each one's id, name and feed, in the person's
+   * order (`news.setSources`, `news.addSite`). Null: none on, so nothing is read.
+   */
+  news: jsonb('news').$type<NewsSettings>(),
 });
 
 /** `burrows.agent_notes` (HE-S120): the text, when it last changed and by whom (a principal id). */

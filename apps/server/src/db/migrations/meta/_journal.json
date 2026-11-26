@@ -274,6 +274,13 @@
       "when": 1795644288716,
       "tag": "0038_looks_ahead_matters",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795681511546,
+      "tag": "0039_weather_news",
+      "breakpoints": true
     }
   ]
 }
