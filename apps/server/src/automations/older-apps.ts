@@ -8,7 +8,7 @@
  * definition (its summary and glance still say what it does) — and a newer app gets everything.
  */
 import type { Automation, AutomationExport, AutomationRun, Message, RealtimeEvent } from '@whombat/core';
-import { FIND_MY_MINOR, THING_AUTOMATIONS_MINOR } from '@whombat/protocol/session';
+import { FIND_MY_MINOR, T3_REVIEW_ROUNDS_MINOR, THING_AUTOMATIONS_MINOR } from '@whombat/protocol/session';
 import { ApiError } from '../lib/errors';
 import { newerDefinition, startedByFindMy } from './release-gate';
 
@@ -17,6 +17,9 @@ export const MAIL_AUTOMATIONS_MINOR = 3;
 
 /** The protocol minor that reads automations started when someone arrives or leaves on Find My. */
 export const FIND_MY_AUTOMATIONS_MINOR = FIND_MY_MINOR;
+
+/** The protocol minor that accepts `t3Review.maxRounds` on a recipe's strict `t3Review` object. */
+export const T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR = T3_REVIEW_ROUNDS_MINOR;
 
 /** Whether a session at `minor` reads mail automations; outside a session (`undefined`), it does. */
 export const readsMailAutomations = (minor: number | undefined) =>
@@ -29,8 +32,17 @@ export const readsFindMyAutomations = (minor: number | undefined) =>
 export const readsThingAutomations = (minor: number | undefined) =>
   minor === undefined || minor >= THING_AUTOMATIONS_MINOR;
 
+export const readsT3ReviewRounds = (minor: number | undefined) =>
+  minor === undefined || minor >= T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR;
+
+function hasT3ReviewMaxRounds(definition: unknown): boolean {
+  const recipe = (definition as { recipe?: { t3Review?: { maxRounds?: unknown } } } | null)?.recipe;
+  return recipe?.t3Review?.maxRounds !== undefined;
+}
+
 /** Whether an app at `minor` can't read this definition (or draft). */
 function unreadable(definition: unknown, minor: number | undefined): boolean {
+  if (!readsT3ReviewRounds(minor) && hasT3ReviewMaxRounds(definition)) return true;
   const triggers = (definition as { triggers?: { kind?: string }[] } | null)?.triggers;
   if (!readsThingAutomations(minor) && Array.isArray(triggers) && triggers.some((t) => t?.kind === 'thing'))
     return true;
@@ -42,10 +54,10 @@ function unreadable(definition: unknown, minor: number | undefined): boolean {
 
 /** An automation as an app at `minor` reads it. */
 export function automationFor(automation: Automation, minor: number | undefined): Automation {
-  if (readsThingAutomations(minor)) return automation;
+  if (readsT3ReviewRounds(minor)) return automation;
   const source = automation.glance?.source;
   const older =
-    source === 'thing' ||
+    (source === 'thing' && !readsThingAutomations(minor)) ||
     (source === 'findmy' && !readsFindMyAutomations(minor)) ||
     (source === 'mail' && !readsMailAutomations(minor));
   return {
@@ -136,15 +148,19 @@ for (const op of [
 
 /** An op's answer as an app at `minor` reads it (every other op's as it is). */
 export function answerFor(op: string, body: unknown, minor: number | undefined): unknown {
-  if (readsThingAutomations(minor) || !body || typeof body !== 'object') return body;
+  if (readsT3ReviewRounds(minor) || !body || typeof body !== 'object') return body;
   const to = ANSWERS[op];
-  return to ? to(body as Answer, minor) : messagesFor(op, body as Answer);
+  return to
+    ? to(body as Answer, minor)
+    : readsThingAutomations(minor)
+      ? body
+      : messagesFor(op, body as Answer);
 }
 
 /** A live update as an app at `minor` reads it. */
 export function eventFor(event: RealtimeEvent, minor: number | undefined): RealtimeEvent {
-  if (readsThingAutomations(minor)) return event;
-  if (event.type === 'message.created' || event.type === 'message.updated')
+  if (readsT3ReviewRounds(minor)) return event;
+  if (!readsThingAutomations(minor) && (event.type === 'message.created' || event.type === 'message.updated'))
     return { ...event, message: messageFor(event.message) };
   if (event.type === 'automation.updated')
     return { ...event, automation: automationFor(event.automation, minor) };

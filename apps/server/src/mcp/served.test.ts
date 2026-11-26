@@ -369,6 +369,21 @@ describe('the list a turn is served (turn-efficiency.md TE-05)', () => {
     expect(servedToolNames({ ...personal, automationStep: true })).toContain('post_message');
   });
 
+  it('serves automation_continue_run only in a person’s turn with an unlanded report fix', () => {
+    const personal = { ...team, turn: { ...team.turn, personal: true } };
+    expect(servedToolNames(personal)).not.toContain('automation_continue_run');
+    expect(servedToolNames({ ...personal, unlandedFix: true })).toContain('automation_continue_run');
+    expect(servedToolNames({ ...personal, unlandedFix: true, automationStep: true })).not.toContain(
+      'automation_continue_run',
+    );
+    expect(
+      servedToolNames({ ...personal, unlandedFix: true, turn: { ...personal.turn, outside: true } }),
+    ).not.toContain('automation_continue_run');
+    expect(
+      servedToolNames({ ...personal, unlandedFix: true, turn: { ...personal.turn, ahead: true } }),
+    ).not.toContain('automation_continue_run');
+  });
+
   it('lists report_assessment only in an automation’s assessment turn (AR-24)', () => {
     expect(servedToolNames(team)).not.toContain('report_assessment');
     expect(servedToolNames({ ...team, assesses: false })).not.toContain('report_assessment');

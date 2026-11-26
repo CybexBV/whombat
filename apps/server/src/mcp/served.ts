@@ -561,6 +561,11 @@ export interface ServedSelection {
    * eye on something in their mail. Never a Looks ahead check, an automation's step or an outsiders' turn. Absent: no.
    */
   aheadWatch?: boolean;
+  /**
+   * The person's turn in the thread of a finished report automation run whose fix started but did not land yet:
+   * serves `automation_continue_run`. Never in an automation step, Looks ahead check, or outsiders' turn. Absent: no.
+   */
+  unlandedFix?: boolean;
 }
 
 /** Reports to the Whombat Team (team-reports.md): the person's own turns, where they can send reports or have some. */
@@ -622,6 +627,7 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   // Automations change only when the person asks in Chat, never from inside an automation's own step, and a step
   // finishes its work in its own turn.
   if ((AUTOMATION_CHAT_TOOLS as readonly string[]).includes(name) && sel.automationStep) return false;
+  if (name === 'automation_continue_run' && (!sel.unlandedFix || sel.automationStep)) return false;
   if (name === 'schedule' && sel.automationStep) return false;
   // What Whombat watches is the person's to change: never from an automation's own step (on-purpose.md).
   if ((name === 'watch_checks' || name === 'quiet_until' || name === 'thing_watch') && sel.automationStep)

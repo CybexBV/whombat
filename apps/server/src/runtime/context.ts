@@ -73,6 +73,7 @@ import type { Services } from '../services';
 import { personWordsFor, t3ThreadsOf } from '../t3code/follow';
 import { t3HandoffsOf } from '../t3code/handoffs';
 import { trackerDispatchContext } from '../trackers/access';
+import { unlandedFixOf } from '../trackers/unlanded';
 import { vaultContextFor } from '../vault/context';
 import { webSearchDispatch } from '../web-search/store';
 import { contextThreadCandidates, contextWindowCandidates } from './context-selection';
@@ -408,6 +409,7 @@ export async function buildDispatchContext(
     commands,
     localModel,
     schedule,
+    unlandedFix,
   ] = await Promise.all([
     runPart,
     approvalPart,
@@ -478,6 +480,10 @@ export async function buildDispatchContext(
       : null,
     // A turn the agent scheduled for itself: its prompt, when, runs and next run.
     outside ? null : side(async () => scheduleContextOf(db, row)),
+    // A finished report run in this thread whose fix did not land yet (person turns only).
+    outside || row.trigger === 'automation' || !row.threadRootId
+      ? null
+      : side(async () => unlandedFixOf(db, row)),
   ]);
   // What a background job of the agent said, from its post (resourceful-agents.md RA-31).
   const notify = outside ? null : notifyContextOf(row, trigger);
@@ -545,6 +551,7 @@ export async function buildDispatchContext(
     ...(assessing ? { feedback: assessing.feedback } : {}),
     ...(feedbackHandoff ? { feedbackHandoff } : {}),
     ...tracker,
+    ...(unlandedFix ? { unlandedFix } : {}),
     ...(grantedApproval ? { grantedApproval } : {}),
     ...(grantedResult ? { grantedResult } : {}),
     ...(retry ? { retry } : {}),

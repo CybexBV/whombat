@@ -24,15 +24,18 @@ import {
 import { sampleReport } from '../automations/routes';
 import { automationGrants } from '../automations/store';
 import { decideApproval } from '../commands/approvals';
+import { sendMessage } from '../commands/messages';
 import { loadBurrowRow } from '../commit/pipeline';
 import { approvals, automations, dispatches, pullRequests, vaultNetworks } from '../db/schema/index';
 import { callTool } from '../mcp/server';
 import { loadPrincipalRow } from '../read/principals';
+import { buildDispatchContext } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
 import { useFakeTrackerDriver } from '../test/tracker-driver';
 import { useVaultNetForTests } from '../vault/net';
+import { unlandedFixOf } from './unlanded';
 
 const w = useAutomationWorld();
 const tracker = new FakeTracker();
@@ -343,6 +346,124 @@ describe('the fix for a report (RN-S4, RN-S5)', () => {
     expect(body).toContain(
       `Tracker report: ${HOST} #${report.number}\n<!-- whombat-tracker:${connectionId}:${report.number} -->`,
     );
+    await w.ok(IDS.mara, deleteAutomation, { automationId: id });
+  });
+
+  it('continues an unlanded report run from review in the person’s follow-up turn and opens the pull request', async () => {
+    const id = await recipe({ repo: REPO, fix: { mode: 'ask' } });
+    await poll();
+    const report = file({ title: 'Exports drop the final row' });
+    await poll();
+    const run = (await w.runs(id)).at(-1) as AutomationRun;
+    let now = await assess(run.id);
+    const [card] = await w.services.db
+      .select()
+      .from(approvals)
+      .where(eq(approvals.id, step(now, 'approve').approvalId as string));
+    await w.ok(IDS.mara, decideApproval, { number: card?.number as number, decision: 'approve' });
+    await w.settle();
+    now = await w.run(run.id);
+    const branch = `feat/tracker-${report.number}`;
+    await w.fakePush(REPO, branch, 'Keep the final row');
+    await w.fakeAgentReply(step(now, 'fix').dispatchId as string, 'Exports keep the final row now.');
+    await w.settle();
+    now = await w.run(run.id);
+    // Review asks for changes: the run finishes unlanded before opening the PR.
+    await w.fakeAgentReply(
+      step(now, 'review').dispatchId as string,
+      'Changes needed: add a test for empty exports.',
+    );
+    await w.settle();
+    now = await w.run(run.id);
+    expect(now.status).toBe('succeeded');
+    expect(step(now, 'pr').state).toBe('skipped');
+    const threadRootId = now.threadRootId as string;
+
+    // unlandedFixOf reports the unlanded run with `review` as the next step.
+    const unlanded = await unlandedFixOf(w.services.db, {
+      burrowId: w.burrowId,
+      conversationId: now.conversationId,
+      threadRootId,
+    });
+    expect(unlanded).toMatchObject({
+      runId: run.id,
+      reportNumber: report.number,
+      repo: REPO,
+      branch,
+      nextStepId: 'review',
+    });
+
+    // Mara writes in the thread, creating a person turn whose DispatchContext carries `unlandedFix`.
+    await w.ok(IDS.mara, sendMessage, {
+      conversationId: now.conversationId,
+      threadRootId,
+      text: '@dusty Finish fixing the test and land it.',
+    });
+    const personDispatches = await w.services.db
+      .select()
+      .from(dispatches)
+      .where(eq(dispatches.threadRootId, threadRootId));
+    const personDispatch = personDispatches.find((d) => d.trigger !== 'automation');
+    if (!personDispatch) throw new Error('expected person dispatch');
+    const dispatchCtx = await buildDispatchContext(w.services, personDispatch);
+    expect(dispatchCtx.unlandedFix).toMatchObject({ runId: run.id, nextStepId: 'review' });
+
+    // An automation-step dispatch cannot call automation_continue_run.
+    const autoDispatch = personDispatches.find((d) => d.trigger === 'automation');
+    if (!autoDispatch) throw new Error('expected automation dispatch');
+    const blocked = await callTool(
+      w.services,
+      {
+        burrowId: w.burrowId,
+        agentId: IDS.dusty,
+        dispatchId: autoDispatch.id,
+      },
+      'automation_continue_run',
+      { runId: run.id, fromStepId: 'review' },
+    );
+    expect(blocked.isError).toBe(true);
+
+    // The person turn continues the run from `review` with a note about the pushed follow-up commit.
+    await w.fakePush(REPO, branch, 'Add empty export test');
+    const resumed = await callTool(
+      w.services,
+      {
+        burrowId: w.burrowId,
+        agentId: IDS.dusty,
+        dispatchId: personDispatch.id,
+      },
+      'automation_continue_run',
+      {
+        runId: run.id,
+        fromStepId: 'review',
+        note: 'Added the empty-exports test and pushed the updated branch.',
+      },
+    );
+    expect(resumed.isError).not.toBe(true);
+    expect(resumed.structuredContent).toMatchObject({ status: 'ok', runId: run.id, fromStepId: 'review' });
+    await w.settle();
+    now = await w.run(run.id);
+    expect(now.status).toBe('waiting');
+    expect(step(now, 'review').state).toBe('waiting');
+    expect(String((step(now, 'fix').output as { reply?: unknown }).reply)).toContain(
+      'Added the empty-exports test',
+    );
+    // The fresh review approves -> Whombat opens the pull request and finishes the run!
+    await w.fakeAgentReply(step(now, 'review').dispatchId as string, 'Approve: empty export test passes.');
+    await w.settle();
+    now = await w.run(run.id);
+    expect(now.status).toBe('succeeded');
+    expect(step(now, 'pr').state).toBe('succeeded');
+    const [pr] = await w.services.db.select().from(pullRequests).where(eq(pullRequests.branch, branch));
+    expect(pr).toBeTruthy();
+    // Now that the PR opened (for a recipe without auto-merge), unlandedFixOf returns null.
+    expect(
+      await unlandedFixOf(w.services.db, {
+        burrowId: w.burrowId,
+        conversationId: now.conversationId,
+        threadRootId,
+      }),
+    ).toBeNull();
     await w.ok(IDS.mara, deleteAutomation, { automationId: id });
   });
 });

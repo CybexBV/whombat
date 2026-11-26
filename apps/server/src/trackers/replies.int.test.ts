@@ -16,7 +16,7 @@ import {
   type ReportAssessmentInput,
   recipeInstructions,
 } from '@whombat/core';
-import { and, asc, eq, like } from 'drizzle-orm';
+import { and, asc, eq, inArray, like } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { BurrowAccess } from '../auth/request';
 import {
@@ -56,6 +56,7 @@ import { useFakeTrackerDriver } from '../test/tracker-driver';
 import { useVaultNetForTests } from '../vault/net';
 import { trackerItemOp } from './people';
 import {
+  RELEASE_DEV_GRACE_MS,
   RELEASE_HOLD_MS,
   RELEASE_LAST_RETRY_MS,
   RELEASE_NUDGE_ANSWER_MS,
@@ -1254,7 +1255,7 @@ describe('a chosen reporter’s release that stopped or went quiet', () => {
     await w.services.db
       .update(trackerFixes)
       .set({ state: 'stopped' })
-      .where(eq(trackerFixes.state, 'development'));
+      .where(inArray(trackerFixes.state, ['merged', 'development']));
   });
 
   /**
@@ -1767,6 +1768,73 @@ describe('a chosen reporter’s release that stopped or went quiet', () => {
     await w.services.background.settle();
     expect(await notLive()).toHaveLength(1);
     await w.ok(IDS.mara, deleteAutomation, { automationId: id });
+  });
+
+  it('releaseFor "*" releases a merged bug fix straight from merge when development does not auto-deploy', async () => {
+    const [origConn] = await w.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, prodId));
+    await w.services.db
+      .update(catalogConnections)
+      .set({ fields: { ...origConn?.fields, releaseFor: '*' } })
+      .where(eq(catalogConnections.id, prodId));
+    try {
+      dev.health = { ...dev.health, environment: 'development' };
+      const id = await recipe(prodId, { repo: REPO, fix: { mode: 'ask' } });
+      await poll(prodId);
+      const { report, run } = await reportRun(id, prod, prodId, {
+        title: 'Tailscale installer uses home address',
+        reporter: { name: 'Anonymous', email: null },
+      });
+      await assess(run.id, bug({ language: 'en', reply: 'Thanks for reporting this.' }));
+      const { pr } = await fixIt(run.id, report.number);
+      const before = launches().length;
+      const posts = prod.posts.length;
+      await merge(pr.number);
+      await follow();
+      const merged = await fixRow(report.id);
+      expect(merged?.state).toBe('merged');
+      // Within the grace window, development gets a chance to deploy on its own first.
+      expect(launches()).toHaveLength(before);
+      await w.services.db
+        .update(trackerFixes)
+        .set({ mergedAt: w.now() })
+        .where(eq(trackerFixes.id, merged?.id as string));
+      w.advance(RELEASE_DEV_GRACE_MS);
+      await follow();
+      // Still not on development after the grace period: Whombat starts the release from the merged commit.
+      expect(launches()).toHaveLength(before + 1);
+      const releasingFix = await fixRow(report.id);
+      expect(releasingFix?.state).toBe('merged');
+      expect(releasingFix?.release?.threadId).toBeTruthy();
+      expect(prod.posts.slice(posts)).toEqual([]);
+      const launchBrief = String(launches().at(-1)?.args.message);
+      expect(launchBrief).toContain('does not run this fix yet');
+      expect(launchBrief).toContain('Released:');
+      // Once the release deploys Beta/development, the fix advances to `development` keeping the running release
+      // without launching a second one or prematurely telling the customer it comes with the next update.
+      await deploy(dev, '0.1.220', 'development');
+      await follow();
+      const onDev = await fixRow(report.id);
+      expect(onDev?.state).toBe('development');
+      expect(onDev?.release?.threadId).toBe(releasingFix?.release?.threadId);
+      expect(launches()).toHaveLength(before + 1);
+      expect(prod.posts.slice(posts)).toEqual([]);
+      // Once Production runs the fix, the customer hears it is live.
+      t3.finish(releasingFix?.release?.threadId as string, 'Released: 0.1.220 is live on production.');
+      await deploy(prod, '0.1.220', 'production');
+      await follow();
+      expect((await fixRow(report.id))?.state).toBe('live');
+      expect(prod.posts.slice(posts)).toHaveLength(1);
+      expect(prod.posts.slice(posts)[0]?.body).toMatchObject({ status: 'available' });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: id });
+    } finally {
+      await w.services.db
+        .update(catalogConnections)
+        .set({ fields: origConn?.fields ?? {} })
+        .where(eq(catalogConnections.id, prodId));
+    }
   });
 });
 

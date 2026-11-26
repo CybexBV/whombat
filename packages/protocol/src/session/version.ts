@@ -86,9 +86,16 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * `place.set`, `news.sources`, `news.setSources` and `news.addSite`, and the screens' `weather` and `news` widgets and
  * `weather` view, which a box sends only to a session at minor 16 or later (Whombat weather-news.md); minor 17 brings
  * unsolicited Looks ahead findings into the Inbox (`NeedsYouKind` `ahead`, `looksAhead.promote`, `looksAhead.feedback`,
- * and `LooksAheadCheckItem.inboxItemId`; Whombat looks-ahead.md).
+ * and `LooksAheadCheckItem.inboxItemId`; Whombat looks-ahead.md); minor 18 adds `t3Review.maxRounds` (1–3 review
+ * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 17 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 18 };
+
+/**
+ * Session protocol minor (major 5) that accepts `t3Review.maxRounds` on an automation recipe. Older apps parse
+ * `t3Review` strictly, so the server hides definitions and drafts that set `maxRounds` from sessions below this minor.
+ */
+export const T3_REVIEW_ROUNDS_MINOR = 18;
 
 /**
  * Session protocol minor (major 5) that lands unsolicited Looks ahead findings in the Inbox (`kind: 'ahead'`,

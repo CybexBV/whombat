@@ -373,6 +373,11 @@ function normalized(recipe: AutomationRecipe): AutomationRecipe {
     const { trustActions: _trustActions, ...fix } = rest.fix;
     rest.fix = fix;
   }
+  // One review round is the default: keep `maxRounds` only when set to 2 or 3 so default recipes stay unchanged.
+  if (rest.t3Review?.maxRounds === 1) {
+    const { maxRounds: _maxRounds, ...t3Review } = rest.t3Review;
+    rest.t3Review = t3Review;
+  }
   if (recipe.when.kind !== 'tracker') {
     const { replyToCustomer: _replyToCustomer, decideFeatures: _decideFeatures, ...other } = rest;
     return other;
@@ -1187,13 +1192,16 @@ function fixSteps(
   // The title the fix thread gives its review in T3 Code, how the review step and the server find it; the colon keeps
   // #15 from matching #150.
   const reviewTitle = tracker ? T3_REVIEW_TITLE : `Review ${item}:`;
-  // A T3 Code fix gets one review: what it finds is fixed and the branch pushed without a second one, as rounds of
-  // reviews were slow and costly and could end with no push at all. The earlier words, up to three reviews and a push
-  // only on an approval of the last commit, are kept to recognise them (`review-rounds`).
+  // A T3 Code fix gets one review by default (`maxRounds` absent or 1), or up to 2–3 rounds when `t3Review.maxRounds`
+  // is set: on the final round, valid findings are fixed, checks re-run, and the branch pushed so fixes do not stall
+  // unpushed. The earlier words (up to three reviews pushing only on approval of the last commit) stay as `review-rounds`.
   const oneReview = words === 'today' || words === 'before-same-fault';
-  const afterReview = oneReview
-    ? `this one review is all: fix what it found that holds up (a bug it found gets a failing test first), run the checks again and commit; push ${branch}, and its screenshots' branch, to origin; never open a pull request, merge or deploy; if it can't be done safely (for a bug, when it can't be reproduced with a failing test), no review answered or it found something you can't fix, push nothing and say why.`
-    : `fix what it finds and have it reviewed again the same way, at most three reviews; push ${branch}, and its screenshots' branch, to origin only once a review approved its last commit; never open a pull request, merge or deploy; if it can't be done safely (for a bug, when it can't be reproduced with a failing test) or no review approved it, push nothing and say why.`;
+  const maxRounds = oneReview ? (recipe.t3Review?.maxRounds ?? 1) : 1;
+  const afterReview = !oneReview
+    ? `fix what it finds and have it reviewed again the same way, at most three reviews; push ${branch}, and its screenshots' branch, to origin only once a review approved its last commit; never open a pull request, merge or deploy; if it can't be done safely (for a bug, when it can't be reproduced with a failing test) or no review approved it, push nothing and say why.`
+    : maxRounds === 1
+      ? `this one review is all: fix what it found that holds up (a bug it found gets a failing test first), run the checks again and commit; push ${branch}, and its screenshots' branch, to origin; never open a pull request, merge or deploy; if it can't be done safely (for a bug, when it can't be reproduced with a failing test), no review answered or it found something you can't fix, push nothing and say why.`
+      : `up to ${maxRounds} review rounds: fix valid findings (a bug gets a failing test first), re-run checks, commit, and before round ${maxRounds} re-review the same way if changes were asked; once approved or after round ${maxRounds}’s fixes, push ${branch} and its screenshots’ branch to origin; never open a pull request, merge or deploy; if unsafe, unreproducible, no review answered or unfixable, push nothing and say why.`;
   const reviewFound = oneReview
     ? 'what the review found and what was done about it'
     : 'what the review found';
@@ -1324,7 +1332,7 @@ function fixSteps(
           timeoutMinutes: T3_STEP_MINUTES.review,
           // The reviewer's own words are read here, never the fix thread's account of them: a fix may merge on its own.
           prompt: oneReview
-            ? `Another model reviewed the work for ${what}, on ${branch} in ${repo}, once, inside its T3 Code thread, which then dealt with what it found. Read that review yourself in T3 Code (${t3}): find the project of ${repo} with t3_project_list, the review with t3_thread_list {projectId, includeSubagents: true, titleContains: "${reviewTitle}"} (the newest), and its last answer with t3_thread_read; if it still runs, wait with t3_thread_wait, untilDelegatedWorkSettled true. Start your reply with “${VERDICT_APPROVE}” and the commit the review read, as it names it (“${VERDICT_APPROVE} — reviewed 8c94527”), only when the fix turn says ${branch} was pushed (take its word for the push and don't look on GitHub: the next step opens the pull request from the branch and stops when it isn't there) and either that last answer approves the work or the fix turn says what was done about each thing it found (fixed, or why it doesn't hold); else with “${VERDICT_CHANGES}” and what has to change, also when you find no review or something it found was left without a reason. Then say in two or three sentences what the review checked and found and what changed after it; it goes into the pull request's description too.\n\n${assessment}\n\nWhat the fix turn said:\n{{steps.fix.reply}}`
+            ? `Another model reviewed the work for ${what}, on ${branch} in ${repo}, ${maxRounds === 1 ? 'once' : `up to ${maxRounds} rounds`}, inside its T3 Code thread, which ${maxRounds === 1 ? 'then ' : ''}dealt with what it found. Read ${maxRounds === 1 ? 'that' : 'the newest'} review yourself in T3 Code (${t3}): find the project of ${repo} with t3_project_list, the review with t3_thread_list {projectId, includeSubagents: true, titleContains: "${reviewTitle}"} (the newest), and its last answer with t3_thread_read; if it still runs, wait with t3_thread_wait, untilDelegatedWorkSettled true. Start your reply with “${VERDICT_APPROVE}” and the commit the review read, as it names it (“${VERDICT_APPROVE} — reviewed 8c94527”), only when the fix turn says ${branch} was pushed (take its word for the push and don't look on GitHub: the next step opens the pull request from the branch and stops when it isn't there) and either that last answer approves the work or the fix turn says what was done about each thing it found (fixed, or why it doesn't hold); else with “${VERDICT_CHANGES}” and what has to change, also when you find no review or something it found was left without a reason. Then say in two or three sentences what the review checked and found and what changed after it; it goes into the pull request's description too.\n\n${assessment}\n\nWhat the fix turn said:\n{{steps.fix.reply}}`
             : `Another model reviewed the work for ${what}, on ${branch} in ${repo}, inside its T3 Code thread. Read that review yourself in T3 Code (${t3}): find the project of ${repo} with t3_project_list, the review with t3_thread_list {projectId, includeSubagents: true, titleContains: "${reviewTitle}"} (the newest), and its last answer with t3_thread_read; if it still runs, wait with t3_thread_wait, untilDelegatedWorkSettled true. Start your reply with “${VERDICT_APPROVE}” and ${REVIEW_NAMES_COMMIT}, as it names it (“${VERDICT_APPROVE} — reviewed 8c94527”), only when that last answer approves the work and the fix turn says ${branch} was pushed (take its word for the push and don't look on GitHub: the next step opens the pull request from the branch and stops when it isn't there); else with “${VERDICT_CHANGES}” and what has to change, also when you find no review. Then say in two or three sentences what the review checked and found; it goes into the pull request's description too.\n\n${assessment}\n\nWhat the fix turn said:\n{{steps.fix.reply}}`,
         }
       : {

@@ -229,7 +229,14 @@ export function t3ThreadTurnLines(ctx: DispatchContext, noReply: string): string
       : []),
     ...(threads.some((t) => t.event === 'finished' && t.reported && !endedBadly(t.status))
       ? [
-          `For a thread whose report Whombat already posted: don’t repeat, summarise or announce it, the person reads it there. When the person’s request needs a next step from you that waited on this work, take it. Otherwise post nothing and end the turn with only ${noReply}.`,
+          ctx.unlandedFix
+            ? `For a thread whose report Whombat already posted: don’t repeat, summarise or announce it, the person reads it there. This thread still has an unlanded report fix (runId ${ctx.unlandedFix.runId}, next step "${ctx.unlandedFix.nextStepId}"): do not end with ${noReply} while steps remain. If T3 Code pushed the fix and finished its review, call automation_continue_run now with a short note of what changed so Whombat opens${ctx.unlandedFix.merges ? ' and merges' : ''} the pull request; if T3 Code still has work to do, send that follow-up now; if it needs the person, say what blocks it in one plain sentence.`
+            : `For a thread whose report Whombat already posted: don’t repeat, summarise or announce it, the person reads it there. When the person’s request needs a next step from you that waited on this work, take it. Otherwise post nothing and end the turn with only ${noReply}.`,
+        ]
+      : []),
+    ...(ctx.unlandedFix && threads.some((t) => t.event === 'finished' && !t.reported && !endedBadly(t.status))
+      ? [
+          `This thread still has an unlanded report fix (runId ${ctx.unlandedFix.runId}, next step "${ctx.unlandedFix.nextStepId}"): if T3 Code pushed the fix and finished its review, call automation_continue_run now with a short note of what changed so Whombat finishes landing it.`,
         ]
       : []),
     ...(threads.some((t) => t.event === 'finished' && t.reported && endedBadly(t.status))

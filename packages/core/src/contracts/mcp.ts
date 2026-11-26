@@ -15,6 +15,8 @@ import {
   AutomationGrant,
   AutomationId,
   AutomationKey,
+  AutomationRunId,
+  AutomationStepId,
   ProposeConnectionActionsInput,
   ReportAssessmentInput,
 } from '../domain/automation.js';
@@ -771,6 +773,23 @@ export const MCP_TOOLS = {
     }),
     requiredKey: null,
     readOnly: true,
+  }),
+  automation_continue_run: tool({
+    name: 'automation_continue_run',
+    title: 'Continue an unlanded report run',
+    description:
+      'Continue a finished report automation run in this thread whose fix did not land yet (for example after T3 Code finished fixing review findings and pushed the branch). Resets steps from fromStepId back to pending so Whombat runs the remaining steps (review, open pull request, merge once checks pass, and release). Use fromStepId "review" whenever new commits were pushed; use "pr" or "merge" only when no new commit was pushed. Only works in the person’s turns in that run’s thread.',
+    input: z.object({
+      runId: AutomationRunId,
+      fromStepId: z.enum(['fix', 'review', 'pr', 'merge']).optional(),
+      note: z.string().trim().min(1).max(4000).optional(),
+    }),
+    output: commitOutcome({
+      runId: AutomationRunId,
+      fromStepId: AutomationStepId,
+    }),
+    requiredKey: null,
+    readOnly: false,
   }),
   report_assessment: tool({
     name: 'report_assessment',

@@ -44,7 +44,7 @@ import {
   TailscaleLoginServer,
   tailscaleLoginUrlTrusted,
 } from './tailscale.js';
-import { LOOKS_AHEAD_INBOX_MINOR, SESSION_PROTOCOL } from './version.js';
+import { SESSION_PROTOCOL, T3_REVIEW_ROUNDS_MINOR } from './version.js';
 
 const BOX = '12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH';
 const SECRET = 'Zm9vYmFyYmF6cXV4cXV1eDEyMzQ';
@@ -77,7 +77,7 @@ describe('the edition (CT-1300, CT-1301)', () => {
   });
 
   it('counts the additions in the session minor: 1 is the local claim’s proof round, 2 the hello’s claim link, 3 mail automations, 4 Find My, 5 its timeline, 6 own names, 7 account pages, 8 the 1Password sync', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: LOOKS_AHEAD_INBOX_MINOR });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: T3_REVIEW_ROUNDS_MINOR });
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

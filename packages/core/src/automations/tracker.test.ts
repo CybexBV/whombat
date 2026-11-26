@@ -430,6 +430,53 @@ describe('code work in T3 Code (TA-37)', () => {
     ).toMatch(/needs T3 Code/);
   });
 
+  it('supports t3Review.maxRounds (1–3) while keeping maxRounds 1 identical to default and fixing-and-pushing on the final round', () => {
+    const base = def(recipe);
+    const one = def({
+      ...recipe,
+      t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds: 1 },
+    });
+    // maxRounds: 1 normalises away so default recipes stay byte-for-byte identical.
+    expect(one).toEqual(base);
+    expect(one.recipe?.t3Review?.maxRounds).toBeUndefined();
+
+    const three = def({
+      ...recipe,
+      decideFeatures: true,
+      t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds: 3 },
+    });
+    expect(validateDefinition(three).problems).toEqual([]);
+    expect(recipeOf(three)).toEqual(three.recipe);
+    expect(recipeIsCurrent(three)).toBe(true);
+    expect(three.recipe?.t3Review?.maxRounds).toBe(3);
+
+    const fixStep = three.steps.find((s) => s.id === 'fix');
+    const reviewStep = three.steps.find((s) => s.id === 'review');
+    if (fixStep?.kind !== 'dispatch_agent' || reviewStep?.kind !== 'dispatch_agent')
+      throw new Error('expected dispatch_agent steps');
+    expect(fixStep.prompt.length).toBeLessThanOrEqual(4000);
+    expect(reviewStep.prompt.length).toBeLessThanOrEqual(4000);
+    expect(fixStep.prompt).toContain('up to 3 review rounds');
+    expect(fixStep.prompt).toContain('round 3');
+    expect(fixStep.prompt).toContain('push feat/{{trigger.ref}}');
+    expect(reviewStep.prompt).toContain('up to 3 rounds');
+    expect(reviewStep.prompt).toContain('newest');
+
+    // Out-of-range values are rejected.
+    expect(
+      recipeProblem({
+        ...recipe,
+        t3Review: { model: 'gpt-6.1-sol', maxRounds: 0 },
+      }),
+    ).not.toBeNull();
+    expect(
+      recipeProblem({
+        ...recipe,
+        t3Review: { model: 'gpt-6.1-sol', maxRounds: 4 },
+      }),
+    ).not.toBeNull();
+  });
+
   it('keeps an automation made before as its recipe and offers to update its wording', () => {
     const d = def({ ...recipe, decideFeatures: true });
     const older = {

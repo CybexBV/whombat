@@ -43,7 +43,7 @@ import { aheadThreadLines, aheadTurnLines, aheadWatchLines } from './ahead';
 import { grantedApprovalLine, retryLine, undoRequestLines } from './approvals';
 import { attachmentNote } from './attachments';
 import { cardNote } from './cards';
-import { codeLines } from './code';
+import { codeLines, unlandedFixLines } from './code';
 import { connectionLines } from './connections';
 import { defuseDelimiters } from './defuse';
 import { deskTurnLines } from './desk';
@@ -472,6 +472,7 @@ export function prefaceLines(ctx: DispatchContext, options: TurnPromptOptions = 
     `Conversation: ${where(ctx)} (conversationId ${c.id})${c.topic ? ` — ${c.topic}` : ''}`,
     ...connectionLines(ctx),
     ...codeLines(ctx),
+    ...unlandedFixLines(ctx),
     ...changeWindowLines(ctx),
     ...commandLines(ctx, options),
     ...browserLines(ctx, options),

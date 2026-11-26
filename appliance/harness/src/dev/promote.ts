@@ -78,11 +78,22 @@ async function main(): Promise<number> {
     say(`${step.words}…`);
     switch (step.kind) {
       case 'promote': {
-        const r = await run(await tufrepoBin(), ['gh-promote', '--dir', github.dir, '--release', a.id], {
-          cwd: REPO_DIR,
-          logFile: join(logDir, 'gh-promote.log'),
-          timeoutMs: 30 * 60_000,
-        });
+        const bin = await tufrepoBin();
+        const r = await plan.retryTransientPush(
+          () =>
+            run(bin, ['gh-promote', '--dir', github.dir, '--release', a.id], {
+              cwd: REPO_DIR,
+              logFile: join(logDir, 'gh-promote.log'),
+              timeoutMs: 30 * 60_000,
+            }),
+          {
+            sleep: (ms) => sleep(ms),
+            onRetry: ({ attempt, maxAttempts, waitMs }) =>
+              say(
+                `tufrepo gh-promote hit a transient GitHub push error (attempt ${attempt}/${maxAttempts}); retrying in ${Math.round(waitMs / 1000)}s…`,
+              ),
+          },
+        );
         if (r.code !== 0)
           throw new Error(
             `tufrepo gh-promote failed (${r.code}; ${join(logDir, 'gh-promote.log')}): ${r.stderr.trim().split('\n').slice(-3).join(' ')}`,
@@ -118,7 +129,24 @@ async function main(): Promise<number> {
             `the tag ${step.tag} is on ${at.slice(0, 12)}, not on ${step.rev.slice(0, 12)}, the commit the release was built from: someone must look before anything is moved`,
           );
         if (!at) await git('tag', '-a', step.tag, '-m', `${step.tag} in Production`, step.rev);
-        await git('push', 'origin', `refs/tags/${step.tag}`);
+        const push = await plan.retryTransientPush(
+          () =>
+            run('git', ['-C', top, 'push', 'origin', `refs/tags/${step.tag}`], {
+              cwd: top,
+              logFile: join(logDir, 'tag.log'),
+            }),
+          {
+            sleep: (ms) => sleep(ms),
+            onRetry: ({ attempt, maxAttempts, waitMs }) =>
+              say(
+                `pushing tag ${step.tag} hit a transient GitHub push error (attempt ${attempt}/${maxAttempts}); retrying in ${Math.round(waitMs / 1000)}s…`,
+              ),
+          },
+        );
+        if (push.code !== 0)
+          throw new Error(
+            `git push refs/tags/${step.tag} failed (${push.code}; ${join(logDir, 'tag.log')}): ${push.stderr.trim().split('\n').slice(-3).join(' ')}`,
+          );
         say(`${step.tag} is a tag on ${step.rev.slice(0, 12)}`);
         tagged = step.rev;
         break;

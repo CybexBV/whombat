@@ -69,8 +69,10 @@ import { type BoundDriver, driverIdOf } from './drivers';
 import { SourceProblem, TrackerConflict, TrackerNotFound, TrackerRefusal } from './errors';
 import { scopeReport, trackerItemKey } from './items';
 import {
+  hasReleaseTargets,
   nudgeRelease,
   RELEASE_ATTEMPTS,
+  RELEASE_DEV_GRACE_MS,
   RELEASE_HOLD_MS,
   RELEASE_LAST_RETRY_MS,
   RELEASE_NUDGE_ANSWER_MS,
@@ -81,9 +83,9 @@ import {
   RELEASE_START_RETRY_MS,
   ReleaseProblem,
   releaseEnded,
-  releaseReporters,
   releaseRevived,
   releaseState,
+  releasesForAll,
   releasesStraightAway,
   releaseUnderWay,
   reportsBeingFixed,
@@ -208,8 +210,11 @@ export async function developmentConnection(
         ),
       )
   ).sort((a, b) => a.label.localeCompare(b.label));
+  const driver = driverIdOf(report);
   const development: CatalogConnectionRow[] = [];
-  for (const c of others) if ((await connectionEnvironment(db, c)) === 'development') development.push(c);
+  for (const c of others)
+    if (driverIdOf(c) === driver && (await connectionEnvironment(db, c)) === 'development')
+      development.push(c);
   if (development.length <= 1) return development[0] ?? null;
   const live = await db
     .select({ definition: automationVersions.definition })
@@ -372,13 +377,23 @@ export const FIX_WORDS = {
   separateArrived(host: string, version: string | null, product: string): string {
     return `The fix is ready for customers’ computers on ${host}${versionOf(version, product)}. The customer heard at its merge that it comes with an update, so the report was only marked as released.`;
   },
-  /** TA-136: “The fix is live on dev.tracker.com (Acme Desk 0.1.176). This reporter's fixes go straight to production, …” */
-  releasing(host: string, version: string | null, product: string): string {
-    return `The fix is live on ${host}${versionOf(version, product)}. This reporter’s fixes go straight to production, so T3 Code is releasing it now. The customer hears once it’s live there.`;
+  releasing(host: string, version: string | null, product: string, allReporters = false): string {
+    const who = allReporters ? 'Bug fixes for this tracker' : 'This reporter’s fixes';
+    return `The fix is live on ${host}${versionOf(version, product)}. ${who} go straight to production, so T3 Code is releasing it now. The customer hears once it’s live there.`;
+  },
+  /** Starting a straight-to-production release directly from a merged commit before development runs it. */
+  releasingFromMerge(host: string, allReporters: boolean, link?: string): string {
+    const head = link ? `${link} was merged.` : `${host} doesn’t run the fix yet.`;
+    const who = allReporters ? 'Bug fixes for this tracker' : 'This reporter’s fixes';
+    return `${head} ${who} go straight to production, so T3 Code is running the release procedure now. The customer hears once it’s live there.`;
   },
   /** A chosen reporter's fix live on development while another release of the repository is under way. */
   releaseWaits(host: string, version: string | null, product: string): string {
     return `The fix is live on ${host}${versionOf(version, product)}. Another production release is under way, so T3 Code releases this one once that’s done. The customer hears once it’s live there.`;
+  },
+  releaseWaitsFromMerge(host: string, link?: string): string {
+    const head = link ? `${link} was merged.` : `${host} doesn’t run the fix yet.`;
+    return `${head} Another production release is under way, so T3 Code releases this one once that’s done. The customer hears once it’s live there.`;
   },
   /** A chosen reporter's fix live on development while other reports going straight to production are being fixed. */
   releaseHeld(host: string, version: string | null, product: string, numbers: number[]): string {
@@ -391,6 +406,17 @@ export const FIX_WORDS = {
             .join(', ')} and #${numbers.at(-1)} also go straight to production and are`;
     // Two hours: RELEASE_HOLD_MS.
     return `The fix is live on ${host}${versionOf(version, product)}. ${which} still being fixed, so T3 Code releases them together, or this one alone after two hours. The customer hears once it’s live there.`;
+  },
+  releaseHeldFromMerge(host: string, numbers: number[], link?: string): string {
+    const head = link ? `${link} was merged.` : `${host} doesn’t run the fix yet.`;
+    const which =
+      numbers.length === 1
+        ? `Report #${numbers[0]} also goes straight to production and is`
+        : `Reports ${numbers
+            .slice(0, -1)
+            .map((n) => `#${n}`)
+            .join(', ')} and #${numbers.at(-1)} also go straight to production and are`;
+    return `${head} ${which} still being fixed, so T3 Code releases them together, or this one alone after two hours. The customer hears once it’s live there.`;
   },
   /** A held fix the release for another such report takes along. */
   releaseJoins(number: number): string {
@@ -410,6 +436,9 @@ export const FIX_WORDS = {
   releasingAgain(host: string, version: string | null, product: string): string {
     return `${host} now runs a newer version with the fix${versionOf(version, product)}, so T3 Code is trying the production release again.`;
   },
+  releasingAgainFromMerge(): string {
+    return 'T3 Code is trying the production release again.';
+  },
   /** A stopped release's thread went on after the stop. */
   releaseGoesOn(): string {
     return 'The production release went on in T3 Code after it stopped, so Whombat follows it again.';
@@ -420,6 +449,9 @@ export const FIX_WORDS = {
     return told === 'told'
       ? `${head} The customer was told it’s fixed and comes with the next update.`
       : `${head} ${notToldText(told)}`;
+  },
+  releaseStoppedFromMerge(why: string): string {
+    return `The production release stopped before production ran the fix: ${why}.`;
   },
 };
 
@@ -1160,7 +1192,7 @@ const NOT_LIVE_STRAIGHT_MS = 90 * 60_000;
 
 /** How long `fix` may take to run on development before the person hears: soon where it goes straight on. */
 function notLiveAfter(fix: FixRow, connection: CatalogConnectionRow, reportEnv: TrackerEnvironment): number {
-  return reportEnv === 'production' && fix.kind === 'bug' && releaseReporters(connection.fields).length
+  return reportEnv === 'production' && fix.kind === 'bug' && hasReleaseTargets(connection.fields)
     ? NOT_LIVE_STRAIGHT_MS
     : NOT_LIVE_AFTER_MS;
 }
@@ -1218,12 +1250,12 @@ async function tellPerson(c: Context, fix: FixRow, text: string, dedupKey: strin
 }
 
 /**
- * Starts the production release of a chosen reporter's bug fix that development runs now (TA-135, TA-136) and moves the
- * fix on to wait for production, saying so in the run's thread. While another release of the repository is under way,
- * or the chosen reporters' other reports are still being fixed, the fix moves on all the same but its release waits
- * (`releaseBehind`), so one release takes them together. False when it isn't such a fix, or when the release couldn't
- * start: then the person hears why once, the try is kept (tried again later), and the fix goes on as any other (the
- * customer hears it's coming). `again` is a later start: a try after a stopped one, numbered, or the one that waited.
+ * Starts the production release of an eligible bug fix — once development runs it, or directly from the merged commit
+ * when development does not auto-deploy (`opts.fromMerge`) — saying so in the run's thread. While another release of
+ * the repository is under way, or other eligible reports are still being fixed, the release waits (`releaseBehind`), so
+ * one release takes them together. False when the fix is not eligible, or when the release couldn't start: then the
+ * person hears why once and the try is kept (tried again later). `again` is a later start: a try after a stopped one,
+ * numbered, or the one that waited.
  */
 async function releaseStarts(
   c: Context,
@@ -1233,16 +1265,26 @@ async function releaseStarts(
   host: string,
   health: Health,
   again: { attempt: number; after: 'stop' | 'wait' | 'held' | 'late' } | null = null,
+  opts: {
+    fromMerge?: boolean;
+    link?: string;
+    merged?: { mergeSha: string | null; mergedAt: string; prUrl: string | null; separate?: Separate };
+  } = {},
 ): Promise<boolean> {
-  if (!health.revision || (reportEnv !== 'production' && reportEnv !== 'development')) return false;
+  const fromMerge = !!opts.fromMerge;
+  const revision = fromMerge ? (opts.merged?.mergeSha ?? fix.mergeSha) : health.revision;
+  if (!revision || (reportEnv !== 'production' && reportEnv !== 'development')) return false;
   const driver = c.driverFor(connection);
   if (!(await releasesStraightAway(driver, connection, fix, reportEnv, !!again))) return false;
   const attempt = again?.attempt ?? 1;
   const earlier = replacedThreads(fix.release, c.now);
   const product = await productOf(c, fix, connection);
+  const allReporters = releasesForAll(connection.fields);
   const other = again ? null : await releaseUnderWay(c.services.db, fix);
-  // Other chosen reporters' reports still being fixed: one release later takes them all, rather than one each now.
-  const pending = again || other ? [] : await reportsBeingFixed(c.services.db, driver, connection, fix);
+  // Other eligible reports still being fixed: one release later takes them all, rather than one each now.
+  const pending =
+    again || other ? [] : await reportsBeingFixed(c.services.db, driver, connection, fix, { fromMerge });
+  const nextState: TrackerFixState = opts.merged ? 'development' : fromMerge ? fix.state : 'development';
   if (other || pending.length) {
     const at = c.now.toISOString();
     await change(
@@ -1250,12 +1292,13 @@ async function releaseStarts(
       fix,
       [fix.state],
       {
-        state: 'development',
-        developmentHost: host,
-        developmentVersion: health.version,
-        developmentAt: at,
+        ...(opts.merged ?? {}),
+        state: nextState,
+        ...(!fromMerge
+          ? { developmentHost: host, developmentVersion: health.version, developmentAt: at }
+          : {}),
         release: {
-          revision: health.revision,
+          revision,
           startedAt: at,
           attempt,
           ...(other ? { behind: other.id } : { held: true }),
@@ -1263,9 +1306,14 @@ async function releaseStarts(
         },
         note: null,
       },
-      other
-        ? FIX_WORDS.releaseWaits(host, health.version, product)
-        : FIX_WORDS.releaseHeld(host, health.version, product, pending),
+      fromMerge
+        ? other
+          ? FIX_WORDS.releaseWaitsFromMerge(host, opts.link)
+          : FIX_WORDS.releaseHeldFromMerge(host, pending, opts.link)
+        : other
+          ? FIX_WORDS.releaseWaits(host, health.version, product)
+          : FIX_WORDS.releaseHeld(host, health.version, product, pending),
+      !!opts.merged,
     );
     return true;
   }
@@ -1276,8 +1324,10 @@ async function releaseStarts(
       product,
       host,
       version: health.version,
-      revision: health.revision,
+      revision,
       separate: fix.separate === 'only' || fix.separate === 'also' ? driver.info.releasedSeparately : null,
+      allReporters,
+      fromMerge,
     });
   } catch (err) {
     const why = err instanceof ReleaseProblem ? err.message : 'it couldn’t start';
@@ -1288,7 +1338,7 @@ async function releaseStarts(
     const at = c.now.toISOString();
     await change(c, fix, [fix.state], {
       release: {
-        revision: health.revision,
+        revision,
         startedAt: at,
         stoppedAt: at,
         why: `it couldn’t start: ${why}`,
@@ -1296,10 +1346,11 @@ async function releaseStarts(
         ...earlier,
       },
     });
+    const whereWords = fromMerge ? 'was merged' : `is live on ${host}`;
     await tellPerson(
       c,
       fix,
-      `${connection.label} #${fix.number}’s fix is live on ${host}, but its production release couldn’t start: ${why}. Whombat tries again every half hour; if it keeps failing, it needs you.`,
+      `${connection.label} #${fix.number}’s fix ${whereWords}, but its production release couldn’t start: ${why}. Whombat tries again every half hour; if it keeps failing, it needs you.`,
       `tracker_release_start:${fix.id}:${attempt}`,
     );
     return false;
@@ -1309,10 +1360,15 @@ async function releaseStarts(
     fix,
     [fix.state],
     {
-      state: 'development',
-      developmentHost: host,
-      developmentVersion: health.version,
-      developmentAt: c.now.toISOString(),
+      ...(opts.merged ?? {}),
+      state: nextState,
+      ...(!fromMerge
+        ? {
+            developmentHost: host,
+            developmentVersion: health.version,
+            developmentAt: c.now.toISOString(),
+          }
+        : {}),
       release: { ...release, attempt, ...earlier },
       note: null,
     },
@@ -1321,18 +1377,22 @@ async function releaseStarts(
       : again?.after === 'held' || again?.after === 'late'
         ? FIX_WORDS.releasingAfterHold(again.after === 'late')
         : again
-          ? FIX_WORDS.releasingAgain(host, health.version, product)
-          : FIX_WORDS.releasing(host, health.version, product),
+          ? fromMerge
+            ? FIX_WORDS.releasingAgainFromMerge()
+            : FIX_WORDS.releasingAgain(host, health.version, product)
+          : fromMerge
+            ? FIX_WORDS.releasingFromMerge(host, allReporters, opts.link)
+            : FIX_WORDS.releasing(host, health.version, product, allReporters),
+    !!opts.merged,
   );
   return true;
 }
 
 /**
- * A chosen reporter's fix whose release waits: for another release of the repository, or for the chosen reporters' other
- * reports still being fixed (`RELEASE_HOLD_MS` at most since it reached development). A release that starts for one of
- * those takes this one along (it releases what development runs, which has this fix). Once no release is under way,
- * nothing else is being fixed or the wait is over, and production still lacks this fix (a pass that finds it there ends
- * the fix first), this fix's release starts for what development runs then.
+ * An eligible fix whose release waits: for another release of the repository, or for other eligible reports still being
+ * fixed (`RELEASE_HOLD_MS` at most). A release that starts for one of those takes this one along. Once no release is
+ * under way, nothing else is being fixed or the wait is over, and production still lacks this fix, this fix's release
+ * starts.
  */
 async function releaseBehind(
   c: Context,
@@ -1348,25 +1408,44 @@ async function releaseBehind(
       await change(
         c,
         fix,
-        ['development'],
+        [fix.state],
         { release: { ...before, behind: other.id } },
         FIX_WORDS.releaseJoins(other.number),
       );
     return;
   }
-  const pending = await reportsBeingFixed(c.services.db, c.driverFor(connection), connection, fix);
+  const where = await developmentConnection(c.services.db, connection, fix.repo);
+  const fromMerge = fix.state === 'merged' || !where;
+  const pending = await reportsBeingFixed(c.services.db, c.driverFor(connection), connection, fix, {
+    fromMerge,
+  });
   const late = c.now.getTime() - Date.parse(before.startedAt) >= RELEASE_HOLD_MS;
   if (pending.length && !late) return;
-  const where = await developmentConnection(c.services.db, connection, fix.repo);
-  if (!where) return;
-  const health = await healthOf(c.services, where, () => c.driverFor(where));
-  if (!health.revision || health.environment !== 'development' || health.revision === before.devChecked)
+  const after = before.behind ? 'wait' : pending.length ? 'late' : 'held';
+  if (!fromMerge && where) {
+    const health = await healthOf(c.services, where, () => c.driverFor(where));
+    if (!health.revision || health.environment !== 'development' || health.revision === before.devChecked)
+      return;
+    if (!(await holdsFix(c, fix, before, health.revision))) return;
+    await releaseStarts(c, fix, connection, reportEnv, hostOf(where.baseUrl), health, {
+      attempt: before.attempt ?? 1,
+      after,
+    });
     return;
-  if (!(await holdsFix(c, fix, before, health.revision))) return;
-  await releaseStarts(c, fix, connection, reportEnv, hostOf(where.baseUrl), health, {
-    attempt: before.attempt ?? 1,
-    after: before.behind ? 'wait' : pending.length ? 'late' : 'held',
-  });
+  }
+  if (!fix.mergeSha) return;
+  const target = where ?? connection;
+  const health = await healthOf(c.services, target, () => c.driverFor(target));
+  await releaseStarts(
+    c,
+    fix,
+    connection,
+    reportEnv,
+    hostOf(target.baseUrl),
+    health,
+    { attempt: before.attempt ?? 1, after },
+    { fromMerge: true },
+  );
 }
 
 /**
@@ -1388,7 +1467,7 @@ async function holdsFix(
     return false;
   }
   UNSURE_AT.delete(unsure);
-  if (!has) await change(c, fix, ['development'], { release: { ...release, devChecked: revision } });
+  if (!has) await change(c, fix, [fix.state], { release: { ...release, devChecked: revision } });
   return has;
 }
 
@@ -1497,6 +1576,16 @@ async function followRelease(
     `The production release of ${connection.label} #${fix.number}’s fix stopped: ${stopped}. ${attempt < RELEASE_ATTEMPTS ? 'Whombat tries again later if what stopped it is mended; until then it needs you.' : 'Whombat doesn’t try again: it needs you to release it.'}`,
     `tracker_release:${fix.id}:${attempt}${release.revivals ? `.${release.revivals}` : ''}`,
   );
+  if (fix.state === 'merged') {
+    await change(
+      c,
+      fix,
+      ['merged'],
+      { release: { ...release, stoppedAt: c.now.toISOString(), why: stopped, stoppedRun: state.run } },
+      FIX_WORDS.releaseStoppedFromMerge(stopped),
+    );
+    return;
+  }
   const product = await productOf(c, fix, connection);
   const notice = trackerFixNotice({
     report: reportEnv,
@@ -1551,12 +1640,12 @@ async function watchMovement(
       `tracker_release_slow:${fix.id}:${release.attempt ?? 1}`,
     );
     release = { ...release, slowToldAt: c.now.toISOString() };
-    await change(c, fix, ['development'], { release });
+    await change(c, fix, [fix.state], { release });
   }
   // T3 Code not answering is no answer: only what it shows decides.
   if (state.items === null) return null;
   if (release.seenItems === undefined || state.items > release.seenItems) {
-    await change(c, fix, ['development'], {
+    await change(c, fix, [fix.state], {
       release: { ...release, seenItems: state.items, seenAt: c.now.toISOString(), nudgedAt: undefined },
     });
     return null;
@@ -1568,7 +1657,7 @@ async function watchMovement(
   if (state.quiet && still >= RELEASE_QUIET_MS) {
     const asked = await nudgeRelease(c.services, release, state.items);
     if (asked !== null)
-      await change(c, fix, ['development'], {
+      await change(c, fix, [fix.state], {
         release: { ...release, seenItems: asked, nudgedAt: c.now.toISOString() },
       });
   }
@@ -1578,10 +1667,9 @@ async function watchMovement(
 /**
  * A chosen reporter's fix whose release stopped or couldn't start. A stopped release whose thread went on after the stop
  * (someone wrote to it) is followed again. Otherwise Whombat starts the release again once the stopped release's thread
- * has ended, no other release of the repository is under way, and development runs a revision with the fix — a newer one
- * (someone mended what stopped it), or the same one `RELEASE_SAME_RETRY_MS` after the stop (mended outside the code: the
- * person decided, a check passes now). At most `RELEASE_ATTEMPTS` releases for one fix; a try that couldn't start (T3
- * Code away) doesn't count and is tried again after `RELEASE_START_RETRY_MS`. Never two releases of one fix at once.
+ * has ended, no other release of the repository is under way, and development runs a revision with the fix (or, when
+ * releasing straight from the merged commit, after the retry wait). At most `RELEASE_ATTEMPTS` releases for one fix; a
+ * try that couldn't start (T3 Code away) doesn't count and is tried again after `RELEASE_START_RETRY_MS`.
  */
 async function releaseAgain(
   c: Context,
@@ -1596,7 +1684,7 @@ async function releaseAgain(
     await change(
       c,
       fix,
-      ['development'],
+      [fix.state],
       {
         release: {
           ...before,
@@ -1617,14 +1705,37 @@ async function releaseAgain(
   const attempt = before.attempt ?? 1;
   if (started && attempt >= RELEASE_ATTEMPTS) return;
   const where = await developmentConnection(c.services.db, connection, fix.repo);
-  if (!where) return;
+  const since = c.now.getTime() - Date.parse(before.stoppedAt);
+  if (fix.state === 'merged' || !where) {
+    if (!fix.mergeSha) return;
+    const wait = !started
+      ? RELEASE_START_RETRY_MS
+      : attempt >= 2
+        ? RELEASE_LAST_RETRY_MS
+        : RELEASE_SAME_RETRY_MS;
+    if (since < wait) return;
+    if (started && !(await releaseEnded(c.services, before))) return;
+    if (await releaseUnderWay(c.services.db, fix)) return;
+    const target = where ?? connection;
+    const health = await healthOf(c.services, target, () => c.driverFor(target));
+    await releaseStarts(
+      c,
+      fix,
+      connection,
+      reportEnv,
+      hostOf(target.baseUrl),
+      health,
+      { attempt: started ? attempt + 1 : attempt, after: 'stop' },
+      { fromMerge: true },
+    );
+    return;
+  }
   const health = await healthOf(c.services, where, () => c.driverFor(where));
   if (!health.revision || health.environment !== 'development' || health.revision === before.devChecked)
     return;
   // A try that couldn't start goes again after a short while. After a stop, the second try goes at once for a newer
   // revision (someone mended main), else three hours on; the last waits half a day, so unrelated merges reaching
   // development don't use up the tries before the person could act on what stopped it.
-  const since = c.now.getTime() - Date.parse(before.stoppedAt);
   const wait = !started
     ? RELEASE_START_RETRY_MS
     : attempt >= 2
@@ -1775,7 +1886,21 @@ async function followOne(c: Context, fix: FixRow): Promise<void> {
       return;
     }
     if (!development) {
-      // A production report without a development tracker: the merge counts as “fixed in development” (TA-32).
+      // A production report without a development tracker: start a straight-to-production release immediately at merge
+      // when eligible, holding back the “comes with the next update” customer notice until production runs it.
+      if (reportEnv === 'production' && fix.kind === 'bug' && mergeSha) {
+        const fresh = { ...fix, ...merged, mergedAt: new Date(merged.mergedAt) };
+        const health = await healthOf(c.services, connection, () => c.driverFor(connection));
+        if (
+          await releaseStarts(c, fresh, connection, reportEnv, hostOf(connection.baseUrl), health, null, {
+            fromMerge: true,
+            link,
+            merged,
+          })
+        )
+          return;
+      }
+      // Otherwise the merge counts as “fixed in development”.
       const notice = trackerFixNotice({
         report: reportEnv,
         live: 'development',
@@ -1814,24 +1939,39 @@ async function followOne(c: Context, fix: FixRow): Promise<void> {
     const where =
       stage === 'development' ? await developmentConnection(db, connection, fix.repo) : connection;
     if (!where) return;
-    // Development deploys a merged fix by itself (TA-35): hours later still without it, once what development runs
-    // was looked at, the person hears once (TA-61).
+    // Development deploys a merged fix by itself when a post-merge deploy runs; hours later still without it, the
+    // person hears once.
     const stale =
       stage === 'development' &&
       !!fix.mergedAt &&
       c.now.getTime() - fix.mergedAt.getTime() > notLiveAfter(fix, connection, reportEnv);
+    const health = await healthOf(c.services, where, () => c.driverFor(where));
     const notLive = async () => {
       if (stale) await tellNotLive(c, fix, hostOf(where.baseUrl));
-      // Production doesn't run it yet: a release that waits for another may start, one Whombat started may have
-      // stopped, or one that stopped may go on or go again.
-      if (stage === 'production' && fix.release)
+      // Not live at this stage yet: follow or retry a release already started for this fix, or — for repositories
+      // whose development/beta channel is built by the release procedure rather than auto-deployed on merge — start
+      // the straight-to-production release directly from the merged commit after a short grace period.
+      if (fix.release) {
         await (fix.release.behind || fix.release.held
           ? releaseBehind
           : fix.release.stoppedAt
             ? releaseAgain
             : followRelease)(c, fix, connection, reportEnv);
+        return;
+      }
+      if (
+        stage === 'development' &&
+        reportEnv === 'production' &&
+        fix.kind === 'bug' &&
+        fix.mergeSha &&
+        fix.mergedAt &&
+        c.now.getTime() - fix.mergedAt.getTime() >= RELEASE_DEV_GRACE_MS
+      ) {
+        await releaseStarts(c, fix, connection, reportEnv, hostOf(where.baseUrl), health, null, {
+          fromMerge: true,
+        });
+      }
     };
-    const health = await healthOf(c.services, where, () => c.driverFor(where));
     const live = stage === 'development' ? health.environment : reportEnv;
     // Where the customer is: the last stage, after which the fix isn't followed any more.
     const final = reportEnv === 'development' || stage === 'production' || live === 'production';
@@ -1879,14 +2019,45 @@ async function followOne(c: Context, fix: FixRow): Promise<void> {
     const host = hostOf(where.baseUrl);
     // Ready for the customer's computers: the notice says so, with the tracker's words for getting it right away.
     const ready = !!need.separate;
-    // A chosen reporter's bug fix on development goes straight to production (TA-135): the release starts, and the
-    // customer hears once production runs it instead of “comes with the next update” now.
-    if (
-      stage === 'development' &&
-      live === 'development' &&
-      (await releaseStarts(c, fix, connection, reportEnv, host, health))
-    )
-      return;
+    // An eligible bug fix on development goes straight to production: either a release already started from merge
+    // (keep it going and advance to `development` without notifying the customer early), or start one now.
+    if (stage === 'development' && live === 'development') {
+      if (fix.release && !fix.release.stoppedAt) {
+        const at = c.now.toISOString();
+        const release =
+          (fix.release.behind || fix.release.held) && health.revision
+            ? { ...fix.release, revision: health.revision }
+            : fix.release;
+        await change(c, fix, [fix.state], {
+          state: 'development',
+          developmentHost: host,
+          developmentVersion: health.version,
+          developmentAt: at,
+          release,
+          note: null,
+        });
+        return;
+      }
+      if (fix.release?.stoppedAt && fix.developmentRequestId) {
+        await change(c, fix, [fix.state], {
+          state: 'development',
+          developmentHost: host,
+          developmentVersion: health.version,
+          developmentAt: c.now.toISOString(),
+        });
+        return;
+      }
+      if (
+        fix.release?.stoppedAt &&
+        !fix.release.threadId &&
+        (await releaseStarts(c, fix, connection, reportEnv, host, health, {
+          attempt: fix.release.attempt ?? 1,
+          after: 'stop',
+        }))
+      )
+        return;
+      if (!fix.release && (await releaseStarts(c, fix, connection, reportEnv, host, health))) return;
+    }
     const at = c.now.toISOString();
     // Another fix of the report told the customer about this release already: this one went with it.
     const sibling = await toldBy(

@@ -16,7 +16,13 @@ import {
 import { decodeTolerant } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { answerFor, eventFor, FIND_MY_AUTOMATIONS_MINOR, MAIL_AUTOMATIONS_MINOR } from './older-apps';
+import {
+  answerFor,
+  eventFor,
+  FIND_MY_AUTOMATIONS_MINOR,
+  MAIL_AUTOMATIONS_MINOR,
+  T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR,
+} from './older-apps';
 
 /* The contracts an app below minor 3 decodes with: the release before mail triggers had none of these. */
 type Member = z.ZodObject<{ kind: z.ZodLiteral<string> }>;
@@ -304,4 +310,42 @@ it('shows monitoring as plain text on a session below minor 9', () => {
     root: { ...message, card: null },
     replies: [{ ...message, card: null }],
   });
+  // Minor 9..17 apps still read thing automations and thing_watch cards intact.
+  expect(answerFor('messages.thread', { root: message, replies: [message] }, 17)).toEqual({
+    root: message,
+    replies: [message],
+  });
+});
+
+it('hides definitions with t3Review.maxRounds from sessions below minor 18', () => {
+  const withRounds = AutomationDefinition.parse(
+    recipeDefinition({
+      when: { kind: 'tracker', connectionId: 'con_prod', itemKinds: ['bug'] },
+      job: 'assess',
+      instructions: 'Assess this report.',
+      conversationId: 'cnv_chat',
+      repo: 'acme/product',
+      t3: 't3',
+      t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds: 3 },
+      fix: { mode: 'auto', minImportance: 'high', merge: 'checks' },
+    }),
+  );
+  const autoWithRounds: Automation = {
+    ...automation,
+    definition: withRounds,
+    draft: withRounds,
+    glance: automation.glance ? { ...automation.glance, source: 'tracker' } : null,
+  };
+  const olderMinor = T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR - 1;
+  expect(answerFor('automations.get', { automation: autoWithRounds }, olderMinor)).toMatchObject({
+    automation: { definition: null, draft: null, glance: { source: 'tracker' } },
+  });
+  expect(() => answerFor('automations.export', { definition: withRounds }, olderMinor)).toThrow(
+    /Update the app/,
+  );
+  for (const newer of [T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR, undefined]) {
+    expect(answerFor('automations.get', { automation: autoWithRounds }, newer)).toEqual({
+      automation: autoWithRounds,
+    });
+  }
 });

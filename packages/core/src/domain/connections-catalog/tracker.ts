@@ -42,17 +42,17 @@ export const entry = {
       },
     },
     {
-      // Whombat report-trackers.md: on a production installation, these reporters' bug fixes are released as soon as
-      // development runs them. Read by the server only; an agent never sees it.
+      // On a production installation, these reporters' bug fixes (or every bug report with `*`) go straight to
+      // production through the repository's release procedure. Read by the server only; an agent never sees it.
       id: 'releaseFor',
       label: 'Straight to production for',
-      placeholder: 'name@example.com, other@example.com',
-      help: 'Production only: bug fixes for reports from these email addresses go to production as soon as they are live on development, through the repository’s own release procedure.',
+      placeholder: 'name@example.com, other@example.com, or *',
+      help: 'Production only: bug fixes for reports from these email addresses (or * for every bug report) go straight to production through the repository’s own release procedure.',
       kind: 'text',
       required: false,
       validation: {
-        pattern: '\\s*[^\\s,@]+@[^\\s,@]+(\\s*,\\s*[^\\s,@]+@[^\\s,@]+)*\\s*',
-        message: 'Email addresses, separated by commas.',
+        pattern: '\\s*(?:\\*|[^\\s,@]+@[^\\s,@]+(?:\\s*,\\s*[^\\s,@]+@[^\\s,@]+)*)\\s*',
+        message: 'Email addresses separated by commas, or * for all reporters.',
       },
     },
     {

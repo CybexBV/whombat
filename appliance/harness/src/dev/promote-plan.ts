@@ -15,6 +15,67 @@ export interface PromoteArgs {
 export const PROMOTE_USAGE =
   'usage: promote <release-id> [--yes] [--no-iso]   (moves a Beta release to Production on John’s word; without --yes it only says what it would do)';
 
+/** How many times a GitHub push step tries before giving up on a transient server or transport fault. */
+export const PROMOTE_PUSH_ATTEMPTS = 3;
+/** Delay between retries of a transient GitHub push fault, in milliseconds. */
+export const PROMOTE_PUSH_BACKOFF_MS: readonly number[] = [10_000, 30_000];
+
+const PERMANENT_PUSH_ERROR = [
+  /\b(?:non-fast-forward|already exists|fetch first|cannot lock ref)\b/i,
+  /\b(?:authentication failed|permission denied|could not read username|invalid username or token|access denied|repository not found)\b/i,
+  /\b(?:secret scanning|push declined due to repository rule violations|gh006|gh009|gh013)\b/i,
+  /\b(?:returned error|http|status)\s*[:=]?\s*40[134]\b/i,
+];
+
+const TRANSIENT_PUSH_ERROR = [
+  /fatal error in commit_refs_rules/i,
+  /\b(?:returned error|http|status)\s*[:=]?\s*5\d\d\b/i,
+  /\brpc failed\b/i,
+  /\b(?:internal server error|bad gateway|service unavailable|gateway timeout)\b/i,
+  /\b(?:remote unpack failed|the remote end hung up unexpectedly|early eof)\b/i,
+  /\b(?:connection reset|connection timed out|operation timed out|timed out|broken pipe|tls handshake timeout|could not resolve host|temporary failure in name resolution|network is unreachable)\b/i,
+  /\btry again later\b/i,
+];
+
+/**
+ * Whether a failed GitHub push (tufrepo gh-promote or git push) looks like a transient server or network fault that
+ * is safe to retry, as opposed to an auth, permission, rule, or ref-conflict refusal.
+ */
+export function isTransientGitHubPushError(output: string): boolean {
+  if (!output.trim()) return false;
+  if (PERMANENT_PUSH_ERROR.some((re) => re.test(output))) return false;
+  return TRANSIENT_PUSH_ERROR.some((re) => re.test(output));
+}
+
+/**
+ * Runs an idempotent GitHub push command, retrying up to `PROMOTE_PUSH_ATTEMPTS` times with backoff when the output
+ * matches a transient GitHub push fault. Non-transient failures return immediately without retrying.
+ */
+export async function retryTransientPush<T extends { code: number | null; stdout: string; stderr: string }>(
+  op: (attempt: number) => Promise<T>,
+  o: {
+    attempts?: number;
+    backoffMs?: readonly number[];
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: (info: { attempt: number; maxAttempts: number; waitMs: number; output: string }) => void;
+  } = {},
+): Promise<T> {
+  const maxAttempts = Math.max(1, o.attempts ?? PROMOTE_PUSH_ATTEMPTS);
+  const backoff = o.backoffMs ?? PROMOTE_PUSH_BACKOFF_MS;
+  const wait = o.sleep ?? (async () => {});
+  let last!: T;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    last = await op(attempt);
+    if (last.code === 0) return last;
+    const output = `${last.stderr}\n${last.stdout}`;
+    if (attempt >= maxAttempts || !isTransientGitHubPushError(output)) return last;
+    const waitMs = backoff[attempt - 1] ?? backoff.at(-1) ?? 0;
+    o.onRetry?.({ attempt, maxAttempts, waitMs, output });
+    if (waitMs > 0) await wait(waitMs);
+  }
+  return last;
+}
+
 export function parsePromoteArgs(argv: readonly string[]): PromoteArgs {
   let id: string | null = null;
   let yes = false;

@@ -11,11 +11,13 @@ import {
   AutomationGrant,
   AutomationId,
   type AutomationRecipe,
+  AutomationRunId,
   AutomationStepId,
   buildRecipe,
   buildTemplate,
   clampTier,
   conversationLabel,
+  DispatchId,
   decide,
   definitionHash,
   type JsonObject,
@@ -56,6 +58,7 @@ import {
   grants,
   principals,
   repos,
+  trackerFixes,
 } from '../db/schema/index';
 import { briefAgent } from '../domain/agent-brief';
 import { postMessage } from '../domain/messages';
@@ -68,11 +71,13 @@ import { mailConnectionRow } from '../mail-triggers/index';
 import { inBurrow, loadConversationRow } from '../read/conversations';
 import { engineActor, loadPrincipalRow, toActor } from '../read/principals';
 import { publishDispatch } from '../runtime/activity';
+import { outsidersTurn } from '../runtime/person';
 import { trackerConnectionRow } from '../trackers/connection';
 import { driverIdOf, noDriverText, recipeWordsOf } from '../trackers/drivers';
 import { stopRunRequests } from '../trackers/features';
-import { type TrackerRunItem, TrackerRunItemSchema, trackerItemScope } from '../trackers/items';
-import { automationAgent } from './authority';
+import { scopeReport, type TrackerRunItem, TrackerRunItemSchema, trackerItemScope } from '../trackers/items';
+import { nextContinueStepId, unlandedReason } from '../trackers/unlanded';
+import { automationAgent, publisherCheck } from './authority';
 import { GitHubItem, githubItemScope, itemRef, sampleTrigger } from './github-items';
 import { postRunNotice } from './notice';
 import { republishPlanCards } from './plan-cards';
@@ -85,6 +90,7 @@ import {
   automationGrants,
   listensToEvents,
   loadAutomationRow,
+  loadStepRows,
   publishAutomation,
   publishRun,
   scheduleNext,
@@ -1449,6 +1455,146 @@ export const reviewAutomationStep = defineCommand({
   },
 });
 
+/** Maximum kept length of `steps.fix.output.reply` after appending a follow-up note. */
+const FIX_REPLY_NOTE_MAX = 12_000;
+
+/**
+ * Resumes a finished report automation run in the current thread whose fix started but did not land yet, from the
+ * requested step (or the earliest incomplete step at or after `fix`). Only callable from a person's turn in that
+ * run's thread — never from outsiders' turns or automation steps.
+ */
+export const continueAutomationRun = defineCommand({
+  name: 'automation.continue_run',
+  schema: z.object({
+    runId: AutomationRunId,
+    dispatchId: DispatchId,
+    fromStepId: z.enum(['fix', 'review', 'pr', 'merge']).optional(),
+    note: z.string().trim().min(1).max(4000).optional(),
+  }),
+  async apply(tx, ctx, input) {
+    const [dispatch] = await tx
+      .select()
+      .from(dispatches)
+      .where(and(eq(dispatches.id, input.dispatchId), eq(dispatches.burrowId, ctx.burrow.id)));
+    if (!dispatch || dispatch.agentId !== ctx.actor.id) throw notFound('Turn');
+    if (dispatch.trigger === 'automation' || outsidersTurn(dispatch) || !dispatch.threadRootId)
+      throw forbidden('Only a person’s turn in the report’s thread can continue an unlanded run.');
+    const [run] = await tx
+      .select()
+      .from(automationRuns)
+      .where(and(eq(automationRuns.id, input.runId), eq(automationRuns.burrowId, ctx.burrow.id)))
+      .for('update');
+    if (!run) throw notFound('Automation run');
+    if (run.conversationId !== dispatch.conversationId || run.threadRootId !== dispatch.threadRootId)
+      throw forbidden('You can only continue the report run of this thread.');
+    const [automation] = await tx
+      .select()
+      .from(automations)
+      .where(and(eq(automations.id, run.automationId), eq(automations.burrowId, ctx.burrow.id)));
+    if (!automation || automation.deletedAt) throw conflict('This automation was deleted.');
+    const [version] = await tx
+      .select()
+      .from(automationVersions)
+      .where(
+        and(eq(automationVersions.automationId, run.automationId), eq(automationVersions.n, run.version)),
+      );
+    if (!version) throw conflict('This automation’s version is gone.');
+    const who = await publisherCheck(tx, run.burrowId, version.publishedById);
+    if (!who.ok) throw forbidden('The person who turned this automation on can no longer run it.');
+    if (!scopeReport(run.scope)) throw conflict('Only a report automation run can be continued this way.');
+    if (run.status !== 'succeeded' && run.status !== 'failed')
+      throw conflict('Only a finished unlanded report run can be continued.');
+    const [landed] = await tx
+      .select({ id: trackerFixes.id })
+      .from(trackerFixes)
+      .where(
+        and(
+          eq(trackerFixes.runId, run.id),
+          inArray(trackerFixes.state, ['merged', 'development', 'live', 'confirmed']),
+        ),
+      )
+      .limit(1);
+    if (landed) throw conflict('This report’s fix is already merged.');
+    const stepRows = await loadStepRows(tx, run.id);
+    const why = unlandedReason(run.definition.steps, stepRows, run.status);
+    if (!why?.fix) throw conflict('This run has no unlanded fix to continue.');
+    const fixRow = stepRows.find((s) => s.stepId === 'fix');
+    if (!fixRow) throw conflict('This run has no fix step.');
+    const chosenId = input.fromStepId ?? nextContinueStepId(run.definition.steps, stepRows);
+    const fromRow = chosenId ? stepRows.find((s) => s.stepId === chosenId && s.idx >= fixRow.idx) : undefined;
+    if (!fromRow)
+      throw badRequest(`This run has no "${input.fromStepId ?? 'review'}" step at or after its fix step.`);
+    // When resuming after `fix`, append the follow-up note to `steps.fix.output.reply` so `review` and `pr` see what
+    // changed in the follow-up (the server still verifies the reviewer and GitHub branch head independently).
+    if (input.note && fromRow.idx > fixRow.idx) {
+      const prevOut = (fixRow.output ?? {}) as JsonObject;
+      const prevReply = typeof prevOut.reply === 'string' ? prevOut.reply.trim() : '';
+      const combined = prevReply ? `${prevReply}\n\nFollow-up:\n${input.note}` : input.note;
+      await tx
+        .update(automationRunSteps)
+        .set({
+          output: { ...prevOut, reply: combined.slice(0, FIX_REPLY_NOTE_MAX) },
+          updatedAt: ctx.now,
+        })
+        .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, fixRow.idx)));
+    }
+    for (const s of stepRows) {
+      if (s.idx < fromRow.idx) continue;
+      await tx
+        .update(automationRunSteps)
+        .set({
+          state: 'pending',
+          attempt: s.attempt + 1,
+          idempotencyKey: null,
+          startedAt: null,
+          finishedAt: null,
+          wakeAt: null,
+          deadlineAt: null,
+          inputSummary: '',
+          output: {},
+          error: null,
+          dispatchId: null,
+          approvalId: null,
+          promptMessageId: null,
+          messageIds: [],
+          prNumber: null,
+          updatedAt: ctx.now,
+        })
+        .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, s.idx)));
+    }
+    const deadlineAt = new Date(ctx.now.getTime() + run.definition.limits.runTimeoutMinutes * 60_000);
+    await tx
+      .update(automationRuns)
+      .set({
+        status: 'running',
+        finishedAt: null,
+        error: null,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        deadlineAt,
+        updatedAt: ctx.now,
+      })
+      .where(eq(automationRuns.id, run.id));
+    await ctx.emit({
+      type: 'automation.run.resumed',
+      kind: 'System',
+      text: `Continued automation run #${run.number} from step “${fromRow.name}”`,
+      where: null,
+      payload: {
+        automationId: run.automationId,
+        runId: run.id,
+        number: run.number,
+        fromStepId: fromRow.stepId,
+      },
+    });
+    await publishRun(ctx, run.id);
+    await publishAutomation(ctx, ctx.burrow.id, run.automationId);
+    const services = ctx.services;
+    ctx.after(async () => services.automations.nudge());
+    return { runId: run.id, fromStepId: fromRow.stepId, status: 'running' as const };
+  },
+});
+
 export const AUTOMATION_COMMANDS = [
   createAutomation,
   saveAutomationDraft,
@@ -1460,6 +1606,7 @@ export const AUTOMATION_COMMANDS = [
   setAutomationWebhook,
   runAutomationNow,
   controlAutomationRun,
+  continueAutomationRun,
   reviewAutomationStep,
   proposeConnectionActions,
 ];
