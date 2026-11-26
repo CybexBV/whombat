@@ -1,0 +1,118 @@
+/* PLACE and NEWS in This Whombat → About (app weather-news-apps.md): the search under the Place row, the news' cards. */
+
+.change {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+/* A field and its button on one line. */
+.find {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  list-style: none;
+}
+
+.results li + li {
+  border-top: 1px solid var(--line);
+}
+
+.result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.result:hover:not(:disabled) {
+  background: var(--sel);
+}
+
+.result:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.result:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.resultName {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.resultMeta {
+  flex: none;
+  color: var(--mut);
+  font-size: 13px;
+}
+
+/* OpenStreetMap's data is ODbL: its credit stays by the results. */
+.credit {
+  color: var(--mut);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.problem {
+  color: var(--bad);
+  font: var(--type-small);
+}
+
+.sourceProblem {
+  color: var(--warn-text);
+  font-size: 13px;
+}
+
+/* A part's own heading inside the section: Your news, Suggested for …, Add a news site. */
+.sub {
+  margin: 6px 2px -2px;
+  color: var(--ink2);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.add {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+/* A touch screen's targets: each result and button 44px. */
+@media (max-width: 720px), (pointer: coarse) {
+  .result {
+    min-height: 44px;
+  }
+}
