@@ -96,6 +96,7 @@ How the split was made: `docs.md`.
 - `update-wait.md` — the box stays usable while an update waits for running work: sessions while draining, commands that wait out a short drain.
 - `ask-before-updating.md` — the owner's switch: every update waits for their yes, enforced by the box's manager.
 - `check-for-updates.md` — Check for updates: the box looks for a newer release now; by itself it still looks hourly.
+- `weather-news.md` — where this Whombat is, MET Norway's forecast, the news sites the person chooses, their widgets and tools.
 - `agent-efficiency.md` — checks that match the change, runs on a pull request's branch (*in part*).
 - `agent-outcomes.md` — evidence on completion, capacity admission, evaluations (*in part*).
 - `agent-computer.md` — *in part*: only the command guard holds (git control files, keys decide, Allow once/for this

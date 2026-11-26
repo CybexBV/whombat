@@ -1845,6 +1845,18 @@ Setup and operation: `docs/github.md`.
     is connected or any matter is kept), standing rules, stopped kinds, the week's count and the 15 most recent checks
     (a told one's “Open thread” opens the thread its finding is in); the assistant reads and changes it as the person
     asks.
+- **Weather and local news** (`apps/server/src/place/`, `weather/`, `news/`, [weather-news.md](docs/decisions/weather-news.md)):
+  where the Whombat is is the place the person chose (`burrows.place`, two decimals), else its time zone's guess
+  (`placeFromTimeZone`, from `zone.tab`); `place.find` looks one up on OpenStreetMap's Nominatim (`PlaceFinder`: one
+  request a second per box, answers kept a day), `place.set` keeps it. `WeatherService` keeps MET Norway's
+  Locationforecast per place in memory and asks again only after it expires (never within 30 minutes, with jitter,
+  never on the hour, `If-Modified-Since`); sunrise and sunset are worked out on the box (`sunTimes`). The news sites the
+  person turned on or added (`burrows.news`, up to 12; `news.sources`, `news.setSources`, `news.addSite`, which finds a
+  page's feed) are read by `NewsReader` every 15 minutes while something needs them (RSS, RDF and Atom with htmlparser2;
+  headline, site, time and link only). Every such request goes through `openDataGet` with Whombat's User-Agent and the
+  outbound rules. The `weather` and `news` widgets read both once per burrow (`desk/widgets/weather-news.ts`), the
+  assistant through `weather_forecast` and `news_headlines`, and a Looks ahead calendar check gets the forecast for the
+  plan's day.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
   beside the looks reads the same looks (every one, not the desk's first) and keeps an incident (`incidents`, 90 days)
   for each thing whose look is bad (`problem`) or down, opened on the second pass in a row that saw it, from the first;

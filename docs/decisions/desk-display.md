@@ -931,3 +931,11 @@ change: everything is the apps' and the shared rules' (`@whombat/client/desk` `c
   aside, and it's what people mean when they drop one widget on another.
 - **DK-168 The keys behind *?*.** On the web the keys line under the screen is a small *?* (*Keys*) that opens them,
   with swapping and *Tidy up*. *Why:* the line was long and read once.
+- **DK-200 *Weather*.** One of Whombat's own widgets (weather-news.md): the forecast where this Whombat is, from one
+  cell (its symbol and temperature) to eight by four (the next hours and the days ahead), its own `weather` view; every
+  form with room says “Data from MET Norway”. Without a place it says “Choose where this Whombat is in Settings”, and
+  “Can’t read the weather just now” when MET can't be read. Shown as it is on a locked screen. *Why:* John asked for the
+  weather on the screens, a morning page among them.
+- **DK-201 *News*.** One of Whombat's own widgets: the newest headlines of the news sites the person turned on, each
+  with its site and time, as a list. With no site on: “Choose your news in Settings”. Shown as it is on a locked
+  screen. *Why:* John asked for local news; headlines are public.
