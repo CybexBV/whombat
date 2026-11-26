@@ -39,6 +39,7 @@ import {
   MAC_SERVER,
   withQuietFixtures,
 } from '@whombat/client/hosts/fixtures';
+import { createFakePlaceNews } from '@whombat/client/weather-news/fake';
 import {
   AGENT_NAME_FORM_TEXT,
   AGENT_NAME_PATTERN,
@@ -76,6 +77,7 @@ import {
   type OverviewLayout,
   type Principal,
   parseThingId,
+  placeFromTimeZone,
   type RealtimeEvent,
   resolveAgentModelRuntime,
   type ThingPage,
@@ -858,6 +860,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     name: 'Lumio',
     localModel: local.view(),
     webSearch: webSearch.view(),
+    place: placeNews.place(),
   });
   // The model on the network (AP-5126): Settings → AI's section, Local in Runs on and the Chat picker.
   const local = createLocalModelFixtures({
@@ -872,6 +875,12 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     emit,
     on: options.webSearch ?? process.env.EXPO_PUBLIC_WHOMBAT_WEB_SEARCH === '1',
     burrow: worldBurrow,
+  });
+  // Where Lumio is and the news it reads (weather-news.md): Settings → This Whombat's PLACE and NEWS. The time zone's
+  // guess (Amsterdam) and AT5 on to start; choosing a place publishes the burrow.
+  const placeNews = createFakePlaceNews({
+    guess: placeFromTimeZone(fixtureBurrow.timeZone),
+    onPlace: () => emit(`burrow:${BURROW_ID}`, { type: 'burrow.updated', burrow: worldBurrow() }),
   });
   /** Its keys as a new Whombat gives them (OA-05); `agent.setKeys` replaces them. */
   let grants: Grant[] = agentDefaultGrants(ASSISTANT_ID);
@@ -1573,6 +1582,14 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     if (!id) return null;
     const localAnswer = local.handle(id, init) ?? webSearch.handle(id, init);
     if (localAnswer) return localAnswer;
+    const placed = placeNews.call(id, {
+      query: Object.fromEntries(url.searchParams),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    if (placed)
+      return id === 'place.set' && placed.status === 200
+        ? json({ burrow: worldBurrow() })
+        : json(placed.body, placed.status);
     const watching = await monitored(id, params, init, url);
     if (watching) return watching;
     const pages = await thingPages.handle(id, params, init, url);
@@ -2155,9 +2172,12 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
       if (id === 'burrows.get' && data && typeof data === 'object' && 'burrow' in data)
         return {
           ...data,
-          burrow: webSearch.burrow(
-            local.burrow((data as { burrow: { localModel?: null; webSearch?: null } }).burrow),
-          ),
+          burrow: {
+            ...webSearch.burrow(
+              local.burrow((data as { burrow: { localModel?: null; webSearch?: null } }).burrow),
+            ),
+            place: placeNews.place(),
+          },
         };
       return data;
     },
@@ -2172,7 +2192,13 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
       const principals = (b.principals as Principal[]).map((p) => (p.id === assistant.id ? assistant : p));
       return {
         ...b,
-        burrow: { ...b.burrow, name: 'Lumio', localModel: local.view(), webSearch: webSearch.view() },
+        burrow: {
+          ...b.burrow,
+          name: 'Lumio',
+          localModel: local.view(),
+          webSearch: webSearch.view(),
+          place: placeNews.place(),
+        },
         principals: principals.some((p) => p.id === assistant.id) ? principals : [...principals, assistant],
         sidebar: {
           ...b.sidebar,
