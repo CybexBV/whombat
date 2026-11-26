@@ -1121,7 +1121,9 @@ function TextBody({ v }: { v: DeskTextView }) {
 
 /* The weather and the news ------------------------------------------------------------------------------------------ */
 
-const degrees = (t: number) => `${t}°`;
+/** A temperature as a person writes it: a true minus sign below zero (“−4°”), not a hyphen. */
+const minus = (t: number) => (t < 0 ? `\u2212${-t}` : `${t}`);
+const degrees = (t: number) => `${minus(t)}°`;
 
 /** The next hours as columns: “Now”, then each hour's time, its sign and its temperature (and its rain, with `rain`). */
 function WeatherHours({ v, inner, rain }: { v: DeskWeatherView; inner: number; rain?: boolean }) {
@@ -1215,8 +1217,12 @@ function WeatherBody({
     );
   const temp = degrees(now.temp);
   const today = v.today;
-  const short = today ? fillWords(W.weather.short, { high: today.high, low: today.low }) : undefined;
-  const highLow = today ? fillWords(W.weather.highLow, { high: today.high, low: today.low }) : undefined;
+  const short = today
+    ? fillWords(W.weather.short, { high: minus(today.high), low: minus(today.low) })
+    : undefined;
+  const highLow = today
+    ? fillWords(W.weather.highLow, { high: minus(today.high), low: minus(today.low) })
+    : undefined;
   const inner = pw - 36;
   const credit = weatherCredit(w, h) && <div className={s.wxCredit}>{v.credit}</div>;
   if (form === 'tile')
@@ -1254,7 +1260,9 @@ function WeatherBody({
       </div>
     );
   const feels = [
-    now.feels !== undefined && now.feels !== now.temp ? fillWords(W.weather.feels, { t: now.feels }) : null,
+    now.feels !== undefined && now.feels !== now.temp
+      ? fillWords(W.weather.feels, { t: minus(now.feels) })
+      : null,
     now.wind,
   ]
     .filter((x): x is string => !!x)
