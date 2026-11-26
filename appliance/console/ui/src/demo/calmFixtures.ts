@@ -13,7 +13,8 @@ import { DESK_FIXTURES } from './deskFixtures';
 import type { Fixture } from './fixtures';
 import { CALM_WIFI } from './wifiFixtures';
 
-const NOW = '2026-10-21T12:34:20Z';
+/** The calm fixtures' clock: a Wednesday, 14:34 in the paired person's zone (Europe/Amsterdam). */
+export const NOW = '2026-10-21T12:34:20Z';
 const ago = (minutes: number) =>
   new Date(Date.parse(NOW) - minutes * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 

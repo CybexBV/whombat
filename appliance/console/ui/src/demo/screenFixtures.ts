@@ -2,13 +2,20 @@
  * The screen of widgets' fixtures (Whombat desk-display.md “Screens of widgets”, mockups `docs/design/desk-widgets/`):
  * the calm glance's fixtures with the box's grid laid over them (`glance.grid`), and a monitor beside the Z13
  * (`glance.outputs` and the kiosk's outputs). The world is `@whombat/screen`'s fixtures (the mockups'): three pages, a
- * server, Home Assistant, UniFi, Plex, SABnzbd, Seerr, the backups, the outage and the question. `desk-grid-*`.
+ * server, Home Assistant, UniFi, Plex, SABnzbd, Seerr, the backups, the outage and the question, pages by time of day
+ * and the doorbell taking over the screen. `desk-grid-*`.
  */
 import type { DeskGrid, DeskWidget } from '@whombat/screen';
-import { FIXTURE_BOX_GRID, FIXTURE_BOX_GRID_WRONG, FIXTURE_MONITOR_GRID } from '@whombat/screen/fixtures';
+import {
+  FIXTURE_BOX_GRID,
+  FIXTURE_BOX_GRID_WRONG,
+  FIXTURE_DOORBELL_GRID,
+  FIXTURE_DOORBELL_GRID_LOCKED,
+  FIXTURE_MONITOR_GRID,
+} from '@whombat/screen/fixtures';
 import { lockedGrid } from '../lib/grid';
 import type { KioskOutput } from '../lib/outputs';
-import { calmOver, FINE, NAS_LOOK, PVE02_DOWN, WELCOME, WRONG } from './calmFixtures';
+import { calmOver, FINE, NAS_LOOK, NOW, PVE02_DOWN, WELCOME, WRONG } from './calmFixtures';
 import type { Fixture } from './fixtures';
 
 const w = (
@@ -114,6 +121,40 @@ const questionGrid = (title: string): DeskGrid => ({
   },
 });
 
+/**
+ * The box's three pages with times, at the calm fixtures' Wednesday 14:34 in Amsterdam: Media only on Wednesday
+ * afternoons (open now, so the screen starts there), House only at night (closed, so the top bar leaves it out).
+ */
+const TIMED: DeskGrid = {
+  ...FIXTURE_BOX_GRID,
+  layout: {
+    ...FIXTURE_BOX_GRID.layout,
+    pages: FIXTURE_BOX_GRID.layout.pages.map((p) =>
+      p.id === 'p_media'
+        ? { ...p, show: { from: '14:00', to: '16:00', days: ['wed'] } }
+        : p.id === 'p_house'
+          ? { ...p, show: { from: '22:00', to: '07:00' } }
+          : p,
+    ),
+  },
+};
+
+/** The doorbell's moment, 40 seconds of its minute left at the calm fixtures' now. */
+const ringing = (g: DeskGrid): DeskGrid =>
+  g.spotlight
+    ? { ...g, spotlight: { ...g.spotlight, until: new Date(Date.parse(NOW) + 40_000).toISOString() } }
+    : g;
+
+/** Unlocked for two more minutes at the calm fixtures' now. */
+const UNLOCKED = {
+  lock: {
+    state: 'unlocked' as const,
+    until: new Date(Date.parse(NOW) + 120_000).toISOString(),
+    retryAt: null,
+    expiresAt: null,
+  },
+};
+
 export const SCREEN_FIXTURES: Record<string, Fixture> = {
   'desk-grid': gridOver(
     calmOver('desk-looks-nothing', 'A screen nobody arranged: the calm glance as widgets (DK-127)', FINE),
@@ -179,6 +220,31 @@ export const SCREEN_FIXTURES: Record<string, Fixture> = {
       FINE,
     ),
     lockedGrid(FIXTURE_BOX_GRID, 'summary', 'Dusty has a question') ?? FIXTURE_BOX_GRID,
+  ),
+  'desk-grid-times': gridOver(
+    calmOver(
+      'desk-looks-nothing',
+      'Pages by time of day: Media’s window is open so the screen starts there; House waits for the night',
+      FINE,
+    ),
+    TIMED,
+  ),
+  'desk-grid-doorbell': gridOver(
+    calmOver(
+      'desk-looks-nothing',
+      'The doorbell rang: its camera big for a minute, with Back; 40 seconds left',
+      FINE,
+      { desk: UNLOCKED },
+    ),
+    ringing(FIXTURE_DOORBELL_GRID),
+  ),
+  'desk-grid-doorbell-locked': gridOver(
+    calmOver(
+      'desk-looks-nothing',
+      'The doorbell rang on a locked screen: the moment shows, the camera’s picture doesn’t',
+      FINE,
+    ),
+    ringing(FIXTURE_DOORBELL_GRID_LOCKED),
   ),
   'desk-grid-welcome': gridOver(
     calmOver(
