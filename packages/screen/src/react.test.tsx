@@ -348,7 +348,7 @@ describe('limits and bars as blocks', () => {
     const html = widget('w_fusebox_subs', 'panel', 8, 5);
     for (const words of [
       'work@example.com',
-      'Meta · Muse Code Max · Renews 20 Dec',
+      'Meta · Muse Code Max',
       '5H',
       'WEEK',
       'resets 30 Nov',
@@ -359,15 +359,18 @@ describe('limits and bars as blocks', () => {
     expect(html).toContain('Used up until Fri 09:00');
     // Six rows, Meta's with two meters: seven lines of blocks.
     expect(html.match(/role="img" aria-label="(5H|WEEK) /g)).toHaveLength(7);
+    // Wide, the reset stands beside the blocks only.
+    expect(html).not.toContain('Claude · Max · Resets');
   });
 
-  it('keeps all six on half the screen, when each renews under its name; the week alone on a small one', () => {
+  it('keeps all six on half the screen, when each one’s usage resets under its name; the week alone on a small one', () => {
     const half = widget('w_fusebox_subs', 'panel', 4, 3);
-    expect(half).toContain('Claude · Max · Renews 14 Dec');
+    expect(half).toContain('Claude · Max · Resets Fri 09:00');
+    expect(half).toContain('Meta · Muse Code Max · Resets 30 Nov');
     // Its state is in its blocks, but for one that is off: nothing else says so.
     expect(half).not.toContain('Used up until Fri 09:00');
     expect(half).toContain('Claude · Off in Fusebox');
-    // The resets stay in what a screen reader hears, not on the half-screen row.
+    // Not beside the blocks too.
     expect(half).not.toContain('>resets 2 Dec<');
     expect(half.match(/muse@example.com/g)).toHaveLength(1);
     const small = widget('w_fusebox_subs', 'panel', 2, 3);
