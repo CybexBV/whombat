@@ -15,6 +15,7 @@
  * - **Kept** 14 days: older rows go every hour (`pruneConnectionEvents`). Rows are operational state like
  *   `gateway_usage`: written here, never signed.
  * - The cameras' names come with the events' rows: read from `/v1/cameras` when the socket opens and every 10 minutes.
+ * - **A ring** is also told at once to whoever listens in the server (`doorbell.ts`): the screens open the doorbell.
  */
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { WebSocket } from 'ws';
@@ -29,6 +30,7 @@ import { outboundConnectOptions } from '../../../lib/outbound';
 import type { Services } from '../../../services';
 import { dateOf, list, rec, str } from '../../words';
 import { getJson } from '../read';
+import { emitDoorbellRing, ringOf } from './doorbell';
 
 /** How long detections are kept: a week of bars and the week before it to compare with. */
 export const EVENTS_KEEP_MS = 14 * 24 * 3600_000;
@@ -296,6 +298,10 @@ class Follower {
     }
     const d = detectionOf(parsed);
     if (!d || this.#closed || this.services.maintenance.paused) return;
+    // A ring is a moment too: the screens hear it before it is kept.
+    const ring = ringOf(parsed, this.services.clock());
+    if (ring)
+      emitDoorbellRing(this.services, { connectionId: this.row.id, burrowId: this.row.burrowId, ...ring });
     if (d.device && !this.#names.has(d.device)) await this.#cameraNames();
     const title = (d.device && this.#names.get(d.device)) || 'A camera';
     await recordDetection(this.services.db, this.row.id, d, title).catch((err: unknown) =>

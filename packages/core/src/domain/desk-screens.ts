@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { DeskShow } from './desk-glance.js';
 import { displayLine as line } from './display-text.js';
 import { LOOK_FIX_LABEL_MAX, LookResearchState } from './look-research.js';
+import { ClockTime, Weekday } from './notify.js';
 
 /* Text and ids --------------------------------------------------------------------------------------------------- */
 
@@ -166,6 +167,18 @@ export const DESK_SCREEN_VIEWS_MAX = 64;
 /** Screens besides the box's own (DK-148). */
 export const DESK_SCREENS_MAX = 8;
 
+/**
+ * When a page is in the screen's turning: from `from` to `to` in the person's time zone, on `days` (the day the
+ * window starts: `22:00`–`06:00` on `fri` runs into Saturday morning), every day without `days`. `from` = `to` is the
+ * whole day. A page without one is always in.
+ */
+export const DeskPageShow = z.object({
+  from: ClockTime,
+  to: ClockTime,
+  days: z.array(Weekday).min(1).max(7).optional(),
+});
+export type DeskPageShow = z.infer<typeof DeskPageShow>;
+
 export const DeskPage = z
   .object({
     id: DeskPageId,
@@ -176,6 +189,8 @@ export const DeskPage = z
       .refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= DESK_PAGE_SHAPES_MAX),
     /** The shape changed last: other shapes without a layout of their own are rearranged from it. */
     last: DeskShapeKey,
+    /** Only at these times; always without. */
+    show: DeskPageShow.optional(),
   })
   .refine((p) => p.last in p.layouts, { message: 'last names one of the layouts' });
 export type DeskPage = z.infer<typeof DeskPage>;
@@ -207,14 +222,16 @@ const overlaps = (a: DeskWidget, b: DeskWidget) =>
 
 /**
  * Why a layout can't be kept, in a few words; null when it can. Every widget inside its shape and on no other, ids
- * unique on a page (a widget keeps its id across a page's shapes), page ids unique, every spec sound. Sizes per type
- * are the screen's to enforce (`@whombat/screen`), not the contract's.
+ * unique on a page (a widget keeps its id across a page's shapes), page ids unique, a page's days each once, every spec
+ * sound. Sizes per type are the screen's to enforce (`@whombat/screen`), not the contract's.
  */
 export function deskLayoutProblem(layout: DeskLayout): string | null {
   const pageIds = new Set<string>();
   for (const page of layout.pages) {
     if (pageIds.has(page.id)) return `page ${page.id} twice`;
     pageIds.add(page.id);
+    const days = page.show?.days ?? [];
+    if (new Set(days).size !== days.length) return `a day twice on ${page.name}`;
     for (const [shape, widgets] of Object.entries(page.layouts)) {
       const s = parseDeskShapeKey(shape);
       if (!s) return `shape ${shape}`;
@@ -537,10 +554,29 @@ export type DeskWidgetViewKind = DeskWidgetView['kind'];
 
 /* A screen's grid as the screen draws it ------------------------------------------------------------------------- */
 
+/** Why a widget takes over a screen for a moment: the doorbell rang. */
+export const DESK_SPOTLIGHT_REASONS = ['doorbell'] as const;
+export const DeskSpotlightReason = z.enum(DESK_SPOTLIGHT_REASONS);
+export type DeskSpotlightReason = z.infer<typeof DeskSpotlightReason>;
+/** How long a moment takes over a screen; a new one starts the time again. */
+export const DESK_SPOTLIGHT_S = 60;
+
+/**
+ * A widget that takes over the screen for a moment: drawn big over the dashboard until `until`, its view among
+ * the grid's `views`. `id` is this moment's: *Back* hides it on that screen until the next one.
+ */
+export const DeskSpotlight = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  widget: DeskWidgetSpec,
+  until: Timestamp,
+  reason: DeskSpotlightReason,
+});
+export type DeskSpotlight = z.infer<typeof DeskSpotlight>;
+
 /**
  * What a screen draws under its top bar (the desk socket's `DeskGlance.grid`, a screen elsewhere's `screen.state`):
- * its layout, the views of its widgets, what needs the person, its pop-ups, and until when it shows Settings' draft
- * (*Try on the screen*, DK-143).
+ * its layout, the views of its widgets, what needs the person, its pop-ups, until when it shows Settings' draft
+ * (*Try on the screen*, DK-143), and a widget taking over for a moment (`spotlight`).
  */
 export const DeskGrid = z.object({
   screen: DeskScreenId,
@@ -549,6 +585,7 @@ export const DeskGrid = z.object({
   attention: DeskAttention,
   popups: DeskPopups,
   trying: z.object({ until: Timestamp }).optional(),
+  spotlight: DeskSpotlight.optional(),
 });
 export type DeskGrid = z.infer<typeof DeskGrid>;
 
@@ -561,16 +598,22 @@ export const DeskScreenSize = z.object({
 });
 export type DeskScreenSize = z.infer<typeof DeskScreenSize>;
 
+/** What a screen does when the doorbell rings: shows the doorbell big for a minute, or nothing. */
+export const DESK_DOORBELL = ['big', 'off'] as const;
+export const DeskDoorbell = z.enum(DESK_DOORBELL);
+export type DeskDoorbell = z.infer<typeof DeskDoorbell>;
+
 /**
- * A screen in Settings → Screens: what it is, its name (“Kitchen tablet”, “DELL U2720Q”), its pop-ups, its size as it
- * last said (null before it did), how many pages, whether it's showing now, when it was last seen, and for a device
- * what it is (“iPad · Safari”).
+ * A screen in Settings → Screens: what it is, its name (“Kitchen tablet”, “DELL U2720Q”), its pop-ups, what it does
+ * when the doorbell rings (absent from an older runtime), its size as it last said (null before it did), how many pages,
+ * whether it's showing now, when it was last seen, and for a device what it is (“iPad · Safari”).
  */
 export const DeskScreenSummary = z.object({
   id: DeskScreenId,
   kind: DeskScreenKind,
   name: line(40),
   popups: DeskPopups,
+  doorbell: DeskDoorbell.optional(),
   size: DeskScreenSize.nullable(),
   pages: z.number().int().min(1).max(DESK_PAGES_MAX),
   online: z.boolean(),
@@ -579,10 +622,14 @@ export const DeskScreenSummary = z.object({
 });
 export type DeskScreenSummary = z.infer<typeof DeskScreenSummary>;
 
-/** `desk.screens`: every screen, the box's own first, and whether another can be added. */
+/**
+ * `desk.screens`: every screen, the box's own first, whether another can be added, and whether the Whombat follows a
+ * doorbell (`doorbell`: Settings offers *When the doorbell rings*).
+ */
 export const DeskScreensList = z.object({
   screens: z.array(DeskScreenSummary).max(DESK_SCREENS_MAX + 4),
   canAdd: z.boolean(),
+  doorbell: z.boolean().optional(),
 });
 export type DeskScreensList = z.infer<typeof DeskScreensList>;
 
@@ -668,4 +715,6 @@ export const DESK_SCREEN_WORDS = {
   turns: { touch: 'When touched', '30s': 'Every 30 s', '60s': 'Every minute' },
   pill: { one: '1 thing needs you', many: '{n} things need you' },
   locked: { ask: '{assistant} has a question', hidden: 'Unlock to see it' },
+  doorbell: { big: 'Show it big', off: 'Don’t' },
+  spotlight: { doorbell: 'Someone’s at the door' },
 } as const;

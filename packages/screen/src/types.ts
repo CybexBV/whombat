@@ -26,11 +26,21 @@ export interface DeskWidget {
   h: number;
 }
 
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+/** When a page is in the turning: `from`–`to` (`HH:MM`) in the person's zone, on `days` (every day without). */
+export interface DeskPageShow {
+  from: string;
+  to: string;
+  days?: Weekday[] | undefined;
+}
+
 export interface DeskPage {
   id: string;
   name: string;
   layouts: Record<string, DeskWidget[]>;
   last: string;
+  show?: DeskPageShow | undefined;
 }
 
 export interface DeskLayout {
@@ -219,6 +229,14 @@ export interface DeskAttention {
 
 /* The screen's grid ----------------------------------------------------------------------------------------------- */
 
+/** A widget taking over the screen for a moment: the doorbell rang. */
+export interface DeskSpotlight {
+  id: string;
+  widget: { id: string; type: WidgetType; ref?: string | undefined; opts: Record<string, string> };
+  until: string;
+  reason: 'doorbell';
+}
+
 export interface DeskGrid {
   screen: string;
   layout: DeskLayout;
@@ -226,6 +244,7 @@ export interface DeskGrid {
   attention: DeskAttention;
   popups: DeskPopups;
   trying?: { until: string } | undefined;
+  spotlight?: DeskSpotlight | undefined;
 }
 
 /* The calm glance's parts Whombat's own widgets read -------------------------------------------------------------- */

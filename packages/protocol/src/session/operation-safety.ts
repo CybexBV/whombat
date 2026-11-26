@@ -860,6 +860,7 @@ const TABLE = {
   'desk.screens': READ,
   'desk.screen.get': READ,
   'desk.screen.update': RECEIPT,
+  'desk.screen.addPage': RECEIPT,
   'desk.screen.views': READ,
   'desk.screen.try': NEVER,
   'desk.screen.add': NEVER,

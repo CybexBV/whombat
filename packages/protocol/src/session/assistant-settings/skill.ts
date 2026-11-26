@@ -109,6 +109,14 @@ exactly as their own tap would. Four tools:
 ### Notifications, the screen
 \`settings_find\` with their words, \`settings_read\` what it is now, \`settings_change\` what they asked. Name what changed.
 
+### A page on a screen (“make me a page for the media server”)
+1. \`settings_read\` \`desk.screens\` for the screen, then \`desk.widgets\` with \`{screen}\` (\`thing\` for one connection's
+   widgets only). Use its widgets as listed: \`type\`, \`ref\`, \`opts\`.
+2. \`settings_change\` \`desk.screen.addPage\` with \`{screen, name, widgets: [{type, ref?, opts?, w?, h?}]}\`, the most
+   important first; \`show: {from, to, days?}\` for a page at set times (“07:00”, \`["mon", …]\`). Six pages at most:
+   \`replace\` with a page's id takes its place.
+3. Say what is on the page, and name what didn't fit (\`left\`).
+
 ### A service's own settings (Plex and others)
 1. \`settings_read\` \`things.page\` with \`{params: {thing: "connection:<id>"}}\`. A service with settings of its own has a
    tab \`service-settings\` (“Plex settings”) whose \`settings\` panels list them: each row's \`id\`, its value in words,

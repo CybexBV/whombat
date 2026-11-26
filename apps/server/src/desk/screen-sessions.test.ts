@@ -29,6 +29,7 @@ const KITCHEN: ScreenRecord = {
   kind: 'device',
   name: 'Kitchen',
   popups: 'problems',
+  doorbell: 'big',
   layout: deskDefaultLayout(),
   show: {} as ScreenRecord['show'],
   endpointId: 'ep_tablet',
@@ -74,6 +75,10 @@ class FakeScreens implements ScreensApi {
   async picture(_screen: ScreenRecord, view: DeskCalmView, thing: string, ref: string) {
     this.pictures.push({ view, thing, ref });
     return this.picture_;
+  }
+  zone: string | null = 'Europe/Amsterdam';
+  async timeZone() {
+    return this.zone;
   }
 }
 
@@ -136,6 +141,13 @@ describe('a screen elsewhere’s state', () => {
     });
     expect(api.draws).toEqual(['summary']);
     expect(state.etag).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+  });
+
+  it('tells the screen the person’s time zone, for its clock and its pages by time of day', async () => {
+    const { api, sessions } = setup({ view: 'time' });
+    expect((await stateOf(sessions)).timeZone).toBe('Europe/Amsterdam');
+    api.zone = null;
+    expect((await stateOf(sessions)).timeZone).toBeUndefined();
   });
 
   it('*Only the time* draws nothing at all', async () => {

@@ -128,6 +128,8 @@ import {
 } from './desk.js';
 import {
   DeskScreenAddInput,
+  DeskScreenAddPageInput,
+  DeskScreenAddPageOutput,
   DeskScreenGetInput,
   DeskScreenRemoveInput,
   DeskScreensInput,
@@ -841,6 +843,8 @@ const SESSION_SPECS = [
   session('desk.screens', DeskScreensInput, DeskScreensList, 'app', false),
   session('desk.screen.get', DeskScreenGetInput, DeskScreenDetail, 'app', false),
   session('desk.screen.update', DeskScreenUpdateInput, DeskScreenDetail, 'app'),
+  // The assistant's “make me a page”.
+  session('desk.screen.addPage', DeskScreenAddPageInput, DeskScreenAddPageOutput, 'app'),
   session('desk.screen.views', DeskScreenViewsInput, DeskScreenViews, 'app', false),
   session('desk.screen.try', DeskScreenTryInput, DeskScreenTryOutput, 'app'),
   session('desk.screen.add', DeskScreenAddInput, DeskScreenDetail, 'app', true, false, true),
