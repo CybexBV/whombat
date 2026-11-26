@@ -189,6 +189,15 @@ function ofService(w: OnPage, group: DeskCatalogGroup, main: DeskCatalogItem): b
   return !!ref && w.ref === ref && (w.type === main.type || (w.type !== 'server' && main.type !== 'server'));
 }
 
+/**
+ * A service's line: its main view's, but a connection's or device's main view is its figures, whose line is the same
+ * for every one (“Its main figures”), so one with more views says which (“Now playing · Recently added · Library”).
+ */
+function serviceLine(group: DeskCatalogGroup, main: DeskCatalogItem): string {
+  const more = group.items.slice(1).map((i) => i.name);
+  return main.type === 'figures' && more.length > 0 ? more.join(' · ') : main.line;
+}
+
 /** Whether a section's groups are services, listed once each: a server's own group, a connection's, an account's. */
 const listsServices = (kind: CatalogSectionKind, group: DeskCatalogGroup) =>
   kind === 'thing' || kind === 'accounts' || (kind === 'servers' && group.key.startsWith('server:'));
@@ -222,7 +231,7 @@ export function catalogRows(
           group,
           item: main,
           name: group.label,
-          line: main.line,
+          line: serviceLine(group, main),
           mark: group.mark ?? main.mark,
           service: true,
           here: onPage.some((w) => ofService(w, group, main)),

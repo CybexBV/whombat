@@ -169,6 +169,7 @@ export const DESK_SCREENS_TEXT = {
     sizes: 'From {min} to {max}. It shows more as it grows.',
     shows: ARRANGE_WORDS.shows,
     reading: ARRANGE_WORDS.reading,
+    couldntRead: ARRANGE_WORDS.couldntRead,
     shapes: {
       small: ARRANGE_WORDS.sizes.s,
       normal: DESK_SCREEN_WORDS.sizes.normal,

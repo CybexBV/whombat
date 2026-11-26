@@ -197,8 +197,10 @@ describe('Add a widget lists each service once (DK-163)', () => {
     // Adding a service adds its main view (its first), at that view's size, with its line.
     const pve = sections[1]?.rows[0];
     expect(pve).toMatchObject({ service: true, item: { opts: {} }, mark: 'proxmox', size: { w: 2, h: 2 } });
+    // A connection's line says which views it has besides its figures; with none, the figures' own.
     const plexRow = sections[2]?.rows[0];
-    expect(plexRow).toMatchObject({ service: true, line: 'Its figures', item: { type: 'figures' } });
+    expect(plexRow).toMatchObject({ service: true, line: 'Now playing', item: { type: 'figures' } });
+    expect(sections[2]?.rows[1]?.line).toBe('Its figures');
     // A partly listed connection is a row of its own too.
     expect(sections[2]?.rows[1]).toMatchObject({ service: true, key: 'connection:con_cal' });
     const google = sections[3]?.rows[0];
