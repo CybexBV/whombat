@@ -41,7 +41,8 @@ test.describe('signed in', () => {
     await page.getByRole('button', { name: 'Connect Google' }).click();
 
     await expect(page.getByText('Google connected: mara@example.com.')).toBeVisible({ timeout: 15_000 });
-    await expect(page).toHaveURL(/\/\/[^/]+\/connections\?connection=google$/);
+    // It lands on the new connection's own page.
+    await expect(page).toHaveURL(/\/\/[^/]+\/things\/connection%3Acon_[^/?]+$/);
     expect(await fake(page, 'googleFinishes', device)).toEqual([
       { code: '4/0fake-code', state: expect.stringMatching(/^oas_/), error: null },
     ]);

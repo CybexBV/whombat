@@ -46,9 +46,14 @@ test('refreshing / on a retired Whombat goes to the list with a notice, and it i
   await expect(page.getByText(NONE_IN_USE)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Claim a Whombat' })).toBeVisible();
   await expect(page.getByText('You’re offline.', { exact: false })).toHaveCount(0);
-  // The last used is cleared: `/` lists it again, without the notice.
+  // The last used is cleared: `/` is the home, which doesn't open it again or offer it, and says nothing of it.
   await page.goto('/');
-  await expect(page).toHaveURL(/\/appliances$/);
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: /Open Burrow HQ/ })).toHaveCount(0);
+  await expect(page.getByTestId('appliances-notice')).toHaveCount(0);
+  // The organization's list still shows it as Retired, without the notice.
+  await page.goto('/appliances');
   await expect(row(page, 'Burrow HQ')).toContainText('Retired');
   await expect(page.getByTestId('appliances-notice')).toHaveCount(0);
   // Forget: gone from this browser's list at once; the organization still has no Whombat in use.

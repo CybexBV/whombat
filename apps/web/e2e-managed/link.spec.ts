@@ -4,6 +4,7 @@
  * each Whombat and the account with the subscription; Stripe Checkout and back; a Whombat removed; Link ending.
  */
 import { expect, type Page, test } from '@playwright/test';
+import { SUBSCRIPTION_TERMS_VERSION } from '@whombat/control-contracts';
 import { fake, fresh, openSignInLink } from './support';
 
 test.beforeEach(async ({ page }) => {
@@ -50,7 +51,7 @@ test('signed out, the box’s code and an email: the link comes back to /link, w
   await page.getByRole('button', { name: 'Add it' }).click();
   await expect(page.getByRole('heading', { name: 'Home is added' })).toBeVisible();
   // Control recorded the Subscription Terms the person ticked.
-  expect(await fake<(string | null)[]>(page, 'linkTerms')).toEqual(['2026-11-22']);
+  expect(await fake<(string | null)[]>(page, 'linkTerms')).toEqual([SUBSCRIPTION_TERMS_VERSION]);
   await page.getByRole('button', { name: 'Your Whombats' }).click();
   await expect(page.getByRole('heading', { name: 'Your Whombat' })).toBeVisible();
   await expect(page.getByText(/Whombat Link · Free month · until /)).toBeVisible();
