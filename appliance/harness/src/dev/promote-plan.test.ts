@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isTransientGitHubPushError,
+  PROMOTE_PUSH_ATTEMPTS,
+  PROMOTE_PUSH_BACKOFF_MS,
   type PromoteFacts,
   parsePromoteArgs,
   planWords,
   promotePlan,
   promotionSection,
+  retryTransientPush,
   uploadOutcome,
   withPromotion,
 } from './promote-plan.ts';
@@ -158,5 +162,86 @@ describe('promote: a Beta release to Production on John’s word (ONE-19)', () =
     });
     expect(uploadOutcome(1, up)).toEqual({ kind: 'failed' });
     expect(uploadOutcome(0, 'not json')).toEqual({ kind: 'failed' });
+  });
+
+  it('recognises transient GitHub push faults and leaves auth, rule and ref errors alone', () => {
+    expect(
+      isTransientGitHubPushError(
+        'remote: fatal error in commit_refs_rules\n! [remote rejected] main -> main (pre-receive hook declined)',
+      ),
+    ).toBe(true);
+    expect(
+      isTransientGitHubPushError('error: RPC failed; HTTP 502 curl 22 The requested URL returned error: 502'),
+    ).toBe(true);
+    expect(isTransientGitHubPushError('fatal: the remote end hung up unexpectedly')).toBe(true);
+    expect(
+      isTransientGitHubPushError('fatal: unable to access https://github.com/o/r.git/: Connection timed out'),
+    ).toBe(true);
+    expect(isTransientGitHubPushError('error: remote unpack failed: index-pack failed')).toBe(true);
+    // Permanent refusals must not be retried.
+    expect(isTransientGitHubPushError('fatal: Authentication failed for https://github.com/o/r.git/')).toBe(
+      false,
+    );
+    expect(
+      isTransientGitHubPushError('remote: Permission to o/r.git denied to user.\nfatal: returned error: 403'),
+    ).toBe(false);
+    expect(isTransientGitHubPushError('! [rejected] main -> main (non-fast-forward)')).toBe(false);
+    expect(isTransientGitHubPushError('! [rejected] v1 -> v1 (already exists)')).toBe(false);
+    expect(
+      isTransientGitHubPushError(
+        'remote: error: GH013: Repository rule violations found for refs/heads/main.',
+      ),
+    ).toBe(false);
+    expect(isTransientGitHubPushError('')).toBe(false);
+  });
+
+  it('retries transient GitHub push faults with backoff and stops immediately on permanent ones', async () => {
+    const waits: number[] = [];
+    const notices: number[] = [];
+    let calls = 0;
+    const ok = await retryTransientPush(
+      async () => {
+        calls++;
+        return calls < 3
+          ? { code: 1, stdout: '', stderr: 'remote: fatal error in commit_refs_rules\n' }
+          : { code: 0, stdout: 'ok\n', stderr: '' };
+      },
+      {
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+        onRetry: ({ attempt }) => notices.push(attempt),
+      },
+    );
+    expect(ok.code).toBe(0);
+    expect(calls).toBe(3);
+    expect(waits).toEqual([...PROMOTE_PUSH_BACKOFF_MS]);
+    expect(notices).toEqual([1, 2]);
+
+    // Exhausting attempts returns the last failure after PROMOTE_PUSH_ATTEMPTS tries.
+    let failCalls = 0;
+    const exhausted = await retryTransientPush(
+      async () => {
+        failCalls++;
+        return { code: 1, stdout: '', stderr: 'fatal: HTTP 503 Service Unavailable' };
+      },
+      { sleep: async () => {} },
+    );
+    expect(exhausted.code).toBe(1);
+    expect(failCalls).toBe(PROMOTE_PUSH_ATTEMPTS);
+
+    // Permanent errors return on attempt 1 without waiting.
+    let permCalls = 0;
+    const permWaits: number[] = [];
+    const perm = await retryTransientPush(
+      async () => {
+        permCalls++;
+        return { code: 1, stdout: '', stderr: '! [rejected] main -> main (non-fast-forward)' };
+      },
+      { sleep: async (ms) => void permWaits.push(ms) },
+    );
+    expect(perm.code).toBe(1);
+    expect(permCalls).toBe(1);
+    expect(permWaits).toEqual([]);
   });
 });
