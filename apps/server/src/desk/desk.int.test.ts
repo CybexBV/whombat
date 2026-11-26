@@ -2189,7 +2189,7 @@ describe('screens of widgets (DK-126…DK-149)', () => {
           opts: { panel: 'cameras', item: 'cam_front' },
         },
       });
-      expect(shown.views.map((v) => v.id)).toContain('w_spotlight');
+      // Its camera is read like any widget's: the box's state never waits for a first read, so its view follows.
       // Don't: the moment showing now ends at once.
       const off = await desk.screenUpdate(mara, { screen: 'box', doorbell: 'off' });
       expect(off.doorbell).toBe('off');

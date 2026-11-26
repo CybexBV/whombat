@@ -2157,7 +2157,20 @@ export class DeskService {
   async #ring(ring: DoorbellRing): Promise<void> {
     if (this.#closed) return;
     const list = await this.#store.list(ring.burrowId);
-    this.#spotlights.ring(ring, list, this.#now());
+    const shown = new Set(this.#spotlights.ring(ring, list, this.#now()));
+    // The camera's picture is read now for whom the screens are drawn, so the next state has it.
+    const people = new Set<string>();
+    for (const record of list.filter((r) => shown.has(r.id))) {
+      const who = await this.#whoFor(record);
+      if (!who || people.has(who)) continue;
+      people.add(who);
+      const place = await this.placeOf({ burrowId: record.burrowId, personId: who });
+      const spotlight = this.#spotlights.of(record.id, this.#now());
+      if (place && spotlight)
+        void this.#resolver
+          .resolve(this.#widgetCtx(place, this.services.clock()), [spotlight.widget], null, 0)
+          .catch(() => undefined);
+    }
   }
 
   /** `ScreensApi.draw`: what a screen elsewhere draws now for what its lock lets show. */
