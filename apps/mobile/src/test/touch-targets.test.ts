@@ -167,15 +167,15 @@ const FILES: Record<string, number> = {
   // screen's page is Button, Field, the segmented control and LinkRow; the editor's the page chips and + Page in the
   // chips' shape (their 7dp slop), Button and Field; the grid's tiles are 36dp and more with a 4dp slop on each side
   // (sized from the screen's grid, checked by `tiles.test.ts`); a widget's
-  // sheet has the 44dp arrows and size steppers (one site), a server's or a part's 52dp radio row and the 44dp Remove;
-  // Add a widget's 56dp fold headings and item rows and its 48dp *Show its widgets* (AP-6032…).
+  // sheet has the 44dp arrows and size steppers (one site), a server's 52dp radio row, the 44dp Remove, *Size*'s 44dp
+  // shapes and *What it shows*' 44dp options (AP-9983, AP-9984); Add a widget's 76dp tiles and 56dp rows (AP-9980).
   'src/settings/screens/ScreensList.tsx': 1,
   'src/settings/screens/AddScreenSheet.tsx': 0,
   'src/settings/screens/ScreenPage.tsx': 0,
   'src/settings/screens/LayoutEditor.tsx': 1,
   'src/settings/screens/TileGrid.tsx': 1,
-  'src/settings/screens/WidgetSheet.tsx': 3,
-  'src/settings/screens/AddWidgetSheet.tsx': 3,
+  'src/settings/screens/WidgetSheet.tsx': 5,
+  'src/settings/screens/AddWidgetSheet.tsx': 2,
   // Voice typing (docs/decisions/dictation.md): the composers' mic and the recording bar's Cancel and Done, 32dp rounds
   // padded to 44dp; VOICE TYPING is 44dp switches, segmented controls, Button and the Dutch voice licence's 44dp link.
   'src/voice/VoiceBar.tsx': 3,

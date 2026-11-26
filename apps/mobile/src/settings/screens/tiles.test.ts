@@ -1,17 +1,20 @@
-import { catalogServers, type DeskCatalog, serverParts } from '@whombat/client/desk';
+import {
+  type CatalogRows,
+  catalogGroupOf,
+  catalogRows,
+  catalogServers,
+  type DeskCatalog,
+  serverParts,
+} from '@whombat/client/desk';
 import { createFakeDesk, fakeDeskApi } from '@whombat/client/desk/fake';
 import { screenGrid } from '@whombat/screen';
 import { describe, expect, it } from 'vitest';
 import {
-  accountChoices,
   accountName,
   accountShows,
-  type CatalogSectionView,
-  catalogView,
   fromCatalog,
   onAnotherServer,
   widgetPrivate,
-  withAccountItem,
   withServerPart,
 } from './catalog';
 import {
@@ -26,6 +29,8 @@ import {
   tileSpoken,
   tileWhere,
 } from './tiles';
+
+const rowsOf = (sections: CatalogRows[]) => sections.flatMap((s) => s.rows);
 
 describe('the tiles', () => {
   it('fit the box’s 8 × 5 across a 360dp phone with the screen’s proportions, every tile 44dp with its slop', () => {
@@ -110,158 +115,66 @@ describe('Add a widget on the phone', () => {
       personId: 'p_me',
       name: 'Mara',
     });
-  const none = new Set<string>();
-  const rowsOf = (sections: CatalogSectionView[]) => sections.flatMap((s) => s.groups.flatMap((g) => g.rows));
-
-  it('folds Whombat’s own, the servers and each server at first, the rest open (DK-155)', async () => {
+  it('lists Whombat’s own, then each server, connection and account once (DK-163)', async () => {
     const catalog = await api().widgets({ screen: 'box' });
-    const sections = catalogView(catalog, { query: '', onPage: [], flipped: none });
-    // The connections, then the person's own accounts (DK-159), then Home's widgets.
-    expect(sections.map((s) => s.kind)).toEqual([
-      'own',
-      'servers',
-      ...sections.slice(2, -2).map(() => 'thing'),
-      'accounts',
-      'widgets',
-    ]);
-    const folded = Object.fromEntries(sections.map((s) => [s.key, s.folded]));
-    expect(folded).toMatchObject({
-      own: true,
-      servers: true,
-      'connection:con_plex': false,
-      accounts: false,
-      widgets: false,
-    });
+    const sections = catalogRows(catalog);
+    expect(sections.map((s) => s.kind)).toEqual(['own', 'servers', 'thing', 'accounts', 'widgets']);
     const servers = sections[1];
-    // One fold per server, each folded, with its overview and its parts.
-    expect(servers?.groups.every((g) => g.server && g.folded)).toBe(true);
-    expect(servers?.groups.map((g) => g.key)).toContain('server:pve-01');
-    expect(servers?.count).toBeGreaterThan(servers?.groups.length ?? 0);
-    // Turning Servers and pve-01 opens them; the other servers stay folded.
-    const opened = catalogView(catalog, {
-      query: '',
-      onPage: [],
-      flipped: new Set(['servers', 'server:pve-01']),
+    const ids = catalog.groups.filter((g) => g.key.startsWith('server:')).map((g) => g.key);
+    expect(servers?.rows.map((r) => r.key)).toEqual(ids);
+    expect(servers?.rows.every((r) => r.service && !r.item.opts.show)).toBe(true);
+    // A server's overview starts 2 × 2; a connection's figures 2 × 1.
+    expect(servers?.rows[0]?.size).toEqual({ w: 2, h: 2 });
+    const plex = sections[2]?.rows.find((r) => r.key === 'connection:con_plex');
+    expect(plex).toMatchObject({
+      name: 'Plex',
+      service: true,
+      item: { type: 'figures' },
+      size: { w: 2, h: 1 },
     });
-    const s = opened.find((x) => x.key === 'servers');
-    expect(s?.folded).toBe(false);
-    expect(s?.groups.find((g) => g.key === 'server:pve-01')?.folded).toBe(false);
-    expect(s?.groups.find((g) => g.key === 'server:nas')?.folded).toBe(true);
-    // A thing turned folds.
-    expect(
-      catalogView(catalog, { query: '', onPage: [], flipped: new Set(['connection:con_plex']) }).find(
-        (x) => x.key === 'connection:con_plex',
-      )?.folded,
-    ).toBe(true);
+    // A connection listed only partly is a row too, adding its figures.
+    expect(sections[2]?.rows.find((r) => r.key === 'connection:con_calendar')?.item.type).toBe('figures');
   });
 
-  it('sizes a server’s part by what it draws, and keys each part apart', async () => {
+  it('finds single views with a search, a part’s name on every server', async () => {
     const catalog = await api().widgets({ screen: 'box' });
-    const pve = catalogView(catalog, { query: '', onPage: [], flipped: none })
-      .find((s) => s.key === 'servers')
-      ?.groups.find((g) => g.key === 'server:pve-01');
-    const size = (show: string) => pve?.rows.find((r) => (r.item.opts.show ?? '') === show)?.size;
-    expect(size('')).toBe('2 × 2');
-    expect(size('cpu')).toBe('4 × 2');
-    expect(size('storage')).toBe('3 × 2');
-    expect(size('temp')).toBe('2 × 1');
-    expect(new Set(pve?.rows.map((r) => r.key)).size).toBe(pve?.rows.length);
+    const temp = catalogRows(catalog, 'temperature').find((s) => s.kind === 'servers');
+    expect(temp?.rows.every((r) => !r.service && r.item.opts.show === 'temp')).toBe(true);
+    expect(temp?.rows.map((r) => r.name)).toContain('pve-01 · Temperature');
+    const pve = rowsOf(catalogRows(catalog, 'pve-01'));
+    expect(pve.length).toBe(catalog.groups.find((g) => g.key === 'server:pve-01')?.items.length);
+    expect(catalogRows(catalog, 'zzzz')).toEqual([]);
   });
 
-  it('offers the rest of a thing that listed part of it, and shows what was read then', async () => {
-    const desk = api();
-    const catalog = await desk.widgets({ screen: 'box' });
-    const thing = 'connection:con_calendar';
-    const before = catalogView(catalog, { query: '', onPage: [], flipped: none }).find(
-      (s) => s.key === thing,
-    );
-    expect(before?.groups[0]?.more).toBe(true);
-    const whole = (await desk.widgets({ screen: 'box', thing })).groups.find((g) => g.thing === thing);
-    const after = catalogView(catalog, {
-      query: '',
-      onPage: [],
-      flipped: none,
-      read: { [thing]: whole },
-    }).find((s) => s.key === thing);
-    expect(after?.groups[0]?.more).toBe(false);
-    expect(after?.count).toBeGreaterThan(before?.count ?? 0);
-    // The rest never shows on a thing that listed all of it.
-    expect(
-      catalogView(catalog, { query: '', onPage: [], flipped: none })
-        .find((s) => s.key === 'connection:con_plex')
-        ?.groups.some((g) => g.more),
-    ).toBe(false);
-  });
-
-  it('opens whatever a search matches: a server’s name lists all of it, a part’s name finds it on every server', async () => {
+  it('says a service is on the page when any of its views is', async () => {
     const catalog = await api().widgets({ screen: 'box' });
-    const pve = catalogView(catalog, { query: 'pve-01', onPage: [], flipped: none });
-    expect(pve.map((s) => [s.key, s.folded])).toEqual([['servers', false]]);
-    const group = pve[0]?.groups[0];
-    expect(group).toMatchObject({ key: 'server:pve-01', folded: false });
-    expect(group?.rows.length).toBe(catalog.groups.find((g) => g.key === 'server:pve-01')?.items.length);
-    const temp = catalogView(catalog, { query: 'temperature', onPage: [], flipped: none });
-    const hot = temp.find((s) => s.key === 'servers');
-    expect(hot?.folded).toBe(false);
-    expect(hot?.groups.every((g) => g.rows.length === 1 && g.rows[0]?.item.opts.show === 'temp')).toBe(true);
-    const plex = catalogView(catalog, {
-      query: 'plex',
-      onPage: [],
-      flipped: new Set(['connection:con_plex']),
+    const memory = { id: 'w_s', type: 'server' as const, ref: 'server:pve-01', opts: { show: 'memory' } };
+    const onPage = [{ ...memory, x: 0, y: 0, w: 4, h: 2 }];
+    const here = rowsOf(catalogRows(catalog, '', onPage)).filter((r) => r.here);
+    expect(here.map((r) => r.key)).toEqual(['server:pve-01']);
+    // Searching, only the part itself.
+    const parts = rowsOf(catalogRows(catalog, 'pve-01', onPage)).filter((r) => r.here);
+    expect(parts.map((r) => r.item.opts.show)).toEqual(['memory']);
+  });
+
+  it('adds a service’s main view and remembers its name and mark for the tile', async () => {
+    const catalog = await api().widgets({ screen: 'box' });
+    const rows = rowsOf(catalogRows(catalog));
+    const plex = rows.find((r) => r.key === 'connection:con_plex');
+    if (!plex) throw new Error('no Plex');
+    const { widget, known } = fromCatalog(plex.item, plex.group);
+    expect(widget).toMatchObject({ type: 'figures', ref: 'connection:con_plex' });
+    expect(known).toMatchObject({ of: 'Plex', mark: 'plex' });
+    const pve = rows.find((r) => r.key === 'server:pve-01');
+    if (!pve) throw new Error('no pve-01');
+    expect(fromCatalog(pve.item, pve.group).known.name).toBe('pve-01');
+    // A server's part found by a search, by its server's name.
+    const storage = rowsOf(catalogRows(catalog, 'pve-01 · storage'))[0];
+    if (!storage) throw new Error('no storage');
+    expect(fromCatalog(storage.item, storage.group)).toMatchObject({
+      widget: { type: 'server', ref: 'server:pve-01', opts: { show: 'storage' } },
+      known: { name: 'pve-01 · Storage' },
     });
-    expect(plex.find((s) => s.key === 'connection:con_plex')?.folded).toBe(false);
-    // Whombat's own, folded at first, opens for a match too.
-    const clock = catalogView(catalog, {
-      query: 'time',
-      onPage: [{ id: 'w_c', type: 'clock', opts: {}, x: 0, y: 0, w: 3, h: 2 }],
-      flipped: none,
-    });
-    expect(clock.find((s) => s.kind === 'own')?.folded).toBe(false);
-    const row = rowsOf(clock).find((r) => r.item.type === 'clock');
-    expect(row?.here).toBe(true);
-    expect(row?.size).toBe('3 × 2');
-    expect(catalogView(catalog, { query: 'zzzz', onPage: [], flipped: none })).toEqual([]);
-  });
-
-  it('marks a server’s part on the page by its part, not its overview', async () => {
-    const catalog = await api().widgets({ screen: 'box' });
-    const onPage = [
-      {
-        id: 'w_s',
-        type: 'server' as const,
-        ref: 'server:pve-01',
-        opts: { show: 'memory' },
-        x: 0,
-        y: 0,
-        w: 4,
-        h: 2,
-      },
-    ];
-    const rows = rowsOf(catalogView(catalog, { query: 'pve-01', onPage, flipped: none }));
-    expect(rows.filter((r) => r.here).map((r) => r.item.opts.show)).toEqual(['memory']);
-  });
-
-  it('adds what an item names and remembers its name and mark for the tile', async () => {
-    const catalog = await api().widgets({ screen: 'box' });
-    const sections = catalogView(catalog, { query: 'plex', onPage: [], flipped: none });
-    const group = sections.flatMap((s) => s.groups).find((g) => g.thing);
-    const row = group?.rows.find((r) => r.item.type === 'panel');
-    if (!group || !row) throw new Error('no Plex');
-    const { widget, known } = fromCatalog(row.item, group);
-    expect(widget.type).toBe('panel');
-    expect(widget.ref).toBe('connection:con_plex');
-    expect(widget.opts.panel).toBeTruthy();
-    expect(known.of).toBe('Plex');
-    expect(known.mark).toBe('plex');
-    // A server's part by its server's name.
-    const pve = catalogView(catalog, { query: 'pve-01', onPage: [], flipped: none })[0]?.groups[0];
-    const storage = pve?.rows.find((r) => r.item.opts.show === 'storage');
-    if (!pve || !storage) throw new Error('no pve-01');
-    const added = fromCatalog(storage.item, pve);
-    expect(added.widget).toMatchObject({ type: 'server', ref: 'server:pve-01', opts: { show: 'storage' } });
-    expect(added.known.name).toBe('pve-01 · Storage');
-    const overview = pve.rows.find((r) => !r.item.opts.show);
-    expect(overview && fromCatalog(overview.item, pve).known.name).toBe('pve-01');
   });
 
   it('lists each server once for a server widget’s Server, and its parts for Shows', async () => {
@@ -415,32 +328,24 @@ const ACCOUNTS: DeskCatalog = {
 };
 
 describe('the person’s accounts, photos and boards on the phone', () => {
-  const none = new Set<string>();
-  const accounts = (flipped: ReadonlySet<string> = none, query = '') =>
-    catalogView(ACCOUNTS, { query, onPage: [], flipped }).find((s) => s.kind === 'accounts');
+  const accounts = (query = '') => catalogRows(ACCOUNTS, query).find((s) => s.kind === 'accounts');
 
-  it('puts every account under one Your accounts, each its own fold, open at first', () => {
-    const sections = catalogView(ACCOUNTS, { query: '', onPage: [], flipped: none });
+  it('lists each account once under Your accounts, adding its first widget', () => {
+    const sections = catalogRows(ACCOUNTS);
     expect(sections.map((s) => s.kind)).toEqual(['own', 'accounts', 'thing']);
-    const mine = accounts();
-    expect(mine).toMatchObject({ key: 'accounts', label: 'Your accounts', folded: false, count: 5 });
-    expect(mine?.groups.map((g) => [g.key, g.account, g.server, g.folded, g.mark])).toEqual([
-      ['account:acc_g', true, false, false, 'google'],
-      ['account:github', true, false, false, 'github'],
+    expect(accounts()?.label).toBe('Your accounts');
+    expect(accounts()?.rows.map((r) => [r.key, r.mark, r.item.opts.panel])).toEqual([
+      ['account:acc_g', 'google', 'today'],
+      ['account:github', 'github', 'pulls'],
     ]);
-    // Turned, an account folds and the other stays open; turned, the section folds.
-    const folded = accounts(new Set(['account:acc_g']));
-    expect(folded?.groups.map((g) => g.folded)).toEqual([true, false]);
-    expect(accounts(new Set(['accounts']))?.folded).toBe(true);
-    // Immich's group isn't an account's.
-    expect(sections.find((s) => s.key === 'connection:con_immich')?.groups[0]?.account).toBe(false);
   });
 
-  it('finds an account by who holds it and a widget by its name', () => {
-    expect(accounts(none, 'google')?.groups.map((g) => g.rows.length)).toEqual([3]);
-    const unread = accounts(none, 'unread');
-    expect(unread?.groups.flatMap((g) => g.rows.map((r) => r.item.opts.panel))).toEqual(['unread']);
-    expect(accounts(new Set(['account:acc_g']), 'unread')?.groups[0]?.folded).toBe(false);
+  it('finds an account’s widget by its name, named by its account', () => {
+    expect(accounts('unread')?.rows.map((r) => [r.name, r.item.opts.panel])).toEqual([
+      ['anna@example.com · Unread mail', 'unread'],
+    ]);
+    expect(accounts('google')).toBeUndefined();
+    expect(accounts('anna')?.rows).toHaveLength(3);
   });
 
   it('names an account by who holds it and its address', () => {
@@ -464,14 +369,11 @@ describe('the person’s accounts, photos and boards on the phone', () => {
   });
 
   it('sizes a photo and a board by what they draw, and adds an account’s widget named by its account', () => {
-    const immich = catalogView(ACCOUNTS, { query: '', onPage: [], flipped: none }).find(
-      (s) => s.key === 'connection:con_immich',
-    );
-    expect(immich?.groups[0]?.rows.map((r) => r.size)).toEqual(['4 × 3', '4 × 2']);
-    const google = accounts()?.groups[0];
-    const today = google?.rows[0];
-    if (!google || !today) throw new Error('no Google');
-    const { widget, known } = fromCatalog(today.item, google);
+    const immich = rowsOf(catalogRows(ACCOUNTS, 'immich'));
+    expect(immich.map((r) => `${r.size.w} × ${r.size.h}`)).toEqual(['4 × 3', '4 × 2']);
+    const google = accounts()?.rows[0];
+    if (!google) throw new Error('no Google');
+    const { widget, known } = fromCatalog(google.item, google.group);
     expect(widget).toEqual({ type: 'panel', ref: 'account:acc_g', opts: { panel: 'today' } });
     expect(known).toMatchObject({
       name: 'Today',
@@ -479,26 +381,20 @@ describe('the person’s accounts, photos and boards on the phone', () => {
       mark: 'google',
       view: 'list',
     });
-    const photo = immich?.groups[0]?.rows[0];
-    if (!photo || !immich?.groups[0]) throw new Error('no Immich');
-    expect(fromCatalog(photo.item, immich.groups[0]).known).toMatchObject({ of: 'Immich', view: 'photo' });
+    const photo = immich[0];
+    if (!photo) throw new Error('no Immich');
+    expect(fromCatalog(photo.item, photo.group).known).toMatchObject({ of: 'Immich', view: 'photo' });
   });
 
-  it('offers the other widgets of the same account, keeping On a locked screen where the new one is private', () => {
+  it('offers every widget of the same account for What it shows', () => {
     const w = { type: 'panel' as const, ref: 'account:acc_g' };
-    expect(accountChoices(ACCOUNTS, w).map((i) => i.opts.panel)).toEqual(['today', 'next-meeting', 'unread']);
-    expect(accountChoices(ACCOUNTS, { type: 'panel', ref: 'account:github' })).toHaveLength(2);
-    expect(accountChoices(ACCOUNTS, { type: 'panel', ref: 'connection:con_immich' })).toEqual([]);
-    expect(accountChoices(undefined, w)).toEqual([]);
-    expect(
-      withAccountItem({ panel: 'today', lock: 'show' }, { opts: { panel: 'unread' }, private: true }),
-    ).toEqual({
-      panel: 'unread',
-      lock: 'show',
-    });
-    expect(withAccountItem({ panel: 'pulls', lock: 'show' }, { opts: { panel: 'review' } })).toEqual({
-      panel: 'review',
-    });
+    expect(catalogGroupOf(ACCOUNTS, w)?.items.map((i) => i.opts.panel)).toEqual([
+      'today',
+      'next-meeting',
+      'unread',
+    ]);
+    expect(catalogGroupOf(ACCOUNTS, { type: 'panel', ref: 'account:github' })?.items).toHaveLength(2);
+    expect(catalogGroupOf(undefined, w)).toBeNull();
   });
 
   it('offers On a locked screen for calendar, mail and photos, not for pull requests or a board', () => {
