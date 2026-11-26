@@ -7,7 +7,12 @@
 
 import type { GuideActInput } from '@whombat/client';
 import { problemText, vaultAskOf } from '@whombat/client';
-import { useStartGoogleConnection, useStartMicrosoftConnection } from '@whombat/client/react';
+import { CONNECT_FORM_TEXT, cardOAuthStartBody, connectProblem } from '@whombat/client/connections';
+import {
+  useConnectionWrite,
+  useStartGoogleConnection,
+  useStartMicrosoftConnection,
+} from '@whombat/client/react';
 import type {
   GuideAction,
   GuideActionsBlock,
@@ -15,6 +20,7 @@ import type {
   GuideCard,
   GuideChoicesBlock,
   GuideConnectBlock,
+  GuideConnectOAuth,
   GuideCopyBlock,
   GuideFormBlock,
   GuideIcon,
@@ -24,11 +30,12 @@ import type {
   GuideStatusState,
   GuideVaultAsk,
 } from '@whombat/core';
-import { GUIDE_VALUE_MAX } from '@whombat/core/contracts';
+import { api, GUIDE_VALUE_MAX } from '@whombat/core/contracts';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
 import { Clipboard, Linking, Share, TextInput, View } from 'react-native';
+import { useBurrow } from '../data/BurrowProvider';
 import {
   applyClientFile,
   connectAppLabel,
@@ -144,6 +151,7 @@ export function GuideCardView({ card, onAct, web }: GuideCardViewProps) {
       busy={sending}
       web={web}
       ask={ask}
+      connectOAuth={card.connectOAuth}
     />
   ));
   return (
@@ -203,6 +211,7 @@ function GuideBlockView({
   busy,
   web,
   ask,
+  connectOAuth,
 }: {
   block: GuideBlock;
   locked: boolean;
@@ -212,12 +221,16 @@ function GuideBlockView({
   web: GuideWeb;
   /** A sign-in card's ask (`vault_ask`): its form is the sign-in form. */
   ask: GuideVaultAsk | null;
+  /** Direct OAuth start details on an `add_connection` card. */
+  connectOAuth: GuideConnectOAuth | undefined;
 }) {
   switch (block.type) {
     case 'choices':
       return <ChoicesBlock block={block} locked={locked} chosen={chosen} act={act} busy={busy} />;
     case 'actions':
-      return locked ? null : <ActionsBlock block={block} act={act} busy={busy} web={web} />;
+      return locked ? null : (
+        <ActionsBlock block={block} act={act} busy={busy} web={web} connectOAuth={connectOAuth} />
+      );
     case 'copy':
       return <CopyBlock block={block} />;
     case 'links':
@@ -458,22 +471,87 @@ function ActionButton({
   );
 }
 
+function ConnectOAuthActionButton({
+  action,
+  oauth,
+  busy,
+  onProblem,
+}: {
+  action: GuideAction;
+  oauth: GuideConnectOAuth;
+  busy: boolean;
+  onProblem: (text: string | null) => void;
+}) {
+  const managed = useManaged();
+  const { slug } = useBurrow();
+  const startOAuth = useConnectionWrite(api.connections.startOAuth, slug);
+
+  async function start() {
+    if (!managed) return;
+    onProblem(null);
+    holdPhoneConnect({ device: managed.applianceId, flow: 'connection' });
+    try {
+      const result = await startOAuth.mutateAsync({
+        params: { burrow: slug },
+        body: cardOAuthStartBody(oauth),
+      });
+      if (result.status !== 'ok') {
+        onProblem(CONNECT_FORM_TEXT.notThrough);
+        return;
+      }
+      openUrl(result.data.authorizeUrl);
+    } catch (err) {
+      onProblem(connectProblem(err).message ?? problemText(err, CONNECT_FORM_TEXT.cantStart));
+    }
+  }
+
+  return (
+    <Button
+      label={action.label}
+      variant={action.style}
+      disabled={busy}
+      busy={startOAuth.isPending}
+      onPress={() => void start()}
+    />
+  );
+}
+
 function ActionsBlock({
   block,
   act,
   busy,
   web,
+  connectOAuth,
 }: {
   block: GuideActionsBlock;
   act: (input: GuideActInput) => Promise<GuideActOutcome>;
   busy: boolean;
   web: GuideWeb;
+  connectOAuth: GuideConnectOAuth | undefined;
 }) {
+  const theme = useTheme();
+  const managed = useManaged();
+  const [problem, setProblem] = useState<string | null>(null);
   return (
     <View style={{ gap: 8 }}>
-      {block.actions.map((action) => (
-        <ActionButton key={action.id} action={action} act={act} busy={busy} web={web} />
-      ))}
+      {block.actions.map((action) =>
+        connectOAuth && managed && (action.id === 'connect' || action.id === 'allow') ? (
+          <ConnectOAuthActionButton
+            key={action.id}
+            action={action}
+            oauth={connectOAuth}
+            busy={busy}
+            onProblem={setProblem}
+          />
+        ) : (
+          <ActionButton key={action.id} action={action} act={act} busy={busy} web={web} />
+        ),
+      )}
+      {problem ? (
+        <Text size={13} lh={1.4} color={theme.colors.bad} accessibilityLiveRegion="polite">
+          {problem}
+        </Text>
+      ) : null}
     </View>
   );
 }

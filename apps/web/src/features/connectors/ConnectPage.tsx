@@ -7,7 +7,12 @@ import {
   foundServerSearch,
 } from '@whombat/client/connections';
 import { useCatalogConnections, useConnectionsCatalog } from '@whombat/client/react';
-import { type CatalogEntry, connectAccessOf } from '@whombat/core/domain';
+import {
+  type CatalogEntry,
+  type ConnectionAccessLevel,
+  connectAccessOf,
+  connectReturnPathOf,
+} from '@whombat/core/domain';
 import { useEffect, useRef, useState } from 'react';
 import { ButtonLink } from '../../components/Button';
 import { SkeletonRows } from '../../components/ListState';
@@ -31,6 +36,8 @@ export function ConnectPage({
   burrow,
   entry,
   url,
+  access: initialAccess,
+  returnTo: initialReturnTo,
   outcome,
   onOutcomeSeen,
   navigate: leave = (url) => window.location.assign(url),
@@ -39,17 +46,24 @@ export function ConnectPage({
   entry: CatalogEntry;
   /** The address to start with (`&url=`, from Found on your network; CS-51): identified at once. */
   url?: string;
+  /** The access level chosen by the assistant's card (`&access=`). */
+  access?: ConnectionAccessLevel;
+  /** Where to return after connecting (`&returnTo=`). */
+  returnTo?: string;
   outcome?: CatalogOutcome;
   onOutcomeSeen?: () => void;
   /** Where an OAuth sign-in goes (tests); a full-page navigation by default. */
   navigate?: (url: string) => void;
 }) {
   const catalog = useConnectionsCatalog({}, { retry: false });
-  // The level the assistant's card chose (`&access=`, connect-in-chat.md); read as the address has it, so Settings'
-  // own search stays as it is.
-  const access = useRouterState({
+  const searchAccess = useRouterState({
     select: (st) => connectAccessOf((st.location.search as Record<string, unknown>).access),
   });
+  const searchReturnTo = useRouterState({
+    select: (st) => connectReturnPathOf((st.location.search as Record<string, unknown>).returnTo),
+  });
+  const access = initialAccess ?? searchAccess;
+  const returnTo = initialReturnTo ?? searchReturnTo;
   const server = asServerNote(entry, url);
   const list = useCatalogConnections({ params: { burrow } });
   const status = catalog.data?.entries.find((e) => e.catalogId === entry.id);
@@ -148,6 +162,7 @@ export function ConnectPage({
                 entry={entry}
                 initialUrl={url}
                 {...(access ? { initialAccess: access } : {})}
+                {...(returnTo ? { returnTo } : {})}
                 leave={leave}
               />
             </>

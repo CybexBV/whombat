@@ -280,6 +280,15 @@ describe('Settings → Connections’ pages open the phone’s own screens (phon
       '/settings?tab=connections&connection=proxmox&url=javascript%3Ax',
       'whombat://settings/connections/connect/proxmox',
     ],
+    // Assistant connect cards pass access and returnTo through; external returnTo is dropped.
+    [
+      '/settings?tab=connections&connection=custom_mcp&url=https%3A%2F%2Fmcp.example.com%2Fmcp&access=read&returnTo=%2Fburrow-hq%2Fchat%3Fthread%3Dmsg_1%26guide%3Dmsg_2',
+      'whombat://settings/connections/connect/custom_mcp?url=https%3A%2F%2Fmcp.example.com%2Fmcp&access=read&returnTo=%2Fburrow-hq%2Fchat%3Fthread%3Dmsg_1%26guide%3Dmsg_2',
+    ],
+    [
+      '/settings?tab=connections&connection=custom_mcp&returnTo=https%3A%2F%2Fevil.example%2Fx',
+      'whombat://settings/connections/connect/custom_mcp',
+    ],
     // One connection: its page.
     [
       '/settings?tab=connections&connection=homeassistant&id=con_ha1',

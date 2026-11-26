@@ -284,4 +284,21 @@ describe('what a connect card tells the turn it wakes (connect-by-talking.md)', 
     expect(line).toContain('connection_look');
     expect(line).toContain('whombat:connection-pages');
   });
+
+  it('tells the agent a step-up permission was allowed without asking for a new logo', () => {
+    const line = connectCardLine('Mara', {
+      node: 'allow_more',
+      title: 'Allow Dusty more on Cloudflare?',
+      answer: {
+        actionId: 'allow',
+        optionIds: null,
+        label: 'Allowed · Cloudflare',
+        at: '2026-11-05T10:00:00.000Z',
+        connectionId: 'con_cf',
+      },
+    });
+    expect(line).toContain('con_cf');
+    expect(line).toContain('allowed');
+    expect(line).not.toContain('connection_look');
+  });
 });

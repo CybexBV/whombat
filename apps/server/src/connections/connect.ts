@@ -390,6 +390,8 @@ export interface NewConnectionInput {
    * docs/decisions/t3code.md T3-05): kept as `accessExpiresAt`, with no access token beside it. Null for every other.
    */
   expiresAt?: Date | null;
+  /** Lock matching open `add_connection` cards and wake the assistant (default true; false when caller locks the card). */
+  closeConnectCards?: boolean;
 }
 
 /** The credential columns of a connection, sealed for its id. */
@@ -471,6 +473,16 @@ export async function saveNewConnection(
   const synced = await syncAndRecord(services, ready, input.checks);
   // A Custom connection looks for its service's own logo in the background (connection-looks.md).
   findLogoLater(services, synced, viewer.principal.id);
+  if (input.closeConnectCards !== false) {
+    await services.guides.closeMatchingConnectCards({
+      burrowId: viewer.burrowId,
+      personId: viewer.principal.id,
+      connectionId: synced.id,
+      catalogId: synced.catalogId,
+      label: synced.label,
+      baseUrl: synced.baseUrl,
+    });
+  }
   return { row: synced, eventId };
 }
 
@@ -483,8 +495,10 @@ export async function saveReconnect(
   viewer: ConnectionViewer,
   row: CatalogConnectionRow,
   input: Omit<NewConnectionInput, 'entry' | 'labelGiven' | 'baseUrl'> & { baseUrl?: string },
+  options: { closeConnectCards?: boolean } = {},
 ): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   const entry = connectableEntry(row.catalogId);
+  const hadScopesWanted = row.scopesWanted.length > 0;
   const set: ConnectionChanges = {
     signIn: input.signIn,
     transport: connectionTransport(entry, input.signIn),
@@ -504,7 +518,16 @@ export async function saveReconnect(
   };
   const res = await applyChanges(services, viewer, row, set, ['reconnected']);
   await emitConnectionLifecycle(services, { type: 'credential', connectionId: row.id });
-  return { row: await syncAndRecord(services, res.row, input.checks), eventId: res.eventId };
+  const synced = await syncAndRecord(services, res.row, input.checks);
+  if (options.closeConnectCards !== false && hadScopesWanted) {
+    await services.guides.closeMatchingAllowMoreCards({
+      burrowId: viewer.burrowId,
+      personId: viewer.principal.id,
+      connectionId: synced.id,
+      label: synced.label,
+    });
+  }
+  return { row: synced, eventId: res.eventId };
 }
 
 /** Writes a change: a signed `connection.changed`. */
@@ -581,14 +604,15 @@ export async function createConnection(
   services: Services,
   viewer: ConnectionViewer,
   body: z.output<typeof CreateConnectionBody>,
+  options: { closeConnectCards?: boolean } = {},
 ): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   switch (body.signIn) {
     case 'password':
-      return createPasswordConnection(services, viewer, body);
+      return createPasswordConnection(services, viewer, body, options);
     case 'client_credentials':
-      return createClientCredentialsConnection(services, viewer, body);
+      return createClientCredentialsConnection(services, viewer, body, options);
     default:
-      return createTokenConnection(services, viewer, body);
+      return createTokenConnection(services, viewer, body, options);
   }
 }
 
@@ -597,6 +621,7 @@ export async function createTokenConnection(
   services: Services,
   viewer: ConnectionViewer,
   body: z.output<typeof CreateConnectionBody>,
+  options: { closeConnectCards?: boolean } = {},
 ): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   const entry = connectableEntry(body.catalogId);
   if (body.signIn !== 'token' && body.signIn !== 'none')
@@ -678,6 +703,7 @@ export async function createTokenConnection(
       checks: outcome.checks,
       fromCheck: outcome.fromCheck ?? {},
       clientSecret: made?.clientKey ?? null,
+      closeConnectCards: options.closeConnectCards,
       remembered: outcome.session?.remembered ?? null,
     });
   } catch (err) {
@@ -1091,6 +1117,7 @@ export async function createPasswordConnection(
   services: Services,
   viewer: ConnectionViewer,
   body: z.output<typeof CreateConnectionBody>,
+  options: { closeConnectCards?: boolean } = {},
 ): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   const entry = connectableEntry(body.catalogId);
   const method = entry.signIn.find((m) => m.kind === 'password');
@@ -1170,6 +1197,7 @@ export async function createPasswordConnection(
     checks: withProvisionNote(outcome.checks, made.note),
     fromCheck: outcome.fromCheck ?? {},
     expiresAt: made.expiresAt ?? null,
+    closeConnectCards: options.closeConnectCards,
   });
 }
 
@@ -1208,6 +1236,7 @@ export async function createClientCredentialsConnection(
   services: Services,
   viewer: ConnectionViewer,
   body: z.output<typeof CreateConnectionBody>,
+  options: { closeConnectCards?: boolean } = {},
 ): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   const entry = connectableEntry(body.catalogId);
   const method = clientCredentialsMethod(entry);
@@ -1246,6 +1275,7 @@ export async function createClientCredentialsConnection(
     access: body.access,
     checks: outcome.checks,
     fromCheck: outcome.fromCheck ?? {},
+    closeConnectCards: options.closeConnectCards,
   });
 }
 

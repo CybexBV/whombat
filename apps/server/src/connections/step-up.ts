@@ -5,10 +5,17 @@
  * the connection's page, where Allow on {Name} signs in again. What the entry never asks for (`scopesNever`:
  * Cloudflare's registrar, members, API tokens) gets no card: the agent hears that the person does it in the service.
  */
-import { type CatalogEntry, catalogSignIn, scopeListWords } from '@whombat/core';
+import {
+  type CatalogEntry,
+  CONNECT_HERE_DECLINE,
+  CONNECT_HERE_TEXT,
+  catalogSignIn,
+  newId,
+  scopeListWords,
+} from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { catalogConnections } from '../db/schema/index';
-import { askWithCard } from '../guides/ask';
+import { askWithCard, cardReturnTo } from '../guides/ask';
 import { makeCard } from '../guides/flows';
 import { loadPrincipalRow, shortName } from '../read/principals';
 import type { Services } from '../services';
@@ -20,7 +27,7 @@ const BASELINE = new Set(['offline_access', 'openid', 'profile', 'email']);
 /** The words the agent hears (to the agent, never the chat). */
 export const STEP_UP_TEXT = {
   carded: (name: string, words: string) =>
-    `${name} hasn’t allowed this yet: it needs the person’s OK to ${words}. A card in this thread asks them. End your turn and carry on once they say they allowed it.`,
+    `${name} hasn’t allowed this yet: it needs the person’s OK to ${words}. A card in this thread asks them. End your turn; Whombat will wake you once they allow it.`,
   asked: (name: string, words: string, label: string) =>
     `${name} hasn’t allowed this yet: it needs the person’s OK to ${words}. They can allow it on ${label}’s page in Settings → Connections (Allow on ${name}); ask them to, then carry on.`,
   never: (name: string, words: string) =>
@@ -39,8 +46,13 @@ export function missingScopes(asked: readonly string[], row: Pick<CatalogConnect
 }
 
 /** The connection page, which opens at Allow on {Name} while something is asked. */
-export function allowMoreHref(entry: Pick<CatalogEntry, 'id'>, connectionId: string): string {
-  return `/settings?tab=connections&connection=${encodeURIComponent(entry.id)}&id=${encodeURIComponent(connectionId)}`;
+export function allowMoreHref(
+  entry: Pick<CatalogEntry, 'id'>,
+  connectionId: string,
+  returnTo?: string | null,
+): string {
+  const base = `/settings?tab=connections&connection=${encodeURIComponent(entry.id)}&id=${encodeURIComponent(connectionId)}`;
+  return returnTo ? `${base}&returnTo=${encodeURIComponent(returnTo)}` : base;
 }
 
 /**
@@ -78,6 +90,15 @@ export async function askForScopes(
   if (!fresh.length || !call.conversationId) return STEP_UP_TEXT.asked(entry.name, words, row.label);
   const agent = await loadPrincipalRow(services.db, call.agentId);
   const who = agent ? shortName(agent) : 'Whombat';
+  const messageId = newId('message');
+  const returnTo = await cardReturnTo(
+    services.db,
+    call.burrowId,
+    call.conversationId,
+    call.threadRootId ?? null,
+    messageId,
+  );
+  const directOAuth = method?.kind === 'mcp_oauth' && returnTo;
   const card = makeCard({
     guide: 'add_connection',
     node: 'allow_more',
@@ -91,16 +112,36 @@ export async function askForScopes(
             id: 'allow',
             label: `Allow on ${entry.name}…`,
             style: 'primary',
-            href: allowMoreHref(entry, row.id),
+            href: allowMoreHref(entry, row.id, returnTo),
           },
+          ...(returnTo
+            ? [
+                {
+                  id: CONNECT_HERE_DECLINE,
+                  label: CONNECT_HERE_TEXT.notNow,
+                  style: 'quiet' as const,
+                  href: null,
+                },
+              ]
+            : []),
         ],
       },
     ],
+    ...(directOAuth
+      ? {
+          connectOAuth: {
+            catalogId: entry.id,
+            method: 'mcp_oauth' as const,
+            connectionId: row.id,
+            returnTo,
+          },
+        }
+      : {}),
   });
   const posted = await services.pipeline
     .commit(
       askWithCard,
-      { conversationId: call.conversationId, threadRootId: call.threadRootId ?? null, card },
+      { conversationId: call.conversationId, threadRootId: call.threadRootId ?? null, card, messageId },
       {
         burrowId: call.burrowId,
         actorId: call.agentId,

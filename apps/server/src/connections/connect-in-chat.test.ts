@@ -1,5 +1,6 @@
-import { catalogEntry, GuideCard } from '@whombat/core';
+import { CONNECT_HERE_DECLINE, catalogEntry, GuideCard } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
+import { parseGuideReturn } from '../guides/service';
 import { connectAddress, connectCard, hostOfAddress } from './ask';
 import { readSshBanner, serversAt, withoutDoubleServers } from './found-servers';
 import { foundAddress, foundName, foundTagline, orderFound } from './found-view';
@@ -63,6 +64,45 @@ describe('connection_add’s pre-fill (connect-in-chat.md)', () => {
     const actions = card.blocks.flatMap((b) => (b.type === 'actions' ? b.actions : []));
     expect(actions.map((a) => a.label)).toEqual(['Add as a server', 'Connect it instead']);
     expect(actions[0]?.href).toContain('address=10.0.0.5');
+  });
+
+  it('makes an open OAuth card with returnTo and Not now when OAuth is available', () => {
+    const returnTo = '/burrow-hq/chat?thread=msg_root&guide=msg_card';
+    const card = connectCard(entry('notion'), {
+      url: null,
+      found: false,
+      access: 'read',
+      agent: 'Dusty',
+      returnTo,
+      oauthMethod: 'mcp_oauth',
+    });
+    expect(GuideCard.parse(card)).toEqual(card);
+    expect(card.state).toBe('open');
+    expect(card.connectOAuth).toEqual({
+      catalogId: 'notion',
+      method: 'mcp_oauth',
+      access: 'read',
+      returnTo,
+    });
+    const actions = card.blocks.flatMap((b) => (b.type === 'actions' ? b.actions : []));
+    expect(actions.map((a) => a.id)).toEqual(['connect', CONNECT_HERE_DECLINE]);
+    expect(actions[0]?.href).toContain(`returnTo=${encodeURIComponent(returnTo)}`);
+  });
+
+  it('parses guide return paths for chat, feedback, task chats and rejects non-conversation paths', () => {
+    expect(parseGuideReturn('/burrow-hq/chat?thread=msg_root&guide=msg_card1')).toEqual({
+      slug: 'burrow-hq',
+      messageId: 'msg_card1',
+    });
+    expect(parseGuideReturn('/burrow-hq/feedback?thread=msg_root&guide=msg_card2')).toEqual({
+      slug: 'burrow-hq',
+      messageId: 'msg_card2',
+    });
+    expect(parseGuideReturn('/chat?burrow=burrow-hq&thread=msg_root&guide=msg_card3')).toEqual({
+      slug: 'burrow-hq',
+      messageId: 'msg_card3',
+    });
+    expect(parseGuideReturn('/burrow-hq/settings?tab=connections&guide=msg_card4')).toBeNull();
   });
 });
 

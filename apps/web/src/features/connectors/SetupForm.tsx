@@ -37,6 +37,7 @@ import {
   initialFields,
   limitNote,
   nameHelp,
+  oauthStartBody,
   ownsAuth,
   PLACED_FIELDS,
   pasteLabel,
@@ -71,6 +72,7 @@ import {
 import { ChevronRight } from 'lucide-react';
 import { type DragEvent, type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useManaged } from '../../app/providers';
+import { useNavigateHref } from '../../app/routing/navigation';
 import { Button, ButtonLink } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Input } from '../../components/Input';
@@ -113,6 +115,7 @@ export function SetupForm({
   entry,
   initialUrl,
   initialAccess,
+  returnTo,
   leave,
 }: {
   burrow: string;
@@ -121,11 +124,14 @@ export function SetupForm({
   initialUrl?: string;
   /** `&access=` (the assistant's card, connect-in-chat.md); left out, chosen by risk (`suggestedAccess`). */
   initialAccess?: ConnectionAccessLevel;
+  /** Where to return once connected (e.g. back to the chat thread that opened this form). */
+  returnTo?: string;
   leave: (url: string) => void;
 }) {
   const ids = useId();
   const toast = useToast();
   const openConnection = useOpenConnection();
+  const navigateHref = useNavigateHref();
   const managed = useManaged();
   const create = useConnectionWrite(api.connections.create, burrow);
   const startOAuth = useConnectionWrite(api.connections.startOAuth, burrow);
@@ -330,7 +336,8 @@ export function SetupForm({
         setCode('');
         setChallenge(null);
         toast.show(CONNECT_FORM_TEXT.connected(result.data.connection.label));
-        openConnection(entry.id, result.data.connection.id);
+        if (returnTo) navigateHref(returnTo);
+        else openConnection(entry.id, result.data.connection.id);
       } else if (method.kind === 'nextcloud_login') {
         // The login opens in a new tab: opened now, while the click still counts, and pointed at Nextcloud once known.
         const tab = window.open('about:blank', '_blank');
@@ -361,13 +368,13 @@ export function SetupForm({
           throw err;
         }
       } else {
-        const returnTo = connectReturnTo(entry.id, burrow);
-        // On a managed Whombat the sign-in comes back to the hosted UI (AP-766): which Whombat started it is held here.
+        const target = connectReturnTo(entry.id, burrow, returnTo);
+        // On a managed Whombat the sign-in comes back to the hosted UI: which Whombat started it is held here.
         if (
           managed &&
           !holdGoogleConnect(() => sessionStorage, {
             device: managed.applianceId,
-            returnTo,
+            returnTo: target,
             flow: 'connection',
           })
         ) {
@@ -376,7 +383,7 @@ export function SetupForm({
         }
         const result = await startOAuth.mutateAsync({
           params: { burrow },
-          body: { ...body, method: method.kind, returnTo },
+          body: oauthStartBody(entry, shown, draft(current), method.kind, target),
         });
         if (result.status === 'ok') leave(result.data.authorizeUrl);
       }
@@ -456,6 +463,14 @@ export function SetupForm({
         burrow={burrow}
         entry={entry}
         started={service}
+        {...(returnTo
+          ? {
+              onConnected: (conn) => {
+                toast.show(CONNECT_FORM_TEXT.connected(conn.label));
+                navigateHref(returnTo);
+              },
+            }
+          : {})}
         onCancel={() => setService(null)}
         onFailed={(message) => {
           setService(null);
@@ -471,6 +486,14 @@ export function SetupForm({
         entry={entry}
         login={login}
         access={access}
+        {...(returnTo
+          ? {
+              onConnected: (conn) => {
+                toast.show(CONNECT_FORM_TEXT.connected(conn.label));
+                navigateHref(returnTo);
+              },
+            }
+          : {})}
         onCancel={() => setLogin(null)}
         onFailed={(message) => {
           setLogin(null);

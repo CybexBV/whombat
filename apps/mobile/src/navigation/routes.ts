@@ -116,7 +116,14 @@ export type RootStackParamList = {
    * `url` fills in the address (Found on your network, CS-51), `error` is a sign-in's `connect_error=` said once.
    * Strings as a link gives them: the screen checks them. A link only fills in; nothing is sent before a tap.
    */
-  Connect: { catalogId: string; url?: string; error?: string; back?: string; access?: string };
+  Connect: {
+    catalogId: string;
+    url?: string;
+    error?: string;
+    back?: string;
+    access?: string;
+    returnTo?: string;
+  };
   /**
    * A builtin connection's screen (PC-02): Google, Microsoft 365 and Email (IMAP) — the person's own account, connected
    * here — GitHub and Website feedback; `whombat://settings/connections/account/google`. `thingId`: the account's page

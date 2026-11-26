@@ -9,7 +9,7 @@
  * GitHub and Website feedback their own screens; anything else the list. Pure.
  */
 import { CONNECTION_CONNECT_ERROR_TEXT, connectableEntry } from '@whombat/client/connections';
-import { connectAccessOf, thingId } from '@whombat/core';
+import { connectAccessOf, connectReturnPathOf, thingId } from '@whombat/core';
 
 const BASE = 'whombat://';
 
@@ -79,9 +79,9 @@ export function connectionsScreenUrl(search: string): string {
   if (open && connectableEntry(open)) {
     if (connectionId) return `${BASE}things/${encodeURIComponent(thingId('connection', connectionId))}`;
     const url = linkedAddress(values(search, 'url')[0]);
-    // The level the assistant's card chose (connect-in-chat.md) rides along.
     const access = connectAccessOf(values(search, 'access')[0]);
-    return `${BASE}settings/connections/connect/${open}${query({ url, error, access })}`;
+    const returnTo = connectReturnPathOf(values(search, 'returnTo')[0]);
+    return `${BASE}settings/connections/connect/${open}${query({ url, error, access, returnTo })}`;
   }
   return `${BASE}settings/connections`;
 }

@@ -8,7 +8,13 @@ import userEvent from '@testing-library/user-event';
 import { ApiError, answeredGuideCard, type CommitResult, type GuideActInput } from '@whombat/client';
 import { infiniteEndpointKey } from '@whombat/client/query';
 import { useMessagesInfinite } from '@whombat/client/react';
-import { type GuideCard, GuideVaultAsk, type Message } from '@whombat/core';
+import {
+  catalogEntry,
+  connectSignInCard,
+  type GuideCard as GuideCardData,
+  GuideVaultAsk,
+  type Message,
+} from '@whombat/core';
 import { type AnyEndpoint, api } from '@whombat/core/contracts';
 import { VAULT_ASK_TEXT, vaultAskCard } from '@whombat/core/vault';
 import { describe, expect, it, vi } from 'vitest';
@@ -27,13 +33,14 @@ import {
   guideResult,
   guideWelcome,
 } from './cardStates';
+import { GuideCard } from './GuideCard';
 import { MessageCard } from './MessageCard';
 
 const burrow = 'burrow-hq';
 const conversationId = 'cnv_dm-hazel';
 const listKey = infiniteEndpointKey(api.messages.list, { params: { burrow, conversationId } });
 
-function message(id: string, card: GuideCard): Message {
+function message(id: string, card: GuideCardData): Message {
   return {
     id,
     conversationId,
@@ -83,7 +90,7 @@ type Answer = (input: { params: unknown; body: unknown }) => Promise<CommitResul
  * The DM with these cards, and a small server behind it: `guides.act` (ok by default, else `answer`) locks the card
  * there too, and a refetch of the list reads the server's copy.
  */
-function renderDm(cards: GuideCard[], answer?: Answer, onActed?: () => void) {
+function renderDm(cards: GuideCardData[], answer?: Answer, onActed?: () => void) {
   const services = fixtureServices();
   const server = cards.map((c, i) => message(`msg_guide${i}`, c));
   const page = () => ({ messages: server.map((m) => ({ ...m })), hasMore: false, before: null });
@@ -507,5 +514,72 @@ describe('the sign-in card', () => {
         .getByLabelText(/^Authenticator key/)
         .getAttribute('aria-invalid'),
     ).toBe('true');
+  });
+});
+
+describe('OAuth connect cards', () => {
+  const mcp = catalogEntry('custom_mcp');
+  if (!mcp) throw new Error('custom_mcp');
+  const returnTo = '/burrow-hq/chat?thread=msg_root&guide=msg_card';
+  const oauthCard = connectSignInCard(
+    mcp,
+    { label: 'Gehoord', url: 'https://gehoord.example/api/mcp', access: 'read', returnTo },
+    'Dusty',
+  );
+
+  it('starts OAuth directly from the card with its access and returnTo', async () => {
+    const user = userEvent.setup();
+    const services = fixtureServices();
+    const starts: unknown[] = [];
+    const leave = vi.fn();
+    const original = services.client.request.bind(services.client);
+    vi.spyOn(services.client, 'request').mockImplementation((async (ep: AnyEndpoint, input: never) => {
+      if (ep.id === 'connections.startOAuth') {
+        starts.push((input as { body: unknown }).body);
+        return {
+          status: 'ok',
+          httpStatus: 200,
+          data: { authorizeUrl: 'https://auth.gehoord.example/authorize?state=1' },
+        };
+      }
+      return original(ep, input);
+    }) as never);
+
+    renderWith(
+      services,
+      <GuideCard burrow={burrow} card={oauthCard} onAct={async () => true} navigate={leave} />,
+    );
+    const card = await cardNamed('Sign in to Gehoord');
+    await user.click(within(card).getByRole('button', { name: 'Sign in…' }));
+    await waitFor(() => expect(leave).toHaveBeenCalledWith('https://auth.gehoord.example/authorize?state=1'));
+    expect(starts).toEqual([
+      {
+        catalogId: 'custom_mcp',
+        method: 'mcp_oauth',
+        label: 'Gehoord',
+        fields: { url: 'https://gehoord.example/api/mcp' },
+        access: 'read',
+        returnTo,
+      },
+    ]);
+  });
+
+  it('hides the sign-in action once an add_connection card is locked with an answer', async () => {
+    const locked: GuideCardData = {
+      ...oauthCard,
+      state: 'done',
+      answer: {
+        actionId: 'connect',
+        optionIds: null,
+        label: 'Connected · Gehoord',
+        at: '2026-11-26T11:33:00.000Z',
+        connectionId: 'con_gehoord',
+      },
+    };
+    renderDm([locked]);
+    const card = await cardNamed('Sign in to Gehoord');
+    expect(within(card).getByText('Connected · Gehoord')).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: 'Sign in…' })).toBeNull();
+    expect(within(card).queryByRole('link', { name: 'Sign in…' })).toBeNull();
   });
 });

@@ -146,6 +146,41 @@ describe('settings in four groups and their old addresses (SS-02)', () => {
     expect(validateSettingsSearch({ tab: 'connections', found: 'no' })).toEqual({ tab: 'connections' });
   });
 
+  it('preserves access and returnTo through settings validation and redirect', () => {
+    const returnTo = '/burrow-hq/chat?thread=msg_root&guide=msg_card';
+    const parsed = validateSettingsSearch({
+      tab: 'connections',
+      connection: 'custom_mcp',
+      url: 'https://mcp.example.com/mcp',
+      access: 'read',
+      returnTo,
+    });
+    expect(parsed).toEqual({
+      tab: 'connections',
+      connection: 'custom_mcp',
+      url: 'https://mcp.example.com/mcp',
+      access: 'read',
+      returnTo,
+    });
+    expect(settingsRedirect(parsed)).toEqual({
+      to: '/connections',
+      search: {
+        connection: 'custom_mcp',
+        url: 'https://mcp.example.com/mcp',
+        access: 'read',
+        returnTo,
+      },
+    });
+    expect(
+      validateSettingsSearch({
+        tab: 'connections',
+        connection: 'custom_mcp',
+        access: 'admin',
+        returnTo: 'https://evil.example/x',
+      }),
+    ).toEqual({ tab: 'connections', connection: 'custom_mcp' });
+  });
+
   const settings = (search: Record<string, string>, hash?: string) => ({
     to: '/settings',
     search,

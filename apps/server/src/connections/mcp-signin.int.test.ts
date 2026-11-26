@@ -10,13 +10,24 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { type AnyEndpoint, api, buildPath } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import {
+  type AnyEndpoint,
+  api,
+  buildPath,
+  CONNECT_HERE_DECLINE,
+  DispatchContext,
+  type GuideCard,
+} from '@whombat/core';
+import { and, desc, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { catalogConnections, connectionClients, messages } from '../db/schema/index';
+import { sendMessage } from '../commands/messages';
+import { catalogConnections, connectionClients, dispatches, messages } from '../db/schema/index';
+import { buildDispatchContext } from '../runtime/context';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
-import { sessionFor } from '../test/tokens';
+import { mcpClient } from '../test/mcp';
+import { addPersonalAgent, type PersonalSetup } from '../test/personal';
+import { accountOf, agentTokenFor, sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
 import { executeConnectionCall } from './call';
 import { clientAad, sealJson } from './crypto';
@@ -25,8 +36,15 @@ import { refreshConnectionAccess } from './refresh';
 import { answerMcp, type McpToolSpec } from './testing/tool-stubs';
 
 // The hosted UI on a real origin: redirects there make a web application (SG-19c).
-const t = useTestServer({ seed: true, app: true, env: { WHOMBAT_APP_URL: 'https://whombat.example.org' } });
+const t = useTestServer({
+  seed: true,
+  listen: true,
+  app: true,
+  env: { WHOMBAT_APP_URL: 'https://whombat.example.org' },
+});
 let cookie = '';
+let me: PersonalSetup;
+let maraAccount = '';
 
 interface World {
   /** The authorization server lists `offline_access`. */
@@ -37,7 +55,19 @@ interface World {
   registered: Record<string, unknown>[];
 }
 
-const NAMES = ['fresh', 'legacy', 'flowing', 'covered', 'dead', 'refresh', 'stepup'] as const;
+const NAMES = [
+  'fresh',
+  'legacy',
+  'flowing',
+  'covered',
+  'dead',
+  'refresh',
+  'stepup',
+  'cardok',
+  'carddeny',
+  'cardmanual',
+  'carddecline',
+] as const;
 type Name = (typeof NAMES)[number];
 const world = (n: Name): World => ({ offline: n !== 'covered', code: 'ok', refresh: 'ok', registered: [] });
 const worlds = Object.fromEntries(NAMES.map((n) => [n, world(n)])) as Record<Name, World>;
@@ -208,6 +238,8 @@ beforeAll(async () => {
     dialAddress: (address) => (address.startsWith('192.168.79.') ? '127.0.0.1' : address),
   });
   cookie = (await sessionFor(t.services, IDS.mara)).cookie;
+  me = await addPersonalAgent(t.services, t.burrowId, IDS.mara, { name: 'Dusty', services: null });
+  maraAccount = await accountOf(t.services, IDS.mara);
   const allowed = await call(api.connections.allowNetwork, { cidr: '192.168.79.0/24', port });
   expect(allowed.status).toBe(200);
 });
@@ -363,6 +395,11 @@ describe('asking for more in the middle of a task (step-up, SG-24…SG-27)', () 
       );
     const [card] = await cards();
     expect(JSON.stringify(card?.card)).toContain(`id=${id}`);
+    expect((card?.card as GuideCard | undefined)?.connectOAuth).toMatchObject({
+      catalogId: 'custom_mcp',
+      method: 'mcp_oauth',
+      connectionId: id,
+    });
 
     // Asked again: no second card; the other way a server says it (an error result's `_meta`) is heard too.
     expect(await run(id, 'WriteFile')).toMatchObject({ reason: 'needs_permission' });
@@ -389,5 +426,185 @@ describe('asking for more in the middle of a task (step-up, SG-24…SG-27)', () 
     expect(after?.scopes.sort()).toEqual(['files:delete', 'files:read', 'files:write']);
     expect(after?.scopesWanted).toEqual(['files:write', 'files:delete']);
     expect(await askedOf(id)).toEqual([]);
+    // Both open step-up cards were closed automatically once the new scopes were granted.
+    for (const c of await cards()) {
+      expect((c.card as GuideCard).state).toBe('done');
+      expect((c.card as GuideCard).answer?.connectionId).toBe(id);
+    }
+  });
+});
+
+describe('OAuth connect cards in chat threads', () => {
+  async function turnInThread(text: string) {
+    const res = await t.commit(IDS.mara, sendMessage, { conversationId: me.dmId, text });
+    if (res.status !== 'ok') throw new Error('not sent');
+    const root = (res.result as { id: string }).id;
+    await t.services.db
+      .update(dispatches)
+      .set({ state: 'done' })
+      .where(and(eq(dispatches.messageId, root), eq(dispatches.state, 'queued')));
+    const d = await agentTokenFor(t.services, t.burrowId, me.agentId, me.dmId, {
+      onBehalfOfAccountId: maraAccount,
+      threadRootId: root,
+      messageId: root,
+      trigger: 'dm',
+    });
+    return { root, token: d.token };
+  }
+
+  async function addMcp(token: string, name: Name, label: string) {
+    const mcp = await mcpClient(t.baseUrl, token);
+    try {
+      const res = await mcp.client.callTool({
+        name: 'connection_add',
+        arguments: { service: 'custom_mcp', name: label, address: `${origin(name)}/mcp` },
+      });
+      return (res.structuredContent ?? {}) as Record<string, unknown>;
+    } finally {
+      await mcp.close();
+    }
+  }
+
+  async function cardOf(messageId: string) {
+    const [row] = await t.services.db.select().from(messages).where(eq(messages.id, messageId));
+    if (row?.card?.kind !== 'guide') throw new Error('no guide card');
+    return { row, card: row.card as GuideCard };
+  }
+
+  it('starts OAuth directly from the card, preserves access, returns to the thread, locks the card and wakes the assistant', async () => {
+    const turn = await turnInThread('Connect cardok MCP');
+    const added = await addMcp(turn.token, 'cardok', 'Gehoord');
+    expect(added).toMatchObject({ status: 'ok', service: 'custom_mcp', signIn: 'oauth', access: 'read' });
+    const messageId = added.messageId as string;
+    const before = await cardOf(messageId);
+    expect(before.card.state).toBe('open');
+    expect(before.card.connectOAuth).toEqual({
+      catalogId: 'custom_mcp',
+      method: 'mcp_oauth',
+      label: 'Gehoord',
+      url: `${origin('cardok')}/mcp`,
+      access: 'read',
+      returnTo: `/burrow-hq/chat?thread=${turn.root}&guide=${messageId}`,
+    });
+
+    const oauth = before.card.connectOAuth;
+    if (!oauth) throw new Error('missing connectOAuth');
+    const started = await call(api.connections.startOAuth, {
+      catalogId: oauth.catalogId,
+      method: oauth.method,
+      label: oauth.label,
+      fields: oauth.url ? { url: oauth.url } : {},
+      access: oauth.access,
+      returnTo: oauth.returnTo,
+    });
+    expect(started.status).toBe(200);
+    const params = new URL(started.body.authorizeUrl).searchParams;
+    const finished = await finish('cardok', params);
+    expect(finished.status).toBe(200);
+    const connectionId = finished.body.connectionId as string;
+    expect(connectionId).toMatch(/^con_/);
+    expect(finished.body.returnPath).toContain(`/burrow-hq/chat?thread=${turn.root}&guide=${messageId}`);
+    expect(finished.body.returnPath).toContain(`connected=custom_mcp`);
+    expect(finished.body.returnPath).toContain(`connection=${connectionId}`);
+
+    const [conn] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, connectionId));
+    expect(conn).toMatchObject({ label: 'Gehoord', access: 'read', status: 'active' });
+
+    const after = await cardOf(messageId);
+    expect(after.card.state).toBe('done');
+    expect(after.card.answer).toMatchObject({
+      actionId: 'connect',
+      connectionId,
+      label: 'Connected · Gehoord',
+    });
+
+    const [woken] = await t.services.db
+      .select()
+      .from(dispatches)
+      .where(and(eq(dispatches.agentId, me.agentId), eq(dispatches.messageId, messageId)))
+      .orderBy(desc(dispatches.createdAt))
+      .limit(1);
+    expect(woken).toMatchObject({ trigger: 'dm', threadRootId: turn.root, conversationId: me.dmId });
+    if (!woken) throw new Error('not woken');
+    const ctx = DispatchContext.parse(await buildDispatchContext(t.services, woken));
+    expect(JSON.stringify(ctx)).toContain(connectionId);
+  });
+
+  it('keeps the card open and posts a short retry note when OAuth is cancelled', async () => {
+    const turn = await turnInThread('Connect carddeny MCP');
+    const added = await addMcp(turn.token, 'carddeny', 'Cancelled MCP');
+    const messageId = added.messageId as string;
+    const oauth = (await cardOf(messageId)).card.connectOAuth;
+    if (!oauth) throw new Error('missing connectOAuth');
+    const started = await call(api.connections.startOAuth, {
+      catalogId: oauth.catalogId,
+      method: oauth.method,
+      label: oauth.label,
+      fields: oauth.url ? { url: oauth.url } : {},
+      access: oauth.access,
+      returnTo: oauth.returnTo,
+    });
+    const state = new URL(started.body.authorizeUrl).searchParams.get('state');
+    const denied = await call(api.connections.finishOAuth, {
+      state,
+      error: 'access_denied',
+      iss: origin('carddeny'),
+    });
+    expect(denied.body.returnPath).toContain(`/burrow-hq/chat?thread=${turn.root}&guide=${messageId}`);
+    expect(denied.body.returnPath).toContain('connect_error=access_denied');
+    expect((await cardOf(messageId)).card.state).toBe('open');
+
+    const replies = await t.services.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, me.dmId), eq(messages.threadRootId, turn.root)));
+    expect(replies.some((m) => m.text.toLowerCase().includes('cancelled'))).toBe(true);
+    const woken = await t.services.db.select().from(dispatches).where(eq(dispatches.messageId, messageId));
+    expect(woken).toHaveLength(0);
+  });
+
+  it('closes the card quietly when Not now is clicked', async () => {
+    const turn = await turnInThread('Connect carddecline MCP');
+    const added = await addMcp(turn.token, 'carddecline', 'Declined MCP');
+    const messageId = added.messageId as string;
+    const res = await t.api.inject({
+      method: 'POST',
+      url: `${api.guides.act.base}${buildPath(api.guides.act.path, { burrow: 'burrow-hq', messageId })}`,
+      headers: { cookie },
+      payload: { actionId: CONNECT_HERE_DECLINE },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const after = await cardOf(messageId);
+    expect(after.card.state).toBe('done');
+    expect(after.card.answer?.label).toBe('Not now');
+    expect(after.card.answer?.connectionId).toBeUndefined();
+    const woken = await t.services.db.select().from(dispatches).where(eq(dispatches.messageId, messageId));
+    expect(woken).toHaveLength(0);
+  });
+
+  it('auto-locks a matching open chat connect card and wakes the assistant when connected through Settings', async () => {
+    const turn = await turnInThread('Connect cardmanual MCP');
+    const added = await addMcp(turn.token, 'cardmanual', 'Manual MCP');
+    const messageId = added.messageId as string;
+    expect((await cardOf(messageId)).card.state).toBe('open');
+
+    // Connect through Settings without carrying the guide marker.
+    const params = await start('cardmanual');
+    const finished = await finish('cardmanual', params);
+    const connectionId = finished.body.connectionId as string;
+    expect(connectionId).toMatch(/^con_/);
+
+    const after = await cardOf(messageId);
+    expect(after.card.state).toBe('done');
+    expect(after.card.answer?.connectionId).toBe(connectionId);
+    const woken = await t.services.db
+      .select()
+      .from(dispatches)
+      .where(and(eq(dispatches.agentId, me.agentId), eq(dispatches.messageId, messageId)));
+    expect(woken).toHaveLength(1);
+    expect(woken[0]).toMatchObject({ trigger: 'dm', threadRootId: turn.root, conversationId: me.dmId });
   });
 });

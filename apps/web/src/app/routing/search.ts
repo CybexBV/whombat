@@ -22,9 +22,12 @@ import {
   AuditActorFilter,
   AuditKindFilter,
   ConnectErrorCode,
+  type ConnectionAccessLevel,
   ConnectionConnectError,
   ConnectorProvider,
   catalogEntry,
+  connectAccessOf,
+  connectReturnPathOf,
   normalizeFilesFolder,
   SearchFilter,
 } from '@whombat/core';
@@ -266,6 +269,10 @@ export interface SettingsSearch {
    * network; CS-51, AP-846).
    */
   url?: string;
+  /** The access level chosen by the assistant's card (`&access=read|manage`). */
+  access?: ConnectionAccessLevel;
+  /** Where to return after connecting (`&returnTo=`, e.g. back to the assistant card's thread). */
+  returnTo?: string;
   /**
    * Add a connection showing only On your network (`?tab=connections&found=1`, the link the assistant posts after the
    * first scan; Whombat desk-found.md DF-05, AP-3801). Taken alone or with `connection=add`; another page wins.
@@ -367,6 +374,14 @@ export function validateSettingsSearch(raw: Raw): SettingsSearch {
     url:
       tab === 'connections' && open && open !== 'add' && !isBuiltinPage(open) && !connectionId
         ? address(raw.url)
+        : undefined,
+    access:
+      tab === 'connections' && open && open !== 'add' && !isBuiltinPage(open) && !connectionId
+        ? (connectAccessOf(raw.access) ?? undefined)
+        : undefined,
+    returnTo:
+      tab === 'connections' && open && open !== 'add' && !isBuiltinPage(open)
+        ? (connectReturnPathOf(raw.returnTo) ?? undefined)
         : undefined,
     found,
     section,
@@ -473,6 +488,8 @@ export function settingsRedirect(search: SettingsSearch, hash = ''): SettingsRed
           connection: page ?? (search.connect_error ? 'google' : search.connected),
           id: search.id,
           url: search.url,
+          access: search.access,
+          returnTo: search.returnTo,
           found: search.found ? 1 : undefined,
           ...outcome,
         }),

@@ -163,16 +163,36 @@ describe('an MCP server or API set up by talking (connect-by-talking.md)', () =>
     expect(card.body).toContain('MCP');
   });
 
-  it('sends an MCP server with its own sign-in to the connect form', () => {
+  it('sends an MCP server with its own sign-in to the connect form, and carries OAuth data when given a return path', () => {
     const card = connectSignInCard(
       mcp,
       { label: 'Linear', url: 'https://mcp.linear.app/mcp', access: 'read' },
       'Dusty',
     );
     expect(card.connectAsk).toBeUndefined();
+    expect(card.connectOAuth).toBeUndefined();
     const action = card.blocks.flatMap((b) => (b.type === 'actions' ? b.actions : []))[0];
     expect(action?.href).toContain('connection=custom_mcp');
     expect(action?.href).toContain(encodeURIComponent('https://mcp.linear.app/mcp'));
+
+    const returnTo = '/burrow-hq/chat?thread=msg_root&guide=msg_card';
+    const direct = connectSignInCard(
+      mcp,
+      { label: 'Linear', url: 'https://mcp.linear.app/mcp', access: 'read', returnTo },
+      'Dusty',
+    );
+    expect(direct.connectOAuth).toEqual({
+      catalogId: 'custom_mcp',
+      method: 'mcp_oauth',
+      label: 'Linear',
+      url: 'https://mcp.linear.app/mcp',
+      access: 'read',
+      returnTo,
+    });
+    const actions = direct.blocks.flatMap((b) => (b.type === 'actions' ? b.actions : []));
+    expect(actions.map((a) => a.id)).toEqual(['connect', CONNECT_HERE_DECLINE]);
+    expect(actions[0]?.href).toContain(`returnTo=${encodeURIComponent(returnTo)}`);
+    expect(connectHereLocked('allowed', 'Linear')).toContain('Linear');
   });
 
   it('names the connection on the locked card and in the history', () => {

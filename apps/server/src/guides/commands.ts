@@ -68,7 +68,8 @@ export async function guideTarget(tx: Db, burrowId: string, messageId: string, a
   if (!conversation || !place || row.authorId !== place.agent.id) throw guideError('not_yours', yours);
   const inChat =
     conversation.kind === 'dm' && conversation.dmPersonId === actorId && place.dm.id === conversation.id;
-  if (!inChat && card.guide !== 'secret') throw guideError('not_yours', yours);
+  if (!inChat && card.guide !== 'secret' && card.guide !== 'add_connection')
+    throw guideError('not_yours', yours);
   if (card.state !== 'open') throw guideError('guide_closed', 'This was answered already.');
   return { row, card, place };
 }

@@ -37,6 +37,8 @@ export function ConnectionsPages({ burrow, search }: { burrow: string; search: S
               provider={search.connection}
               connectionId={search.id}
               url={search.url}
+              access={search.access}
+              returnTo={search.returnTo}
               found={search.found === true}
               outcome={outcome}
               onOutcomeSeen={onOutcomeSeen}

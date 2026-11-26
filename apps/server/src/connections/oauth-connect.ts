@@ -13,6 +13,7 @@
  * and `connection=<id>`, or `connect_error=<code>`).
  */
 import {
+  type ConnectionAccessLevel,
   type ConnectionConnectError,
   catalogEntry,
   catalogSignIn,
@@ -22,6 +23,7 @@ import {
 } from '@whombat/core';
 import type { z } from 'zod';
 import { codeChallengeS256, newCodeVerifier } from '../connectors/oauth';
+import { parseGuideReturn } from '../guides/service';
 import { ApiError } from '../lib/errors';
 import type { OutboundResponse } from '../lib/outbound';
 import type { Services } from '../services';
@@ -75,6 +77,8 @@ interface OAuthPendingState {
   client: OAuthClient | null;
   /** The scope asked (MCP): what the connection holds when the token answer names none. Absent: none asked. */
   scope?: string | null;
+  /** The access level chosen for a new connection (Look only or Manage); omitted on reconnect or older clients. */
+  access?: ConnectionAccessLevel;
 }
 
 const LOCAL_ORIGIN = 'http://whombat.invalid';
@@ -137,7 +141,14 @@ export async function startConnectionOAuth(
   const verifier = newCodeVerifier();
   let state: OAuthPendingState;
   let authorize: URL;
-  const common = { verifier, redirectUri, labelGiven, fields, baseUrl };
+  const common = {
+    verifier,
+    redirectUri,
+    labelGiven,
+    fields,
+    baseUrl,
+    ...(!connectionId && body.access ? { access: body.access } : {}),
+  };
   if (method.kind === 'ha_oauth') {
     await requireDestination(services, [baseUrl]);
     const clientId = haClientId(services.config);
@@ -277,10 +288,22 @@ export async function finishConnectionOAuth(
 ): Promise<FinishOutcome> {
   const taken = await takePending(services, query.state, accountId, OAUTH_SIGN_INS);
   const returnPath = taken.kind === 'unknown' ? null : taken.row.returnPath;
-  const fail = (code: ConnectionConnectError): FinishOutcome => ({
-    location: withParams(returnPath ?? fallbackPath, { connect_error: code }, fallbackPath),
-    connectionId: null,
-  });
+  const pendingForFail = taken.kind === 'taken' && accountId ? taken.row : null;
+  const fail = async (code: ConnectionConnectError): Promise<FinishOutcome> => {
+    if (pendingForFail?.burrowId && accountId && parseGuideReturn(pendingForFail.returnPath)) {
+      await services.guides.afterConnectionOAuth({
+        accountId,
+        burrowId: pendingForFail.burrowId,
+        returnPath: pendingForFail.returnPath,
+        catalogId: pendingForFail.catalogId,
+        outcome: { error: code },
+      });
+    }
+    return {
+      location: withParams(returnPath ?? fallbackPath, { connect_error: code }, fallbackPath),
+      connectionId: null,
+    };
+  };
   if (taken.kind !== 'taken' || !accountId) return fail('invalid_state');
   const pending = taken.row;
   const st = pendingState<OAuthPendingState>(services, pending);
@@ -354,16 +377,36 @@ export async function finishConnectionOAuth(
   };
   try {
     const existing = pending.connectionId ? await connectionRow(services.db, pending.connectionId) : null;
-    let saved: { row: { id: string } };
-    if (existing && isVisibleTo(existing, viewer))
-      saved = await saveReconnect(services, viewer, existing, { ...credential, baseUrl: st.baseUrl });
-    else {
+    const hasGuide = parseGuideReturn(pending.returnPath) !== null;
+    let saved: { row: { id: string; label: string } };
+    let reconnected = false;
+    if (existing && isVisibleTo(existing, viewer)) {
+      reconnected = true;
+      saved = await saveReconnect(
+        services,
+        viewer,
+        existing,
+        { ...credential, baseUrl: st.baseUrl },
+        { closeConnectCards: !hasGuide },
+      );
+    } else {
       await requireDestination(services, [st.baseUrl, st.mcpUrl]);
       saved = await saveNewConnection(services, viewer, {
         ...credential,
         entry,
         labelGiven: st.labelGiven,
         baseUrl: st.baseUrl,
+        ...(st.access ? { access: st.access } : {}),
+        closeConnectCards: !hasGuide,
+      });
+    }
+    if (hasGuide && pending.burrowId) {
+      await services.guides.afterConnectionOAuth({
+        accountId,
+        burrowId: pending.burrowId,
+        returnPath: pending.returnPath,
+        catalogId: entry.id,
+        outcome: { connectionId: saved.row.id, label: saved.row.label, reconnected },
       });
     }
     services.log.info(

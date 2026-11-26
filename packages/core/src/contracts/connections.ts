@@ -140,6 +140,8 @@ export const StartConnectionOAuthBody = z.object({
   method: OAuthSignInKind,
   label: ConnectionLabel.optional(),
   fields: ConnectionFields.default({}),
+  /** Access level for a new agent-used connection (Look only or Manage); ignored on reconnect. */
+  access: ConnectionAccessLevel.optional(),
   connectionId: ConnectionId.optional(),
   returnTo: ReturnPath,
 });
