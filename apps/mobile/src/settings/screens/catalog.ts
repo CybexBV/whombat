@@ -104,6 +104,15 @@ export function widgetPrivate(
   return w.type !== 'server' && (view === 'posters' || view === 'camera' || view === 'photo');
 }
 
+/** Whether a panel widget shows limits (Fusebox's): its sheet offers *Limits*, used or left. */
+export function widgetLimits(
+  w: Pick<DeskWidget, 'type' | 'ref' | 'opts'>,
+  groups: readonly Pick<DeskCatalogGroup, 'items'>[],
+): boolean {
+  if (w.type !== 'panel') return false;
+  return groups.some((g) => g.items.some((item) => sameWidget(item, w) && item.limits === true));
+}
+
 /** A server widget's options showing part `show` (the overview's is empty: no `show`), its other choices kept. */
 export function withServerPart(opts: Readonly<Record<string, string>>, show: string): Record<string, string> {
   const { show: _was, ...rest } = opts;

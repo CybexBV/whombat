@@ -342,6 +342,15 @@ export const ThingPageCell = z.object({
   button: z.boolean().optional(),
   /** A small bar before the text, 0…1 (a guest's CPU) (CT-396). */
   meter: z.number().min(0).max(1).optional(),
+  /**
+   * A brand's mark that goes with the row (`@whombat/brand`'s name: `claude`, `openai`): the screen's rows draw it before
+   * the title (Fusebox's subscriptions); a client that doesn't know marks leaves it out.
+   */
+  mark: z
+    .string()
+    .max(32)
+    .regex(/^[a-z0-9][a-z0-9._-]*$/)
+    .optional(),
   /** A small line instead of the text (a guest's last 24 hours), oldest first (CT-396). */
   spark: z.array(z.number().nullable()).max(120).optional(),
   /**

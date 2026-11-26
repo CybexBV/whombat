@@ -218,6 +218,137 @@ export function mapFuseboxAccounts(
   return sortGatewayAccounts(out).slice(0, GATEWAY_ACCOUNTS_MAX);
 }
 
+/* Every subscription Fusebox lists ------------------------------------------------------- */
+
+/** Fusebox's providers as its dashboard names them; ChatGPT as Whombat does. */
+const FUSEBOX_TOOLS: Readonly<Record<string, string>> = {
+  claude: 'Claude',
+  codex: 'ChatGPT',
+  gemini: 'Gemini',
+  vertex: 'Vertex AI',
+  antigravity: 'Antigravity',
+  kimi: 'Kimi',
+  xai: 'Grok',
+  meta: 'Meta',
+  devin: 'Devin',
+};
+
+/** A provider's mark (`@whombat/brand`), the ones Fusebox's dashboard shows; ChatGPT's is OpenAI's. */
+const FUSEBOX_MARKS: Readonly<Record<string, string>> = {
+  codex: 'openai',
+};
+
+/** A Fusebox provider's name as people read it (“Meta”, “Grok”), its own id otherwise. */
+export function fuseboxToolName(provider: string): string {
+  return FUSEBOX_TOOLS[provider] ?? (provider.charAt(0).toUpperCase() + provider.slice(1)).slice(0, 40);
+}
+
+/**
+ * A Fusebox provider's mark: its brand's (`claude`, `openai`, `meta`), or its own id, which a screen draws as its first
+ * letter when there's no mark by that name (Antigravity's is drawn with blurs a mark can't hold).
+ */
+export function fuseboxProviderMark(provider: string): string | undefined {
+  const mark = FUSEBOX_MARKS[provider] ?? provider;
+  return /^[a-z0-9][a-z0-9._-]{0,31}$/.test(mark) ? mark : undefined;
+}
+
+/**
+ * A subscription of a tool outside the pools (Meta, Gemini, Grok, Kimi…): Fusebox lists it with its limits, Whombat
+ * shows it beside the Claude and ChatGPT ones and sends nothing through it.
+ */
+export interface FuseboxOtherSubscription {
+  key: string;
+  label: string;
+  /** Fusebox's provider id (`meta`). */
+  provider: string;
+  plan: string | null;
+  noFiveHourLimit: boolean;
+  status: GatewayAccountStatus;
+  until: string | null;
+  windows: UsageWindow[];
+}
+
+/** Of Fusebox's limits beyond windows (credits, a model's own), the ones its dashboard's list shows: two at most. */
+function fuseboxLimits(quota: Record<string, unknown> | null, now: Date): UsageWindow[] {
+  const all = (Array.isArray(quota?.limits) ? quota.limits : [])
+    .map(obj)
+    .filter(
+      (l): l is Record<string, unknown> => !!l && l.enabled !== false && typeof l.used_percent === 'number',
+    );
+  const primary = all.filter((l) => ['account', 'credits'].includes(str(obj(l.scope)?.kind) ?? ''));
+  return (primary.length ? primary : all).slice(0, 2).flatMap((l) => {
+    const w = fuseboxWindow(
+      { name: str(l.name) ?? str(l.id) ?? 'Limit', used: l.used_percent, resets_at: l.resets_at },
+      now,
+    );
+    return w ? [w] : [];
+  });
+}
+
+/**
+ * The subscriptions of `GET /api/accounts` beyond Claude's and ChatGPT's, as Fusebox's dashboard lists them: an account
+ * it signs in to that reports use (Meta's whether or not it has yet), or any account with limits. At most 64, in
+ * Fusebox's order.
+ */
+export function mapFuseboxOtherSubscriptions(
+  connectionId: string,
+  body: unknown,
+  faults: readonly StoredGatewayFault[],
+  now: Date,
+): FuseboxOtherSubscription[] {
+  if (!Array.isArray(body)) return [];
+  const out: FuseboxOtherSubscription[] = [];
+  for (const raw of body) {
+    const a = obj(raw);
+    const id = str(a?.id);
+    const provider = str(a?.provider)?.toLowerCase();
+    if (!a || !id || !provider || PROVIDERS.includes(provider as GatewayProvider)) continue;
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(provider)) continue;
+    const quota = obj(a.quota);
+    const noFiveHourLimit = quota?.no_five_hour_limit === true;
+    const windows = (Array.isArray(quota?.windows) ? quota.windows : [])
+      .map((w) => fuseboxWindow(w, now))
+      .filter((w): w is UsageWindow => w !== null && !(noFiveHourLimit && w.kind === 'five_hour'));
+    const limits = fuseboxLimits(quota, now);
+    const signedIn = str(a.kind) === 'oauth' && provider === 'meta';
+    const hasLimits =
+      (Array.isArray(quota?.windows) && quota.windows.length > 0) ||
+      (Array.isArray(quota?.limits) && quota.limits.length > 0);
+    if (!signedIn && !hasLimits) continue;
+    const { status, until } = accountStatus(
+      a.disabled === true,
+      faults.filter((f) => f.accountId === id),
+    );
+    const planName = str(quota?.plan_name)?.replace(/^Google AI\s+/i, '') ?? planWords(str(quota?.plan));
+    out.push({
+      key: gatewayAccountKey(connectionId, id),
+      label: (str(a.email) ?? str(a.label) ?? `${fuseboxToolName(provider)} account`).slice(0, 256),
+      provider,
+      plan: planName ? planName.slice(0, USAGE_PLAN_MAX) : null,
+      noFiveHourLimit,
+      status,
+      until,
+      windows: [...sortUsageWindows(windows), ...limits].slice(0, USAGE_WINDOWS_MAX),
+    });
+    if (out.length >= GATEWAY_ACCOUNTS_MAX) break;
+  }
+  return out;
+}
+
+/** Fusebox's ids of the Claude and ChatGPT accounts it signs in to: subscriptions, also while one is off and unread. */
+export function fuseboxSignedIn(connectionId: string, body: unknown): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(body)) return out;
+  for (const raw of body) {
+    const a = obj(raw);
+    const id = str(a?.id);
+    const provider = str(a?.provider)?.toLowerCase();
+    if (a && id && str(a.kind) === 'oauth' && PROVIDERS.includes(provider as GatewayProvider))
+      out.add(gatewayAccountKey(connectionId, id));
+  }
+  return out;
+}
+
 /* Whombat's named client (AIG-02, AIG-03) ------------------------------------------------------------------------- */
 
 /** A new client key: `wbgw_` + 32 random bytes, base64url. */

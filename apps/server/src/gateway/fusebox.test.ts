@@ -6,10 +6,14 @@ import { describe, expect, it } from 'vitest';
 import {
   accountStatus,
   faultsByKey,
+  fuseboxProviderMark,
+  fuseboxSignedIn,
+  fuseboxToolName,
   fuseboxWindow,
   gatewayAccountKey,
   isOpenFusebox,
   mapFuseboxAccounts,
+  mapFuseboxOtherSubscriptions,
   mergeFaults,
   newGatewayClientKey,
   parseFuseboxFaults,
@@ -254,6 +258,93 @@ describe('Fusebox accounts → the pool (AIG-11)', () => {
   it('keeps at most 64 accounts', () => {
     const many = Array.from({ length: 80 }, (_, i) => account({ id: `a${i}` }));
     expect(mapFuseboxAccounts('cnx_1', many, [], NOW)).toHaveLength(64);
+  });
+});
+
+describe('every subscription Fusebox lists', () => {
+  const meta = account({
+    id: 'meta-a.json',
+    provider: 'meta',
+    email: 'muse@example.com',
+    quota: {
+      plan_name: 'Muse Code Max',
+      windows: [
+        { name: '5h', used: 3, resets_at: LATER },
+        { name: 'week', used: 1, resets_at: MONDAY },
+      ],
+    },
+  });
+  const body = [
+    account(),
+    account({ id: 'claude-off.json', email: 'off@example.com', disabled: true, quota: {} }),
+    meta,
+    account({ id: 'meta-new.json', provider: 'meta', email: 'new@example.com', quota: {} }),
+    account({
+      id: 'kimi-key',
+      provider: 'kimi',
+      kind: 'api-key',
+      email: undefined,
+      label: 'kimi',
+      quota: {},
+    }),
+    account({
+      id: 'devin.json',
+      provider: 'devin',
+      email: 'devin@example.com',
+      quota: { limits: [{ id: 'acu', name: 'Credits', scope: { kind: 'account' }, used_percent: 40 }] },
+    }),
+  ];
+
+  it('lists the other tools’ subscriptions in Fusebox’s order, as its dashboard does', () => {
+    const subs = mapFuseboxOtherSubscriptions('con_1', body, [], NOW);
+    expect(subs.map((s) => [s.provider, s.label, s.plan])).toEqual([
+      ['meta', 'muse@example.com', 'Muse Code Max'],
+      // Signed in to Meta but no reading yet: still a subscription.
+      ['meta', 'new@example.com', null],
+      ['devin', 'devin@example.com', null],
+    ]);
+    expect(subs[0]?.windows.map((w) => [w.kind, w.usedPct])).toEqual([
+      ['five_hour', 3],
+      ['seven_day', 1],
+    ]);
+    expect(subs[2]?.windows.map((w) => [w.label, w.usedPct])).toEqual([['Credits', 40]]);
+    expect(subs[0]?.key).toBe(gatewayAccountKey('con_1', 'meta-a.json'));
+  });
+
+  it('takes the status from disabled and the faults, as the pools’ accounts do', () => {
+    const off = mapFuseboxOtherSubscriptions('con_1', [{ ...meta, disabled: true }], [], NOW);
+    expect(off[0]?.status).toBe('off');
+    const used = mapFuseboxOtherSubscriptions(
+      'con_1',
+      [meta],
+      [{ key: 'q', kind: 'quota', provider: 'meta', accountId: 'meta-a.json', until: MONDAY }],
+      NOW,
+    );
+    expect(used[0]).toMatchObject({ status: 'used_up', until: MONDAY });
+  });
+
+  it('knows the Claude and ChatGPT accounts it signs in to, also one that is off and unread', () => {
+    const keys = fuseboxSignedIn('con_1', body);
+    expect([...keys]).toEqual([
+      gatewayAccountKey('con_1', 'claude-work.json'),
+      gatewayAccountKey('con_1', 'claude-off.json'),
+    ]);
+  });
+
+  it('names each tool and its mark as Fusebox’s dashboard does', () => {
+    expect(['claude', 'codex', 'meta', 'xai', 'antigravity'].map(fuseboxToolName)).toEqual([
+      'Claude',
+      'ChatGPT',
+      'Meta',
+      'Grok',
+      'Antigravity',
+    ]);
+    expect(['claude', 'codex', 'meta', 'antigravity'].map(fuseboxProviderMark)).toEqual([
+      'claude',
+      'openai',
+      'meta',
+      'antigravity',
+    ]);
   });
 });
 

@@ -71,7 +71,14 @@ import { useBottomRoom } from '../../ui/screenBottom';
 import { useAfterSheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 import { AddWidgetSheet } from './AddWidgetSheet';
-import { accountGroup, accountName, fromCatalog, onAnotherServer, widgetPrivate } from './catalog';
+import {
+  accountGroup,
+  accountName,
+  fromCatalog,
+  onAnotherServer,
+  widgetLimits,
+  widgetPrivate,
+} from './catalog';
 import {
   canNudge,
   type Draft,
@@ -568,6 +575,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
         options={desk?.showOptions}
         pairFirst={screen.kind === 'box' && desk?.paired === null}
         lockable={picked ? widgetPrivate(picked, catalog?.groups ?? [], viewOf(picked)) : false}
+        limits={picked ? widgetLimits(picked, catalog?.groups ?? []) : false}
         show={show}
         servers={servers}
         choices={choiceGroup?.items ?? []}

@@ -13,6 +13,7 @@
  * Tailscale owner's address). The rest — queues, storage, figures, coming episodes — is fine for anyone passing by.
  */
 import type { ThingControl, ThingGalleryItem, ThingPage, ThingPageCell, ThingPagePanel } from '@whombat/core';
+import { fuseboxProviderMark } from '../../gateway/fusebox';
 import {
   actionsBuilds,
   actionsRepos,
@@ -524,9 +525,22 @@ const infra = {
   },
   fusebox: {
     panels: [
-      // The pools' rows (Claude · week, ChatGPT · week) with their bars; no subscription's name.
-      { panel: 'limits', view: 'list' },
-      { panel: 'subscriptions', private: true },
+      // The pools' rows (Claude · week, ChatGPT · week) as blocks with the tool's mark; no subscription's name. Used or
+      // left as the widget's settings say.
+      {
+        panel: 'limits',
+        view: 'list',
+        limits: { mark: (id) => fuseboxProviderMark(id.split('-')[0] ?? '') },
+      },
+      // Every subscription Fusebox lists, as its dashboard does: the tool's mark, the plan, the 5 hours (where there is
+      // a limit) and the week as blocks with when it resets, and how it is.
+      {
+        panel: 'subscriptions',
+        private: true,
+        head: (_page, p) => (p?.kind === 'table' ? (p.meta ?? null) : null),
+        columns: { meta: 'status' },
+        limits: { meters: { five: '5H', week: 'WEEK' }, reset: 'resets', note: 'used {text}' },
+      },
       // Who used it most and every client: people's machines by name.
       { panel: 'people', private: true },
       { panel: 'clients', private: true },

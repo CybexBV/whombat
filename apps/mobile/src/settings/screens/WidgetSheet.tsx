@@ -5,12 +5,13 @@
  * edge is off; onto one other widget the two change places, any other taken spot says so); *Size* — its shapes as the
  * Overview's gear draws them, then − and + for wide and high, within its smallest and largest; its own settings
  * (*What’s going on*'s choices and *Servers*' order; a server's server; *What it shows* — every view of its connection,
- * server or account as the Overview's options; a server's chart's range; *On a locked screen*); what touching it on the
+ * server or account as the Overview's options; a server's chart's range; *Limits* for Fusebox's; *On a locked screen*); what touching it on the
  * screen does; *Remove from this page* and *Done*. Every button 44dp and named for TalkBack with the widget's name.
  * Changes go into the draft.
  */
 import {
   DESK_SCREENS_TEXT,
+  DESK_WIDGET_LIMITS,
   DESK_WIDGET_LOCK,
   DESK_WIDGET_RANGES,
   type DeskCatalogItem,
@@ -18,6 +19,8 @@ import {
   type DeskShowOption,
   type DeskShowPatch,
   type DeskWidget,
+  type DeskWidgetLimits,
+  deskWidgetLimits,
   fillDeskWords,
   gridText,
   sameWidget,
@@ -80,6 +83,7 @@ export function WidgetSheet({
   reading = false,
   pairFirst = false,
   lockable = false,
+  limits = false,
   note,
   noteTone = 'bad',
 }: {
@@ -99,6 +103,8 @@ export function WidgetSheet({
   pairFirst?: boolean;
   /** It shows what a locked screen leaves out (`widgetPrivate`): *On a locked screen* is offered. */
   lockable?: boolean;
+  /** It shows limits (`widgetLimits`, Fusebox's): *Limits*, used or left, is offered. */
+  limits?: boolean;
   /** The screen's choices as the draft has them. */
   show: DeskShow;
   /** The servers a server widget can show, once each. */
@@ -158,6 +164,7 @@ export function WidgetSheet({
             reading={reading}
             pairFirst={pairFirst}
             lockable={lockable}
+            limits={limits}
             onDragging={setDragging}
           />
           <TouchLine widget={widget} label={label} server={servers.find((s) => s.ref === widget.ref)?.name} />
@@ -408,6 +415,7 @@ function OwnSettings({
   reading,
   pairFirst,
   lockable,
+  limits,
   onDragging,
 }: {
   widget: DeskWidget;
@@ -420,6 +428,8 @@ function OwnSettings({
   pairFirst: boolean;
   /** It shows something private: *On a locked screen* is offered. */
   lockable: boolean;
+  /** It shows limits: *Limits* is offered. */
+  limits: boolean;
   onDragging: (dragging: boolean) => void;
 }) {
   const theme = useTheme();
@@ -502,6 +512,16 @@ function OwnSettings({
       return (
         <>
           <ShowsPart widget={widget} choices={choices} reading={reading} onChoose={actions.choose} />
+          {limits ? (
+            <LimitsPart
+              widget={widget}
+              onLimits={(v) => {
+                // Used is what it says unless chosen: choosing it again takes the setting away.
+                const { limits: _was, ...rest } = widget.opts;
+                actions.setOpts(v === 'used' ? rest : { ...rest, limits: v });
+              }}
+            />
+          ) : null}
           {lockable ? <LockPart widget={widget} onLock={(lock) => opt('lock', lock)} /> : null}
         </>
       );
@@ -574,6 +594,25 @@ function ShowsPart({
           {E.reading}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+/** *Limits*: *Used* · *Left*, used unless chosen, for a widget of limits (Fusebox's subscriptions). */
+function LimitsPart({ widget, onLimits }: { widget: DeskWidget; onLimits: (v: DeskWidgetLimits) => void }) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: 8 }}>
+      <SectionLabel>{E.limits.toUpperCase()}</SectionLabel>
+      <Segmented
+        options={DESK_WIDGET_LIMITS.map((value) => ({ value, label: E.limitsChoices[value] }))}
+        value={deskWidgetLimits(widget.opts)}
+        onChange={onLimits}
+        label={E.limits}
+      />
+      <Text size={13} lh={1.4} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
+        {E.limitsHint}
+      </Text>
     </View>
   );
 }

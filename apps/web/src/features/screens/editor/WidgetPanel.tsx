@@ -20,6 +20,7 @@ import {
   catalogRows,
   catalogServers,
   DESK_SCREENS_TEXT,
+  DESK_WIDGET_LIMITS,
   DESK_WIDGET_RANGES,
   DESK_WORDS,
   type DeskApi,
@@ -33,8 +34,10 @@ import {
   type DeskShowLevel,
   type DeskShowPatch,
   type DeskWidget,
+  type DeskWidgetLimits,
   type DeskWidgetView,
   deskShowLevel,
+  deskWidgetLimits,
   fillDeskWords,
   gridText,
   isAccountGroup,
@@ -758,6 +761,12 @@ function ChosenPanel({
           />
         </div>
       ) : null}
+      {widget.type === 'panel' && found?.item.limits ? (
+        <LimitsField
+          value={deskWidgetLimits(widget.opts)}
+          onChange={(v) => setOpt('limits', v === 'used' ? null : v)}
+        />
+      ) : null}
       {(widget.type === 'panel' || widget.type === 'server') &&
       (found?.item.private ?? (widget.type === 'panel' && kind !== undefined && PRIVATE_VIEWS.has(kind))) ? (
         <LockField
@@ -1048,6 +1057,35 @@ function ShapeCells({ w, h }: { w: number; h: number }) {
         <i key={i} />
       ))}
     </span>
+  );
+}
+
+/** A widget of limits (Fusebox's): whether its blocks and words say what is used or what is left. */
+function LimitsField({
+  value,
+  onChange,
+}: {
+  value: DeskWidgetLimits;
+  onChange: (v: DeskWidgetLimits) => void;
+}) {
+  const id = useId();
+  return (
+    <div className={e.field}>
+      <span className={e.fieldLabel}>{E.limits}</span>
+      <SegmentedControl
+        variant="soft"
+        size="sm"
+        role="radiogroup"
+        label={E.limits}
+        describedBy={`${id}-hint`}
+        value={value}
+        onChange={onChange}
+        options={DESK_WIDGET_LIMITS.map((v) => ({ value: v, label: E.limitsChoices[v] }))}
+      />
+      <span className={e.fieldHint} id={`${id}-hint`}>
+        {E.limitsHint}
+      </span>
+    </div>
   );
 }
 
