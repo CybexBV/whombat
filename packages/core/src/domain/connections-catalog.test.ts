@@ -1128,13 +1128,20 @@ describe('a report tracker (report-trackers.md, TA-01, TA-02)', () => {
     expect(fieldProblem(signature, 'Whombat Team (AI assistant)')).toBeNull();
     expect(fieldProblem(signature, 'x'.repeat(61))).not.toBeNull();
     expect(fieldProblem(signature, 'two\nlines')).not.toBeNull();
-    // Reporters whose bug fixes go straight to production (TA-135): optional, email addresses only.
+    // Reporters whose bug fixes go straight to production: optional, email addresses or * for all reporters.
     const releaseFor = e.fields.find((f) => f.id === 'releaseFor');
     if (!releaseFor) throw new Error('releaseFor');
     expect(releaseFor.required).toBe(false);
     expect(fieldProblem(releaseFor, '')).toBeNull();
+    expect(fieldProblem(releaseFor, '*')).toBeNull();
+    expect(fieldProblem(releaseFor, ' * ')).toBeNull();
     expect(fieldProblem(releaseFor, 'ann@acme.example, Bo@Acme.example')).toBeNull();
-    expect(fieldProblem(releaseFor, 'ann@acme.example; bo')).toBe('Email addresses, separated by commas.');
+    expect(fieldProblem(releaseFor, '*, ann@acme.example')).toBe(
+      'Email addresses separated by commas, or * for all reporters.',
+    );
+    expect(fieldProblem(releaseFor, 'ann@acme.example; bo')).toBe(
+      'Email addresses separated by commas, or * for all reporters.',
+    );
     expect(resolveBaseUrl(e, { url: 'https://desk.acme.example/', driver: 'acme-desk' })).toBe(
       'https://desk.acme.example',
     );

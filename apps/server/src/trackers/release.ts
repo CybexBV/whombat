@@ -68,6 +68,12 @@ export const RELEASE_NUDGE =
  * they reach beta and production in one release. After this it goes alone (the thread's words say “two hours”).
  */
 export const RELEASE_HOLD_MS = 2 * 60 * 60_000;
+/**
+ * How long a merged bug fix eligible for straight-to-production release waits for development to run it before Whombat
+ * starts the repository's release procedure directly from the merged commit (for repositories whose development/beta
+ * channel is built by the release procedure itself rather than auto-deployed on every merge).
+ */
+export const RELEASE_DEV_GRACE_MS = 10 * 60_000;
 /** How long Whombat keeps trying to settle a release thread that is over, after it could first have settled. */
 export const RELEASE_SETTLE_TRY_MS = 24 * 60 * 60_000;
 /** A release thread that couldn't be settled yet (it waits for something, T3 Code didn't answer) is looked at again then. */
@@ -78,6 +84,11 @@ const PENDING_MAX = 20;
 const STOPPED = /^\W*stopped\b/i;
 const RELEASED = /^\W*released\b/i;
 
+/** Whether the connection sends every bug fix straight to production (`releaseFor` set to `*`). */
+export function releasesForAll(fields: Readonly<Record<string, string>>): boolean {
+  return (fields.releaseFor ?? '').trim() === '*';
+}
+
 /** The reporters (lowercase email addresses) whose bug fixes go straight to production, from the connection's setting. */
 export function releaseReporters(fields: Readonly<Record<string, string>>): string[] {
   return (fields.releaseFor ?? '')
@@ -86,15 +97,20 @@ export function releaseReporters(fields: Readonly<Record<string, string>>): stri
     .filter((s) => /^[^\s@]+@[^\s@]+$/.test(s));
 }
 
+/** Whether the connection has any straight-to-production release target (email addresses or `*`). */
+export function hasReleaseTargets(fields: Readonly<Record<string, string>>): boolean {
+  return releasesForAll(fields) || releaseReporters(fields).length > 0;
+}
+
 /** Why a release couldn't start or stopped, in plain words for the person. */
 export class ReleaseProblem extends Error {
   override name = 'ReleaseProblem';
 }
 
 /**
- * Whether a fix is released straight away: a bug report on a production installation, filed by one of the
- * connection's `releaseFor` reporters (read from the report itself, never kept), with no release started yet — or, `again`,
- * whatever earlier release it had.
+ * Whether a fix is released straight away: a bug report on a production installation, matching the connection's
+ * `releaseFor` setting (`*` for every bug report, or a listed email address read from the report itself and never
+ * kept), with no release started yet — or, `again`, whatever earlier release it had.
  */
 export async function releasesStraightAway(
   driver: BoundDriver,
@@ -104,6 +120,7 @@ export async function releasesStraightAway(
   again = false,
 ): Promise<boolean> {
   if (reportEnvironment !== 'production' || fix.kind !== 'bug' || (fix.release && !again)) return false;
+  if (releasesForAll(connection.fields)) return true;
   const reporters = releaseReporters(connection.fields);
   if (!reporters.length) return false;
   const report = await driver.item(fix.reportId);
@@ -185,15 +202,25 @@ export function releaseBrief(p: {
   mergeSha: string | null;
   /** The paths the fix changes that reach customers with a release of their own (null: none). */
   separate?: readonly string[] | null;
+  /** True when the connection sends every bug fix straight to production (`releaseFor: "*"`). */
+  allReporters?: boolean;
+  /** True when starting straight from the merged commit because development does not run the fix yet. */
+  fromMerge?: boolean;
 }): string {
   const runs = p.version ? `${p.product} ${p.version}` : p.product;
   const pr = p.prUrl ? `${p.prUrl} (pull request #${p.prNumber})` : `pull request #${p.prNumber}`;
+  const who = p.allReporters ? 'bug fixes for this tracker' : 'the bug fixes of this reporter';
+  const when = p.fromMerge ? 'straight away' : 'as soon as development runs them';
+  const why = `Why: the person who runs Whombat decided that ${who} go to production ${when}. It is their standing decision, so you don’t ask them first. It is no hotfix and no shortcut: follow the procedure this repository documents for a production release (its AGENTS.md and its release docs) from start to end${p.fromMerge ? ', including building and deploying development or beta first if it does not run this fix yet' : ''}.`;
+  const what = p.fromMerge
+    ? `What: ${p.repo} including ${pr}${p.mergeSha ? `, merged as ${p.mergeSha}` : ''}. ${p.host} (${runs}) does not run this fix yet, so start from the current main revision containing ${p.revision} and take it through the full release procedure (development or beta and every required check, then production). Everything merged before it goes along, as with any release.`
+    : `What: ${p.repo} at revision ${p.revision}, exactly. ${p.host} runs it (${runs}) and it has the fix: ${pr}${p.mergeSha ? `, merged as ${p.mergeSha}` : ''}. Everything merged before it goes along, as with any release.`;
   return [
     `Release this fix to production now, with ${p.repo}'s own normal production release procedure.`,
     '',
-    'Why: the person who runs Whombat decided that the bug fixes of this reporter go to production as soon as development runs them. It is their standing decision, so you don’t ask them first. It is no hotfix and no shortcut: follow the procedure this repository documents for a production release (its AGENTS.md and its release docs) from start to end.',
+    why,
     '',
-    `What: ${p.repo} at revision ${p.revision}, exactly. ${p.host} runs it (${runs}) and it has the fix: ${pr}${p.mergeSha ? `, merged as ${p.mergeSha}` : ''}. Everything merged before it goes along, as with any release.`,
+    what,
     ...(p.separate?.length
       ? [
           '',
@@ -224,6 +251,8 @@ export async function startRelease(
     version: string | null;
     revision: string;
     separate?: readonly string[] | null;
+    allReporters?: boolean;
+    fromMerge?: boolean;
   },
 ): Promise<TrackerFixRelease> {
   const connection = await t3ConnectionFor(services.db, fix);
@@ -252,6 +281,8 @@ export async function startRelease(
           prNumber: fix.prNumber,
           mergeSha: fix.mergeSha,
           separate: p.separate ?? null,
+          allReporters: p.allReporters,
+          fromMerge: p.fromMerge,
         }),
         runtimeMode: 'full-access',
       },
@@ -368,7 +399,7 @@ export async function releaseUnderWay(db: Db, fix: FixRow): Promise<{ id: string
       and(
         eq(trackerFixes.burrowId, fix.burrowId),
         ne(trackerFixes.id, fix.id),
-        eq(trackerFixes.state, 'development'),
+        inArray(trackerFixes.state, ['merged', 'development']),
         sql`lower(${trackerFixes.repo}) = ${fix.repo.toLowerCase()}`,
         sql`${trackerFixes.release} ->> 'threadId' is not null`,
         sql`${trackerFixes.release} ->> 'stoppedAt' is null`,
@@ -379,20 +410,22 @@ export async function releaseUnderWay(db: Db, fix: FixRow): Promise<{ id: string
 }
 
 /**
- * The numbers of the connection's other bug reports, filed by one of its chosen reporters, that are still being fixed
+ * The numbers of the connection's other bug reports, matching its `releaseFor` setting, that are still being fixed
  * for the fix's repository: a run of the report goes on by itself (not one waiting for a person's approval), or its fix
- * is open or merged and development doesn't run it yet. The fix's release waits for them, so one release takes them all
- * to production. Who filed a report is read from the tracker, as for the fix itself, and kept nowhere; a report the
- * tracker doesn't show doesn't count.
+ * is open — and when waiting on development (`!fromMerge`), also merged fixes development doesn't run yet. When
+ * releasing straight from main (`fromMerge`), already-merged fixes are included in main so we only wait for open PRs
+ * and active runs. Who filed a report is read from the tracker and kept nowhere.
  */
 export async function reportsBeingFixed(
   db: Db,
   driver: BoundDriver,
   connection: CatalogConnectionRow,
   fix: FixRow,
+  opts: { fromMerge?: boolean } = {},
 ): Promise<number[]> {
-  const reporters = releaseReporters(connection.fields);
-  if (!reporters.length) return [];
+  const all = releasesForAll(connection.fields);
+  const reporters = all ? [] : releaseReporters(connection.fields);
+  if (!all && !reporters.length) return [];
   const repo = fix.repo.toLowerCase();
   const fixes = await db
     .select({ reportId: trackerFixes.reportId, number: trackerFixes.number })
@@ -402,7 +435,7 @@ export async function reportsBeingFixed(
         eq(trackerFixes.burrowId, fix.burrowId),
         eq(trackerFixes.connectionId, fix.connectionId),
         ne(trackerFixes.reportId, fix.reportId),
-        inArray(trackerFixes.state, ['open', 'merged']),
+        inArray(trackerFixes.state, opts.fromMerge ? ['open'] : ['open', 'merged']),
         eq(trackerFixes.kind, 'bug'),
         sql`lower(${trackerFixes.repo}) = ${repo}`,
       ),
@@ -433,6 +466,7 @@ export async function reportsBeingFixed(
     const report = scopeReport(r.scope);
     if (report) reports.set(report.reportId, report.number);
   }
+  if (all) return [...reports.values()].slice(0, PENDING_MAX).sort((a, b) => a - b);
   const numbers: number[] = [];
   for (const [reportId, number] of [...reports].slice(0, PENDING_MAX)) {
     const report = await driver.item(reportId).catch(() => null);
