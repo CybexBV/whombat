@@ -1379,6 +1379,7 @@ export type AheadWatchInput = z.infer<typeof AheadWatchInput>;
 export const AHEAD_TOOL_NAMES = [
   'mail_search',
   'mail_read',
+  'mail_attachment_open',
   'files_search',
   'files_read',
   'ahead_read_docs',

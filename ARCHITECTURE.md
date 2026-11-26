@@ -1472,7 +1472,9 @@ Setup and operation: `docs/github.md`.
 - **Accounts** (`apps/server/src/connectors/`): Google through an OAuth client the person stores, with tokens sealed
   per connection and refreshed on the server (`WHOMBAT_GOOGLE=real|fake|off`); the connector tools are pipeline
   commands, and sending, invites and sharing always ask; trashing mail and files goes to the provider's trash and asks
-  unless the person allowed it. Each account (and GitHub) is a thing on Home and in the sidebar's Connections by its
+  unless the person allowed it. `mail_attachment_open` reads a mailed file from its bytes for the model: a PDF's text,
+  read by PDF.js in a `worker_threads` worker of its own per file (`pdf-worker`, its own bundle, with a heap and a time
+  limit), a text or HTML file's words, a PNG or JPEG as image content beside the answer. Each account (and GitHub) is a thing on Home and in the sidebar's Connections by its
   name ([accounts.md](docs/decisions/accounts.md)).
 - **Servers** (`apps/server/src/hosts/`): the hosts service (`hosts/`, the program `whombat-hosts`) owns the agents on monitored servers, their
   history, alerts and consoles; the server talks to it over its socket, signs every change the person makes, relays
@@ -1797,7 +1799,8 @@ Setup and operation: `docs/github.md`.
     (`event.triage.picks`) for 48 hours, and the watcher starts each as a mail check within the day's budget; a pass's
     link to a matter holds only when the mail matches that matter and came after it began, else the pick is checked as
     any other mail. A read takes the newest 50 mails of a mailbox.
-  - **A mail check** reads one mail (`mail_search`, `mail_read`, files, docs; the web is closed from the start: its
+  - **A mail check** reads one mail (`mail_search`, `mail_read`, its attachments with `mail_attachment_open`, files,
+    docs; the web is closed from the start: its
     row's `mail_read_at` is stamped) with the next 14 days of plans, and ends with `ahead_report`. The server refuses
     its finding or a change to a matter until it has read its own mail with `mail_read`, and takes `{ matter: true }` as
     a source only from a follow-up; one whose turn failed, or came at night, is tried once more. It looks for a

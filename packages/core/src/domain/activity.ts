@@ -191,6 +191,7 @@ export const ROUTINE_WHOMBAT_TOOLS: ReadonlySet<string> = new Set([
 const CONNECTOR_VERBS: Record<string, readonly [string, string, string]> = {
   mail_search: ['Searching mail', 'Searched mail', 'Mail search failed'],
   mail_read: ['Reading an email', 'Read an email', 'Couldn’t read the email'],
+  mail_attachment_open: ['Opening an attachment', 'Opened an attachment', 'Couldn’t open the attachment'],
   mail_draft: ['Drafting an email', 'Drafted an email', 'Couldn’t draft the email'],
   mail_send: ['Sending an email', 'Sent an email', 'Couldn’t send the email'],
   mail_organize: ['Organizing mail', 'Organized mail', 'Couldn’t organize mail'],

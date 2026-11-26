@@ -219,6 +219,8 @@ owner's connection.
 |---|---|---|
 | `mail_search` | mail.read | `query` (provider search syntax, Gmail's for Google), `limit` ≤ 25; id, threadId, from, to, subject, snippet, date, unread, labels |
 | `mail_read` | mail.read | `messageId` or `threadId`; text bodies (HTML → text), attachment names and sizes; body cap 50 000 chars |
+| `mail_attachment` | mail.read | `messageId`, `attachmentId` from `mail_read`; the file as base64 (≤ 10 MB), to save or work on in a command |
+| `mail_attachment_open` | mail.read | the same ids; the file read from its bytes, never its name: a PDF’s text (PDF.js in a worker thread of its own per file, 256 MB heap, 20 s, ≤ 50 pages), a text or HTML file’s words, a PNG or JPEG as MCP image content beside the answer (≤ 1568 px a side); text cap 100 000 chars; anything else, a scan without text or a locked or damaged PDF says why (`shows: 'none'`) |
 | `mail_draft` | mail.draft | to/cc/bcc, subject, body (text), `replyToMessageId` (threads the reply); returns `draftId` |
 | `mail_send` | mail.send | `draftId`, or a full message; always asks → approval `mail_send` |
 | `mail_organize` | mail.organize | messageIds, addLabels, removeLabels, `read`, `archive` |

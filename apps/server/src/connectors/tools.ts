@@ -16,10 +16,12 @@ import {
 import type { z } from 'zod';
 import type { CommandDef, CommitOptions } from '../commit/types';
 import { ApiError } from '../lib/errors';
+import { type ToolImage, withImage } from '../mcp/image';
 import type { ToolContext, ToolHandler } from '../mcp/tools';
 import { toOutcome } from '../mcp/tools';
 import { shortName } from '../read/principals';
 import { type PersonalAccess, personalAccess } from './access';
+import { openAttachment } from './attachment-open';
 import {
   type ConnectorResult,
   callGoogle,
@@ -129,6 +131,18 @@ export const CONNECTOR_TOOL_HANDLERS: { [N in ConnectorToolName]: ToolHandler<N>
     read(ctx, 'mail_attachment', input.provider, async (g, t) => ({
       file: await g.mailAttachment(t, input),
     })),
+  // Opened as it was downloaded: the picture goes beside the answer as image content (`/mcp`), not in its JSON.
+  mail_attachment_open: async (ctx, input) => {
+    const opened: { picture: ToolImage | null } = { picture: null };
+    const out = await read(ctx, 'mail_attachment_open', input.provider, async (g, t) => {
+      const file = await openAttachment(await g.mailAttachment(t, input), {
+        images: ctx.services.feedback.images,
+      });
+      opened.picture = file.picture;
+      return { attachment: file.attachment };
+    });
+    return opened.picture ? withImage(out, opened.picture.data, opened.picture.mimeType) : out;
+  },
   files_download: (ctx, input) =>
     read(ctx, 'files_download', input.provider, async (g, t) => ({
       file: await g.filesDownload(t, input.fileId),

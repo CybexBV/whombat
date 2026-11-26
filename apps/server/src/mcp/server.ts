@@ -522,8 +522,10 @@ export async function callTool(
       await services.runtime.markPosted(auth.dispatchId);
     if (name === 'browser_preview' || name === 'page_preview' || name === 'show_pages')
       return browserResult(out);
-    // A connection tool's picture (a Mac's screen) beside its answer; the call's own status says how it went.
-    if (name === 'connection_call') return withImageContent(okResult(out), out);
+    // A connection tool's picture (a Mac's screen), or a mailed picture opened, beside its answer; the call's own status
+    // says how it went.
+    if (name === 'connection_call' || name === 'mail_attachment_open')
+      return withImageContent(okResult(out), out);
     return okResult(out);
   } catch (err) {
     if (err instanceof ApiError) {
