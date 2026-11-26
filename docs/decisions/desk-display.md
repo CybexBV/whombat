@@ -748,7 +748,7 @@ DK-111, DK-118…DK-122 stay. Ids: DK-126…DK-159 here (DK-150 after DK-148), D
   size: a figure, a list, posters, a chart, a camera still), refreshed at the widget's pace; the screen picks the form
   for the cells it has. Pictures come only through the runtime — the box's console through the desk socket, a screen
   elsewhere through the session — signed for the thing they belong to, never fetched by the screen from the service.
-- **DK-143 Editing.** Settings → Screens → a screen → *Edit layout*: the screen at its real shape with live data and its
+- **DK-143 Editing.** *Superseded in part by DK-167* (a widget moved onto exactly one other changes places with it). Settings → Screens → a screen → *Edit layout*: the screen at its real shape with live data and its
   cells showing; pages along the top with *+ Page*; *Size* and *Pages turn*; *Add a widget* beside it (search, grouped by
   where they come from, drag in or *+* for the first free spot, smaller if it must). A widget is chosen by a touch: a
   corner to resize (it redraws as it grows), × to remove, its settings beside it. A spot that is taken says so (red) and
@@ -829,12 +829,12 @@ a server's part is its widget's `opts.show`, drawn with the views every screen k
   name and mark) with its overview first and then its parts; the apps show them under one *Servers*. An older app
   shows each server as its own group. *Why:* 48 items per group would cut a fleet's parts short, and a server's
   widgets belong together.
-- **DK-155 *Add a widget* folds.** Every section folds under its heading: *Whombat and {assistant}*, *Servers* (and in
+- **DK-155 *Add a widget* folds.** *Superseded by DK-163* (each service is one row; nothing folds). Every section folds under its heading: *Whombat and {assistant}*, *Servers* (and in
   it each server), each connection or device, *Made by {assistant}*. *Whombat and {assistant}* and *Servers* start
   folded, everything else open, each server folded inside *Servers*; a search opens whatever matches, and *Didn’t fit*
   never folds. Folding lasts while the editor is open. Same on the web and the phone. *Why:* John asked; the
   connections were below two long sections.
-- **DK-156 A widget's preview before adding it.** On the web, resting the pointer on a widget in *Add a widget* for half
+- **DK-156 A widget's preview before adding it.** *Superseded in part by DK-163* (a service's row previews its main view). On the web, resting the pointer on a widget in *Add a widget* for half
   a second (or keeping the keyboard on its *+* as long) shows a preview beside it: the widget drawn live at the size it
   starts at, with what it shows now (`desk.screen.views`). It stays on the page, never under the sidebar or off the
   window: left of the row where it fits, else right of it, else under or over it (the panel under the screen on a
@@ -889,6 +889,48 @@ Contracts 3.7.0, session protocol minor 2. Runtime decisions `desk-display-serve
 - **DK-162 A board view.** `board`: many small named tiles, each a colour and maybe a short value (up to 48), for
   everything fine at a glance where a list stops at twelve rows: every container, every device, every repository.
   *Why:* the research's second missing way of drawing.
+
+## The editor like the Overview (2026-11-26)
+
+John, 2026-11-26 (main checkout): “I like that way how we configure a widget on the overview dashboard, we can simply
+select which view we want for this widget, rather than selecting it from a long list like on the screen editor.” *Add
+a widget* listed every view of every service as its own row (Fusebox alone had twelve). Ids: DK-163…DK-168 here, web
+AP-9970… (`docs/app/decisions/desk-display-web.md`), phone AP-9980… (`desk-display-android.md`). No contract or runtime
+change: everything is the apps' and the shared rules' (`@whombat/client/desk` `catalogRows`, `catalogGroupOf`,
+`chooseWidget`, `sizePresets`, `tidyPage`, `moveWidget`).
+
+- **DK-163 *Add a widget* lists each service once.** Each server, connection or device and each of the person's
+  accounts is one row: its mark, its name, a short line (a server's and an account's main view's line; a connection's
+  other views by name, since its figures' line is the same for every one), *On this page* when any of its widgets is on
+  the open page, its main view's size and *+* (and dragging on the web). Adding it adds its main view — the first of its
+  group: a server's overview, a connection's figures, an account's main panel — at that view's size, exactly as adding
+  that view did, and chooses it so its settings show (the phone opens its sheet). The connections and devices are under
+  one *Connections*; *Servers* and *Your accounts* keep their headings; nothing folds. Whombat's own are small tiles
+  (icon and name, three to a row, a check when on the page) at the top; the assistant's Home widgets stay one row each;
+  *Didn’t fit* is as it was. A search lists single views, named with what they belong to (“pve-01 · Storage”, “Plex ·
+  Now playing”), so a view is still found directly. *Why:* John asked; choosing a view belongs to the widget, as on the
+  Overview.
+- **DK-164 *What it shows*.** A chosen widget's settings list every view of its connection, server or account as the
+  Overview's gear does: one option per view with its name and line, the one it shows pressed (a connection listed only
+  partly is read whole first). Choosing one changes the widget in its place — figures and panels alike — its size fitted
+  to the new view's smallest and largest; where growing has no room it stays and says so. Its chart's range and a photo's
+  pace stay; *On a locked screen* stays only where the new view is private too. The *Server*, *Connection* and *Account*
+  pickers above it still move it to another one. *Why:* the Overview's way, which John likes.
+- **DK-165 Size as shapes.** Above the steppers, up to five shapes: *Small* (its smallest), *Normal* (the size it
+  starts at), *Wide* (twice as wide), *Tall* (twice as high) and *Large* (both), each within its largest and the grid;
+  one that equals an earlier one or doesn't fit its limits isn't offered. Each is drawn as its cells with its name and
+  size, the one it is pressed; choosing one resizes it in place, refused as resizing is when there's no room. *Why:* the
+  Overview's Small, Wide, Large, with the steppers kept for one cell at a time.
+- **DK-166 *Tidy up*.** A page's *Tidy up* packs its widgets up and to the left in reading order, each keeping its size
+  at the first free spot; one Undo step; “Tidied up.” or “Already tidy.” Nothing is dropped; a page that couldn't be
+  packed that way is left as it was and says so. *Why:* moving widgets one by one into the gaps was the slow part.
+- **DK-167 Two widgets change places.** A widget moved (dragged, arrows, the phone's arrows) onto exactly one other
+  widget takes that one's top left corner, and the other takes its old one, each keeping its size — when both then fit
+  without covering anything else; otherwise the spot is taken as before. The web shows it while dragging (the landing
+  spot not red, the other drawn faint where it goes); it says “Swapped Clock and Weather.” *Why:* a swap isn't pushing
+  aside, and it's what people mean when they drop one widget on another.
+- **DK-168 The keys behind *?*.** On the web the keys line under the screen is a small *?* (*Keys*) that opens them,
+  with swapping and *Tidy up*. *Why:* the line was long and read once.
 
 ## Pages by time, pages by {assistant}, the doorbell (2026-11-26)
 

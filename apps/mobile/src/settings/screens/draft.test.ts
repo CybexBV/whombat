@@ -18,10 +18,12 @@ import {
   draftPageShow,
   draftRemove,
   draftRenamePage,
+  draftResize,
   draftSaved,
   draftShow,
   draftSize,
   draftSpec,
+  draftTidy,
   draftUndo,
   mergeShowPatch,
 } from './draft';
@@ -60,16 +62,21 @@ describe('the phone’s layout draft', () => {
     expect(draftDirty(d)).toBe(false);
   });
 
-  it('moves with the arrows, refuses a taken spot and the edge, and Undo takes a move back', async () => {
+  it('moves with the arrows, swaps onto one other, refuses the rest and the edge, and Undo takes a move back', async () => {
     const d0 = draftOf(await boxScreen());
     const clock = draftPage(d0).widgets.find((w) => w.type === 'clock');
-    if (!clock) throw new Error('no clock');
+    const status = draftPage(d0).widgets.find((w) => w.type === 'status');
+    if (!clock || !status) throw new Error('no clock');
     expect(canNudge(d0, clock.id, -1, 0)).toBe(false);
     expect(canNudge(d0, clock.id, 1, 0)).toBe(true);
-    // How things are sits right of it.
-    expect(draftNudge(d0, clock.id, 1, 0)).toEqual({ ok: false, why: 'taken' });
-    const status = draftPage(d0).widgets.find((w) => w.type === 'status');
-    if (!status) throw new Error('no status');
+    // How things are sits right of it: the two change places (DK-167).
+    const swapped = ok(draftNudge(d0, clock.id, 1, 0));
+    expect(swapped.swapped).toBe(status.id);
+    const after = draftPage(swapped.draft).widgets;
+    expect(after.find((w) => w.id === clock.id)).toMatchObject({ x: status.x, y: status.y });
+    expect(after.find((w) => w.id === status.id)).toMatchObject({ x: clock.x, y: clock.y });
+    // What's going on under it is wider: it can't go where the clock was.
+    expect(draftNudge(d0, clock.id, 0, 1)).toEqual({ ok: false, why: 'taken' });
     const removed = draftRemove(d0, status.id);
     expect(draftDirty(removed)).toBe(true);
     const moved = ok(draftNudge(removed, clock.id, 1, 0)).draft;
@@ -249,17 +256,81 @@ describe('the phone’s layout draft', () => {
         size: null,
       });
     const d = on([today, tiny, beside]);
-    // A list at 4 × 4 shrinks to the figures' largest.
-    const next = ok(draftChoose(d, 'w_t', { opts: { panel: 'next-meeting' } }, 'figures'));
+    const item = (panel: string, view: string) => ({
+      type: 'panel' as const,
+      ref: 'account:acc_g',
+      opts: { panel },
+      name: panel,
+      line: '',
+      view: view as 'list',
+      private: true,
+    });
+    // A list at 4 × 4 shrinks to the figures' largest, On a locked screen kept (both private).
+    const next = ok(draftChoose(d, 'w_t', item('next-meeting', 'figures')));
     const shrunk = draftPage(next.draft).widgets.find((w) => w.id === 'w_t');
-    expect(shrunk).toMatchObject({ w: 4, h: 2, opts: { panel: 'next-meeting' } });
+    expect(shrunk).toMatchObject({ w: 4, h: 2, opts: { panel: 'next-meeting', lock: 'show' } });
     expect(draftUndo(next.draft)?.layout).toEqual(d.layout);
     // A 1 × 1 figures widget can't become a list (2 × 1 at least) with the clock beside it.
-    const blocked = draftChoose(d, 'w_n', { opts: { panel: 'today' } }, 'list');
+    const blocked = draftChoose(d, 'w_n', item('today', 'list'));
     expect(blocked).toMatchObject({ ok: false, why: 'noRoom' });
     // With room, it grows to the list's smallest.
     const free = on([tiny]);
-    const grown = ok(draftChoose(free, 'w_n', { opts: { panel: 'today' } }, 'list'));
+    const grown = ok(draftChoose(free, 'w_n', item('today', 'list')));
     expect(draftPage(grown.draft).widgets[0]).toMatchObject({ w: 2, h: 1 });
+    // A connection's figures become one of its panels: the type changes too.
+    const figures = {
+      id: 'w_f',
+      type: 'figures' as const,
+      ref: 'connection:con_plex',
+      opts: {},
+      x: 0,
+      y: 0,
+      w: 2,
+      h: 1,
+    };
+    const panel = ok(
+      draftChoose(on([figures]), 'w_f', {
+        type: 'panel',
+        ref: 'connection:con_plex',
+        opts: { panel: 'recent' },
+        name: 'Recently added',
+        line: '',
+        view: 'posters',
+      }),
+    );
+    expect(draftPage(panel.draft).widgets[0]).toMatchObject({
+      type: 'panel',
+      opts: { panel: 'recent' },
+      w: 2,
+      h: 1,
+    });
+  });
+
+  it('sizes to a shape at once, and tidies the page up and to the left as one step', () => {
+    const one = (widgets: DeskLayout['pages'][number]['layouts'][string]) =>
+      draftOf({
+        layout: {
+          ...oneEmptyPage(),
+          pages: [{ id: 'p_a', name: 'Overview', layouts: { '8x5': widgets }, last: '8x5' }],
+        },
+        size: null,
+      });
+    const clock = { id: 'w_c', type: 'clock' as const, opts: {}, x: 2, y: 1, w: 3, h: 2 };
+    const status = { id: 'w_s', type: 'status' as const, opts: {}, x: 5, y: 3, w: 3, h: 2 };
+    const d = one([clock, status]);
+    const wide = ok(draftResize(d, 'w_c', { w: 6, h: 2 }));
+    expect(draftPage(wide.draft).widgets[0]).toMatchObject({ w: 6, h: 2 });
+    expect(draftResize(d, 'w_c', { w: 6, h: 3 })).toMatchObject({ ok: false, why: 'noRoom' });
+    const tidied = draftTidy(d);
+    if (!tidied.ok) throw new Error('refused');
+    expect(tidied.moved).toBe(2);
+    expect(draftPage(tidied.draft).widgets.map((w) => [w.id, w.x, w.y])).toEqual([
+      ['w_c', 0, 0],
+      ['w_s', 3, 0],
+    ]);
+    expect(draftUndo(tidied.draft)?.layout).toEqual(d.layout);
+    const again = draftTidy(tidied.draft);
+    expect(again.ok && again.moved).toBe(0);
+    expect(again.ok && again.draft).toBe(tidied.draft);
   });
 });

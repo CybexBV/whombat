@@ -471,11 +471,81 @@
   background: color-mix(in srgb, var(--bad) 16%, transparent);
 }
 
-.hint {
-  margin: 10px 0 0;
+.ghostSwap {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+}
+
+/* The keys behind a small ? under the screen (DK-168). */
+.keys {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.keysButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 50%;
+  background: var(--sf);
+  color: var(--ink2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.keysButton:hover,
+.keysButton[aria-expanded="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.keysButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .keysButton {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.keysPop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: min(380px, 100%);
+  padding: 14px 16px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  box-shadow: var(--shadow-pane);
+  color: var(--ink2);
   font-size: 13px;
   line-height: 1.55;
-  color: var(--mut);
+}
+
+.keysTitle {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.keysPop p {
+  margin: 0 0 10px;
+}
+
+.keysPop kbd {
+  margin: 0 1px;
 }
 
 .floating {
@@ -547,113 +617,76 @@
   color: var(--mut);
 }
 
-/* A section's heading folds it (DK-155): the label as the groups' were, a chevron that turns, how many. */
-.section {
-  margin-top: 10px;
-}
-
-.section:has(.fold[aria-expanded="true"]) + .section {
-  margin-top: 14px;
-}
-
-.foldHead {
-  margin: 0;
-}
-
-.fold,
-.serverFold {
-  display: flex;
-  align-items: center;
+/* Whombat's own as small tiles, three to a row (DK-163): its icon and name, a check when it's on the page. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  width: 100%;
-  margin: 0;
-  border: 0;
-  border-radius: var(--radius-button);
-  background: none;
+}
+
+.ownTile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 74px;
+  padding: 11px 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink);
   font: inherit;
-  text-align: left;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: pan-y;
 }
 
-.fold {
-  min-height: 30px;
-  padding: 4px 6px;
-  color: var(--mut);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-
-.fold:hover,
-.serverFold:hover {
+.ownTile:hover {
+  border-color: var(--line2);
   background: var(--sel);
 }
 
-.fold:hover {
-  color: var(--ink2);
-}
-
-.fold:focus-visible,
-.serverFold:focus-visible {
+.ownTile:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-.foldChevron {
-  display: flex;
-  flex: none;
-  transition: transform 0.15s ease;
+.ownIcon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--sf2);
+  color: var(--ink2);
 }
 
-.fold[aria-expanded="true"] .foldChevron,
-.serverFold[aria-expanded="true"] .foldChevron {
-  transform: rotate(90deg);
+.ownName {
+  max-width: 100%;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
-.foldLabel {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.ownTile[data-here] .ownName,
+.ownTile[data-here] .ownIcon {
+  opacity: 0.6;
 }
 
-.foldCount {
-  flex: none;
-  margin-left: auto;
-  padding-left: 8px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--mut);
-}
-
-/* A server under *Servers*: its mark and name, its widgets under it. */
-.server + .server {
-  margin-top: 2px;
-}
-
-.serverFold {
-  min-height: 40px;
-  padding: 6px;
-  color: var(--ink);
-  gap: 8px;
-}
-
-.serverName {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.serverItems {
-  margin: 2px 0 6px 12px;
-  padding-left: 4px;
-  border-left: 1px solid var(--line);
+.ownHere {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--sf2);
+  color: var(--ink2);
 }
 
 /* A widget's preview beside its row (DK-156): the screen's own dark, drawn live at the size it starts at. */
@@ -812,7 +845,6 @@
 }
 
 .add:focus-visible,
-.more:focus-visible,
 .backLink:focus-visible,
 .removeLink:focus-visible,
 .stepper button:focus-visible {
@@ -825,18 +857,6 @@
     width: 44px;
     height: 44px;
   }
-}
-
-.more {
-  margin: 4px 0 0 44px;
-  padding: 4px 0;
-  border: 0;
-  background: none;
-  color: var(--ink2);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .noMatch {
@@ -992,8 +1012,135 @@
   }
 }
 
-.showField {
+.showField,
+.showsField,
+.sizeField {
   align-items: stretch;
+}
+
+/* *What it shows* (DK-164): the Overview gear's options, each its name and line, the one it shows ringed. */
+.opts {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.opt:hover {
+  border-color: var(--line2);
+}
+
+.opt[aria-pressed="true"] {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.opt:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.optName {
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.optLine {
+  color: var(--mut);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+/* *Size*'s shapes (DK-165): the Overview's segments, each its cells, name and size. */
+.shapes {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--line);
+}
+
+.shapes button {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 2px 6px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  cursor: pointer;
+}
+
+.shapes button:hover {
+  color: var(--ink2);
+}
+
+.shapes button[aria-pressed="true"] {
+  background: var(--sf);
+  box-shadow: var(--shadow-segment-lift);
+  color: var(--ink);
+}
+
+.shapes button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.shapeCells {
+  display: grid;
+  gap: 1px;
+}
+
+.shapeCells i {
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.shapes button[aria-pressed="true"] .shapeCells i {
+  opacity: 1;
+}
+
+.shapeName {
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.shapeSize {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.shapes + .steppers {
+  margin-top: 4px;
 }
 
 .showRows {

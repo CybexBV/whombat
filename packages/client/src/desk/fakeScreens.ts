@@ -357,7 +357,7 @@ const THINGS: readonly ThingDef[] = [
     ref: CALENDAR,
     label: 'Family calendar',
     panels: [{ id: 'today', name: 'Today', line: 'Today’s appointments', view: 'list' }],
-    // Its page wasn't read in time: *Add a widget* asks for it when the group opens.
+    // Its page wasn't read in time: a widget's *What it shows* asks for the rest.
     partial: true,
   },
 ];

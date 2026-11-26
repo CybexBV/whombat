@@ -1,18 +1,21 @@
 /**
- * A screen's layout on the phone (Whombat desk-display.md DK-129…DK-133, DK-143…DK-145; desk-display-android.md
- * AP-6010…AP-6022; the mockups' `editor.html`, the phone's way): “‹ {where it came from}” with *Undo* and *Save*; the
- * screen's name with what it is, its grid and pages, and *Not saved yet* while it isn't; the pages as chips with *+
- * Page*; *Rearranged for 10 × 6.* when the page has no layout of its own for this shape; the grid as labelled tiles
- * (touch one for its sheet: Move, Size, its settings, Remove); what didn't fit; *Add a widget* (a sheet) and *Try on
- * the screen*; then THIS PAGE (its name, its times, its place, Delete page) and THIS SCREEN (Size, Pages turn); *Ask
- * {assistant}* beside *+ Page* starts a thread asking for a page. Everything is a
- * draft until Save (`desk.screen.update {layout, show}`; a refused layout said plainly); leaving with changes asks
- * first. The rules are `@whombat/client/desk`'s editor, the web's too; the draft around them is `draft.ts`.
+ * A screen's layout on the phone (Whombat desk-display.md DK-129…DK-133, DK-143…DK-145, DK-163…DK-167, DK-180…DK-185;
+ * desk-display-android.md AP-6010…AP-6022, AP-9980…, AP-9995…; the mockups' `editor.html`, the phone's way): “‹ {where
+ * it came from}” with *Undo* and *Save*; the screen's name with what it is, its grid and pages, and *Not saved yet*
+ * while it isn't; the pages as chips with *+ Page* and *Ask {assistant}* (a thread asking for a page); *Rearranged for
+ * 10 × 6.* when the page has no layout of its own for this shape; the grid as labelled tiles (touch one for its sheet:
+ * Move, Size, its settings, Remove); what didn't fit; *Add a widget* (a sheet; what it adds opens its own sheet) and
+ * *Try on the screen*; then THIS PAGE (its name, its times, *Tidy up*, its place, Delete page) and THIS SCREEN (Size,
+ * Pages turn). Everything is a draft until Save (`desk.screen.update {layout, show}`; a refused layout said plainly);
+ * leaving with changes asks first. The rules are `@whombat/client/desk`'s editor, the web's too; the draft around them
+ * is `draft.ts`.
  */
 import { type RouteProp, useRoute } from '@react-navigation/native';
 import {
   applyDeskShowPatch,
+  type CatalogEntry,
   catalogFind,
+  catalogGroupOf,
   catalogName,
   catalogServers,
   DESK_SCREEN_WORDS,
@@ -65,20 +68,10 @@ import { KeyboardAvoidingView } from '../../ui/keyboard';
 import { Button, ErrorState, Loading, SectionLabel } from '../../ui/primitives';
 import { Segmented } from '../../ui/Segmented';
 import { useBottomRoom } from '../../ui/screenBottom';
+import { useAfterSheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 import { AddWidgetSheet } from './AddWidgetSheet';
-import {
-  accountChoices,
-  accountGroup,
-  accountName,
-  type CatalogGroupView,
-  type CatalogRow,
-  fromCatalog,
-  onAnotherServer,
-  widgetPrivate,
-  withAccountItem,
-  withServerPart,
-} from './catalog';
+import { accountGroup, accountName, fromCatalog, onAnotherServer, widgetPrivate } from './catalog';
 import {
   canNudge,
   type Draft,
@@ -97,11 +90,13 @@ import {
   draftPageShow,
   draftRemove,
   draftRenamePage,
+  draftResize,
   draftSaved,
   draftSelect,
   draftShow,
   draftSize,
   draftSpec,
+  draftTidy,
   draftTurn,
   draftUndo,
 } from './draft';
@@ -162,8 +157,18 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
 
   // The views of the draft's widgets: their names and marks for the tiles, a panel's kind for its sizes.
   const specs = useMemo(() => deskLayoutWidgets(draft.layout), [draft.layout]);
-  const views = useDeskScreenViews(api, specs.length > 0 ? { screen: screen.id, widgets: specs } : null).data
-    ?.views;
+  const viewsRead = useDeskScreenViews(api, specs.length > 0 ? { screen: screen.id, widgets: specs } : null);
+  // A widget whose *What it shows* changed here is drawn as the item it shows now (`known`) until its view is read again.
+  const [rechosen, setRechosen] = useState<ReadonlySet<string>>(new Set());
+  const fresh = viewsRead.data !== undefined && !viewsRead.isPlaceholderData;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each fresh read of the views lets the chosen ones go
+  useEffect(() => {
+    if (fresh) setRechosen((was) => (was.size ? new Set() : was));
+  }, [fresh, viewsRead.dataUpdatedAt]);
+  const views = useMemo(
+    () => viewsRead.data?.views.filter((v) => !rechosen.has(v.id)),
+    [viewsRead.data, rechosen],
+  );
   const catalog = useDeskWidgets(api, { screen: screen.id }).data;
   // An account's widget is drawn as its catalogue item says, which knows it at once after it switched to another of
   // its account's widgets here (the views read before still draw the one it was until they're read again).
@@ -210,7 +215,17 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
 
   const page = draftPage(draft, viewOf);
   const dirty = draftDirty(draft);
-  const chosen = draft.selected ? (page.widgets.find((w) => w.id === draft.selected) ?? null) : null;
+  const picked = draft.selected ? (page.widgets.find((w) => w.id === draft.selected) ?? null) : null;
+  // Its *What it shows*: every view of its connection, server or account, read whole where the catalogue listed part.
+  const pickedGroup = picked ? catalogGroupOf(catalog, picked) : null;
+  const whole = useDeskWidgets(
+    api,
+    pickedGroup?.partial && pickedGroup.thing ? { screen: screen.id, thing: pickedGroup.thing } : null,
+  );
+  const choiceGroup =
+    (pickedGroup?.partial ? whole.data?.groups.find((g) => g.thing === pickedGroup.thing) : undefined) ??
+    pickedGroup;
+  const choicesReading = !!pickedGroup?.partial && !whole.data && !whole.error;
   const show = useMemo(() => applyDeskShowPatch(screen.show, draft.show ?? {}), [screen.show, draft.show]);
   const lines = screenLines(
     { ...screen, layout: draft.layout, pages: draft.layout.pages.length },
@@ -239,17 +254,24 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
     return () => clearTimeout(t);
   }, [trying]);
 
-  // A sheet covers the toasts (a modal is above the app), so what a sheet's button couldn't do is said in the sheet.
-  const [sheetNote, setSheetNote] = useState<string | null>(null);
+  // A sheet covers the toasts (a modal is above the app), so what a sheet's button did or couldn't do is said in it.
+  const [sheetNote, setSheetNote] = useState<{ text: string; ok: boolean } | null>(null);
   const openSheet = (next: 'add' | 'widget' | null) => {
     setSheet(next);
     setSheetNote(null);
   };
-  const say = (text: string) => (sheet ? setSheetNote(text) : toasts.show(text));
+  const after = useAfterSheet();
+  const say = (text: string, ok = false) => (sheet ? setSheetNote({ text, ok }) : toasts.show(text));
+  const swappedText = (w: DeskWidget, other: string) => {
+    const b = page.widgets.find((x) => x.id === other);
+    return fillDeskWords(E.swapped, { a: labelOf(w).name, b: b ? labelOf(b).name : other });
+  };
   const apply = (r: DraftResult) => {
     if (r.ok) {
       setDraft(r.draft);
       setSheetNote(null);
+      // Two widgets that changed places say so (DK-167).
+      if (r.swapped && picked) say(swappedText(picked, r.swapped), true);
     } else say(refusalText(r.why, r.size, r.grow));
   };
   const undo = () => {
@@ -264,16 +286,18 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
       action: { label: TOAST_COPY.undo, onPress: () => setDraft((d) => draftUndo(d) ?? d) },
     });
 
+  /** Adds a widget, chosen, and opens its sheet once *Add a widget* is down (DK-163). */
   const add = (widget: NewWidget, name: string, remember?: KnownWidget) => {
     const r = draftAdd(draft, widget, viewOf, remember?.view);
     if (!r.ok) return say(refusalText(r.why));
     if (remember) setKnown((k) => ({ ...k, [r.id]: remember }));
     setDraft(r.draft);
     openSheet(null);
+    after.later(() => openSheet('widget'));
     toasts.show(fillDeskWords(r.smaller ? E.addedSmaller : E.added, { name }));
   };
-  const addFromCatalog = (row: CatalogRow, group: CatalogGroupView) => {
-    const { widget, known: remember } = fromCatalog(row.item, group);
+  const addFromCatalog = (row: CatalogEntry) => {
+    const { widget, known: remember } = fromCatalog(row.item, row.group);
     add(widget, remember.name, remember);
   };
   const addBack = (w: DeskWidget) =>
@@ -282,36 +306,47 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
       labelOf(w).name,
     );
 
-  const widgetActions: WidgetSheetActions | null = chosen
+  const widgetActions: WidgetSheetActions | null = picked
     ? {
-        nudge: (dx, dy) => apply(draftNudge(draft, chosen.id, dx, dy, viewOf)),
-        grow: (dim, by) => apply(draftGrow(draft, chosen.id, dim, by, viewOf)),
-        canNudge: (dx, dy) => canNudge(draft, chosen.id, dx, dy, viewOf),
-        setOpts: (opts) => setDraft(draftSpec(draft, chosen.id, { opts }, viewOf)),
+        nudge: (dx, dy) => apply(draftNudge(draft, picked.id, dx, dy, viewOf)),
+        grow: (dim, by) => apply(draftGrow(draft, picked.id, dim, by, viewOf)),
+        resize: (w, h) => apply(draftResize(draft, picked.id, { w, h }, viewOf)),
+        canNudge: (dx, dy) => canNudge(draft, picked.id, dx, dy, viewOf),
+        setOpts: (opts) => setDraft(draftSpec(draft, picked.id, { opts }, viewOf)),
         setRef: (ref) =>
           setDraft(
             draftSpec(
               draft,
-              chosen.id,
-              { ref, opts: onAnotherServer(chosen.opts, serverParts(catalog, ref)) },
+              picked.id,
+              { ref, opts: onAnotherServer(picked.opts, serverParts(catalog, ref)) },
               viewOf,
             ),
           ),
-        setPart: (show) =>
-          setDraft(draftSpec(draft, chosen.id, { opts: withServerPart(chosen.opts, show) }, viewOf)),
-        setItem: (item) =>
-          apply(
-            draftChoose(draft, chosen.id, { opts: withAccountItem(chosen.opts, item) }, item.view, viewOf),
-          ),
+        choose: (item) => {
+          const r = draftChoose(draft, picked.id, item, viewOf);
+          if (r.ok && choiceGroup) {
+            // Named and sized as the view it shows now until that view is read.
+            setKnown((k) => ({ ...k, [picked.id]: fromCatalog(item, choiceGroup).known }));
+            setRechosen((was) => new Set([...was, picked.id]));
+          }
+          apply(r);
+        },
         setShow: (patch) => setDraft(draftShow(draft, patch)),
         remove: () => {
-          const name = labelOf(chosen).name;
-          setDraft(draftRemove(draft, chosen.id, viewOf));
+          const name = labelOf(picked).name;
+          setDraft(draftRemove(draft, picked.id, viewOf));
           openSheet(null);
           undoable(fillDeskWords(E.removed, { name }));
         },
       }
     : null;
+  const tidy = () => {
+    const r = draftTidy(draft, viewOf);
+    if (!r.ok) return toasts.show(refusalText(r.why));
+    if (r.moved === 0) return toasts.show(E.alreadyTidy);
+    setDraft(r.draft);
+    undoable(E.tidied);
+  };
 
   const save = () => {
     if (draftProblem(draft.layout, viewOf)) return Alert.alert(E.save, DESK_WORDS.errors.bad_layout);
@@ -474,6 +509,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
             show={draft.layout.pages[draft.page]?.show ?? null}
             onTimes={() => setTiming(true)}
             onRename={(name) => setDraft(draftRenamePage(draft, draft.page, name))}
+            onTidy={page.widgets.length > 0 ? tidy : null}
             onMove={(by) => setDraft(draftMovePage(draft, draft.page, by))}
             onDelete={() => {
               const r = draftDeletePage(draft, draft.page);
@@ -520,31 +556,32 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
         </ScrollView>
       </KeyboardAvoidingView>
       <WidgetSheet
-        visible={sheet === 'widget' && chosen !== null}
+        visible={sheet === 'widget' && picked !== null}
         onClose={() => openSheet(null)}
-        widget={chosen}
-        label={chosen ? labelOf(chosen) : null}
+        widget={picked}
+        label={picked ? labelOf(picked) : null}
+        grid={page.grid}
         viewOf={viewOf}
         actions={widgetActions ?? NO_ACTIONS}
-        note={sheetNote}
+        note={sheetNote?.text ?? null}
+        noteTone={sheetNote?.ok ? 'ok' : 'bad'}
         options={desk?.showOptions}
         pairFirst={screen.kind === 'box' && desk?.paired === null}
-        lockable={chosen ? widgetPrivate(chosen, catalog?.groups ?? [], viewOf(chosen)) : false}
+        lockable={picked ? widgetPrivate(picked, catalog?.groups ?? [], viewOf(picked)) : false}
         show={show}
         servers={servers}
-        parts={chosen?.type === 'server' ? serverParts(catalog, chosen.ref) : []}
-        choices={chosen ? accountChoices(catalog, chosen) : []}
+        choices={choiceGroup?.items ?? []}
+        reading={choicesReading}
       />
       <AddWidgetSheet
         visible={sheet === 'add'}
         onClose={() => openSheet(null)}
-        api={api}
-        screen={screen.id}
+        onDismissed={after.onDismissed}
         catalog={catalog}
         onPage={page.widgets}
         left={page.left}
         labelOf={labelOf}
-        note={sheetNote}
+        note={sheetNote?.text ?? null}
         onAdd={addFromCatalog}
         onAddBack={addBack}
       />
@@ -608,18 +645,18 @@ function AddPageChip({ onPress }: { onPress: () => void }) {
 const NO_ACTIONS: WidgetSheetActions = {
   nudge: () => {},
   grow: () => {},
+  resize: () => {},
   canNudge: () => false,
   setOpts: () => {},
   setRef: () => {},
-  setPart: () => {},
-  setItem: () => {},
+  choose: () => {},
   setShow: () => {},
   remove: () => {},
 };
 
 /**
- * THIS PAGE: its name (kept when the field is left), *Show at set times…* (with when it shows), Move left and Move right
- * among the pages, Delete page.
+ * THIS PAGE: its name (kept when the field is left), *Show at set times…* (with when it shows), *Tidy up* (DK-166),
+ * Move left and Move right among the pages, Delete page.
  */
 function PageCard({
   name,
@@ -628,6 +665,7 @@ function PageCard({
   show,
   onTimes,
   onRename,
+  onTidy,
   onMove,
   onDelete,
 }: {
@@ -637,6 +675,8 @@ function PageCard({
   show: DeskPageShow | null;
   onTimes: () => void;
   onRename: (name: string) => void;
+  /** Null on an empty page. */
+  onTidy: (() => void) | null;
   onMove: (by: -1 | 1) => void;
   onDelete: () => void;
 }) {
@@ -678,6 +718,13 @@ function PageCard({
             {fillDeskWords(E.times.label, { when: pageWhenText(show) })}
           </Text>
         ) : null}
+        <Button
+          label={E.tidy}
+          variant="secondary"
+          disabled={!onTidy}
+          onPress={() => onTidy?.()}
+          accessibilityLabel={`${E.tidy}, ${name}`}
+        />
         {count > 1 ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button

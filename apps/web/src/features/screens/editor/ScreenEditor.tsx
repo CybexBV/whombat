@@ -1,10 +1,11 @@
 /**
- * Settings → Screens → a screen → *Edit layout* (Whombat desk-display.md DK-143; desk-display-web.md AP-5950…; the
- * mockups' `editor.html`): the screen at its real shape with live views and its cells showing; pages along the top with
- * *+ Page*; *Size* and *Pages turn*; *Add a widget* beside it (search, groups, drag in or *+*); a widget chosen by a
- * touch or the keyboard, moved by dragging it, resized by its corner (it redraws as it grows), its settings beside it.
- * A taken spot says so in red and nothing is pushed aside. Changes are a draft until *Save*; *Try on the screen* shows
- * the draft there for a minute; *Undo* goes back a step.
+ * Settings → Screens → a screen → *Edit layout* (Whombat desk-display.md DK-143, DK-163…DK-168; desk-display-web.md
+ * AP-5950…, AP-9970…; the mockups' `editor.html`): the screen at its real shape with live views and its cells showing;
+ * pages along the top with *+ Page* and *Tidy up*; *Size* and *Pages turn*; *Add a widget* beside it (search, Whombat's
+ * own as tiles, each service once, drag in or *+*); a widget chosen by a touch or the keyboard, moved by dragging it,
+ * resized by its corner (it redraws as it grows), its settings beside it. Dropped onto one other widget the two change
+ * places; any other taken spot says so in red and nothing is pushed aside. The keys are behind *?* under the screen.
+ * Changes are a draft until *Save*; *Try on the screen* shows the draft there for a minute; *Undo* goes back a step.
  */
 
 import { toggleDay, WEEKDAY_LABELS } from '@whombat/client';
@@ -15,6 +16,7 @@ import {
   DESK_TURNS,
   DESK_WORDS,
   type DeskApi,
+  type DeskCatalogItem,
   type DeskPageShow,
   type DeskScreen,
   type DeskScreenDetail,
@@ -28,6 +30,7 @@ import {
   editorKey,
   fillDeskWords,
   gridText,
+  moveSpot,
   PAGE_TIMES_DEFAULT,
   pageHoursText,
   pagesText,
@@ -50,6 +53,7 @@ import { cellAt, cellRect, GAP, type Grid } from '@whombat/screen';
 import { Screen, WidgetBox } from '@whombat/screen/react';
 import { ChevronLeft, Clock, MessageCircle, MoreHorizontal, X } from 'lucide-react';
 import {
+  type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -127,6 +131,8 @@ type Drag =
       moved: boolean;
       to: { x: number; y: number; w: number; h: number };
       ok: boolean;
+      /** Moved onto one other widget: where it lands (that one's corner) and where that one goes (DK-167). */
+      swap: { at: { x: number; y: number }; id: string; x: number; y: number } | null;
       dx: number;
       dy: number;
     }
@@ -171,7 +177,12 @@ function Editor({
       w.type === 'panel' ? (views.get(w.id)?.kind ?? kinds.current.get(w.id)) : undefined,
     [views],
   );
-  const ed = useScreenEditor(screen.layout, screen.size, viewOf);
+  const nameOf = useCallback(
+    (w: Pick<DeskWidget, 'id' | 'type' | 'ref' | 'opts'>) =>
+      widgetName(w, views.get(w.id), catalog.data, assistant),
+    [views, catalog.data, assistant],
+  );
+  const ed = useScreenEditor(screen.layout, screen.size, viewOf, nameOf);
   const { draft, page, selected } = ed.state;
   const grid = ed.grid;
   const shape = screen.size ?? EDITOR_DEFAULT_SIZE;
@@ -213,11 +224,6 @@ function Editor({
     if (text) toast.show(text);
   };
   const selectedWidget = ed.widgets.find((w) => w.id === selected) ?? null;
-  const nameOf = useCallback(
-    (w: Pick<DeskWidget, 'id' | 'type' | 'ref' | 'opts'>) =>
-      widgetName(w, views.get(w.id), catalog.data, assistant),
-    [views, catalog.data, assistant],
-  );
 
   /* Moving and resizing on the screen ------------------------------------------------------------------------------ */
 
@@ -235,6 +241,7 @@ function Editor({
       moved: false,
       to: { x: w.x, y: w.y, w: w.w, h: w.h },
       ok: true,
+      swap: null,
       dx: 0,
       dy: 0,
     };
@@ -248,8 +255,13 @@ function Editor({
       const dy = (ev.clientY - d.sy) / k;
       const now = edRef.current;
       const to = dragTarget(now.grid, d.from, d.mode, dx, dy, widgetSize(d.from, viewOfRef.current), GAP);
-      const ok = fitsHere(now.widgets, to, now.grid, d.id);
-      setDrag({ ...d, moved: true, to, ok, dx, dy });
+      if (d.mode === 'resize') {
+        setDrag({ ...d, moved: true, to, ok: fitsHere(now.widgets, to, now.grid, d.id), dx, dy });
+        return;
+      }
+      const spot = moveSpot(now.widgets, now.grid, d.id, to);
+      const swap = spot.ok && spot.swap ? { at: { x: spot.x, y: spot.y }, ...spot.swap } : null;
+      setDrag({ ...d, moved: true, to, ok: spot.ok, swap, dx, dy });
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -337,6 +349,20 @@ function Editor({
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+  };
+
+  /** *What it shows*: until its new view is read, its sizes are the chosen view's, not the old one's (AP-9975). */
+  const choose = (id: string, item: DeskCatalogItem) => {
+    const refused = ed.choose(id, item);
+    if (refused) return say(refused);
+    if (item.view) kinds.current.set(id, item.view);
+    else kinds.current.delete(id);
+    setViews((was) => {
+      if (!was.has(id)) return was;
+      const next = new Map(was);
+      next.delete(id);
+      return next;
+    });
   };
 
   const addPick = (pick: CatalogPick, at?: { x: number; y: number; w: number; h: number }) => {
@@ -465,6 +491,9 @@ function Editor({
             askLabel={askPage ? fillDeskWords(E.askPage, { assistant }) : null}
             onAsk={askPage}
           />
+          <Button variant="ghost" size="sm" onClick={() => say(ed.tidy())} disabled={ed.widgets.length === 0}>
+            {E.tidy}
+          </Button>
           <div className={e.options}>
             <span className={e.optionLabel} id="editor-size">
               {E.size}
@@ -559,7 +588,21 @@ function Editor({
                         ))}
                         {dragging && dragging.mode === 'move' ? (
                           <>
-                            <Ghost grid={grid} to={dragging.to} ok={dragging.ok} />
+                            <Ghost
+                              grid={grid}
+                              to={dragging.swap ? { ...dragging.to, ...dragging.swap.at } : dragging.to}
+                              ok={dragging.ok}
+                            />
+                            {dragging.swap ? (
+                              <SwapGhost
+                                grid={grid}
+                                widget={ed.widgets.find((w) => w.id === dragging.swap?.id)}
+                                at={dragging.swap}
+                                view={views.get(dragging.swap.id)}
+                                calm={calm}
+                                now={now}
+                              />
+                            ) : null}
                             <div
                               className={e.moving}
                               style={{ transform: `translate(${dragging.dx}px, ${dragging.dy}px)` }}
@@ -602,15 +645,7 @@ function Editor({
                 ) : null}
               </div>
             </div>
-            <p className={e.hint}>
-              {E.hint1}
-              <i>{E.hintAdd}</i>
-              {E.hint2} <Kbd>←</Kbd>
-              <Kbd>→</Kbd>
-              <Kbd>↑</Kbd>
-              <Kbd>↓</Kbd>
-              {E.hint3} <Kbd>Shift</Kbd> {E.hint4} <Kbd>Delete</Kbd>.
-            </p>
+            <KeysHint />
           </div>
           <WidgetPanel
             api={api}
@@ -628,6 +663,7 @@ function Editor({
             viewOf={viewOf}
             onPickDown={onPickDown}
             onAdd={(pick) => addPick(pick)}
+            onChoose={choose}
             say={say}
             nameOf={nameOf}
           />
@@ -758,6 +794,101 @@ function Ghost({
       style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
       aria-hidden="true"
     />
+  );
+}
+
+/** The widget a drag swaps with, drawn faint where it goes (DK-167). */
+function SwapGhost({
+  grid,
+  widget,
+  at,
+  view,
+  calm,
+  now,
+}: {
+  grid: Grid;
+  widget: DeskWidget | undefined;
+  at: { x: number; y: number };
+  view: DeskWidgetView | undefined;
+  calm: ComponentProps<typeof WidgetBox>['calm'];
+  now: number;
+}) {
+  if (!widget) return null;
+  const placed = { ...widget, ...at };
+  const r = cellRect(grid, placed);
+  return (
+    <>
+      <div
+        className={cx(e.ghost, e.ghostSwap)}
+        style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
+        aria-hidden="true"
+      />
+      <div className={e.ghostWidget} aria-hidden="true">
+        <WidgetBox g={grid} widget={placed} view={view} calm={calm} now={now} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * The editor's keys behind a small *?* under the screen (DK-168): dragging, the arrows, Shift, Delete, swapping and
+ * *Tidy up*, in a popover that Escape or a click elsewhere closes.
+ */
+function KeysHint() {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const box = useRef<HTMLDivElement | null>(null);
+  const button = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (ev: PointerEvent) => {
+      if (!box.current?.contains(ev.target as Node)) setOpen(false);
+    };
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    window.addEventListener('pointerdown', away);
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('pointerdown', away);
+      window.removeEventListener('keydown', key);
+    };
+  }, [open]);
+  return (
+    <div className={e.keys} ref={box}>
+      <button
+        ref={button}
+        type="button"
+        className={e.keysButton}
+        aria-label={E.keys}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+      >
+        ?
+      </button>
+      {open ? (
+        <div id={id} className={e.keysPop} role="dialog" aria-label={E.keys}>
+          <h2 className={e.keysTitle}>{E.keys}</h2>
+          <p>
+            {E.hint1}
+            <i>{E.hintAdd}</i>
+            {E.hint2} <Kbd>←</Kbd>
+            <Kbd>→</Kbd>
+            <Kbd>↑</Kbd>
+            <Kbd>↓</Kbd>
+            {E.hint3} <Kbd>Shift</Kbd> {E.hint4} <Kbd>Delete</Kbd>.
+          </p>
+          <p>{E.hintSwap}</p>
+          <p>
+            <i>{E.tidy}</i>
+            {E.hintTidy}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

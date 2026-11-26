@@ -4,6 +4,8 @@ import { type DeskLayout, deskDefaultLayout } from './contract';
 import {
   addPage,
   addWidget,
+  chooseWidget,
+  chosenOpts,
   deletePage,
   didntFit,
   draftProblem,
@@ -15,6 +17,7 @@ import {
   freeSpot,
   growWidget,
   movePage,
+  moveSpot,
   moveWidget,
   nudgeWidget,
   pageName,
@@ -24,6 +27,8 @@ import {
   renamePage,
   resizeWidget,
   setWidgetSpec,
+  sizePresets,
+  tidyPage,
   UNDO_MAX,
   type UndoStack,
 } from './editor';
@@ -42,12 +47,38 @@ describe('the editor', () => {
     expect(shapeKey(editorGrid(null, 'larger'))).toBe('6x4');
   });
 
-  it('moves a widget onto a free spot, and refuses a taken one without pushing anything aside', () => {
+  it('moves a widget onto a free spot, and off the grid refuses', () => {
     const emptied = removeWidget(base(), 0, box, 'w_status');
     const moved = moveWidget(emptied, 0, box, 'w_clock', { x: 4, y: 0 });
     expect(moved.ok && at(moved.layout, 'w_clock')).toMatchObject({ x: 4, y: 0 });
-    expect(moveWidget(base(), 0, box, 'w_clock', { x: 2, y: 0 })).toEqual({ ok: false, why: 'taken' });
+    expect(moved.ok && moved.swapped).toBeUndefined();
     expect(nudgeWidget(base(), 0, box, 'w_clock', -1, 0)).toEqual({ ok: false, why: 'taken' });
+  });
+
+  it('swaps two widgets when one lands on exactly one other and both fit (DK-167)', () => {
+    // The clock dragged half onto How things are: each takes the other's corner, each keeps its size.
+    const moved = moveWidget(base(), 0, box, 'w_clock', { x: 2, y: 0 });
+    expect(moved.ok && moved.swapped).toBe('w_status');
+    expect(moved.ok && at(moved.layout, 'w_clock')).toMatchObject({ x: 4, y: 0, w: 4, h: 2 });
+    expect(moved.ok && at(moved.layout, 'w_status')).toMatchObject({ x: 0, y: 0, w: 4, h: 2 });
+    expect(moved.ok && ids(moved.layout)).toEqual(ids(base()));
+    // The arrows too: one cell right onto its neighbour.
+    const nudged = nudgeWidget(base(), 0, box, 'w_clock', 1, 0);
+    expect(nudged.ok && nudged.swapped).toBe('w_status');
+    // What's going on (8 × 2) can't go where the clock was without covering How things are: refused.
+    expect(moveWidget(base(), 0, box, 'w_clock', { x: 0, y: 1 })).toEqual({ ok: false, why: 'taken' });
+    // Onto two widgets at once: refused, nothing pushed aside.
+    expect(moveWidget(base(), 0, box, 'w_clock', { x: 2, y: 1 })).toEqual({ ok: false, why: 'taken' });
+    // What the web draws while dragging.
+    const widgets = editorPage(base(), 0, box).widgets;
+    expect(moveSpot(widgets, box, 'w_clock', { x: 3, y: 0 })).toEqual({
+      ok: true,
+      x: 4,
+      y: 0,
+      swap: { id: 'w_status', x: 0, y: 0 },
+    });
+    expect(moveSpot(widgets, box, 'w_clock', { x: 0, y: 0 })).toMatchObject({ ok: true, swap: null });
+    expect(moveSpot(widgets, box, 'w_clock', { x: 5, y: 0 }).ok).toBe(false);
   });
 
   it('resizes between a widget’s smallest and largest, and only into room it has', () => {
@@ -134,6 +165,159 @@ describe('the editor', () => {
       ref: 'server:b',
       opts: { range: '7d' },
     });
+  });
+
+  it('changes what a widget shows in its place, fitting its size to the new view, figures and panels alike', () => {
+    const one = (w: DeskLayout['pages'][number]['layouts'][string]) => ({
+      ...base(),
+      pages: [{ id: 'p_1', name: 'Overview', layouts: { '8x5': w }, last: '8x5' }],
+    });
+    const figures = {
+      id: 'w_f',
+      type: 'figures' as const,
+      ref: 'connection:con_plex',
+      opts: { range: '7d' },
+      x: 2,
+      y: 1,
+      w: 2,
+      h: 1,
+    };
+    // Figures to a camera panel: the type changes and it grows to the camera's smallest, in place.
+    const cam = chooseWidget(one([figures]), 'w_f', {
+      type: 'panel',
+      ref: 'connection:con_plex',
+      opts: { panel: 'door' },
+      view: 'camera',
+    });
+    expect(cam.ok && at(cam.layout, 'w_f')).toEqual({
+      id: 'w_f',
+      type: 'panel',
+      ref: 'connection:con_plex',
+      opts: { range: '7d', panel: 'door' },
+      x: 2,
+      y: 1,
+      w: 2,
+      h: 2,
+    });
+    // A 6 × 4 list back to the figures shrinks to their largest, and the panel goes.
+    const list = { ...figures, type: 'panel' as const, opts: { panel: 'queue', lock: 'show' }, w: 6, h: 4 };
+    const back = chooseWidget(one([{ ...list, x: 0, y: 0 }]), 'w_f', {
+      type: 'figures',
+      ref: 'connection:con_plex',
+      opts: {},
+      view: 'figures',
+    });
+    expect(back.ok && at(back.layout, 'w_f')).toMatchObject({ type: 'figures', opts: {}, w: 4, h: 2 });
+    // No room to grow there: refused, nothing changes.
+    const beside = { id: 'w_c', type: 'clock' as const, opts: {}, x: 2, y: 2, w: 3, h: 2 };
+    expect(
+      chooseWidget(one([figures, beside]), 'w_f', { type: 'panel', opts: { panel: 'door' }, view: 'camera' }),
+    ).toEqual({ ok: false, why: 'noRoom' });
+    expect(chooseWidget(one([figures]), 'w_gone', { type: 'figures', opts: {} }).ok).toBe(false);
+    // A server's part keeps the chart's range; On a locked screen stays only where the new one is private.
+    expect(chosenOpts({ show: 'cpu', range: '1h' }, { opts: {} })).toEqual({ range: '1h' });
+    expect(chosenOpts({ panel: 'a', lock: 'show' }, { opts: { panel: 'b' }, private: true })).toEqual({
+      panel: 'b',
+      lock: 'show',
+    });
+    expect(chosenOpts({ panel: 'a', lock: 'show' }, { opts: { panel: 'b' } })).toEqual({ panel: 'b' });
+  });
+
+  it('chooses another view on every shape the widget has', () => {
+    const tablet = editorGrid({ width: 820, height: 1180 }, 'normal');
+    const l = addWidget(removeWidget(base(), 0, tablet, 'w_clock'), 0, tablet, {
+      type: 'server',
+      ref: 'server:a',
+      opts: {},
+    });
+    if (!l.ok) throw new Error('no room');
+    const r = chooseWidget(l.layout, l.id, { type: 'server', ref: 'server:a', opts: { show: 'memory' } });
+    expect(r.ok && editorPage(r.layout, 0, tablet).widgets.find((w) => w.id === l.id)?.opts).toEqual({
+      show: 'memory',
+    });
+  });
+
+  it('offers the size’s shapes from a widget’s sizes and the grid, none twice (DK-165)', () => {
+    const shapes = (type: 'clock' | 'now' | 'figures', g = box) =>
+      sizePresets(sizeOf({ type }), g).map((p) => `${p.key} ${p.w}x${p.h}`);
+    expect(shapes('clock')).toEqual(['small 2x1', 'normal 3x2', 'wide 6x2', 'tall 3x3', 'large 6x3']);
+    expect(shapes('figures')).toEqual(['small 1x1', 'normal 2x1', 'wide 4x1', 'tall 2x2', 'large 4x2']);
+    // What's going on starts as wide as the screen: no Wide, and Large is Tall.
+    expect(shapes('now')).toEqual(['small 2x2', 'normal 8x2', 'tall 8x3']);
+    // On a 5-wide tablet the grid caps it.
+    const tablet = editorGrid({ width: 820, height: 1180 }, 'normal');
+    expect(shapes('now', tablet)).toEqual(['small 2x2', 'normal 5x2', 'tall 5x3']);
+  });
+
+  it('tidies a page up and to the left in reading order, keeping every widget and its size (DK-166)', () => {
+    const gappy = {
+      ...base(),
+      pages: [
+        {
+          id: 'p_1',
+          name: 'Overview',
+          layouts: {
+            '8x5': [
+              { id: 'w_a', type: 'clock' as const, opts: {}, x: 5, y: 3, w: 3, h: 2 },
+              { id: 'w_b', type: 'status' as const, opts: {}, x: 2, y: 1, w: 3, h: 2 },
+              { id: 'w_c', type: 'figures' as const, ref: 'connection:x', opts: {}, x: 0, y: 4, w: 1, h: 1 },
+            ],
+          },
+          last: '8x5',
+        },
+      ],
+    };
+    const r = tidyPage(gappy, 0, box);
+    if (!r.ok) throw new Error('refused');
+    expect(r.moved).toBe(3);
+    const after = editorPage(r.layout, 0, box).widgets;
+    expect(after.map((w) => [w.id, w.x, w.y, w.w, w.h])).toEqual([
+      ['w_a', 3, 0, 3, 2],
+      ['w_b', 0, 0, 3, 2],
+      ['w_c', 6, 0, 1, 1],
+    ]);
+    // Tidy already: the same layout, nothing to undo.
+    const again = tidyPage(r.layout, 0, box);
+    expect(again.ok && again.moved).toBe(0);
+    expect(again.ok && again.layout).toBe(r.layout);
+    const layout = base();
+    expect(tidyPage(layout, 0, box)).toEqual({ ok: true, layout, moved: 0 });
+    // A page whose widgets can't all be packed (two stored on top of each other) moves nothing.
+    const stacked = {
+      ...base(),
+      pages: [
+        {
+          id: 'p_1',
+          name: 'Overview',
+          layouts: {
+            '8x5': [
+              {
+                id: 'w_a',
+                type: 'panel' as const,
+                ref: 'connection:x',
+                opts: { panel: 'p' },
+                x: 0,
+                y: 0,
+                w: 8,
+                h: 5,
+              },
+              {
+                id: 'w_b',
+                type: 'panel' as const,
+                ref: 'connection:x',
+                opts: { panel: 'q' },
+                x: 0,
+                y: 0,
+                w: 8,
+                h: 5,
+              },
+            ],
+          },
+          last: '8x5',
+        },
+      ],
+    };
+    expect(tidyPage(stacked, 0, box)).toEqual({ ok: false, why: 'tidy' });
   });
 
   it('adds pages up to six, named after the others; renames; the last page can’t go', () => {
