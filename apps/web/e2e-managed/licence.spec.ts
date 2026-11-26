@@ -3,6 +3,7 @@
  * inert, LNK-04), licence refusals, the appliance terms at claim (LC-17, LC-18) and deleting the cloud account (CT-78).
  */
 import { expect, type Page, test } from '@playwright/test';
+import { APPLIANCE_TERMS_VERSION } from '@whombat/control-contracts';
 import { agreeToTerms, claimAndSaveKit, consoles, fake, fresh, signIn, startFresh } from './support';
 
 /** Burrow screens are burrow-less (AP-360); the open appliance's burrow is the one they show. */
@@ -69,14 +70,14 @@ test('the terms at claim: the claim waits for the tick, the terms page is public
     page.getByRole('link', { name: 'Whombat Appliance Terms' }).click(),
   ]);
   await expect(tab.getByRole('heading', { name: 'Whombat Appliance Terms', level: 1 })).toBeVisible();
-  await expect(tab.getByRole('note')).toContainText('Version 2026-11-19');
+  await expect(tab.getByRole('note')).toContainText(`Version ${APPLIANCE_TERMS_VERSION}`);
   await expect(tab.getByRole('heading', { name: '2. Your data stays yours' })).toBeVisible();
   await tab.close();
   await agreeToTerms(page);
   await page.getByRole('button', { name: 'Claim it' }).click();
   await startFresh(page);
   await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
-  expect(await fake<string[]>(page, 'claimTerms')).toEqual(['2026-11-19']);
+  expect(await fake<string[]>(page, 'claimTerms')).toEqual([APPLIANCE_TERMS_VERSION]);
 });
 
 test('control’s claim refusals: a self-installed box, and the plan’s Whombat limit', async ({ page }) => {
