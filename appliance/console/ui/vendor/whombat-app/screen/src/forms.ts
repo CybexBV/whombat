@@ -249,6 +249,11 @@ export type PagesAt = 'centre' | 'after' | 'dots' | 'dotsAfter';
 /** A screen narrower than this shows its pages as dots (the mockups' tablet), names or not. */
 export const PAGE_NAMES_MIN = 900;
 
+/** The room kept between what sits in the middle of the top bar and the name or the chips. */
+const BAR_ROOM = 24;
+const centredInBar = (m: { bar: number; left: number; chips: number }, w: number) =>
+  (m.bar - w) / 2 >= m.left + BAR_ROOM && (m.bar + w) / 2 <= m.chips - BAR_ROOM;
+
 /**
  * The pages never touch the name, the pill or the host's chips (any width): names centred while they fit between them
  * with room to spare, else right after the name, else dots, centred or after it; a narrow screen has dots. All in the
@@ -262,10 +267,16 @@ export function pagesAt(m: {
   names: number;
   dots: number;
 }): PagesAt {
-  const room = 24;
-  const centred = (w: number) => (m.bar - w) / 2 >= m.left + room && (m.bar + w) / 2 <= m.chips - room;
   const names = m.bar >= PAGE_NAMES_MIN;
-  if (names && centred(m.names)) return 'centre';
-  if (names && m.left + 34 + m.names <= m.chips - room) return 'after';
-  return centred(m.dots) ? 'dots' : 'dotsAfter';
+  if (names && centredInBar(m, m.names)) return 'centre';
+  if (names && m.left + 34 + m.names <= m.chips - BAR_ROOM) return 'after';
+  return centredInBar(m, m.dots) ? 'dots' : 'dotsAfter';
+}
+
+/**
+ * Where a moment's words and *Back* go in the top bar, as the pages: centred while they fit between the name and the
+ * chips, else right after the name (the box's own screen has its widest chips while it's unlocked).
+ */
+export function spotAt(m: { bar: number; left: number; chips: number; spot: number }): 'centre' | 'after' {
+  return centredInBar(m, m.spot) ? 'centre' : 'after';
 }
