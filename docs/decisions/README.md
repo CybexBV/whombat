@@ -96,6 +96,7 @@ How the split was made: `docs.md`.
 - `update-wait.md` — the box stays usable while an update waits for running work: sessions while draining, commands that wait out a short drain.
 - `ask-before-updating.md` — the owner's switch: every update waits for their yes, enforced by the box's manager.
 - `check-for-updates.md` — Check for updates: the box looks for a newer release now; by itself it still looks hourly.
+- `weather-news.md` — where this Whombat is, MET Norway's forecast, the news sites the person chooses, their widgets and tools.
 - `agent-efficiency.md` — checks that match the change, runs on a pull request's branch (*in part*).
 - `agent-outcomes.md` — evidence on completion, capacity admission, evaluations (*in part*).
 - `agent-computer.md` — *in part*: only the command guard holds (git control files, keys decide, Allow once/for this
@@ -339,6 +340,8 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
   do in three words, old addresses, connections added on Connections, developer things gated, the Vault in plain words.
 - `mobile-app.md`, `mobile-live.md`, `phone-connect.md`, `bp-fix-mobile.md` — the Android app (*mobile-app in part*).
 - `../app/decisions/phone-audit-1112.md` — the phone after the 2026-11-12 audit: failures in an alert, never a toast; the updater has no Stop.
+- `../app/decisions/weather-news-apps.md` — the weather and news widgets' forms and signs on every screen, and Place and
+  News in This Whombat on the web and the phone.
 - `phone-shell-final.md` — the phone's final shell: the tabs with Search and Places above them, the Places sheet, Back
   first on pushed pages, the Search page, readable iPhone badges, Spend shown as Usage.
 

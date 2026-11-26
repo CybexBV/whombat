@@ -19,6 +19,19 @@ describe('decision ids (decision-ids.md)', () => {
     expect(findings).toEqual({ clashes: ['ZQ-02'], unresolved: ['ZQ-09'] });
   });
 
+  it('takes a region code in a string for data, and the same shape elsewhere for an id', () => {
+    const findings = scan(
+      tree({
+        'docs/decisions/a.md': '| ZQ-01 | One. | Why. |\n',
+        // Austria's Länder share the shape of a decision id: in a string they are regions.
+        'packages/core/src/regions.ts':
+          "regions: ['ZQ-6'], other: \"ZQ-7\", note: 'see ZQ-8', code: `ZQ-9`\n",
+        'apps/server/src/y.ts': '// ZQ-2 is cited here\n',
+      }),
+    );
+    expect(findings.unresolved).toEqual(['ZQ-2', 'ZQ-8', 'ZQ-9']);
+  });
+
   it('spans a range with its letters and zeros', () => {
     expect(rangeIds('HE-S08', 'HE-S10')).toEqual(['HE-S08', 'HE-S09', 'HE-S10']);
     expect(rangeIds('DK-60', 'CT-62')).toEqual([]);

@@ -80,7 +80,8 @@ export const SETTINGS_PAGES = {
   'appliance.overview': {
     where: 'Settings → This Whombat → Overview',
     path: 'settings?tab=appliance',
-    about: 'how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail',
+    about:
+      'how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail, where it is and its news',
   },
   'appliance.backups': {
     where: 'Settings → This Whombat → Backups',

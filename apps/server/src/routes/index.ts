@@ -30,6 +30,8 @@ import { looksAheadRoutes } from '../looks-ahead/settings';
 import { signInRoutes } from '../managed/providers/routes';
 import { signInApiRoutes } from '../managed/providers/signin-routes';
 import { memoryRoutes } from '../memory/routes';
+import { newsRoutes } from '../news/routes';
+import { placeRoutes } from '../place/routes';
 import { promptRoutes } from '../prompts/routes';
 import { runnerRoutes } from '../runtime/routes';
 import { scheduleRoutes } from '../schedules/routes';
@@ -113,6 +115,9 @@ export const ROUTES: RouteDef[] = [
   ...oneWhombatRoutes,
   ...careRoutes,
   ...looksAheadRoutes,
+  // Where this Whombat is, and the news sites it reads (docs/decisions/weather-news.md).
+  ...placeRoutes,
+  ...newsRoutes,
   // Servers through the hosts service (docs/decisions/one-whombat-servers.md).
   ...hostsRoutes,
   // Device skills: the person's choice on the card (docs/decisions/one-whombat-devices.md).

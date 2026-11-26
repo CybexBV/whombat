@@ -12,4 +12,5 @@ export * from './pager';
 export * from './specs';
 export * from './times';
 export * from './types';
+export * from './weather';
 export * from './words';

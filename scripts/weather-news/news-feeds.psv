@@ -1,0 +1,199 @@
+# The news sources Whombat suggests (NEWS_SUGGESTIONS in packages/core/src/domain/news-suggestions.ts, written from
+# this file by `node --import tsx scripts/weather-news/gen.ts`; docs/decisions/weather-news.md). Each row was fetched on
+# the date in its last column and answered over https, without a redirect, with an RSS or Atom feed of recent items.
+#
+# Columns: id | country (ISO 3166-1) | regions (ISO 3166-2, the level-4 code: a province, state or Land; comma between
+# several) | areas (ISO 3166-2 level 6, where the region is too large: a Belgian province) | language | name | feed |
+# checked.
+#
+# A row without regions or areas is the country's own news. Keep one feed per broadcaster for a country (its “all news”
+# feed, not every section), only https feeds, and none whose terms rule out a paid product (Yle) or a feed made for
+# personal readers only (Google News).
+nl-nos|NL|||nl|NOS Nieuws|https://feeds.nos.nl/nosnieuwsalgemeen|2026-11-26: rss 20 items, newest 2026-11-26 07:19Z
+nl-omroep-brabant|NL|NL-NB||nl|Omroep Brabant|https://www.omroepbrabant.nl/rss|2026-11-26: rss 25 items, newest 2026-11-26 06:24Z
+nl-omroep-gelderland|NL|NL-GE||nl|Omroep Gelderland|https://www.gld.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:28Z
+nl-nh-nieuws|NL|NL-NH||nl|NH Nieuws|https://rss.nhnieuws.nl/rss|2026-11-26: rss 25 items, newest 2026-11-26 07:14Z
+nl-rtv-noord|NL|NL-GR||nl|RTV Noord|https://www.rtvnoord.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:14Z
+nl-omrop-fryslan|NL|NL-FR||nl|Omrop Fryslân|https://www.omropfryslan.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:57Z
+nl-rtv-drenthe|NL|NL-DR||nl|RTV Drenthe|https://www.rtvdrenthe.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 07:00Z
+nl-rtv-oost|NL|NL-OV||nl|RTV Oost|https://www.rtvoost.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:02Z
+nl-rtv-utrecht|NL|NL-UT||nl|RTV Utrecht|https://www.rtvutrecht.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:59Z
+nl-rijnmond|NL|NL-ZH||nl|Rijnmond|https://www.rijnmond.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 07:17Z
+nl-omroep-west|NL|NL-ZH||nl|Omroep West|https://www.omroepwest.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:49Z
+nl-omroep-zeeland|NL|NL-ZE||nl|Omroep Zeeland|https://www.omroepzeeland.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 06:08Z
+nl-l1|NL|NL-LI||nl|L1 Nieuws|https://www.l1nieuws.nl/rss/index.xml|2026-11-26: rss 50 items, newest 2026-11-26 07:02Z
+be-vrt-nws|BE|||nl|VRT NWS|https://www.vrt.be/vrtnws/nl.rss.articles.xml|2026-11-26: atom 50 items, newest 2026-11-26 07:28Z
+be-rtbf-info|BE|||fr|RTBF Info|https://rss.rtbf.be/article/rss/highlight_rtbf_info.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-26 07:27Z
+be-rtbf-bruxelles|BE|BE-BRU||fr|RTBF Bruxelles|https://rss.rtbf.be/article/rss/highlight_rtbf_regions-bruxelles.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-26 07:10Z
+be-bruzz|BE|BE-BRU||nl|BRUZZ|https://www.bruzz.be/rss.xml|2026-11-26: rss 100 items, newest 2026-11-26 07:43Z
+be-rtbf-brabant-wallon|BE||BE-WBR|fr|RTBF Brabant wallon|https://rss.rtbf.be/article/rss/highlight_rtbf_regions-brabant-wallon.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-25 16:58Z
+be-rtbf-hainaut|BE||BE-WHT|fr|RTBF Hainaut|https://rss.rtbf.be/article/rss/highlight_rtbf_regions-hainaut.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-26 07:27Z
+be-rtbf-liege|BE||BE-WLG|fr|RTBF Liège|https://rss.rtbf.be/article/rss/highlight_rtbf_regions-liege.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-25 16:33Z
+be-rtbf-luxembourg|BE||BE-WLX|fr|RTBF Luxembourg|https://rss.rtbf.be/article/rss/highlight_rtbf_regions-luxembourg.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-26 07:04Z
+be-rtbf-namur|BE||BE-WNA|fr|RTBF Namur|https://rss.rtbf.be/article/rss/highlight_rtbf_regions-namur.xml?source=internal|2026-11-26: rss 20 items, newest 2026-11-25 19:11Z
+de-tagesschau|DE|||de|tagesschau|https://www.tagesschau.de/index~rss2.xml|2026-11-26: rss 61 items, newest 2026-11-26 07:36Z
+de-tagesschau-bw|DE|DE-BW||de|tagesschau Baden-Württemberg|https://www.tagesschau.de/inland/regional/badenwuerttemberg/index~rss2.xml|2026-11-26: rss 59 items, newest 2026-11-26 07:43Z
+de-tagesschau-by|DE|DE-BY||de|tagesschau Bayern|https://www.tagesschau.de/inland/regional/bayern/index~rss2.xml|2026-11-26: rss 31 items, newest 2026-11-25 04:09Z
+de-tagesschau-be|DE|DE-BE||de|tagesschau Berlin|https://www.tagesschau.de/inland/regional/berlin/index~rss2.xml|2026-11-26: rss 59 items, newest 2026-11-26 07:15Z
+de-tagesschau-bb|DE|DE-BB||de|tagesschau Brandenburg|https://www.tagesschau.de/inland/regional/brandenburg/index~rss2.xml|2026-11-26: rss 59 items, newest 2026-11-26 07:38Z
+de-tagesschau-hb|DE|DE-HB||de|tagesschau Bremen|https://www.tagesschau.de/inland/regional/bremen/index~rss2.xml|2026-11-26: rss 37 items, newest 2026-11-25 20:18Z
+de-tagesschau-hh|DE|DE-HH||de|tagesschau Hamburg|https://www.tagesschau.de/inland/regional/hamburg/index~rss2.xml|2026-11-26: rss 16 items, newest 2026-11-26 06:22Z
+de-tagesschau-he|DE|DE-HE||de|tagesschau Hessen|https://www.tagesschau.de/inland/regional/hessen/index~rss2.xml|2026-11-26: rss 59 items, newest 2026-11-26 06:24Z
+de-tagesschau-mv|DE|DE-MV||de|tagesschau Mecklenburg-Vorpommern|https://www.tagesschau.de/inland/regional/mecklenburgvorpommern/index~rss2.xml|2026-11-26: rss 21 items, newest 2026-11-26 07:43Z
+de-tagesschau-ni|DE|DE-NI||de|tagesschau Niedersachsen|https://www.tagesschau.de/inland/regional/niedersachsen/index~rss2.xml|2026-11-26: rss 28 items, newest 2026-11-26 07:38Z
+de-tagesschau-nw|DE|DE-NW||de|tagesschau Nordrhein-Westfalen|https://www.tagesschau.de/inland/regional/nordrheinwestfalen/index~rss2.xml|2026-11-26: rss 59 items, newest 2026-11-26 07:34Z
+de-tagesschau-rp|DE|DE-RP||de|tagesschau Rheinland-Pfalz|https://www.tagesschau.de/inland/regional/rheinlandpfalz/index~rss2.xml|2026-11-26: rss 48 items, newest 2026-11-26 05:09Z
+de-tagesschau-sl|DE|DE-SL||de|tagesschau Saarland|https://www.tagesschau.de/inland/regional/saarland/index~rss2.xml|2026-11-26: rss 59 items, newest 2026-11-26 07:34Z
+de-tagesschau-sn|DE|DE-SN||de|tagesschau Sachsen|https://www.tagesschau.de/inland/regional/sachsen/index~rss2.xml|2026-11-26: rss 18 items, newest 2026-11-26 05:00Z
+de-tagesschau-st|DE|DE-ST||de|tagesschau Sachsen-Anhalt|https://www.tagesschau.de/inland/regional/sachsenanhalt/index~rss2.xml|2026-11-26: rss 22 items, newest 2026-11-26 06:34Z
+de-tagesschau-sh|DE|DE-SH||de|tagesschau Schleswig-Holstein|https://www.tagesschau.de/inland/regional/schleswigholstein/index~rss2.xml|2026-11-26: rss 23 items, newest 2026-11-26 07:20Z
+de-tagesschau-th|DE|DE-TH||de|tagesschau Thüringen|https://www.tagesschau.de/inland/regional/thueringen/index~rss2.xml|2026-11-26: rss 27 items, newest 2026-11-26 06:58Z
+at-orf|AT|||de|ORF News|https://rss.orf.at/news.xml|2026-11-26: rss 25 items, newest 2026-11-26 07:18Z
+at-orf-burgenland|AT|AT-1||de|ORF Burgenland|https://rss.orf.at/burgenland.xml|2026-11-26: rss 20 items, newest 2026-11-26 07:30Z
+at-orf-kaernten|AT|AT-2||de|ORF Kärnten|https://rss.orf.at/kaernten.xml|2026-11-26: rss 18 items, newest 2026-11-26 05:49Z
+at-orf-noe|AT|AT-3||de|ORF Niederösterreich|https://rss.orf.at/noe.xml|2026-11-26: rss 15 items, newest 2026-11-26 06:01Z
+at-orf-ooe|AT|AT-4||de|ORF Oberösterreich|https://rss.orf.at/ooe.xml|2026-11-26: rss 16 items, newest 2026-11-26 05:00Z
+at-orf-salzburg|AT|AT-5||de|ORF Salzburg|https://rss.orf.at/salzburg.xml|2026-11-26: rss 19 items, newest 2026-11-26 07:07Z
+at-orf-steiermark|AT|AT-6||de|ORF Steiermark|https://rss.orf.at/steiermark.xml|2026-11-26: rss 14 items, newest 2026-11-26 07:23Z
+at-orf-tirol|AT|AT-7||de|ORF Tirol|https://rss.orf.at/tirol.xml|2026-11-26: rss 17 items, newest 2026-11-26 07:35Z
+at-orf-vorarlberg|AT|AT-8||de|ORF Vorarlberg|https://rss.orf.at/vorarlberg.xml|2026-11-26: rss 20 items, newest 2026-11-26 07:38Z
+at-orf-wien|AT|AT-9||de|ORF Wien|https://rss.orf.at/wien.xml|2026-11-26: rss 20 items, newest 2026-11-26 06:51Z
+gb-bbc|GB|||en|BBC News|https://feeds.bbci.co.uk/news/rss.xml|2026-11-26: rss 33 items, newest 2026-11-26 07:40Z
+gb-bbc-england|GB|GB-ENG||en|BBC England|https://feeds.bbci.co.uk/news/england/rss.xml|2026-11-26: rss 24 items, newest 2026-11-26 06:29Z
+gb-bbc-scotland|GB|GB-SCT||en|BBC Scotland|https://feeds.bbci.co.uk/news/scotland/rss.xml|2026-11-26: rss 36 items, newest 2026-11-26 07:42Z
+gb-bbc-wales|GB|GB-WLS||en|BBC Wales|https://feeds.bbci.co.uk/news/wales/rss.xml|2026-11-26: rss 31 items, newest 2026-11-26 07:42Z
+gb-bbc-northern-ireland|GB|GB-NIR||en|BBC Northern Ireland|https://feeds.bbci.co.uk/news/northern_ireland/rss.xml|2026-11-26: rss 39 items, newest 2026-11-26 07:41Z
+ie-rte|IE|||en|RTÉ News|https://www.rte.ie/feeds/rss/?index=/news/|2026-11-26: rss 60 items, newest 2026-11-26 07:40Z
+ie-rte-regional|IE|||en|RTÉ Regional|https://www.rte.ie/feeds/rss/?index=/news/regional/|2026-11-26: rss 50 items, newest 2026-11-26 06:01Z
+fr-franceinfo|FR|||fr|franceinfo|https://www.franceinfo.fr/titres.rss|2026-11-26: rss 28 items, newest 2026-11-26 07:45Z
+fr-france3-ara|FR|FR-ARA||fr|France 3 Auvergne-Rhône-Alpes|https://france3-regions.franceinfo.fr/auvergne-rhone-alpes/rss|2026-11-26: rss 30 items, newest 2026-11-25 19:19Z
+fr-france3-bfc|FR|FR-BFC||fr|France 3 Bourgogne-Franche-Comté|https://france3-regions.franceinfo.fr/bourgogne-franche-comte/rss|2026-11-26: rss 30 items, newest 2026-11-25 18:47Z
+fr-france3-bre|FR|FR-BRE||fr|France 3 Bretagne|https://france3-regions.franceinfo.fr/bretagne/rss|2026-11-26: rss 30 items, newest 2026-11-25 20:17Z
+fr-france3-cvl|FR|FR-CVL||fr|France 3 Centre-Val de Loire|https://france3-regions.franceinfo.fr/centre-val-de-loire/rss|2026-11-26: rss 30 items, newest 2026-11-25 19:03Z
+fr-france3-cor|FR|FR-20R||fr|France 3 Corse|https://france3-regions.franceinfo.fr/corse/rss|2026-11-26: rss 30 items, newest 2026-11-26 07:19Z
+fr-france3-ges|FR|FR-GES||fr|France 3 Grand Est|https://france3-regions.franceinfo.fr/grand-est/rss|2026-11-26: rss 30 items, newest 2026-11-26 07:39Z
+fr-france3-hdf|FR|FR-HDF||fr|France 3 Hauts-de-France|https://france3-regions.franceinfo.fr/hauts-de-france/rss|2026-11-26: rss 30 items, newest 2026-11-25 18:42Z
+fr-france3-nor|FR|FR-NOR||fr|France 3 Normandie|https://france3-regions.franceinfo.fr/normandie/rss|2026-11-26: rss 30 items, newest 2026-11-26 06:52Z
+fr-france3-naq|FR|FR-NAQ||fr|France 3 Nouvelle-Aquitaine|https://france3-regions.franceinfo.fr/nouvelle-aquitaine/rss|2026-11-26: rss 30 items, newest 2026-11-25 18:06Z
+fr-france3-occ|FR|FR-OCC||fr|France 3 Occitanie|https://france3-regions.franceinfo.fr/occitanie/rss|2026-11-26: rss 30 items, newest 2026-11-26 05:55Z
+fr-france3-idf|FR|FR-IDF||fr|France 3 Paris Île-de-France|https://france3-regions.franceinfo.fr/paris-ile-de-france/rss|2026-11-26: rss 30 items, newest 2026-11-26 06:04Z
+fr-france3-pdl|FR|FR-PDL||fr|France 3 Pays de la Loire|https://france3-regions.franceinfo.fr/pays-de-la-loire/rss|2026-11-26: rss 30 items, newest 2026-11-26 07:29Z
+fr-france3-pac|FR|FR-PAC||fr|France 3 Provence-Alpes-Côte d’Azur|https://france3-regions.franceinfo.fr/provence-alpes-cote-d-azur/rss|2026-11-26: rss 30 items, newest 2026-11-25 18:49Z
+ch-srf|CH|||de|SRF News|https://www.srf.ch/news/bnf/rss/1646|2026-11-26: rss 82 items, newest 2026-11-26 07:37Z
+ch-rts|CH|||fr|RTS Info|https://www.rts.ch/info/toute-info/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-26 07:39Z
+ch-rsi|CH|||it|RSI|https://www.rsi.ch/info/?f=rss|2026-11-26: rss 100 items, newest 2026-11-26 07:41Z
+ch-rts-geneve|CH|CH-GE||fr|RTS Genève|https://www.rts.ch/info/regions/geneve/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-25 12:09Z
+ch-rts-vaud|CH|CH-VD||fr|RTS Vaud|https://www.rts.ch/info/regions/vaud/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-25 15:51Z
+ch-rts-valais|CH|CH-VS||fr|RTS Valais|https://www.rts.ch/info/regions/valais/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-25 18:23Z
+ch-rts-fribourg|CH|CH-FR||fr|RTS Fribourg|https://www.rts.ch/info/regions/fribourg/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-25 10:34Z
+ch-rts-neuchatel|CH|CH-NE||fr|RTS Neuchâtel|https://www.rts.ch/info/regions/neuchatel/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-24 13:17Z
+ch-rts-jura|CH|CH-JU||fr|RTS Jura|https://www.rts.ch/info/regions/jura/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-25 13:28Z
+ch-rts-berne|CH|CH-BE||fr|RTS Berne|https://www.rts.ch/info/regions/berne/?format=rss/news|2026-11-26: rss 25 items, newest 2026-11-25 13:30Z
+lu-rtl|LU|||lb|RTL.lu|https://www.rtl.lu/rss/feed/headlines.rss|2026-11-26: rss 24 items, newest 2026-11-26 07:30Z
+lu-rtl-today|LU|||en|RTL Today|https://today.rtl.lu/rss/feed/headlines.rss|2026-11-26: rss 20 items, newest 2026-11-26 07:24Z
+dk-dr|DK|||da|DR Nyheder|https://www.dr.dk/nyheder/service/feeds/senestenyt|2026-11-26: rss 20 items, newest 2026-11-26 07:36Z
+dk-dr-kbh|DK|DK-84||da|DR København|https://www.dr.dk/nyheder/service/feeds/regionale/kbh|2026-11-26: rss 20 items, newest 2026-11-26 07:00Z
+dk-dr-bornholm|DK|DK-84||da|DR Bornholm|https://www.dr.dk/nyheder/service/feeds/regionale/bornholm|2026-11-26: rss 20 items, newest 2026-11-25 12:25Z
+dk-dr-sjaelland|DK|DK-85||da|DR Sjælland|https://www.dr.dk/nyheder/service/feeds/regionale/sjaelland|2026-11-26: rss 20 items, newest 2026-11-25 19:12Z
+dk-dr-fyn|DK|DK-83||da|DR Fyn|https://www.dr.dk/nyheder/service/feeds/regionale/fyn|2026-11-26: rss 20 items, newest 2026-11-25 16:55Z
+dk-dr-syd|DK|DK-83||da|DR Syd|https://www.dr.dk/nyheder/service/feeds/regionale/syd|2026-11-26: rss 20 items, newest 2026-11-25 12:45Z
+dk-dr-trekanten|DK|DK-83||da|DR Trekanten|https://www.dr.dk/nyheder/service/feeds/regionale/trekanten|2026-11-26: rss 20 items, newest 2026-11-24 20:30Z
+dk-dr-oestjylland|DK|DK-82||da|DR Østjylland|https://www.dr.dk/nyheder/service/feeds/regionale/oestjylland|2026-11-26: rss 20 items, newest 2026-11-26 06:00Z
+dk-dr-vest|DK|DK-82||da|DR Midt & Vest|https://www.dr.dk/nyheder/service/feeds/regionale/vest|2026-11-26: rss 20 items, newest 2026-11-25 11:35Z
+dk-dr-nord|DK|DK-81||da|DR Nord|https://www.dr.dk/nyheder/service/feeds/regionale/nord|2026-11-26: rss 20 items, newest 2026-11-24 19:50Z
+se-svt|SE|||sv|SVT Nyheter|https://www.svt.se/rss.xml|2026-11-26: rss 100 items, newest 2026-11-26 07:24Z
+se-svt-blekinge|SE|SE-K||sv|SVT Blekinge|https://www.svt.se/nyheter/lokalt/blekinge/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-dalarna|SE|SE-W||sv|SVT Dalarna|https://www.svt.se/nyheter/lokalt/dalarna/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 05:32Z
+se-svt-gavleborg|SE|SE-X||sv|SVT Gävleborg|https://www.svt.se/nyheter/lokalt/gavleborg/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 05:53Z
+se-svt-halland|SE|SE-N||sv|SVT Halland|https://www.svt.se/nyheter/lokalt/halland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-jamtland|SE|SE-Z||sv|SVT Jämtland|https://www.svt.se/nyheter/lokalt/jamtland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-jonkoping|SE|SE-F||sv|SVT Jönköping|https://www.svt.se/nyheter/lokalt/jonkoping/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 07:09Z
+se-svt-smaland|SE|SE-G,SE-H||sv|SVT Småland|https://www.svt.se/nyheter/lokalt/smaland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-norrbotten|SE|SE-BD||sv|SVT Norrbotten|https://www.svt.se/nyheter/lokalt/norrbotten/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-skane|SE|SE-M||sv|SVT Skåne|https://www.svt.se/nyheter/lokalt/skane/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-stockholm|SE|SE-AB||sv|SVT Stockholm|https://www.svt.se/nyheter/lokalt/stockholm/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 06:28Z
+se-svt-sodertalje|SE|SE-AB||sv|SVT Södertälje|https://www.svt.se/nyheter/lokalt/sodertalje/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-sormland|SE|SE-D||sv|SVT Sörmland|https://www.svt.se/nyheter/lokalt/sormland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-uppsala|SE|SE-C||sv|SVT Uppsala|https://www.svt.se/nyheter/lokalt/uppsala/rss.xml|2026-11-26: rss 20 items, newest 2026-11-25 18:45Z
+se-svt-varmland|SE|SE-S||sv|SVT Värmland|https://www.svt.se/nyheter/lokalt/varmland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-vasterbotten|SE|SE-AC||sv|SVT Västerbotten|https://www.svt.se/nyheter/lokalt/vasterbotten/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 06:33Z
+se-svt-vasternorrland|SE|SE-Y||sv|SVT Västernorrland|https://www.svt.se/nyheter/lokalt/vasternorrland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-vastmanland|SE|SE-U||sv|SVT Västmanland|https://www.svt.se/nyheter/lokalt/vastmanland/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-vast|SE|SE-O||sv|SVT Väst|https://www.svt.se/nyheter/lokalt/vast/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-orebro|SE|SE-T||sv|SVT Örebro|https://www.svt.se/nyheter/lokalt/orebro/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+se-svt-ost|SE|SE-E||sv|SVT Öst|https://www.svt.se/nyheter/lokalt/ost/rss.xml|2026-11-26: rss 20 items, newest 2026-11-26 04:30Z
+no-nrk|NO|||no|NRK|https://www.nrk.no/toppsaker.rss|2026-11-26: rss 100 items, newest 2026-11-26 07:01Z
+no-nrk-agder|NO|NO-42||no|NRK Agder|https://www.nrk.no/agder.rss|2026-11-26: rss 20 items, newest 2026-11-26 06:58Z
+no-nrk-akershus|NO|NO-32||no|NRK Akershus|https://www.nrk.no/akershus.rss|2026-11-26: rss 20 items, newest 2026-11-25 15:06Z
+no-nrk-buskerud|NO|NO-33||no|NRK Buskerud|https://www.nrk.no/buskerud.rss|2026-11-26: rss 20 items, newest 2026-11-25 16:24Z
+no-nrk-finnmark|NO|NO-56||no|NRK Finnmark|https://www.nrk.no/finnmark.rss|2026-11-26: rss 20 items, newest 2026-11-26 06:05Z
+no-nrk-innlandet|NO|NO-34||no|NRK Innlandet|https://www.nrk.no/innlandet.rss|2026-11-26: rss 20 items, newest 2026-11-25 18:32Z
+no-nrk-more-og-romsdal|NO|NO-15||no|NRK Møre og Romsdal|https://www.nrk.no/more-og-romsdal.rss|2026-11-26: rss 20 items, newest 2026-11-25 15:20Z
+no-nrk-nordland|NO|NO-18||no|NRK Nordland|https://www.nrk.no/nordland.rss|2026-11-26: rss 20 items, newest 2026-11-26 05:36Z
+no-nrk-oslo|NO|NO-03||no|NRK Oslo|https://www.nrk.no/oslo.rss|2026-11-26: rss 20 items, newest 2026-11-25 19:43Z
+no-nrk-ostfold|NO|NO-31||no|NRK Østfold|https://www.nrk.no/ostfold.rss|2026-11-26: rss 20 items, newest 2026-11-24 22:21Z
+no-nrk-rogaland|NO|NO-11||no|NRK Rogaland|https://www.nrk.no/rogaland.rss|2026-11-26: rss 20 items, newest 2026-11-26 05:40Z
+no-nrk-telemark|NO|NO-40||no|NRK Telemark|https://www.nrk.no/telemark.rss|2026-11-26: rss 20 items, newest 2026-11-21 17:23Z
+no-nrk-troms|NO|NO-55||no|NRK Troms|https://www.nrk.no/troms.rss|2026-11-26: rss 20 items, newest 2026-11-26 05:36Z
+no-nrk-trondelag|NO|NO-50||no|NRK Trøndelag|https://www.nrk.no/trondelag.rss|2026-11-26: rss 20 items, newest 2026-11-26 06:21Z
+no-nrk-vestfold|NO|NO-39||no|NRK Vestfold|https://www.nrk.no/vestfold.rss|2026-11-26: rss 20 items, newest 2026-11-25 12:30Z
+no-nrk-vestland|NO|NO-46||no|NRK Vestland|https://www.nrk.no/vestland.rss|2026-11-26: rss 20 items, newest 2026-11-26 06:58Z
+it-ansa|IT|||it|ANSA|https://www.ansa.it/sito/ansait_rss.xml|2026-11-26: rss 28 items, newest 2026-11-26 07:21Z
+it-rainews|IT|||it|RaiNews|https://www.rainews.it/rss/tutti|2026-11-26: rss 40 items, newest 2026-11-26 07:30Z
+it-ansa-abruzzo|IT|IT-65||it|ANSA Abruzzo|https://www.ansa.it/abruzzo/notizie/abruzzo_rss.xml|2026-11-26: rss 62 items, newest 2026-11-25 20:31Z
+it-ansa-basilicata|IT|IT-77||it|ANSA Basilicata|https://www.ansa.it/basilicata/notizie/basilicata_rss.xml|2026-11-26: rss 70 items, newest 2026-11-26 07:39Z
+it-ansa-calabria|IT|IT-78||it|ANSA Calabria|https://www.ansa.it/calabria/notizie/calabria_rss.xml|2026-11-26: rss 29 items, newest 2026-11-25 19:31Z
+it-ansa-campania|IT|IT-72||it|ANSA Campania|https://www.ansa.it/campania/notizie/campania_rss.xml|2026-11-26: rss 118 items, newest 2026-11-25 18:43Z
+it-ansa-emiliaromagna|IT|IT-45||it|ANSA Emilia-Romagna|https://www.ansa.it/emiliaromagna/notizie/emiliaromagna_rss.xml|2026-11-26: rss 36 items, newest 2026-11-25 23:00Z
+it-ansa-friuliveneziagiulia|IT|IT-36||it|ANSA Friuli Venezia Giulia|https://www.ansa.it/friuliveneziagiulia/notizie/friuliveneziagiulia_rss.xml|2026-11-26: rss 68 items, newest 2026-11-25 18:33Z
+it-ansa-lazio|IT|IT-62||it|ANSA Lazio|https://www.ansa.it/lazio/notizie/lazio_rss.xml|2026-11-26: rss 47 items, newest 2026-11-25 21:57Z
+it-ansa-liguria|IT|IT-42||it|ANSA Liguria|https://www.ansa.it/liguria/notizie/liguria_rss.xml|2026-11-26: rss 66 items, newest 2026-11-25 22:44Z
+it-ansa-lombardia|IT|IT-25||it|ANSA Lombardia|https://www.ansa.it/lombardia/notizie/lombardia_rss.xml|2026-11-26: rss 66 items, newest 2026-11-26 07:10Z
+it-ansa-marche|IT|IT-57||it|ANSA Marche|https://www.ansa.it/marche/notizie/marche_rss.xml|2026-11-26: rss 82 items, newest 2026-11-25 22:39Z
+it-ansa-molise|IT|IT-67||it|ANSA Molise|https://www.ansa.it/molise/notizie/molise_rss.xml|2026-11-26: rss 25 items, newest 2026-11-25 17:22Z
+it-ansa-piemonte|IT|IT-21||it|ANSA Piemonte|https://www.ansa.it/piemonte/notizie/piemonte_rss.xml|2026-11-26: rss 77 items, newest 2026-11-25 17:56Z
+it-ansa-puglia|IT|IT-75||it|ANSA Puglia|https://www.ansa.it/puglia/notizie/puglia_rss.xml|2026-11-26: rss 41 items, newest 2026-11-25 18:42Z
+it-ansa-sardegna|IT|IT-88||it|ANSA Sardegna|https://www.ansa.it/sardegna/notizie/sardegna_rss.xml|2026-11-26: rss 33 items, newest 2026-11-25 18:11Z
+it-ansa-sicilia|IT|IT-82||it|ANSA Sicilia|https://www.ansa.it/sicilia/notizie/sicilia_rss.xml|2026-11-26: rss 40 items, newest 2026-11-25 17:54Z
+it-ansa-toscana|IT|IT-52||it|ANSA Toscana|https://www.ansa.it/toscana/notizie/toscana_rss.xml|2026-11-26: rss 30 items, newest 2026-11-25 20:10Z
+it-ansa-trentino|IT|IT-32||it|ANSA Trentino|https://www.ansa.it/trentino/notizie/trentino_rss.xml|2026-11-26: rss 23 items, newest 2026-11-25 17:48Z
+it-ansa-umbria|IT|IT-55||it|ANSA Umbria|https://www.ansa.it/umbria/notizie/umbria_rss.xml|2026-11-26: rss 39 items, newest 2026-11-25 20:13Z
+it-ansa-valledaosta|IT|IT-23||it|ANSA Valle d’Aosta|https://www.ansa.it/valledaosta/notizie/valledaosta_rss.xml|2026-11-26: rss 44 items, newest 2026-11-25 16:43Z
+it-ansa-veneto|IT|IT-34||it|ANSA Veneto|https://www.ansa.it/veneto/notizie/veneto_rss.xml|2026-11-26: rss 30 items, newest 2026-11-25 17:47Z
+ca-cbc|CA|||en|CBC News|https://www.cbc.ca/webfeed/rss/rss-topstories|2026-11-26: rss 20 items, newest 2026-11-26 03:48Z
+ca-cbc-british-columbia|CA|CA-BC||en|CBC British Columbia|https://www.cbc.ca/webfeed/rss/rss-canada-britishcolumbia|2026-11-26: rss 20 items, newest 2026-11-26 02:38Z
+ca-cbc-kamloops|CA|CA-BC||en|CBC Kamloops|https://www.cbc.ca/webfeed/rss/rss-canada-kamloops|2026-11-26: rss 19 items, newest 2026-11-23 11:00Z
+ca-cbc-calgary|CA|CA-AB||en|CBC Calgary|https://www.cbc.ca/webfeed/rss/rss-canada-calgary|2026-11-26: rss 19 items, newest 2026-11-26 00:56Z
+ca-cbc-edmonton|CA|CA-AB||en|CBC Edmonton|https://www.cbc.ca/webfeed/rss/rss-canada-edmonton|2026-11-26: rss 19 items, newest 2026-11-26 00:56Z
+ca-cbc-saskatchewan|CA|CA-SK||en|CBC Saskatchewan|https://www.cbc.ca/webfeed/rss/rss-canada-saskatchewan|2026-11-26: rss 20 items, newest 2026-11-25 22:21Z
+ca-cbc-saskatoon|CA|CA-SK||en|CBC Saskatoon|https://www.cbc.ca/webfeed/rss/rss-canada-saskatoon|2026-11-26: rss 20 items, newest 2026-11-25 22:21Z
+ca-cbc-manitoba|CA|CA-MB||en|CBC Manitoba|https://www.cbc.ca/webfeed/rss/rss-canada-manitoba|2026-11-26: rss 20 items, newest 2026-11-26 03:08Z
+ca-cbc-toronto|CA|CA-ON||en|CBC Toronto|https://www.cbc.ca/webfeed/rss/rss-canada-toronto|2026-11-26: rss 20 items, newest 2026-11-26 00:15Z
+ca-cbc-ottawa|CA|CA-ON||en|CBC Ottawa|https://www.cbc.ca/webfeed/rss/rss-canada-ottawa|2026-11-26: rss 19 items, newest 2026-11-25 23:19Z
+ca-cbc-hamilton|CA|CA-ON||en|CBC Hamilton|https://www.cbc.ca/webfeed/rss/rss-canada-hamiltonnews|2026-11-26: rss 20 items, newest 2026-11-25 22:06Z
+ca-cbc-kitchener-waterloo|CA|CA-ON||en|CBC Kitchener-Waterloo|https://www.cbc.ca/webfeed/rss/rss-canada-kitchenerwaterloo|2026-11-26: rss 20 items, newest 2026-11-25 23:21Z
+ca-cbc-london|CA|CA-ON||en|CBC London|https://www.cbc.ca/webfeed/rss/rss-canada-london|2026-11-26: rss 20 items, newest 2026-11-26 00:43Z
+ca-cbc-windsor|CA|CA-ON||en|CBC Windsor|https://www.cbc.ca/webfeed/rss/rss-canada-windsor|2026-11-26: rss 20 items, newest 2026-11-25 23:07Z
+ca-cbc-sudbury|CA|CA-ON||en|CBC Sudbury|https://www.cbc.ca/webfeed/rss/rss-canada-sudbury|2026-11-26: rss 20 items, newest 2026-11-25 20:58Z
+ca-cbc-thunder-bay|CA|CA-ON||en|CBC Thunder Bay|https://www.cbc.ca/webfeed/rss/rss-canada-thunderbay|2026-11-26: rss 20 items, newest 2026-11-25 20:58Z
+ca-cbc-montreal|CA|CA-QC||en|CBC Montreal|https://www.cbc.ca/webfeed/rss/rss-canada-montreal|2026-11-26: rss 20 items, newest 2026-11-26 01:49Z
+ca-cbc-new-brunswick|CA|CA-NB||en|CBC New Brunswick|https://www.cbc.ca/webfeed/rss/rss-canada-newbrunswick|2026-11-26: rss 20 items, newest 2026-11-25 23:02Z
+ca-cbc-pei|CA|CA-PE||en|CBC Prince Edward Island|https://www.cbc.ca/webfeed/rss/rss-canada-pei|2026-11-26: rss 20 items, newest 2026-11-26 00:20Z
+ca-cbc-nova-scotia|CA|CA-NS||en|CBC Nova Scotia|https://www.cbc.ca/webfeed/rss/rss-canada-novascotia|2026-11-26: rss 20 items, newest 2026-11-26 01:56Z
+ca-cbc-newfoundland|CA|CA-NL||en|CBC Newfoundland and Labrador|https://www.cbc.ca/webfeed/rss/rss-canada-newfoundland|2026-11-26: rss 20 items, newest 2026-11-26 04:17Z
+ca-cbc-north|CA|CA-YT,CA-NT,CA-NU||en|CBC North|https://www.cbc.ca/webfeed/rss/rss-canada-north|2026-11-26: rss 20 items, newest 2026-11-26 01:24Z
+au-abc|AU|||en|ABC News|https://www.abc.net.au/news/feed/51120/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 07:37Z
+au-abc-nsw|AU|AU-NSW||en|ABC New South Wales|https://www.abc.net.au/news/feed/52498/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 05:42Z
+au-abc-vic|AU|AU-VIC||en|ABC Victoria|https://www.abc.net.au/news/feed/54242/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 06:04Z
+au-abc-qld|AU|AU-QLD||en|ABC Queensland|https://www.abc.net.au/news/feed/50990/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 06:41Z
+au-abc-sa|AU|AU-SA||en|ABC South Australia|https://www.abc.net.au/news/feed/54702/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 05:43Z
+au-abc-wa|AU|AU-WA||en|ABC Western Australia|https://www.abc.net.au/news/feed/52764/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 07:37Z
+au-abc-tas|AU|AU-TAS||en|ABC Tasmania|https://www.abc.net.au/news/feed/50042/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 04:48Z
+au-abc-nt|AU|AU-NT||en|ABC Northern Territory|https://www.abc.net.au/news/feed/53408/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 06:17Z
+au-abc-act|AU|AU-ACT||en|ABC Canberra|https://www.abc.net.au/news/feed/48320/rss.xml|2026-11-26: rss 25 items, newest 2026-11-26 06:08Z
+es-rtve|ES|||es|RTVE Noticias|https://www.rtve.es/api/tematicas/825/noticias.rss|2026-11-26: rss 20 items, newest 2026-11-26 08:14Z
+es-el-pais|ES|||es|El País|https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada|2026-11-26: rss 150 items, newest 2026-11-26 07:36Z
+pt-rtp|PT|||pt|RTP Notícias|https://www.rtp.pt/noticias/rss|2026-11-26: rss 50 items, newest 2026-11-26 07:47Z
+pl-tvp-info|PL|||pl|TVP Info|https://www.tvp.info/tvp.info/rss+xml.php|2026-11-26: rss 30 items, newest 2026-11-26 07:37Z
+cz-ct24|CZ|||cs|ČT24|https://ct24.ceskatelevize.cz/rss/tema/vyber-redakce-84313|2026-11-26: rss 30 items, newest 2026-11-26 04:29Z
+us-npr|US|||en|NPR News|https://feeds.npr.org/1001/rss.xml|2026-11-26: rss 10 items, newest 2026-11-26 06:53Z

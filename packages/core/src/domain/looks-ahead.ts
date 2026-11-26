@@ -1063,9 +1063,10 @@ export type AheadReportMatter = z.infer<typeof AheadReportMatter>;
 /* The check's report ------------------------------------------------------------------------------------------------ */
 
 /**
- * Where a finding comes from: a web page the check read (or an attempted-and-blocked search listing), a mail it read,
- * a Drive/OneDrive file it read, a Paperless/Notion document it read, the person's own calendar (for conflicts), or in
- * a follow-up the thing kept an eye on itself. Whombat names each itself, so a finding's links and names are never the
+ * Where a finding comes from: a web page the check read (or an attempted-and-blocked search listing, or a headline
+ * from the person's news sites), a mail it read, a Drive/OneDrive file it read, a Paperless/Notion document it read, the
+ * person's own calendar (for conflicts), the weather forecast it was given or read (Whombat weather-news.md), or in a
+ * follow-up the thing kept an eye on itself. Whombat names each itself, so a finding's links and names are never the
  * model's words.
  */
 export const AheadSource = z.union([
@@ -1075,7 +1076,7 @@ export const AheadSource = z.union([
       .url()
       .max(2048)
       .describe(
-        'A web page this check read with read_web_page (or tried to read when the site blocked fetching).',
+        'A web page this check read with read_web_page (or tried to read when the site blocked fetching), or a headline’s link from news_headlines.',
       ),
   }),
   z.strictObject({
@@ -1096,6 +1097,11 @@ export const AheadSource = z.union([
     matter: z
       .literal(true)
       .describe('The thing kept an eye on that this follow-up is about, as Whombat gave it.'),
+  }),
+  z.strictObject({
+    weather: z
+      .literal(true)
+      .describe('The weather forecast given in this check, or one you read with weather_forecast in it.'),
   }),
 ]);
 export type AheadSource = z.infer<typeof AheadSource>;
@@ -1365,9 +1371,10 @@ export type AheadWatchInput = z.infer<typeof AheadWatchInput>;
 
 /**
  * Everything a Looks ahead check may be served (Whombat looks-ahead.md): read mail, Drive/OneDrive files, and
- * Paperless/Notion docs (all strictly read-only, closing the web once touched), search and read public web pages, and
- * report what it found; a look through new mail only picks (`ahead_triage`). Nothing that writes, sends, remembers, or
- * opens the general browser/commands/Vault.
+ * Paperless/Notion docs (all strictly read-only, closing the web once touched), search and read public web pages, the
+ * weather forecast and the headlines of the person's news sites (weather-news.md: a forecast for another place only
+ * while the web is open, by public words), and report what it found; a look through new mail only picks
+ * (`ahead_triage`). Nothing that writes, sends, remembers, or opens the general browser/commands/Vault.
  */
 export const AHEAD_TOOL_NAMES = [
   'mail_search',
@@ -1377,6 +1384,8 @@ export const AHEAD_TOOL_NAMES = [
   'ahead_read_docs',
   'search_web',
   'read_web_page',
+  'weather_forecast',
+  'news_headlines',
   'ahead_report',
   'ahead_triage',
 ] as const;
@@ -1465,6 +1474,35 @@ export const AheadMatterContext = z.object({
 });
 export type AheadMatterContext = z.infer<typeof AheadMatterContext>;
 
+/** An hour of a check's forecast (local time with its offset), in the forecast's units. */
+export const AheadForecastHour = z.object({
+  at: z.string().max(40),
+  temperature: z.number(),
+  text: z.string().max(60),
+  rain: z.number(),
+  windSpeed: z.number(),
+});
+export type AheadForecastHour = z.infer<typeof AheadForecastHour>;
+
+/**
+ * The forecast where the person's Whombat is for a plan's day (MET Norway; Whombat weather-news.md), when the day is
+ * within the forecast's week: the day's highest, lowest, rain and strongest wind, and the hours of the plan (at most 12).
+ */
+export const AheadForecast = z.object({
+  place: z.string().max(80),
+  date: z.string().regex(DAY),
+  units: z.object({ temperature: z.enum(['°C', '°F']), wind: z.enum(['m/s', 'mph']) }),
+  text: z.string().max(60),
+  high: z.number(),
+  low: z.number(),
+  rain: z.number(),
+  rainChance: z.number().nullable(),
+  windMax: z.number().nullable(),
+  hours: z.array(AheadForecastHour).max(12),
+  credit: z.string().max(60),
+});
+export type AheadForecast = z.infer<typeof AheadForecast>;
+
 /**
  * `DispatchContext.ahead`: the event or email a Looks ahead turn checks (trigger `ahead`), along with same-day/upcoming
  * trusted schedule, prior check notes for this event, user-owned standing rules, and recent dismissals; the new mail of
@@ -1524,6 +1562,8 @@ export const AheadDispatchContext = z.object({
   matters: z.array(AheadMatterContext).max(AHEAD_MATTERS_MAX).optional(),
   /** A mail check or a follow-up: the thing kept an eye on it is about. */
   matter: AheadMatterContext.optional(),
+  /** A calendar check: the forecast where the person's Whombat is, for the plan's day, when it is within the week. */
+  weather: AheadForecast.optional(),
 });
 export type AheadDispatchContext = z.infer<typeof AheadDispatchContext>;
 

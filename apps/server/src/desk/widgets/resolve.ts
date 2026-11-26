@@ -10,7 +10,8 @@
  *   hosts service kept per range; a **server's part** (its storage, its guests, its memory over a week…) from what its
  *   own screen reads, once per server and range for all its parts; a **Home widget** from Home, a minute; a **connection's or device's** through
  *   `ThingWidgets`, in one call for all that are due, each kept its own `refreshS`; one of the **person's own
- *   accounts** (`account:` refs) through `AccountWidgets`, what it read kept and drawn for now at each widget's pace.
+ *   accounts** (`account:` refs) through `AccountWidgets`, what it read kept and drawn for now at each widget's pace;
+ *   the **weather** and the **news** (weather-news.md) once per burrow, from what their own services keep.
  * - **The lock** (DK-138): `trimView` leaves out what *A summary* hides.
  */
 import {
@@ -25,7 +26,9 @@ import {
   DeskWidgetView as DeskWidgetViewSchema,
 } from '@whombat/core';
 import { hostsFor } from '../../hosts/service';
+import { type NewsRead, newsDeskView } from '../../news/view';
 import type { Services } from '../../services';
+import { type WeatherRead, weatherDeskView } from '../../weather/view';
 import { CALM_SOURCE_WAIT_MS } from '../calm';
 import { type DeskFleet, deskFleet } from '../glance';
 import { readServerParts, type ServerParts } from '../server-page';
@@ -36,6 +39,7 @@ import { comingView, doneView, workView } from './own';
 import { SERVER_PARTS_KEEP_MS, serverPartOf, serverPartRange, serverPartView } from './server-parts';
 import { readServerLine, SERVER_HISTORY_KEEP_MS, type ServerLine, serverRange, serverView } from './servers';
 import type { Resolved, ThingWidgets, WidgetCtx } from './types';
+import { NEWS_KEEP_MS, readNews, readWeather, WEATHER_KEEP_MS } from './weather-news';
 
 /** What the glance read for the screen's person, which Whombat's own widgets and the servers' figures read. */
 export interface GlanceFacts {
@@ -204,6 +208,8 @@ export class WidgetResolver {
       parts?: (serverId: string, range: DeskServerRange, now: Date) => Promise<ServerParts>;
       homeWidgets?: (ctx: WidgetCtx) => Promise<ScreenHomeWidget[]>;
       accounts?: Partial<AccountReads>;
+      weather?: (burrowId: string) => Promise<WeatherRead>;
+      news?: (burrowId: string) => Promise<NewsRead>;
     } = {},
   ) {
     this.#kept = new Kept(() => services.clock().getTime());
@@ -248,6 +254,8 @@ export class WidgetResolver {
     const burrowId = ctx.viewer.burrowId;
     const fleetKey = `fleet\n${burrowId}`;
     const homeKey = `home\n${viewer}`;
+    const weatherKey = `weather\n${burrowId}`;
+    const newsKey = `news\n${burrowId}`;
     const things: DeskWidgetSpec[] = [];
     for (const spec of specs) {
       switch (spec.type) {
@@ -283,6 +291,13 @@ export class WidgetResolver {
         case 'widget':
           keys.push(homeKey);
           break;
+        // The weather and the news: one read per burrow for every such widget.
+        case 'weather':
+          keys.push(weatherKey);
+          break;
+        case 'news':
+          keys.push(newsKey);
+          break;
         case 'figures':
         case 'panel':
           if (isAccountRef(spec.ref)) {
@@ -307,6 +322,16 @@ export class WidgetResolver {
           this.reads.homeWidgets ??
           ((c: WidgetCtx) => screenHomeWidgets(this.services.db, c.viewer.principal, c.now));
         return new Map([[homeKey, { value: await read(ctx), keepMs: HOME_WIDGET_REFRESH_S * 1000 }]]);
+      });
+    if (keys.includes(weatherKey) && this.#kept.due(weatherKey))
+      this.#kept.start([weatherKey], async () => {
+        const read = this.reads.weather ?? ((b: string) => readWeather(this.services, b));
+        return new Map([[weatherKey, { value: await read(burrowId), keepMs: WEATHER_KEEP_MS }]]);
+      });
+    if (keys.includes(newsKey) && this.#kept.due(newsKey))
+      this.#kept.start([newsKey], async () => {
+        const read = this.reads.news ?? ((b: string) => readNews(this.services, b));
+        return new Map([[newsKey, { value: await read(burrowId), keepMs: NEWS_KEEP_MS }]]);
       });
     // Every thing's widget that's due, in one call: each thing's page is read once for all of them.
     const due = new Map<string, DeskWidgetSpec>();
@@ -390,6 +415,16 @@ export class WidgetResolver {
           unreachable: !card && fleet.failed,
         });
       }
+      case 'weather': {
+        const kept = this.#kept.peek<WeatherRead>(`weather\n${ctx.viewer.burrowId}`);
+        if (!kept.has) return null;
+        return weatherDeskView(spec.id, kept.value ?? null, ctx.now, ctx.timeZone);
+      }
+      case 'news': {
+        const kept = this.#kept.peek<NewsRead>(`news\n${ctx.viewer.burrowId}`);
+        if (!kept.has) return null;
+        return newsDeskView(spec.id, kept.value ?? null, ctx.now, ctx.timeZone);
+      }
       case 'widget': {
         const home = this.#kept.peek<ScreenHomeWidget[]>(`home\n${viewer}`);
         if (!home.has) return home.failed ? failedView(spec, 'Widget', RESOLVE_WORDS.failed) : null;
@@ -456,6 +491,8 @@ export function trimView(
       return { kind: 'photo', ...base, items: [] };
     case 'board':
       return { kind: 'board', ...base, items: [] };
+    case 'weather':
+      return { kind: 'weather', ...base, unit: v.unit, hours: [], days: [], credit: v.credit };
   }
 }
 

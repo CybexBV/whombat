@@ -24,7 +24,7 @@ import { filesCacheOf, type TurnDeps } from './deps';
 import { placeFiles } from './files';
 import { buildTurnInput, reviewChanges } from './input';
 import { TurnModel } from './model';
-import { openSandbox } from './sandbox';
+import { openSandbox, runsInPod } from './sandbox';
 import type { TurnScope } from './scope';
 import { planSession } from './session';
 import { shapeOf } from './shape';
@@ -72,7 +72,7 @@ export async function prepareTurn(
   const { provider, viaGateway } = start;
   const step = setupSteps(turn);
   const shape = shapeOf(ctx, deps);
-  const built = await buildTurnInput(shape.ctx, deps, step);
+  const built = await buildTurnInput(shape.ctx, deps, step, { pod: runsInPod(deps, provider, ctx) });
   resources.prepared = built.cwd;
   step('prompt');
   planSession(turn, { turnCtx: shape.ctx, provider, built });

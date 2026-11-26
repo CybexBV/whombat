@@ -27,12 +27,17 @@ import {
   tilesThatFit,
   tileValueFits,
   viewTone,
+  WEATHER_DAY_H,
+  weatherCredit,
+  weatherForm,
+  weatherHourPicks,
 } from './forms';
 import {
   Bar,
   cx,
   Face,
   Header,
+  type IconName,
   IconTile,
   keyed,
   Line,
@@ -59,12 +64,14 @@ import type {
   DeskTextView,
   DeskViewFigure,
   DeskViewRow,
+  DeskWeatherView,
   DeskWidget,
   DeskWidgetView,
   ScreenCalm,
 } from './types';
+import { WeatherIcon } from './WeatherIcon';
 import s from './widgets.module.css';
-import { clockText, dateText, fillWords, SCREEN_WORDS } from './words';
+import { clockText, dateText, fillWords, SCREEN_WORDS, weekdayText } from './words';
 
 const W = SCREEN_WORDS;
 
@@ -1112,15 +1119,257 @@ function TextBody({ v }: { v: DeskTextView }) {
   );
 }
 
+/* The weather and the news ------------------------------------------------------------------------------------------ */
+
+const degrees = (t: number) => `${t}°`;
+
+/** The next hours as columns: “Now”, then each hour's time, its sign and its temperature (and its rain, with `rain`). */
+function WeatherHours({ v, inner, rain }: { v: DeskWeatherView; inner: number; rain?: boolean }) {
+  const { timeZone } = useEnv();
+  const picks = weatherHourPicks(v.hours.length, inner);
+  return (
+    <div className={s.wxHours} style={{ gridTemplateColumns: `repeat(${picks.length}, minmax(0, 1fr))` }}>
+      {picks.map((i, n) => {
+        const hour = v.hours[i];
+        if (!hour) return null;
+        const wet = rain && hour.rainMm !== undefined && hour.rainMm >= 0.1;
+        return (
+          <div key={hour.at} className={s.wxHour}>
+            <span className={s.wxAt}>
+              {n === 0 ? W.weather.now : clockText(Date.parse(hour.at), timeZone)}
+            </span>
+            <WeatherIcon symbol={hour.symbol} size={28} />
+            <b>{degrees(hour.temp)}</b>
+            {rain && (
+              <span className={s.wxWet}>
+                {wet ? fillWords(W.weather.rain, { mm: hour.rainMm ?? 0 }) : ''}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The days ahead as rows: the day, its sign, its rain, its lowest and highest on the week's scale. */
+function WeatherDays({ v, max, inner }: { v: DeskWeatherView; max: number; inner: number }) {
+  // A narrow card leaves the rain out rather than squeeze it.
+  const rain = inner >= 420;
+  const days = v.days.slice(0, max);
+  const lo = Math.min(...v.days.map((d) => d.low));
+  const hi = Math.max(...v.days.map((d) => d.high));
+  const span = hi - lo || 1;
+  return (
+    <div className={s.wxDays}>
+      {days.map((d, i) => (
+        <div key={d.date} className={cx(s.wxDay, !rain && s.wxDayDry)}>
+          <span className={s.wxDayName}>{i === 0 ? W.weather.today : weekdayText(d.date)}</span>
+          <WeatherIcon symbol={d.symbol} size={26} />
+          {rain && (
+            <span className={s.wxWet}>
+              {d.rainMm !== undefined && d.rainMm >= 0.1 ? fillWords(W.weather.rain, { mm: d.rainMm }) : ''}
+            </span>
+          )}
+          <span className={s.wxLow}>{degrees(d.low)}</span>
+          <span className={s.wxRange} aria-hidden="true">
+            <i
+              className={s.wxSpan}
+              style={{ left: `${((d.low - lo) / span) * 100}%`, right: `${((hi - d.high) / span) * 100}%` }}
+            />
+          </span>
+          <b className={s.wxHigh}>{degrees(d.high)}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The weather in the form it has room for (Whombat weather-news.md): the sign and the temperature, then the highest and
+ * lowest and what the sky does, the next hours, the days; MET Norway's credit wherever there's room.
+ */
+function WeatherBody({
+  v,
+  w,
+  h,
+  pw,
+  ph,
+}: {
+  v: DeskWeatherView;
+  w: number;
+  h: number;
+  pw: number;
+  ph: number;
+}) {
+  const { timeZone } = useEnv();
+  const form = weatherForm(w, h);
+  const now = v.now;
+  const head = <Header mark={<IconTile name="weather" />} name={v.place ?? v.title} />;
+  if (!now)
+    return (
+      <>
+        {head}
+        <div className={s.empty}>{v.place ? W.weather.problem : W.weather.noPlace}</div>
+      </>
+    );
+  const temp = degrees(now.temp);
+  const today = v.today;
+  const short = today ? fillWords(W.weather.short, { high: today.high, low: today.low }) : undefined;
+  const highLow = today ? fillWords(W.weather.highLow, { high: today.high, low: today.low }) : undefined;
+  const inner = pw - 36;
+  const credit = weatherCredit(w, h) && <div className={s.wxCredit}>{v.credit}</div>;
+  if (form === 'tile')
+    return (
+      <div className={s.wxTile}>
+        <WeatherIcon symbol={now.symbol} size={38} />
+        <FitLine className={s.wxTemp} width={inner} max={36} text={temp} />
+        {short && <div className={s.d}>{short}</div>}
+      </div>
+    );
+  // The sign, the temperature with the highest and lowest beside it, and what the sky does under them.
+  const nowRow = (icon: number, size: number, more?: ReactNode) => (
+    <div className={s.wxNow}>
+      <WeatherIcon symbol={now.symbol} size={icon} />
+      <div className={s.wxNowWords}>
+        <div className={s.wxTempRow}>
+          <span className={s.wxTemp} style={{ fontSize: size }}>
+            {temp}
+          </span>
+          {short && !more && <span className={s.d}>{short}</span>}
+        </div>
+        <div className={cx(s.d, s.wxSays)}>{now.text}</div>
+        {more}
+      </div>
+    </div>
+  );
+  if (form === 'line') return <div className={s.wxFill}>{nowRow(62, 40)}</div>;
+  if (form === 'strip')
+    return (
+      <div className={s.wxSplit}>
+        <div className={s.wxLeft} style={{ width: Math.min(250, inner * 0.5) }}>
+          {nowRow(58, 38)}
+        </div>
+        <WeatherHours v={v} inner={inner - Math.min(250, inner * 0.5) - 16} />
+      </div>
+    );
+  const feels = [
+    now.feels !== undefined && now.feels !== now.temp ? fillWords(W.weather.feels, { t: now.feels }) : null,
+    now.wind,
+  ]
+    .filter((x): x is string => !!x)
+    .join(' · ');
+  const chance =
+    today?.rainChance !== undefined ? fillWords(W.weather.rainChance, { n: today.rainChance }) : null;
+  const sun = v.sun?.polar
+    ? v.sun.polar === 'day'
+      ? W.weather.polarDay
+      : W.weather.polarNight
+    : v.sun?.rise && v.sun.set
+      ? fillWords(W.weather.sun, {
+          rise: clockText(Date.parse(v.sun.rise), timeZone),
+          set: clockText(Date.parse(v.sun.set), timeZone),
+        })
+      : null;
+  if (form === 'block') {
+    // The header, the now row, the hours and the credit take this much; days fill what's left.
+    const days =
+      h >= 3 ? Math.min(v.days.length, Math.floor((ph - 30 - 34 - 76 - 92 - 34) / WEATHER_DAY_H)) : 0;
+    return (
+      <>
+        {head}
+        {nowRow(56, 42)}
+        <div className={s.wxPush} />
+        <WeatherHours v={v} inner={inner} />
+        {days > 0 && <WeatherDays v={v} max={days} inner={inner} />}
+        {credit}
+      </>
+    );
+  }
+  const details = (
+    <>
+      {highLow && <div className={s.d}>{highLow}</div>}
+      {feels && <div className={s.d}>{feels}</div>}
+      {chance && <div className={s.d}>{chance}</div>}
+      {form === 'large' && sun && <div className={s.d}>{sun}</div>}
+    </>
+  );
+  const left = Math.max(260, inner * 0.4);
+  const top = (
+    <div className={cx(s.wxSplit, form === 'large' && s.wxTop)}>
+      <div className={s.wxLeft} style={{ width: left }}>
+        {nowRow(w >= 6 ? 76 : 56, w >= 6 ? 58 : 50, details)}
+      </div>
+      <WeatherHours v={v} inner={inner - left - 16} rain />
+    </div>
+  );
+  if (form === 'wide')
+    return (
+      <>
+        {head}
+        {top}
+        {credit}
+      </>
+    );
+  // The padding, the header, the now band and the credit take this much; days fill what's left.
+  const days = Math.min(v.days.length, Math.floor((ph - 30 - 34 - 176 - 36) / WEATHER_DAY_H));
+  return (
+    <>
+      {head}
+      {top}
+      {days > 0 && <WeatherDays v={v} max={days} inner={inner} />}
+      {credit}
+    </>
+  );
+}
+
+/** The news (a list): each headline with its site and when, the first one alone when the widget is one cell high. */
+function NewsBody({ v, h, ph }: { v: DeskListView | undefined; h: number; ph: number }) {
+  const rows = v?.rows ?? [];
+  const meta = (r: DeskViewRow) => [r.detail, r.time].filter(Boolean).join(' · ');
+  const first = rows[0];
+  return (
+    <>
+      <Header mark={<IconTile name="news" />} name={v?.title ?? W.own.news.name} />
+      {!first ? (
+        <div className={s.empty}>{v?.empty ?? W.news.empty}</div>
+      ) : h === 1 ? (
+        <>
+          <div className={cx(s.mid, s.nwsOne)}>{first.title}</div>
+          <div className={s.d}>{meta(first)}</div>
+        </>
+      ) : (
+        <div className={s.rows}>
+          {keyed(rows.slice(0, rowsThatFit(ph, 44, 56)), (x) => x.title).map(([key, r]) => (
+            <div key={key} className={s.rw}>
+              <div className={s.two}>
+                <b>{r.title}</b>
+                <span>{meta(r)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* One widget ------------------------------------------------------------------------------------------------------ */
 
-const OWN_SIGN: Partial<Record<WidgetType, 'cal' | 'check'>> = { coming: 'cal', done: 'check' };
+const OWN_SIGN: Partial<Record<WidgetType, IconName>> = {
+  coming: 'cal',
+  done: 'check',
+  weather: 'weather',
+  news: 'news',
+};
 
 function OwnOrViewHeader({ type, v }: { type: WidgetType; v: DeskWidgetView }) {
   const { assistant } = useEnv();
   if (type === 'work') return <Header mark={<Face size={24} />} name={assistant} />;
   const sign = OWN_SIGN[type];
-  if (sign) return <Header mark={<IconTile name={sign} />} name={v.title} />;
+  // The weather is named by where it is for.
+  const name = v.kind === 'weather' ? (v.place ?? v.title) : v.title;
+  if (sign) return <Header mark={<IconTile name={sign} />} name={name} />;
   return <ViewHeader v={v} />;
 }
 
@@ -1146,7 +1395,10 @@ function Body(props: WidgetViewProps) {
     return (
       <>
         {head}
-        <div className={cx(s.mid, s.cBad)}>{v.problem.text}</div>
+        {/* One cell has room for the words only a little smaller. */}
+        <div className={cx(s.mid, s.cBad)} style={w === 1 ? { fontSize: 17 } : undefined}>
+          {v.problem.text}
+        </div>
         {v.problem.detail && <div className={cx(s.d, s.wrap)}>{v.problem.detail}</div>}
       </>
     );
@@ -1172,6 +1424,8 @@ function Body(props: WidgetViewProps) {
       return <ComingBody v={v?.kind === 'list' ? v : undefined} h={h} ph={ph} />;
     case 'done':
       return <DoneBody v={v?.kind === 'list' ? v : undefined} h={h} ph={ph} />;
+    case 'news':
+      return <NewsBody v={v?.kind === 'list' ? v : undefined} h={h} ph={ph} />;
   }
   if (!v) return null;
   switch (v.kind) {
@@ -1200,6 +1454,8 @@ function Body(props: WidgetViewProps) {
       );
     case 'board':
       return <BoardBody v={v} w={w} pw={pw} ph={ph} />;
+    case 'weather':
+      return <WeatherBody v={v} w={w} h={h} pw={pw} ph={ph} />;
   }
 }
 

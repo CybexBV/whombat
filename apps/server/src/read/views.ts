@@ -20,6 +20,7 @@ import { aiGatewayView } from '../gateway/store';
 import { notFound } from '../lib/errors';
 import { iso } from '../lib/time';
 import { localModelView } from '../local-model/store';
+import { placeOfBurrow } from '../place/store';
 import { webSearchView } from '../web-search/store';
 import {
   type ConversationRow,
@@ -53,6 +54,8 @@ export function toBurrow(row: BurrowRow, aiGateway: BurrowAiGateway | null = nul
     localModel: localModelView(row),
     // Web search with a Brave Search key (web-search.md): never the key.
     webSearch: webSearchView(row),
+    // Where the Whombat is (weather-news.md): the person's place, else the time zone's guess.
+    place: placeOfBurrow(row),
   };
 }
 

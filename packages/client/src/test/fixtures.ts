@@ -45,6 +45,8 @@ export const burrow = (o: Partial<Burrow> = {}): Burrow => ({
   timeZone: 'Europe/Amsterdam',
   localModel: null,
   webSearch: null,
+  // The time zone's guess (`placeFromTimeZone('Europe/Amsterdam')`).
+  place: { name: 'Amsterdam', lat: 52.37, lon: 4.9, country: 'NL', guessed: true },
   createdAt: '2026-01-05T09:00:00.000Z',
   ...o,
 });

@@ -221,7 +221,7 @@ import { DeskLookLog, DeskWelcome } from './welcome';
 import { isAccountRef } from './widgets/accounts';
 import { deskCatalog, homeWidgetsGroup, ownGroup, serverGroups } from './widgets/catalog';
 import { type ScreenHomeWidget, screenHomeWidgets } from './widgets/home';
-import { catalogFor, viewsFor } from './widgets/older-apps';
+import { catalogFor, screenDetailFor, viewsFor, withHiddenWidgets } from './widgets/older-apps';
 import { type GlanceFacts, pictureKey, screenViews, viewPictures, WidgetResolver } from './widgets/resolve';
 import { createThingWidgets } from './widgets/things';
 import type { Resolved, ScreenRecord, ScreensApi, ThingWidgets, WidgetCtx } from './widgets/types';
@@ -2304,7 +2304,10 @@ export class DeskService {
   async screenGet(principal: SessionPrincipal, input: { screen: string }): Promise<DeskScreenDetail> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
-    return screenDetail(this.#summary(record, record.kind === 'box' ? await this.#boxOn() : false), record);
+    return screenDetailFor(
+      screenDetail(this.#summary(record, record.kind === 'box' ? await this.#boxOn() : false), record),
+      principal.protocolMinor,
+    );
   }
 
   /**
@@ -2350,9 +2353,11 @@ export class DeskService {
   ): Promise<DeskScreenDetail> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
-    // An app that can't read a page's times sends its pages without them: they stay as they were.
+    // An app that can't read a page's times sends its pages without them, and one from before the weather and the news
+    // without those widgets: both stay as they were.
     const older = principal.protocolMinor !== undefined && principal.protocolMinor < SCREEN_TIMES_MINOR;
-    const layout = input.layout && older ? keepPageTimes(input.layout, record.layout) : input.layout;
+    const timed = input.layout && older ? keepPageTimes(input.layout, record.layout) : input.layout;
+    const layout = timed ? withHiddenWidgets(timed, record.layout, principal.protocolMinor) : undefined;
     if (layout) await this.#checkLayout(target, layout);
     const box = record.kind === 'box';
     if (box && input.show) await this.update(principal, { show: input.show });
@@ -2522,9 +2527,10 @@ export class DeskService {
   ): Promise<{ until: string }> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
-    await this.#checkLayout(target, input.layout);
+    const layout = withHiddenWidgets(input.layout, record.layout, principal.protocolMinor);
+    await this.#checkLayout(target, layout);
     const until = this.#now() + DESK_TRY_S * 1_000;
-    this.#trying.set(record.id, { layout: input.layout, until });
+    this.#trying.set(record.id, { layout, until });
     return { until: new Date(until).toISOString() };
   }
 

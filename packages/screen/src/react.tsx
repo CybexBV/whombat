@@ -23,4 +23,5 @@ export {
   WidgetBox,
   WidgetPreview,
 } from './Screen';
+export { WeatherIcon } from './WeatherIcon';
 export { WidgetView, type WidgetViewProps, widgetLabel } from './WidgetView';

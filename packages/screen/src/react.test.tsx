@@ -13,6 +13,7 @@ import {
   FIXTURE_TABLET_GRID,
   FIXTURE_TIME_ZONE,
   FIXTURE_VIEWS,
+  FIXTURE_WEATHER_NEWS_VIEWS,
 } from './fixtures';
 import { Screen, type ScreenProps, WidgetPreview, WidgetView } from './react';
 import type { DeskGrid, DeskWidget } from './types';
@@ -36,7 +37,7 @@ const widget = (id: string, type: DeskWidget['type'], w: number, h: number) =>
   renderToStaticMarkup(
     <WidgetView
       widget={{ id, type, opts: {} }}
-      view={FIXTURE_VIEWS.find((v) => v.id === id)}
+      view={[...FIXTURE_VIEWS, ...FIXTURE_WEATHER_NEWS_VIEWS].find((v) => v.id === id)}
       calm={FIXTURE_CALM}
       w={w}
       h={h}
@@ -278,6 +279,37 @@ describe('<WidgetView>', () => {
     expect(html).toContain('Unlock to see it');
     expect(html).toContain('Done today');
     expect(html).not.toContain('Renewed');
+  });
+
+  it('draws the weather from the temperature alone up to the hours and the days, with MET’s credit where there’s room', () => {
+    const tile = widget('w_weather', 'weather', 1, 1);
+    expect(tile).toContain('11°');
+    expect(tile).not.toContain('Partly cloudy');
+    expect(tile).not.toContain('MET Norway');
+    expect(widget('w_weather', 'weather', 2, 1)).toContain('Partly cloudy');
+    const strip = widget('w_weather', 'weather', 4, 1);
+    expect(strip).toContain('Now');
+    expect(strip).not.toContain('MET Norway');
+    const block = widget('w_weather', 'weather', 2, 2);
+    expect(block).toContain('Amsterdam');
+    expect(block).toContain('Data from MET Norway');
+    expect(block).not.toContain('Today');
+    const large = widget('w_weather', 'weather', 4, 3);
+    expect(large).toContain('Today');
+    expect(large).toContain('Wed');
+    // The test draws without the Whombat's time zone, so only that the times are there.
+    expect(large).toMatch(/Sunrise \d\d:\d\d · Sunset \d\d:\d\d/);
+    expect(large).toContain('Data from MET Norway');
+  });
+
+  it('says the weather couldn’t be read as every problem, and how to choose the news', () => {
+    const bad = widget('w_weather_wrong', 'weather', 2, 2);
+    expect(bad).toContain('data-tone="bad"');
+    expect(bad).toContain('Can’t read the weather');
+    expect(widget('w_news_none', 'news', 3, 2)).toContain('Choose your news in Settings');
+    const news = widget('w_news', 'news', 3, 2);
+    expect(news).toContain('New cycle bridge');
+    expect(news).toContain('AT5 · 13:40');
   });
 
   it('draws the calm glance’s servers with the rest counted', () => {

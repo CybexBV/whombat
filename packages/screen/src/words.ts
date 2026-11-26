@@ -12,6 +12,8 @@ export const SCREEN_WORDS = {
     work: { name: '{assistant}’s work' },
     coming: { name: 'Coming up' },
     done: { name: 'Done today' },
+    weather: { name: 'Weather' },
+    news: { name: 'News' },
   },
   pill: { one: '1 thing needs you', many: '{n} things need you' },
   locked: { ask: '{assistant} has a question', hidden: 'Unlock to see it' },
@@ -37,6 +39,24 @@ export const SCREEN_WORDS = {
   work: { steps: '{done} of {n} done', now: 'now', next: 'next' },
   done: { empty: 'Nothing done yet today' },
   list: { empty: 'Nothing here right now', count: '{n} in all' },
+  /** The weather widget's own words (the forecast's own come in its view: the place, what the sky does, the credit). */
+  weather: {
+    now: 'Now',
+    today: 'Today',
+    highLow: 'High {high}° · Low {low}°',
+    short: '{high}° / {low}°',
+    feels: 'Feels like {t}°',
+    rain: '{mm} mm',
+    rainChance: '{n} % chance of rain',
+    sun: 'Sunrise {rise} · Sunset {set}',
+    polarDay: 'The sun stays up all day',
+    polarNight: 'The sun stays down all day',
+    /** Core `WEATHER_WORDS`, kept equal by a test. */
+    problem: 'Can’t read the weather just now',
+    noPlace: 'Choose where this Whombat is in Settings',
+  },
+  /** The news widget's (core `NEWS_WORDS`, kept equal by a test). */
+  news: { empty: 'Choose your news in Settings', problem: 'Can’t read the news just now' },
   modal: {
     since: 'Since {clock} · {ago}',
     asks: '{assistant} asks · {clock}',
@@ -118,6 +138,12 @@ function format(timeZone: string | undefined, opts: Intl.DateTimeFormatOptions):
 /** “14:34”, in the Whombat's time zone. */
 export function clockText(ms: number, timeZone?: string): string {
   return format(timeZone, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
+}
+
+/** A forecast's day (`YYYY-MM-DD`, the place's own) by its short name: “Wed”. */
+export function weekdayText(date: string): string {
+  const ms = Date.parse(`${date}T12:00:00Z`);
+  return Number.isNaN(ms) ? date : format('UTC', { weekday: 'short' }).format(ms);
 }
 
 /** “Tuesday 27 October”. */

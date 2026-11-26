@@ -249,6 +249,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "What a screen does when the doorbell rings (docs/decisions/desk-display.md): one text column on screens, 'big' by default, checked to 'big' or 'off'. The release before it reads past the column, and its inserts get the default."
+    },
+    "0040_weather_news": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Weather and local news (docs/decisions/weather-news.md): two nullable jsonb columns on burrows, place (where this Whombat is, when the person chose) and news (the news sites it reads); the release before it reads and writes past them."
     }
   }
 }

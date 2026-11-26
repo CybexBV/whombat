@@ -183,6 +183,7 @@ const burrow = {
   timeZone: 'Europe/Amsterdam',
   localModel: null,
   webSearch: null,
+  place: null,
   createdAt: '2026-01-05T09:00:00.000Z',
 };
 

@@ -22,15 +22,20 @@ import {
   MCP_TOOLS,
   type McpToolName,
   mailFromAddress,
+  WEATHER_CREDIT,
+  WEATHER_DAYS_MAX,
 } from '@whombat/core';
 import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
 import { aheadChecks, aheadMatters, burrows, connections, principals } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { forbidden } from '../lib/errors';
+import { placeOfBurrow } from '../place/store';
 import type { DispatchRow } from '../runtime/context';
 import { dispatchPerson } from '../runtime/person';
 import type { Services } from '../services';
+import { weatherFor } from '../weather/service';
+import { aheadForecastOf } from '../weather/view';
 import { openWebSearchKey } from '../web-search/store';
 import { calendarAccounts, calendarKey, currentEvent } from './calendars';
 import {
@@ -252,8 +257,10 @@ export async function aheadContextOf(
   // Where a follow-up or a matter's mail check looks: the mails its earlier checks were about, newest first, rather than
   // a search by a title written from mail.
   const messageIds = openMatter ? await matterMessageIds(db, dispatch.burrowId, openMatter.id, row.id) : [];
+  const weather = row.source === 'calendar' ? await planForecast(services, dispatch, row) : null;
   return {
     ...base,
+    ...(weather ? { weather } : {}),
     ...(mail ? { mail: mailContext(mail) } : {}),
     ...(mailProviders?.length ? { mailProviders } : {}),
     ...(hasFiles ? { hasFiles: true } : {}),
@@ -270,6 +277,30 @@ export async function aheadContextOf(
         }
       : {}),
   };
+}
+
+/** How far ahead the forecast goes. */
+const FORECAST_AHEAD_MS = WEATHER_DAYS_MAX * 24 * 3_600_000;
+
+/**
+ * A calendar check's forecast where the Whombat is, for the plan's day (weather-news.md), when the day is within the
+ * forecast's week; the check may then name it as a source. Null otherwise, or when MET can't be read.
+ */
+async function planForecast(services: Services, dispatch: DispatchRow, row: AheadCheckRow) {
+  const start = Date.parse(row.event.start);
+  const now = services.clock();
+  if (!Number.isFinite(start) || start - now.getTime() > FORECAST_AHEAD_MS) return null;
+  const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, dispatch.burrowId));
+  const place = burrow ? placeOfBurrow(burrow) : null;
+  if (!burrow || !place) return null;
+  const forecast = await weatherFor(services)
+    .forecast(place.lat, place.lon)
+    .catch(() => null);
+  const found = forecast
+    ? aheadForecastOf(place, forecast, now, burrow.timeZone, { start: row.event.start, end: row.event.end })
+    : null;
+  if (found) seenOf(services, dispatch.id).weather = true;
+  return found;
 }
 
 /** The message ids of the mails a matter's earlier checks were about, newest first, without this check's own. */
@@ -592,6 +623,42 @@ export async function readWebPageTool(services: Services, dispatch: DispatchRow,
   }
 }
 
+/** What a check hears when it asks the weather of another place after the web closed. */
+export const WEATHER_ELSEWHERE_CLOSED =
+  'The web is closed in this check: weather_forecast only for where the person’s Whombat is now (leave place out).';
+
+/**
+ * Before a check asks the weather of another place (`weather_forecast` with `place`, looked up on OpenStreetMap): only
+ * while its web is open, and only by public words (`aheadQueryRefusal`), as a search. Throws what the check hears.
+ */
+export async function aheadPlaceAllowed(
+  services: Services,
+  dispatch: DispatchRow,
+  place: string,
+): Promise<void> {
+  const row = await liveCheck(services, dispatch);
+  const seen = seenOf(services, dispatch.id);
+  if (row.mailReadAt || seen.mailRead || row.source !== 'calendar') throw forbidden(WEATHER_ELSEWHERE_CLOSED);
+  const refusal = aheadQueryRefusal(place, await privateWords(services, dispatch.burrowId, row));
+  if (refusal) throw forbidden(refusal.replace('The search holds', 'The place holds'));
+}
+
+/** After `weather_forecast` ran in a check: the forecast may be a finding's source. */
+export function aheadSawWeather(services: Services, dispatch: DispatchRow): void {
+  if (dispatch.trigger === 'ahead') seenOf(services, dispatch.id).weather = true;
+}
+
+/**
+ * After `news_headlines` ran in a check: each headline's link may be read with `read_web_page` and named as a source
+ * (the site said it, in its own headline).
+ */
+export function aheadSawHeadlines(services: Services, dispatch: DispatchRow, links: readonly string[]): void {
+  if (dispatch.trigger !== 'ahead') return;
+  const seen = seenOf(services, dispatch.id);
+  sawLinks(seen, links);
+  for (const link of links) sawSource(seen, link);
+}
+
 export async function readDocsTool(services: Services, dispatch: DispatchRow, query: string) {
   await liveCheck(services, dispatch);
   const docs = await searchAheadDocs(services, dispatch.burrowId, query);
@@ -675,6 +742,13 @@ export async function aheadReportSources(
       if (row.source !== 'matter' || !row.matterId)
         throw forbidden('matter is a source only in a follow-up: name the mail you read instead.');
       named.push({ label: LOOKS_AHEAD_WORDS.matters });
+    } else if ('weather' in source) {
+      if (!seen.weather)
+        throw forbidden(
+          'weather is a source only when this check was given a forecast or you read one with weather_forecast.',
+        );
+      // MET Norway's licence asks for its credit wherever its data is shown.
+      named.push({ label: WEATHER_CREDIT });
     }
   }
   return named;

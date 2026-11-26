@@ -13,6 +13,7 @@ import {
   type ServerShow,
   serverShow,
 } from '@whombat/screen';
+import { FIXTURE_NEWS, FIXTURE_WEATHER } from '@whombat/screen/fixtures';
 import {
   DESK_SCREEN_WORDS,
   type DeskCatalog,
@@ -516,11 +517,19 @@ export function fakeCatalog(world: FakeDeskWorld, thing?: string): DeskCatalog {
       {
         key: 'own',
         label: fill(w.groups.own),
-        items: (['clock', 'status', 'now', 'strip', 'work', 'coming', 'done'] as const).map((type) => ({
+        items: (
+          ['clock', 'status', 'now', 'strip', 'work', 'coming', 'done', 'weather', 'news'] as const
+        ).map((type) => ({
           type,
           opts: {},
           name: fill(w.own[type].name),
           line: fill(w.own[type].line),
+          // The weather draws its own view and the news a list, as the runtime says.
+          ...(type === 'weather'
+            ? { view: 'weather' as const }
+            : type === 'news'
+              ? { view: 'list' as const }
+              : {}),
         })),
       },
       // A group per server, with its overview and its parts (DK-153, DK-154).
@@ -880,6 +889,27 @@ export function fakeViews(
             { time: '11:20', title: 'Answered Bakkerij de Vries', state: 'on' },
           ],
         });
+        break;
+      case 'weather':
+        // MET Norway's forecast for Amsterdam (Whombat weather-news.md); not read while things are wrong.
+        out.push(
+          scenario === 'wrong'
+            ? {
+                ...FIXTURE_WEATHER,
+                id: w.id,
+                now: undefined,
+                today: undefined,
+                hours: [],
+                days: [],
+                tone: 'bad',
+                problem: { text: 'Can’t read the weather just now' },
+              }
+            : { ...FIXTURE_WEATHER, id: w.id },
+        );
+        break;
+      case 'news':
+        // Headlines from the sites turned on in Settings → This Whombat.
+        out.push({ ...FIXTURE_NEWS, id: w.id });
         break;
       case 'server': {
         const id = w.ref?.slice('server:'.length) ?? '';

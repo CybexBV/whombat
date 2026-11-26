@@ -4,12 +4,22 @@ import {
   DESK_SCREEN_WORDS,
   DESK_SPOTLIGHT_S,
   DESK_TURN_S,
+  NEWS_WORDS,
+  WEATHER_WORDS,
 } from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import { SPOTLIGHT_S } from './forms';
 import { FIRST_PAGE_AFTER_S, TURN_S } from './pager';
 import { METER_TONES, SERVER_SHOW_VIEWS, SERVER_SHOWS, serverShow, sizeOf, VIEW_SIZES } from './specs';
-import { agoText, clockText, dateText, fillWords, SCREEN_WORDS, SERVER_SHOW_WORDS } from './words';
+import {
+  agoText,
+  clockText,
+  dateText,
+  fillWords,
+  SCREEN_WORDS,
+  SERVER_SHOW_WORDS,
+  weekdayText,
+} from './words';
 
 describe('the screen’s words', () => {
   it('are Settings’ words where both say them', () => {
@@ -17,6 +27,10 @@ describe('the screen’s words', () => {
       expect(own.name).toBe(DESK_SCREEN_WORDS.own[key as keyof typeof DESK_SCREEN_WORDS.own].name);
     expect(SCREEN_WORDS.pill).toEqual(DESK_SCREEN_WORDS.pill);
     expect(SCREEN_WORDS.locked).toEqual(DESK_SCREEN_WORDS.locked);
+    expect(SCREEN_WORDS.weather.problem).toBe(WEATHER_WORDS.problem);
+    expect(SCREEN_WORDS.weather.noPlace).toBe(WEATHER_WORDS.noPlace);
+    expect(SCREEN_WORDS.news.empty).toBe(NEWS_WORDS.widgetEmpty);
+    expect(SCREEN_WORDS.news.problem).toBe(NEWS_WORDS.widgetProblem);
     expect(SCREEN_WORDS.spotlight).toEqual(DESK_SCREEN_WORDS.spotlight);
   });
 
@@ -61,5 +75,7 @@ describe('the screen’s words', () => {
     expect(clockText(t, 'Europe/Amsterdam')).toBe('14:34');
     expect(dateText(t, 'Europe/Amsterdam')).toBe('Tuesday 27 October');
     expect(clockText(t, 'Not/AZone')).toMatch(/^\d\d:\d\d$/);
+    expect(weekdayText('2026-10-28')).toBe('Wed');
+    expect(weekdayText('soon')).toBe('soon');
   });
 });

@@ -30,6 +30,7 @@ import { screenText } from '../desk/glance';
 import { deskTarget } from '../desk/person';
 import { type ScreenSessions, screenError } from '../desk/screen-sessions';
 import { loadDeskRow } from '../desk/store';
+import { gridFor, screenDetailFor } from '../desk/widgets/older-apps';
 import type { ScreenRecord } from '../desk/widgets/types';
 import { ApiError, forbidden, notFound } from '../lib/errors';
 import type { Services } from '../services';
@@ -264,10 +265,14 @@ type DisplayHandler = (c: SessionOpContext, input: any) => Promise<unknown>;
 export const DISPLAY_SESSION_HANDLERS: Readonly<Record<string, DisplayHandler>> = {
   'enroll.display.request': (c, i) => requestDisplay(c, i),
   'enroll.display.status': (c, i) => displayStatus(c, i),
-  'desk.screen.add': (c, i) => addScreenDevice(c, i),
+  // An older app's and screen's answers leave out what they can't read (weather-news.md).
+  'desk.screen.add': async (c, i) => screenDetailFor(await addScreenDevice(c, i), c.principal.protocolMinor),
   'screen.state': async (c, i) => {
     const { screens, screen } = await ownScreen(c);
-    return screens.state(screen, i);
+    const state = await screens.state(screen, i);
+    return 'grid' in state && state.grid
+      ? { ...state, grid: gridFor(state.grid, c.principal.protocolMinor) }
+      : state;
   },
   'screen.unlock': async (c, i: { pin: string }) => {
     const { screens, screen } = await ownScreen(c);
