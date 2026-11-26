@@ -184,7 +184,20 @@ have widgets, listed under *Your accounts*, and two new views, `photo` and `boar
 | AP-6123 | **An account widget's sheet** names it by what it shows (“Today”) over its account, “Google · anna@example.com” (`accountName`: the provider by its mark in front of the runtime's label, unless the label says it); *Shows* lists that account's other widgets of the same type as 52dp radio rows with their icons (`accountChoices`), as a server's parts. Switching keeps *On a locked screen* only where the new one is private too (`withAccountItem`), and fits the widget to what the new one draws on every shape (`draftChoose`): it shrinks to the largest, grows to the smallest where there's room, else stays and says “No room to make it that big there.” in the sheet. The tile and the sheet name the new one at once (from the catalogue, before the views are read again). *On a locked screen* is offered for calendar and mail (`item.private`; before the catalogue is read, every account's widget but the Whombat's GitHub); *Touching it on the screen* says “Opens it big, with Back.”, as a connection's panel. | DK-140, DK-159; the server sheet's way of choosing, for an account. |
 | AP-6124 | **Checks.** Unit tests with a local catalogue of accounts, a photo and a board (`tiles.test.ts`; the demo world gets them from the runtime's streams): one *Your accounts* with each account open and turning, search by provider and widget, an account's name, what each widget shows, a photo's and a board's sizes, what adding remembers, the account's choices and the lock kept, private by item and by kind, a tile's view; `draft.test.ts`: switching shrinks, refuses without room, grows with it, and Undo. The touch-target audit is unchanged (no new sites: the headings and radio rows are the existing ones). Not checked yet: the emulator (the demo world has no accounts until the runtime's streams merge). | The logic is tested; the layout is checked on the device once the demo world has accounts. |
 
+## Pages by time, a page by the assistant, the doorbell (2026-11-26)
+
+Whombat desk-display.md DK-180…DK-188; the web's AP-9990…AP-9994. Code: `settings/screens/PageTimes.tsx`,
+`LayoutEditor.tsx`, `draft.ts` (`draftPageShow`), `ScreenPage.tsx`.
+
+| Id | Decision | Why |
+|---|---|---|
+| AP-9995 | **THIS PAGE has *Show at set times…*** under the name, with when the page shows under it: a sheet with From and To (`ClockField`, iOS's own picker on the iPhone), the seven days as toggles (36 dp, slop to 44), the person's zone, *Show at these times* and *Always* when the page has times. A window without a day says so in the sheet; saving toasts when it shows, with Undo. | The quiet hours' fields, as on the web. |
+| AP-9996 | **A page chip with times shows a small clock and its hours** (mono 12) after its name; a screen reader hears when in full. | As the web's tab. |
+| AP-9997 | ***Ask {assistant}*** chip beside *+ Page* opens the new-thread sheet, titled *Ask {assistant}*, with “Make a page on the {screen} screen that shows ” to finish; sending starts the thread in Chat and opens it. | The phone's way to start a thread with words ready. |
+| AP-9998 | **WHEN THE DOORBELL RINGS** on a screen's page under its pop-ups: *Show it big* · *Don’t* and a line, shown as on the web. | Same rule as the web. |
+
 ## Release
+
 
 Released as **whombat-app 0.103.0** (`app-v0.103.0`), with contracts 0.100.0 (Whombat desk-display.md DK-01…DK-15).
 

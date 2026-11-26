@@ -336,9 +336,15 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   Every screen is a grid of widgets the person arranges ([desk-display.md](docs/decisions/desk-display.md)):
   the box's own, each monitor the console reports through the desk socket's `size`, each tablet or
   computer enrolled as a screen, each a row of `screens` (`desk/screens.ts`) with its layout, pages and pop-ups, the
-  calm glance being the default layout. The runtime resolves each placed widget into a view (`desk/widgets/`: Whombat's
-  own from the glance's read, servers from the fleet and the hosts service — a server's overview or one part of it
-  (`opts.show`: processor, memory, network, storage, guests, temperature, alerts; `server-parts.ts`, read as its own
+  calm glance being the default layout. A page may show only at set times (`DeskPage.show`, in the person's zone): the
+  screen (`@whombat/screen` `rotationNow`, the pager) turns only through the pages whose time it is, goes to a page when
+  its window opens and back to its home after a while; a screen elsewhere is told the zone with its state. The assistant
+  makes a page with `desk.screen.addPage` (`desk/screen-pages.ts`: widgets *Add a widget* offers, placed as the editor
+  would). When a UniFi Protect doorbell rings, its event follower tells the server at once
+  (`things/kinds/home/doorbell.ts`) and each screen whose `doorbell` choice is `big` carries the doorbell's camera for a
+  minute (`desk/spotlight.ts`, `DeskGrid.spotlight`), drawn big over the dashboard. The runtime resolves each placed
+  widget into a view (`desk/widgets/`: Whombat's own from the glance's read, servers from the fleet and the hosts
+  service — a server's overview or one part of it (`opts.show`: processor, memory, network, storage, guests, temperature, alerts; `server-parts.ts`, read as its own
   screen reads it) — Home's widgets, the connections' and devices' through `ThingWidgets`), kept at each widget's pace
   and read again in the background so the glance never
   waits, trimmed by the lock; the console gets them in `DeskGlance.grid` and `outputs`, pictures through the socket's
