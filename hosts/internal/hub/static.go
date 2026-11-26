@@ -358,8 +358,21 @@ func (h *Hub) installScript(viaAgent bool) http.HandlerFunc {
 // Unix socket headless): the script the agent listener serves at
 // /install.sh, for the Whombat server to run over SSH (SI-02). Its
 // downloads come from the agents' address with the listener's key pinned,
-// not from the Host the request named.
+// not from the Host the request named. `?hub=wss://host:port` names another
+// of the hub's own addresses for this server (its tailnet address, when
+// Whombat reached the server over the tailnet): the script downloads from
+// it and the agent dials it.
 func (h *Hub) apiAgentInstallScript(w http.ResponseWriter, r *http.Request, p *principal) error {
+	if raw := r.URL.Query().Get("hub"); raw != "" {
+		au := h.ownHubAddr(r.Context(), raw)
+		if au == "" {
+			return apiErr(http.StatusBadRequest, "bad_request", "hub must be one of the hub's own addresses, like wss://10.100.1.97:8443.")
+		}
+		if !h.writeInstallScript(w, "https://"+strings.TrimPrefix(au, "wss://"), au, h.listenerPin()) {
+			return apiErr(http.StatusBadRequest, "bad_request", "hub is not usable: "+au+".")
+		}
+		return nil
+	}
 	base, err := h.agentInstallBase()
 	if err != nil {
 		return apiErr(http.StatusServiceUnavailable, "no_agent_url", "The hub does not know the address agents reach it at: "+err.Error()+".")
@@ -685,9 +698,9 @@ fetch() {
 	rc=0
 	if command -v curl >/dev/null 2>&1; then
 		if [ -n "$TLS_PIN" ]; then
-			curl -fsSL --insecure --pinnedpubkey "$TLS_PIN" -o "$2" "$1" || rc=$?
+			curl -fsSL --insecure --pinnedpubkey "$TLS_PIN" --connect-timeout 15 -o "$2" "$1" || rc=$?
 		else
-			curl -fsSL -o "$2" "$1" || rc=$?
+			curl -fsSL --connect-timeout 15 -o "$2" "$1" || rc=$?
 		fi
 		case "$rc" in
 		0) return 0 ;;

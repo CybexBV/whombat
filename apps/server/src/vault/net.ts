@@ -38,6 +38,11 @@ import { destinationReach } from './store';
 export interface VaultNet {
   resolve(hostname: string): Promise<{ address: string; family: number }[]>;
   dialAddress?: (address: string) => string;
+  /**
+   * Tests only: the box's own address a connection to a checked address leaves from (the socket's local address
+   * otherwise), so a fake on 127.0.0.1 can stand behind a server reached over the tailnet.
+   */
+  sourceAddress?: (address: string) => string | undefined;
   /** Tests only: a shorter deadline than `VAULT_CALL_DEADLINE_MS` (the refusal still reads “30 seconds”). */
   deadlineMs?: number;
   /**

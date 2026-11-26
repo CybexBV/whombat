@@ -933,7 +933,10 @@ A malformed `Host` gets 400 `bad host`.
 `install.sh` for a client that runs it itself (Whombat over SSH): the
 downloads and the agent URL are the agents' address with the listener's key
 pinned, never the request's `Host`. 503 `no_agent_url` when the hub does
-not know that address.
+not know that address. `?hub=wss://host:port` names another of the hub's
+own addresses (`HelloAck.Addrs`; its tailnet address for a server Whombat
+reached over the tailnet): the downloads and the agent URL are that one;
+400 `bad_request` when it isn't one of them.
 
 **`GET /download/{name}`** (UI and agent listener):
 `whombat-agent-{linux,darwin}-{amd64,arm64}`, `whombat-helper-macos.zip`

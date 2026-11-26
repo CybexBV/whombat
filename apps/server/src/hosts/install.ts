@@ -12,8 +12,10 @@
  * travel on stdin, never on a command line, and are never logged, signed, recorded or put in `detail` (SI-03).
  */
 import { randomBytes } from 'node:crypto';
+import { BlockList, isIPv4, isIPv6 } from 'node:net';
 import {
   HOST_MACOS_MIN_MAJOR,
+  HOSTS_AGENT_PORT_DEFAULT,
   type HostControlLevel,
   type HostInstall,
   type HostInstallBody,
@@ -101,6 +103,31 @@ export function installCommand(way: RootWay, file: string, control: HostControlL
   if (way === 'root') return run;
   // `-k`: sudo always reads its password line, so the token is never taken for it, nor the password for the token.
   return way === 'sudo' ? `sudo -n ${run}` : `sudo -k -S -p '' ${run}`;
+}
+
+/** Tailscale's address ranges: 100.64.0.0/10 and its IPv6 prefix. */
+const TAILNET = new BlockList();
+TAILNET.addSubnet('100.64.0.0', 10, 'ipv4');
+TAILNET.addSubnet('fd7a:115c:a1e0::', 48, 'ipv6');
+
+/**
+ * The agents' URL on the box's tailnet address, when the box reached the server from it (`local`, the SSH
+ * connection's own end), with the port of the hub's agents' URL; null when the connection didn't go over the tailnet.
+ */
+export function tailnetAgentUrl(
+  local: string | null | undefined,
+  agentUrl: string | null | undefined,
+): string | null {
+  const ip = (local ?? '').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  const family = isIPv4(ip) ? 'ipv4' : isIPv6(ip) ? 'ipv6' : null;
+  if (!family || !TAILNET.check(ip, family)) return null;
+  let port = String(HOSTS_AGENT_PORT_DEFAULT);
+  try {
+    port = new URL(agentUrl ?? '').port || port;
+  } catch {
+    // No agents' URL: the listener's default port.
+  }
+  return `wss://${family === 'ipv6' ? `[${ip}]` : ip}:${port}`;
 }
 
 /** A path `mktemp` printed that is safe on a command line. */
@@ -372,9 +399,13 @@ export class HostInstalls {
       if (!token) throw new InstallStop({ code: 'failed', message: HOSTS_TEXT.down });
       job.secrets.token = token;
       job.enrollment = str(made.id) ? { id: str(made.id) as string, claimed: false } : null;
-      job.agents = agentsPlace(str(made.agent_url));
+      // A server Whombat reached over the tailnet may have no way to the box's LAN address: it calls home on the box's
+      // tailnet address instead, the one this connection came from.
+      const hub = tailnetAgentUrl(opened.localAddress, str(made.agent_url));
+      job.agents = agentsPlace(hub ?? str(made.agent_url));
       const script = await this.#hosts.text({
         path: `${HOSTS_API}/agent-install.sh`,
+        ...(hub ? { query: { hub } } : {}),
         actor: job.actor,
         timeoutMs: 30_000,
       });

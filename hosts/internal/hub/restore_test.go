@@ -489,7 +489,9 @@ func TestHubAddresses(t *testing.T) {
 			return slices.Clone(ifs), nil
 		}
 	})
-	want := []string{"wss://hosts.example:8443", "wss://10.100.1.158:8443", "wss://192.168.5.2:8443", "wss://[fd00::5]:8443"}
+	// The tailnet's address last: a fallback here, the way in for servers that reach the box only over the tailnet.
+	want := []string{"wss://hosts.example:8443", "wss://10.100.1.158:8443", "wss://192.168.5.2:8443", "wss://[fd00::5]:8443",
+		"wss://100.64.0.3:8443"}
 	if got := e.h.hubAddrs(ctx); !slices.Equal(got, want) {
 		t.Fatalf("addrs = %v", got)
 	}
@@ -514,7 +516,7 @@ func TestHubAddresses(t *testing.T) {
 	mu.Unlock()
 	e.h.refreshAddrs(ctx)
 	e.h.refreshAddrs(ctx)
-	want = []string{"wss://hosts.example:8443", "wss://10.100.1.160:8443", "wss://192.168.5.2:8443"}
+	want = []string{"wss://hosts.example:8443", "wss://10.100.1.160:8443", "wss://192.168.5.2:8443", "wss://100.64.0.3:8443"}
 	waitFor(t, "hub_addrs", 5*time.Second, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()

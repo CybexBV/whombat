@@ -515,7 +515,10 @@ no default route). Errors: 400 `invalid_control`, `invalid_name`,
 `/install.sh`, byte for byte: downloads from the agents' address
 (`https://<agents address>:<port>/download`, the listener's key pinned) and
 the agents' URL baked in, whatever `Host` the socket request named. 503
-`no_agent_url` like above. Whombat streams it to the server over SSH (§6).
+`no_agent_url` like above. `?hub=wss://host:port` puts another of the hub's
+own addresses in both (400 `bad_request` for any other): Whombat asks for the
+hub's tailnet address when it reached the server over the tailnet. Whombat
+streams it to the server over SSH (§6).
 
 ### Consoles (`hosts.consoles.create`)
 

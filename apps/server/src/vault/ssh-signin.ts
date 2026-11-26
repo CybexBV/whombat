@@ -18,6 +18,7 @@ import ssh2, {
 } from 'ssh2';
 import type { Services } from '../services';
 import { VAULT_SSH_KEEPALIVE_MS } from './limits';
+import { vaultNetOf } from './net';
 import { clientKey, dial, hostKeyOf, SSH_ALGORITHMS, SshFailure, sshDeadlineMs, sshDestination } from './ssh';
 
 const { Client: SshClient } = ssh2;
@@ -36,6 +37,8 @@ export interface SignedIn {
   hostKey: VaultSshHostKey;
   /** First contact (no trusted key for this host and port): the key was taken as shown (SI-04). */
   hostKeyNew: boolean;
+  /** The box's own address the connection left from (its tailnet address when it reached the server that way). */
+  localAddress: string | null;
 }
 
 /** ssh2's auth methods for a password: `password`, then `keyboard-interactive` with the password for every prompt. */
@@ -78,6 +81,7 @@ export async function openSshSignIn(
         ];
   const pinned = new Set(options.pins.map((p) => p.fingerprint));
   const socket = await dial(services, address, target.port, deadlineMs);
+  const localAddress = vaultNetOf(services).sourceAddress?.(address) ?? socket.localAddress ?? null;
   const left = Math.max(1, deadlineMs - (Date.now() - started));
   const client = new SshClient();
   let shown: VaultSshHostKey | null = null;
@@ -109,7 +113,8 @@ export async function openSshSignIn(
         client.end();
         socket.destroy();
         reject(err);
-      } else resolve({ client, hostKey: shown as VaultSshHostKey, hostKeyNew: pinned.size === 0 });
+      } else
+        resolve({ client, hostKey: shown as VaultSshHostKey, hostKeyNew: pinned.size === 0, localAddress });
     };
     const timer = setTimeout(() => finish(new SshFailure('timeout')), left);
     client.on('ready', () => finish(null));
