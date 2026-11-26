@@ -6,7 +6,17 @@
 export const SCREEN_SIZES = ['smaller', 'normal', 'larger'] as const;
 export type ScreenSize = (typeof SCREEN_SIZES)[number];
 
-export const OWN_WIDGETS = ['clock', 'status', 'now', 'strip', 'work', 'coming', 'done'] as const;
+export const OWN_WIDGETS = [
+  'clock',
+  'status',
+  'now',
+  'strip',
+  'work',
+  'coming',
+  'done',
+  'weather',
+  'news',
+] as const;
 export type OwnWidget = (typeof OWN_WIDGETS)[number];
 export const WIDGET_TYPES = [...OWN_WIDGETS, 'server', 'figures', 'panel', 'widget'] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
@@ -20,6 +30,7 @@ export const VIEW_KINDS = [
   'text',
   'photo',
   'board',
+  'weather',
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -50,6 +61,9 @@ export const OWN_SIZES: Readonly<Record<OwnWidget, WidgetSize>> = {
   work: size([2, 1], [8, 3], [4, 1]),
   coming: size([2, 1], [4, 4], [2, 2]),
   done: size([2, 1], [6, 4], [3, 2]),
+  // One cell is the symbol and the temperature; wider adds the hours, higher the days.
+  weather: size([1, 1], [8, 4], [2, 2]),
+  news: size([2, 1], [6, 5], [3, 2]),
 };
 
 /** A panel's, by what it draws. */
@@ -65,6 +79,7 @@ export const VIEW_SIZES: Readonly<Record<ViewKind, WidgetSize>> = {
   // A picture worth looking at needs room; a board starts as a strip of tiles.
   photo: size([2, 2], [8, 5], [4, 3]),
   board: size([2, 1], [8, 4], [4, 2]),
+  weather: size([1, 1], [8, 4], [2, 2]),
 };
 
 export const SERVER_SIZE = VIEW_SIZES.server;

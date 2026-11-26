@@ -1082,3 +1082,244 @@
   color: var(--mut);
   font-size: 16px;
 }
+
+/* Weather (Whombat weather-news.md): its own line icons, the temperature big, the hours as columns, the days as rows */
+
+.wxIcon {
+  flex: none;
+  overflow: visible;
+  color: var(--ink2);
+}
+
+.wxCloud {
+  fill: var(--sf);
+  stroke: currentColor;
+}
+
+.wxSun {
+  stroke: var(--warn);
+}
+
+.wxMoon {
+  stroke: var(--brand);
+}
+
+.wxRain {
+  stroke: var(--chart1);
+}
+
+.wxSnow {
+  fill: var(--ink);
+  stroke: none;
+}
+
+.wxBolt {
+  stroke: var(--warn);
+}
+
+.wxFog {
+  stroke: var(--mut);
+}
+
+.wxTile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.wxTile .d {
+  margin-top: 0;
+}
+
+.wxTemp {
+  overflow: hidden;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wxFill {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  min-height: 0;
+}
+
+.wxNow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.wxFill .wxNow,
+.wxLeft .wxNow {
+  margin-top: 0;
+}
+
+.wxNowWords {
+  min-width: 0;
+}
+
+.wxTempRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.wxTempRow .d {
+  margin-top: 0;
+}
+
+.wxSays {
+  margin-top: 4px;
+  color: var(--ink2);
+  font-size: 16px;
+}
+
+.wxSplit {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* The large form's now band keeps its height; the days take the rest. */
+.wxTop {
+  flex: none;
+  margin-top: 12px;
+}
+
+.wxLeft {
+  flex: none;
+  min-width: 0;
+}
+
+.wxPush {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.wxHours {
+  display: grid;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.wxHour {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.wxHour b {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wxAt {
+  color: var(--mut);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.wxWet {
+  min-height: 17px;
+  overflow: hidden;
+  color: var(--chart1);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wxDays {
+  display: flex;
+  flex-direction: column;
+  margin: 12px 0 4px;
+}
+
+.wxDay {
+  display: grid;
+  grid-template-columns: 58px 28px minmax(0, 64px) 40px minmax(40px, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+}
+
+.wxDayDry {
+  grid-template-columns: 50px 26px 32px minmax(24px, 1fr) 32px;
+  gap: 8px;
+}
+
+.wxDay:first-child {
+  border-top: 0;
+}
+
+.wxDayName {
+  color: var(--ink2);
+}
+
+.wxDay .wxWet {
+  min-height: 0;
+  text-align: right;
+}
+
+.wxLow {
+  color: var(--mut);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.wxHigh {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The day's lowest to highest on the week's scale, cool to warm. */
+.wxRange {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 10%, var(--sf));
+}
+
+.wxSpan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--chart1), var(--warn));
+}
+
+/* MET Norway's credit, wherever there's room (its licence asks for it). */
+.wxCredit {
+  margin-top: auto;
+  padding-top: 6px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--mut) 80%, var(--bg));
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* News: one headline at a time when low. */
+.nwsOne {
+  display: -webkit-box;
+  font-size: 19px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
