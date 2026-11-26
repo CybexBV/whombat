@@ -1,12 +1,15 @@
 /**
- * The editor's draft (Whombat desk-display.md DK-143; desk-display-web.md AP-5950…): the layout being changed, the page
- * open, the widget chosen, what each change replaced (Undo) and what didn't fit after rearranging. Every change goes
- * through `@whombat/client/desk`'s editor rules; this only keeps the state and says what happened in words.
+ * The editor's draft (Whombat desk-display.md DK-143, DK-164…DK-167; desk-display-web.md AP-5950…, AP-9970…): the layout
+ * being changed, the page open, the widget chosen, what each change replaced (Undo) and what didn't fit after
+ * rearranging. Every change goes through `@whombat/client/desk`'s editor rules; this only keeps the state and says what
+ * happened in words.
  */
 import {
   addPage,
   addWidget,
+  chooseWidget,
   DESK_SCREENS_TEXT,
+  type DeskCatalogItem,
   type DeskLayout,
   type DeskSize,
   type DeskTurn,
@@ -20,6 +23,7 @@ import {
   fillDeskWords,
   gridText,
   growWidget,
+  type MoveResult,
   movePage,
   moveWidget,
   type NewWidget,
@@ -34,6 +38,7 @@ import {
   setLayoutSize,
   setLayoutTurn,
   setWidgetSpec,
+  tidyPage,
   type UndoStack,
   type ViewOf,
   widgetSize,
@@ -83,6 +88,10 @@ export interface ScreenEditor {
     at?: { x: number; y: number; w: number; h: number },
   ): { text: string; id: string | null };
   setSpec(id: string, spec: { ref?: string; opts: Record<string, string> }): void;
+  /** *What it shows*: another view of its connection, server or account, in its place; what to say when refused. */
+  choose(id: string, item: DeskCatalogItem): string | null;
+  /** *Tidy up*: the open page packed up and to the left; what to say. */
+  tidy(): string;
   addPage(): string;
   renamePage(index: number, name: string): void;
   movePage(index: number, by: -1 | 1): void;
@@ -98,12 +107,13 @@ const leftKey = (layout: DeskLayout, page: number, g: Pick<Grid, 'cols' | 'rows'
 
 /**
  * The editor's state for a screen `size` (as it last said) starting from `initial`; `viewOf` knows each panel's view
- * kind (its sizes).
+ * kind (its sizes), `nameOf` a widget's name for the words (“Swapped Clock and Weather.”).
  */
 export function useScreenEditor(
   initial: DeskLayout,
   size: { width: number; height: number } | null,
   viewOf: ViewOf,
+  nameOf: (w: DeskWidget) => string = (w) => w.id,
 ): ScreenEditor {
   const [state, setState] = useState<EditorState>(() => ({
     draft: initial,
@@ -122,6 +132,8 @@ export function useScreenEditor(
   }, []);
   const view = useRef(viewOf);
   view.current = viewOf;
+  const names = useRef(nameOf);
+  names.current = nameOf;
 
   const grid = editorGrid(size, state.draft.size);
   const page = editorPage(state.draft, state.page, grid, viewOf);
@@ -149,6 +161,17 @@ export function useScreenEditor(
       if (!result.ok) return refusal(result.why);
       if (result.layout !== s.draft) set(commit(s, result.layout));
       return null;
+    };
+    /** A move done: two widgets that changed places say so (DK-167). */
+    const moved = (s: EditorState, r: Extract<MoveResult, { ok: true }> & { id: string }): string | null => {
+      if (r.layout !== s.draft) set(commit(s, r.layout));
+      if (!r.swapped) return null;
+      const before = editorPage(s.draft, s.page, gridOf(s.draft), view.current).widgets;
+      const name = (id: string) => {
+        const w = before.find((x) => x.id === id);
+        return w ? names.current(w) : id;
+      };
+      return fillDeskWords(E.swapped, { a: name(r.id), b: name(r.swapped) });
     };
     const sizeOfId = (id: string) => {
       const s = live.current;
@@ -189,9 +212,8 @@ export function useScreenEditor(
       },
       move: (id, cell) => {
         const s = live.current;
-        return run(moveWidget(s.draft, s.page, gridOf(s.draft), id, cell, view.current), (why) =>
-          refusalText(why),
-        );
+        const r = moveWidget(s.draft, s.page, gridOf(s.draft), id, cell, view.current);
+        return r.ok ? moved(s, { ...r, id }) : refusalText(r.why);
       },
       resize: (id, size) => {
         const s = live.current;
@@ -203,8 +225,7 @@ export function useScreenEditor(
         const s = live.current;
         // An arrow into a taken spot or off the grid does nothing, as a key pressed at an edge.
         const r = nudgeWidget(s.draft, s.page, gridOf(s.draft), id, dx, dy, view.current);
-        if (r.ok && r.layout !== s.draft) set(commit(s, r.layout));
-        return null;
+        return r.ok ? moved(s, { ...r, id }) : null;
       },
       grow: (id, dim, by) => {
         const s = live.current;
@@ -227,6 +248,21 @@ export function useScreenEditor(
       setSpec(id, spec) {
         const s = live.current;
         set(commit(s, setWidgetSpec(s.draft, id, spec)));
+      },
+      choose(id, item) {
+        const s = live.current;
+        const r = chooseWidget(s.draft, id, item);
+        if (!r.ok) return refusalText(r.why);
+        if (r.layout !== s.draft) set(commit(s, r.layout));
+        return null;
+      },
+      tidy() {
+        const s = live.current;
+        const r = tidyPage(s.draft, s.page, gridOf(s.draft), view.current);
+        if (!r.ok) return refusalText(r.why);
+        if (r.moved === 0) return E.alreadyTidy;
+        set(commit(s, r.layout));
+        return E.tidied;
       },
       addPage() {
         const s = live.current;

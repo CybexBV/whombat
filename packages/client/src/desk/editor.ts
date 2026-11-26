@@ -1,16 +1,19 @@
 /**
- * The layout editor's rules (3.6; Whombat desk-display.md DK-129…DK-133, DK-143, DK-145), pure so the web's editor and
- * the phone's share them and they're tested without a page: what a page shows on the screen's grid (its own layout for
- * this shape, else its latest rearranged, with what didn't fit), and every change — move, resize, add, remove, a
- * widget's settings, pages, Size and page turning — as a new draft or the reason it can't be made. A spot that's taken
- * refuses; nothing is pushed aside. The grid and the sizes are `@whombat/screen`'s, the same the screen draws with.
+ * The layout editor's rules (3.6; Whombat desk-display.md DK-129…DK-133, DK-143, DK-145, DK-164…DK-167), pure so the
+ * web's editor and the phone's share them and they're tested without a page: what a page shows on the screen's grid
+ * (its own layout for this shape, else its latest rearranged, with what didn't fit), and every change — move (two
+ * widgets change places when one lands on the other), resize and the size's shapes, add, remove, what a widget shows
+ * and its settings, *Tidy up*, pages, Size and page turning — as a new draft or the reason it can't be made. Nothing is
+ * pushed aside. The grid and the sizes are `@whombat/screen`'s, the same the screen draws with.
  */
 import {
   clampSize,
   firstFree,
   fits,
   type Grid,
+  overlaps,
   pageOn,
+  parseShape,
   screenGrid,
   shapeKey,
   sizeOf,
@@ -20,6 +23,7 @@ import {
   DESK_PAGE_WIDGETS_MAX,
   DESK_PAGES_MAX,
   DESK_SCREEN_WORDS,
+  type DeskCatalogItem,
   type DeskLayout,
   type DeskPage,
   type DeskSize,
@@ -105,13 +109,55 @@ export function setPageWidgets(
 }
 
 /** Why a change couldn't be made, for the editor's words (`EDITOR_WORDS.refused`). */
-export type EditorRefusal = 'taken' | 'noRoom' | 'tooSmall' | 'tooBig' | 'full' | 'pagesFull' | 'lastPage';
+export type EditorRefusal =
+  | 'taken'
+  | 'noRoom'
+  | 'tooSmall'
+  | 'tooBig'
+  | 'full'
+  | 'pagesFull'
+  | 'lastPage'
+  | 'tidy';
 
 export type EditorResult = { ok: true; layout: DeskLayout } | { ok: false; why: EditorRefusal };
 
 const refused = (why: EditorRefusal): EditorResult => ({ ok: false, why });
 
-/** Moves widget `id` to `cell` (its size kept): refused when the spot is taken or off the grid. */
+/**
+ * Where widget `id` moved to `cell` (its size kept) goes: there when it's free; when it lands on exactly one other
+ * widget, the two change places (DK-167) — it takes the other's top left corner and the other takes its old one, each
+ * keeping its size — if both then fit; else nowhere (`ok` false). The web draws the change while dragging from this.
+ */
+export function moveSpot(
+  widgets: readonly DeskWidget[],
+  g: Pick<Grid, 'cols' | 'rows'>,
+  id: string,
+  cell: { x: number; y: number },
+): { ok: false } | { ok: true; x: number; y: number; swap: { id: string; x: number; y: number } | null } {
+  const w = widgets.find((x) => x.id === id);
+  if (!w) return { ok: false };
+  const next = { ...w, x: cell.x, y: cell.y };
+  if (fits(widgets, next, g, id)) return { ok: true, x: cell.x, y: cell.y, swap: null };
+  if (next.x < 0 || next.y < 0 || next.x + next.w > g.cols || next.y + next.h > g.rows) return { ok: false };
+  const under = widgets.filter((o) => o.id !== id && overlaps(o, next));
+  const other = under.length === 1 ? under[0] : undefined;
+  if (!other) return { ok: false };
+  const moved = { ...w, x: other.x, y: other.y };
+  const back = { ...other, x: w.x, y: w.y };
+  const rest = widgets.filter((o) => o.id !== id && o.id !== other.id);
+  if (!fits(rest, moved, g) || !fits(rest, back, g) || overlaps(moved, back)) return { ok: false };
+  return { ok: true, x: other.x, y: other.y, swap: { id: other.id, x: w.x, y: w.y } };
+}
+
+/** A move's result: `swapped` the widget it changed places with. */
+export type MoveResult =
+  | { ok: true; layout: DeskLayout; swapped?: string }
+  | { ok: false; why: EditorRefusal };
+
+/**
+ * Moves widget `id` to `cell` (its size kept); onto exactly one other widget the two change places (`moveSpot`).
+ * Refused when the spot is taken otherwise or off the grid.
+ */
 export function moveWidget(
   layout: DeskLayout,
   index: number,
@@ -119,17 +165,30 @@ export function moveWidget(
   id: string,
   cell: { x: number; y: number },
   viewOf?: ViewOf,
-): EditorResult {
+): MoveResult {
   const { widgets } = editorPage(layout, index, g, viewOf);
   const w = widgets.find((x) => x.id === id);
   if (!w) return refused('taken');
-  const next = { ...w, x: cell.x, y: cell.y };
-  if (!fits(widgets, next, g, id)) return refused('taken');
-  if (next.x === w.x && next.y === w.y) return { ok: true, layout };
-  return { ok: true, layout: setPageWidgets(layout, index, g, swap(widgets, next)) };
+  const spot = moveSpot(widgets, g, id, cell);
+  if (!spot.ok) return refused('taken');
+  if (spot.x === w.x && spot.y === w.y) return { ok: true, layout };
+  const { swap } = spot;
+  const next = widgets.map((x) =>
+    x.id === id
+      ? { ...x, x: spot.x, y: spot.y }
+      : swap && x.id === swap.id
+        ? { ...x, x: swap.x, y: swap.y }
+        : x,
+  );
+  return {
+    ok: true,
+    layout: setPageWidgets(layout, index, g, next),
+    ...(swap ? { swapped: swap.id } : {}),
+  };
 }
 
-const swap = (widgets: readonly DeskWidget[], next: DeskWidget) =>
+/** The page's widgets with the one whose id `next` has put in its place. */
+const replaceWidget = (widgets: readonly DeskWidget[], next: DeskWidget) =>
   widgets.map((x) => (x.id === next.id ? next : x));
 
 /**
@@ -153,10 +212,10 @@ export function resizeWidget(
   const next = { ...w, w: size.w, h: size.h };
   if (!fits(widgets, next, g, id)) return refused('noRoom');
   if (next.w === w.w && next.h === w.h) return { ok: true, layout };
-  return { ok: true, layout: setPageWidgets(layout, index, g, swap(widgets, next)) };
+  return { ok: true, layout: setPageWidgets(layout, index, g, replaceWidget(widgets, next)) };
 }
 
-/** The keyboard's and the phone's buttons: one cell left, right, up or down. */
+/** The keyboard's and the phone's buttons: one cell left, right, up or down (onto another, the two change places). */
 export function nudgeWidget(
   layout: DeskLayout,
   index: number,
@@ -165,7 +224,7 @@ export function nudgeWidget(
   dx: number,
   dy: number,
   viewOf?: ViewOf,
-): EditorResult {
+): MoveResult {
   const w = editorPage(layout, index, g, viewOf).widgets.find((x) => x.id === id);
   if (!w) return refused('taken');
   return moveWidget(layout, index, g, id, { x: w.x + dx, y: w.y + dy }, viewOf);
@@ -191,6 +250,41 @@ export function growWidget(
     { w: w.w + (dim === 'w' ? by : 0), h: w.h + (dim === 'h' ? by : 0) },
     viewOf,
   );
+}
+
+/** The size's shapes (DK-165), in this order. */
+export const SIZE_PRESETS = ['small', 'normal', 'wide', 'tall', 'large'] as const;
+export type SizePresetKey = (typeof SIZE_PRESETS)[number];
+
+/**
+ * The shapes a widget's *Size* offers (DK-165), from its sizes and the grid: *Small* its smallest, *Normal* the size it
+ * starts at, *Wide* that twice as wide, *Tall* twice as high, *Large* both — each as far as its largest and the grid
+ * allow. A shape the same as an earlier one, or one its smallest or the grid rules out, isn't offered.
+ */
+export function sizePresets(
+  limits: WidgetSize,
+  g: Pick<Grid, 'cols' | 'rows'>,
+): { key: SizePresetKey; w: number; h: number }[] {
+  const maxW = Math.min(limits.max[0], g.cols);
+  const maxH = Math.min(limits.max[1], g.rows);
+  const w = Math.min(limits.def[0], maxW);
+  const h = Math.min(limits.def[1], maxH);
+  const wide = Math.min(w * 2, maxW);
+  const tall = Math.min(h * 2, maxH);
+  const all: { key: SizePresetKey; w: number; h: number }[] = [
+    { key: 'small', w: limits.min[0], h: limits.min[1] },
+    { key: 'normal', w, h },
+    { key: 'wide', w: wide, h },
+    { key: 'tall', w, h: tall },
+    { key: 'large', w: wide, h: tall },
+  ];
+  const out: typeof all = [];
+  for (const p of all) {
+    if (p.w < limits.min[0] || p.h < limits.min[1] || p.w > maxW || p.h > maxH) continue;
+    if (out.some((o) => o.w === p.w && o.h === p.h)) continue;
+    out.push(p);
+  }
+  return out;
 }
 
 /** Takes widget `id` off this page's layout for this shape (Undo brings it back). */
@@ -377,12 +471,100 @@ export function setWidgetSpec(
 }
 
 /**
+ * A widget's options once it shows `item` instead (DK-164): the item's own (its panel, its part), and of what it had
+ * everything but what it showed — its chart's range, a photo's pace — with *On a locked screen* kept only where the new
+ * one is private too.
+ */
+export function chosenOpts(
+  current: Readonly<Record<string, string>>,
+  item: Pick<DeskCatalogItem, 'opts' | 'private'>,
+): Record<string, string> {
+  const { panel: _panel, show: _show, lock, ...kept } = current;
+  return { ...kept, ...item.opts, ...(item.private && lock ? { lock } : {}) };
+}
+
+/**
+ * *What it shows*: widget `id` shows `item` instead (DK-164) — another view of its connection, server or account, a
+ * connection's figures or one of its panels — on every shape of every page where it is, in its place: it shrinks to the
+ * new view's largest and grows to its smallest. Refused (`noRoom`) where growing would run onto another widget or off
+ * the grid, and nothing changes.
+ */
+export function chooseWidget(
+  layout: DeskLayout,
+  id: string,
+  item: Pick<DeskCatalogItem, 'type' | 'ref' | 'opts' | 'view' | 'private'>,
+): EditorResult {
+  let found = false;
+  let blocked = false;
+  const pages = layout.pages.map((page) => ({
+    ...page,
+    layouts: Object.fromEntries(
+      Object.entries(page.layouts).map(([key, widgets]) => {
+        const w = widgets.find((x) => x.id === id);
+        if (!w) return [key, widgets];
+        found = true;
+        const opts = chosenOpts(w.opts, item);
+        const size = clampSize(sizeOf({ type: item.type, opts }, item.view), w.w, w.h);
+        const next: DeskWidget = {
+          id,
+          type: item.type,
+          ...(item.ref ? { ref: item.ref } : {}),
+          opts,
+          x: w.x,
+          y: w.y,
+          ...size,
+        };
+        const shape = parseShape(key);
+        if (shape && !fits(widgets, next, shape, id)) blocked = true;
+        return [key, replaceWidget(widgets, next)];
+      }),
+    ),
+  }));
+  if (!found || blocked) return refused('noRoom');
+  return { ok: true, layout: { ...layout, pages } };
+}
+
+/**
  * What waits in *Didn’t fit* on this page and shape: what the rearranging left out (`left`, kept by the editor once the
  * rearranged layout became this shape's own) and isn't on the page now.
  */
 export function didntFit(widgets: readonly DeskWidget[], left: readonly DeskWidget[]): DeskWidget[] {
   const here = new Set(widgets.map((w) => w.id));
   return left.filter((w) => !here.has(w.id));
+}
+
+/**
+ * *Tidy up* (DK-166): page `index`'s widgets packed up and to the left — in reading order, each at the first free spot
+ * with its size kept, so nothing is dropped. `moved` how many moved (none: the layout as it was). Refused (`tidy`) in
+ * the rare page whose widgets don't all fit packed that way; nothing moves then.
+ */
+export function tidyPage(
+  layout: DeskLayout,
+  index: number,
+  g: Pick<Grid, 'cols' | 'rows'>,
+  viewOf?: ViewOf,
+): { ok: true; layout: DeskLayout; moved: number } | { ok: false; why: EditorRefusal } {
+  const { widgets } = editorPage(layout, index, g, viewOf);
+  const placed: DeskWidget[] = [];
+  let moved = 0;
+  for (const w of [...widgets].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const spot = firstFree(placed, w.w, w.h, g);
+    if (!spot) return { ok: false, why: 'tidy' };
+    if (spot.x !== w.x || spot.y !== w.y) moved += 1;
+    placed.push({ ...w, ...spot });
+  }
+  if (moved === 0) return { ok: true, layout, moved };
+  const at = new Map(placed.map((w) => [w.id, w]));
+  return {
+    ok: true,
+    layout: setPageWidgets(
+      layout,
+      index,
+      g,
+      widgets.map((w) => at.get(w.id) ?? w),
+    ),
+    moved,
+  };
 }
 
 /* Pages (DK-133) --------------------------------------------------------------------------------------------------- */

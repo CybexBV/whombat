@@ -1,21 +1,23 @@
 /**
- * The editor's side panel (the mockups' `editor.html`): *Add a widget* — search, *Didn’t fit*, the sections that fold
- * (DK-155: Whombat's own and *Servers* folded at first, each server inside it, each connection or device, *Your
- * accounts* with each account open inside it, the assistant's Home widgets), a thing's whole list read when asked, a widget's live preview after half a second on it
- * (DK-156), drag one in or *+* — or, with a widget chosen, its settings (DK-144): a preview at its size, what it shows
- * (a server, which part of it and its chart's range, a connection and its panel), *On a locked screen* where it shows
- * something private,
- * *What’s going on*'s choices and *Servers*' order (the screen's own, saved as they're chosen), its size, what touching
- * it does, and *Remove from this page*.
+ * The editor's side panel (the mockups' `editor.html`; Whombat desk-display.md DK-163…DK-165): *Add a widget* — search,
+ * Whombat's own as small tiles, *Didn’t fit*, then each server, connection or device and account once under its
+ * section's heading (adding one adds its main view), the assistant's Home widgets each; a search lists single views. A
+ * widget's live preview shows after half a second on it (DK-156); drag one in or *+* — or, with a widget chosen, its
+ * settings (DK-144): a preview at its size, its server, connection or account, *What it shows* (every view of it, as the
+ * Overview's gear offers), its chart's range, *On a locked screen* where it shows something private, *What’s going on*'s
+ * choices and *Servers*' order (the screen's own, saved as they're chosen), its size as shapes and steppers, what
+ * touching it does, and *Remove from this page*.
  */
 import { isBrandMark } from '@whombat/brand';
 import { BrandMark } from '@whombat/brand/react';
 import {
-  CATALOG_FOLDED_AT_FIRST,
+  type CatalogEntry,
+  type CatalogRows,
   catalogFind,
+  catalogGroupOf,
   catalogItemKey,
   catalogName,
-  catalogSections,
+  catalogRows,
   catalogServers,
   DESK_SCREENS_TEXT,
   DESK_WIDGET_RANGES,
@@ -40,8 +42,8 @@ import {
   ownWidgetName,
   sameWidget,
   screensErrorText,
-  sectionCount,
   serverParts,
+  sizePresets,
   type ViewOf,
   widgetSize,
 } from '@whombat/client/desk';
@@ -59,8 +61,8 @@ import {
   CalendarCheck,
   CalendarClock,
   CalendarDays,
+  Check,
   ChevronLeft,
-  ChevronRight,
   Clock,
   Columns2,
   Cpu,
@@ -80,15 +82,7 @@ import {
   Thermometer,
   TriangleAlert,
 } from 'lucide-react';
-import {
-  type ReactNode,
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
@@ -206,6 +200,8 @@ export interface WidgetPanelProps {
   viewOf: ViewOf;
   onPickDown: (event: ReactPointerEvent, pick: CatalogPick) => void;
   onAdd: (pick: CatalogPick) => void;
+  /** *What it shows*: widget `id` shows `item` instead. */
+  onChoose: (id: string, item: DeskCatalogItem) => void;
   say: (text: string | null) => void;
   nameOf: (w: Pick<DeskWidget, 'id' | 'type' | 'ref' | 'opts'>) => string;
 }
@@ -239,19 +235,10 @@ export interface PeekArea {
   bottom: number;
 }
 
-const matchesQuery = (query: string, ...words: (string | undefined)[]) =>
-  !query || words.join(' ').toLowerCase().includes(query);
-
 function AddPanel(props: WidgetPanelProps) {
-  const { api, screen, catalog, ed, assistant, onPickDown, onAdd, views } = props;
+  const { catalog, ed, assistant, onPickDown, onAdd, views } = props;
   const [q, setQ] = useState('');
-  const query = q.trim().toLowerCase();
-  // What the person folded or opened; the rest as it starts (DK-155). A search shows everything that matches.
-  const [folds, setFolds] = useState<Record<string, boolean>>({});
-  const isOpen = (key: string, atFirst: boolean) => query !== '' || (folds[key] ?? atFirst);
-  const toggle = (key: string, atFirst: boolean) => setFolds((f) => ({ ...f, [key]: !(f[key] ?? atFirst) }));
   const [peek, setPeek] = useState<Peek | null>(null);
-  const onPage = (item: DeskCatalogItem) => ed.widgets.some((w) => sameWidget(w, item));
   const tray = ed.tray.map((w) => {
     const found = catalogFind(catalog, w);
     const view = views.get(w.id)?.kind ?? found?.item.view;
@@ -264,32 +251,10 @@ function AddPanel(props: WidgetPanelProps) {
     };
     return { key: w.id, pick, mark: found?.item.mark ?? views.get(w.id)?.mark, line: found?.item.line ?? '' };
   });
-  // Each section with the items the search leaves; a thing listed partly keeps its row to read the rest.
-  const sections = catalogSections(catalog)
-    .map((section) => {
-      const groups = section.groups
-        .map((g) => ({
-          group: g,
-          items: g.items.filter((i) => matchesQuery(query, i.name, i.line, g.label, section.label)),
-        }))
-        .filter((g) => g.items.length > 0 || (g.group.partial && !query));
-      return { section, groups };
-    })
-    .filter((x) => x.groups.length > 0);
-  const row = (group: DeskCatalogGroup, item: DeskCatalogItem) => (
-    <CatalogRow
-      key={catalogItemKey(item)}
-      pick={pickOf(group, item)}
-      label={item.name}
-      mark={item.mark}
-      icon={isAccountGroup(group) ? accountIcon(item) : undefined}
-      line={item.line}
-      here={onPage(item)}
-      onPickDown={onPickDown}
-      onAdd={onAdd}
-      onPeek={setPeek}
-    />
-  );
+  // Each service once, or with a search each view that matches (DK-163).
+  const sections = catalogRows(catalog, q, ed.widgets);
+  const own = sections.find((x) => x.kind === 'own');
+  const rest = sections.filter((x) => x.kind !== 'own');
   return (
     <>
       <h2 className={e.panelTitle}>{E.addWidget}</h2>
@@ -301,6 +266,7 @@ function AddPanel(props: WidgetPanelProps) {
         value={q}
         onChange={(ev) => setQ(ev.target.value)}
       />
+      {own ? <OwnTiles section={own} onPickDown={onPickDown} onAdd={onAdd} onPeek={setPeek} /> : null}
       {tray.length > 0 ? (
         <section className={cx(e.group, e.tray)} aria-label={E.didntFit}>
           <h3 className={e.groupLabel}>{E.didntFit}</h3>
@@ -318,65 +284,28 @@ function AddPanel(props: WidgetPanelProps) {
           ))}
         </section>
       ) : null}
-      {sections.map(({ section, groups }) => {
-        const atFirst = !CATALOG_FOLDED_AT_FIRST.has(section.kind);
-        const open = isOpen(section.key, atFirst);
-        return (
-          <section key={section.key} className={e.section} aria-label={section.label}>
-            <Fold
-              label={section.label}
-              count={query ? groups.reduce((n, g) => n + g.items.length, 0) : sectionCount(section)}
-              open={open}
-              onToggle={() => toggle(section.key, atFirst)}
-              controls={`fold-${section.key}`}
+      {rest.map((section) => (
+        <section key={section.key} className={e.group} aria-label={section.label}>
+          <h3 className={e.groupLabel}>{section.label}</h3>
+          {section.rows.map((row) => (
+            <CatalogRow
+              key={row.key}
+              pick={pickOf(row.group, row.item)}
+              label={row.name}
+              mark={row.mark}
+              icon={!row.service && isAccountGroup(row.group) ? accountIcon(row.item) : undefined}
+              part={!row.service && row.item.type === 'server' ? row.item.opts.show : undefined}
+              line={row.line}
+              here={row.here}
+              onPickDown={onPickDown}
+              onAdd={onAdd}
+              onPeek={setPeek}
             />
-            {open ? (
-              <div id={`fold-${section.key}`}>
-                {section.kind === 'servers' || section.kind === 'accounts'
-                  ? groups.map(({ group, items }) => {
-                      // A fleet's servers start folded; a person's few accounts open (AP-6110).
-                      const groupAtFirst = section.kind === 'accounts';
-                      const serverOpen = isOpen(group.key, groupAtFirst);
-                      return (
-                        <div key={group.key} className={e.server}>
-                          <GroupFold
-                            group={group}
-                            type={section.kind === 'servers' ? 'server' : 'panel'}
-                            count={items.length}
-                            open={serverOpen}
-                            onToggle={() => toggle(group.key, groupAtFirst)}
-                            controls={`fold-${group.key}`}
-                          />
-                          {serverOpen ? (
-                            <div id={`fold-${group.key}`} className={e.serverItems}>
-                              {items.map((item) => row(group, item))}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })
-                  : groups.map(({ group, items }) =>
-                      group.partial ? (
-                        <ThingRows
-                          key={group.key}
-                          api={api}
-                          screen={screen.id}
-                          group={group}
-                          items={items}
-                          query={query}
-                          row={row}
-                        />
-                      ) : (
-                        items.map((item) => row(group, item))
-                      ),
-                    )}
-              </div>
-            ) : null}
-          </section>
-        );
-      })}
-      {query && sections.length === 0 && tray.length === 0 ? (
-        <p className={e.noMatch}>{fillDeskWords(E.noMatch, { q })}</p>
+          ))}
+        </section>
+      ))}
+      {q.trim() && sections.length === 0 && tray.length === 0 ? (
+        <p className={e.noMatch}>{fillDeskWords(E.noMatch, { q: q.trim() })}</p>
       ) : null}
       <p className={e.ask}>{fillDeskWords(E.ask, { assistant: assistant })}</p>
       {peek ? <PeekPreview {...props} peek={peek} onClose={() => setPeek(null)} /> : null}
@@ -384,134 +313,13 @@ function AddPanel(props: WidgetPanelProps) {
   );
 }
 
-/** A section's heading: a button that folds it (DK-155), with how many widgets it has. */
-function Fold({
-  label,
-  count,
-  open,
-  onToggle,
-  controls,
-}: {
-  label: string;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-  controls: string;
-}) {
-  return (
-    <h3 className={e.foldHead}>
-      <button
-        type="button"
-        className={e.fold}
-        aria-expanded={open}
-        aria-controls={controls}
-        onClick={onToggle}
-      >
-        <span className={e.foldChevron} aria-hidden="true">
-          <Icon icon={ChevronRight} size={13} />
-        </span>
-        <span className={e.foldLabel}>{label}</span>
-        <span className={e.foldCount}>{count}</span>
-      </button>
-    </h3>
-  );
-}
-
-/** A server under *Servers*, or an account under *Your accounts*: its mark and name, folding its widgets. */
-function GroupFold({
-  group,
-  type,
-  count,
-  open,
-  onToggle,
-  controls,
-}: {
-  group: DeskCatalogGroup;
-  type: 'server' | 'panel';
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-  controls: string;
-}) {
-  return (
-    <button
-      type="button"
-      className={e.serverFold}
-      aria-expanded={open}
-      aria-controls={controls}
-      onClick={onToggle}
-    >
-      <span className={e.foldChevron} aria-hidden="true">
-        <Icon icon={ChevronRight} size={13} />
-      </span>
-      <span className={e.tile}>
-        <WidgetMark mark={group.mark} type={type} />
-      </span>
-      <span className={e.serverName}>{group.label}</span>
-      <span className={e.foldCount}>{count}</span>
-    </button>
-  );
-}
-
-/** A thing whose page wasn't read in time: its figures, and its widgets once asked for (`desk.widgets {thing}`). */
-function ThingRows({
-  api,
-  screen,
-  group,
-  items,
-  query,
-  row,
-}: {
-  api: DeskApi;
-  screen: string;
-  group: DeskCatalogGroup;
-  items: DeskCatalogItem[];
-  query: string;
-  row: (group: DeskCatalogGroup, item: DeskCatalogItem) => ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const whole = useDeskWidgets(api, open && group.thing ? { screen, thing: group.thing } : null);
-  const full = whole.data?.groups[0];
-  const shown = (full?.items ?? items).filter((i) => matchesQuery(query, i.name, i.line, group.label));
-  return (
-    <>
-      {shown.map((item) => row(full ?? group, item))}
-      {!full ? (
-        <button type="button" className={e.more} onClick={() => setOpen(true)} disabled={open}>
-          {open ? E.loadingMore : E.more}
-        </button>
-      ) : null}
-    </>
-  );
-}
-
-function CatalogRow({
-  pick,
-  label,
-  mark,
-  icon,
-  line,
-  here,
-  onPickDown,
-  onAdd,
-  onPeek,
-}: {
-  pick: CatalogPick;
-  /** Its name under its heading (“Storage” under pve-01); `pick.name` says what it belongs to too. */
-  label?: string;
-  mark: string | undefined;
-  /** A line icon of its own (an account's calendar, mail, pull requests). */
-  icon?: LucideIcon | undefined;
-  line: string;
-  here: boolean;
-  onPickDown: WidgetPanelProps['onPickDown'];
-  onAdd: WidgetPanelProps['onAdd'];
-  onPeek: (peek: Peek | null) => void;
-}) {
-  const def = pick.want ?? { w: pick.size.def[0], h: pick.size.def[1] };
-  const ref = useRef<HTMLDivElement | null>(null);
+/**
+ * Resting the pointer on a row or a tile for half a second shows its preview (DK-156), as does the keyboard's focus on
+ * its button; leaving, pressing or dragging takes it away.
+ */
+function usePeek(pick: CatalogPick, onPeek: (peek: Peek | null) => void) {
+  const ref = useRef<HTMLElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Resting on it for half a second shows its preview (DK-156); leaving, pressing or dragging takes it away.
   const rest = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
@@ -530,17 +338,134 @@ function CatalogRow({
     },
     [],
   );
+  return { ref, rest, leave };
+}
+
+/**
+ * Whombat's own (DK-163): small tiles, three to a row, each its icon and name; a press adds it, a drag brings it in, and
+ * one on the page already has a check.
+ */
+function OwnTiles({
+  section,
+  onPickDown,
+  onAdd,
+  onPeek,
+}: {
+  section: CatalogRows;
+  onPickDown: WidgetPanelProps['onPickDown'];
+  onAdd: WidgetPanelProps['onAdd'];
+  onPeek: (peek: Peek | null) => void;
+}) {
+  return (
+    <section className={e.group} aria-label={section.label}>
+      <h3 className={e.groupLabel}>{section.label}</h3>
+      <div className={e.tiles}>
+        {section.rows.map((row) => (
+          <OwnTile key={row.key} row={row} onPickDown={onPickDown} onAdd={onAdd} onPeek={onPeek} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function OwnTile({
+  row,
+  onPickDown,
+  onAdd,
+  onPeek,
+}: {
+  row: CatalogEntry;
+  onPickDown: WidgetPanelProps['onPickDown'];
+  onAdd: WidgetPanelProps['onAdd'];
+  onPeek: (peek: Peek | null) => void;
+}) {
+  const pick = pickOf(row.group, row.item);
+  const peek = usePeek(pick, onPeek);
+  const label = fillDeskWords(E.addOne, { name: pick.name });
+  return (
+    <button
+      ref={(el) => {
+        peek.ref.current = el;
+      }}
+      type="button"
+      className={e.ownTile}
+      data-here={row.here || undefined}
+      aria-label={row.here ? `${label}, ${E.onThisPage}` : label}
+      title={row.line}
+      onPointerEnter={(ev) => {
+        if (ev.pointerType === 'mouse') peek.rest();
+      }}
+      onPointerLeave={peek.leave}
+      onPointerDown={(ev) => {
+        peek.leave();
+        onPickDown(ev, pick);
+      }}
+      onFocus={(ev) => {
+        if (focusVisible(ev.target)) peek.rest();
+      }}
+      onBlur={peek.leave}
+      onKeyDown={(ev) => {
+        if (ev.key === 'Escape') peek.leave();
+      }}
+      onClick={() => {
+        peek.leave();
+        onAdd(pick);
+      }}
+    >
+      <span className={e.ownIcon} aria-hidden="true">
+        <WidgetMark type={row.item.type} />
+      </span>
+      <span className={e.ownName}>{row.name}</span>
+      {row.here ? (
+        <span className={e.ownHere} aria-hidden="true">
+          <Icon icon={Check} size={12} />
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function CatalogRow({
+  pick,
+  label,
+  mark,
+  icon,
+  part,
+  line,
+  here,
+  onPickDown,
+  onAdd,
+  onPeek,
+}: {
+  pick: CatalogPick;
+  /** Its name in the list (a service's: “Plex”); `pick.name` is the widget's, for the words. */
+  label?: string;
+  mark: string | undefined;
+  /** A line icon of its own (an account's calendar, mail, pull requests). */
+  icon?: LucideIcon | undefined;
+  /** A server's part, found by a search: its icon. */
+  part?: string | undefined;
+  line: string;
+  here: boolean;
+  onPickDown: WidgetPanelProps['onPickDown'];
+  onAdd: WidgetPanelProps['onAdd'];
+  onPeek: (peek: Peek | null) => void;
+}) {
+  const def = pick.want ?? { w: pick.size.def[0], h: pick.size.def[1] };
+  const peek = usePeek(pick, onPeek);
   return (
     // Dragging is the pointer's way in; + is everyone's (the keyboard's too).
     <div
-      ref={ref}
+      ref={(el) => {
+        peek.ref.current = el;
+      }}
       className={e.item}
       onPointerEnter={(ev) => {
-        if (ev.pointerType === 'mouse') rest();
+        if (ev.pointerType === 'mouse') peek.rest();
       }}
-      onPointerLeave={leave}
+      onPointerLeave={peek.leave}
       onPointerDown={(ev) => {
-        leave();
+        peek.leave();
         if ((ev.target as HTMLElement).closest('button')) return;
         onPickDown(ev, pick);
       }}
@@ -549,12 +474,7 @@ function CatalogRow({
         <Icon icon={GripVertical} size={14} />
       </span>
       <span className={e.tile}>
-        <WidgetMark
-          mark={mark}
-          type={pick.widget.type}
-          part={pick.widget.type === 'server' ? pick.widget.opts?.show : undefined}
-          icon={icon}
-        />
+        <WidgetMark mark={mark} type={pick.widget.type} part={part} icon={icon} />
       </span>
       <span className={e.itemText}>
         <span className={e.itemName}>
@@ -567,17 +487,17 @@ function CatalogRow({
       <button
         type="button"
         className={e.add}
-        aria-label={fillDeskWords(E.addOne, { name: pick.name })}
+        aria-label={fillDeskWords(E.addOne, { name: label ?? pick.name })}
         onClick={() => {
-          leave();
+          peek.leave();
           onAdd(pick);
         }}
         onFocus={(ev) => {
-          if (focusVisible(ev.target)) rest();
+          if (focusVisible(ev.target)) peek.rest();
         }}
-        onBlur={leave}
+        onBlur={peek.leave}
         onKeyDown={(ev) => {
-          if (ev.key === 'Escape') leave();
+          if (ev.key === 'Escape') peek.leave();
         }}
       >
         <Icon icon={Plus} size={16} />
@@ -744,11 +664,13 @@ function ChosenPanel({
   loadImage,
   shape,
   viewOf,
+  onChoose,
   say,
   nameOf,
   widget,
 }: WidgetPanelProps & { widget: DeskWidget }) {
   const view = views.get(widget.id);
+  const group = catalogGroupOf(catalog, widget);
   const found = catalogFind(catalog, widget);
   const name = nameOf(widget);
   const limits = widgetSize(widget, viewOf);
@@ -805,11 +727,32 @@ function ChosenPanel({
         />
       </div>
 
-      {widget.type === 'server' ? (
-        <ServerFields catalog={catalog} widget={widget} ed={ed} setOpt={setOpt} />
-      ) : null}
+      {widget.type === 'server' ? <ServerField catalog={catalog} widget={widget} ed={ed} /> : null}
       {widget.type === 'panel' || widget.type === 'figures' ? (
-        <ThingFields api={api} screen={screen.id} catalog={catalog} widget={widget} ed={ed} />
+        <ThingField catalog={catalog} widget={widget} ed={ed} />
+      ) : null}
+      {group ? (
+        <ShowsField
+          api={api}
+          screen={screen.id}
+          group={group}
+          widget={widget}
+          onChoose={(item) => onChoose(widget.id, item)}
+        />
+      ) : null}
+      {widget.type === 'server' && RANGED.has(serverShow(widget.opts)) ? (
+        <div className={e.field}>
+          <span className={e.fieldLabel}>{E.chart}</span>
+          <SegmentedControl
+            variant="soft"
+            size="sm"
+            role="radiogroup"
+            label={E.chart}
+            value={(widget.opts.range as (typeof DESK_WIDGET_RANGES)[number] | undefined) ?? '24h'}
+            onChange={(range) => setOpt('range', range === '24h' ? null : range)}
+            options={DESK_WIDGET_RANGES.map((r) => ({ value: r, label: E.ranges[r] }))}
+          />
+        </div>
       ) : null}
       {(widget.type === 'panel' || widget.type === 'server') &&
       (found?.item.private ?? (widget.type === 'panel' && kind !== undefined && PRIVATE_VIEWS.has(kind))) ? (
@@ -822,33 +765,7 @@ function ChosenPanel({
         <ShowFields api={api} screen={screen} desk={desk} type={widget.type} assistant={assistant} />
       ) : null}
 
-      <div className={e.field}>
-        <span className={e.fieldLabel}>{E.sizeLabel}</span>
-        <div className={e.steppers}>
-          <span className={e.stepLabel}>{E.wide}</span>
-          <Stepper
-            value={widget.w}
-            less={E.narrower}
-            more={E.wider}
-            onLess={() => say(ed.grow(widget.id, 'w', -1))}
-            onMore={() => say(ed.grow(widget.id, 'w', 1))}
-          />
-          <span className={cx(e.stepLabel, e.stepLabelGap)}>{E.high}</span>
-          <Stepper
-            value={widget.h}
-            less={E.lower}
-            more={E.higher}
-            onLess={() => say(ed.grow(widget.id, 'h', -1))}
-            onMore={() => say(ed.grow(widget.id, 'h', 1))}
-          />
-        </div>
-        <span className={e.fieldHint}>
-          {fillDeskWords(E.sizes, {
-            min: gridText(limits.min[0], limits.min[1]),
-            max: gridText(limits.max[0], limits.max[1]),
-          })}
-        </span>
-      </div>
+      <SizeField widget={widget} grid={ed.grid} limits={limits} ed={ed} say={say} />
 
       {ownType ? null : (
         <div className={e.field}>
@@ -903,106 +820,57 @@ function Stepper({
 /** The parts drawn over a range, whose chart's range can be chosen. */
 const RANGED = new Set(['overview', 'cpu', 'memory', 'network']);
 
-/** A server widget: which server, which part of it (DK-153), and its chart's range. */
-function ServerFields({
+/** A server widget's *Server*: another server keeps the part when it has it, else shows its overview. */
+function ServerField({
   catalog,
   widget,
   ed,
-  setOpt,
 }: {
   catalog: DeskCatalog | undefined;
   widget: DeskWidget;
   ed: ScreenEditor;
-  setOpt: (key: string, value: string | null) => void;
 }) {
   const id = useId();
   const servers = catalogServers(catalog);
   const show = serverShow(widget.opts);
-  const parts = serverParts(catalog, widget.ref);
-  /** The widget's options with `show` set to `next` (the overview's is none). */
-  const withShow = (opts: Record<string, string>, next: string) => {
-    const out = { ...opts };
-    if (next && next !== 'overview') out.show = next;
-    else delete out.show;
-    return out;
-  };
   return (
-    <>
-      <div className={e.field}>
-        <label className={e.fieldLabel} htmlFor={`${id}-server`}>
-          {E.server}
-        </label>
-        <select
-          id={`${id}-server`}
-          className={e.select}
-          value={widget.ref ?? ''}
-          onChange={(ev) => {
-            // Another server keeps the part when it has it, else shows its overview.
-            const offers = serverParts(catalog, ev.target.value).some((p) => (p.show || 'overview') === show);
-            ed.setSpec(widget.id, { ref: ev.target.value, opts: withShow(widget.opts, offers ? show : '') });
-          }}
-        >
-          {servers.some((x) => x.ref === widget.ref) ? null : (
-            <option value={widget.ref ?? ''}>{widget.ref}</option>
-          )}
-          {servers.map((x) => (
-            <option key={x.ref} value={x.ref}>
-              {x.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      {parts.length > 1 ? (
-        <div className={e.field}>
-          <label className={e.fieldLabel} htmlFor={`${id}-shows`}>
-            {E.panel}
-          </label>
-          <select
-            id={`${id}-shows`}
-            className={e.select}
-            value={show}
-            onChange={(ev) => ed.setSpec(widget.id, { opts: withShow(widget.opts, ev.target.value) })}
-          >
-            {parts.some((p) => (p.show || 'overview') === show) ? null : <option value={show}>{show}</option>}
-            {parts.map((p) => (
-              <option key={p.show || 'overview'} value={p.show || 'overview'}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-      {RANGED.has(show) ? (
-        <div className={e.field}>
-          <span className={e.fieldLabel}>{E.chart}</span>
-          <SegmentedControl
-            variant="soft"
-            size="sm"
-            role="radiogroup"
-            label={E.chart}
-            value={(widget.opts.range as (typeof DESK_WIDGET_RANGES)[number] | undefined) ?? '24h'}
-            onChange={(range) => setOpt('range', range === '24h' ? null : range)}
-            options={DESK_WIDGET_RANGES.map((r) => ({ value: r, label: E.ranges[r] }))}
-          />
-        </div>
-      ) : null}
-    </>
+    <div className={e.field}>
+      <label className={e.fieldLabel} htmlFor={`${id}-server`}>
+        {E.server}
+      </label>
+      <select
+        id={`${id}-server`}
+        className={e.select}
+        value={widget.ref ?? ''}
+        onChange={(ev) => {
+          const offers = serverParts(catalog, ev.target.value).some((p) => (p.show || 'overview') === show);
+          const opts = { ...widget.opts };
+          if (!offers) delete opts.show;
+          ed.setSpec(widget.id, { ref: ev.target.value, opts });
+        }}
+      >
+        {servers.some((x) => x.ref === widget.ref) ? null : (
+          <option value={widget.ref ?? ''}>{widget.ref}</option>
+        )}
+        {servers.map((x) => (
+          <option key={x.ref} value={x.ref}>
+            {x.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
 /**
- * A connection's widget: which connection, and for a panel which of its page's panels. An account's widget lists the
- * person's accounts instead (AP-6111): another account keeps the panel when it has one by that id.
+ * A connection's widget: which connection; an account's lists the person's accounts instead (AP-6111). Another one
+ * keeps the panel when it has one by that id, else shows its first of the same kind.
  */
-function ThingFields({
-  api,
-  screen,
+function ThingField({
   catalog,
   widget,
   ed,
 }: {
-  api: DeskApi;
-  screen: string;
   catalog: DeskCatalog | undefined;
   widget: DeskWidget;
   ed: ScreenEditor;
@@ -1011,61 +879,171 @@ function ThingFields({
   const account = !!widget.ref && isAccountGroup({ key: widget.ref });
   const things = (catalog?.groups ?? []).filter((g) => g.thing && isAccountGroup(g) === account);
   const group = things.find((g) => g.thing === widget.ref);
-  // A thing listed partly: its whole list, read for the panel's choices.
-  const whole = useDeskWidgets(api, group?.partial && group.thing ? { screen, thing: group.thing } : null);
-  const panels = (whole.data?.groups[0] ?? group)?.items.filter((i) => i.type === 'panel') ?? [];
   return (
-    <>
-      <div className={e.field}>
-        <label className={e.fieldLabel} htmlFor={`${id}-thing`}>
-          {account ? E.account : E.thing}
-        </label>
-        <select
-          id={`${id}-thing`}
-          className={e.select}
-          value={widget.ref ?? ''}
-          onChange={(ev) => {
-            const next = things.find((g) => g.thing === ev.target.value);
-            const same = next?.items.find(
-              (i) => i.type === widget.type && i.opts.panel === widget.opts.panel,
-            );
-            const first = same ?? next?.items.find((i) => i.type === widget.type);
-            if (!next) return;
-            ed.setSpec(widget.id, {
-              ref: ev.target.value,
-              opts:
-                widget.type === 'panel' ? { ...widget.opts, panel: first?.opts.panel ?? '' } : widget.opts,
-            });
-          }}
-        >
-          {group ? null : <option value={widget.ref ?? ''}>{widget.ref}</option>}
-          {things.map((g) => (
-            <option key={g.key} value={g.thing}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      {widget.type === 'panel' && panels.length > 0 ? (
-        <div className={e.field}>
-          <label className={e.fieldLabel} htmlFor={`${id}-panel`}>
-            {E.panel}
-          </label>
-          <select
-            id={`${id}-panel`}
-            className={e.select}
-            value={widget.opts.panel ?? ''}
-            onChange={(ev) => ed.setSpec(widget.id, { opts: { ...widget.opts, panel: ev.target.value } })}
+    <div className={e.field}>
+      <label className={e.fieldLabel} htmlFor={`${id}-thing`}>
+        {account ? E.account : E.thing}
+      </label>
+      <select
+        id={`${id}-thing`}
+        className={e.select}
+        value={widget.ref ?? ''}
+        onChange={(ev) => {
+          const next = things.find((g) => g.thing === ev.target.value);
+          const same = next?.items.find((i) => i.type === widget.type && i.opts.panel === widget.opts.panel);
+          const first = same ?? next?.items.find((i) => i.type === widget.type);
+          if (!next) return;
+          ed.setSpec(widget.id, {
+            ref: ev.target.value,
+            opts: widget.type === 'panel' ? { ...widget.opts, panel: first?.opts.panel ?? '' } : widget.opts,
+          });
+        }}
+      >
+        {group ? null : <option value={widget.ref ?? ''}>{widget.ref}</option>}
+        {things.map((g) => (
+          <option key={g.key} value={g.thing}>
+            {g.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * *What it shows* (DK-164): every view of the widget's connection, server or account as the Overview's gear offers
+ * them — its name and line, the one it shows pressed — read whole where *Add a widget* listed it only partly. Choosing
+ * one changes the widget in its place, its size fitted to the new view.
+ */
+function ShowsField({
+  api,
+  screen,
+  group,
+  widget,
+  onChoose,
+}: {
+  api: DeskApi;
+  screen: string;
+  group: DeskCatalogGroup;
+  widget: DeskWidget;
+  onChoose: (item: DeskCatalogItem) => void;
+}) {
+  const id = useId();
+  const whole = useDeskWidgets(api, group.partial && group.thing ? { screen, thing: group.thing } : null);
+  const full = whole.data?.groups.find((g) => g.thing === group.thing) ?? whole.data?.groups[0];
+  const items = (full ?? group).items;
+  const reading = !!group.partial && !full;
+  if (items.length < 2 && !reading) return null;
+  return (
+    <div className={cx(e.field, e.showsField)}>
+      <span className={e.fieldLabel} id={`${id}-shows`}>
+        {E.shows}
+      </span>
+      <fieldset className={e.opts} aria-labelledby={`${id}-shows`}>
+        {items.map((item) => (
+          <button
+            key={catalogItemKey(item)}
+            type="button"
+            className={e.opt}
+            aria-pressed={sameWidget(widget, item)}
+            onClick={() => {
+              if (!sameWidget(widget, item)) onChoose(item);
+            }}
           >
-            {panels.map((p) => (
-              <option key={p.opts.panel} value={p.opts.panel}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+            <span className={e.optName}>{item.name}</span>
+            {item.line ? <small className={e.optLine}>{item.line}</small> : null}
+          </button>
+        ))}
+      </fieldset>
+      {reading ? <span className={e.fieldHint}>{whole.isError ? E.couldntRead : E.reading}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * *Size* (DK-165): its shapes — *Small*, *Normal*, *Wide*, *Tall*, *Large*, as many as its sizes and the grid make
+ * different — each drawn as its cells with its name and size, the one it is pressed; the steppers under them for one
+ * cell at a time.
+ */
+function SizeField({
+  widget,
+  grid,
+  limits,
+  ed,
+  say,
+}: {
+  widget: DeskWidget;
+  grid: Grid;
+  limits: WidgetSize;
+  ed: ScreenEditor;
+  say: (text: string | null) => void;
+}) {
+  const id = useId();
+  const presets = sizePresets(limits, grid);
+  return (
+    <div className={cx(e.field, e.sizeField)}>
+      <span className={e.fieldLabel} id={`${id}-size`}>
+        {E.sizeLabel}
+      </span>
+      {presets.length > 1 ? (
+        <fieldset className={e.shapes} aria-labelledby={`${id}-size`}>
+          {presets.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              aria-pressed={widget.w === p.w && widget.h === p.h}
+              aria-label={fillDeskWords(E.shape, { name: E.shapes[p.key], size: gridText(p.w, p.h) })}
+              onClick={() => say(ed.resize(widget.id, { w: p.w, h: p.h }))}
+            >
+              <ShapeCells w={p.w} h={p.h} />
+              <span className={e.shapeName}>{E.shapes[p.key]}</span>
+              <small className={e.shapeSize}>{`${p.w}×${p.h}`}</small>
+            </button>
+          ))}
+        </fieldset>
       ) : null}
-    </>
+      <div className={e.steppers}>
+        <span className={e.stepLabel}>{E.wide}</span>
+        <Stepper
+          value={widget.w}
+          less={E.narrower}
+          more={E.wider}
+          onLess={() => say(ed.grow(widget.id, 'w', -1))}
+          onMore={() => say(ed.grow(widget.id, 'w', 1))}
+        />
+        <span className={cx(e.stepLabel, e.stepLabelGap)}>{E.high}</span>
+        <Stepper
+          value={widget.h}
+          less={E.lower}
+          more={E.higher}
+          onLess={() => say(ed.grow(widget.id, 'h', -1))}
+          onMore={() => say(ed.grow(widget.id, 'h', 1))}
+        />
+      </div>
+      <span className={e.fieldHint}>
+        {fillDeskWords(E.sizes, {
+          min: gridText(limits.min[0], limits.min[1]),
+          max: gridText(limits.max[0], limits.max[1]),
+        })}
+      </span>
+    </div>
+  );
+}
+
+/** A shape drawn as its cells, small and in proportion: a 6 × 2 widget is six by two little blocks. */
+function ShapeCells({ w, h }: { w: number; h: number }) {
+  const cell = Math.max(3, Math.min(6, Math.floor(44 / w), Math.floor(26 / h)));
+  return (
+    <span
+      className={e.shapeCells}
+      aria-hidden="true"
+      style={{ gridTemplateColumns: `repeat(${w}, ${cell}px)`, gridAutoRows: `${cell}px` }}
+    >
+      {Array.from({ length: w * h }, (_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a shape's cells are fixed places
+        <i key={i} />
+      ))}
+    </span>
   );
 }
 

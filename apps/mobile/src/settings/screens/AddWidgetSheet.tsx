@@ -1,70 +1,53 @@
 /**
- * *Add a widget* as a sheet on the phone (Whombat desk-display.md DK-139, DK-143, DK-145, DK-154, DK-155, DK-159;
- * desk-display-android.md AP-6017, AP-6032…, AP-6120…): a search field; *Didn’t fit after rearranging* first while a
- * rearranged page left some out (it never folds); then the sections, each under a heading that folds it — *Whombat and
- * {assistant}* and *Servers* folded at first, each server folded inside *Servers*, the connections, devices, *Your
- * accounts* (each account open inside it) and *Made by {assistant}* open; an account's widget without a brand mark of
- * its own has the icon of what it shows (a calendar, mail, a pull request), a photo or a board the icon of what it draws;
- * a thing that listed only part of what it has offers *Show its widgets*, which reads its whole list
- * (`desk.widgets {thing}`); and at the end how to ask the assistant for one that isn't there. A search opens whatever
- * matches. Each item is one row (56dp and more) that adds it to the first free spot, smaller if it must, with the size
- * it starts at and *On this page* when it's there already.
+ * *Add a widget* as a sheet on the phone (Whombat desk-display.md DK-139, DK-143, DK-145, DK-154, DK-159, DK-163;
+ * desk-display-android.md AP-6017, AP-6120…, AP-9980…): a search field; Whombat's own as small tiles, three to a row
+ * (one on the page already has a check); *Didn’t fit after rearranging* while a rearranged page left some out; then each
+ * server, connection or device and account once under its section's heading — its mark, name, a line and the size its
+ * main view starts at; adding it adds that view, and its sheet's *What it shows* chooses another — and the assistant's
+ * Home widgets each; and at the end how to ask the assistant for one that isn't there. A search lists single views,
+ * named with what they belong to (“pve-01 · Storage”). Each row (56dp and more) and tile (76dp) adds it to the first
+ * free spot, smaller if it must; then the editor opens its sheet.
  */
 import {
+  type CatalogEntry,
+  type CatalogRows,
+  catalogRows,
   DESK_SCREENS_TEXT,
-  type DeskApi,
   type DeskCatalog,
-  type DeskCatalogGroup,
   type DeskWidget,
-  type DeskWidgetType,
   fillDeskWords,
   gridText,
+  isAccountGroup,
 } from '@whombat/client/desk';
-import { useDeskWidgets } from '@whombat/client/desk/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useAgentWords } from '../../data/useAgent';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
-import { ChevronDown, ChevronRight, CircleUser, type LucideIcon, Plus, Search } from '../../ui/icons';
+import { Check, CircleUser, type LucideIcon, Plus, Search } from '../../ui/icons';
 import { SectionLabel } from '../../ui/primitives';
 import { Sheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
-import {
-  accountName,
-  accountShows,
-  type CatalogGroupView,
-  type CatalogRow,
-  type CatalogSectionView,
-  catalogView,
-} from './catalog';
-import { type TileLabel, widgetsText } from './tiles';
+import { accountShows } from './catalog';
+import type { TileLabel } from './tiles';
 import { ACCOUNT_ICONS, VIEW_ICONS, WidgetLogo } from './WidgetLogo';
 
 const E = DESK_SCREENS_TEXT.editor;
 
-/** The icon a section's heading has where it has no mark of its own. */
-const SECTION_ICON: Record<CatalogSectionView['kind'], DeskWidgetType> = {
-  own: 'clock',
-  servers: 'server',
-  thing: 'panel',
-  accounts: 'figures',
-  widgets: 'widget',
-};
-/** Where a section's heading has an icon of its own: the person's accounts. */
-const SECTION_OWN_ICON: Partial<Record<CatalogSectionView['kind'], LucideIcon>> = { accounts: CircleUser };
-
-/** An item's icon where it has no brand mark: what an account's widget shows, else what it draws (a photo, a board). */
-function itemIcon(item: CatalogRow['item']): LucideIcon | undefined {
-  const shows = accountShows(item);
-  return shows ? ACCOUNT_ICONS[shows] : item.view ? VIEW_ICONS[item.view] : undefined;
+/**
+ * A row's icon where it has no brand mark: an account's a person's (one found by a search, what it shows), else what it
+ * draws (a photo, a board).
+ */
+function rowIcon(row: CatalogEntry): LucideIcon | undefined {
+  if (row.service) return isAccountGroup(row.group) ? CircleUser : undefined;
+  const shows = accountShows(row.item);
+  return shows ? ACCOUNT_ICONS[shows] : row.item.view ? VIEW_ICONS[row.item.view] : undefined;
 }
 
 export function AddWidgetSheet({
   visible,
   onClose,
-  api,
-  screen,
+  onDismissed,
   catalog,
   onPage,
   left,
@@ -75,8 +58,8 @@ export function AddWidgetSheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  api: DeskApi;
-  screen: string;
+  /** Once it's down: the new widget's sheet opens then. */
+  onDismissed?: () => void;
   catalog: DeskCatalog | undefined;
   onPage: readonly DeskWidget[];
   /** What didn't fit after a rearranging, to put back. */
@@ -84,49 +67,21 @@ export function AddWidgetSheet({
   labelOf: (w: DeskWidget) => TileLabel;
   /** Why the last one couldn't be added (the page is full), said in the sheet: the toasts are behind it. */
   note: string | null;
-  onAdd: (row: CatalogRow, group: CatalogGroupView) => void;
+  onAdd: (row: CatalogEntry) => void;
   onAddBack: (w: DeskWidget) => void;
 }) {
   const theme = useTheme();
   const assistant = useAgentWords().name;
   const [query, setQuery] = useState('');
-  // What the person folded or opened, kept while the editor is open (the sheet stays mounted between showings).
-  const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set());
-  // The things whose whole list was asked for (*Show its widgets*), and what came back.
-  const [asked, setAsked] = useState<ReadonlySet<string>>(new Set());
-  const [read, setRead] = useState<Record<string, DeskCatalogGroup | undefined>>({});
   useEffect(() => {
     if (!visible) setQuery('');
   }, [visible]);
-  const sections = useMemo(
-    () => (catalog ? catalogView(catalog, { query, onPage, flipped, read }) : []),
-    [catalog, query, onPage, flipped, read],
-  );
-  const flip = (key: string) =>
-    setFlipped((was) => {
-      const next = new Set(was);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  const ask = (thing: string) => setAsked((was) => (was.has(thing) ? was : new Set([...was, thing])));
-  // A read that failed offers *Show its widgets* again.
-  const unask = useCallback(
-    (thing: string) =>
-      setAsked((was) => {
-        const next = new Set(was);
-        next.delete(thing);
-        return next;
-      }),
-    [],
-  );
-  const onRead = useCallback(
-    (thing: string, g: DeskCatalogGroup) => setRead((r) => (r[thing] === g ? r : { ...r, [thing]: g })),
-    [],
-  );
+  const sections = useMemo(() => catalogRows(catalog, query, onPage), [catalog, query, onPage]);
+  const own = sections.find((x) => x.kind === 'own');
+  const rest = sections.filter((x) => x.kind !== 'own');
   const searching = query.trim() !== '';
   return (
-    <Sheet visible={visible} onClose={onClose} label={E.addWidget} maxHeight="92%">
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} label={E.addWidget} maxHeight="92%">
       <View style={{ paddingHorizontal: 20, paddingBottom: 10, gap: 12 }}>
         <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
           {E.addWidget}
@@ -170,14 +125,10 @@ export function AddWidgetSheet({
         ) : null}
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
-        {[...asked].map((thing) => (
-          <ThingRead key={thing} api={api} screen={screen} thing={thing} onRead={onRead} onFailed={unask} />
-        ))}
+        {own ? <OwnTiles section={own} onAdd={onAdd} /> : null}
         {left.length > 0 && !searching ? (
           <View>
-            <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 2 }}>
-              <SectionLabel>{E.didntFit.toUpperCase()}</SectionLabel>
-            </View>
+            <Heading label={E.didntFit} />
             {left.map((w) => {
               const l = labelOf(w);
               return (
@@ -195,45 +146,22 @@ export function AddWidgetSheet({
             })}
           </View>
         ) : null}
-        {sections.map((section) => (
+        {rest.map((section) => (
           <View key={section.key}>
-            <FoldHead
-              label={section.label}
-              type={SECTION_ICON[section.kind]}
-              icon={SECTION_OWN_ICON[section.kind]}
-              mark={section.mark}
-              line={section.groups.some((g) => g.more) ? '' : widgetsText(section.count)}
-              open={!section.folded}
-              searching={searching}
-              onPress={() => flip(section.key)}
-            />
-            {section.folded
-              ? null
-              : section.groups.map((g) => (
-                  <View key={g.key}>
-                    {g.server || g.account ? (
-                      <FoldHead
-                        label={g.label}
-                        type={g.server ? 'server' : 'panel'}
-                        icon={g.account ? CircleUser : undefined}
-                        mark={g.mark}
-                        line={widgetsText(g.rows.length)}
-                        open={!g.folded}
-                        searching={searching}
-                        onPress={() => flip(g.key)}
-                        inner
-                      />
-                    ) : null}
-                    {g.folded ? null : <Rows group={g} onAdd={onAdd} />}
-                    {g.more && g.thing && !g.folded ? (
-                      <MoreRow
-                        loading={asked.has(g.thing)}
-                        label={g.label}
-                        onPress={() => g.thing && ask(g.thing)}
-                      />
-                    ) : null}
-                  </View>
-                ))}
+            <Heading label={section.label} />
+            {section.rows.map((row) => (
+              <ItemRow
+                key={row.key}
+                type={row.item.type}
+                mark={row.mark}
+                icon={rowIcon(row)}
+                name={row.name}
+                line={row.line}
+                size={gridText(row.size.w, row.size.h)}
+                here={row.here}
+                onPress={() => onAdd(row)}
+              />
+            ))}
           </View>
         ))}
         {catalog && sections.length === 0 && searching ? (
@@ -264,149 +192,85 @@ export function AddWidgetSheet({
   );
 }
 
-/** A thing's whole list, read once asked for (`desk.widgets {thing}`): its page may list more than the catalogue did. */
-function ThingRead({
-  api,
-  screen,
-  thing,
-  onRead,
-  onFailed,
-}: {
-  api: DeskApi;
-  screen: string;
-  thing: string;
-  onRead: (thing: string, group: DeskCatalogGroup) => void;
-  onFailed: (thing: string) => void;
-}) {
-  const r = useDeskWidgets(api, { screen, thing });
-  const group = r.data?.groups.find((g) => g.thing === thing) ?? r.data?.groups[0];
-  const failed = Boolean(r.error);
-  useEffect(() => {
-    if (group) onRead(thing, group);
-    else if (failed) onFailed(thing);
-  }, [group, failed, thing, onRead, onFailed]);
-  return null;
+/** A section's heading: its name in capitals, a header for TalkBack. */
+function Heading({ label }: { label: string }) {
+  return (
+    <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 2 }}>
+      <SectionLabel>{label.toUpperCase()}</SectionLabel>
+    </View>
+  );
 }
 
-/**
- * A section's heading, or a server's inside *Servers* or an account's inside *Your accounts* (`inner`, indented): its
- * mark or icon, name and how many it lists, folding or opening what's under it (a button, expanded or not). While
- * searching everything that matches is open and the heading doesn't fold.
- */
-function FoldHead({
-  label,
-  type,
-  icon,
-  mark,
-  line,
-  open,
-  searching,
-  onPress,
-  inner = false,
-}: {
-  label: string;
-  type: DeskWidgetType;
-  icon?: LucideIcon | undefined;
-  mark: string | null;
-  line: string;
-  open: boolean;
-  searching: boolean;
-  onPress: () => void;
-  inner?: boolean;
-}) {
-  const theme = useTheme();
-  const Chevron = open ? ChevronDown : ChevronRight;
+/** Whombat's own (DK-163): tiles three to a row, each its icon and name; one on the page already is dimmed with a check. */
+function OwnTiles({ section, onAdd }: { section: CatalogRows; onAdd: (row: CatalogEntry) => void }) {
+  const rows: (CatalogEntry | null)[][] = [];
+  for (let i = 0; i < section.rows.length; i += 3) {
+    const three: (CatalogEntry | null)[] = section.rows.slice(i, i + 3);
+    while (three.length < 3) three.push(null);
+    rows.push(three);
+  }
   return (
-    <Touchable
-      accessibilityRole="button"
-      accessibilityState={{ expanded: open, disabled: searching }}
-      accessibilityLabel={line ? `${label}, ${line}` : label}
-      disabled={searching}
-      onPress={onPress}
-      feedback="wash"
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        minHeight: 56,
-        paddingVertical: 10,
-        paddingLeft: inner ? 32 : 20,
-        paddingRight: 20,
-        borderTopWidth: inner ? 0 : 1,
-        borderTopColor: theme.colors.line,
-      }}
-    >
-      <WidgetLogo type={type} mark={mark} name={label} icon={icon} />
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text size={15} weight={inner ? 500 : 600} lh={1.35}>
-          {label}
-        </Text>
-        {line ? (
-          <Text size={13} lh={1.4} color={theme.colors.mut}>
-            {line}
-          </Text>
-        ) : null}
+    <View>
+      <Heading label={section.label} />
+      <View style={{ paddingHorizontal: 20, gap: 8 }}>
+        {rows.map((three) => (
+          <View key={three.map((t) => t?.key ?? '').join(' ')} style={{ flexDirection: 'row', gap: 8 }}>
+            {three.map((row, i) =>
+              row ? (
+                <OwnTile key={row.key} row={row} onPress={() => onAdd(row)} />
+              ) : (
+                // biome-ignore lint/suspicious/noArrayIndexKey: the empty places at the end of the last row
+                <View key={i} style={{ flex: 1 }} />
+              ),
+            )}
+          </View>
+        ))}
       </View>
-      <Chevron size={18} color={theme.colors.mut} />
-    </Touchable>
+    </View>
   );
 }
 
-/** *Show its widgets* under a thing that listed only part of what it has; *Reading its page…* while it's read. */
-function MoreRow({ loading, label, onPress }: { loading: boolean; label: string; onPress: () => void }) {
+function OwnTile({ row, onPress }: { row: CatalogEntry; onPress: () => void }) {
   const theme = useTheme();
+  const label = fillDeskWords(E.addOne, { name: row.name });
   return (
     <Touchable
       accessibilityRole="button"
-      accessibilityLabel={`${loading ? E.loadingMore : E.more}, ${label}`}
-      accessibilityState={{ busy: loading, disabled: loading }}
-      disabled={loading}
+      accessibilityLabel={row.here ? `${label}, ${E.onThisPage}` : label}
+      accessibilityHint={row.line || undefined}
       onPress={onPress}
       feedback="wash"
+      ringRadius={14}
       style={{
-        flexDirection: 'row',
+        flex: 1,
+        minHeight: 76,
         alignItems: 'center',
-        gap: 12,
-        minHeight: 48,
-        paddingVertical: 10,
-        paddingLeft: 64,
-        paddingRight: 20,
+        gap: 6,
+        paddingTop: 12,
+        paddingBottom: 10,
+        paddingHorizontal: 6,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.line,
+        backgroundColor: theme.colors.sf,
       }}
     >
-      <Text size={14.5} weight={500} color={loading ? theme.colors.mut : theme.colors.brand}>
-        {loading ? E.loadingMore : E.more}
-      </Text>
+      <View style={{ opacity: row.here ? 0.6 : 1, alignItems: 'center', gap: 6 }}>
+        <WidgetLogo type={row.item.type} name={row.name} size={28} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          {row.here ? <Check size={12} color={theme.colors.ink2} /> : null}
+          <Text
+            size={13}
+            weight={500}
+            lh={1.25}
+            numberOfLines={2}
+            style={{ flexShrink: 1, textAlign: 'center' }}
+          >
+            {row.name}
+          </Text>
+        </View>
+      </View>
     </Touchable>
-  );
-}
-
-function Rows({
-  group,
-  onAdd,
-}: {
-  group: CatalogGroupView;
-  onAdd: (row: CatalogRow, group: CatalogGroupView) => void;
-}) {
-  // An account's widgets are under its heading with its mark: each has the icon of what it shows instead.
-  const of = group.account ? accountName(group) : group.thing || group.server ? group.label : null;
-  return (
-    <>
-      {group.rows.map((r) => (
-        <ItemRow
-          key={r.key}
-          type={r.item.type}
-          mark={r.item.mark ?? ((group.thing || group.server) && !group.account ? group.mark : null)}
-          icon={itemIcon(r.item)}
-          name={r.item.name}
-          of={of}
-          line={r.item.line}
-          size={r.size}
-          here={r.here}
-          inner={group.server || group.account}
-          onPress={() => onAdd(r, group)}
-        />
-      ))}
-    </>
   );
 }
 
@@ -416,31 +280,22 @@ function ItemRow({
   mark,
   icon,
   name,
-  of = null,
   line,
   size,
   here,
-  inner = false,
   onPress,
 }: {
   type: DeskWidget['type'];
   mark: string | null | undefined;
   icon?: LucideIcon | undefined;
   name: string;
-  of?: string | null;
   line: string;
   size: string;
   here: boolean;
-  /** Under a server's or an account's heading: indented with it. */
-  inner?: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const spoken = [
-    fillDeskWords(E.addOne, { name: of ? `${name}, ${of}` : name }),
-    size,
-    here ? E.onThisPage : null,
-  ]
+  const spoken = [fillDeskWords(E.addOne, { name }), size, here ? E.onThisPage : null]
     .filter(Boolean)
     .join(', ');
   return (
@@ -456,11 +311,10 @@ function ItemRow({
         gap: 12,
         minHeight: 56,
         paddingVertical: 10,
-        paddingLeft: inner ? 32 : 20,
-        paddingRight: 20,
+        paddingHorizontal: 20,
       }}
     >
-      <WidgetLogo type={type} mark={mark} name={of ?? name} icon={icon} />
+      <WidgetLogo type={type} mark={mark} name={name} icon={icon} />
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
           <Text size={15} weight={500} lh={1.35}>

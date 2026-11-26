@@ -46,10 +46,7 @@ export const PHONE_SCREENS_TEXT = {
   tryIt: 'On the screen now for a minute, with “Preview from Settings” on it.',
   newPage: 'A new page. Add widgets to it.',
   pairFirst: 'Pair this Whombat’s screen first, on its page. Then you can choose what shows here.',
-  widgets: '{n} widgets',
-  oneWidget: '1 widget',
   pageMore: 'More for {name}',
-  shows: '{panel} from {thing}',
   orderUp: 'Move {name} up',
   orderDown: 'Move {name} down',
 } as const;
@@ -196,9 +193,4 @@ export function didntFitLine(n: number): string | null {
     n,
     they: n === 1 ? PHONE_SCREENS_TEXT.didntFitOne : PHONE_SCREENS_TEXT.didntFitMany,
   });
-}
-
-/** The widgets a page has, in words: “1 widget”, “6 widgets”. */
-export function widgetsText(n: number): string {
-  return n === 1 ? PHONE_SCREENS_TEXT.oneWidget : fillDeskWords(PHONE_SCREENS_TEXT.widgets, { n });
 }

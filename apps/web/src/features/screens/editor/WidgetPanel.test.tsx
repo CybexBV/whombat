@@ -1,7 +1,7 @@
 /**
- * *Add a widget* in the editor (Whombat desk-display.md DK-153…DK-156): its sections fold — Whombat's own and *Servers*
- * folded at first, the connections open, each server folded inside *Servers* — and a search opens what matches. The
- * canvas isn't drawn without a layout engine, so choosing a widget (its *Shows*) is checked in the browser.
+ * *Add a widget* in the editor (Whombat desk-display.md DK-156, DK-163…DK-165): Whombat's own as tiles, each server,
+ * connection and account once, a search listing single views; adding one chooses it, and its settings offer *What it
+ * shows* and the size's shapes. The canvas isn't drawn without a layout engine, so dragging is checked in the browser.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -24,48 +24,67 @@ function open() {
 
 const panel = () => screen.findByRole('complementary', { name: 'Add a widget' }, { timeout: 8000 });
 
-describe('Add a widget (DK-155)', () => {
-  it('starts with Whombat’s own and the servers folded and the connections open', async () => {
+describe('Add a widget (DK-163)', () => {
+  it('lists Whombat’s own as tiles and each server, connection and account once', async () => {
     open();
     const add = await panel();
-    const own = await within(add).findByRole('button', { name: /^Whombat and/ }, { timeout: 8000 });
-    expect(own.getAttribute('aria-expanded')).toBe('false');
-    const servers = within(add).getByRole('button', { name: /^Servers/ });
-    expect(servers.getAttribute('aria-expanded')).toBe('false');
-    expect(within(add).getByRole('button', { name: /^Plex/ }).getAttribute('aria-expanded')).toBe('true');
-    expect(within(add).queryByRole('button', { name: 'Add Clock' })).toBeNull();
-
-    // Opening Servers shows each server folded; opening one shows its parts.
-    const user = userEvent.setup();
-    await user.click(servers);
-    const pve = within(add).getByRole('button', { name: /^pve-01/ });
-    expect(pve.getAttribute('aria-expanded')).toBe('false');
-    await user.click(pve);
-    expect(within(add).getByRole('button', { name: 'Add pve-01 · Storage' })).toBeTruthy();
-    expect(within(add).getByRole('button', { name: 'Add pve-01 · VMs and containers' })).toBeTruthy();
+    const clock = await within(add).findByRole('button', { name: /^Add Clock/ }, { timeout: 8000 });
+    expect(clock.className).toMatch(/ownTile/);
+    // A server once, by its name; its parts are its widget's What it shows.
+    expect(within(add).getByRole('button', { name: 'Add pve-01' })).toBeTruthy();
+    expect(within(add).queryByRole('button', { name: /Storage/ })).toBeNull();
+    // A connection once, and an account once.
+    expect(within(add).getByRole('button', { name: 'Add Plex' })).toBeTruthy();
+    expect(within(add).queryByRole('button', { name: /Now playing/ })).toBeNull();
+    expect(within(add).getAllByRole('button', { name: /^Add GitHub/ })).toHaveLength(1);
+    // No folds any more.
+    expect(within(add).queryByRole('button', { expanded: false })).toBeNull();
   });
 
-  it('puts the person’s accounts under Your accounts, each open at first', async () => {
+  it('finds single views with a search, named with what they belong to', async () => {
     open();
     const add = await panel();
-    const accounts = await within(add).findByRole('button', { name: /^Your accounts/ }, { timeout: 8000 });
-    expect(accounts.getAttribute('aria-expanded')).toBe('true');
-    expect(
-      within(add)
-        .getByRole('button', { name: /^GitHub/ })
-        .getAttribute('aria-expanded'),
-    ).toBe('true');
-    expect(within(add).getByRole('button', { name: 'Add GitHub · Waiting for review' })).toBeTruthy();
+    await within(add).findByRole('button', { name: 'Add pve-01' }, { timeout: 8000 });
+    const user = userEvent.setup();
+    const search = within(add).getByRole('searchbox', { name: 'Search widgets' });
+    await user.type(search, 'storage');
+    await waitFor(() =>
+      expect(within(add).getByRole('button', { name: 'Add pve-01 · Storage' })).toBeTruthy(),
+    );
+    expect(within(add).queryByRole('button', { name: 'Add pve-01' })).toBeNull();
+    await user.clear(search);
+    await user.type(search, 'now playing');
+    await waitFor(() =>
+      expect(within(add).getByRole('button', { name: 'Add Plex · Now playing' })).toBeTruthy(),
+    );
   });
 
-  it('opens whatever a search matches', async () => {
+  it('adds a service’s main view and offers its other views and the size’s shapes', async () => {
     open();
     const add = await panel();
-    await within(add).findByRole('button', { name: /^Servers/ }, { timeout: 8000 });
     const user = userEvent.setup();
-    await user.type(within(add).getByRole('searchbox', { name: 'Search widgets' }), 'clock');
-    await waitFor(() => expect(within(add).getByRole('button', { name: 'Add Clock' })).toBeTruthy());
-    expect(within(add).queryByRole('button', { name: /^Servers/ })).toBeNull();
+    const plex = await within(add).findByRole('button', { name: 'Add Plex' }, { timeout: 8000 });
+    // The first page is full: a new one has room.
+    await user.click(screen.getByRole('button', { name: '+ Page' }));
+    await user.click(plex);
+    const chosen = await screen.findByRole('complementary', { name: 'Plex · Figures' });
+    const shows = within(chosen).getByRole('group', { name: 'What it shows' });
+    const figures = within(shows).getByRole('button', { name: /^Figures/ });
+    expect(figures.getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(shows).getByRole('button', { name: /^Now playing/ }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('complementary', { name: 'Now playing' }))
+          .getByRole('button', { name: /^Now playing/ })
+          .getAttribute('aria-pressed'),
+      ).toBe('true'),
+    );
+    const sizes = within(screen.getByRole('complementary', { name: 'Now playing' })).getByRole('group', {
+      name: 'Size',
+    });
+    const shapes = within(sizes).getAllByRole('button');
+    expect(shapes.length).toBeGreaterThan(1);
+    expect(shapes.filter((b) => b.getAttribute('aria-pressed') === 'true')).toHaveLength(1);
   });
 });
 
