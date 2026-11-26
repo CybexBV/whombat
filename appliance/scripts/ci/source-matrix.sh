@@ -69,6 +69,8 @@ expected() {
 }
 
 base=$(git -C "$top" rev-parse HEAD)
+# A shallow copy (fast-test's on the build server) is fine: the flake reads its commits' dates, never how many came before.
+shallow=; [ "$(git -C "$top" rev-parse --is-shallow-repository)" = false ] || shallow='&shallow=1'
 [ -z "$(git -C "$top" status --porcelain --untracked-files=no)" ] ||
   echo "source-matrix: uncommitted changes are not part of this: it compares commits on top of ${base:0:9}" >&2
 work=$(mktemp -d "$TMPDIR/source-matrix.XXXXXX")
@@ -165,7 +167,7 @@ row_commit() {
 answer() {
   nix eval --impure --json --no-write-lock-file --expr "
     let
-      f = builtins.getFlake \"git+file://$top?rev=$1&dir=${root#"$top"/}\";
+      f = builtins.getFlake \"git+file://$top?rev=$1&dir=${root#"$top"/}$shallow\";
       p = f.packages.x86_64-linux;
       both = d: { drv = d.drvPath; out = d.outPath; };
       rel = f.lib.applianceRelease {
