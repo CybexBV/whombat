@@ -3008,3 +3008,15 @@ with the management key; control's answer checked against the contract and answe
   control again. The operator's `whombat-manager check` (no body) always looks again.
 - The hourly look (`tufLoop`, `RefreshSec`) and the assignment poll are unchanged.
 - Tests: broker `TestCheckEndpoint`, `TestCheckEndpointContract`, `TestCheckEndpointReusesTheLastAnswer`.
+
+## MG-195 A newer release out during an install is taken at once (2026-11-26)
+
+- A box that takes its channel's newest release (or its repository's, a community box) refreshes the release list
+  right before it activates (`atBoundary`), and its helper takes only the newest. A release published after the
+  manager's offer and before the activation makes the helper refuse the candidate (`not_assigned`, “not the newest
+  release”). The manager retried that candidate until its next hourly refresh offered the newer one, and the owner read
+  “The last update didn't work” meanwhile: Home on 2026-11-26, with two Beta releases a minute apart.
+- Now a candidate the helper refuses as not assigned wakes the refresh loop (`newerElsewhere`, `tufNow`): it refreshes
+  at once, and on a box that takes the newest it offers it, which replaces the refused candidate. Once per candidate,
+  so a refusal that lasts costs one extra refresh; a box that takes control's assignments only refreshes.
+- Test: daemon `TestCommunityNewerWhileInstalling` (a newer release published while the update waits for work).

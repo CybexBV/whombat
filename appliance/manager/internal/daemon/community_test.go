@@ -87,3 +87,45 @@ func TestCommunityDaemon(t *testing.T) {
 		t.Fatalf("a claim lookup lease reached the runtime: %+v", l)
 	}
 }
+
+// A release published while the box installs the one before (Home, 2026-11-26, two releases a minute apart): the helper
+// refuses that one at activation as no longer the newest, and the manager takes the newest at once, not after its next
+// refresh an hour later.
+func TestCommunityNewerWhileInstalling(t *testing.T) {
+	t.Parallel()
+	const newer = "rt-20-newer"
+	h := startDaemon(t, map[string]any{"edition": "community", "control": map[string]any{"url": ""}, "refreshSec": 3600},
+		func(w *testworld.World, _ *fakecontrol.Control, c *config.Config) {
+			w.SetEdition("community")
+			w.Keep(testworld.Factory, testworld.RuntimeGood)
+		})
+	w := h.w
+	h.waitFor("rt-2, the newest, healthy", func(st *update.State) bool {
+		return st.Phase == update.Healthy && st.Current.ReleaseID == testworld.RuntimeGood
+	})
+	// Work holds the next update at the boundary while a newer release comes out.
+	w.Runtime.SetBlockers([]local.DrainBlocker{{Kind: "turn", ID: "t1", Description: "long turn", Since: "2026-11-26T11:58:00Z"}}, -1)
+	publish := func(id, version string) {
+		t.Helper()
+		if _, err := w.Repo.AddFakeRelease(devtuf.StandardRelease(id, "26.05.1", version)); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Repo.Publish(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publish(testworld.RuntimeNext, "1.1.5")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if res, err := h.d.CheckNow(ctx); err != nil || res.Result != "assigned" {
+		t.Fatalf("check with rt-8 out: %+v %v", res, err)
+	}
+	h.waitFor("rt-8 waiting for the work", func(st *update.State) bool {
+		return st.Phase == update.WaitingForSafeBoundary && st.Candidate != nil && st.Candidate.Release.ID() == testworld.RuntimeNext
+	})
+	publish(newer, "1.1.6")
+	w.Runtime.SetBlockers(nil, 0)
+	h.waitFor("the newer release healthy, without a check", func(st *update.State) bool {
+		return st.Phase == update.Healthy && st.Current.ReleaseID == newer
+	})
+}
