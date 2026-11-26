@@ -92,18 +92,25 @@ export function screenDetailFor(detail: DeskScreenDetail, minor: number | undefi
   return readsWeatherNews(minor) ? detail : { ...detail, layout: layoutFor(detail.layout, minor) };
 }
 
-/** A screen elsewhere's grid as an app at `minor` reads it: its layout and its views. */
+/**
+ * A screen elsewhere's grid as an app at `minor` reads it: its layout without the widgets it doesn't know, and their views
+ * left out (a moment's widget, which isn't on a page, keeps its own).
+ */
 export function gridFor(grid: DeskGrid, minor: number | undefined): DeskGrid {
   if (readsWeatherNews(minor)) return grid;
-  const layout = layoutFor(grid.layout, minor);
-  const kept = new Set(
-    layout.pages.flatMap((p) =>
+  const hidden = new Set(
+    grid.layout.pages.flatMap((p) =>
       Object.values(p.layouts)
         .flat()
+        .filter((w) => WEATHER_NEWS_TYPES.has(w.type))
         .map((w) => w.id),
     ),
   );
-  return { ...grid, layout, views: viewsFor(grid.views, minor).filter((v) => kept.has(v.id)) };
+  return {
+    ...grid,
+    layout: layoutFor(grid.layout, minor),
+    views: viewsFor(grid.views, minor).filter((v) => !hidden.has(v.id)),
+  };
 }
 
 const overlaps = (a: DeskWidget, b: DeskWidget) =>

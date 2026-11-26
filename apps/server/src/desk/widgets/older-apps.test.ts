@@ -123,10 +123,14 @@ describe('an app from before the weather and the news', () => {
     ];
     expect(catalogFor(groups, OLD)[0]?.items.map((i) => i.type)).toEqual(['clock']);
     expect(catalogFor(groups, WEATHER_NEWS_MINOR)[0]?.items).toHaveLength(3);
-    const grid = { layout: stored, views } as unknown as DeskGrid;
+    // A moment's widget (the doorbell's camera) isn't on a page: its view stays.
+    const grid = {
+      layout: stored,
+      views: [...views, { kind: 'camera' as const, id: 'w_doorbell' }],
+    } as unknown as DeskGrid;
     const old = gridFor(grid, OLD);
     expect(old.layout).toEqual(layoutFor(stored, OLD));
-    // The news's list view goes with its widget: only what the layout still has.
-    expect(old.views.map((v) => v.id)).toEqual(['w_clock']);
+    // The news's list view goes with its widget.
+    expect(old.views.map((v) => v.id)).toEqual(['w_clock', 'w_doorbell']);
   });
 });
