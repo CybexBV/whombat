@@ -2176,7 +2176,7 @@ describe('screens of widgets (DK-126…DK-149)', () => {
       emitDoorbellRing(services, { ...ring, eventId: 'evt_one' });
       const shown = await vi.waitFor(async () => {
         const grid = DeskGrid.parse(DeskState.parse(await desk.state()).glance?.grid);
-        if (!grid.spotlight) throw new Error('not yet');
+        if (grid.spotlight?.widget.ref !== `connection:${protect}`) throw new Error('not yet');
         return grid;
       });
       expect(shown.spotlight).toMatchObject({
