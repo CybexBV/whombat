@@ -285,6 +285,30 @@ describe('t3ThreadTurnLines (Whombat t3code.md)', () => {
     expect(told).not.toContain('already posted');
   });
 
+  it('tells the assistant to continue an unlanded report run instead of replying NO_REPLY on a T3 Code wake', () => {
+    const ctx = DispatchContext.parse({
+      ...mention,
+      dispatch: { ...mention.dispatch, trigger: 't3_thread', messageId: null },
+      trigger: null,
+      t3Threads: [moved({ reported: true })],
+      unlandedFix: {
+        runId: 'arn_unlanded01',
+        runNumber: 12,
+        reportNumber: 2,
+        connection: 'Whombat Production',
+        repo: 'acme/product',
+        branch: 'feat/whombat-production-2',
+        reason: 'No review approved the fix.',
+        nextStepId: 'review',
+        merges: true,
+      },
+    });
+    const text = t3ThreadTurnLines(ctx, 'NO_REPLY').join('\n');
+    expect(text).toContain('automation_continue_run');
+    expect(text).toContain('arn_unlanded01');
+    expect(text).toContain('do not end with NO_REPLY');
+  });
+
   it('settles a thread whose job is finished, never one that failed or still watches a pull request', () => {
     for (const reported of [true, false]) {
       const text = t3ThreadTurnLines(woken([moved({ reported })]), 'NO_REPLY').join('\n');

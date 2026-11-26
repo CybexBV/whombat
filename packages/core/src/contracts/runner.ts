@@ -8,6 +8,7 @@ import { COMMAND_MAX, COMMAND_TARGET_MAX, CommandCategory, CommandScope } from '
 import { ACTIVITY_REPORTS_MAX, ActivityReport } from '../domain/activity.js';
 import { AgentFace, AgentProvider, AgentRuntime } from '../domain/agent.js';
 import { Approval } from '../domain/approval.js';
+import { AutomationRunId } from '../domain/automation.js';
 import { CareStepId, ChangeWindow } from '../domain/care-plan.js';
 import { Count, Timestamp } from '../domain/common.js';
 import {
@@ -920,6 +921,23 @@ export type DispatchBrowser = z.infer<typeof DispatchBrowser>;
 /** A full commit id (sha-1, or sha-256 repos). */
 export const GitSha = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/i);
 
+/**
+ * A finished report automation run in this thread whose fix started but did not land yet (person turns only):
+ * keeps the assistant focused on landing the fix and resuming the automation with `automation_continue_run`.
+ */
+export const UnlandedFixContext = z.object({
+  runId: AutomationRunId,
+  runNumber: z.number().int().positive(),
+  reportNumber: z.number().int().positive(),
+  connection: z.string().max(120),
+  repo: z.string().max(255).nullable(),
+  branch: z.string().max(255).nullable(),
+  reason: z.string().max(500),
+  nextStepId: z.enum(['fix', 'review', 'pr', 'merge']),
+  merges: z.boolean(),
+});
+export type UnlandedFixContext = z.infer<typeof UnlandedFixContext>;
+
 export const DispatchContext = z.object({
   dispatch: Dispatch,
   /** The provider sign-in this turn uses (OP-09); null when it runs on the AI gateway or the local model only. */
@@ -1018,6 +1036,11 @@ export const DispatchContext = z.object({
    * building and reviewing), absent elsewhere.
    */
   tracker: TrackerDispatchContext.nullable().optional(),
+  /**
+   * A finished report automation run in this thread whose fix did not land yet (person turns only). Tells the
+   * assistant to finish landing it and resume the automation with `automation_continue_run`.
+   */
+  unlandedFix: UnlandedFixContext.nullable().optional(),
   /**
    * The person's Vault entries, switched on for the agent or not (0.125, CT-1243; OA-10): what reaches the agent in
    * this turn, never a secret (`runner.turnKeys`, `runner.loginSecret` bring those). Null or none (an `outside`

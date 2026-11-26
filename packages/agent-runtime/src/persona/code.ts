@@ -73,3 +73,24 @@ export function codeLines(ctx: Connections): string[] {
       : []),
   ];
 }
+
+/**
+ * Goal-carrying guidance when a person's turn is in the thread of a finished report automation run whose fix did not
+ * land yet: reminds the assistant to finish landing it and call `automation_continue_run` once T3 Code pushes.
+ */
+export function unlandedFixLines(
+  ctx: Partial<Pick<DispatchContext, 'outside' | 'unlandedFix'>> & {
+    dispatch?: Pick<DispatchContext['dispatch'], 'trigger'>;
+  },
+): string[] {
+  const u = ctx.unlandedFix;
+  if (!u || ctx.outside || ctx.dispatch?.trigger === 'automation') return [];
+  const where = u.repo ? ` in ${defuseDelimiters(u.repo)}` : '';
+  const onBranch = u.branch ? ` on ${defuseDelimiters(u.branch)}` : '';
+  const finish = u.merges
+    ? 'review passes, Whombat opens and merges the pull request, and the fix ships'
+    : 'review passes and Whombat opens the pull request';
+  return [
+    `This thread’s report automation run (#${u.runNumber}, runId ${u.runId}, ${defuseDelimiters(u.connection)} #${u.reportNumber}${where}${onBranch}) stopped before its fix landed: ${defuseDelimiters(u.reason)} The goal is to finish landing it (${finish}), not stop after pushing commits. Once T3 Code has pushed the fix and finished its review, call automation_continue_run with runId "${u.runId}", fromStepId "${u.nextStepId}", and a short note summarizing what changed and that the branch was pushed, so Whombat runs the remaining steps instead of improvising timers or stopping early.`,
+  ];
+}

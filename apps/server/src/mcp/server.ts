@@ -72,6 +72,7 @@ import { outsidersTurn } from '../runtime/person';
 import type { Services } from '../services';
 import { teamReportsOffered } from '../team-reports/tool';
 import { NOT_A_TRACKER_TURN, trackerToolsInTurn } from '../trackers/access';
+import { unlandedFixOf } from '../trackers/unlanded';
 import { vaultToolList } from '../vault/context';
 import { imageOf } from './image';
 import {
@@ -275,6 +276,18 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
     teamReports: once(async () => {
       const agentRow = await agent();
       return !!agentRow && (await teamReportsOffered(services, agentRow.burrowId));
+    }),
+    unlandedFix: once(async () => {
+      const row = await dispatch();
+      if (
+        !row ||
+        row.agentId !== agentId ||
+        row.trigger === 'automation' ||
+        outsidersTurn(row) ||
+        !row.threadRootId
+      )
+        return false;
+      return (await unlandedFixOf(db, row)) !== null;
     }),
   };
   const assessment = once(async () => {

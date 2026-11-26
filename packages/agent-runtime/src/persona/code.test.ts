@@ -1,6 +1,6 @@
 import type { DispatchContext } from '@whombat/core/contracts';
 import { describe, expect, it } from 'vitest';
-import { codeGoesToT3, codeLines } from './code';
+import { codeGoesToT3, codeLines, unlandedFixLines } from './code';
 import { ghLines } from './gh';
 
 type Connection = NonNullable<DispatchContext['connections']>[number];
@@ -113,6 +113,29 @@ describe('where code work goes (t3code.md)', () => {
     expect(codeLines({})).toEqual([]);
     expect(codeLines({ connections: [{ ...t3, access: 'read' }] })).toEqual([]);
     expect(codeGoesToT3({ connections: [{ ...t3, access: 'read' }] })).toBe(false);
+  });
+
+  it('keeps the assistant on the landing goal when a thread has an unlanded report fix', () => {
+    const unlandedFix = {
+      runId: 'arn_unlanded01',
+      runNumber: 12,
+      reportNumber: 2,
+      connection: 'Whombat Production',
+      repo: 'acme/product',
+      branch: 'feat/whombat-production-2',
+      reason: 'No review approved the fix.',
+      nextStepId: 'review' as const,
+      merges: true,
+    };
+    const [line] = unlandedFixLines({ unlandedFix, dispatch: { trigger: 'mention' } });
+    expect(line).toContain('arn_unlanded01');
+    expect(line).toContain('automation_continue_run');
+    expect(line).toContain('fromStepId "review"');
+    expect(line).toContain('feat/whombat-production-2');
+    // Never shown in outsiders' turns or automation steps.
+    expect(unlandedFixLines({ unlandedFix, outside: true })).toEqual([]);
+    expect(unlandedFixLines({ unlandedFix, dispatch: { trigger: 'automation' } })).toEqual([]);
+    expect(unlandedFixLines({})).toEqual([]);
   });
 
   it('says so first when T3 Code can’t be reached, and does no code work elsewhere unasked', () => {

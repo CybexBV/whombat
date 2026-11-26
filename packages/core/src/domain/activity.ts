@@ -152,6 +152,7 @@ const WHOMBAT_VERBS: Record<string, readonly [string, string]> = {
   post_answer: ['Answering', 'Answered'],
   set_status: ['Updating status', 'Updated status'],
   draft_automation: ['Drafting an automation', 'Drafted an automation'],
+  automation_continue_run: ['Continuing the automation run', 'Continued the automation run'],
   read_attachment: ['Reading a file', 'Read a file'],
   upload_file: ['Uploading a file', 'Uploaded a file'],
   list_files: ['Listing files', 'Listed files'],

@@ -2,7 +2,7 @@
 import { AutomationDefinition, type AutomationRecipeInput, recipeDefinition } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { AutomationStepRow } from '../automations/store';
-import { unlandedReason } from './unlanded';
+import { nextContinueStepId, unlandedReason } from './unlanded';
 
 const when = { kind: 'tracker' as const, connectionId: 'con_tracker_dev1', itemKinds: ['bug' as const] };
 const recipe: AutomationRecipeInput = {
@@ -20,8 +20,9 @@ const steps = AutomationDefinition.parse(recipeDefinition(recipe)).steps;
 /** The run's rows: each step named here started, with what it says; the rest skipped. */
 const rows = (by: Record<string, Partial<AutomationStepRow>>) =>
   steps.map(
-    (s) =>
+    (s, idx) =>
       ({
+        idx,
         stepId: s.id,
         state: 'skipped',
         error: null,
@@ -99,6 +100,40 @@ describe('a report that needs the person', () => {
         merge: { state: 'failed', error: 'Checks failed on PR #12, so I left it for you.' },
       }),
     ).toBe('Checks failed on PR #12, so I left it for you.');
+  });
+
+  it('chooses the right step to continue an unlanded report run from', () => {
+    expect(nextContinueStepId(steps, rows({ fix: { state: 'failed' } }))).toBe('fix');
+    expect(
+      nextContinueStepId(
+        steps,
+        rows({
+          fix: { state: 'succeeded' },
+          review: { state: 'succeeded', output: { verdict: 'changes_needed' } },
+        }),
+      ),
+    ).toBe('review');
+    expect(
+      nextContinueStepId(
+        steps,
+        rows({
+          fix: { state: 'succeeded' },
+          review: approved,
+          pr: { state: 'succeeded', output: { opened: false } },
+        }),
+      ),
+    ).toBe('pr');
+    expect(
+      nextContinueStepId(
+        steps,
+        rows({
+          fix: { state: 'succeeded' },
+          review: approved,
+          pr: { state: 'succeeded', output: { opened: true } },
+          merge: { state: 'failed' },
+        }),
+      ),
+    ).toBe('merge');
   });
 
   it('says a run that failed before the customer was answered needs the person too', () => {

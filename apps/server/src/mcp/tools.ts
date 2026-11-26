@@ -15,6 +15,7 @@ import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { automationsForAgent } from '../automations/agent-read';
 import { assessesInTurn, NOT_AN_ASSESSMENT, reportAssessment } from '../automations/assessment';
+import { continueAutomationRun } from '../automations/commands';
 import { proposeAutomationPlan } from '../automations/plans';
 import {
   NOT_PROPOSING_ACTIONS,
@@ -530,6 +531,12 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     })),
   // The person's automations and how to write one: only in their own turns, like draft_automation.
   automation_read: async (ctx, input) => automationsForAgent(ctx, input),
+  // Resume a finished unlanded report run in this thread from review/pr/merge after follow-up work in T3 Code.
+  automation_continue_run: async (ctx, input) =>
+    run(ctx, continueAutomationRun, { ...input, dispatchId: ctx.dispatch.id }, (r) => ({
+      runId: r.runId,
+      fromStepId: r.fromStepId,
+    })),
 
   // Plans and plan canvases (docs/decisions/work-supervision.md WS-01…WS-08): the turn's reach (BP-C35, OP-S71), plus
   // “Create tasks for other agents” for writes (the commands' key).

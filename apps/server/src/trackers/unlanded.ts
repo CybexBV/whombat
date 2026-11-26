@@ -4,13 +4,21 @@
  * thread (a failed run's own notice already does) and puts it in the person's Inbox, once per run — the one point in the
  * flow that waits for them.
  */
-import type { AutomationStep, JsonObject } from '@whombat/core';
-import { and, desc, eq, gt, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import type { AutomationStep, JsonObject, UnlandedFixContext } from '@whombat/core';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { outsidersRun } from '../automations/runs';
 import { type AutomationRunRow, type AutomationStepRow, loadStepRows } from '../automations/store';
 import { loadBurrowRow } from '../commit/pipeline';
 import type { ApplyContext } from '../commit/types';
-import { automationRunSteps, automationRuns, automations, messages, notifications } from '../db/schema/index';
+import type { Db } from '../db/client';
+import {
+  automationRunSteps,
+  automationRuns,
+  automations,
+  messages,
+  notifications,
+  trackerFixes,
+} from '../db/schema/index';
 import { linkOfMessage } from '../domain/links';
 import { postMessage } from '../domain/messages';
 import { notify } from '../domain/notify';
@@ -110,6 +118,114 @@ export function unlandedReason(
     };
   if (end?.state === 'failed' || end?.state === 'blocked') return said(end, 'It wasn’t merged.');
   return { reason: 'It wasn’t merged.', fix: true };
+}
+
+export type ContinueStepId = 'fix' | 'review' | 'pr' | 'merge';
+
+/**
+ * Which step to restart an unlanded report run from: `fix` if fixing didn't finish, `review` if review asked for
+ * changes or didn't finish, otherwise the first incomplete step among `pr` and `merge` (falling back to `review` then
+ * `fix`).
+ */
+export function nextContinueStepId(
+  steps: readonly AutomationStep[],
+  rows: readonly Pick<AutomationStepRow, 'idx' | 'stepId' | 'state' | 'output'>[],
+): ContinueStepId | null {
+  const fix = rows.find((r) => r.stepId === 'fix');
+  if (!fix || steps.find((s) => s.id === 'fix')?.kind !== 'dispatch_agent') return null;
+  if (fix.state !== 'succeeded') return 'fix';
+  const review = rows.find((r) => r.stepId === 'review' && r.idx > fix.idx);
+  if (
+    review &&
+    (review.state !== 'succeeded' ||
+      (review.output as { verdict?: unknown } | null)?.verdict === 'changes_needed')
+  )
+    return 'review';
+  const pr = rows.find((r) => r.stepId === 'pr' && r.idx > fix.idx);
+  if (pr && (pr.state !== 'succeeded' || (pr.output as { opened?: unknown } | null)?.opened === false))
+    return 'pr';
+  const merge = rows.find((r) => r.stepId === 'merge' && r.idx > fix.idx);
+  if (merge && merge.state !== 'succeeded') return 'merge';
+  return review ? 'review' : 'fix';
+}
+
+/**
+ * The latest finished tracker report run in a thread whose fix started and has not landed yet, or null when the thread
+ * has none (or a fix of it already merged). Used in person turns to keep the assistant on the goal and allow
+ * `automation_continue_run`.
+ */
+export async function unlandedFixOf(
+  db: Db,
+  target: { burrowId: string; conversationId: string; threadRootId: string | null },
+): Promise<UnlandedFixContext | null> {
+  if (!target.threadRootId) return null;
+  const [found] = await db
+    .select({ run: automationRuns })
+    .from(automationRuns)
+    .innerJoin(automations, eq(automations.id, automationRuns.automationId))
+    .where(
+      and(
+        eq(automationRuns.burrowId, target.burrowId),
+        eq(automationRuns.conversationId, target.conversationId),
+        eq(automationRuns.threadRootId, target.threadRootId),
+        eq(automationRuns.test, false),
+        isNull(automations.deletedAt),
+        sql`${automationRuns.scope}->>'kind' = 'tracker'`,
+      ),
+    )
+    .orderBy(desc(automationRuns.createdAt))
+    .limit(1);
+  const run = found?.run;
+  if (!run || (run.status !== 'succeeded' && run.status !== 'failed')) return null;
+  const report = scopeReport(run.scope);
+  if (!report) return null;
+  const [landed] = await db
+    .select({ id: trackerFixes.id })
+    .from(trackerFixes)
+    .where(
+      and(
+        eq(trackerFixes.runId, run.id),
+        inArray(trackerFixes.state, ['merged', 'development', 'live', 'confirmed']),
+      ),
+    )
+    .limit(1);
+  if (landed) return null;
+  const stepRows = await loadStepRows(db, run.id);
+  const why = unlandedReason(run.definition.steps, stepRows, run.status);
+  if (!why?.fix) return null;
+  const nextStepId = nextContinueStepId(run.definition.steps, stepRows);
+  if (!nextStepId) return null;
+  const prStep = run.definition.steps.find((s) => s.kind === 'open_pull_request');
+  const mergeStep = run.definition.steps.find((s) => s.kind === 'merge_pull_request');
+  const recipeRepo = (run.definition as { recipe?: { repo?: unknown } }).recipe?.repo;
+  const repo =
+    prStep?.kind === 'open_pull_request'
+      ? prStep.repo
+      : mergeStep?.kind === 'merge_pull_request'
+        ? mergeStep.repo
+        : typeof recipeRepo === 'string'
+          ? recipeRepo
+          : null;
+  const prRow = stepRows.find((r) => r.stepId === 'pr');
+  const prBranch = (prRow?.output as { branch?: unknown } | undefined)?.branch;
+  const scopeRef = (run.scope as { ref?: unknown }).ref;
+  const branch =
+    typeof prBranch === 'string' && prBranch
+      ? prBranch
+      : typeof scopeRef === 'string' && scopeRef
+        ? `feat/${scopeRef}`
+        : null;
+  return {
+    runId: run.id,
+    runNumber: run.number,
+    reportNumber: report.number,
+    connection: report.connection.slice(0, 120),
+    repo: repo ? repo.slice(0, 255) : null,
+    branch: branch ? branch.slice(0, 255) : null,
+    reason: why.reason.slice(0, 500),
+    nextStepId,
+    merges: !!mergeStep,
+  };
 }
 
 /**
