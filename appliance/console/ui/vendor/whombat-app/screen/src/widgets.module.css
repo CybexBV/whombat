@@ -323,14 +323,15 @@
 
 .limWide {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) 200px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) 200px;
   align-items: center;
   gap: 40px;
 }
 
 .limMid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
+  /* The limits take the room the name doesn't need: their blocks are as long as they can be. */
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 1.3fr);
   align-items: center;
   gap: 18px;
   min-height: 45px;

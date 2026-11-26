@@ -1006,14 +1006,20 @@ fusebox-page.md FP-16. Contract: optional fields only (`DeskViewRow` `meters`, `
 `limits`; `ThingPageCell` `mark`), no session minor: a screen that doesn't know meters draws the row's `progress` and
 words as before. The box's console reads the new fields (`grid.ts`) with the app 3.169.0 vendored.
 
+Then, the same day, with a picture of the half-wide widget: “Can you make the bars longer, there is unused space” and
+“behind ‘Claude Ultra’ we see ‘Working’ or some other text, I'd rather see when it renews” (fusebox-page.md FP-17).
+DK-211 and DK-214 say it as it is now.
+
 - **DK-210 Every bar is the server card's blocks.** Every bar a widget draws — a list row's, a figure's, a poster's, a
   card's, the calm page's moments — is DK-152's blocks: lit up to the value, as many as fit at the server card's size
   (about 9 px wide, 2 px apart), ten to twenty, so a long bar has wider blocks; measured where it is drawn. Colours stay
   as they were. *Why:* John asked; one kind of bar reads as one system.
 - **DK-211 Rows of limits.** A list whose rows carry `meters` draws them as limits, by the widget's width: from 900 px
   wide, each row its mark, name and plan, each limit's line (its short name, the blocks, “62 % used”) with when it
-  resets, and how it is on the right with its note under it (“used 2 min ago”); from 560 px, the limits beside the name
-  and how it is after the plan; narrower, the name with the last limit's words (or how it is, when that isn't fine) and
+  resets, and how it is on the right with its note under it (“used 2 min ago”); from 560 px, the limits beside the name,
+  taking the room the name doesn't need (1.3 to its 1, at least 270 px; wide, 1.7 to 1) so their blocks are as long as
+  they can be, with only the row's detail under the name (when it renews) and how it is only for a row that is off,
+  whose blocks say nothing; narrower, the name with the last limit's words (or how it is, when that isn't fine) and
   its blocks under it. Where those rows don't all fit, each becomes one tight line with its last limit only, its name in
   the colour of how it is, so a 4 × 2 widget on the Z13 still shows six. A wide row grows to 104 px where there is room.
   *Why:* the Fusebox dashboard's table, at a screen's sizes.
@@ -1026,7 +1032,7 @@ words as before. The box's console reads the new fields (`grid.ts`) with the app
   `left`). Left lights the blocks that are left and says “38 % left”; the colours follow what is used either way (amber
   from 80 % used, red when all of it is). *Why:* John asked; Fusebox's dashboard has the same choice.
 - **DK-214 Fusebox's subscriptions on a screen.** Each subscription is a row: its tool's mark, its address, “Claude ·
-  Ultra”, the 5 hours only where the subscription has that limit and the week (unlit with a dash when nothing was read),
+  Ultra · Renews 3 Dec” (FP-17), the 5 hours only where the subscription has that limit and the week (unlit with a dash when nothing was read),
   the week's reset, how it is (“Working”, “Used up until Fri 09:00”, “Off in Fusebox”) with when it was last used; the
   header says how many work (“4 of 6 working”). *Limits now* draws each pool's week and 5 hours the same way with the
   tool's mark. *Why:* as Fusebox's dashboard lists them.

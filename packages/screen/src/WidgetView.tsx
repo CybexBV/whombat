@@ -643,9 +643,10 @@ function RowMark({ r, size }: { r: DeskViewRow; size: number }) {
 
 /**
  * Rows of limits (Fusebox's subscriptions): wide, each with its mark, name and plan, its limits as blocks with
- * when they reset, and how it is; half as wide, the limits beside the name with how it is under it; narrow, the name
- * with the last limit's words and its blocks under it (what isn't fine says so instead). Where they don't all fit so,
- * each is one tight line with its last limit, its name in the colour of how it is.
+ * when they reset, and how it is; half as wide, the name with its plan and when it renews, the limits beside it as
+ * long as there's room; narrow, the name with the last limit's words and its blocks under it (what isn't fine says so
+ * instead). Where they don't all fit so, each is one tight line with its last limit, its name in the colour of how it
+ * is.
  */
 function MeterRows({ v, pw, ph }: { v: DeskListView; pw: number; ph: number }) {
   const form = meterRowsForm(pw);
@@ -679,7 +680,13 @@ function MeterRows({ v, pw, ph }: { v: DeskListView; pw: number; ph: number }) {
             );
           }
           const wide = form === 'wide';
-          const under = tight ? '' : wide ? r.detail : [r.detail, r.meta].filter(Boolean).join(' · ');
+          // Under the name its plan and when it renews; half as wide, a switched-off row says so there too (its blocks
+          // say nothing), the others' state is in their blocks.
+          const under = tight
+            ? ''
+            : wide || r.tone !== 'off'
+              ? r.detail
+              : [r.detail, r.meta].filter(Boolean).join(' · ');
           const lines = tight ? meters.slice(-1) : meters;
           return (
             <div
