@@ -212,7 +212,7 @@ import { DeskLookLog, DeskWelcome } from './welcome';
 import { isAccountRef } from './widgets/accounts';
 import { deskCatalog } from './widgets/catalog';
 import { type ScreenHomeWidget, screenHomeWidgets } from './widgets/home';
-import { catalogFor, viewsFor } from './widgets/older-apps';
+import { catalogFor, screenDetailFor, viewsFor, withHiddenWidgets } from './widgets/older-apps';
 import { type GlanceFacts, pictureKey, screenViews, viewPictures, WidgetResolver } from './widgets/resolve';
 import { createThingWidgets } from './widgets/things';
 import type { Resolved, ScreenRecord, ScreensApi, ThingWidgets, WidgetCtx } from './widgets/types';
@@ -2217,7 +2217,10 @@ export class DeskService {
   async screenGet(principal: SessionPrincipal, input: { screen: string }): Promise<DeskScreenDetail> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
-    return screenDetail(this.#summary(record, record.kind === 'box' ? await this.#boxOn() : false), record);
+    return screenDetailFor(
+      screenDetail(this.#summary(record, record.kind === 'box' ? await this.#boxOn() : false), record),
+      principal.protocolMinor,
+    );
   }
 
   /**
@@ -2262,6 +2265,9 @@ export class DeskService {
   ): Promise<DeskScreenDetail> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
+    // An older app saves without the widgets it couldn't see: they stay where they were.
+    if (input.layout)
+      input = { ...input, layout: withHiddenWidgets(input.layout, record.layout, principal.protocolMinor) };
     if (input.layout) await this.#checkLayout(target, input.layout);
     const box = record.kind === 'box';
     if (box && input.show) await this.update(principal, { show: input.show });
@@ -2329,9 +2335,10 @@ export class DeskService {
   ): Promise<{ until: string }> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
-    await this.#checkLayout(target, input.layout);
+    const layout = withHiddenWidgets(input.layout, record.layout, principal.protocolMinor);
+    await this.#checkLayout(target, layout);
     const until = this.#now() + DESK_TRY_S * 1_000;
-    this.#trying.set(record.id, { layout: input.layout, until });
+    this.#trying.set(record.id, { layout, until });
     return { until: new Date(until).toISOString() };
   }
 
