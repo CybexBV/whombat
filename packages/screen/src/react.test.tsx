@@ -246,7 +246,8 @@ describe('<WidgetView>', () => {
     const large = widget('w_weather', 'weather', 4, 3);
     expect(large).toContain('Today');
     expect(large).toContain('Wed');
-    expect(large).toContain('Sunrise 07:26');
+    // The test draws without the Whombat's time zone, so only that the times are there.
+    expect(large).toMatch(/Sunrise \d\d:\d\d · Sunset \d\d:\d\d/);
     expect(large).toContain('Data from MET Norway');
   });
 
