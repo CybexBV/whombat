@@ -4,9 +4,14 @@
  * The person's, on the `app` channel behind feature `desk` (Settings → Screens and the editor):
  * - `desk.screens` → `DeskScreensList`: every screen, the box's own first.
  * - `desk.screen.get {screen}` → `DeskScreenDetail`: one with its layout and choices.
- * - `desk.screen.update {screen, name?, popups?, layout?, show?}` → `DeskScreenDetail`: any of them; a layout whole
- *   (`deskLayoutProblem` must find nothing: `bad_layout`), `show` as `desk.update`'s (`applyDeskShowPatch`). The box's
- *   own screen keeps its name (the Whombat's).
+ * - `desk.screen.update {screen, name?, popups?, doorbell?, layout?, show?}` → `DeskScreenDetail`: any of them; a
+ *   layout whole (`deskLayoutProblem` must find nothing: `bad_layout`), `show` as `desk.update`'s (`applyDeskShowPatch`).
+ *   The box's own screen keeps its name (the Whombat's). A layout from an app below `SCREEN_TIMES_MINOR` keeps each
+ *   page's stored times (`DeskPage.show`), which that app can't read.
+ * - `desk.screen.addPage {screen, name, widgets, show?, replace?}` → `DeskScreenAddPageOutput` (minor
+ *   `SCREEN_TIMES_MINOR`; the assistant's “make me a page”, desk-display.md): a new page with these widgets in
+ *   this order, each at its asked size within its limits, at the first free place on the screen's shape; what doesn't
+ *   fit is left out and named. A seventh page is refused unless it replaces one (`replace`, a page id).
  * - `desk.screen.views {screen, widgets, scenario?}` → `DeskScreenViews`: the views of any widgets as that screen would
  *   draw them now (the editor's live preview, a draft's widgets included), with the calm glance and what needs the
  *   person; `scenario` as Settings' preview (`deskPreviewInput`). Unlocked, as the person at the screen sees it.
@@ -25,7 +30,7 @@
  *
  * A screen elsewhere, on the `screen` channel (only a screen's endpoint; nothing else is open to it):
  * - `screen.state {size, known?}` → `ScreenState`, or `{same, etag}` when nothing changed since `known`. Its size keeps
- *   Settings' picture of it right.
+ *   Settings' picture of it right; `timeZone` is the person's, for the clock and the pages by time of day.
  * - `screen.unlock {pin}` (secret) → `ScreenLock`; `screen.lock` → `ScreenLock`. Unlocked it shows what *A summary*
  *   hides; it never answers questions or takes a look's step (on the phone or the box's own screen).
  * - `screen.image {thing, ref}` → `ScreenImage`: a picture one of its views names.
@@ -33,20 +38,28 @@
  * Every change answers `desk.changed` (topic `me`), as the other `desk.*` ops.
  */
 import {
+  DESK_GRID_MAX,
+  DESK_PAGE_WIDGETS_MAX,
   DESK_SCREEN_VIEWS_MAX,
   DeskAttention,
   DeskCalm,
+  DeskDoorbell,
   DeskGrid,
   DeskLayout,
   DeskLockedView,
+  DeskPage,
+  DeskPageId,
+  DeskPageShow,
   DeskPopups,
   DeskPreviewScenario,
   DeskScreenCode,
   DeskScreenId,
   DeskScreenSize,
   DeskShowPatch,
+  DeskWidgetOpts,
   DeskWidgetRef,
   DeskWidgetSpec,
+  DeskWidgetType,
   DeskWidgetView,
   displayLine,
   Timestamp,
@@ -62,10 +75,50 @@ export const DeskScreenUpdateInput = z.strictObject({
   screen: DeskScreenId,
   name: Name.optional(),
   popups: DeskPopups.optional(),
+  doorbell: DeskDoorbell.optional(),
   layout: DeskLayout.optional(),
   show: DeskShowPatch.optional(),
 });
 export type DeskScreenUpdateInput = z.infer<typeof DeskScreenUpdateInput>;
+
+/** A widget the assistant asks for on a new page: what it is and shows, and the size it would like (cells). */
+export const DeskScreenPageWidget = z.strictObject({
+  type: DeskWidgetType,
+  ref: DeskWidgetRef.optional(),
+  opts: DeskWidgetOpts.optional(),
+  w: z.number().int().min(1).max(DESK_GRID_MAX).optional(),
+  h: z.number().int().min(1).max(DESK_GRID_MAX).optional(),
+});
+export type DeskScreenPageWidget = z.infer<typeof DeskScreenPageWidget>;
+
+export const DeskScreenAddPageInput = z.strictObject({
+  screen: DeskScreenId,
+  name: displayLine(24),
+  widgets: z.array(DeskScreenPageWidget).min(1).max(DESK_PAGE_WIDGETS_MAX),
+  show: DeskPageShow.optional(),
+  /** The page it takes the place of (its id): the only way to a seventh. */
+  replace: DeskPageId.optional(),
+});
+export type DeskScreenAddPageInput = z.infer<typeof DeskScreenAddPageInput>;
+
+/** Why an asked widget isn't on the page: no room left, or not one this Whombat can show. */
+export const DESK_PAGE_LEFT_WHY = ['no_room', 'unknown'] as const;
+/** The page as made, and the widgets left out (in the order asked), each with its name where known. */
+export const DeskScreenAddPageOutput = z.object({
+  screen: DeskScreenId,
+  page: DeskPage,
+  left: z
+    .array(
+      z.object({
+        type: DeskWidgetType,
+        ref: DeskWidgetRef.optional(),
+        name: displayLine(60).optional(),
+        why: z.enum(DESK_PAGE_LEFT_WHY),
+      }),
+    )
+    .max(DESK_PAGE_WIDGETS_MAX),
+});
+export type DeskScreenAddPageOutput = z.infer<typeof DeskScreenAddPageOutput>;
 
 export const DeskScreenViewsInput = z.strictObject({
   screen: DeskScreenId,
@@ -150,6 +203,8 @@ export const ScreenState = z.object({
   whombat: Name,
   /** The assistant's name, for Whombat's own widgets' words (“Dusty’s work”); absent: “Your assistant”. */
   assistant: Name.optional(),
+  /** The person's time zone (IANA), for the clock and the pages by time of day; absent: the device's own. */
+  timeZone: z.string().min(1).max(64).optional(),
   lock: ScreenLock,
   calm: DeskCalm.nullable(),
   grid: DeskGrid.nullable(),

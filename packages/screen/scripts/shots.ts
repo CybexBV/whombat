@@ -56,6 +56,8 @@ const SHOTS: Record<string, { width: number; height: number; act?: (page: Page) 
   'f-larger': { width: 1280, height: 800 },
   'f-trying': { width: 1280, height: 800 },
   'f-kinds': { width: 1280, height: 800 },
+  'f-doorbell': { width: 1280, height: 800 },
+  'f-doorbell-locked': { width: 1280, height: 800 },
   'f-wide-chips': { width: 1280, height: 800 },
   'f-sizes': { width: 1600, height: 1480 },
   'f-servers': { width: 1900, height: 1700 },

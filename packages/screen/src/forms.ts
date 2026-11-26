@@ -215,6 +215,9 @@ export function chartForm(h: number): ChartForm {
   return h === 1 ? 'spark' : 'chart';
 }
 
+/** How long a moment takes over the screen (the contract's `DESK_SPOTLIGHT_S`): the line under the bar runs down. */
+export const SPOTLIGHT_S = 60;
+
 /** The size a widget opens to when touched (DK-140): its largest, as far as the screen has room. */
 export function bigSize(
   max: readonly [number, number],

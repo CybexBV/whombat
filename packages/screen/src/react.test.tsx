@@ -6,6 +6,8 @@ import {
   FIXTURE_BOX_GRID_WRONG,
   FIXTURE_CALM,
   FIXTURE_CALM_WRONG,
+  FIXTURE_DOORBELL_GRID,
+  FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_NOW,
   FIXTURE_QUESTION,
   FIXTURE_TABLET_GRID,
@@ -166,6 +168,55 @@ describe('<Screen>', () => {
   it('says the draft is being tried', () => {
     const until = new Date(FIXTURE_NOW + 42_000).toISOString();
     expect(draw({ ...FIXTURE_BOX_GRID, trying: { until } })).toContain('42 s');
+  });
+
+  it('names only the pages whose time it is, and starts on the one whose window is open', () => {
+    // 14:34 on a Tuesday: the afternoon page is in, the morning page isn't.
+    const [overview, media, house] = FIXTURE_BOX_GRID.layout.pages;
+    if (!overview || !media || !house) throw new Error('pages');
+    const layout = {
+      ...FIXTURE_BOX_GRID.layout,
+      pages: [
+        overview,
+        { ...media, show: { from: '07:00', to: '09:00' } },
+        { ...house, show: { from: '14:00', to: '15:00', days: ['tue' as const] } },
+      ],
+    };
+    const html = draw({ ...FIXTURE_BOX_GRID, layout });
+    expect(html).toContain('>House</button>');
+    expect(html).not.toContain('>Media</button>');
+    expect(html).toContain('aria-current="page">House');
+    expect(html).toContain('data-widget="w_door"');
+    // The editor shows every page, whatever the time.
+    expect(draw({ ...FIXTURE_BOX_GRID, layout }, { editing: true, page: 0 })).toContain('>Media</button>');
+  });
+
+  it('opens the doorbell big over the dashboard, with what happened, the minute running down and Back', () => {
+    const html = draw(FIXTURE_DOORBELL_GRID);
+    expect(html).toContain('Someone’s at the door');
+    expect(html).toContain('data-widget="w_spotlight"');
+    expect(html).toContain('Rang at 14:34');
+    expect(html).toContain('>Back</button>');
+    // 40 of its 60 seconds left.
+    expect(html).toMatch(/--left:66\.6\d*%/);
+    // The pages wait while it shows.
+    expect(html).not.toContain('aria-label="Pages"');
+  });
+
+  it('shows the doorbell’s locked form on a locked screen, and nothing once its minute is over', () => {
+    const locked = draw(FIXTURE_DOORBELL_GRID_LOCKED);
+    expect(locked).toContain('Someone’s at the door');
+    expect(locked).toContain('Unlock to see it');
+    expect(locked).not.toContain('<img');
+    expect(draw(FIXTURE_DOORBELL_GRID, { now: FIXTURE_NOW + 41_000 })).not.toContain('Someone’s at the door');
+    expect(draw(FIXTURE_DOORBELL_GRID, { onlyTime: true })).not.toContain('Someone’s at the door');
+    expect(draw(FIXTURE_DOORBELL_GRID, { editing: true })).not.toContain('Someone’s at the door');
+  });
+
+  it('keeps an outage’s modal back while the doorbell shows', () => {
+    const html = draw({ ...FIXTURE_DOORBELL_GRID, attention: FIXTURE_BOX_GRID_WRONG.attention });
+    expect(html).not.toContain('role="dialog"');
+    expect(html).toContain('Someone’s at the door');
   });
 });
 

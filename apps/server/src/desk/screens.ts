@@ -21,6 +21,7 @@ import {
   DESK_SCREEN_WORDS,
   DESK_SCREENS_MAX,
   DESK_WORDS,
+  DeskDoorbell,
   type DeskLayout,
   DeskLayout as DeskLayoutSchema,
   DeskPopups,
@@ -115,6 +116,7 @@ export function recordOf(row: ScreenRow, boxShow: DeskShow | null = null): Scree
     // The box's own keeps its name; a monitor without one is *Monitor on this Whombat*.
     name: kind === 'box' ? DESK_SCREEN_WORDS.box : row.name || DESK_SCREEN_WORDS[kind],
     popups: popupsOf(row.popups, kind),
+    doorbell: row.doorbell === 'off' ? 'off' : 'big',
     layout: layoutOf(row.layout),
     show: kind === 'box' && boxShow ? boxShow : showOf(row.show),
     endpointId: row.endpointId,
@@ -133,6 +135,7 @@ export function defaultBoxRecord(burrowId: string, show: DeskShow, personId: str
     kind: 'box',
     name: DESK_SCREEN_WORDS.box,
     popups: 'all',
+    doorbell: 'big',
     layout: deskDefaultLayout(),
     show,
     endpointId: null,
@@ -232,9 +235,10 @@ async function checkWriter(tx: Tx, actor: { id: string; kind: string }, system: 
 const Name = z.string().regex(/^(?:[^\p{Cc}\p{Cf}\p{Cs}\p{Z}]| ){1,40}$/u);
 
 /**
- * The person changes a screen (DK-128, DK-143, DK-144, DK-137): its name (not the box's own), pop-ups, layout (checked
- * before by the service: `layoutRefusal`), choices (a monitor's or a device's; the box's own go through `update_desk`).
- * The box's own row is written now if it had none. Signed without words, as a setting is.
+ * The person changes a screen (DK-128, DK-143, DK-144, DK-137): its name (not the box's own), pop-ups, what it
+ * does when the doorbell rings, layout (checked before by the service: `layoutRefusal`), choices (a monitor's or a
+ * device's; the box's own go through `update_desk`). The box's own row is written now if it had none. Signed without
+ * words, as a setting is.
  */
 export const updateScreen = defineCommand({
   name: 'update_screen',
@@ -242,6 +246,7 @@ export const updateScreen = defineCommand({
     id: DeskScreenId,
     name: Name.optional(),
     popups: DeskPopups.optional(),
+    doorbell: DeskDoorbell.optional(),
     layout: DeskLayoutSchema.optional(),
     show: DeskShow.optional(),
   }),
@@ -258,6 +263,7 @@ export const updateScreen = defineCommand({
     const changed = {
       ...(input.name !== undefined && !box ? { name: input.name.trim() } : {}),
       ...(input.popups ? { popups: input.popups } : {}),
+      ...(input.doorbell ? { doorbell: input.doorbell } : {}),
       ...(input.layout ? { layout: input.layout } : {}),
       ...(input.show && !box ? { show: input.show } : {}),
     };

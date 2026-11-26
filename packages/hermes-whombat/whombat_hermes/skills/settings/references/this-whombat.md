@@ -95,6 +95,7 @@ The box’s screen and other screens: what they show, the lock, night and Talk.
 - Pair a screen (it needs a code) — `desk.pair` · theirs: send them there
 - Preview what the screen will show — `desk.preview` · read
 - Add a screen (it needs a code) — `desk.screen.add` · theirs: send them there
+- Make a new page of widgets on a screen — `desk.screen.addPage` · change
 - Read one screen and what it shows — `desk.screen.get` · read
 - Remove a screen — `desk.screen.remove` · change, always asks
 - Try a layout on a screen — `desk.screen.try` · change

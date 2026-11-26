@@ -2,6 +2,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { type ApprovalResponse, GuideCard, type MessagePage } from '@whombat/core';
+import { SESSION_PROTOCOL } from '@whombat/protocol/session';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { createClient } from '../http/client';
@@ -504,7 +505,7 @@ describe('useSessionProtocol', () => {
     expect(result.current).toBeNull();
 
     act(() => session.connect());
-    await waitFor(() => expect(result.current).toEqual({ major: 5, minor: 14 }));
+    await waitFor(() => expect(result.current).toEqual(SESSION_PROTOCOL));
 
     // Simulate a rollback to minor 2: reconnect picks up the older welcome version.
     appliance.faults.protocolMinor(2);

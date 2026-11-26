@@ -2,14 +2,17 @@
  * Settings → Screens (Whombat desk-display.md DK-128, DK-137, DK-146, DK-147; desk-display-web.md AP-5940…): every
  * screen with a live picture of what it shows, its lines (what it is, its grid and pages; what pops up, how it locks)
  * and *Edit layout*; *+ Add a screen* (the six letters a tablet or computer shows). A screen's own page (`&screen=`):
- * its picture and *Edit layout*, its name (not the box's), *What pops up*, and for the box's own the parts that were the
+ * its picture and *Edit layout*, its name (not the box's), *What pops up*, *When the doorbell rings* (where the Whombat
+ * follows a doorbell), and for the box's own the parts that were the
  * *Screen* tab's (*Top bar*, *Lock and PIN*, *Night*, *Talk*); a screen elsewhere can be removed.
  */
 import {
+  DESK_DOORBELL,
   DESK_POPUPS,
   DESK_SCREEN_WORDS,
   DESK_SCREENS_TEXT,
   type DeskApi,
+  type DeskDoorbell,
   type DeskPopups,
   type DeskScreen,
   type DeskScreenDetail,
@@ -84,6 +87,7 @@ export function ScreensTab({
         api={api}
         id={screen}
         known={summary !== undefined}
+        doorbell={list.data.doorbell === true}
         desk={desk.data}
         timeZone={here.timeZone}
         onBack={() => onScreenChange(undefined)}
@@ -266,6 +270,7 @@ function ScreenSettings({
   api,
   id,
   known,
+  doorbell,
   desk,
   timeZone,
   onBack,
@@ -277,6 +282,8 @@ function ScreenSettings({
   api: DeskApi;
   id: string;
   known: boolean;
+  /** The Whombat follows a doorbell: *When the doorbell rings* shows. */
+  doorbell: boolean;
   desk: DeskScreen | undefined;
   timeZone: string;
   onBack: () => void;
@@ -290,6 +297,7 @@ function ScreenSettings({
   const toast = useToast();
   const [removing, setRemoving] = useState(false);
   const popupsId = useId();
+  const doorbellId = useId();
   const back = (
     <button type="button" className={s.back} onClick={onBack}>
       <Icon icon={ChevronLeft} size={15} />
@@ -306,7 +314,7 @@ function ScreenSettings({
   const screen = detail.data;
   if (!screen) return <div className={s.tab}>{back}</div>;
   const lines = screenLines(screen, linesContext(desk, timeZone));
-  const save = (patch: { name?: string; popups?: DeskPopups }) =>
+  const save = (patch: { name?: string; popups?: DeskPopups; doorbell?: DeskDoorbell }) =>
     void actions
       .update({ screen: screen.id, ...patch })
       .catch((error) => toast.show(screensErrorText(error)));
@@ -352,6 +360,28 @@ function ScreenSettings({
             options={DESK_POPUPS.map((p) => ({ value: p, label: DESK_SCREEN_WORDS.popups[p] }))}
           />
         </div>
+        {doorbell && screen.doorbell ? (
+          <div className={cx(styles.row, s.fieldRow)} data-row="doorbell">
+            <span className={styles.rowMain}>
+              <span className={styles.rowTitle} id={`${doorbellId}-title`}>
+                {T.page.doorbell}
+              </span>
+              <span className={styles.rowMeta} id={`${doorbellId}-hint`}>
+                {T.page.doorbellHint[screen.doorbell]}
+              </span>
+            </span>
+            <SegmentedControl
+              variant="soft"
+              size="sm"
+              role="radiogroup"
+              label={T.page.doorbell}
+              describedBy={`${doorbellId}-hint`}
+              value={screen.doorbell}
+              onChange={(next) => save({ doorbell: next })}
+              options={DESK_DOORBELL.map((d) => ({ value: d, label: DESK_SCREEN_WORDS.doorbell[d] }))}
+            />
+          </div>
+        ) : null}
         {screen.kind !== 'box' ? (
           <div className={cx(styles.row, s.fieldRow)} data-row="remove">
             <span className={styles.rowMain}>

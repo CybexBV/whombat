@@ -12,6 +12,7 @@ import type {
   DeskWidgetRef,
   DeskWidgetSpec,
 } from '@whombat/core';
+import type { DeskScreenAddPageInput } from '@whombat/protocol/session';
 import { ApiError } from '../lib/errors';
 import type { SessionPrincipal } from '../managed/trust';
 import type { DeskService } from './service';
@@ -52,8 +53,17 @@ export const DESK_SESSION_HANDLERS: Readonly<Record<string, DeskHandler>> = {
   'desk.screen.get': (c, i: { screen: string }) => deskOf(c).screenGet(c.principal, i),
   'desk.screen.update': (
     c,
-    i: { screen: string; name?: string; popups?: DeskPopups; layout?: DeskLayout; show?: DeskShowPatch },
+    i: {
+      screen: string;
+      name?: string;
+      popups?: DeskPopups;
+      doorbell?: 'big' | 'off';
+      layout?: DeskLayout;
+      show?: DeskShowPatch;
+    },
   ) => deskOf(c).screenUpdate(c.principal, i),
+  // The assistant's “make me a page”.
+  'desk.screen.addPage': (c, i: DeskScreenAddPageInput) => deskOf(c).screenAddPage(c.principal, i),
   'desk.screen.views': (
     c,
     i: { screen: string; widgets: DeskWidgetSpec[]; scenario?: DeskPreviewScenario },

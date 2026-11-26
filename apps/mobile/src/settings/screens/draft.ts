@@ -13,6 +13,7 @@ import {
   chooseWidget,
   type DeskCatalogItem,
   type DeskLayout,
+  type DeskPageShow,
   type DeskScreenDetail,
   type DeskShowPatch,
   type DeskSize,
@@ -36,6 +37,7 @@ import {
   sameLayout,
   setLayoutSize,
   setLayoutTurn,
+  setPageShow,
   setWidgetSpec,
   tidyPage,
   type UndoStack,
@@ -292,6 +294,13 @@ export function draftDeletePage(d: Draft, index: number): DraftResult {
   const shown = index === d.page ? index - 1 : index < d.page ? d.page - 1 : d.page;
   const page = Math.max(0, Math.min(shown, r.layout.pages.length - 1));
   return { ok: true, draft: changed(d, { layout: r.layout, page, selected: null }) };
+}
+
+/** *Show at set times…*: page `index` at these times, or always (`null`); null when no day is chosen. */
+export function draftPageShow(d: Draft, index: number, show: DeskPageShow | null): Draft | null {
+  const layout = setPageShow(d.layout, index, show);
+  if (!layout) return null;
+  return layout === d.layout ? d : changed(d, { layout });
 }
 
 /** *Move left* / *Move right* on a page's sheet: its place among the pages. */

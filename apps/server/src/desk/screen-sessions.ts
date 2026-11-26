@@ -198,6 +198,7 @@ export class ScreenSessions {
       screen: { id: screen.id, name: screen.name, popups: screen.popups },
       whombat: await this.deps.whombatName(screen),
       ...(await this.#assistant(screen)),
+      ...(await this.#zone(screen)),
       lock,
       calm: drawn?.calm ?? null,
       grid: drawn?.grid ?? null,
@@ -211,6 +212,12 @@ export class ScreenSessions {
   async #assistant(screen: ScreenRecord): Promise<{ assistant?: string }> {
     const name = await this.deps.assistantName?.(screen).catch(() => null);
     return name ? { assistant: name } : {};
+  }
+
+  /** The person's time zone, for the clock and the pages by time of day; none: the device's own. */
+  async #zone(screen: ScreenRecord): Promise<{ timeZone?: string }> {
+    const zone = await this.deps.api.timeZone?.(screen).catch(() => null);
+    return zone ? { timeZone: zone.slice(0, 64) } : {};
   }
 
   /**

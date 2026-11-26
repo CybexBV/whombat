@@ -45,7 +45,12 @@ import {
   newId,
   topics,
 } from '@whombat/core';
-import { DeskScreenViews, DeskVoiceSample } from '@whombat/protocol/session';
+import {
+  DeskScreenAddPageOutput,
+  DeskScreenViews,
+  DeskVoiceSample,
+  SCREEN_TIMES_MINOR,
+} from '@whombat/protocol/session';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { approvalActionHash } from '../approvals/create';
@@ -59,6 +64,7 @@ import {
   applianceState,
   approvals,
   burrows,
+  catalogConnections,
   deskDisplay,
   deskScreens,
   dispatches,
@@ -84,6 +90,7 @@ import { insertConnection } from '../test/connections';
 import { TEST_APP_URL } from '../test/harness';
 import { useManagedRuntime } from '../test/managed';
 import { addPersonalAgent, type PersonalSetup } from '../test/personal';
+import { emitDoorbellRing } from '../things/kinds/home/doorbell';
 import { parseWav, setVoiceFor, VoiceCallError } from '../voice/speech';
 import { updateVoiceTyping } from '../voice/store';
 import { FAKE_SPEECH_RATE, FakeVoice, fakeRecording } from '../voice/testing/fake-voice';
@@ -2083,6 +2090,123 @@ describe('screens of widgets (DK-126…DK-149)', () => {
     expect(await desk.screens.picture(elsewhere, 'everything', 'connection:con_plex', ref)).toBeNull();
     expect((await refusal(desk.image('connection:con_plex', ref))).details).toBe(404);
   });
+
+  it('makes a page from the widgets asked, says what it left out, and keeps to six pages', async () => {
+    const before = (await desk.screenGet(mara, { screen: 'box' })).layout;
+    const made = DeskScreenAddPageOutput.parse(
+      await desk.screenAddPage(mara, {
+        screen: 'box',
+        name: '  Morning ',
+        show: { from: '07:00', to: '09:00', days: ['mon', 'tue', 'wed', 'thu', 'fri'] },
+        widgets: [
+          { type: 'clock', w: 4, h: 2 },
+          { type: 'figures', ref: 'connection:con_nothere' },
+          { type: 'done', w: 4, h: 3 },
+        ],
+      }),
+    );
+    expect(made.page).toMatchObject({ name: 'Morning', show: { from: '07:00', to: '09:00' } });
+    expect(
+      Object.values(made.page.layouts)
+        .flat()
+        .map((w) => w.type),
+    ).toEqual(['clock', 'done']);
+    expect(made.left).toEqual([{ type: 'figures', ref: 'connection:con_nothere', why: 'unknown' }]);
+    const saved = (await desk.screenGet(mara, { screen: 'box' })).layout;
+    expect(saved.pages.map((p) => p.id)).toEqual([...before.pages.map((p) => p.id), made.page.id]);
+    // Up to six; the seventh only in another's place.
+    for (let i = saved.pages.length; i < 6; i++)
+      await desk.screenAddPage(mara, { screen: 'box', name: `Page ${i}`, widgets: [{ type: 'clock' }] });
+    expect(
+      (await refusal(desk.screenAddPage(mara, { screen: 'box', name: 'More', widgets: [{ type: 'clock' }] })))
+        .details,
+    ).toMatchObject({ code: 'bad_layout' });
+    const replaced = await desk.screenAddPage(mara, {
+      screen: 'box',
+      name: 'Evening',
+      widgets: [{ type: 'clock' }],
+      replace: made.page.id,
+    });
+    expect(replaced.page.id).toBe(made.page.id);
+    expect((await desk.screenGet(mara, { screen: 'box' })).pages).toBe(6);
+    await desk.screenUpdate(mara, { screen: 'box', layout });
+  });
+
+  it('keeps the page times an older app’s layout leaves out; a current app changes them', async () => {
+    const timed = structuredClone(layout);
+    const media = timed.pages[1];
+    if (!media) throw new Error('no page');
+    media.show = { from: '18:00', to: '23:00' };
+    await desk.screenUpdate(mara, { screen: 'box', layout: timed });
+    const older = { ...mara, protocolMinor: SCREEN_TIMES_MINOR - 1 } as SessionPrincipal;
+    const renamed = structuredClone(layout);
+    if (renamed.pages[0]) renamed.pages[0].name = 'Home';
+    const kept = await desk.screenUpdate(older, { screen: 'box', layout: renamed });
+    expect(kept.layout.pages.map((p) => [p.name, p.show?.from ?? null])).toEqual([
+      ['Home', null],
+      ['Media', '18:00'],
+    ]);
+    const current = { ...mara, protocolMinor: SCREEN_TIMES_MINOR } as SessionPrincipal;
+    const cleared = await desk.screenUpdate(current, { screen: 'box', layout });
+    expect(cleared.layout.pages.every((p) => p.show === undefined)).toBe(true);
+  });
+
+  it('opens the doorbell big for a minute on the screens that show it, and on none that don’t', async () => {
+    const services = m.t.services;
+    expect(DeskScreensList.parse(await desk.screensList(mara)).doorbell).toBeUndefined();
+    const protect = await insertConnection(services, {
+      handle: 'protect-screens',
+      catalogId: 'unifi_protect',
+      burrowId: TEST_BURROW_ID,
+      fields: { url: 'https://192.168.1.1' },
+      secret: 'protect-key',
+      auth: { type: 'header', name: 'X-API-KEY', template: '{secret}' },
+    });
+    try {
+      const list = DeskScreensList.parse(await desk.screensList(mara));
+      expect(list.doorbell).toBe(true);
+      expect(list.screens[0]?.doorbell).toBe('big');
+      const ring = {
+        connectionId: protect,
+        burrowId: TEST_BURROW_ID,
+        camera: 'cam_front',
+        at: new Date(now),
+      };
+      desk.lock.unlock(now);
+      emitDoorbellRing(services, { ...ring, eventId: 'evt_one' });
+      const shown = await vi.waitFor(async () => {
+        const grid = DeskGrid.parse(DeskState.parse(await desk.state()).glance?.grid);
+        if (grid.spotlight?.widget.ref !== `connection:${protect}`) throw new Error('not yet');
+        return grid;
+      });
+      expect(shown.spotlight).toMatchObject({
+        id: 'ring_evt_one',
+        reason: 'doorbell',
+        until: new Date(now + 60_000).toISOString(),
+        widget: {
+          type: 'panel',
+          ref: `connection:${protect}`,
+          opts: { panel: 'cameras', item: 'cam_front' },
+        },
+      });
+      // Its camera is read like any widget's: the box's state never waits for a first read, so its view follows.
+      // Don't: the moment showing now ends at once.
+      const off = await desk.screenUpdate(mara, { screen: 'box', doorbell: 'off' });
+      expect(off.doorbell).toBe('off');
+      expect(DeskGrid.parse(DeskState.parse(await desk.state()).glance?.grid).spotlight).toBeUndefined();
+      await desk.screenUpdate(mara, { screen: 'box', doorbell: 'big' });
+      // A new ring shows for a minute, then it's over.
+      emitDoorbellRing(services, { ...ring, at: new Date(now), eventId: 'evt_two' });
+      await vi.waitFor(async () => {
+        const grid = DeskGrid.parse(DeskState.parse(await desk.state()).glance?.grid);
+        if (grid.spotlight?.id !== 'ring_evt_two') throw new Error('not yet');
+      });
+      now += 60_000;
+      expect(DeskGrid.parse(DeskState.parse(await desk.state()).glance?.grid).spotlight).toBeUndefined();
+    } finally {
+      await services.db.delete(catalogConnections).where(eq(catalogConnections.id, protect));
+    }
+  });
 });
 
 describe('what a screen may load (DK-138, DK-142)', () => {
@@ -2129,6 +2253,7 @@ describe('what a screen may load (DK-138, DK-142)', () => {
     kind: 'device',
     name: 'Kitchen',
     popups: 'none',
+    doorbell: 'big',
     layout: {
       pages: [
         {

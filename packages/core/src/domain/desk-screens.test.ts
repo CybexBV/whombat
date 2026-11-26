@@ -84,6 +84,40 @@ describe('layouts', () => {
       }).views,
     ).toHaveLength(1);
   });
+
+  it('keeps a page to set times, each day once', () => {
+    const base = deskDefaultLayout();
+    const page = base.pages[0];
+    if (!page) throw new Error('no page');
+    const at = (show: unknown) => DeskLayout.safeParse({ ...base, pages: [{ ...page, show }] });
+    const morning = at({ from: '07:00', to: '09:00', days: ['mon', 'tue', 'wed', 'thu', 'fri'] });
+    expect(morning.success && deskLayoutProblem(morning.data)).toBeNull();
+    // Past midnight, the whole day (the same time twice) and every day (no days) are all windows.
+    expect(at({ from: '22:00', to: '06:00' }).success).toBe(true);
+    expect(at({ from: '00:00', to: '00:00', days: ['sat', 'sun'] }).success).toBe(true);
+    expect(at({ from: '7:00', to: '09:00' }).success).toBe(false);
+    expect(at({ from: '07:00', to: '09:00', days: [] }).success).toBe(false);
+    const twice = at({ from: '07:00', to: '09:00', days: ['mon', 'mon'] });
+    expect(twice.success && deskLayoutProblem(twice.data)).toMatch(/twice/);
+  });
+
+  it('carries a widget taking over for a moment', () => {
+    const grid = {
+      screen: 'box',
+      layout: deskDefaultLayout(),
+      views: [],
+      attention: { items: [], more: 0 },
+      popups: 'all',
+    };
+    const spotlight = {
+      id: 'ring_1',
+      widget: { id: 'w_doorbell', type: 'panel', ref: 'connection:con_protect', opts: { panel: 'cameras' } },
+      until: '2026-11-26T09:01:00Z',
+      reason: 'doorbell',
+    };
+    expect(DeskGrid.parse({ ...grid, spotlight }).spotlight?.widget.ref).toBe('connection:con_protect');
+    expect(DeskGrid.safeParse({ ...grid, spotlight: { ...spotlight, reason: 'party' } }).success).toBe(false);
+  });
 });
 
 describe('what needs the person (the modal and the pill)', () => {

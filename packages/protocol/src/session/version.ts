@@ -80,9 +80,18 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * Looks ahead with `looksAhead.checkNow`, incoming mail checks, standing rules and recent checks (Whombat looks-ahead.md);
  * minor 13 is the owner's “Check for updates” (`appliance.update.check`, Whombat check-for-updates.md); minor 14 is
  * Looks ahead's “Keeping an eye on”: the view's `matters`, `looksAhead.update`'s `removeMatter`, and a recent check's
- * `of`, `count` and `picked` (Whombat looks-ahead.md).
+ * `of`, `count` and `picked` (Whombat looks-ahead.md); minor 15 is pages by time of day and moments on screens: a
+ * page's `show`, `desk.screen.addPage`, a screen's `doorbell` choice, a grid's `spotlight` and a screen elsewhere's
+ * `timeZone` (Whombat desk-display.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 14 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 15 };
+
+/**
+ * Session protocol minor (major 5) that keeps pages by time of day (`DeskPage.show`), makes a page for the assistant
+ * (`desk.screen.addPage`) and has a screen's doorbell choice; a box keeps the page times a layout from an older app
+ * leaves out, and an app offers the doorbell choice only where the box sends it.
+ */
+export const SCREEN_TIMES_MINOR = 15;
 
 /** Session protocol minor (major 5) that checks for updates on demand (`appliance.update.check`); an app checks it first. */
 export const UPDATE_CHECK_MINOR = 13;

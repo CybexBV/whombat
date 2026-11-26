@@ -64,6 +64,7 @@ import {
   type DeskCalmInput,
   type DeskCalmView,
   type DeskCatalog,
+  type DeskCatalogGroup,
   type DeskDisplay,
   type DeskGrid,
   type DeskLayout,
@@ -88,6 +89,7 @@ import {
   deskPreviewInput,
   deskQuietNow,
   deskText,
+  deskWidgetSpecProblem,
   fillDeskWords,
   type ThingSummary,
   topics,
@@ -96,8 +98,12 @@ import {
   DESK_ERROR_STATUS,
   DESK_VOICE_SAMPLE_WAV_MAX_BYTES,
   type DeskErrorCode,
+  type DeskScreenAddPageInput,
+  type DeskScreenAddPageOutput,
   type DeskScreenViews,
+  SCREEN_TIMES_MINOR,
 } from '@whombat/protocol/session';
+import { screenGrid as gridOfScreen } from '@whombat/screen';
 import { eq } from 'drizzle-orm';
 import { decideApproval } from '../commands/approvals';
 import type { CommandDef } from '../commit/types';
@@ -125,6 +131,7 @@ import { approvalByNumber, toApproval } from '../read/work';
 import { approvalVisible } from '../read/work-views';
 import type { Services } from '../services';
 import { thingPicture } from '../things/image-route';
+import { type DoorbellRing, followsDoorbell, onDoorbellRing } from '../things/kinds/home/doorbell';
 import { quietThingNotice } from '../things/quiet/service';
 import { DictationError, voiceTypingFor } from '../voice/service';
 import { speakingVoices, voiceFor, voiceHealth } from '../voice/speech';
@@ -166,6 +173,7 @@ import {
 } from './presence';
 import { UnlockPushes, unlockPushWhat } from './push-link';
 import { glanceFacts, screenDetail, screenGrid, screenSummary } from './screen-grid';
+import { type AskedWidget, catalogItemFor, keepPageTimes, placePage } from './screen-pages';
 import type { ScreenPinCheck } from './screen-sessions';
 import {
   badLayout,
@@ -181,6 +189,7 @@ import {
 } from './screens';
 import { deskServerPage, readServerParts, type ServerParts } from './server-page';
 import type { DeskAck, DeskBox, DeskPhoneUnlockAnswer, DeskServer, DeskTouchAnswer } from './shapes';
+import { ScreenSpotlights, withSpotlight } from './spotlight';
 import {
   DeskBootId,
   type DeskRow,
@@ -210,7 +219,7 @@ import {
 import { tellPerson } from './tell';
 import { DeskLookLog, DeskWelcome } from './welcome';
 import { isAccountRef } from './widgets/accounts';
-import { deskCatalog } from './widgets/catalog';
+import { deskCatalog, homeWidgetsGroup, ownGroup, serverGroups } from './widgets/catalog';
 import { type ScreenHomeWidget, screenHomeWidgets } from './widgets/home';
 import { catalogFor, viewsFor } from './widgets/older-apps';
 import { type GlanceFacts, pictureKey, screenViews, viewPictures, WidgetResolver } from './widgets/resolve';
@@ -275,6 +284,10 @@ const noSuchServer = () => new DeskRefused(404, 'not_found', 'There is no such s
 /** A voice the box doesn't have now, or a sample it can't make (DK-52). */
 const noVoice = () => deskError('no_voice', DESK_WORDS.errors.no_voice);
 const noOwnAssistant = () => new ApiError('conflict', 'You need your assistant on this Whombat first.');
+/** A screen that never said its size is drawn at the Z13's (the editor's too). */
+const DEFAULT_SCREEN_SIZE = { width: 1280, height: 800 } as const;
+/** How long a screen's time zone is kept before it is read again. */
+const ZONE_KEPT_MS = 60_000;
 
 /** A new PIN (DK-26, DK-27): 4 to 6 digits and not too easy to guess, checked before it is hashed or anything used up. */
 function checkNewPin(pin: string): void {
@@ -421,6 +434,7 @@ export class DeskService {
   readonly #timers = new Set<NodeJS.Timeout>();
   readonly #offFrames: () => void;
   readonly #offPush: () => void;
+  readonly #offRing: () => void;
   /** The unlock pushes sent, for `push.resolve` (DK-S21). */
   readonly #unlockPushes = new UnlockPushes(PUSH_TTL_S * 1000);
   /** When the console's state last checked whether to pair itself (DK-17). */
@@ -460,6 +474,10 @@ export class DeskService {
   readonly #things: ThingWidgets;
   /** *Try on the screen* (DK-143), per screen while it lasts: memory only, a restart ends it. */
   readonly #trying = new Map<string, { layout: DeskLayout; until: number }>();
+  /** A widget taking over a screen for a moment (the doorbell), per screen while it lasts: memory only. */
+  readonly #spotlights = new ScreenSpotlights();
+  /** Each screen's time zone as last read (`#zoneFor`). */
+  readonly #zones = new Map<string, { at: number; zone: string | null }>();
   /** Per screen, the pictures its views named when last drawn, for the lock view they were drawn for (DK-142). */
   readonly #shown = new Map<string, { view: DeskCalmView; at: number; pictures: ReadonlySet<string> }>();
   /** The outputs the box's page reported last, and the burrow its screens are in (DK-147). */
@@ -493,8 +511,15 @@ export class DeskService {
       },
       seen: (id, size, at) => this.#store.seen(id, size, at),
       draw: (screen, view) => this.#draw(screen, view),
+      timeZone: async (screen) => (await this.#zoneFor(screen)) ?? null,
       picture: (screen, view, thing, ref) => this.#picture(screen, view, thing, ref),
     };
+    // The doorbell rang: the screens that show it open it big.
+    this.#offRing = onDoorbellRing(services, (ring) => {
+      void this.#ring(ring).catch((err) =>
+        services.log.warn({ err: String(err) }, 'desk: the doorbell didn’t reach the screens'),
+      );
+    });
     this.#bootId =
       options.bootId === undefined ? readBootId(services.config.WHOMBAT_BOOT_ID) : options.bootId;
     this.presence = new PresenceLoop({
@@ -585,6 +610,7 @@ export class DeskService {
     this.#offTick?.();
     this.#offFrames();
     this.#offPush();
+    this.#offRing();
     for (const t of this.#timers) clearTimeout(t);
     this.#timers.clear();
     this.talk.close();
@@ -1974,7 +2000,8 @@ export class DeskService {
   ): Promise<DeskGrid | null> {
     const trying = this.#tryingOf(record.id, ctx.now.getTime());
     const layout = trying?.layout ?? record.layout;
-    const specs = deskLayoutWidgets(layout).slice(0, DESK_SCREEN_VIEWS_MAX);
+    const spotlight = this.#spotlights.of(record.id, ctx.now.getTime());
+    const specs = withSpotlight(deskLayoutWidgets(layout), spotlight, DESK_SCREEN_VIEWS_MAX);
     const resolved =
       view === 'time' ? new Map<string, Resolved>() : await this.#resolver.resolve(ctx, specs, facts, waitMs);
     const warn = (message: string, detail: unknown) =>
@@ -1988,6 +2015,7 @@ export class DeskService {
       record,
       layout,
       trying: trying?.until ?? null,
+      spotlight,
       views,
       calm,
       view,
@@ -2086,16 +2114,63 @@ export class DeskService {
     record: ScreenRecord,
     personId?: string,
   ): Promise<{ cache: GlanceCache; place: DeskPlace } | null> {
-    if (record.kind === 'device' && !record.personId) return null;
-    const paired = await this.#row();
-    const who =
-      personId ??
-      (record.kind !== 'device' && paired?.burrowId === record.burrowId ? paired.personId : null) ??
-      record.personId ??
-      (await thePerson(this.services.db, record.burrowId))?.id;
+    const who = await this.#whoFor(record, personId);
     if (!who) return null;
     const cache = await this.glanceFor({ burrowId: record.burrowId, personId: who });
     return cache.place ? { cache, place: cache.place } : null;
+  }
+
+  /** Whom a screen is drawn for (`#placeFor`'s rule): null for a device's screen whose person is gone. */
+  async #whoFor(record: ScreenRecord, personId?: string): Promise<string | null> {
+    if (record.kind === 'device' && !record.personId) return null;
+    const paired = await this.#row();
+    return (
+      personId ??
+      (record.kind !== 'device' && paired?.burrowId === record.burrowId ? paired.personId : null) ??
+      record.personId ??
+      (await thePerson(this.services.db, record.burrowId))?.id ??
+      null
+    );
+  }
+
+  /**
+   * The time zone a screen is drawn in: its person's own, else the Whombat's; null without a person. Kept a minute per
+   * screen: a screen elsewhere asks every few seconds.
+   */
+  async #zoneFor(record: ScreenRecord): Promise<string | null> {
+    const now = this.#now();
+    const kept = this.#zones.get(record.id);
+    if (kept && now - kept.at < ZONE_KEPT_MS) return kept.zone;
+    const who = await this.#whoFor(record);
+    const zone = who
+      ? ((await this.placeOf({ burrowId: record.burrowId, personId: who }))?.timeZone ?? null)
+      : null;
+    if (this.#zones.size >= 64) this.#zones.clear();
+    this.#zones.set(record.id, { at: now, zone });
+    return zone;
+  }
+
+  /**
+   * The doorbell rang: each of its Whombat's screens whose choice is *Show it big* shows the doorbell's camera
+   * for a minute; the box's own sees it at its next state (every second), a screen elsewhere at its next ask.
+   */
+  async #ring(ring: DoorbellRing): Promise<void> {
+    if (this.#closed) return;
+    const list = await this.#store.list(ring.burrowId);
+    const shown = new Set(this.#spotlights.ring(ring, list, this.#now()));
+    // The camera's picture is read now for whom the screens are drawn, so the next state has it.
+    const people = new Set<string>();
+    for (const record of list.filter((r) => shown.has(r.id))) {
+      const who = await this.#whoFor(record);
+      if (!who || people.has(who)) continue;
+      people.add(who);
+      const place = await this.placeOf({ burrowId: record.burrowId, personId: who });
+      const spotlight = this.#spotlights.of(record.id, this.#now());
+      if (place && spotlight)
+        void this.#resolver
+          .resolve(this.#widgetCtx(place, this.services.clock()), [spotlight.widget], null, 0)
+          .catch(() => undefined);
+    }
   }
 
   /** `ScreensApi.draw`: what a screen elsewhere draws now for what its lock lets show. */
@@ -2144,7 +2219,11 @@ export class DeskService {
     if (kept && age < SCREEN_PICTURES_FRESH_MS && kept.pictures.has(key)) return true;
     if (age < SCREEN_PICTURES_AGAIN_MS) return false;
     const trying = this.#tryingOf(record.id, now.getTime());
-    const specs = deskLayoutWidgets(trying?.layout ?? record.layout).slice(0, DESK_SCREEN_VIEWS_MAX);
+    const specs = withSpotlight(
+      deskLayoutWidgets(trying?.layout ?? record.layout),
+      this.#spotlights.of(record.id, now.getTime()),
+      DESK_SCREEN_VIEWS_MAX,
+    );
     const ctx = this.#widgetCtx(at.place, now);
     const resolved = await this.#resolver.resolve(ctx, specs, this.#factsOf(at.cache, at.place, now), 0);
     return this.#rememberShown(record.id, view, now.getTime(), screenViews(specs, resolved, view)).has(key);
@@ -2208,9 +2287,17 @@ export class DeskService {
   /** `desk.screens` (DK-128): every screen, the box's own first, then monitors, then devices; whether one can be added. */
   async screensList(principal: SessionPrincipal): Promise<DeskScreensList> {
     const target = await this.#screensTarget(principal);
-    const [list, boxOn] = await Promise.all([this.#store.list(target.burrowId), this.#boxOn()]);
+    const [list, boxOn, doorbell] = await Promise.all([
+      this.#store.list(target.burrowId),
+      this.#boxOn(),
+      followsDoorbell(this.services, target.burrowId).catch(() => false),
+    ]);
     const others = list.filter((r) => r.kind !== 'box').length;
-    return { screens: list.map((r) => this.#summary(r, boxOn)), canAdd: others < DESK_SCREENS_MAX };
+    return {
+      screens: list.map((r) => this.#summary(r, boxOn)),
+      canAdd: others < DESK_SCREENS_MAX,
+      ...(doorbell ? { doorbell } : {}),
+    };
   }
 
   /** `desk.screen.get`: one screen with its layout and choices. */
@@ -2256,13 +2343,17 @@ export class DeskService {
       screen: string;
       name?: string;
       popups?: 'all' | 'problems' | 'none';
+      doorbell?: 'big' | 'off';
       layout?: DeskLayout;
       show?: DeskShowPatch;
     },
   ): Promise<DeskScreenDetail> {
     const target = await this.#screensTarget(principal);
     const record = await this.#recordOf(target, input.screen);
-    if (input.layout) await this.#checkLayout(target, input.layout);
+    // An app that can't read a page's times sends its pages without them: they stay as they were.
+    const older = principal.protocolMinor !== undefined && principal.protocolMinor < SCREEN_TIMES_MINOR;
+    const layout = input.layout && older ? keepPageTimes(input.layout, record.layout) : input.layout;
+    if (layout) await this.#checkLayout(target, layout);
     const box = record.kind === 'box';
     if (box && input.show) await this.update(principal, { show: input.show });
     const name = !box && input.name !== undefined ? input.name.trim() : undefined;
@@ -2271,16 +2362,118 @@ export class DeskService {
     const changes = {
       ...(name ? { name } : {}),
       ...(input.popups ? { popups: input.popups } : {}),
-      ...(input.layout ? { layout: input.layout } : {}),
+      ...(input.doorbell ? { doorbell: input.doorbell } : {}),
+      ...(layout ? { layout } : {}),
       ...(!box && input.show ? { show: applyDeskShowPatch(record.show, input.show) } : {}),
     };
     if (Object.keys(changes).length > 0) {
       await this.#commit(target, updateScreen, { id: record.id, ...changes });
       // What was tried is saved now, or replaced by what was.
-      if (input.layout) this.#trying.delete(record.id);
+      if (layout) this.#trying.delete(record.id);
+      // *Don’t*: a moment showing now ends too.
+      if (input.doorbell === 'off') this.#spotlights.forget(record.id);
       await this.#screensChanged(target.burrowId);
     }
     return this.screenGet(principal, { screen: record.id });
+  }
+
+  /**
+   * `desk.screen.addPage`: the assistant's “make me a page”. Each widget asked must be one *Add a widget*
+   * offers (else it's left out, `unknown`); they go on a new page in the order asked, on the screen's shape as it last
+   * said its size, each at its asked size within its limits (`placePage`; what doesn't fit is left out, `no_room`). A
+   * seventh page is refused unless it replaces one. One commit, as the editor's Save.
+   */
+  async screenAddPage(
+    principal: SessionPrincipal,
+    input: DeskScreenAddPageInput,
+  ): Promise<DeskScreenAddPageOutput> {
+    const target = await this.#screensTarget(principal);
+    const record = await this.#recordOf(target, input.screen);
+    const name = input.name.replace(/\s+/g, ' ').trim();
+    if (!name) throw new ApiError('validation_failed', 'Give the page a name.');
+    for (const [i, w] of input.widgets.entries()) {
+      const problem = deskWidgetSpecProblem({ type: w.type, ref: w.ref, opts: w.opts ?? {} });
+      if (problem) throw badLayout(`widget ${i + 1}: ${problem}`);
+    }
+    const place = await this.placeOf({ burrowId: target.burrowId, personId: target.id });
+    if (!place) throw noOwnAssistant();
+    const ctx = this.#widgetCtx(place, this.services.clock());
+    const groups = await this.#catalogOf(ctx, input.widgets);
+    const asked = input.widgets.map((w) => ({ w, item: catalogItemFor(groups, w) }));
+    const known = asked.filter((a) => a.item !== null);
+    const size =
+      record.size ?? this.#outputs?.list.find((o) => o.id === record.id)?.size ?? DEFAULT_SCREEN_SIZE;
+    const grid = gridOfScreen(size.width, size.height, record.layout.size);
+    const placed = placePage({
+      layout: record.layout,
+      shape: { cols: grid.cols, rows: grid.rows },
+      name,
+      widgets: known.map(({ w, item }) => ({
+        ...w,
+        opts: { ...(item?.opts ?? {}), ...(w.opts ?? {}) },
+        view: item?.view,
+      })),
+      show: input.show,
+      replace: input.replace,
+    });
+    if (!placed.ok)
+      throw badLayout(
+        placed.why === 'pages_full'
+          ? 'a screen has at most 6 pages: replace one'
+          : `no page ${input.replace ?? ''} on this screen`,
+      );
+    const views = new Map(placed.ids.map((id, i) => [id, known[i]?.item?.view]));
+    const refusal = layoutRefusal(placed.layout, (id) => views.get(id) ?? undefined);
+    if (refusal) throw badLayout(refusal);
+    await this.#commit(target, updateScreen, { id: record.id, layout: placed.layout });
+    await this.#screensChanged(target.burrowId);
+    const noRoom = new Set(known.filter((_, i) => placed.ids[i] === null).map((k) => k.w));
+    const left = asked.flatMap(({ w, item }) => {
+      if (item && !noRoom.has(w)) return [];
+      const named = item ? screenText(item.name, 60) : '';
+      return [
+        {
+          type: w.type,
+          ...(w.ref ? { ref: w.ref } : {}),
+          ...(named ? { name: named } : {}),
+          why: item ? ('no_room' as const) : ('unknown' as const),
+        },
+      ];
+    });
+    return { screen: record.id, page: placed.page, left };
+  }
+
+  /**
+   * What *Add a widget* offers for the widgets asked: Whombat's own always, the servers when one is asked, each thing
+   * and account asked (its page read now) and Home's widgets when one is asked.
+   */
+  async #catalogOf(ctx: WidgetCtx, widgets: readonly AskedWidget[]): Promise<DeskCatalogGroup[]> {
+    const refs = [...new Set(widgets.flatMap((w) => (w.ref ? [w.ref] : [])))].slice(0, 24);
+    const things = refs.filter((r) => /^(connection|device|account):/.test(r));
+    const warn = (what: string) => (err: unknown) => {
+      this.services.log.warn({ err: String(err) }, `desk: ${what} weren’t listed for a new page`);
+      return [] as DeskCatalogGroup[];
+    };
+    const [fleet, thingGroups, homeWidgets] = await Promise.all([
+      refs.some((r) => r.startsWith('server:'))
+        ? deskFleet(this.services, ctx.viewer.burrowId, CALM_SOURCE_WAIT_MS).catch(() => null)
+        : null,
+      Promise.all(
+        things.map((ref) =>
+          (isAccountRef(ref as DeskWidgetRef)
+            ? this.#resolver.accounts.groups(ctx, ref as DeskWidgetRef)
+            : this.#things.groups(ctx, ref as DeskWidgetRef)
+          ).catch(warn(ref)),
+        ),
+      ),
+      refs.some((r) => r.startsWith('widget:'))
+        ? screenHomeWidgets(this.services.db, ctx.viewer.principal, ctx.now).catch(
+            () => [] as ScreenHomeWidget[],
+          )
+        : ([] as ScreenHomeWidget[]),
+    ]);
+    const home = homeWidgetsGroup(homeWidgets, ctx.assistant);
+    return [ownGroup(ctx.assistant), ...serverGroups(fleet), ...thingGroups.flat(), ...(home ? [home] : [])];
   }
 
   /**
@@ -2351,6 +2544,7 @@ export class DeskService {
       });
     else await this.#commit(target, forgetScreen, { id: record.id });
     this.#trying.delete(record.id);
+    this.#spotlights.forget(record.id);
     await this.#screensChanged(target.burrowId);
     return { ok: true };
   }

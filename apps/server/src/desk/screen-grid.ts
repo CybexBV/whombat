@@ -11,6 +11,7 @@ import {
   type DeskScreenDetail,
   type DeskScreenSize,
   type DeskScreenSummary,
+  type DeskSpotlight,
   type DeskWidgetView,
   deskAttentionFor,
 } from '@whombat/core';
@@ -30,6 +31,7 @@ export function screenSummary(
     kind: record.kind,
     name: record.name,
     popups: record.popups,
+    doorbell: record.doorbell,
     size,
     pages: record.layout.pages.length,
     online,
@@ -63,13 +65,15 @@ export function glanceFacts(
 const NO_ATTENTION = { items: [], more: 0 };
 
 /**
- * A screen's grid now: its layout or the draft it's trying (until `trying.until`), the views given (already trimmed),
- * what needs the person for its pop-ups and the lock. Null when it isn't one the screen takes; `warn` says why.
+ * A screen's grid now: its layout or the draft it's trying (until `trying.until`), the views given (already trimmed,
+ * the moment's among them), what needs the person for its pop-ups and the lock, and a widget taking over for a moment
+ * (`spotlight`). Null when it isn't one the screen takes; `warn` says why.
  */
 export function screenGrid(input: {
   record: ScreenRecord;
   layout: DeskLayout;
   trying: number | null;
+  spotlight?: DeskSpotlight | null;
   views: DeskWidgetView[];
   calm: DeskCalmInput | null;
   view: DeskCalmView;
@@ -83,6 +87,7 @@ export function screenGrid(input: {
     attention: calm ? deskAttentionFor(calm, record.show, view, record.popups) : NO_ATTENTION,
     popups: record.popups,
     ...(input.trying !== null ? { trying: { until: new Date(input.trying).toISOString() } } : {}),
+    ...(input.spotlight ? { spotlight: input.spotlight } : {}),
   };
   const parsed = DeskGrid.safeParse(grid);
   if (parsed.success) return parsed.data;
