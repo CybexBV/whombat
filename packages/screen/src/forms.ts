@@ -210,6 +210,43 @@ export function photoEveryMs(every: number | undefined): number {
   return Math.max(min, Math.min(max, every ?? PHOTO_EVERY_S.default)) * 1000;
 }
 
+/**
+ * The weather (Whombat weather-news.md): one cell is its sign and the temperature (`tile`); two cells wide and one high
+ * adds the highest and lowest and what the sky does (`line`); wider and one high, the next hours beside it (`strip`);
+ * two or three wide and higher, the next hours under it (`block`, and the days when there's room); four wide or more,
+ * the hours beside it (`wide`) and, three high or more, the days under (`large`, which opening big shows).
+ */
+export type WeatherForm = 'tile' | 'line' | 'strip' | 'block' | 'wide' | 'large';
+export function weatherForm(w: number, h: number): WeatherForm {
+  if (w === 1) return 'tile';
+  if (h === 1) return w >= 3 ? 'strip' : 'line';
+  if (w < 4) return 'block';
+  return h >= 3 ? 'large' : 'wide';
+}
+
+/** MET Norway's credit, on every form two cells or more each way (its licence asks for it wherever there's room). */
+export function weatherCredit(w: number, h: number): boolean {
+  return w >= 2 && h >= 2;
+}
+
+/** An hour's column in the strip, at least this wide (px). */
+export const WEATHER_HOUR_W = 56;
+
+/**
+ * Which of the next hours a strip `inner` px wide shows (their places in `hours`): as many columns as fit, each hour
+ * when twelve or more fit, else every second or third hour so a narrow strip still reaches into the evening.
+ */
+export function weatherHourPicks(total: number, inner: number): number[] {
+  const fits = Math.max(1, Math.floor((inner + 4) / WEATHER_HOUR_W));
+  const step = fits >= 12 ? 1 : fits >= 6 ? 2 : 3;
+  const picks: number[] = [];
+  for (let i = 0; i < total && picks.length < fits; i += step) picks.push(i);
+  return picks;
+}
+
+/** A day's row under the hours (px). */
+export const WEATHER_DAY_H = 38;
+
 export type ChartForm = 'spark' | 'chart';
 export function chartForm(h: number): ChartForm {
   return h === 1 ? 'spark' : 'chart';
