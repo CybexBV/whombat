@@ -6,6 +6,7 @@
  *   validate   gates, scenarios, demo → gates.json; VM upgrade gates             (validate.ts)
  *   status     one screen: hosted components, fleet, rollouts, alerts, records  (status.ts)
  *   iso        the installer ISO of a build (its host's), on demand (UP-X15)    (iso.ts)
+ *   prune      old release folders go; what a channel lists stays               (prune.ts)
  *
  * Publishing is whombat-ops `candidate` (Beta) and `promote` (Production): `tufrepo gh-publish` and `gh-promote`.
  * Arguments: args.ts.
@@ -14,6 +15,7 @@ import { parseShipArgs } from './args.ts';
 import { build } from './build.ts';
 import { shipContext } from './context.ts';
 import { shipIso } from './iso.ts';
+import { shipPrune } from './prune.ts';
 import { status } from './status.ts';
 import { validate } from './validate.ts';
 
@@ -33,6 +35,9 @@ async function main(): Promise<void> {
       return status(ctx, a.status);
     case 'iso':
       await shipIso(ctx, { prodId: id });
+      return;
+    case 'prune':
+      await shipPrune(ctx, a.prune);
       return;
   }
 }
