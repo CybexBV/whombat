@@ -74,10 +74,11 @@ export function outcomeCopy(outcome: ManagedOutcome, provider: string, detail?: 
 }
 
 const RULES: [ManagedOutcome, RegExp][] = [
-  // Missing binary first: "spawn codex ENOENT", "Claude Code executable not found".
+  // Missing binary first: "spawn codex ENOENT", "Claude Code executable not found". Only a program that couldn't be
+  // started: any other missing file (a turn's folder the pod can't see) is an ordinary failure, not a missing provider.
   [
     'provider_missing',
-    /\bENOENT\b|executable not found|command not found|No such file or directory \(os error 2\)/i,
+    /\bspawn \S+ ENOENT\b|executable not found|command not found|No such file or directory \(os error 2\)/i,
   ],
   [
     'auth_expired',

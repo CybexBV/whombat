@@ -75,6 +75,8 @@ export async function buildTurnInput(
     Partial<Pick<TurnDeps, 'managed' | 'commands'>>,
   /** Called as each setup step ends (turn-efficiency.md TE-12): `workdir`. */
   step?: (name: string) => void,
+  /** The turn runs in its person's pod (`runsInPod`): its folder must be one the pod mounts. */
+  options: { pod?: boolean } = {},
 ): Promise<BuiltTurn> {
   const host = deps.host ?? hostFromEnv();
   const prepared = await prepareCwd(ctx, {
@@ -83,6 +85,7 @@ export async function buildTurnInput(
     checkout: true,
     host,
     ...(deps.managed?.generation !== undefined ? { generation: deps.managed.generation } : {}),
+    ...(options.pod ? { pod: true } : {}),
   });
   step?.('workdir');
   // An automation's step (automation-recipes.md AR-43): a folder of its own in the agent's work folder for what only

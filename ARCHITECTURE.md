@@ -763,7 +763,9 @@ Automations. Code finds it by kind
   addresses.
 - **Workspaces** (`apps/runner/src/workspace.ts`): coding work is a git worktree of Whombat's own mirror of the
   repository under `<WHOMBAT_WORKSPACES>/<burrow>/<repo>/<branch>`. The person's turn without a checkout works in the
-  agent's work folder (`~/work`); other turns get an empty folder in the runner's private temporary space. A
+  agent's work folder (`~/work`), also one without commands (a Looks ahead check, a Search answer): it runs in the
+  person's pod, which mounts only the agent's home and the workspaces. An outsiders' turn gets an empty folder in the
+  runner's private temporary space. A
   read-only workspace (an automation's investigator or reviewer) is exported without git metadata into a fresh folder.
 - **Pushes and `gh`**: git and gh in a command reach the runner through helpers (`whombat-git`, `whombat-gh`). For each
   operation the server decides with the keys engine (`feat/*` needs the branch key, `main` is blocked, a shared branch

@@ -326,9 +326,19 @@ export async function prepareCwd(
     host: RunnerHost;
     /** Managed: the runner generation, the workspace fence (MSB-11). */
     generation?: number;
+    /**
+     * The turn runs in its person's pod (hermes-native.md HN-W01). The pod mounts the agent's home and the workspaces,
+     * never the runner's scratch space, so a folder there would not exist for Hermes and the pod would refuse the turn.
+     */
+    pod?: boolean;
   },
 ): Promise<PreparedCwd> {
   const { host } = options;
+  // Without a checkout: an empty folder in the runner's scratch space, or in the pod the agent's work folder, as a
+  // person's chat turn has. Hermes needs a folder that exists; a turn without commands (a Looks ahead check, a Search
+  // answer) runs nothing in it.
+  const noCheckout = async (note: string | null = null): Promise<PreparedCwd> =>
+    options.pod ? { ...(await agentWorkspace(host)), note } : scratch(ctx, host, note);
   // A live run turn without its checkout: the server gives none when the run's repository is gone. Its work can't
   // happen anywhere else, so nothing runs (resourceful-agents.md RA-DS54).
   if (options.checkout && isRunTurn(ctx) && !ctx.workspace && ctx.run?.repoId)
@@ -345,7 +355,7 @@ export async function prepareCwd(
   // A commands turn without a checkout (OP-S109): the agent's work folder.
   if (options.checkout && isWorkFolderTurn(ctx)) return agentWorkspace(host);
   const target = workspaceTarget(ctx);
-  if (!target || !options.checkout || !options.api) return scratch(ctx, host);
+  if (!target || !options.checkout || !options.api) return noCheckout();
   const manager = workspaceManager(ctx, options.root, options.api, options.generation);
   const readOnly = ctx.workspace?.access === 'read';
   try {
@@ -399,7 +409,7 @@ export async function prepareCwd(
       err instanceof RunnerApiError && err.status === 501
         ? 'GitHub is not configured on the server; working without a checkout'
         : `could not check out ${target.repo}@${target.branch}: ${describe(err)}`;
-    return { ...(await scratch(ctx, host, why)), problem: why };
+    return { ...(await noCheckout(why)), problem: why };
   }
 }
 

@@ -11,6 +11,7 @@ import {
   type CredentialOwner,
   type EgressAllowance,
   type EgressPolicy,
+  isOutsideTurn,
   joinPolicies,
   type PodNeeds,
   SANDBOX_BROWSER_ORIGIN,
@@ -42,6 +43,7 @@ import {
 import type { PodCredential, PodShape } from '../pods';
 import { toolAsker } from '../tool-asks';
 import { type PreparedCwd, TurnRefusal } from '../workspace';
+import type { TurnDeps } from './deps';
 import type { FilesPlace } from './files';
 import type { TurnScope } from './scope';
 import type { TurnShape } from './shape';
@@ -145,6 +147,19 @@ async function turnCommands(
       ...extra,
     },
   );
+}
+
+/**
+ * Whether a turn runs in its person's pod (hermes-native.md HN-W01): a provider with pods on a runner that has them,
+ * never a turn outsiders' input started (the same rule as the provider's own `podNeeds`). Known before the turn's folder
+ * is chosen, which must be one the pod mounts.
+ */
+export function runsInPod(
+  deps: Pick<TurnDeps, 'pods'>,
+  provider: Pick<AgentProvider, 'podNeeds'>,
+  ctx: Pick<TurnScope['ctx'], 'outside' | 'dispatch'>,
+): boolean {
+  return Boolean(deps.pods && provider.podNeeds) && !isOutsideTurn(ctx);
 }
 
 /**
