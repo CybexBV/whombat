@@ -1,4 +1,4 @@
-import { OWN_WIDGETS, VIEW_KINDS, WIDGET_TYPES } from '@whombat/screen';
+import { OWN_WIDGETS, SCREEN_WORDS, VIEW_KINDS, WIDGET_TYPES } from '@whombat/screen';
 import { describe, expect, it } from 'vitest';
 import { constList, deskScreensSource, deskSocketSource } from './contractsSource';
 import {
@@ -12,6 +12,7 @@ import {
   DESK_SCREEN_ID_RE,
   DESK_SCREEN_VIEWS_MAX,
   DESK_SHAPE_RE,
+  DESK_SPOTLIGHT_REASONS,
   DESK_VIEW_POINTS_MAX,
   DESK_VIEW_ROWS_MAX,
   DESK_WIDGET_OPTS_MAX,
@@ -20,6 +21,7 @@ import {
   parseAttention,
   parseGrid,
   parseOutputGrids,
+  parseSpotlight,
   parseView,
 } from './grid';
 
@@ -340,6 +342,79 @@ describe('the screen of widgets as the page reads it', () => {
     expect(parseAttention({ items: [], more: 0, tone: 'bad' })).toEqual({ items: [], more: 0 });
   });
 
+  it('keeps a page’s times, and lets a window it can’t read go', () => {
+    const page = (id: string, show: unknown) => ({ id, name: id, last: '8x5', layouts: { '8x5': [] }, show });
+    const sound = grid({
+      layout: {
+        turn: '30s',
+        size: 'normal',
+        pages: [
+          page('p_morning', { from: '07:00', to: '09:30', days: ['mon', 'tue', 'wed', 'thu', 'fri'] }),
+          page('p_night', { from: '22:00', to: '06:00' }),
+          { id: 'p_always', name: 'p_always', last: '8x5', layouts: { '8x5': [] } },
+        ],
+      },
+    });
+    expect(parseGrid(sound)).toEqual(sound);
+    const g = parseGrid(
+      grid({
+        layout: {
+          pages: [
+            page('p_a', { from: '7:00', to: '24:00' }),
+            page('p_b', { from: '22:00', to: '06:00', days: 'weekends' }),
+            page('p_c', { from: '08:00', to: '10:00', days: ['sat', 'Sunday', 'sat', 'sun'] }),
+            page('p_d', { from: '08:00', to: '10:00', days: ['someday'] }),
+            page('p_f', '08:00–10:00'),
+            page('p_g', { from: '12:00', to: '12:00' }),
+          ],
+        },
+      }),
+    );
+    expect(g?.layout.pages.map((p) => [p.id, p.show])).toEqual([
+      ['p_a', undefined],
+      ['p_b', undefined],
+      ['p_c', { from: '08:00', to: '10:00', days: ['sat', 'sun'] }],
+      ['p_d', undefined],
+      ['p_f', undefined],
+      ['p_g', { from: '12:00', to: '12:00' }],
+    ]);
+    expect(g?.layout.pages.some((p) => 'show' in p && p.show === undefined)).toBe(false);
+  });
+
+  it('keeps the doorbell’s moment when every part of it is right', () => {
+    const spotlight = {
+      id: 'ring_6720a1b2c3',
+      widget: {
+        id: 'w_spotlight',
+        type: 'panel',
+        ref: 'connection:con_protect',
+        opts: { panel: 'cameras', item: 'cam_front' },
+      },
+      until: '2026-10-27T13:35:00Z',
+      reason: 'doorbell',
+    };
+    const view = { kind: 'camera', id: 'w_spotlight', title: 'Front door', event: 'Rang at 14:34' };
+    const sound = grid({ views: [...grid().views, view], spotlight });
+    expect(parseGrid(sound)).toEqual(sound);
+    // Wrong in one part, the moment goes and the screen stays.
+    for (const wrong of [
+      { reason: 'parcel' },
+      { id: 'ring 1' },
+      { until: 'in a minute' },
+      { widget: { ...spotlight.widget, type: 'map' } },
+      { widget: { ...spotlight.widget, ref: 'file:/etc/passwd' } },
+      { widget: { ...spotlight.widget, id: 'spotlight' } },
+      { widget: undefined },
+    ]) {
+      const g = parseGrid(grid({ spotlight: { ...spotlight, ...wrong } }));
+      expect(g?.layout.pages.length).toBe(2);
+      expect(g && 'spotlight' in g).toBe(false);
+    }
+    expect(
+      parseSpotlight({ ...spotlight, widget: { ...spotlight.widget, opts: { Bad: 'x', panel: 'cameras' } } }),
+    ).toEqual({ ...spotlight, widget: { ...spotlight.widget, opts: { panel: 'cameras' } } });
+  });
+
   it('reads the monitors’ screens', () => {
     const o = parseOutputGrids([
       { key: 'hdmi-a-1', name: 'DELL U2720Q', grid: grid({ screen: 'out_hdmi-a-1' }) },
@@ -404,6 +479,37 @@ describe('a grid the page shows locked itself (Whombat away, an unlock that ran 
     });
     expect(s?.layout).toBe(g.layout);
   });
+
+  it('keeps the doorbell’s moment, its camera locked in A summary', () => {
+    const spotlight = {
+      id: 'ring_1',
+      widget: {
+        id: 'w_door',
+        type: 'panel' as const,
+        ref: 'connection:con_protect',
+        opts: { panel: 'cameras' },
+      },
+      until: '2026-10-27T13:35:00Z',
+      reason: 'doorbell' as const,
+    };
+    const ringing = {
+      ...g,
+      views: [
+        ...g.views,
+        { kind: 'camera' as const, id: 'w_door', title: 'Front door', event: 'Rang at 14:34' },
+      ],
+      spotlight,
+    };
+    const s = lockedGrid(ringing, 'summary', title);
+    expect(s?.spotlight).toEqual(spotlight);
+    expect(s?.views.find((v) => v.id === 'w_door')).toEqual({
+      kind: 'camera',
+      id: 'w_door',
+      title: 'Front door',
+      locked: true,
+    });
+    expect(lockedGrid(ringing, 'everything', title)?.spotlight).toEqual(spotlight);
+  });
 });
 
 describe('the copies of the contract', () => {
@@ -441,6 +547,8 @@ describe('the copies of the contract', () => {
       "export const DESK_WIDGET_TYPES = [...DESK_OWN_WIDGETS, 'server', 'figures', 'panel', 'widget'] as const;",
     );
     expect(deskScreensSource).toContain(`kind: z.literal('${VIEW_KINDS[0]}')`);
+    // The moments the page keeps are those the drawing has words for.
+    expect([...DESK_SPOTLIGHT_REASONS]).toEqual(Object.keys(SCREEN_WORDS.spotlight));
     for (const k of VIEW_KINDS) expect(deskScreensSource).toContain(`kind: z.literal('${k}')`);
   });
 });

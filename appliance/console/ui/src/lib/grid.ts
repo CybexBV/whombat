@@ -3,7 +3,8 @@
  * socket's `DeskGlance.grid` (core's `DeskGrid`) and each monitor's in `DeskGlance.outputs`, checked member by member
  * like the rest of the state: what the page doesn't understand goes (a widget of an unknown type, a view of an unknown
  * kind, a field of the wrong type), a part without what it can't do without goes, and what is left is always drawable.
- * A grid with no page left is none, and the page draws the calm glance instead.
+ * A grid with no page left is none, and the page draws the calm glance instead. A page's times (`show`) and a widget
+ * taking over for a moment (`spotlight`, the doorbell) go to the drawing, which turns the pages and draws the moment.
  *
  * The shapes are `@whombat/screen`'s (the drawing's), which mirror core's member for member.
  */
@@ -14,13 +15,16 @@ import type {
   DeskImage,
   DeskLayout,
   DeskPage,
+  DeskPageShow,
+  DeskSpotlight,
   DeskViewBase,
   DeskViewPoster,
   DeskViewRow,
   DeskWidget,
   DeskWidgetView,
+  Weekday,
 } from '@whombat/screen';
-import { SCREEN_SIZES, VIEW_KINDS, type ViewKind, WIDGET_TYPES } from '@whombat/screen';
+import { SCREEN_SIZES, VIEW_KINDS, type ViewKind, WEEKDAYS, WIDGET_TYPES } from '@whombat/screen';
 
 export type {
   DeskAttention,
@@ -29,6 +33,8 @@ export type {
   DeskImage,
   DeskLayout,
   DeskPage,
+  DeskPageShow,
+  DeskSpotlight,
   DeskViewBase,
   DeskWidget,
   DeskWidgetView,
@@ -58,6 +64,11 @@ export const DESK_WIDGET_REF_RE =
   /^(server|connection|device|widget|account):[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 export const DESK_SHAPE_RE = /^([1-9]|[1-3][0-9])x([1-9]|[1-3][0-9])$/;
 export const DESK_OUTPUT_KEY_RE = /^[a-z0-9-]{1,40}$/;
+/** Why a widget takes over the screen for a moment (`DESK_SPOTLIGHT_REASONS`): the drawing has words for each. */
+export const DESK_SPOTLIGHT_REASONS = ['doorbell'] as const satisfies readonly DeskSpotlight['reason'][];
+/** A page's window opens and closes at a wall-clock time, `HH:MM` (notify.ts `ClockTime`). */
+export const DESK_CLOCK_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const SPOTLIGHT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const PAGE_ID_RE = /^p_[A-Za-z0-9_-]{1,32}$/;
 const WIDGET_ID_RE = /^w_[A-Za-z0-9_-]{1,32}$/;
 const OPT_KEY_RE = /^[a-z][a-zA-Z0-9]{0,23}$/;
@@ -131,27 +142,52 @@ function parseOpts(v: unknown): Record<string, string> {
   return out;
 }
 
+/** What a widget is and shows (`DeskWidgetSpec`): an id, a type the page can draw, a sound ref; null otherwise. */
+function parseSpec(w: unknown): Pick<DeskWidget, 'id' | 'type' | 'ref' | 'opts'> | null {
+  if (!isObj(w)) return null;
+  const id = matching(w.id, WIDGET_ID_RE);
+  const type = oneOf(w.type, WIDGET_TYPES);
+  const ref = w.ref === undefined ? undefined : matching(w.ref, DESK_WIDGET_REF_RE);
+  if (!id || !type || (w.ref !== undefined && !ref)) return null;
+  return defined({ id, type, ref, opts: parseOpts(w.opts) });
+}
+
 /** A shape's widgets: the ones the page can draw, inside the shape, each id once, none on another. */
 function parseWidgets(v: unknown, cols: number, rows: number): DeskWidget[] {
   const out: DeskWidget[] = [];
   for (const w of list(v, DESK_PAGE_WIDGETS_MAX)) {
     if (!isObj(w)) continue;
-    const id = matching(w.id, WIDGET_ID_RE);
-    const type = oneOf(w.type, WIDGET_TYPES);
+    const spec = parseSpec(w);
+    if (!spec) continue;
     const x = int(w.x, 0, DESK_GRID_MAX - 1);
     const y = int(w.y, 0, DESK_GRID_MAX - 1);
     const width = int(w.w, 1, DESK_GRID_MAX);
     const height = int(w.h, 1, DESK_GRID_MAX);
-    if (!id || !type || x === undefined || y === undefined || width === undefined || height === undefined)
-      continue;
+    if (x === undefined || y === undefined || width === undefined || height === undefined) continue;
     if (x + width > cols || y + height > rows) continue;
-    const ref = w.ref === undefined ? undefined : matching(w.ref, DESK_WIDGET_REF_RE);
-    if (w.ref !== undefined && !ref) continue;
-    const widget: DeskWidget = defined({ id, type, ref, opts: parseOpts(w.opts), x, y, w: width, h: height });
-    if (out.some((o) => o.id === id || overlaps(o, widget))) continue;
+    const widget: DeskWidget = { ...spec, x, y, w: width, h: height };
+    if (out.some((o) => o.id === widget.id || overlaps(o, widget))) continue;
     out.push(widget);
   }
   return out;
+}
+
+/**
+ * When a page is in the turning: both times `HH:MM`, and the days it names that are days (each once). A window that
+ * isn't one (a time it can't read, no day it knows) goes, and the page is always in: shown too often beats never.
+ */
+function parseShow(v: unknown): DeskPageShow | undefined {
+  if (!isObj(v)) return undefined;
+  const from = matching(v.from, DESK_CLOCK_RE);
+  const to = matching(v.to, DESK_CLOCK_RE);
+  if (!from || !to) return undefined;
+  if (v.days === undefined) return { from, to };
+  const days: Weekday[] = [];
+  for (const d of list(v.days, WEEKDAYS.length)) {
+    const day = oneOf(d, WEEKDAYS);
+    if (day && !days.includes(day)) days.push(day);
+  }
+  return days.length > 0 ? { from, to, days } : undefined;
 }
 
 function parsePage(v: unknown): DeskPage | null {
@@ -167,7 +203,7 @@ function parsePage(v: unknown): DeskPage | null {
   const shapes = Object.keys(layouts);
   if (shapes.length === 0) return null;
   const last = typeof v.last === 'string' && v.last in layouts ? v.last : (shapes[0] as string);
-  return { id, name, layouts, last };
+  return defined({ id, name, layouts, last, show: parseShow(v.show) });
 }
 
 export function parseLayout(v: unknown): DeskLayout | null {
@@ -422,6 +458,19 @@ export function parseAttention(v: unknown): DeskAttention {
 
 /* The grid -------------------------------------------------------------------------------------------------------- */
 
+/**
+ * A widget taking over the screen for a moment (the doorbell): its id, a widget the page can draw (no place: it's
+ * drawn big), until when, and a reason the drawing has words for; none when any of it isn't right.
+ */
+export function parseSpotlight(v: unknown): DeskSpotlight | undefined {
+  if (!isObj(v)) return undefined;
+  const id = matching(v.id, SPOTLIGHT_ID_RE);
+  const widget = parseSpec(v.widget);
+  const until = time(v.until);
+  const reason = oneOf(v.reason, DESK_SPOTLIGHT_REASONS);
+  return id && widget && until && reason ? { id, widget, until, reason } : undefined;
+}
+
 /** A screen's grid, checked; null when it has no page the page can draw (then the calm glance shows). */
 export function parseGrid(v: unknown): DeskGrid | null {
   if (!isObj(v)) return null;
@@ -441,6 +490,7 @@ export function parseGrid(v: unknown): DeskGrid | null {
     attention: parseAttention(v.attention),
     popups: oneOf(v.popups, ['all', 'problems', 'none'] as const) ?? 'all',
     trying: until ? { until } : undefined,
+    spotlight: parseSpotlight(v.spotlight),
   });
 }
 
