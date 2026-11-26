@@ -45,6 +45,8 @@ export const AHEAD_SEARCHES_MAX = 4;
 export const AHEAD_PAGES_MAX = 6;
 /** Sources a finding names. */
 export const AHEAD_SOURCES_MAX = 6;
+/** Longest short title of a finding in the person's Inbox (and first line when opened in Chat). */
+export const AHEAD_TITLE_MAX = 120;
 /** Longest finding: one to three sentences, or two short issues on the same plan. */
 export const AHEAD_TEXT_MAX = 900;
 /** User-owned standing rules (“What to watch for”), at most. */
@@ -1107,17 +1109,43 @@ export const AheadSource = z.union([
 export type AheadSource = z.infer<typeof AheadSource>;
 
 /**
+ * A source as Whombat named it on a finding: a site with its link, or a mail, file, doc, calendar, weather or matter
+ * label. Stored on the finding so the Inbox shows verified sources before a Chat thread exists.
+ */
+export const AheadNamedSource = z.object({
+  label: z.string().min(1).max(80),
+  url: z.string().url().max(2048).optional(),
+});
+export type AheadNamedSource = z.infer<typeof AheadNamedSource>;
+
+/**
+ * What an Inbox item carries for a Looks ahead finding: the check id for promotion and feedback, where it came from
+ * (calendar, mail or a follow-up), its finding kind, its verified sources, and any one-tap next step.
+ */
+export const AheadInboxMeta = z.object({
+  checkId: z.string().min(1).max(64),
+  source: z.enum(['calendar', 'mail', 'matter']),
+  kind: AheadKind,
+  sources: z.array(AheadNamedSource).max(AHEAD_SOURCES_MAX),
+  action: z.string().min(1).max(AHEAD_ACTION_MAX).optional(),
+  /** True when this finding is about something kept an eye on: stopping it closes that matter instead of the kind. */
+  matter: z.boolean().optional(),
+  matterTitle: z.string().max(AHEAD_MATTER_TITLE_MAX).optional(),
+});
+export type AheadInboxMeta = z.infer<typeof AheadInboxMeta>;
+
+/**
  * `ahead_report`'s input: nothing worth telling (`found: false`, with an optional `note` kept for later stages of the
  * same event), or a finding with primary `kind`, optional `extraKinds` (when the same plan has two real problems),
- * plain text, verified `sources`, optional one-tap `action` chip label, and optional `note`. Either way a mail check
- * or a follow-up may open, update or close a thing kept an eye on (`matter`).
+ * optional short `title`, plain `text`, verified `sources`, optional one-tap `action` chip label, and optional `note`.
+ * Either way a mail check or a follow-up may open, update or close a thing kept an eye on (`matter`).
  */
 export const AheadReportInput = z
   .strictObject({
     found: z
       .boolean()
       .describe(
-        'false: everything matches, or nothing you can show with a source. true: a sourced finding with kind, text and sources.',
+        'false: everything matches, or nothing you can show with a source. true: a sourced finding with kind, title, text and sources.',
       ),
     kind: AheadKind.optional(),
     extraKinds: z
@@ -1125,6 +1153,15 @@ export const AheadReportInput = z
       .max(2)
       .optional()
       .describe('Additional kinds if this same plan has a second distinct issue in the same message.'),
+    title: z
+      .string()
+      .trim()
+      .min(2)
+      .max(AHEAD_TITLE_MAX)
+      .optional()
+      .describe(
+        'Short plain headline (3–10 words) for the person’s Inbox, e.g. “The Script starts at 20:45, not 20:00” or “School invoice €120 due Friday”.',
+      ),
     text: z
       .string()
       .trim()
@@ -1168,10 +1205,13 @@ export const AheadReportInput = z
     path: ['found'],
   })
   // A quiet check may still start, update or close a thing kept an eye on.
-  .refine((v) => v.found || (!v.kind && !v.extraKinds?.length && !v.text && !v.sources && !v.action), {
-    message: 'Nothing found says nothing more (other than an optional note or matter).',
-    path: ['found'],
-  });
+  .refine(
+    (v) => v.found || (!v.kind && !v.extraKinds?.length && !v.title && !v.text && !v.sources && !v.action),
+    {
+      message: 'Nothing found says nothing more (other than an optional note or matter).',
+      path: ['found'],
+    },
+  );
 export type AheadReportInput = z.infer<typeof AheadReportInput>;
 
 /**
@@ -1595,6 +1635,8 @@ export const LooksAheadCheckItem = z.object({
   state: z.enum(['checking', 'quiet', 'told', 'failed']),
   kind: AheadKind.nullable().optional(),
   threadRootId: z.string().max(64).nullable().optional(),
+  /** Set while the finding is waiting in the person's Inbox rather than a Chat thread. */
+  inboxItemId: z.string().max(120).nullable().optional(),
   feedback: z.enum(['not_useful', 'stop_kind']).nullable().optional(),
   /** A look through new mail (`triage`) or a follow-up of a thing kept an eye on (`matter`). */
   of: z.enum(['triage', 'matter']).optional(),
@@ -1674,6 +1716,29 @@ export const LooksAheadCheckNowResult = z.object({
 });
 export type LooksAheadCheckNowResult = z.infer<typeof LooksAheadCheckNowResult>;
 
+/**
+ * `looksAhead.promote`: move an Inbox finding into a Chat thread so the person can act on it or reply. When `text` is
+ * given (a one-tap action or a direct reply), it is posted as the person's reply and wakes the assistant.
+ */
+export const AheadPromoteBody = z.strictObject({
+  text: z.string().trim().min(1).max(4000).optional(),
+});
+export type AheadPromoteBody = z.infer<typeof AheadPromoteBody>;
+
+/** `looksAhead.feedback`: record “Not useful” or “Stop checking for this” directly from the Inbox. */
+export const AheadInboxFeedbackBody = z.strictObject({
+  verdict: z.enum(['not_useful', 'stop_kind']),
+  reason: z.string().trim().min(1).max(AHEAD_FEEDBACK_REASON_MAX).optional(),
+});
+export type AheadInboxFeedbackBody = z.infer<typeof AheadInboxFeedbackBody>;
+
+export const AheadInboxFeedbackResponse = z.object({
+  ok: z.literal(true),
+  kind: AheadKind,
+  stopped: z.enum(['kind', 'matter']).nullable(),
+});
+export type AheadInboxFeedbackResponse = z.infer<typeof AheadInboxFeedbackResponse>;
+
 /* Words --------------------------------------------------------------------------------------------------------------- */
 
 export const LOOKS_AHEAD_WORDS = {
@@ -1729,4 +1794,15 @@ export const LOOKS_AHEAD_WORDS = {
   recentTriage: (count: number, picked: number) =>
     `Looked through ${count} new ${count === 1 ? 'mail' : 'mails'}, ${picked === 0 ? 'nothing to check' : `${picked} to check`}`,
   recentMatter: 'Follow-up',
+  openInInbox: 'Open in Inbox',
+  notUsefulAction: 'Not useful',
+  stopCheckingAction: 'Stop checking for this',
+  stopMatterAction: 'Stop keeping an eye on this',
+  replyPlaceholder: (assistant: string) => `Reply to ${assistant}…`,
+  sendReply: 'Send',
+  markedNotUseful: 'Marked not useful.',
+  stoppedKindToast: (kind: AheadKind) => `Stopped checking for “${AHEAD_KIND_WORDS[kind]}”.`,
+  stoppedMatterToast: 'Stopped keeping an eye on it.',
+  inboxCalendar: 'Calendar',
+  inboxMail: 'Mail',
 } as const;

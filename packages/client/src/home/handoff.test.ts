@@ -11,7 +11,7 @@ const action = (kind: NonNullable<NeedsYouButton['action']>['kind']) =>
 
 describe('needsYouButtonGoes', () => {
   it('sends what hands work to the assistant to its thread', () => {
-    for (const kind of ['fix', 'askFix', 'handle', 'talk'] as const)
+    for (const kind of ['fix', 'askFix', 'handle', 'talk', 'aheadAction'] as const)
       expect(needsYouButtonGoes(button(kind))).toBe('thread');
     // The yes to a proposal (“Yes, do it”) and “Look into it” start its turn.
     expect(needsYouButtonGoes(button('action', action('ask')))).toBe('thread');
@@ -26,7 +26,7 @@ describe('needsYouButtonGoes', () => {
   it('keeps the person where they are for decisions and quiet buttons', () => {
     for (const kind of ['approve', 'approve_later', 'decline', 'snooze'] as const)
       expect(needsYouActionGoes({ kind })).toBe('stay');
-    for (const kind of ['settle', 'snooze', 'stop', 'back'] as const)
+    for (const kind of ['settle', 'snooze', 'stop', 'back', 'notUseful', 'stopAhead'] as const)
       expect(needsYouButtonGoes(button(kind))).toBe('stay');
     expect(needsYouButtonGoes(button('action'))).toBe('stay');
   });

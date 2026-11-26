@@ -17,6 +17,7 @@ import {
 } from '@whombat/core';
 import { type DateInput, formatDate } from '@whombat/core/text';
 import {
+  LOOKS_AHEAD_INBOX_MINOR,
   LOOKS_AHEAD_MATTERS_MINOR,
   LOOKS_AHEAD_MINOR,
   LOOKS_AHEAD_V2_MINOR,
@@ -69,6 +70,11 @@ export function hasLooksAheadV2(protocol: ProtocolVersion | null | undefined): b
 /** Whether this Whombat shows and removes what Looks ahead keeps an eye on (“Keeping an eye on”). */
 export function hasLooksAheadMatters(protocol: ProtocolVersion | null | undefined): boolean {
   return protocolAtLeast(protocol, LOOKS_AHEAD_MATTERS_MINOR);
+}
+
+/** Whether this Whombat lands unsolicited Looks ahead findings in the Inbox (`looksAhead.promote` / `feedback`). */
+export function hasLooksAheadInbox(protocol: ProtocolVersion | null | undefined): boolean {
+  return protocolAtLeast(protocol, LOOKS_AHEAD_INBOX_MINOR);
 }
 
 /** The view with one change made, while it saves (the Whombat's answer replaces it). */

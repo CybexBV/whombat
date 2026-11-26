@@ -13,6 +13,7 @@ import { ApiError, notFound } from '../lib/errors';
 import { hasCareLines } from '../looks/lines';
 import { fixLook, handleLook, liveResearches } from '../looks/research';
 import { thingLook } from '../looks/watch';
+import { promoteAheadFinding } from '../looks-ahead/commands';
 import { commitAs } from '../routes/burrows';
 import { type HandlerContext, type RouteDef, route } from '../routes/define';
 import { quietThingNotice } from '../things/quiet/service';
@@ -133,9 +134,14 @@ export const oneWhombatRoutes: RouteDef[] = [
     return { ref, ignored };
   }),
   // Talk to {assistant} about it (inbox.md IBX-07): the item as the caller's Inbox has it now, so its words are
-  // Whombat's own; a new thread the assistant opens with them.
+  // Whombat's own; a new thread the assistant opens with them. For a Looks ahead finding, promote the finding itself
+  // so it leaves the Inbox and carries its verified sources and finding context into Chat.
   route(api.needsYou.discuss, async (ctx) => {
     const { ref } = ctx.body;
+    if (ref.kind === 'ahead') {
+      const started = await commitAs(ctx, promoteAheadFinding, { checkId: ref.id });
+      return startedChatAnswer(ctx, started);
+    }
     const overview = await homeOverview(ctx.services, ctx.access);
     const item = (overview.needsYouList ?? overview.needsYou).find(
       (i) => i.ref.kind === ref.kind && i.ref.id === ref.id,

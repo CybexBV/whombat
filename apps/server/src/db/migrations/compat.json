@@ -255,6 +255,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Weather and local news (docs/decisions/weather-news.md): two nullable jsonb columns on burrows, place (where this Whombat is, when the person chose) and news (the news sites it reads); the release before it reads and writes past them."
+    },
+    "0041_looks_ahead_inbox": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Unsolicited Looks ahead findings land in the Inbox before Chat (docs/decisions/looks-ahead.md): two nullable columns (title, promoted_at), one defaulted jsonb column (sources) and a partial inbox index on ahead_checks; the release before it reads and writes past them, and Inbox reads skip rows whose thread message already exists so rollback and upgrade rows stay in Chat."
     }
   }
 }

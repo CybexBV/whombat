@@ -64,6 +64,8 @@ describe('a Looks ahead check’s request', () => {
     expect(text).toContain('crowds and closures nearby');
     expect(text).toContain('ahead_report');
     expect(text).toContain('found false');
+    expect(text).toContain('title');
+    expect(text).toContain('Inbox');
     expect(text).toContain('search_web');
     expect(text).toContain('read_web_page');
     expect(text).toContain('weather_forecast');

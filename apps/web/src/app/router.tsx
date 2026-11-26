@@ -557,6 +557,9 @@ async function chatsRedirect(
   });
 }
 
+const validateInboxSearch = (raw: Record<string, unknown>): { item?: string } =>
+  typeof raw.item === 'string' && raw.item ? { item: raw.item } : {};
+
 /**
  * The Inbox (inbox.md IBX-01; needs-you-list.md NYL-01, NYL-05): the one list of what needs the person, in its groups;
  * `?item=` marks one (a push, a link). The sidebar's Inbox row opens it.
@@ -564,6 +567,7 @@ async function chatsRedirect(
 const inboxRoute = createRoute({
   getParentRoute: () => burrowRoute,
   path: 'inbox',
+  validateSearch: validateInboxSearch,
   component: withScreens([NeedsYouScreen], function InboxRoute() {
     const burrow = useOpenBurrow();
     return <NeedsYouScreen burrow={burrow} />;

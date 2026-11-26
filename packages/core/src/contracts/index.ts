@@ -101,6 +101,7 @@ export * from './host.js';
 export * from './hosts.js';
 export * from './kept-sites.js';
 export * from './live-activity.js';
+export * from './looks-ahead.js';
 export * from './mcp.js';
 export * from './mcp-attachments.js';
 export * from './mcp-backup.js';

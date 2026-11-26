@@ -24,15 +24,20 @@ import { AHEAD_KIND_WORDS, AHEAD_RULE_MAX, AHEAD_RULES_MAX, type LooksAheadUpdat
 import { useState } from 'react';
 import { Alert, Switch, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { threadRoute } from '../../data/chatRoom';
+import { navigateTo, useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
+import { ChevronRight } from '../../ui/icons';
 import { Button, ErrorState, Section, SkeletonRows } from '../../ui/primitives';
 import { switchColors } from '../../ui/switchColors';
+import { Touchable } from '../../ui/Touchable';
 import { showNotice } from '../feedback';
 import { Note, type PartProps, PartScroll } from './parts';
 
 export function LooksAheadPart({ profile }: PartProps) {
   const theme = useTheme();
+  const navigation = useAppNavigation();
   const { slug, timeZone } = useBurrowBase();
   const protocol = useSessionProtocol();
   const v2 = hasLooksAheadV2(protocol);
@@ -306,25 +311,61 @@ export function LooksAheadPart({ profile }: PartProps) {
 
       {v2 && recent.length ? (
         <Section title={T.recent}>
-          {recent.map((item, i) => (
-            <View
-              key={item.id}
-              style={{
-                paddingVertical: 10,
-                paddingHorizontal: 16,
-                gap: 2,
-                borderTopWidth: i === 0 ? 0 : 1,
-                borderTopColor: theme.colors.line,
-              }}
-            >
-              <Text size={14} weight={600} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text size={13} lh={1.4} color={theme.colors.mut}>
-                {looksAheadCheckMeta(item)}
-              </Text>
-            </View>
-          ))}
+          {recent.map((item, i) => {
+            const canOpenThread = Boolean(item.threadRootId && item.of !== 'triage');
+            const canOpenInbox = Boolean(!canOpenThread && item.inboxItemId && item.of !== 'triage');
+            const openRecent = canOpenThread
+              ? () => {
+                  const route = threadRoute(`/chat?thread=${item.threadRootId}`, T.title);
+                  if (route) navigateTo(navigation, route);
+                }
+              : canOpenInbox
+                ? () =>
+                    navigation.navigate('NeedsYouItem', {
+                      itemId: item.inboxItemId as string,
+                      back: T.title,
+                    })
+                : null;
+            const rowStyle = {
+              flexDirection: 'row' as const,
+              alignItems: 'center' as const,
+              gap: 10,
+              minHeight: 52,
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderTopWidth: i === 0 ? 0 : 1,
+              borderTopColor: theme.colors.line,
+            };
+            const body = (
+              <>
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text size={14} weight={600} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text size={13} lh={1.4} color={theme.colors.mut}>
+                    {looksAheadCheckMeta(item)}
+                  </Text>
+                </View>
+                {openRecent ? <ChevronRight size={16} color={theme.colors.mut} strokeWidth={1.7} /> : null}
+              </>
+            );
+            return openRecent ? (
+              <Touchable
+                key={item.id}
+                onPress={openRecent}
+                feedback="wash"
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title}, ${canOpenThread ? T.openThread : T.openInInbox}`}
+                style={rowStyle}
+              >
+                {body}
+              </Touchable>
+            ) : (
+              <View key={item.id} style={rowStyle}>
+                {body}
+              </View>
+            );
+          })}
         </Section>
       ) : null}
     </PartScroll>

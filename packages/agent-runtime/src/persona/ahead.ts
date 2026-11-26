@@ -275,7 +275,7 @@ function sharedTail(ctx: DispatchContext, person: string, of: CheckOf): string[]
     of === 'plan'
       ? 'Most checks find nothing: then call ahead_report with found false (you may include a brief factual note for later stages of this plan, e.g. what confirmation you found), and that is all.'
       : 'Most checks find nothing: then call ahead_report with found false, and that is all.',
-    `A finding: call ahead_report with found true, kind (and extraKinds if this same ${of === 'plan' ? 'plan' : 'thing'} has a second distinct issue), one to three plain sentences (or two crisp lines if two issues) in the language you and ${person} talk in (what it is, why it matters, what they could do), like a colleague’s chat message, no links in them, verified sources (${SOURCES[of]}), optional short one-tap action chip label${CHIPS[of]}, and optional note. Whombat names the sources and posts it in its own thread.`,
+    `A finding: call ahead_report with found true, kind (and extraKinds if this same ${of === 'plan' ? 'plan' : 'thing'} has a second distinct issue), a short plain title (3 to 10 words, e.g. “The Script starts at 20:45, not 20:00” or “School invoice €120 due Friday”), one to three plain sentences (or two crisp lines if two issues) in the language you and ${person} talk in (what it is, why it matters, what they could do), like a colleague’s chat message, no links in them, verified sources (${SOURCES[of]}), optional short one-tap action chip label${CHIPS[of]}, and optional note. Whombat names the sources and puts it in ${person}’s Inbox (or in their thread if they asked to be told).`,
     'Do all of it in this turn, without helpers; never say you’ll come back.',
   );
   return lines;

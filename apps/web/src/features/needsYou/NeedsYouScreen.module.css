@@ -154,6 +154,86 @@
   font: 400 12px / 1.4 var(--font-mono);
 }
 
+.sources {
+  margin: 4px 0 0;
+  color: var(--mut);
+  font: 400 13px / 1.4 var(--font-sans);
+}
+
+.sourceLink {
+  color: var(--ink2);
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 2px;
+}
+
+.sourceLink:hover {
+  color: var(--ink);
+}
+
+.sourceLink:focus-visible {
+  border-radius: var(--radius-small);
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Inline reply box on a Looks ahead finding: promotes the finding to Chat when submitted. */
+.replyForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 480px;
+  margin-top: 10px;
+}
+
+.replyInput {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-small);
+  background: var(--sf);
+  color: var(--ink);
+  font: 400 14px var(--font-sans);
+}
+
+.replyInput::placeholder {
+  color: var(--mut);
+}
+
+.replyInput:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.replySend {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--btn);
+  border-radius: var(--radius-button-small);
+  background: var(--btn);
+  color: var(--btnfg);
+  cursor: pointer;
+}
+
+.replySend:disabled {
+  border-color: var(--line2);
+  background: var(--sf2);
+  color: var(--mut);
+  cursor: default;
+}
+
+.replySend:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .says {
   margin-top: 8px;
 }
@@ -272,6 +352,19 @@
   .more {
     flex: none;
     width: 44px;
+  }
+
+  .replyForm {
+    max-width: none;
+  }
+
+  .replyInput {
+    height: 44px;
+  }
+
+  .replySend {
+    width: 44px;
+    height: 44px;
   }
 }
 

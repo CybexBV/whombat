@@ -230,6 +230,9 @@ export const CouncilMemberId = idSchema('cnm');
 export const DelegationId = idSchema('dlg');
 /** One task of a delegation (Whombat delegate.md). */
 export const DelegationTaskId = idSchema('dlt');
+/** One Looks ahead check of an event (Whombat looks-ahead.md). */
+export const AheadCheckId = idSchema('ahc');
+export type AheadCheckId = z.infer<typeof AheadCheckId>;
 /** A matched incoming email mirrored for a mail-triggered automation run. */
 export const MailTriggerItemId = idSchema('mlm');
 

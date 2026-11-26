@@ -9,10 +9,12 @@
  */
 
 import {
+  type AheadKind,
   type ChatSubject,
   fillQuietWords,
   type HomeOverview,
   type HomeRef,
+  LOOKS_AHEAD_WORDS,
   type NeedsYouAction,
   type NeedsYouGroup,
   type NeedsYouItem,
@@ -143,7 +145,10 @@ export type NeedsYouButtonKind =
   | 'talk'
   | 'snooze'
   | 'stop'
-  | 'back';
+  | 'back'
+  | 'aheadAction'
+  | 'notUseful'
+  | 'stopAhead';
 
 export interface NeedsYouButton {
   id: string;
@@ -242,7 +247,7 @@ function approvalAnswers(actions: readonly NeedsYouAction[]): NeedsYouAction[] {
 export function needsYouButtons(
   item: Pick<
     NeedsYouItem,
-    'kind' | 'nature' | 'actions' | 'fixable' | 'href' | 'research' | 'watch' | 'subject'
+    'kind' | 'nature' | 'actions' | 'fixable' | 'href' | 'research' | 'watch' | 'subject' | 'ahead'
   >,
   group: InboxGroup,
   words: Pick<AgentWords, 'name'>,
@@ -267,6 +272,28 @@ export function needsYouButtons(
     look: 'quiet',
     more: true,
   };
+  if (item.kind === 'ahead' && item.ahead) {
+    const notUseful: NeedsYouButton = {
+      id: 'not_useful',
+      kind: 'notUseful',
+      label: LOOKS_AHEAD_WORDS.notUsefulAction,
+      look: 'quiet',
+      more: true,
+    };
+    const stopAhead: NeedsYouButton = {
+      id: 'stop_ahead',
+      kind: 'stopAhead',
+      label: item.ahead.matter ? LOOKS_AHEAD_WORDS.stopMatterAction : LOOKS_AHEAD_WORDS.stopCheckingAction,
+      look: 'quiet',
+      more: true,
+    };
+    if (group === 'later' || group === 'settled')
+      return [{ id: 'back', kind: 'back', label: W.back, look: 'secondary' }, ...talk, notUseful, stopAhead];
+    const lead: NeedsYouButton[] = item.ahead.action
+      ? [{ id: 'ahead_action', kind: 'aheadAction', label: item.ahead.action, look: 'primary' }]
+      : [];
+    return [...lead, settle, ...talk, snooze, notUseful, stopAhead];
+  }
   if (group === 'later' || group === 'settled')
     return [{ id: 'back', kind: 'back', label: W.back, look: 'secondary' }, ...talk, ...stop];
   if (group === 'assistant') return talk;
@@ -423,7 +450,11 @@ function rowOf(
   const body = found ? '' : item.body;
   const where = item.subject
     ? (names.get(`${item.subject.kind}:${item.subject.id}`) ?? item.subject.name)
-    : null;
+    : item.kind === 'ahead' && item.ahead
+      ? item.ahead.source === 'calendar'
+        ? LOOKS_AHEAD_WORDS.inboxCalendar
+        : LOOKS_AHEAD_WORDS.inboxMail
+      : null;
   const when = needsYouWhen(item.at, now, timeZone);
   const state =
     group === 'later' && item.snoozedUntil ? capitalized(untilText(item.snoozedUntil, now, timeZone)) : null;
@@ -584,7 +615,15 @@ export type NeedsYouListIntent =
   | { type: 'settle'; ref: HomeRef }
   | { type: 'snooze'; ref: HomeRef; until: string }
   | { type: 'stop'; watch: NeedsYouWatch }
-  | { type: 'back'; ref: HomeRef };
+  | { type: 'back'; ref: HomeRef }
+  | { type: 'aheadPromote'; checkId: string; text?: string }
+  | {
+      type: 'aheadFeedback';
+      checkId: string;
+      verdict: 'not_useful' | 'stop_kind';
+      kind: AheadKind;
+      matter: boolean;
+    };
 
 /**
  * The first line of a question about a thing, which becomes a new thread's title: the item's title, named by its thing
@@ -606,7 +645,7 @@ export function askFixText(item: Pick<NeedsYouItem, 'title' | 'body' | 'subject'
 }
 
 export function needsYouListIntent(
-  item: Pick<NeedsYouItem, 'ref' | 'title' | 'body' | 'subject' | 'href' | 'research' | 'watch'>,
+  item: Pick<NeedsYouItem, 'ref' | 'title' | 'body' | 'subject' | 'href' | 'research' | 'watch' | 'ahead'>,
   button: Pick<NeedsYouButton, 'kind' | 'action'>,
   now: Date | number,
   timeZone: string,
@@ -622,10 +661,36 @@ export function needsYouListIntent(
         : { type: 'ask', text, subject: null };
     }
     case 'talk': {
+      // A Looks ahead finding promotes cleanly to Chat as its own thread.
+      if (item.ahead) return { type: 'aheadPromote', checkId: item.ahead.checkId };
       // Once the assistant looked into it, its thread holds the whole story: talk there.
       const thread = item.research ? lookThreadHref(item.research) : null;
       return thread ? { type: 'open', href: thread } : { type: 'talk', ref: item.ref };
     }
+    case 'aheadAction':
+      return item.ahead?.action
+        ? { type: 'aheadPromote', checkId: item.ahead.checkId, text: item.ahead.action }
+        : null;
+    case 'notUseful':
+      return item.ahead
+        ? {
+            type: 'aheadFeedback',
+            checkId: item.ahead.checkId,
+            verdict: 'not_useful',
+            kind: item.ahead.kind,
+            matter: Boolean(item.ahead.matter),
+          }
+        : null;
+    case 'stopAhead':
+      return item.ahead
+        ? {
+            type: 'aheadFeedback',
+            checkId: item.ahead.checkId,
+            verdict: 'stop_kind',
+            kind: item.ahead.kind,
+            matter: Boolean(item.ahead.matter),
+          }
+        : null;
     case 'askFix':
       return { type: 'ask', text: askFixText(item), subject: item.subject ?? null };
     case 'see':

@@ -275,11 +275,14 @@ export const INBOX_SYMBOLS: Record<NeedsYouButtonKind, string> = {
   snooze: 'clock',
   stop: 'eye.slash',
   back: 'arrow.uturn.backward',
+  aheadAction: 'arrow.right.circle',
+  notUseful: 'hand.thumbsdown',
+  stopAhead: 'bell.slash',
 };
 
 /**
  * An Inbox row's More, iOS's own menu from its swipe's ⋯ or a long press: handing it over and talking it over, then
- * Remind me tomorrow, then Stop watching on its own (it switches a check off). A pick is the button's id.
+ * Remind me tomorrow, then Stop watching / feedback on its own. A pick is the button's id.
  */
 export function inboxMoreMenu(
   buttons: readonly NeedsYouButton[],
@@ -290,12 +293,14 @@ export function inboxMoreMenu(
     title: b.label,
     icon: INBOX_SYMBOLS[b.kind],
   });
-  const ask = buttons.filter((b) => b.kind !== 'snooze' && b.kind !== 'stop');
+  const quietFeedback = (b: NeedsYouButton) =>
+    b.kind === 'stop' || b.kind === 'notUseful' || b.kind === 'stopAhead';
+  const ask = buttons.filter((b) => b.kind !== 'snooze' && !quietFeedback(b));
   return plainMenu(
     [
       ask.map(item),
       buttons.filter((b) => b.kind === 'snooze').map(item),
-      buttons.filter((b) => b.kind === 'stop').map(item),
+      buttons.filter(quietFeedback).map(item),
     ],
     title,
   );

@@ -10,7 +10,7 @@
  *   `checkAheadNow`.
  * Postgres because every step is a signed commit and a queued turn.
  */
-import { AHEAD_REPLIES, type CalendarEvent } from '@whombat/core';
+import { AHEAD_REPLIES, type CalendarEvent, needsYouItemHref } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueDispatchToken } from '../auth/agent-tokens';
@@ -26,6 +26,7 @@ import {
   notifications,
 } from '../db/schema/index';
 import { messageDedupKey } from '../domain/message-notify';
+import { acknowledgeWatch, ignoreNeedsYou, snoozeNeedsYou } from '../home/snoozes';
 import { useOpenDataForTests } from '../lib/open-data';
 import { AHEAD_TOOLS } from '../mcp/served';
 import { buildDispatchContext } from '../runtime/context';
@@ -37,8 +38,16 @@ import { minimalPdf } from '../test/pdf';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { metAnswer } from '../weather/testing';
 import { sealWebSearchKey } from '../web-search/store';
-import { aheadSettingsOf, updateLooksAhead } from './commands';
+import {
+  aheadInboxFeedback,
+  aheadNoticeDedupKey,
+  aheadSettingsOf,
+  promoteAheadFinding,
+  tidyAhead,
+  updateLooksAhead,
+} from './commands';
 import { useAheadDocsForTests } from './docs';
+import { looksAheadNeedsYou } from './inbox';
 import { looksAheadView } from './settings';
 import { checkAheadNow, watchAhead } from './watch';
 import { useAheadWebForTests } from './web';
@@ -367,13 +376,14 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const headlines = await mcp.client.callTool({ name: 'news_headlines', arguments: {} });
     expect(headlines.structuredContent).toMatchObject({ status: 'none' });
 
-    // Report with primary kind, extraKinds, one-tap action chip, note, and multiple verified sources.
+    // Report with short title, primary kind, extraKinds, one-tap action chip, note, and multiple verified sources.
     const told = await mcp.client.callTool({
       name: 'ahead_report',
       arguments: {
         found: true,
         kind: 'time',
         extraKinds: ['crowds'],
+        title: 'Show starts later (20:45)',
         text: 'The Script starts at 20:45, not 20:00. Ajax plays nearby. See https://evil.example.net/x',
         action: 'Update event to 20:45',
         note: 'Verified 20:45 on venue site and tickets in Paperless.',
@@ -393,31 +403,111 @@ describe('Looks ahead (looks-ahead.md)', () => {
       state: 'told',
       kind: 'time',
       extraKinds: ['crowds'],
+      title: 'Show starts later (20:45)',
       actionLabel: 'Update event to 20:45',
       note: 'Verified 20:45 on venue site and tickets in Paperless.',
+      promotedAt: null,
     });
-    const [root] = await t.services.db.select().from(messages).where(eq(messages.id, after.threadRootId));
-    expect(root).toMatchObject({ authorId: mine.agentId, conversationId: mine.dmId, threadRootId: null });
-    expect(root?.text).toContain('20:45');
-    expect(root?.text).toContain('[venue.example.com](https://venue.example.com/the-script)');
-    expect(root?.text).toContain('(mail)');
-    expect(root?.text).toContain('Paperless');
-    expect(root?.text).toContain('Data from MET Norway');
-    expect(root?.text).not.toContain('evil.example.net');
-    expect(root?.suggestions).toEqual(['Update event to 20:45', ...AHEAD_REPLIES]);
+    expect(after.text).not.toContain('evil.example.net');
+    // Unsolicited finding lands in Inbox first — no Chat message yet.
+    expect(await t.services.db.select().from(messages).where(eq(messages.id, after.threadRootId))).toEqual(
+      [],
+    );
 
     await t.services.db
       .update(dispatches)
       .set({ state: 'done' })
       .where(eq(dispatches.id, check.dispatchId ?? ''));
     await t.services.background.settle();
-    const inbox = await t.services.db
+    const notices = await t.services.db
       .select()
       .from(notifications)
-      .where(eq(notifications.dedupKey, messageDedupKey(after.threadRootId)));
-    expect(inbox.map((n) => n.kind)).toEqual(['agent_update']);
+      .where(eq(notifications.dedupKey, aheadNoticeDedupKey(first)));
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      kind: 'agent_update',
+      link: { type: 'external', url: needsYouItemHref(`ahead:${first}`) },
+    });
 
-    // Morning-of stage (3 hours before start) runs as a later stage, carries priorChecks note, and replies in the SAME thread!
+    const inboxItems = await looksAheadNeedsYou({
+      db: t.services.db,
+      burrowId: TEST_BURROW_ID,
+      personId: IDS.mara,
+      now,
+    });
+    expect(inboxItems).toHaveLength(1);
+    expect(inboxItems[0]).toMatchObject({
+      id: `ahead:${first}`,
+      kind: 'ahead',
+      severity: 'info',
+      title: 'Show starts later (20:45)',
+      ahead: {
+        checkId: first,
+        source: 'calendar',
+        kind: 'time',
+        action: 'Update event to 20:45',
+      },
+    });
+    expect(inboxItems[0]?.ahead?.sources.map((s) => s.label)).toEqual(
+      expect.arrayContaining(['venue.example.com', 'Data from MET Norway']),
+    );
+    const beforePromoteView = await looksAheadView(t.services, TEST_BURROW_ID);
+    expect(beforePromoteView.recent?.find((r) => r.id === first)).toMatchObject({
+      threadRootId: null,
+      inboxItemId: `ahead:${first}`,
+    });
+
+    // Tapping the proposed action promotes the finding into Chat, posts the person's reply, and wakes the assistant.
+    const promoted = await t.commit(IDS.mara, promoteAheadFinding, {
+      checkId: first,
+      text: 'Update event to 20:45',
+    });
+    expect(promoted.status).toBe('ok');
+    const [root] = await t.services.db.select().from(messages).where(eq(messages.id, after.threadRootId));
+    expect(root).toMatchObject({ authorId: mine.agentId, conversationId: mine.dmId, threadRootId: null });
+    expect(root?.text).toContain('**Show starts later (20:45)**');
+    expect(root?.text).toContain('20:45');
+    expect(root?.text).toContain('[venue.example.com](https://venue.example.com/the-script)');
+    expect(root?.text).toContain('(mail)');
+    expect(root?.text).toContain('Paperless');
+    expect(root?.text).toContain('Data from MET Norway');
+    expect(root?.text).not.toContain('evil.example.net');
+    expect(root?.suggestions).toEqual([]);
+    const replyId = (promoted as { result: { messageId: string } }).result.messageId;
+    const [personReply] = await t.services.db.select().from(messages).where(eq(messages.id, replyId));
+    expect(personReply).toMatchObject({ threadRootId: after.threadRootId, text: 'Update event to 20:45' });
+    const [actionTurn] = await t.services.db
+      .select()
+      .from(dispatches)
+      .where(and(eq(dispatches.messageId, replyId), eq(dispatches.agentId, mine.agentId)));
+    expect(actionTurn).toBeTruthy();
+    const actionCtx = await buildDispatchContext(t.services, actionTurn as NonNullable<typeof actionTurn>);
+    expect(actionCtx.ahead?.found).toMatchObject({ kind: 'time', action: 'Update event to 20:45' });
+    // No duplicate push for the promoted root; Inbox notification and Inbox row are gone.
+    expect(
+      await t.services.db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.dedupKey, messageDedupKey(after.threadRootId))),
+    ).toEqual([]);
+    expect(
+      await t.services.db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.dedupKey, aheadNoticeDedupKey(first))),
+    ).toEqual([]);
+    expect(
+      await looksAheadNeedsYou({ db: t.services.db, burrowId: TEST_BURROW_ID, personId: IDS.mara, now }),
+    ).toEqual([]);
+    const afterPromoteView = await looksAheadView(t.services, TEST_BURROW_ID);
+    expect(afterPromoteView.recent?.find((r) => r.id === first)?.threadRootId).toBe(after.threadRootId);
+    expect(afterPromoteView.recent?.find((r) => r.id === first)?.inboxItemId).toBeUndefined();
+    await t.services.db
+      .update(dispatches)
+      .set({ state: 'done' })
+      .where(eq(dispatches.id, actionTurn?.id ?? ''));
+
+    // Morning-of stage (3 hours before start) runs as a later stage, carries priorChecks note, and replies in the SAME promoted thread!
     now = new Date('2026-12-14T17:00:00Z');
     const morningId = (await watchAhead(t.services, TEST_BURROW_ID, { ...ready, fresh: true })) ?? '';
     expect(morningId).toMatch(/^ahc_/);
@@ -581,6 +671,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
       arguments: {
         found: true,
         kind: 'missing_event',
+        title: 'Hotel Chiado missing from calendar',
         text: 'Your Hotel Chiado booking for 22 Dec is confirmed in mail but not on your calendar.',
         action: 'Add hotel stay to calendar',
         sources: [{ mailId: 'msg_hotel_booking' }],
@@ -590,7 +681,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
     await mcp.close();
     await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
 
-    // Recent checks in Settings view shows the mail check and its thread link, and the look as a mail row.
+    // Unpromoted mail finding sits in Inbox; Recent checks links to Inbox until promoted.
     const view = await looksAheadView(t.services, TEST_BURROW_ID);
     const shown = view.recent?.find((r) => r.id === second);
     expect(shown).toMatchObject({
@@ -598,8 +689,9 @@ describe('Looks ahead (looks-ahead.md)', () => {
       stage: 'mail',
       state: 'told',
       kind: 'missing_event',
+      threadRootId: null,
+      inboxItemId: `ahead:${second}`,
     });
-    expect(shown?.threadRootId).toBeTruthy();
     expect(view.recent?.find((r) => r.id === look.id)).toMatchObject({
       source: 'mail',
       stage: 'mail',
@@ -608,8 +700,132 @@ describe('Looks ahead (looks-ahead.md)', () => {
       picked: 1,
     });
 
+    // Snoozing and settling in Inbox mark the Inbox notification read, and taking it back leaves the finding open.
+    const ref = { kind: 'ahead' as const, id: second };
+    await t.commit(IDS.mara, snoozeNeedsYou, {
+      ref,
+      until: new Date(now.getTime() + 24 * 3600_000).toISOString(),
+    });
+    const [readNotice] = await t.services.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.dedupKey, aheadNoticeDedupKey(second)));
+    expect(readNotice?.readAt).not.toBeNull();
+    await t.commit(IDS.mara, acknowledgeWatch, { ref, acknowledged: false });
+    await t.commit(IDS.mara, ignoreNeedsYou, { ref, ignored: true });
+    await t.commit(IDS.mara, ignoreNeedsYou, { ref, ignored: false });
+
+    // Promoting without a reply (“Talk to Dusty about it” / older apps) opens the Chat thread with quick replies without waking Dusty.
+    const talk = await t.commit(IDS.mara, promoteAheadFinding, { checkId: second });
+    expect(talk.status).toBe('ok');
+    const [mailMsg] = await t.services.db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, mailRow.threadRootId));
+    expect(mailMsg?.suggestions).toEqual(['Add hotel stay to calendar', ...AHEAD_REPLIES]);
+    expect(
+      await t.services.db.select().from(dispatches).where(eq(dispatches.messageId, mailRow.threadRootId)),
+    ).toEqual([]);
+    const afterTalk = await looksAheadView(t.services, TEST_BURROW_ID);
+    expect(afterTalk.recent?.find((r) => r.id === second)?.threadRootId).toBe(mailRow.threadRootId);
+    expect(afterTalk.recent?.find((r) => r.id === second)?.inboxItemId).toBeUndefined();
+
     // checkAheadNow returns false when nothing more is due, and respects switching mailOn off.
     expect(await checkAheadNow(t.services, TEST_BURROW_ID, ready)).toBe(false);
+  });
+
+  it('supports direct Inbox feedback (Not useful, Stop checking) and auto-settles expired unpromoted Inbox findings', async () => {
+    await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
+    await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+    const google = (t.services.google.workspace as FakeGoogleWorkspace).stateFor(FAKE_ACCESS_TOKEN);
+    google.messages = google.messages.map((m) => ({ ...m, date: new Date('2026-12-01T10:00:00Z') }));
+    google.events = [
+      event({
+        id: 'fb_one',
+        summary: 'Train trip',
+        start: '2026-12-14T15:00:00Z',
+        end: '2026-12-14T17:00:00Z',
+        location: 'Amsterdam Centraal',
+      }),
+      event({
+        id: 'fb_two',
+        summary: 'Dinner in town',
+        start: '2026-12-14T18:00:00Z',
+        end: '2026-12-14T20:00:00Z',
+        location: 'Utrecht',
+      }),
+      event({
+        id: 'fb_three',
+        summary: 'Museum visit',
+        start: '2026-12-14T11:00:00Z',
+        end: '2026-12-14T13:00:00Z',
+        location: 'Rijksmuseum',
+      }),
+    ];
+    now = new Date('2026-12-13T15:00:00Z');
+    const reportOne = async (kind: 'travel' | 'place' | 'time', title: string) => {
+      const id = (await watchAhead(t.services, TEST_BURROW_ID, { ...ready, fresh: true })) ?? '';
+      const r = await row(id);
+      const mcp = await inTurn(r.dispatchId ?? '');
+      const res = await mcp.client.callTool({
+        name: 'ahead_report',
+        arguments: {
+          found: true,
+          kind,
+          title,
+          text: `${title} — details here.`,
+          sources: [{ calendar: true }],
+        },
+      });
+      expect(res.structuredContent, said(res)).toMatchObject({ status: 'ok', told: true });
+      await mcp.close();
+      await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
+      return id;
+    };
+
+    const firstId = await reportOne('travel', 'Works on the rail line');
+    const secondId = await reportOne('place', 'Entrance moved to North Gate');
+    const thirdId = await reportOne('time', 'Museum opens later');
+
+    // Direct “Not useful” removes from Inbox and stores calibration verdict without opening Chat.
+    const notUseful = await t.commit(IDS.mara, aheadInboxFeedback, {
+      checkId: firstId,
+      verdict: 'not_useful',
+      reason: 'Already took the bus',
+    });
+    expect(notUseful).toMatchObject({ status: 'ok', result: { ok: true, kind: 'travel', stopped: null } });
+    expect(await row(firstId)).toMatchObject({
+      feedback: 'not_useful',
+      feedbackNote: 'Already took the bus',
+    });
+
+    // Direct “Stop checking for this” stops the kind and removes from Inbox.
+    const stopped = await t.commit(IDS.mara, aheadInboxFeedback, {
+      checkId: secondId,
+      verdict: 'stop_kind',
+    });
+    expect(stopped).toMatchObject({ status: 'ok', result: { ok: true, kind: 'place', stopped: 'kind' } });
+    expect((await aheadSettingsOf(t.services.db, TEST_BURROW_ID)).stopped).toContain('place');
+
+    // Only the third finding remains in Inbox; once its event ends + 2 h, tidyAhead settles it cleanly.
+    expect(
+      (
+        await looksAheadNeedsYou({ db: t.services.db, burrowId: TEST_BURROW_ID, personId: IDS.mara, now })
+      ).map((i) => i.ref.id),
+    ).toEqual([thirdId]);
+    now = new Date('2026-12-14T22:30:00Z');
+    await t.commit(mine.agentId, tidyAhead, {});
+    expect((await row(thirdId)).settledAt).not.toBeNull();
+    expect(
+      await looksAheadNeedsYou({ db: t.services.db, burrowId: TEST_BURROW_ID, personId: IDS.mara, now }),
+    ).toEqual([]);
+    expect(
+      await t.services.db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.dedupKey, aheadNoticeDedupKey(thirdId))),
+    ).toEqual([]);
+    now = new Date('2026-12-13T15:00:00Z');
   });
 
   it('cancels stale checks, drops Hermes sessions and respects night hours', async () => {

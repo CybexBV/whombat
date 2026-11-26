@@ -188,5 +188,13 @@ describe('an Inbox row’s More (inbox.md IBX-04)', () => {
     expect(spec.sections.flat().every((i) => typeof i.icon === 'string' && i.icon.length > 0)).toBe(true);
     // Only what the row has: an approval's More is Talk alone.
     expect(inboxMoreMenu([b('talk')]).sections).toHaveLength(1);
+    // Looks ahead rows put feedback (“Not useful”, “Stop checking for this”) in its own group.
+    const ahead = inboxMoreMenu([b('talk'), b('snooze'), b('notUseful'), b('stopAhead')], 'The Script');
+    expect(ahead.sections.map((s) => s.map((i) => i.id))).toEqual([
+      ['talk'],
+      ['snooze'],
+      ['notUseful', 'stopAhead'],
+    ]);
+    expect(ahead.sections.flat().every((i) => typeof i.icon === 'string' && i.icon.length > 0)).toBe(true);
   });
 });

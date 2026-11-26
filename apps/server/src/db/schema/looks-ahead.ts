@@ -2,6 +2,7 @@ import type {
   AheadKind,
   AheadMatterMatch,
   AheadMatterReason,
+  AheadNamedSource,
   AheadStage,
   AheadTriggerSource,
   AheadWaitingOn,
@@ -197,7 +198,11 @@ export const aheadChecks = pgTable(
     kind: text('kind').$type<AheadKind>(),
     /** Additional finding kinds when a single message reports more than one issue. */
     extraKinds: jsonb('extra_kinds').$type<AheadKind[]>().notNull().default([]),
+    /** Short plain headline for the person's Inbox (and first line when opened in Chat). */
+    title: text('title'),
     text: text('text'),
+    /** Verified sources Whombat named for the finding, kept so the Inbox renders them before any Chat message exists. */
+    sources: jsonb('sources').$type<AheadNamedSource[]>().notNull().default([]),
     /** Optional one-tap action chip label proposed with the finding. */
     actionLabel: text('action_label'),
     /** Brief factual note kept only for later stages of the same event (never in Hermes memory). */
@@ -215,6 +220,8 @@ export const aheadChecks = pgTable(
     /** The check read private data (mail, files or docs): nothing more of it goes to the web. */
     mailReadAt: timestamp('mail_read_at', { withTimezone: true }),
     reportedAt: timestamp('reported_at', { withTimezone: true }),
+    /** When the finding was posted to Chat (directly when asked/threaded, or promoted from the Inbox). */
+    promotedAt: timestamp('promoted_at', { withTimezone: true }),
     settledAt: timestamp('settled_at', { withTimezone: true }),
     /** The thing kept an eye on this check is about; its checks stay when it goes. */
     matterId: text('matter_id').references(() => aheadMatters.id, { onDelete: 'set null' }),
@@ -228,6 +235,11 @@ export const aheadChecks = pgTable(
     uniqueIndex('ahead_checks_thread_idx').on(t.threadRootId),
     index('ahead_checks_dispatch_idx').on(t.dispatchId),
     index('ahead_checks_matter_idx').on(t.burrowId, t.matterId),
+    index('ahead_checks_inbox_idx')
+      .on(t.burrowId, t.reportedAt)
+      .where(
+        sql`${t.state} = 'told' and ${t.promotedAt} is null and ${t.settledAt} is null and ${t.feedback} is null`,
+      ),
   ],
 );
 

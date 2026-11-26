@@ -13,6 +13,7 @@ import { AutomationId } from './automation.js';
 import { Count, JsonObject, Timestamp } from './common.js';
 import { CHAT_ROOMS, type ChatRoom } from './conversation.js';
 import { LookResearch } from './look-research.js';
+import { AheadInboxMeta } from './looks-ahead.js';
 import { OverviewLayout } from './overview-layout.js';
 import { NoticeCheck, NoticeNature, NoticeSubject, ThingCause } from './quiet.js';
 import { ThingLogo } from './thing-logo.js';
@@ -44,6 +45,7 @@ export const HOME_REF_KINDS = [
   'address_change',
   'backup',
   'feature_request',
+  'ahead',
 ] as const;
 export const HomeRef = z.object({
   kind: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
@@ -74,6 +76,7 @@ export const NEEDS_YOU_KINDS = [
   'automation_run',
   'device',
   'backup',
+  'ahead',
 ] as const;
 /** The kinds an older app's `HomeOverview.needsYou` may hold (the rest are only in `needsYouList`). */
 export const NEEDS_YOU_FIRST_KINDS: readonly NeedsYouKind[] = [
@@ -197,6 +200,8 @@ export const NeedsYouItem = z.object({
   fixable: z.literal(true).optional(),
   /** The check behind a line, for *Stop watching this* (`NeedsYouWatch`). */
   watch: NeedsYouWatch.optional(),
+  /** Looks ahead finding details (sources, one-tap action, feedback target) when `kind` is `ahead`. */
+  ahead: AheadInboxMeta.optional(),
 });
 export type NeedsYouItem = z.infer<typeof NeedsYouItem>;
 

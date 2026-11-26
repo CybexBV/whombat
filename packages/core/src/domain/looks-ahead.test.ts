@@ -8,6 +8,7 @@ import {
   AHEAD_MATTER_KEEP_MS,
   AHEAD_MATTER_NO_ANSWER_MS,
   AHEAD_MATTER_QUIET_MS,
+  AHEAD_TITLE_MAX,
   AHEAD_TOOL_NAMES,
   AHEAD_TRIAGE_FIRST_MS,
   AHEAD_TRIAGE_GAP_MS,
@@ -16,6 +17,9 @@ import {
   AHEAD_TRIAGE_PICKS_MAX,
   AHEAD_TRIAGE_SINCE_MAX_MS,
   AheadDispatchContext,
+  AheadInboxFeedbackBody,
+  AheadInboxMeta,
+  AheadPromoteBody,
   AheadReportInput,
   AheadTriageInput,
   AheadWatchInput,
@@ -842,10 +846,53 @@ describe('the report and the setting', () => {
         found: true,
         kind: 'time',
         extraKinds: ['crowds'],
+        title: 'The Script starts at 20:45',
         text: 'Starts at 20:45, not 20:00. Ajax plays next door at 20:00.',
         sources: [{ url: 'https://example.com/the-script' }, { fileId: 'drv_1' }, { docId: 'paperless:1:9' }],
         action: 'Update event to 20:45',
         note: 'Flagged time mismatch and Ajax match.',
+      }).success,
+    ).toBe(true);
+    expect(AheadReportInput.safeParse({ found: false, title: 'No title when quiet' }).success).toBe(false);
+    expect(
+      AheadReportInput.safeParse({
+        found: true,
+        kind: 'time',
+        title: 'x'.repeat(AHEAD_TITLE_MAX + 1),
+        text: 'Starts at 20:45.',
+        sources: [{ calendar: true }],
+      }).success,
+    ).toBe(false);
+    expect(
+      AheadInboxMeta.safeParse({
+        checkId: 'ahc_1',
+        source: 'calendar',
+        kind: 'time',
+        sources: [
+          { label: 'venue.example.com', url: 'https://venue.example.com/show' },
+          { label: 'Your calendar' },
+        ],
+        action: 'Update event to 20:45',
+      }).success,
+    ).toBe(true);
+    expect(AheadPromoteBody.safeParse({}).success).toBe(true);
+    expect(AheadPromoteBody.safeParse({ text: 'Update event to 20:45' }).success).toBe(true);
+    expect(AheadPromoteBody.safeParse({ text: '   ' }).success).toBe(false);
+    expect(AheadInboxFeedbackBody.safeParse({ verdict: 'not_useful', reason: 'Already knew' }).success).toBe(
+      true,
+    );
+    expect(AheadInboxFeedbackBody.safeParse({ verdict: 'stop_kind' }).success).toBe(true);
+    expect(
+      LooksAheadCheckItem.safeParse({
+        id: 'ahc_1',
+        source: 'calendar',
+        stage: 'eve',
+        title: 'The Script',
+        at: '2026-12-13T12:00:00Z',
+        state: 'told',
+        kind: 'time',
+        threadRootId: null,
+        inboxItemId: 'ahead:ahc_1',
       }).success,
     ).toBe(true);
     expect(

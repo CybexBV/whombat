@@ -14,6 +14,7 @@ import {
   type LooksAheadView,
 } from '@whombat/core';
 import { and, desc, eq, gte, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { startedChatAnswer } from '../chats/routes';
 import { aheadChecks, messages } from '../db/schema/index';
 import { isThePerson, thePerson } from '../domain/the-person';
 import { forbidden } from '../lib/errors';
@@ -21,10 +22,14 @@ import { commitAs } from '../routes/burrows';
 import { type RouteDef, route } from '../routes/define';
 import type { Services } from '../services';
 import { accountCalendars, calendarAccounts, calendarIsOn, calendarKey } from './calendars';
-import { aheadSettingsOf, updateLooksAhead } from './commands';
+import { aheadInboxFeedback, aheadSettingsOf, promoteAheadFinding, updateLooksAhead } from './commands';
+import { registerLooksAheadSource } from './inbox';
 import { mailAccounts } from './mail';
 import { matterItem, openMatters } from './matters';
 import { checkAheadNow } from './watch';
+
+// Register the Inbox source whenever Looks ahead's routes are loaded (dev, tests and managed boot).
+registerLooksAheadSource();
 
 const WEEK_MS = 7 * 24 * 3600_000;
 
@@ -80,6 +85,8 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
       state: aheadChecks.state,
       kind: aheadChecks.kind,
       threadRootId: aheadChecks.threadRootId,
+      promotedAt: aheadChecks.promotedAt,
+      settledAt: aheadChecks.settledAt,
       feedback: aheadChecks.feedback,
       event: aheadChecks.event,
     })
@@ -102,29 +109,37 @@ export async function looksAheadView(services: Services, burrowId: string): Prom
       : [],
   );
 
-  const recent: LooksAheadCheckItem[] = rows.map((r) => ({
-    id: r.id,
-    // Older apps know only calendar and mail rows in the four old stages: a triage pass and a follow-up are mail rows
-    // that say what they are in `of`.
-    ...(r.source === 'calendar' && r.stage !== 'mail' && r.stage !== 'triage' && r.stage !== 'matter'
-      ? { source: 'calendar' as const, stage: r.stage }
-      : { source: 'mail' as const, stage: 'mail' as const }),
-    ...(r.source === 'triage'
-      ? {
-          of: 'triage' as const,
-          count: r.event.triage?.count ?? 0,
-          picked: r.event.triage?.picks?.length ?? 0,
-        }
-      : r.source === 'matter'
-        ? { of: 'matter' as const }
-        : {}),
-    title: r.summary.slice(0, 300),
-    at: r.startedAt.toISOString(),
-    state: r.state,
-    kind: r.kind,
-    threadRootId: r.state === 'told' ? (rootOf.get(r.threadRootId) ?? null) : null,
-    feedback: r.feedback,
-  }));
+  const recent: LooksAheadCheckItem[] = rows.map((r) => {
+    const threadRootId = r.state === 'told' ? (rootOf.get(r.threadRootId) ?? null) : null;
+    const inboxItemId =
+      r.state === 'told' && !threadRootId && !r.promotedAt && !r.settledAt && !r.feedback
+        ? `ahead:${r.id}`
+        : null;
+    return {
+      id: r.id,
+      // Older apps know only calendar and mail rows in the four old stages: a triage pass and a follow-up are mail rows
+      // that say what they are in `of`.
+      ...(r.source === 'calendar' && r.stage !== 'mail' && r.stage !== 'triage' && r.stage !== 'matter'
+        ? { source: 'calendar' as const, stage: r.stage }
+        : { source: 'mail' as const, stage: 'mail' as const }),
+      ...(r.source === 'triage'
+        ? {
+            of: 'triage' as const,
+            count: r.event.triage?.count ?? 0,
+            picked: r.event.triage?.picks?.length ?? 0,
+          }
+        : r.source === 'matter'
+          ? { of: 'matter' as const }
+          : {}),
+      title: r.summary.slice(0, 300),
+      at: r.startedAt.toISOString(),
+      state: r.state,
+      kind: r.kind,
+      threadRootId,
+      ...(inboxItemId ? { inboxItemId } : {}),
+      feedback: r.feedback,
+    };
+  });
 
   const matters = (await openMatters(services.db, burrowId)).slice(0, AHEAD_MATTERS_MAX).map(matterItem);
 
@@ -155,4 +170,18 @@ export const looksAheadRoutes: RouteDef[] = [
     const started = await checkAheadNow(services, access.burrow.id);
     return { started, view: await looksAheadView(services, access.burrow.id) };
   }),
+  route(api.looksAhead.promote, async (ctx) => {
+    const started = await commitAs(ctx, promoteAheadFinding, {
+      checkId: ctx.params.checkId,
+      ...(ctx.body.text ? { text: ctx.body.text } : {}),
+    });
+    return startedChatAnswer(ctx, started);
+  }),
+  route(api.looksAhead.feedback, async (ctx) =>
+    commitAs(ctx, aheadInboxFeedback, {
+      checkId: ctx.params.checkId,
+      verdict: ctx.body.verdict,
+      ...(ctx.body.reason ? { reason: ctx.body.reason } : {}),
+    }),
+  ),
 ];
