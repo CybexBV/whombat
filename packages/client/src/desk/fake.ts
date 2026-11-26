@@ -31,6 +31,7 @@ import {
   DESK_SCREEN_UNLOCK_IDLE_S,
   DESK_SCREEN_WORDS,
   DESK_SCREENS_MAX,
+  DESK_SPOTLIGHT_S,
   DESK_TRIES,
   DESK_TRY_S,
   DESK_VOICES,
@@ -63,7 +64,13 @@ import {
   type ScreenLock,
   type ScreenState,
 } from './contract';
-import { type FakeScreen, fakeCatalog, fakeScreensSeed, fakeViews } from './fakeScreens';
+import {
+  FAKE_DOORBELL_WIDGET,
+  type FakeScreen,
+  fakeCatalog,
+  fakeScreensSeed,
+  fakeViews,
+} from './fakeScreens';
 import {
   defaultFakeDeskWorld,
   type FakeDeskWorld,
@@ -151,6 +158,8 @@ export interface FakeDesk {
   screenCall(op: string, input: unknown, endpoint: string): { status: number; body: unknown };
   /** The six letters a device shows while it waits, by its endpoint; null when it doesn't. */
   displayLetters(endpoint: string): string | null;
+  /** Someone rings the doorbell: each screen whose choice is *Show it big* shows it for a minute. */
+  ringDoorbell(): void;
 }
 
 const LETTERS = ['KXQM', 'TRAW', 'HNVB', 'PDGY', 'CJEF'];
@@ -289,6 +298,8 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
   >();
   const unlocks = new Map<string, { until: number; wrong: number; retryAt: number }>();
   let trying: { screen: string; layout: DeskLayout; until: number } | null = null;
+  /** The doorbell rang: until when, and which ring (its moment's id). */
+  let ring: { until: number; n: number } | null = null;
 
   const live = <T extends { expiresAt: number }>(x: T | null): T | null =>
     x && x.expiresAt > now() ? x : null;
@@ -358,6 +369,7 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
       kind: x.kind,
       name: x.name,
       popups: x.popups,
+      doorbell: x.doorbell ?? 'big',
       size: x.size,
       pages: x.layout.pages.length,
       online: x.online,
@@ -395,6 +407,8 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
         return ok({
           screens: [...screens].sort((a, b) => ORDER[a.kind] - ORDER[b.kind]).map(summaryOf),
           canAdd: others() < DESK_SCREENS_MAX,
+          // The fake world has a doorbell (Home Assistant's front door).
+          doorbell: true,
         });
       case 'desk.screen.get': {
         const x = findScreen(input.screen);
@@ -413,6 +427,7 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
           // The box's own screen keeps the Whombat's name: a new one is ignored, as the runtime does.
           ...(parsed.data.name !== undefined && x.kind !== 'box' ? { name: parsed.data.name } : {}),
           ...(parsed.data.popups ? { popups: parsed.data.popups } : {}),
+          ...(parsed.data.doorbell ? { doorbell: parsed.data.doorbell } : {}),
           ...(parsed.data.layout ? { layout: parsed.data.layout } : {}),
         };
         screens = screens.map((y) => (y.id === x.id ? next : y));
@@ -540,10 +555,12 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
     const at = new Date(now());
     const t = trying && trying.screen === x.id && trying.until > now() ? trying : null;
     const layout = t ? t.layout : x.layout;
-    const views = fakeViews(w, deskLayoutWidgets(layout));
+    const rang = ring && ring.until > now() && (x.doorbell ?? 'big') === 'big' ? ring : null;
+    const views = fakeViews(w, [...(rang ? [FAKE_DOORBELL_WIDGET] : []), ...deskLayoutWidgets(layout)]);
     const body: Omit<ScreenState, 'etag' | 'now'> = {
       screen: { id: x.id, name: x.name, popups: x.popups },
       whombat: name ?? w.burrow,
+      timeZone: w.timeZone,
       lock,
       calm: view === 'time' ? null : deskCalmFor(fakeDeskCalmInput(w, show, 'now', at), show, view),
       grid:
@@ -556,6 +573,16 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
               attention: deskAttentionFor(fakeDeskCalmInput(w, show, 'now', at), show, view, x.popups),
               popups: x.popups,
               ...(t ? { trying: { until: iso(t.until) } } : {}),
+              ...(rang
+                ? {
+                    spotlight: {
+                      id: `ring_${rang.n}`,
+                      widget: FAKE_DOORBELL_WIDGET,
+                      until: iso(rang.until),
+                      reason: 'doorbell' as const,
+                    },
+                  }
+                : {}),
             },
     };
     // The clock's minute changes the drawing, so it's part of what “the same” means.
@@ -778,6 +805,10 @@ export function createFakeDesk(options: FakeDeskOptions = {}): FakeDesk {
     displayLetters: (endpoint) => {
       const d = displays.get(endpoint);
       return d && !d.screen && d.expiresAt > now() ? d.code : null;
+    },
+    ringDoorbell() {
+      ring = { until: now() + DESK_SPOTLIGHT_S * 1000, n: (ring?.n ?? 0) + 1 };
+      changed();
     },
   };
 }

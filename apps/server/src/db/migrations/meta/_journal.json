@@ -278,8 +278,15 @@
     {
       "idx": 39,
       "version": "7",
-      "when": 1795681511546,
-      "tag": "0039_weather_news",
+      "when": 1795679708191,
+      "tag": "0039_screen_doorbell",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795683376474,
+      "tag": "0040_weather_news",
       "breakpoints": true
     }
   ]

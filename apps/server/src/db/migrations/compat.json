@@ -244,7 +244,13 @@
       "writers": "0000_baseline",
       "note": "Looks ahead keeps an eye on matters (docs/decisions/looks-ahead.md): a new table ahead_matters cascading with the burrow, the person and the conversation, and one nullable text column on ahead_checks (matter_id, set null when its matter goes) with an index. The release before it never reads or writes the table and reads and writes ahead_checks past the column."
     },
-    "0039_weather_news": {
+    "0039_screen_doorbell": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "What a screen does when the doorbell rings (docs/decisions/desk-display.md): one text column on screens, 'big' by default, checked to 'big' or 'off'. The release before it reads past the column, and its inserts get the default."
+    },
+    "0040_weather_news": {
       "class": "expand",
       "readers": "0000_baseline",
       "writers": "0000_baseline",

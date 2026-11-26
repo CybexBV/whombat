@@ -52,6 +52,14 @@ exactly as their own tap would. Four tools:
 ### Notifications, the screen
 `settings_find` with their words, `settings_read` what it is now, `settings_change` what they asked. Name what changed.
 
+### A page on a screen (“make me a page for the media server”)
+1. `settings_read` `desk.screens` for the screen, then `desk.widgets` with `{screen}` (`thing` for one connection's
+   widgets only). Use its widgets as listed: `type`, `ref`, `opts`.
+2. `settings_change` `desk.screen.addPage` with `{screen, name, widgets: [{type, ref?, opts?, w?, h?}]}`, the most
+   important first; `show: {from, to, days?}` for a page at set times (“07:00”, `["mon", …]`). Six pages at most:
+   `replace` with a page's id takes its place.
+3. Say what is on the page, and name what didn't fit (`left`).
+
 ### A service's own settings (Plex and others)
 1. `settings_read` `things.page` with `{params: {thing: "connection:<id>"}}`. A service with settings of its own has a
    tab `service-settings` (“Plex settings”) whose `settings` panels list them: each row's `id`, its value in words,
@@ -86,7 +94,7 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 - `connections` Settings → Connections: your accounts (Google, Microsoft, mail), apps and services, and what needs you there
 - `overview` Overview: every server and service with its own page: how it is doing, what Whombat watches, its settings
 
-### This Whombat (the box) — `references/this-whombat.md` (124 settings)
+### This Whombat (the box) — `references/this-whombat.md` (125 settings)
 - `appliance.overview` Settings → This Whombat → Overview: how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail, where it is and its news
 - `appliance.backups` Settings → This Whombat → Backups: where the box backs up, when, and backup files
 - `appliance.screen` Settings → This Whombat → Screen: the box’s screen and other screens: what they show, the lock, night and Talk

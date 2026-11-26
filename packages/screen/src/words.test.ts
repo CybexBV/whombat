@@ -2,11 +2,13 @@ import {
   DESK_BOX_TONES,
   DESK_FIRST_PAGE_AFTER_S,
   DESK_SCREEN_WORDS,
+  DESK_SPOTLIGHT_S,
   DESK_TURN_S,
   NEWS_WORDS,
   WEATHER_WORDS,
 } from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
+import { SPOTLIGHT_S } from './forms';
 import { FIRST_PAGE_AFTER_S, TURN_S } from './pager';
 import { METER_TONES, SERVER_SHOW_VIEWS, SERVER_SHOWS, serverShow, sizeOf, VIEW_SIZES } from './specs';
 import {
@@ -29,6 +31,7 @@ describe('the screen’s words', () => {
     expect(SCREEN_WORDS.weather.noPlace).toBe(WEATHER_WORDS.noPlace);
     expect(SCREEN_WORDS.news.empty).toBe(NEWS_WORDS.widgetEmpty);
     expect(SCREEN_WORDS.news.problem).toBe(NEWS_WORDS.widgetProblem);
+    expect(SCREEN_WORDS.spotlight).toEqual(DESK_SCREEN_WORDS.spotlight);
   });
 
   it('colour a server’s meters at the box’s own tones', () => {
@@ -47,9 +50,10 @@ describe('the screen’s words', () => {
     expect(sizeOf({ type: 'server', opts: { show: 'temp' } })).toBe(VIEW_SIZES[SERVER_SHOW_VIEWS.temp]);
   });
 
-  it('turn pages at the contract’s pace', () => {
+  it('turn pages at the contract’s pace, and give a moment the contract’s minute', () => {
     expect(TURN_S).toEqual(DESK_TURN_S);
     expect(FIRST_PAGE_AFTER_S).toBe(DESK_FIRST_PAGE_AFTER_S);
+    expect(SPOTLIGHT_S).toBe(DESK_SPOTLIGHT_S);
   });
 
   it('fill their blanks and leave unknown ones', () => {

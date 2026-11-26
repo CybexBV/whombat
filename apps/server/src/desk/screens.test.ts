@@ -45,6 +45,7 @@ const row = (over: Partial<ScreenRow> = {}): ScreenRow => ({
   kind: 'output',
   name: 'DELL U2720Q',
   popups: 'problems',
+  doorbell: 'big',
   layout: NOT_ARRANGED,
   show: {},
   endpointId: null,

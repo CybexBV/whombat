@@ -45,6 +45,8 @@ export interface FakeScreen {
   device?: string;
   /** A device's endpoint (the fake's own id), so `screen.*` knows which screen asks. */
   endpoint?: string;
+  /** When the doorbell rings; `big` unless chosen. */
+  doorbell?: 'big' | 'off';
 }
 
 type Place = [
@@ -79,6 +81,13 @@ const SAB = 'connection:con_sab';
 const SEERR = 'connection:con_seerr';
 const SONARR = 'connection:con_sonarr';
 const HA = 'connection:con_ha';
+/** The fake world's doorbell: Home Assistant's front door camera, as a ring takes over a screen with it. */
+export const FAKE_DOORBELL_WIDGET = {
+  id: 'w_spotlight',
+  type: 'panel' as const,
+  ref: HA,
+  opts: { panel: 'front-door' },
+};
 const UNIFI = 'connection:con_unifi';
 const PIHOLE = 'connection:con_pihole';
 const SYNOLOGY = 'connection:con_synology';

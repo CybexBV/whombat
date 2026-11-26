@@ -6,6 +6,8 @@ import {
   FIXTURE_BOX_GRID_WRONG,
   FIXTURE_CALM,
   FIXTURE_CALM_WRONG,
+  FIXTURE_DOORBELL_GRID,
+  FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_KINDS_GRID,
   FIXTURE_MONITOR_GRID,
   FIXTURE_PHOTO_BOARD_VIEWS,
@@ -44,6 +46,11 @@ const both = {
     (x: Mine.DeskAttention): Core.DeskAttention => x,
   ],
   grid: [(x: Core.DeskGrid): Mine.DeskGrid => x, (x: Mine.DeskGrid): Core.DeskGrid => x],
+  show: [(x: Core.DeskPageShow): Mine.DeskPageShow => x, (x: Mine.DeskPageShow): Core.DeskPageShow => x],
+  spotlight: [
+    (x: Core.DeskSpotlight): Mine.DeskSpotlight => x,
+    (x: Mine.DeskSpotlight): Core.DeskSpotlight => x,
+  ],
   moment: [(x: Core.DeskMoment): Mine.DeskMoment => x, (x: Mine.DeskMoment): Core.DeskMoment => x],
   strip: [
     (x: Core.DeskStripServer): Mine.DeskStripServer => x,
@@ -75,6 +82,8 @@ describe('the fixtures', () => {
       FIXTURE_BOX_GRID_WRONG,
       FIXTURE_MONITOR_GRID,
       FIXTURE_TABLET_GRID,
+      FIXTURE_DOORBELL_GRID,
+      FIXTURE_DOORBELL_GRID_LOCKED,
     ]) {
       expect(Core.DeskGrid.safeParse(grid).error?.issues).toBeUndefined();
       expect(Core.deskLayoutProblem(grid.layout)).toBeNull();

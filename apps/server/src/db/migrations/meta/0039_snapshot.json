@@ -1,5 +1,5 @@
 {
-  "id": "8de77a66-e810-4676-ba45-e0d21b1e3ab1",
+  "id": "7064233c-80be-4380-a0fe-c128cab2489c",
   "prevId": "c5cc0c30-3a8f-49ba-9ee7-ba41c05f67f8",
   "version": "7",
   "dialect": "postgresql",
@@ -10785,6 +10785,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "doorbell": {
+          "name": "doorbell",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'big'"
+        },
         "layout": {
           "name": "layout",
           "type": "jsonb",
@@ -10916,6 +10923,10 @@
         "screens_popups": {
           "name": "screens_popups",
           "value": "\"screens\".\"popups\" IN ('all', 'problems', 'none')"
+        },
+        "screens_doorbell": {
+          "name": "screens_doorbell",
+          "value": "\"screens\".\"doorbell\" IN ('big', 'off')"
         },
         "screens_id": {
           "name": "screens_id",
@@ -23178,18 +23189,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "place": {
-          "name": "place",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "news": {
-          "name": "news",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

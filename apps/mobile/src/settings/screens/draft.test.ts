@@ -15,6 +15,7 @@ import {
   draftNudge,
   draftOf,
   draftPage,
+  draftPageShow,
   draftRemove,
   draftRenamePage,
   draftResize,
@@ -190,6 +191,16 @@ describe('the phone’s layout draft', () => {
     let one = draftGoPage(full, 0);
     while (one.layout.pages.length > 1) one = ok(draftDeletePage(one, 0)).draft;
     expect(draftDeletePage(one, 0)).toEqual({ ok: false, why: 'lastPage' });
+  });
+
+  it('shows a page at set times, refuses one without a day, and Undo takes it back', async () => {
+    const d = draftOf(await boxScreen());
+    const timed = draftPageShow(d, 1, { from: '18:00', to: '23:00', days: ['fri', 'sat'] });
+    expect(timed?.layout.pages[1]?.show).toEqual({ from: '18:00', to: '23:00', days: ['fri', 'sat'] });
+    expect(timed && draftDirty(timed)).toBe(true);
+    expect(draftPageShow(d, 1, { from: '18:00', to: '23:00', days: [] })).toBeNull();
+    expect(draftPageShow(d, 1, null)).toBe(d);
+    expect(timed && draftUndo(timed)?.layout.pages[1]?.show).toBeUndefined();
   });
 
   it('rearranges for another Size and keeps what didn’t fit once the rearranged page is changed', async () => {

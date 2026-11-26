@@ -1,7 +1,8 @@
 /**
  * A screen's own page on the phone (Whombat desk-display.md DK-128, DK-137, DK-146, DK-147; desk-display-android.md
  * AP-6004…AP-6008), from Settings → Screens: what it is under its name; its name to change (not the box's own: it has
- * the Whombat's); *Edit layout* with its pages and grid; *What pops up* (the three, saved at once). The box's own screen
+ * the Whombat's); *Edit layout* with its pages and grid; *What pops up* (the three, saved at once); *When the doorbell
+ * rings* (Show it big or Don't, where the Whombat follows a doorbell). The box's own screen
  * keeps what the older *Screen* page had beyond the layout — the unlock request, *Show Whombat on this screen* and its
  * pairing, and as tabs *Top bar* (with *Welcome back* and *Done today*), *Lock and PIN*, *Night* and *Talk*
  * (`?part=night` opens one). A screen elsewhere ends with *Remove*, a monitor on the box with forgetting its layout,
@@ -9,9 +10,12 @@
  */
 import { type RouteProp, useRoute } from '@react-navigation/native';
 import {
+  DESK_DOORBELL,
+  DESK_SCREEN_WORDS,
   DESK_SCREENS_TEXT,
   DESK_WORDS,
   type DeskApi,
+  type DeskDoorbell,
   type DeskPopups,
   type DeskScreenDetail,
   type DeskShowPatch,
@@ -21,7 +25,13 @@ import {
   fillDeskWords,
   screensErrorText,
 } from '@whombat/client/desk';
-import { useDesk, useDeskActions, useDeskScreen, useDeskScreenActions } from '@whombat/client/desk/react';
+import {
+  useDesk,
+  useDeskActions,
+  useDeskScreen,
+  useDeskScreenActions,
+  useDeskScreens,
+} from '@whombat/client/desk/react';
 import { useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
@@ -97,6 +107,10 @@ function ScreenParts({
   });
   const box = screen.kind === 'box';
   const setPopups = (popups: DeskPopups) => void actions.update({ screen: screen.id, popups }).catch(failed);
+  // Only where the Whombat follows a doorbell, and the box says what this screen does.
+  const doorbell = useDeskScreens(api).data?.doorbell === true ? (screen.doorbell ?? null) : null;
+  const setDoorbell = (next: DeskDoorbell) =>
+    void actions.update({ screen: screen.id, doorbell: next }).catch(failed);
   return (
     <>
       <Text size={14} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6, marginTop: -12 }}>
@@ -127,6 +141,20 @@ function ScreenParts({
           {fillDeskWords(P.popupsHint[screen.popups], { assistant })}
         </Text>
       </View>
+      {doorbell ? (
+        <View style={{ gap: 8 }}>
+          <SectionLabel>{P.doorbell.toUpperCase()}</SectionLabel>
+          <Segmented<DeskDoorbell>
+            options={DESK_DOORBELL.map((value) => ({ value, label: DESK_SCREEN_WORDS.doorbell[value] }))}
+            value={doorbell}
+            onChange={setDoorbell}
+            label={P.doorbell}
+          />
+          <Text size={13} lh={1.4} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
+            {P.doorbellHint[doorbell]}
+          </Text>
+        </View>
+      ) : null}
       {box ? <BoxParts api={api} asked={part} /> : <RemoveCard api={api} screen={screen} />}
     </>
   );

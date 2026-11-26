@@ -7,6 +7,7 @@ import type {
   DeskCalm,
   DeskCalmView,
   DeskCatalogGroup,
+  DeskDoorbell,
   DeskGrid,
   DeskLayout,
   DeskPopups,
@@ -55,6 +56,8 @@ export interface ScreenRecord {
   kind: DeskScreenKind;
   name: string;
   popups: DeskPopups;
+  /** When the doorbell rings. */
+  doorbell: DeskDoorbell;
   layout: DeskLayout;
   show: DeskShow;
   endpointId: string | null;
@@ -89,6 +92,8 @@ export interface ScreensApi {
   seen(id: string, size: DeskScreenSize, at: Date): Promise<void>;
   /** What the screen draws now for what the lock lets show: the calm glance and its grid. */
   draw(screen: ScreenRecord, view: DeskCalmView): Promise<{ calm: DeskCalm; grid: DeskGrid }>;
+  /** The time zone of the person the screen is drawn for (their own, else the Whombat's); null without one. */
+  timeZone?(screen: ScreenRecord): Promise<string | null>;
   /** A picture one of the screen's widgets names, if it may show it now; null otherwise (always the same refusal). */
   picture(
     screen: ScreenRecord,

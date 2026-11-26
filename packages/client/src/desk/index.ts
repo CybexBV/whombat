@@ -9,4 +9,5 @@ export * from './catalog';
 export * from './contract';
 export * from './editor';
 export * from './model';
+export * from './pageTimes';
 export * from './screens';

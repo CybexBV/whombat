@@ -42,6 +42,10 @@ describe('classifyProviderFailure', () => {
     ['API Error: Connection error. (ECONNRESET)', 'provider_outage'],
     ['unexpected status 503 Service Unavailable', 'provider_outage'],
     ['spawn codex ENOENT', 'provider_missing'],
+    ['spawn /opt/claude ENOENT', 'provider_missing'],
+    // The pod's refusal of a folder it can't see is no missing provider.
+    ['the turn’s folder: not there (ENOENT)', null],
+    ["ENOENT: no such file or directory, open '/x/config.yaml'", null],
     [
       'Claude Code executable not found at /opt/claude. Is options.pathToClaudeCodeExecutable set?',
       'provider_missing',

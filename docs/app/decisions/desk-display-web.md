@@ -250,7 +250,22 @@ AP-3300), changes what a locked screen shows, and unlocks it from the notice tha
 
 The screen's voice (AP-3400…AP-3409), the same way: see AP-3409. Shots: `~/.cache/wb-tmp/voice-web-shots/`.
 
+## Pages by time, a page by the assistant, the doorbell (2026-11-26)
+
+Whombat desk-display.md DK-180…DK-188. Code: `features/screens/editor/ScreenEditor.tsx` (`PageTabs`,
+`PageTimesDialog`), `useScreenEditor.ts`, `ScreensTab.tsx`, `screenMode/ScreenMode.tsx`; the rules and words in
+`@whombat/client/desk` (`pageTimes.ts`, `DESK_SCREENS_TEXT`).
+
+| Id | Decision | Why |
+|---|---|---|
+| AP-9990 | **The page menu has *Show at set times…*** after *Rename*: a dialog with From and To (time fields), the seven days as toggles (all on at first), the person's zone under them, *Always* when the page has times, *Cancel* and *Show at these times*. A window without a day says so in the dialog and stays open; saving says when the page shows (“Morning shows Weekdays, 07:00–09:00.”); Undo takes it back. | The quiet hours' own fields and toggles, so it reads the same. |
+| AP-9991 | **A page tab with times shows a small clock and its hours** (12 px, tabular figures, the muted colour): “07:00–09:00”, a whole day its days (“Weekends”) or “All day”; its title says when in full. | Which pages come and go, at a glance. |
+| AP-9992 | **The page menu is drawn above the screen**: its wrapper is lifted over the canvas, which covered it. | The menu's lower items were under the screen. |
+| AP-9993 | ***Ask {assistant}*** beside *+ Page* (a chat icon, the brand colour) puts “Make a page on the {screen} screen that shows ” in Chat's box and opens Chat's new chat, as *Talk about it* does; with changes not saved it asks first. | The person finishes the request in their own words. |
+| AP-9994 | **“When the doorbell rings”** on a screen's page under *What pops up*: *Show it big* · *Don’t* with a line saying what it does, only where the list says the Whombat follows a doorbell and the screen says its choice. Screen mode draws in the zone the Whombat sends, else the device's. | The row means nothing without a doorbell. |
+
 ## Release
+
 
 Released as **whombat-app 0.103.0** (`app-v0.103.0`), with contracts 0.100.0 (Whombat desk-display.md DK-01…DK-15).
 

@@ -79,6 +79,8 @@ export const SCREEN_WORDS = {
   ago: { now: 'just now', min: '{n} min', hour: '{n} h', hourMin: '{h} h {m} min', day: '{n} d' },
   back: 'Back',
   trying: 'Trying a layout from Settings · {s} s',
+  /** A widget taking over for a moment, by why (the contract's `DESK_SCREEN_WORDS.spotlight`). */
+  spotlight: { doorbell: 'Someone’s at the door' },
   pages: 'Pages',
   page: '{name}, page {i} of {n}',
   editing: { empty: 'An empty page.', emptyMore: 'Drag widgets here, or press + on one.' },

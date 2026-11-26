@@ -931,6 +931,58 @@ change: everything is the apps' and the shared rules' (`@whombat/client/desk` `c
   aside, and it's what people mean when they drop one widget on another.
 - **DK-168 The keys behind *?*.** On the web the keys line under the screen is a small *?* (*Keys*) that opens them,
   with swapping and *Tidy up*. *Why:* the line was long and read once.
+
+## Pages by time, pages by {assistant}, the doorbell (2026-11-26)
+
+John, 2026-11-26, choosing from the research's ideas for the screens: “I like … 1, 3, 4 from the screen itself section”
+— pages by time of day, asking {assistant} to make a page, and moments that take over the screen (the doorbell first).
+Session protocol minor 15 (`SCREEN_TIMES_MINOR`). Runtime decisions `desk-display-server.md` DK-S300…DK-S308, web
+`desk-display-web.md` AP-9990…AP-9994, phone `desk-display-android.md` AP-9995…AP-9998.
+
+- **DK-180 A page can show only at set times.** A page's `show` is a window in the person's time zone: from, to and the
+  days (every day unless chosen). A window past midnight belongs to the day it starts (22:00–06:00 on Friday runs into
+  Saturday morning), and the same time twice is the whole day, as quiet hours. Outside its window a page is out of the
+  turning and the top bar doesn't name it; a page without a window always shows. *Why:* John chose it: a *Morning* page
+  from 07:00 to 09:00 on weekdays, a clock-only page at night.
+- **DK-181 A window opening takes the screen there.** When a page's window opens, the screen goes to it once, and
+  waits 30 seconds after the last touch so it never turns under someone's finger. Untouched for a while, the screen
+  goes back to its home: the first page whose window is open now, else the first page without one. With no page in the
+  turning, the first page shows; a screen is never blank. *Why:* in the morning the morning page is the screen's home.
+- **DK-182 Every screen keeps the person's clock.** A screen elsewhere is told the person's time zone (their own, else
+  the Whombat's) with its state and draws its clock and its windows in it; the box's own screen already had it. *Why:*
+  a tablet in another zone, or set wrong, would turn pages at the wrong hour.
+- **DK-183 The editor sets the times.** The page menu on the web and THIS PAGE on the phone have *Show at set times…*:
+  From, To and the seven days (all on at first), in the person's zone; *Always* takes the times away; Undo works. A page
+  with times shows a small clock and its hours on its tab (“07:00–09:00”). An app from before minor 15 that saves a
+  layout keeps each page's stored times. *Why:* the person sees which pages come and go, and an older phone must not
+  lose them.
+- **DK-184 {assistant} makes a page when asked.** “Make me a page for the media server” goes to `desk.screen.addPage`,
+  which the assistant may use as a change on Settings → Screen: it names the widgets from *Add a widget*'s list in the
+  order that matters, each with the size it would like. Whombat puts them on a new page on the screen's shape, each at
+  its size within its limits, at the first free place in reading order, smaller when it must; what still doesn't fit,
+  or isn't a widget this Whombat offers, is left out and named in the answer, so {assistant} can say so. A screen keeps
+  six pages: a seventh only takes another's place. *Why:* John chose it; the assistant already knows every widget.
+- **DK-185 *Ask {assistant}* beside *+ Page*.** The editor's button opens Chat (on the phone, the new-thread sheet) with
+  “Make a page on the {screen} screen that shows ” ready to finish. *Why:* the request is the person's words; the editor
+  only starts it.
+- **DK-186 The doorbell takes over the screen for a minute.** When a UniFi Protect doorbell rings, every screen whose
+  choice says so shows the doorbell's camera big over its dashboard, with “Someone’s at the door” and *Back* in the top
+  bar and a thin line under it running down the minute. *Back* hides it on that screen until the next ring; a new ring
+  starts the minute again; the modal waits while it shows. A locked screen shows what the lock allows: the camera's
+  locked form, no picture; *Only the time* shows nothing. Home Assistant's doorbells wait: Whombat doesn't follow its
+  events yet. *Why:* John chose it; the doorbell is the moment a wall screen is for.
+- **DK-187 Each screen chooses.** Settings → Screens → a screen: “When the doorbell rings: Show it big · Don’t”, *Show
+  it big* on every screen at first, offered where the Whombat has a working UniFi Protect connection. *Why:* a bedroom
+  monitor may not want it; the setting means nothing without a doorbell.
+- **DK-188 Older apps keep working.** A page's `show`, `desk.screen.addPage`, a screen's `doorbell`, a grid's
+  `spotlight` and a screen's `timeZone` came with session minor 15; an older app ignores them, and the box keeps the
+  page times its layouts leave out (DK-183). *Why:* a phone that updates a day later shouldn't undo the times.
+
+## The weather and the news (2026-11-26)
+
+weather-news.md WN-08, WN-09; runtime rows `desk-display-server.md` DK-S320…DK-S322. Session protocol minor 16
+(`WEATHER_NEWS_MINOR`): an older app doesn't see these two widgets, and the box keeps them when it saves a layout.
+
 - **DK-200 *Weather*.** One of Whombat's own widgets (weather-news.md): the forecast where this Whombat is, from one
   cell (its symbol and temperature) to eight by four (the next hours and the days ahead), its own `weather` view; every
   form with room says “Data from MET Norway”. Without a place it says “Choose where this Whombat is in Settings”, and

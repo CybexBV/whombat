@@ -142,6 +142,7 @@ export const BOX_SETTINGS = {
   'desk.pair': never('appliance.screen', 'Pair a screen (it needs a code)'),
   'desk.preview': read('appliance.screen', 'Preview what the screen will show'),
   'desk.screen.add': never('appliance.screen', 'Add a screen (it needs a code)'),
+  'desk.screen.addPage': change('appliance.screen', 'Make a new page of widgets on a screen'),
   'desk.screen.get': read('appliance.screen', 'Read one screen and what it shows'),
   'desk.screen.remove': ask('appliance.screen', 'Remove a screen'),
   'desk.screen.try': change('appliance.screen', 'Try a layout on a screen'),

@@ -202,7 +202,20 @@ select which view we want for this widget, rather than selecting it from a long 
 | AP-9985 | ***Tidy up*** in THIS PAGE, under its name (off on an empty page): `draftTidy`, one Undo step, “Tidied up.” with Undo in the toast or “Already tidy.” | DK-166. |
 | AP-9986 | **Checks.** `draft.test.ts` (an arrow swapping and refused, choosing for an account and figures ↔ panel, a shape, *Tidy up* and Undo), `tiles.test.ts` (rows per service in the demo world, a part found by a search, *On this page* by any view, what adding a row remembers, accounts' rows and their *What it shows*); the touch-target audit counts the tiles, the shapes and the options; the reading-order audit holds (no absolute badge). Not checked on a device in this change. | The logic is tested; the layout follows the Overview's sheet. |
 
+## Pages by time, a page by the assistant, the doorbell (2026-11-26)
+
+Whombat desk-display.md DK-180…DK-188; the web's AP-9990…AP-9994. Code: `settings/screens/PageTimes.tsx`,
+`LayoutEditor.tsx`, `draft.ts` (`draftPageShow`), `ScreenPage.tsx`.
+
+| Id | Decision | Why |
+|---|---|---|
+| AP-9995 | **THIS PAGE has *Show at set times…*** under the name, with when the page shows under it: a sheet with From and To (`ClockField`, iOS's own picker on the iPhone), the seven days as toggles (36 dp, slop to 44), the person's zone, *Show at these times* and *Always* when the page has times. A window without a day says so in the sheet; saving toasts when it shows, with Undo. | The quiet hours' fields, as on the web. |
+| AP-9996 | **A page chip with times shows a small clock and its hours** (mono 12) after its name; a screen reader hears when in full. | As the web's tab. |
+| AP-9997 | ***Ask {assistant}*** chip beside *+ Page* opens the new-thread sheet, titled *Ask {assistant}*, with “Make a page on the {screen} screen that shows ” to finish; sending starts the thread in Chat and opens it. | The phone's way to start a thread with words ready. |
+| AP-9998 | **WHEN THE DOORBELL RINGS** on a screen's page under its pop-ups: *Show it big* · *Don’t* and a line, shown as on the web. | Same rule as the web. |
+
 ## Release
+
 
 Released as **whombat-app 0.103.0** (`app-v0.103.0`), with contracts 0.100.0 (Whombat desk-display.md DK-01…DK-15).
 

@@ -11,6 +11,8 @@ import {
   FIXTURE_BOX_LAYOUT,
   FIXTURE_CALM,
   FIXTURE_CALM_WRONG,
+  FIXTURE_DOORBELL_GRID,
+  FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_KINDS_GRID,
   FIXTURE_MONITOR_GRID,
   FIXTURE_NAME,
@@ -427,6 +429,9 @@ export const SHOTS: Record<string, () => ReactNode> = {
       { page: 1 },
     ),
   'f-kinds': () => box(FIXTURE_KINDS_GRID),
+  /** The doorbell rang: its camera big for a minute, 40 seconds left; and the same on a locked screen. */
+  'f-doorbell': () => box(FIXTURE_DOORBELL_GRID),
+  'f-doorbell-locked': () => box(FIXTURE_DOORBELL_GRID_LOCKED),
   /** The console's widest top bar: the pages move out of the chips' way. */
   'f-wide-chips': () =>
     box(FIXTURE_BOX_GRID_WRONG, {

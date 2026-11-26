@@ -109,6 +109,8 @@ export const screens = pgTable(
     kind: text('kind').$type<'box' | 'output' | 'device'>().notNull(),
     name: text('name').notNull(),
     popups: text('popups').$type<'all' | 'problems' | 'none'>().notNull(),
+    /** When the doorbell rings (desk-display.md): `big` shows it big for a minute, `off` doesn't. */
+    doorbell: text('doorbell').$type<'big' | 'off'>().notNull().default('big'),
     /** `DeskLayout` (core), read through it: a bad or older value reads as the default layout. */
     layout: jsonb('layout').notNull(),
     /** `DeskShow` (core), only what the person changed; unused for the box's own (`desk_screens.show`). */
@@ -130,6 +132,7 @@ export const screens = pgTable(
     uniqueIndex('screens_endpoint_idx').on(t.endpointId),
     check('screens_kind', sql`${t.kind} IN ('box', 'output', 'device')`),
     check('screens_popups', sql`${t.popups} IN ('all', 'problems', 'none')`),
+    check('screens_doorbell', sql`${t.doorbell} IN ('big', 'off')`),
     check('screens_id', sql`${t.id} ~ '^(box|out_[a-z0-9-]{1,40}|scr_[A-Za-z0-9_-]{8,40})$'`),
     check('screens_size', sql`(${t.width} IS NULL) = (${t.height} IS NULL)`),
   ],

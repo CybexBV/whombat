@@ -7,6 +7,8 @@
  * places; any other taken spot says so in red and nothing is pushed aside. The keys are behind *?* under the screen.
  * Changes are a draft until *Save*; *Try on the screen* shows the draft there for a minute; *Undo* goes back a step.
  */
+
+import { toggleDay, WEEKDAY_LABELS } from '@whombat/client';
 import {
   DESK_SCREEN_WORDS,
   DESK_SCREENS_TEXT,
@@ -15,6 +17,7 @@ import {
   DESK_WORDS,
   type DeskApi,
   type DeskCatalogItem,
+  type DeskPageShow,
   type DeskScreen,
   type DeskScreenDetail,
   type DeskWidget,
@@ -28,7 +31,10 @@ import {
   fillDeskWords,
   gridText,
   moveSpot,
+  PAGE_TIMES_DEFAULT,
+  pageHoursText,
   pagesText,
+  pageWhenText,
   screensErrorText,
   screenWhat,
   widgetSize,
@@ -41,10 +47,11 @@ import {
   useDeskScreenViews,
   useDeskWidgets,
 } from '@whombat/client/desk/react';
-import { useTheAgent } from '@whombat/client/react';
+import { useChatRooms, useTheAgent } from '@whombat/client/react';
+import { WEEKDAY_KEYS } from '@whombat/core';
 import { cellAt, cellRect, GAP, type Grid } from '@whombat/screen';
 import { Screen, WidgetBox } from '@whombat/screen/react';
-import { ChevronLeft, MoreHorizontal, X } from 'lucide-react';
+import { ChevronLeft, Clock, MessageCircle, MoreHorizontal, X } from 'lucide-react';
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -56,6 +63,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useNavigateHref } from '../../../app/routing/navigation';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
@@ -65,6 +73,7 @@ import { Modal, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
 import { useDeskHere } from '../../desk/useDeskHere';
+import { draftKey, writeDraft } from '../../messaging/drafts';
 import { NO_ATTENTION, useScreenImages } from '../drawing';
 import s from '../Screens.module.css';
 import e from './Editor.module.css';
@@ -390,6 +399,8 @@ function Editor({
 
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  // Where Leave goes: back to the screen's page, or Chat (*Ask {assistant}*).
+  const away = useRef(onBack);
   const save = () => {
     if (draftProblem(draft, viewOf)) return say(DESK_WORDS.errors.bad_layout);
     setSaving(true);
@@ -408,7 +419,24 @@ function Editor({
       .then(() => say(E.trying))
       .catch((error) => say(screensErrorText(error)));
   };
-  const leave = () => (ed.dirty ? setLeaving(true) : onBack());
+  const leave = (to: () => void = onBack) => {
+    away.current = to;
+    if (ed.dirty) setLeaving(true);
+    else to();
+  };
+  // *Ask {assistant}* next to *+ Page*: Chat opens with a request to finish, as Automations' “Talk about it” does.
+  const rooms = useChatRooms(burrow);
+  const navigate = useNavigateHref();
+  const askPage = rooms.chat
+    ? () => {
+        const chat = rooms.chat;
+        leave(() => {
+          if (chat)
+            writeDraft(draftKey(burrow, chat.id), fillDeskWords(E.askPageDraft, { screen: screen.name }));
+          navigate('/chat?new=1');
+        });
+      }
+    : null;
   useEffect(() => {
     if (!ed.dirty) return;
     const stay = (ev: BeforeUnloadEvent) => ev.preventDefault();
@@ -435,7 +463,7 @@ function Editor({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the editor's keys (Undo, and the chosen widget's arrows) */}
       <div className={e.editor} onKeyDown={onKeyDown}>
         <header className={e.head}>
-          <button type="button" className={s.back} onClick={leave}>
+          <button type="button" className={s.back} onClick={() => leave()}>
             <Icon icon={ChevronLeft} size={15} />
             {T.back}
           </button>
@@ -456,7 +484,13 @@ function Editor({
         </header>
 
         <div className={e.toolbar}>
-          <PageTabs ed={ed} say={say} />
+          <PageTabs
+            ed={ed}
+            say={say}
+            timeZone={timeZone}
+            askLabel={askPage ? fillDeskWords(E.askPage, { assistant }) : null}
+            onAsk={askPage}
+          />
           <Button variant="ghost" size="sm" onClick={() => say(ed.tidy())} disabled={ed.widgets.length === 0}>
             {E.tidy}
           </Button>
@@ -651,7 +685,7 @@ function Editor({
             variant="primary"
             onClick={() => {
               setLeaving(false);
-              onBack();
+              away.current();
             }}
           >
             {E.leave}
@@ -858,11 +892,27 @@ function KeysHint() {
   );
 }
 
-/** The pages along the top, *+ Page*, and the open page's menu (rename, move, delete). */
-function PageTabs({ ed, say }: { ed: ScreenEditor; say: (text: string | null) => void }) {
+/**
+ * The pages along the top (a page at set times with a clock and its hours), *+ Page* and *Ask {assistant}*, and the open
+ * page's menu (rename, set times, move, delete).
+ */
+function PageTabs({
+  ed,
+  say,
+  timeZone,
+  askLabel,
+  onAsk,
+}: {
+  ed: ScreenEditor;
+  say: (text: string | null) => void;
+  timeZone: string;
+  askLabel: string | null;
+  onAsk: (() => void) | null;
+}) {
   const { draft, page } = ed.state;
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [timing, setTiming] = useState<number | null>(null);
   const current = draft.pages[page];
   return (
     <div className={e.pages} role="tablist" aria-label="Pages">
@@ -873,9 +923,16 @@ function PageTabs({ ed, say }: { ed: ScreenEditor; say: (text: string | null) =>
             role="tab"
             aria-selected={i === page}
             className={cx(e.pageButton, i === page && e.pageOn)}
+            title={p.show ? fillDeskWords(E.times.label, { when: pageWhenText(p.show) }) : undefined}
             onClick={() => ed.setPage(i)}
           >
             {p.name}
+            {p.show ? (
+              <span className={e.pageHours}>
+                <Icon icon={Clock} size={11} />
+                {pageHoursText(p.show)}
+              </span>
+            ) : null}
           </button>
           {i === page ? (
             <span className={e.pageMenuWrap}>
@@ -900,6 +957,16 @@ function PageTabs({ ed, say }: { ed: ScreenEditor; say: (text: string | null) =>
                     }}
                   >
                     {E.rename}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenu(false);
+                      setTiming(i);
+                    }}
+                  >
+                    {E.showAt}
                   </button>
                   <button
                     type="button"
@@ -944,6 +1011,28 @@ function PageTabs({ ed, say }: { ed: ScreenEditor; say: (text: string | null) =>
       <button type="button" className={cx(e.pageButton, e.addPage)} onClick={() => say(ed.addPage())}>
         {E.addPage}
       </button>
+      {askLabel && onAsk ? (
+        <button type="button" className={cx(e.pageButton, e.askPage)} onClick={onAsk}>
+          <Icon icon={MessageCircle} size={14} />
+          {askLabel}
+        </button>
+      ) : null}
+      <PageTimesDialog
+        key={timing ?? 'closed'}
+        name={timing === null ? '' : (draft.pages[timing]?.name ?? '')}
+        show={timing === null ? null : (draft.pages[timing]?.show ?? null)}
+        timeZone={timeZone}
+        open={timing !== null}
+        onClose={() => setTiming(null)}
+        onSave={(show) => {
+          if (timing === null) return null;
+          const r = ed.setPageShow(timing, show);
+          if (!r.ok) return r.text;
+          say(r.text);
+          setTiming(null);
+          return null;
+        }}
+      />
       <Modal open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
         <form
           onSubmit={(ev) => {
@@ -977,5 +1066,122 @@ function PageTabs({ ed, say }: { ed: ScreenEditor; say: (text: string | null) =>
         </form>
       </Modal>
     </div>
+  );
+}
+
+/**
+ * *Show at set times…*: From and To, the seven days (all on unless chosen), in the person's zone; *Always* takes the
+ * times away. A window without a day says so and stays open.
+ */
+function PageTimesDialog({
+  name,
+  show,
+  timeZone,
+  open,
+  onClose,
+  onSave,
+}: {
+  name: string;
+  show: DeskPageShow | null;
+  timeZone: string;
+  open: boolean;
+  onClose: () => void;
+  /** Saves the times (null: always); the words of a refusal, else null. */
+  onSave: (show: DeskPageShow | null) => string | null;
+}) {
+  const id = useId();
+  const start = show ?? PAGE_TIMES_DEFAULT;
+  const [from, setFrom] = useState(start.from);
+  const [to, setTo] = useState(start.to);
+  const [days, setDays] = useState<string[]>(start.days ?? [...WEEKDAY_KEYS]);
+  const [note, setNote] = useState<string | null>(null);
+  const valid = (t: string) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t);
+  return (
+    <Modal open={open} onOpenChange={(o) => !o && onClose()}>
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          if (!valid(from) || !valid(to)) return;
+          setNote(onSave({ from, to, days: WEEKDAY_KEYS.filter((d) => days.includes(d)) }));
+        }}
+      >
+        <ModalTitle className={s.dialogTitle}>{E.times.title}</ModalTitle>
+        <p className={s.dialogLine}>
+          <b>{name}</b> · {E.times.line}
+        </p>
+        <div className={e.timesRow}>
+          <label className={e.timesLabel} htmlFor={`${id}-from`}>
+            {E.times.from}
+          </label>
+          <Input
+            id={`${id}-from`}
+            type="time"
+            className={e.clockInput}
+            value={from}
+            required
+            onChange={(ev) => setFrom(ev.target.value)}
+          />
+          <label className={e.timesLabel} htmlFor={`${id}-to`}>
+            {E.times.to}
+          </label>
+          <Input
+            id={`${id}-to`}
+            type="time"
+            className={e.clockInput}
+            value={to}
+            required
+            onChange={(ev) => setTo(ev.target.value)}
+          />
+        </div>
+        <div className={e.timesRow}>
+          <span className={e.timesLabel} id={`${id}-days`}>
+            {E.times.on}
+          </span>
+          {/* biome-ignore lint/a11y/useSemanticElements: a group of toggle buttons, not form fields */}
+          <div className={e.days} role="group" aria-labelledby={`${id}-days`}>
+            {WEEKDAY_KEYS.map((day) => (
+              <button
+                key={day}
+                type="button"
+                className={e.day}
+                aria-pressed={days.includes(day)}
+                aria-label={WEEKDAY_LABELS[day].long}
+                onClick={() => {
+                  setNote(null);
+                  setDays((d) => toggleDay(d as (typeof WEEKDAY_KEYS)[number][], day));
+                }}
+              >
+                {WEEKDAY_LABELS[day].short}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className={e.timesHint}>{fillDeskWords(E.times.zone, { zone: timeZone })}</p>
+        {note ? (
+          <p className={e.timesNote} role="alert">
+            {note}
+          </p>
+        ) : null}
+        <div className={cx(s.dialogButtons, e.timesButtons)}>
+          {show ? (
+            <Button
+              variant="ghost"
+              className={e.timesAlways}
+              onClick={() => {
+                onSave(null);
+              }}
+            >
+              {E.times.always}
+            </Button>
+          ) : null}
+          <Button variant="ghost" onClick={onClose}>
+            {T.addDialog.cancel}
+          </Button>
+          <Button variant="primary" type="submit">
+            {E.times.save}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
