@@ -27,6 +27,8 @@ export interface CheckSeen {
   docs: Map<string, string>;
   /** It searched or read mail, files or docs: the web is closed for the rest of the check. */
   mailRead: boolean;
+  /** It was given a forecast or read one (weather-news.md): `{ weather: true }` may be a finding's source. */
+  weather: boolean;
   searches: number;
   pages: number;
   at: number;
@@ -58,6 +60,7 @@ export function seenOf(services: Services, dispatchId: string): CheckSeen {
       files: new Map(),
       docs: new Map(),
       mailRead: false,
+      weather: false,
       searches: 0,
       pages: 0,
       at: now,

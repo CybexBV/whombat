@@ -27,6 +27,8 @@ const OWN_VIEWS: Partial<Record<DeskWidgetType, DeskCatalogItem['view']>> = {
   work: 'list',
   coming: 'list',
   done: 'list',
+  weather: 'weather',
+  news: 'list',
 };
 
 const line = (text: string | null | undefined, fallback: string) => screenText(text, 120) || fallback;

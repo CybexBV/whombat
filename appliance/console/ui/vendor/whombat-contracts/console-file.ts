@@ -12,7 +12,8 @@
  *   box's measurements (CT-334): `POST /v1/host/metrics`; its hardware and
  *   network (0.102, CT-573): `POST /v1/host/hardware`, `POST /v1/network/state`, `POST /v1/network/wifi/scan|join|forget`;
  *   Tailscale (1.0, CT-1255): `POST /v1/tailscale/state|on|off|sign-in|cert`; its other devices (3.11, CT-1635):
- *   `POST /v1/tailscale/peers`; the own address (4.3, `own-address.ts`): `POST /v1/own-address/state|register|cert|ct`,
+ *   `POST /v1/tailscale/peers`; the own address (4.3, `own-address.ts`): `POST /v1/own-address/state|register|cert|ct`
+ *   and (4.16) `check|rename`,
  *   `POST /v1/runtime/account/link-lookup|link`, `POST /v1/backup/kit-credentials`; Whombat Link (4.4, `link.ts`):
  *   `POST /v1/link/state|on|off`, `POST /v1/update/channel`, `/v1/update/channel/set`,
  *   `POST /v1/runtime/push/register|unregister`.
@@ -117,6 +118,13 @@ export const MANAGER_PATHS = {
    * release waiting for it. 409 `not_waiting` when no update waits for the owner or another release does.
    */
   updateApprove: '/v1/update/approve',
+  /**
+   * Runtime (the owner's “Check for updates”, 4.19; Whombat check-for-updates.md), and root and the manager's own user
+   * (`whombat-manager check`): `UpdateCheckRequest` → `UpdateCheckResponse`. The manager looks for a newer release now
+   * instead of at its next hourly look, and offers one it finds as any. 502 `control_refused` / 503 `unavailable` when
+   * the release list or control can't be read; an older manager answers 404.
+   */
+  updateCheck: '/v1/update/check',
   /** Lock holders (the backup service). */
   lock: '/v1/maintenance/lock',
   unlock: '/v1/maintenance/unlock',
@@ -167,6 +175,18 @@ export const MANAGER_PATHS = {
   sharePut: '/v1/runtime/shares/put',
   shareDelete: '/v1/runtime/shares/delete',
   shareViews: '/v1/runtime/shares/views',
+  /**
+   * Runtime (Whombat team-reports.md): the device ops `team.reports.list`, `.get`, `.create`, `.reply` and `.act`,
+   * bodies and answers exactly theirs; the manager signs and forwards them and answers control's body. It accepts
+   * request bodies up to 64 KiB and control's answers up to `TEAM_PAYLOAD_ANSWER_MAX_BYTES` and a little. While control
+   * is unreachable: 503 `LocalError{code: 'control_unreachable'}`; control's refusals as for shares (502
+   * `control_refused`, its code first in the message).
+   */
+  teamReportsList: '/v1/runtime/team-reports/list',
+  teamReportsGet: '/v1/runtime/team-reports/get',
+  teamReportsCreate: '/v1/runtime/team-reports/create',
+  teamReportsReply: '/v1/runtime/team-reports/reply',
+  teamReportsAct: '/v1/runtime/team-reports/act',
   /**
    * Runtime (`host.metrics`, CT-334): `HostMetricsRequest` → `HostMetricsResponse`, the manager's processor,
    * memory, disk and network measurements. A read: at most a few a second, answered from memory.
@@ -234,6 +254,18 @@ export const MANAGER_PATHS = {
   /** Runtime: `OwnAddressCtRequest` → `OwnAddressCtResponse`. 404 `own_address.off`. */
   ownAddressCt: '/v1/own-address/ct',
   /**
+   * Runtime (4.16): `OwnAddressCheckRequest` → `OwnAddressCheckResponse`, asked of control (`address.check`). 404
+   * `own_address.off`; 409 `own_address.link_off`; 503 `control_unreachable`.
+   */
+  ownAddressCheck: '/v1/own-address/check',
+  /**
+   * Runtime (4.16): `OwnAddressRenameRequest` → `OwnAddressStateResponse`, the manager changes the name at control
+   * (`address.rename`), keeps the earlier host as `leaving` and orders the new host's certificate. 404 `own_address.off`;
+   * 409 `own_address.label_taken`, `.label_invalid`, `.label_reserved`, `.rename_limit`, `.link_off`; 503
+   * `control_unreachable`.
+   */
+  ownAddressRename: '/v1/own-address/rename',
+  /**
    * Runtime (4.3): the device ops `account.link.lookup` and `account.link`, bodies and answers exactly theirs; the
    * manager signs and forwards them and answers control's body, with the same error mapping as `kitEnvelopes`.
    */
@@ -254,6 +286,30 @@ export const MANAGER_PATHS = {
   linkOn: '/v1/link/on',
   /** Runtime (the owner's): `LinkOffRequest` → `LinkStateResponse` (`off`), after `link.leave`. Errors as `linkOn`. */
   linkOff: '/v1/link/off',
+  /**
+   * Runtime (4.13): `LinkClaimRequest` → `LocalOk`, answered at once. The claim link the box shows, which the manager
+   * sends with `link.status`; without `claimLink` the manager forgets it.
+   */
+  linkClaim: '/v1/link/claim',
+  /**
+   * Runtime (4.14): the device op `link.whombats`, body and answer exactly its own (`RuntimeLinkWhombatsRequest`,
+   * `RuntimeLinkWhombatsResponse`): the other Whombats linked to the same account, for the menu under the box's name.
+   * 404 `link.unavailable` while Link doesn't run (or from an older manager); 503 `control_unreachable`; 502
+   * `control_refused`.
+   */
+  linkWhombats: '/v1/link/whombats',
+  /**
+   * Runtime (4.15): the device op `link.mail.set`, body and answer its own (`RuntimeLinkMailSetRequest`): the owner's
+   * choices for email through Link. 404 `unavailable` while control doesn't know the box (Link off, or an older
+   * manager); 503 `unavailable` when control can't be reached; 502 `control_refused`.
+   */
+  linkMail: '/v1/link/mail',
+  /**
+   * Runtime (4.15): the device op `mail.send`, body and answer its own (`RuntimeMailSendRequest`): one email to the
+   * Link account's own address. 404 `unavailable` while control doesn't know the box (Link off, or an older manager);
+   * 503 `unavailable`; 502 `control_refused` (Link not running, the owner's choice says no, the day's limit).
+   */
+  mailSend: '/v1/runtime/mail',
   /** Runtime (4.4): `UpdateChannelRequest` → `UpdateChannelResponse`. 404 `update.channel_unavailable`. */
   updateChannel: '/v1/update/channel',
   /** Runtime (the owner's, 4.4): `UpdateChannelSetRequest` → `UpdateChannelResponse`. 409 `busy` while an update runs. */
@@ -333,6 +389,18 @@ export const RuntimeShareDeleteRequest = DEVICE_OPS['share.delete'].body;
 export const RuntimeShareDeleteResponse = DEVICE_OPS['share.delete'].response;
 export const RuntimeShareViewsRequest = DEVICE_OPS['share.views'].body;
 export const RuntimeShareViewsResponse = DEVICE_OPS['share.views'].response;
+
+/** Reports to the Whombat Team through the manager (team-reports.md): the device ops' own schemas. */
+export const RuntimeTeamReportsListRequest = DEVICE_OPS['team.reports.list'].body;
+export const RuntimeTeamReportsListResponse = DEVICE_OPS['team.reports.list'].response;
+export const RuntimeTeamReportsGetRequest = DEVICE_OPS['team.reports.get'].body;
+export const RuntimeTeamReportsGetResponse = DEVICE_OPS['team.reports.get'].response;
+export const RuntimeTeamReportsCreateRequest = DEVICE_OPS['team.reports.create'].body;
+export const RuntimeTeamReportsCreateResponse = DEVICE_OPS['team.reports.create'].response;
+export const RuntimeTeamReportsReplyRequest = DEVICE_OPS['team.reports.reply'].body;
+export const RuntimeTeamReportsReplyResponse = DEVICE_OPS['team.reports.reply'].response;
+export const RuntimeTeamReportsActRequest = DEVICE_OPS['team.reports.act'].body;
+export const RuntimeTeamReportsActResponse = DEVICE_OPS['team.reports.act'].response;
 /** Reporter statuses through the manager (CT-164). */
 export const RuntimeFeedbackReportersRequest = DEVICE_OPS['feedback.reporters.publish'].body;
 export const RuntimeFeedbackReportersResponse = DEVICE_OPS['feedback.reporters.publish'].response;
@@ -350,6 +418,8 @@ export const UpdateStatusResponse = z.object({
   failure: ident().optional(),
   /** Control's assignment is `hold`. */
   hold: z.boolean(),
+  /** The box's update channel is paused by its release key; absent when not paused. */
+  paused: z.boolean().optional(),
   /** The known-good release can only read the database (a newer release migrated). */
   readOnly: z.boolean(),
 });
@@ -854,7 +924,9 @@ export type ConsoleReach = z.infer<typeof ConsoleReach>;
  * The console file (CC-08): what `whombat-console` shows on tty1. The runtime is the authority on the letters,
  * rotation, backoff and claim state. `code` (the four letters, `KXQM`; the lookup number is never shown, CC-13, CT-67)
  * is present exactly in `claimable`, `retryAt`
- * exactly in `backoff`, `burrows` and `signIn` (0.106, a screen sign-in) only in `claimed` and optional there
+ * exactly in `backoff`, `burrows` and `signIn` (0.106, a screen sign-in) only in `claimed` and optional there,
+ * `lettersUntil`, `fallbackUrl` and `pageOpen` only in `claimable` and `newLetters` only in `claimable` and `backoff`,
+ * optional there, `ipv6Only` in any state but `claimed`
  * (`consoleStateValid`). `url` is
  * `WHOMBAT_APP_URL` + `/claim`, or on a box that has its own address ready and is still unclaimed, its claim link
  * (`https://<host>/c/<secret>`, 4.3); the console shows it without the scheme (`consoleDisplayUrl`). Every string except
@@ -874,6 +946,42 @@ export const ConsoleState = z.object({
     .max(256)
     .regex(/^https?:[/][/][\x21-\x7e]+$/),
   retryAt: Rfc3339.optional(),
+  /**
+   * The letters were asked for at the box's own screen and stay until then, whatever is tried (Whombat
+   * whombat-link.md): only in `claimable`. Without it the letters change after a wrong try.
+   */
+  lettersUntil: Rfc3339.optional(),
+  /**
+   * The person at the box can ask for new letters now (the desk socket's `claimLetters`): the screen offers it. Only in
+   * `claimable` and `backoff`, on a box that shows letters of its own.
+   */
+  newLetters: z.literal(true).optional(),
+  /**
+   * The box's network gave it an IPv6 address and no IPv4 one (Whombat whombat-link.md): the Whombat app takes an IPv4
+   * address only, so the screen of a box without an address to open says that an IPv4 address is another way. Said on
+   * its own, whatever `url` names: a box whose only IPv6 addresses can't be told to anyone names none. Never in
+   * `claimed`.
+   */
+  ipv6Only: z.literal(true).optional(),
+  /**
+   * Another address for the claim, for when `url` doesn't open (Whombat own-address.md): only in `claimable`, beside
+   * the claim link at the box's own address. That address is on the internet, where strangers can keep it busy; this
+   * one they can't reach. The box's Tailscale page (`https://`) when it has one, else its address on the local network
+   * (`http://<IPv4>:<port>/`), which the Whombat app there takes. The console shows it under the letters, by the rules
+   * of `url`, and leaves it out when it can't.
+   */
+  fallbackUrl: z
+    .string()
+    .min(8)
+    .max(256)
+    .regex(/^https?:[/][/][\x21-\x7e]+$/)
+    .optional(),
+  /**
+   * A browser has the claim link open and waits for the letters (Whombat console-gui.md): a session at the box's own
+   * address showed the link. Only in `claimable`. The screen then says to type the letters there, and leaves out the
+   * link to open, its QR code and the second way in: scanning the code would move the claim to another device.
+   */
+  pageOpen: z.literal(true).optional(),
   burrows: ConsoleBurrows.optional(),
   /** A screen sign-in is showing (0.106, CT-626): only in `claimed`. */
   signIn: ConsoleSignIn.optional(),
@@ -885,20 +993,31 @@ export const ConsoleState = z.object({
 export type ConsoleState = z.infer<typeof ConsoleState>;
 
 /**
- * `code` exactly when `claimable`, `retryAt` exactly when `backoff`, `burrows` and `signIn` only when `claimed` (a
- * runtime that doesn't send them, a box without a burrow or without a sign-in showing, leaves them out). A consumer
- * that finds a `signIn` outside `claimed` may drop the sign-in and keep the rest (the console does).
+ * `code` exactly when `claimable`, `retryAt` exactly when `backoff`, `lettersUntil`, `fallbackUrl` and `pageOpen` only
+ * when `claimable`, `newLetters` only when `claimable` or `backoff`, `ipv6Only` never when `claimed`, `burrows` and `signIn` only when `claimed` (a runtime that doesn't
+ * send them, a box without a burrow or without a sign-in showing, leaves them out). A consumer that finds a `signIn` outside `claimed` may drop the sign-in and keep the rest
+ * (the console does).
  */
 export function consoleStateValid(s: {
   state: string;
   code?: string;
   retryAt?: string;
+  lettersUntil?: string;
+  newLetters?: boolean;
+  ipv6Only?: boolean;
+  fallbackUrl?: string;
+  pageOpen?: boolean;
   burrows?: unknown;
   signIn?: unknown;
 }): boolean {
   return (
     (s.state === 'claimable') === (s.code !== undefined) &&
     (s.state === 'backoff') === (s.retryAt !== undefined) &&
+    (s.lettersUntil === undefined || s.state === 'claimable') &&
+    (s.newLetters === undefined || s.state === 'claimable' || s.state === 'backoff') &&
+    (s.ipv6Only === undefined || s.state !== 'claimed') &&
+    (s.fallbackUrl === undefined || s.state === 'claimable') &&
+    (s.pageOpen === undefined || s.state === 'claimable') &&
     (s.burrows === undefined || s.state === 'claimed') &&
     (s.signIn === undefined || s.state === 'claimed')
   );
@@ -969,6 +1088,8 @@ export const UpdateFacts = z.object({
    * before it installs. Absent from a manager that can't hold updates for the owner, so the app offers no switch.
    */
   askFirst: z.boolean().optional(),
+  /** The box's update channel is paused by its release key; absent when not paused. */
+  paused: z.boolean().optional(),
 });
 export type UpdateFacts = z.infer<typeof UpdateFacts>;
 
@@ -990,6 +1111,29 @@ export const UpdateApproveRequest = z.strictObject({ v: V, release: ReleaseId })
 export type UpdateApproveRequest = z.infer<typeof UpdateApproveRequest>;
 export const UpdateApproveResponse = z.object({ v: V, release: ReleaseId });
 export type UpdateApproveResponse = z.infer<typeof UpdateApproveResponse>;
+
+/**
+ * `POST /v1/update/check` (4.19): look for a newer release now. `result`: what the release list or control answered —
+ * `assigned` (a release to offer), `unchanged` (the same as last time), `none` (nothing to offer). `decision`: what the
+ * box did with a release it was offered — `started`, `queued` (after the work that runs), `noop` (it runs it already),
+ * `hold` (updates are paused), `refused` (it won't take it); absent without one. `nextCheckS`: when the manager looks
+ * again by itself. A check right after another answers the one before.
+ */
+export const UpdateCheckRequest = z.strictObject({ v: V });
+export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequest>;
+export const UPDATE_CHECK_RESULTS = ['assigned', 'unchanged', 'none'] as const;
+export const UPDATE_CHECK_DECISIONS = ['started', 'queued', 'noop', 'hold', 'refused'] as const;
+export const UpdateCheckResponse = z.object({
+  v: V,
+  result: z.enum(UPDATE_CHECK_RESULTS),
+  decision: z.enum(UPDATE_CHECK_DECISIONS).optional(),
+  nextCheckS: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 3600),
+});
+export type UpdateCheckResponse = z.infer<typeof UpdateCheckResponse>;
 
 /**
  * What only the manager knows, pushed to the runtime whenever it changes (and at runtime start): the backup

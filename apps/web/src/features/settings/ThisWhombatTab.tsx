@@ -52,6 +52,7 @@ import {
   ManagedPolicy,
   useApplianceStatus,
 } from './ManagedTabs';
+import { PlaceNewsSections } from './PlaceNewsSections';
 import { RemoteHelpSection } from './RemoteHelpSection';
 import styles from './SettingsScreen.module.css';
 import tw from './ThisWhombat.module.css';
@@ -204,6 +205,8 @@ export function ThisWhombatTab({
           <TeamReportsAbout burrow={burrow} />
           {/* When the assistant may install updates and restart things (care-plan.md), before the updates themselves. */}
           <QuietHoursSection burrow={burrow} />
+          {/* Where this Whombat is, beside its time zone, and the news it reads (Whombat weather-news.md). */}
+          <PlaceNewsSections burrow={burrow} />
           {managed ? <ApplianceSections appliance={appliance} /> : null}
           {managed ? (
             appliance.status ? (

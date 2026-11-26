@@ -18,6 +18,8 @@ import { z } from 'zod';
 import { DeskShow } from './desk-glance.js';
 import { displayLine as line } from './display-text.js';
 import { LOOK_FIX_LABEL_MAX, LookResearchState } from './look-research.js';
+import { ClockTime, Weekday } from './notify.js';
+import { WEATHER_DAYS_MAX, WEATHER_HOURS_MAX, WeatherSymbol } from './weather.js';
 
 /* Text and ids --------------------------------------------------------------------------------------------------- */
 
@@ -74,12 +76,23 @@ export function parseDeskShapeKey(key: string): { cols: number; rows: number } |
 
 /**
  * What a widget is. Whombat's own: `clock`, `status` (*How things are*), `now` (*What’s going on*), `strip` (*Servers*),
- * `work` (the assistant's work), `coming` (*Coming up*), `done` (*Done today*). Then `server` (a server, `ref`
+ * `work` (the assistant's work), `coming` (*Coming up*), `done` (*Done today*), `weather` (the forecast where this
+ * Whombat is, Whombat weather-news.md) and `news` (headlines from the news sites the person turned on). Then `server` (a server, `ref`
  * `server:<hosts id>`), `figures` (a connection's or device's figures, `ref` `connection:<id>` / `device:<id>`),
  * `panel` (one panel of its page, `opts.panel` the panel's id; an account's, `ref` `account:<id>`, 3.7) and `widget` (a
  * widget the assistant made for Home, `ref` `widget:<id>`).
  */
-export const DESK_OWN_WIDGETS = ['clock', 'status', 'now', 'strip', 'work', 'coming', 'done'] as const;
+export const DESK_OWN_WIDGETS = [
+  'clock',
+  'status',
+  'now',
+  'strip',
+  'work',
+  'coming',
+  'done',
+  'weather',
+  'news',
+] as const;
 export const DESK_WIDGET_TYPES = [...DESK_OWN_WIDGETS, 'server', 'figures', 'panel', 'widget'] as const;
 export const DeskWidgetType = z.enum(DESK_WIDGET_TYPES);
 export type DeskWidgetType = z.infer<typeof DeskWidgetType>;
@@ -166,6 +179,18 @@ export const DESK_SCREEN_VIEWS_MAX = 64;
 /** Screens besides the box's own (DK-148). */
 export const DESK_SCREENS_MAX = 8;
 
+/**
+ * When a page is in the screen's turning: from `from` to `to` in the person's time zone, on `days` (the day the
+ * window starts: `22:00`–`06:00` on `fri` runs into Saturday morning), every day without `days`. `from` = `to` is the
+ * whole day. A page without one is always in.
+ */
+export const DeskPageShow = z.object({
+  from: ClockTime,
+  to: ClockTime,
+  days: z.array(Weekday).min(1).max(7).optional(),
+});
+export type DeskPageShow = z.infer<typeof DeskPageShow>;
+
 export const DeskPage = z
   .object({
     id: DeskPageId,
@@ -176,6 +201,8 @@ export const DeskPage = z
       .refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= DESK_PAGE_SHAPES_MAX),
     /** The shape changed last: other shapes without a layout of their own are rearranged from it. */
     last: DeskShapeKey,
+    /** Only at these times; always without. */
+    show: DeskPageShow.optional(),
   })
   .refine((p) => p.last in p.layouts, { message: 'last names one of the layouts' });
 export type DeskPage = z.infer<typeof DeskPage>;
@@ -207,14 +234,16 @@ const overlaps = (a: DeskWidget, b: DeskWidget) =>
 
 /**
  * Why a layout can't be kept, in a few words; null when it can. Every widget inside its shape and on no other, ids
- * unique on a page (a widget keeps its id across a page's shapes), page ids unique, every spec sound. Sizes per type
- * are the screen's to enforce (`@whombat/screen`), not the contract's.
+ * unique on a page (a widget keeps its id across a page's shapes), page ids unique, a page's days each once, every spec
+ * sound. Sizes per type are the screen's to enforce (`@whombat/screen`), not the contract's.
  */
 export function deskLayoutProblem(layout: DeskLayout): string | null {
   const pageIds = new Set<string>();
   for (const page of layout.pages) {
     if (pageIds.has(page.id)) return `page ${page.id} twice`;
     pageIds.add(page.id);
+    const days = page.show?.days ?? [];
+    if (new Set(days).size !== days.length) return `a day twice on ${page.name}`;
     for (const [shape, widgets] of Object.entries(page.layouts)) {
       const s = parseDeskShapeKey(shape);
       if (!s) return `shape ${shape}`;
@@ -383,6 +412,30 @@ export const DeskViewRow = z.object({
 });
 export type DeskViewRow = z.infer<typeof DeskViewRow>;
 
+/** A whole degree, Celsius or Fahrenheit as the view's `unit` says. */
+const Degrees = z.number().int().min(-150).max(150);
+/** Rain in millimetres, to one decimal. */
+const RainMm = z.number().min(0).max(1000);
+
+/** An hour of the forecast: when it starts, its temperature, its symbol (MET's `symbol_code`) and its rain. */
+export const DeskWeatherHour = z.object({
+  at: Timestamp,
+  temp: Degrees,
+  symbol: WeatherSymbol,
+  rainMm: RainMm.optional(),
+});
+export type DeskWeatherHour = z.infer<typeof DeskWeatherHour>;
+
+/** A day of the forecast (`date` the place's own, `YYYY-MM-DD`): its highest and lowest, its symbol and its rain. */
+export const DeskWeatherDay = z.object({
+  date: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
+  high: Degrees,
+  low: Degrees,
+  symbol: WeatherSymbol,
+  rainMm: RainMm.optional(),
+});
+export type DeskWeatherDay = z.infer<typeof DeskWeatherDay>;
+
 /** A poster or a picture with its words: “Dune: Part Two” “Film · 2024” “John · Living room TV”. */
 export const DeskViewPoster = z.object({
   title: line(120),
@@ -429,10 +482,13 @@ export type DeskViewPhoto = z.infer<typeof DeskViewPhoto>;
  * - `text` a few plain sentences;
  * - `photo` (3.7) one big picture filling the widget, the next one every `every` seconds, its words under it;
  * - `board` (3.7) many small named tiles, each a colour and maybe a short value: everything fine at a glance where a
- *   list would stop at twelve rows (every container, every device, every repository's main branch).
+ *   list would stop at twelve rows (every container, every device, every repository's main branch);
+ * - `weather` the forecast where this Whombat is (Whombat weather-news.md): the place, now, today's highest and lowest,
+ *   the next hours, the days ahead, sunrise and sunset, and MET Norway's credit, which every form that has room shows.
+ *   Without a forecast (`problem`), `now` and `today` are absent and the hours and days empty.
  *
  * A screen or an app that doesn't know a kind leaves its widget empty; the runtime sends `photo` and `board` only to
- * sessions at protocol minor 2 or later (DK-161).
+ * sessions at protocol minor 2 or later (DK-161), and `weather` only to those at `WEATHER_NEWS_MINOR` or later.
  */
 export const DeskWidgetView = z.discriminatedUnion('kind', [
   z.object({
@@ -531,16 +587,70 @@ export const DeskWidgetView = z.discriminatedUnion('kind', [
     count: Count.optional(),
     empty: line(120).optional(),
   }),
+  z.object({
+    kind: z.literal('weather'),
+    ...viewBase,
+    /** Where it is for (“Amsterdam”). */
+    place: line(80).optional(),
+    unit: z.enum(['C', 'F']),
+    now: z
+      .object({
+        temp: Degrees,
+        symbol: WeatherSymbol,
+        /** What the symbol says (“Partly cloudy”). */
+        text: line(60),
+        /** “4 m/s SW”. */
+        wind: line(24).optional(),
+        feels: Degrees.optional(),
+      })
+      .optional(),
+    today: z
+      .object({ high: Degrees, low: Degrees, rainMm: RainMm.optional(), rainChance: Pct.optional() })
+      .optional(),
+    /** The next hours, from the one now on. */
+    hours: z.array(DeskWeatherHour).max(WEATHER_HOURS_MAX),
+    /** Today and the days after it. */
+    days: z.array(DeskWeatherDay).max(WEATHER_DAYS_MAX),
+    /** Today's sunrise and sunset; neither, and `polar`, when the sun stays up or down all day. */
+    sun: z
+      .object({
+        rise: Timestamp.optional(),
+        set: Timestamp.optional(),
+        polar: z.enum(['day', 'night']).optional(),
+      })
+      .optional(),
+    /** “Data from MET Norway”. */
+    credit: line(60),
+  }),
 ]);
 export type DeskWidgetView = z.infer<typeof DeskWidgetView>;
 export type DeskWidgetViewKind = DeskWidgetView['kind'];
 
 /* A screen's grid as the screen draws it ------------------------------------------------------------------------- */
 
+/** Why a widget takes over a screen for a moment: the doorbell rang. */
+export const DESK_SPOTLIGHT_REASONS = ['doorbell'] as const;
+export const DeskSpotlightReason = z.enum(DESK_SPOTLIGHT_REASONS);
+export type DeskSpotlightReason = z.infer<typeof DeskSpotlightReason>;
+/** How long a moment takes over a screen; a new one starts the time again. */
+export const DESK_SPOTLIGHT_S = 60;
+
+/**
+ * A widget that takes over the screen for a moment: drawn big over the dashboard until `until`, its view among
+ * the grid's `views`. `id` is this moment's: *Back* hides it on that screen until the next one.
+ */
+export const DeskSpotlight = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  widget: DeskWidgetSpec,
+  until: Timestamp,
+  reason: DeskSpotlightReason,
+});
+export type DeskSpotlight = z.infer<typeof DeskSpotlight>;
+
 /**
  * What a screen draws under its top bar (the desk socket's `DeskGlance.grid`, a screen elsewhere's `screen.state`):
- * its layout, the views of its widgets, what needs the person, its pop-ups, and until when it shows Settings' draft
- * (*Try on the screen*, DK-143).
+ * its layout, the views of its widgets, what needs the person, its pop-ups, until when it shows Settings' draft
+ * (*Try on the screen*, DK-143), and a widget taking over for a moment (`spotlight`).
  */
 export const DeskGrid = z.object({
   screen: DeskScreenId,
@@ -549,6 +659,7 @@ export const DeskGrid = z.object({
   attention: DeskAttention,
   popups: DeskPopups,
   trying: z.object({ until: Timestamp }).optional(),
+  spotlight: DeskSpotlight.optional(),
 });
 export type DeskGrid = z.infer<typeof DeskGrid>;
 
@@ -561,16 +672,22 @@ export const DeskScreenSize = z.object({
 });
 export type DeskScreenSize = z.infer<typeof DeskScreenSize>;
 
+/** What a screen does when the doorbell rings: shows the doorbell big for a minute, or nothing. */
+export const DESK_DOORBELL = ['big', 'off'] as const;
+export const DeskDoorbell = z.enum(DESK_DOORBELL);
+export type DeskDoorbell = z.infer<typeof DeskDoorbell>;
+
 /**
- * A screen in Settings → Screens: what it is, its name (“Kitchen tablet”, “DELL U2720Q”), its pop-ups, its size as it
- * last said (null before it did), how many pages, whether it's showing now, when it was last seen, and for a device
- * what it is (“iPad · Safari”).
+ * A screen in Settings → Screens: what it is, its name (“Kitchen tablet”, “DELL U2720Q”), its pop-ups, what it does
+ * when the doorbell rings (absent from an older runtime), its size as it last said (null before it did), how many pages,
+ * whether it's showing now, when it was last seen, and for a device what it is (“iPad · Safari”).
  */
 export const DeskScreenSummary = z.object({
   id: DeskScreenId,
   kind: DeskScreenKind,
   name: line(40),
   popups: DeskPopups,
+  doorbell: DeskDoorbell.optional(),
   size: DeskScreenSize.nullable(),
   pages: z.number().int().min(1).max(DESK_PAGES_MAX),
   online: z.boolean(),
@@ -579,10 +696,14 @@ export const DeskScreenSummary = z.object({
 });
 export type DeskScreenSummary = z.infer<typeof DeskScreenSummary>;
 
-/** `desk.screens`: every screen, the box's own first, and whether another can be added. */
+/**
+ * `desk.screens`: every screen, the box's own first, whether another can be added, and whether the Whombat follows a
+ * doorbell (`doorbell`: Settings offers *When the doorbell rings*).
+ */
 export const DeskScreensList = z.object({
   screens: z.array(DeskScreenSummary).max(DESK_SCREENS_MAX + 4),
   canAdd: z.boolean(),
+  doorbell: z.boolean().optional(),
 });
 export type DeskScreensList = z.infer<typeof DeskScreensList>;
 
@@ -605,7 +726,7 @@ export const DeskCatalogItem = z.object({
   line: line(120),
   mark: Mark.optional(),
   view: z
-    .enum(['figures', 'list', 'posters', 'chart', 'camera', 'server', 'text', 'photo', 'board'])
+    .enum(['figures', 'list', 'posters', 'chart', 'camera', 'server', 'text', 'photo', 'board', 'weather'])
     .optional(),
   /** It shows what a locked screen leaves out unless chosen (DK-138): the editor offers *On a locked screen*. */
   private: z.boolean().optional(),
@@ -654,6 +775,8 @@ export const DESK_SCREEN_WORDS = {
     work: { name: '{assistant}’s work', line: 'What {assistant} is doing and how far along' },
     coming: { name: 'Coming up', line: 'Automations and backups in the next hours' },
     done: { name: 'Done today', line: 'What {assistant} finished today' },
+    weather: { name: 'Weather', line: 'Today and the days ahead, where this Whombat is' },
+    news: { name: 'News', line: 'Headlines from the news sites you chose' },
   },
   groups: {
     own: 'Whombat and {assistant}',
@@ -668,4 +791,6 @@ export const DESK_SCREEN_WORDS = {
   turns: { touch: 'When touched', '30s': 'Every 30 s', '60s': 'Every minute' },
   pill: { one: '1 thing needs you', many: '{n} things need you' },
   locked: { ask: '{assistant} has a question', hidden: 'Unlock to see it' },
+  doorbell: { big: 'Show it big', off: 'Don’t' },
+  spotlight: { doorbell: 'Someone’s at the door' },
 } as const;

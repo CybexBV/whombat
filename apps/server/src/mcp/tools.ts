@@ -78,6 +78,7 @@ import {
 } from '../looks-ahead/turn';
 import { whombatBackupTool } from '../managed/backup-tool';
 import { tailnetDevicesTool } from '../managed/tailnet-tool';
+import { newsHeadlinesTool } from '../news/tool';
 import { PAGES_TOOL_HANDLERS } from '../pages/tool';
 import { loadConversationRow } from '../read/conversations';
 import { loadMessageRow } from '../read/messages';
@@ -101,6 +102,7 @@ import { trackerItemTool, trackerReadTool } from '../trackers/access';
 import { vaultAddServerTool } from '../vault/add-server';
 import { vaultAskTool } from '../vault/ask';
 import { vaultSaveTool } from '../vault/save';
+import { weatherForecastTool } from '../weather/tool';
 
 export interface ToolContext {
   services: Services;
@@ -644,6 +646,9 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   ...DELEGATE_TOOL_HANDLERS,
   ...SETTINGS_TOOL_HANDLERS,
   tailnet_devices: (ctx, input) => tailnetDevicesTool(ctx, input),
+  // The weather where this Whombat is and the person's news sites' headlines (weather-news.md): read-only.
+  weather_forecast: (ctx, input) => weatherForecastTool(ctx, input),
+  news_headlines: (ctx, input) => newsHeadlinesTool(ctx, input),
   // Whombat's browser tools are gone for Hermes's (hermes-engine.md HE-20); `browser_preview` stays (HE-S142).
   ...BROWSER_TOOL_HANDLERS,
   ...PAGES_TOOL_HANDLERS,

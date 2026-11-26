@@ -67,3 +67,9 @@ export const deskScreensSource = readFileSync(
   new URL('../../vendor/whombat-contracts/desk-screens.ts', import.meta.url),
   'utf8',
 );
+
+/** The weather (`@whombat/core` domain/weather.ts): the forecast's bounds and MET's symbol, for the weather view. */
+export const weatherSource = readFileSync(
+  new URL('../../vendor/whombat-contracts/weather.ts', import.meta.url),
+  'utf8',
+);

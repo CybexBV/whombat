@@ -307,6 +307,19 @@ describe('the list a turn is served (turn-efficiency.md TE-05)', () => {
     }
   });
 
+  it('serves the weather and the news in the person’s turns, automations and checks, never to outsiders (weather-news.md)', () => {
+    const personal = { ...team, turn: { ...team.turn, personal: true } };
+    for (const name of ['weather_forecast', 'news_headlines'] as const) {
+      expect(servedToolNames(personal)).toContain(name);
+      expect(servedToolNames({ ...personal, automationStep: true })).toContain(name);
+      expect(servedToolNames({ ...personal, turn: { ...personal.turn, ahead: true } })).toContain(name);
+      expect(
+        servedToolNames({ ...personal, turn: { ...personal.turn, ahead: true, aheadTriage: true } }),
+      ).not.toContain(name);
+      expect(toolFitsTurn(name, { ...personal.turn, outside: true })).toBe(false);
+    }
+  });
+
   it('serves a triage pass only ahead_triage, and no other check ahead_triage (looks-ahead.md)', () => {
     const personal = { ...team, turn: { ...team.turn, personal: true } };
     const check: ServedSelection = {

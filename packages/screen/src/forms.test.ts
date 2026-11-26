@@ -14,16 +14,53 @@ import {
   postersForm,
   postersInRow,
   serverForm,
+  spotAt,
   statusForm,
   stripForm,
   tilesThatFit,
   tileValueFits,
   viewTone,
+  weatherCredit,
+  weatherForm,
+  weatherHourPicks,
 } from './forms';
 import type { DeskPostersView } from './types';
 
 const view = <K extends string>(id: string) =>
   FIXTURE_VIEWS.find((v) => v.id === id) as Extract<(typeof FIXTURE_VIEWS)[number], { kind: K }>;
+
+describe('the weather’s forms', () => {
+  it('grows from the sign and the temperature to the hours and the days', () => {
+    expect(weatherForm(1, 1)).toBe('tile');
+    expect(weatherForm(1, 3)).toBe('tile');
+    expect(weatherForm(2, 1)).toBe('line');
+    expect(weatherForm(3, 1)).toBe('strip');
+    expect(weatherForm(8, 1)).toBe('strip');
+    expect(weatherForm(2, 2)).toBe('block');
+    expect(weatherForm(3, 4)).toBe('block');
+    expect(weatherForm(4, 2)).toBe('wide');
+    expect(weatherForm(4, 3)).toBe('large');
+    // Opened big it is its largest.
+    expect(weatherForm(8, 4)).toBe('large');
+  });
+
+  it('credits MET Norway on every form two cells or more each way', () => {
+    expect(weatherCredit(1, 1)).toBe(false);
+    expect(weatherCredit(2, 1)).toBe(false);
+    expect(weatherCredit(6, 1)).toBe(false);
+    expect(weatherCredit(2, 2)).toBe(true);
+    expect(weatherCredit(8, 4)).toBe(true);
+  });
+
+  it('shows every hour when there’s room, else every second or third so it reaches the evening', () => {
+    expect(weatherHourPicks(24, 1000)).toEqual([...Array(17).keys()]);
+    expect(weatherHourPicks(24, 340)).toEqual([0, 2, 4, 6, 8, 10]);
+    expect(weatherHourPicks(24, 230)).toEqual([0, 3, 6, 9]);
+    expect(weatherHourPicks(3, 230)).toEqual([0]);
+    expect(weatherHourPicks(0, 1000)).toEqual([]);
+    expect(weatherHourPicks(24, 20)).toEqual([0]);
+  });
+});
 
 describe('the forms by size', () => {
   it('draws the clock stacked, in a row when wide and low, the time alone when small', () => {
@@ -122,6 +159,12 @@ describe('the forms by size', () => {
     expect(pagesAt({ ...bar, left: 500, chips: 700 })).toBe('dots');
     expect(pagesAt({ ...bar, left: 600, chips: 700 })).toBe('dotsAfter');
     expect(pagesAt({ bar: 820, left: 80, chips: 620, names: 140, dots: 34 })).toBe('dots');
+  });
+
+  it('keeps a moment’s words clear of the chips', () => {
+    expect(spotAt({ bar: 1280, left: 80, chips: 900, spot: 320 })).toBe('centre');
+    // The box's own screen unlocked: its chips start left of the middle.
+    expect(spotAt({ bar: 1280, left: 80, chips: 610, spot: 320 })).toBe('after');
   });
 
   it('shrinks a long big line to fit, down to half', () => {

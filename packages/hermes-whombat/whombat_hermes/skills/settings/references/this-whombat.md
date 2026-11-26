@@ -2,7 +2,7 @@
 
 ## Settings → This Whombat → Overview (`appliance.overview`)
 
-How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail.
+How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail, where it is and its news.
 
 - Read how this Whombat is doing — `appliance.status` · read
 - Read this Whombat’s name and time zone — `burrows.get` · read
@@ -33,6 +33,11 @@ How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing 
 - Forget a Wi-Fi network — `host.wifi.forget` · change, always asks
 - Join a Wi-Fi network (it needs a password) — `host.wifi.join` · theirs: send them there
 - Look for Wi-Fi networks nearby — `host.wifi.scan` · read
+- Add a news site — `news.addSite` · change, always asks
+- Turn news sites on or off — `news.setSources` · change
+- Read the news sites that are on and the ones suggested — `news.sources` · read
+- Look up a place on OpenStreetMap — `place.find` · read
+- Set where this Whombat is, for the weather and local news — `place.set` · change
 - Download the voice typing model — `voice.fetchModel` · change
 - Read the voice typing settings — `voice.get` · read
 - Delete the voice typing model — `voice.removeModel` · change, always asks

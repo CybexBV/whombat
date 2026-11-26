@@ -115,7 +115,7 @@ The mobile app loads its fonts from the `@expo-google-fonts` packages listed und
 ### Service and system marks (`packages/brand`)
 
 The marks of the services people connect and the systems their servers run, listed one by one with their sources in
-`packages/brand/assets/marks/SOURCES.md`. 81 of them are path data from Simple Icons (<https://simpleicons.org>), released under
+`packages/brand/assets/marks/SOURCES.md`. 85 of them are path data from Simple Icons (<https://simpleicons.org>), released under
 CC0 1.0 Universal. The others:
 
 | Mark | From | Licence |
@@ -123,7 +123,9 @@ CC0 1.0 Universal. The others:
 | AI gateway | Lucide `sparkles` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | API | Lucide `braces` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Debian | Simple Icons `debian` (<https://www.debian.org/logos>) | the Debian Open Use Logo, Copyright (c) 1999 Software in the Public Interest, Inc., and others: LGPL-3.0-or-later or, at your option, CC BY-SA 3.0 (<https://www.debian.org/logos/>) |
+| Website feedback | Lucide `message-square-text` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Fedora | Simple Icons `fedora` (<https://docs.fedoraproject.org/en-US/project/brand/>) | its owner’s brand terms |
+| Find My | drawn for Whombat in Lucide's stroke: a location pin over two people (never Apple's Find My icon) | Cybex BV’s own |
 | Forgejo | Simple Icons `forgejo` (<https://codeberg.org/forgejo/meta/raw/branch/readme/branding/logo/forgejo-monochrome.svg>) | CC BY-SA 4.0, by Caesar Schinas |
 | Fusebox | Fusebox's `assets/icon.svg` (John's own product) | Unlicense |
 | Gentoo | Simple Icons `gentoo` (<https://wiki.gentoo.org/wiki/Project:Artwork/Artwork#Variations_of_the_.22g.22_logo>) | CC BY-SA 2.5 |
@@ -143,6 +145,7 @@ CC0 1.0 Universal. The others:
 | Sonarr | Sonarr's logo (<https://github.com/Sonarr/Sonarr>, a GPL-3.0 project) as 24-unit path data; not from Simple Icons, which has no Sonarr, and where the path data came from isn't recorded | not verified yet |
 | T3 Code | the “T3” of T3 Code's `assets/prod/logo.svg` (<https://github.com/pingdotgg/t3code>), without its black tile | MIT, Copyright (c) 2026 T3 Tools Inc. (the licence text under T3 Code above) |
 | Report tracker | Lucide `inbox` (a tracker connection shows its driver's own logo instead) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
+| Website or address | Lucide `activity` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 
 The marks and the names are trademarks of their owners; showing them names the service or system and implies no
 endorsement.
@@ -162,9 +165,11 @@ cover it and grants nothing in it, and it is used under Anthropic’s own terms.
   `pnpm install` downloads the binary for the machine’s architecture from the npm registry.
 - **Whombat’s builds** leave it out: the runtime bundle (`pnpm bundle:runtime`) keeps it external and its manifest says
   `claude.bundled: false`; the web, widget and admin pages and the Android and iPhone apps don’t contain it.
-- **On an appliance** it is not in the image. On an owner’s request the manager installs it from Whombat’s signed
-  client channel (`appliance/release-tools/clientchannel`): Anthropic’s published binary, checked against
-  Anthropic’s digest and served unmodified, packed in a `tar.gz`, from Whombat’s update host.
+- **On an appliance** it is not in the image. On an owner’s request the manager downloads it from Anthropic’s own
+  download site (`downloads.claude.ai`), at the version Whombat tested: Whombat’s signed client channel
+  (`appliance/release-tools/clientchannel`) names its address, size and SHA-256, and the box installs Anthropic’s
+  file, unmodified, only when it matches. Until every Whombat runs a manager that does this, Whombat’s update host also
+  keeps that unmodified binary for older ones.
 
 ## Fetched by the tools, not part of this repository
 
@@ -312,7 +317,7 @@ Fetched by the Go toolchain; each module's own licence applies.
 
 ### Hermes Agent and agent-browser
 
-`pnpm hermes:install` installs, for development, Hermes Agent 0.23.3 (Nous Research,
+`pnpm hermes:install` installs, for development, Hermes Agent 0.23.4 (Nous Research,
 <https://github.com/NousResearch/hermes-agent>, MIT, below) from its git tag with the Python packages its `uv.lock`
 pins, each under its own licence, and agent-browser 0.26.0 (Vercel, <https://github.com/vercel-labs/agent-browser>,
 Apache-2.0) from the npm registry (`packages/hermes-whombat/agent-browser.json`). The appliance image builds both in
@@ -354,7 +359,7 @@ Every licence below allows distributing Whombat under AGPL-3.0-only (`pnpm notic
 
 | Licence | Packages | Next to the AGPL |
 |---|---|---|
-| MIT | 752 | permissive |
+| MIT | 754 | permissive |
 | ISC | 64 | permissive |
 | BSD-3-Clause | 25 | permissive |
 | Apache-2.0 | 23 | compatible with GPL-3.0 and the AGPL; attribution and NOTICE files required |
@@ -377,6 +382,8 @@ Corrected from the package's own files:
 
 | Package | Versions | Licence | Homepage |
 |---|---|---|---|
+| @1password/sdk | 0.5.0 | MIT |  |
+| @1password/sdk-core | 0.5.0 | MIT |  |
 | @agentclientprotocol/sdk | 1.5.0 | Apache-2.0 | <https://github.com/agentclientprotocol/typescript-sdk#readme> |
 | @antfu/install-pkg | 2.1.0 | MIT | <https://github.com/antfu-collective/install-pkg#readme> |
 | @babel/code-frame | 7.29.7 | MIT | <https://babel.dev/docs/en/next/babel-code-frame> |

@@ -64,6 +64,7 @@ import {
   Check,
   ChevronLeft,
   Clock,
+  CloudSun,
   Columns2,
   Cpu,
   GitPullRequest,
@@ -74,6 +75,7 @@ import {
   Mail,
   MemoryStick,
   Network,
+  Newspaper,
   Plug,
   Plus,
   Rows3,
@@ -112,6 +114,8 @@ const OWN_ICONS: Record<string, LucideIcon> = {
   work: Sparkles,
   coming: CalendarClock,
   done: CalendarCheck,
+  weather: CloudSun,
+  news: Newspaper,
 };
 
 /** A widget's name in the editor: Whombat's own by the contract's words, the rest by the catalogue or its view. */

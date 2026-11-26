@@ -977,3 +977,20 @@ Session protocol minor 15 (`SCREEN_TIMES_MINOR`). Runtime decisions `desk-displa
 - **DK-188 Older apps keep working.** A page's `show`, `desk.screen.addPage`, a screen's `doorbell`, a grid's
   `spotlight` and a screen's `timeZone` came with session minor 15; an older app ignores them, and the box keeps the
   page times its layouts leave out (DK-183). *Why:* a phone that updates a day later shouldn't undo the times.
+- **DK-189 The doorbell's words keep clear of the chips.** “Someone’s at the door” and *Back* sit in the middle of the
+  top bar while they fit between the Whombat's name and the chips, else right after the name, as the pages do. *Why:*
+  the box's own screen, unlocked, has chips wide enough to reach the middle, and the words ran over them.
+
+## The weather and the news (2026-11-26)
+
+weather-news.md WN-08, WN-09; runtime rows `desk-display-server.md` DK-S320…DK-S322. Session protocol minor 16
+(`WEATHER_NEWS_MINOR`): an older app doesn't see these two widgets, and the box keeps them when it saves a layout.
+
+- **DK-200 *Weather*.** One of Whombat's own widgets (weather-news.md): the forecast where this Whombat is, from one
+  cell (its symbol and temperature) to eight by four (the next hours and the days ahead), its own `weather` view; every
+  form with room says “Data from MET Norway”. Without a place it says “Choose where this Whombat is in Settings”, and
+  “Can’t read the weather just now” when MET can't be read. Shown as it is on a locked screen. *Why:* John asked for the
+  weather on the screens, a morning page among them.
+- **DK-201 *News*.** One of Whombat's own widgets: the newest headlines of the news sites the person turned on, each
+  with its site and time, as a list. With no site on: “Choose your news in Settings”. Shown as it is on a locked
+  screen. *Why:* John asked for local news; headlines are public.

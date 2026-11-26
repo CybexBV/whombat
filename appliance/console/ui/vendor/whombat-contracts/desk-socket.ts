@@ -246,6 +246,12 @@ export const DESK_PATHS = {
    * start and whenever they change; a second output is a monitor on the box, a screen of its own (DK-147).
    */
   size: '/v1/desk/size',
+  /**
+   * *New letters* on the claim screen (Whombat whombat-link.md): `DeskRequest` → `DeskAck`. The person at the box asks
+   * for fresh claim letters that stay for `CLAIM_WINDOW_S`, whatever others on the network tried before. Only while
+   * the box shows its own claim letters; `409 not_available` otherwise.
+   */
+  claimLetters: '/v1/desk/claim/letters',
 } as const;
 
 /** The largest request body on the desk socket but a talk's, and a talk's (with up to 30 s of audio). */
@@ -717,6 +723,11 @@ export const DeskLook = z.object({
    * in Talk; `fixing` and `fixed` say where the step is. Absent or `failed`: the card as before.
    */
   research: LookResearch.optional(),
+  /**
+   * What it is down because of: its server or machine (`server:pve-02`) or the internet
+   * (`box:network`), with its name. Such a thing makes no look of its own; one that still shows carries this.
+   */
+  causedBy: z.object({ thing: text(120), name: text(40) }).optional(),
 });
 export type DeskLook = z.infer<typeof DeskLook>;
 

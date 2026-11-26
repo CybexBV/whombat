@@ -2,7 +2,7 @@
 # Refresh console/ui/vendor/whombat-contracts/ from a contracts tag of Whombat (CG-40): the desk's words (`@whombat/core`
 # domain/desk.ts, domain/task-card.ts for a task row's, 0.116, domain/remote-help.ts for remote help's line, 0.120, and
 # domain/quiet.ts for a look's kinds and checks, 0.122, domain/look-research.ts for what the assistant found out, 3.5, and
-# domain/desk-screens.ts for the screen of widgets, 3.6),
+# domain/desk-screens.ts for the screen of widgets, 3.6, and domain/weather.ts for the weather view's bounds),
 # the desk socket's shapes (`@whombat/control-contracts` local/desk.ts), the console file's (local/index.ts: the sign-in's ConsoleSignIn,
 # CG-151), the sign-in's letters (`@whombat/protocol` claim/screen.ts) and the box's Bluetooth (`@whombat/protocol`
 # session/bluetooth.ts, CG-200), byte for byte from the tag (never the working tree), with the licence and a PIN file. The page can't import the contracts: it copies the words
@@ -44,6 +44,8 @@ take packages/core/src/domain/quiet.ts quiet.ts
 take packages/core/src/domain/look-research.ts look-research.ts
 # The screen of widgets (3.6): its layout, views, what needs the person and the grid the runtime sends.
 take packages/core/src/domain/desk-screens.ts desk-screens.ts
+# The weather view's bounds and symbols, which desk-screens.ts imports.
+take packages/core/src/domain/weather.ts weather.ts
 take packages/control-contracts/src/local/desk.ts desk-socket.ts
 take packages/control-contracts/src/local/index.ts console-file.ts
 take packages/protocol/src/claim/screen.ts screen-signin.ts

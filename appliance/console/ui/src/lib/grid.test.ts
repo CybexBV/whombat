@@ -1,6 +1,6 @@
-import { OWN_WIDGETS, VIEW_KINDS, WIDGET_TYPES } from '@whombat/screen';
+import { OWN_WIDGETS, SCREEN_WORDS, VIEW_KINDS, WIDGET_TYPES } from '@whombat/screen';
 import { describe, expect, it } from 'vitest';
-import { constList, deskScreensSource, deskSocketSource } from './contractsSource';
+import { constList, deskScreensSource, deskSocketSource, weatherSource } from './contractsSource';
 import {
   DESK_ATTENTION_MAX,
   DESK_GRID_MAX,
@@ -12,15 +12,21 @@ import {
   DESK_SCREEN_ID_RE,
   DESK_SCREEN_VIEWS_MAX,
   DESK_SHAPE_RE,
+  DESK_SPOTLIGHT_REASONS,
   DESK_VIEW_POINTS_MAX,
   DESK_VIEW_ROWS_MAX,
   DESK_WIDGET_OPTS_MAX,
   DESK_WIDGET_REF_RE,
+  type DeskPage,
   lockedGrid,
   parseAttention,
   parseGrid,
   parseOutputGrids,
+  parseSpotlight,
   parseView,
+  WEATHER_DAYS_MAX,
+  WEATHER_HOURS_MAX,
+  WEATHER_SYMBOL_RE,
 } from './grid';
 
 const ref = 'eyJ0IjoicGxleCJ9.c2lnbmF0dXJl';
@@ -126,7 +132,7 @@ describe('the screen of widgets as the page reads it', () => {
                   widget('w_clock', 'status', 2, 0, 2, 1), // the same id twice
                   widget('w_over', 'status', 1, 0, 2, 1), // on the clock
                   widget('w_out', 'status', 3, 2, 2, 1), // past the shape's edge
-                  widget('w_new', 'weather', 0, 1, 1, 1), // a type this page doesn't know
+                  widget('w_new', 'radar', 0, 1, 1, 1), // a type this page doesn't know
                   widget('w_ref', 'server', 0, 1, 1, 1, { ref: 'file:/etc/passwd' }),
                   widget('w_half', 'status', 0.5, 2, 1, 1),
                   widget('w_ok', 'figures', 0, 2, 2, 1, {
@@ -340,6 +346,171 @@ describe('the screen of widgets as the page reads it', () => {
     expect(parseAttention({ items: [], more: 0, tone: 'bad' })).toEqual({ items: [], more: 0 });
   });
 
+  it('keeps a page’s times, and lets a window it can’t read go', () => {
+    const page = (id: string, show: unknown) => ({ id, name: id, last: '8x5', layouts: { '8x5': [] }, show });
+    const sound = grid({
+      layout: {
+        turn: '30s',
+        size: 'normal',
+        pages: [
+          page('p_morning', { from: '07:00', to: '09:30', days: ['mon', 'tue', 'wed', 'thu', 'fri'] }),
+          page('p_night', { from: '22:00', to: '06:00' }),
+          { id: 'p_always', name: 'p_always', last: '8x5', layouts: { '8x5': [] } },
+        ],
+      },
+    });
+    expect(parseGrid(sound)).toEqual(sound);
+    const g = parseGrid(
+      grid({
+        layout: {
+          pages: [
+            page('p_a', { from: '7:00', to: '24:00' }),
+            page('p_b', { from: '22:00', to: '06:00', days: 'weekends' }),
+            page('p_c', { from: '08:00', to: '10:00', days: ['sat', 'Sunday', 'sat', 'sun'] }),
+            page('p_d', { from: '08:00', to: '10:00', days: ['someday'] }),
+            page('p_f', '08:00–10:00'),
+            page('p_g', { from: '12:00', to: '12:00' }),
+          ],
+        },
+      }),
+    );
+    expect(g?.layout.pages.map((p) => [p.id, p.show])).toEqual([
+      ['p_a', undefined],
+      ['p_b', undefined],
+      ['p_c', { from: '08:00', to: '10:00', days: ['sat', 'sun'] }],
+      ['p_d', undefined],
+      ['p_f', undefined],
+      ['p_g', { from: '12:00', to: '12:00' }],
+    ]);
+    expect(g?.layout.pages.some((p) => 'show' in p && p.show === undefined)).toBe(false);
+  });
+
+  it('keeps the doorbell’s moment when every part of it is right', () => {
+    const spotlight = {
+      id: 'ring_6720a1b2c3',
+      widget: {
+        id: 'w_spotlight',
+        type: 'panel',
+        ref: 'connection:con_protect',
+        opts: { panel: 'cameras', item: 'cam_front' },
+      },
+      until: '2026-10-27T13:35:00Z',
+      reason: 'doorbell',
+    };
+    const view = { kind: 'camera', id: 'w_spotlight', title: 'Front door', event: 'Rang at 14:34' };
+    const sound = grid({ views: [...grid().views, view], spotlight });
+    expect(parseGrid(sound)).toEqual(sound);
+    // Wrong in one part, the moment goes and the screen stays.
+    for (const wrong of [
+      { reason: 'parcel' },
+      { id: 'ring 1' },
+      { until: 'in a minute' },
+      { widget: { ...spotlight.widget, type: 'map' } },
+      { widget: { ...spotlight.widget, ref: 'file:/etc/passwd' } },
+      { widget: { ...spotlight.widget, id: 'spotlight' } },
+      { widget: undefined },
+    ]) {
+      const g = parseGrid(grid({ spotlight: { ...spotlight, ...wrong } }));
+      expect(g?.layout.pages.length).toBe(2);
+      expect(g && 'spotlight' in g).toBe(false);
+    }
+    expect(
+      parseSpotlight({ ...spotlight, widget: { ...spotlight.widget, opts: { Bad: 'x', panel: 'cameras' } } }),
+    ).toEqual({ ...spotlight, widget: { ...spotlight.widget, opts: { panel: 'cameras' } } });
+  });
+
+  it('takes the weather and the news widgets, and reads a forecast member by member', () => {
+    const forecast = {
+      kind: 'weather',
+      id: 'w_weather',
+      title: 'Weather',
+      place: 'Amsterdam',
+      unit: 'C',
+      now: { temp: 12, symbol: 'partlycloudy_day', text: 'Partly cloudy', wind: '4 m/s SW', feels: 10 },
+      today: { high: 14, low: 7, rainMm: 0.4, rainChance: 30 },
+      hours: [
+        { at: '2026-10-21T13:00:00Z', temp: 12, symbol: 'partlycloudy_day' },
+        { at: '2026-10-21T14:00:00Z', temp: 13, symbol: 'lightrain', rainMm: 0.2 },
+      ],
+      days: [{ date: '2026-10-21', high: 14, low: 7, symbol: 'lightrain', rainMm: 0.4 }],
+      sun: { rise: '2026-10-21T06:20:00Z', set: '2026-10-21T16:40:00Z' },
+      credit: 'Data from MET Norway',
+    };
+    const news = {
+      kind: 'list',
+      id: 'w_news',
+      title: 'News',
+      rows: [{ title: 'Ferry to Texel runs again', detail: 'NOS', time: '14:02' }],
+    };
+    const sound = grid({
+      layout: {
+        turn: 'touch',
+        size: 'normal',
+        pages: [
+          {
+            id: 'p_morning',
+            name: 'Morning',
+            last: '8x5',
+            layouts: {
+              '8x5': [widget('w_weather', 'weather', 0, 0, 4, 3), widget('w_news', 'news', 4, 0, 4, 3)],
+            },
+          },
+        ],
+      },
+      views: [forecast, news],
+    });
+    expect(parseGrid(sound)).toEqual(sound);
+
+    // What can't be read goes; the rest of the forecast stays.
+    expect(
+      parseView({
+        ...forecast,
+        now: { temp: 12, symbol: 'partlycloudy_day' },
+        today: { high: 14, low: 'cold', rainChance: 130 },
+        hours: [
+          { at: '2026-10-21T13:00:00Z', temp: 12.5, symbol: 'rain' },
+          { at: '2026-10-21T14:00:00Z', temp: 13, symbol: 'Heavy rain' },
+          { at: 'soon', temp: 13, symbol: 'rain' },
+          { at: '2026-10-21T15:00:00Z', temp: 300, symbol: 'rain' },
+          { at: '2026-10-21T16:00:00Z', temp: -2, symbol: 'snow', rainMm: -1 },
+        ],
+        days: [
+          { date: '21 October', high: 14, low: 7, symbol: 'rain' },
+          { date: '2026-10-22', high: 15, low: 8, symbol: 'fair_day' },
+        ],
+        sun: { polar: 'dusk' },
+      }),
+    ).toEqual({
+      ...forecast,
+      now: undefined,
+      today: undefined,
+      hours: [{ at: '2026-10-21T16:00:00Z', temp: -2, symbol: 'snow' }],
+      days: [{ date: '2026-10-22', high: 15, low: 8, symbol: 'fair_day' }],
+      sun: undefined,
+    });
+    const hours = Array.from({ length: 30 }, (_, i) => ({
+      at: `2026-10-21T${String(i % 24).padStart(2, '0')}:00:00Z`,
+      temp: i,
+      symbol: 'cloudy',
+    }));
+    const long = parseView({ ...forecast, hours });
+    expect(long?.kind === 'weather' && long.hours.length).toBe(WEATHER_HOURS_MAX);
+    // Without its unit or its credit a forecast isn't shown.
+    expect(parseView({ ...forecast, unit: 'K' })).toBeNull();
+    expect(parseView({ ...forecast, credit: undefined })).toBeNull();
+    // No place chosen, or MET can't be read: the widget says so itself.
+    const bare = {
+      kind: 'weather',
+      id: 'w_weather',
+      title: 'Weather',
+      unit: 'C',
+      hours: [],
+      days: [],
+      credit: 'Data from MET Norway',
+    };
+    expect(parseView(bare)).toEqual(bare);
+  });
+
   it('reads the monitors’ screens', () => {
     const o = parseOutputGrids([
       { key: 'hdmi-a-1', name: 'DELL U2720Q', grid: grid({ screen: 'out_hdmi-a-1' }) },
@@ -404,6 +575,93 @@ describe('a grid the page shows locked itself (Whombat away, an unlock that ran 
     });
     expect(s?.layout).toBe(g.layout);
   });
+
+  it('keeps the doorbell’s moment, its camera locked in A summary', () => {
+    const spotlight = {
+      id: 'ring_1',
+      widget: {
+        id: 'w_door',
+        type: 'panel' as const,
+        ref: 'connection:con_protect',
+        opts: { panel: 'cameras' },
+      },
+      until: '2026-10-27T13:35:00Z',
+      reason: 'doorbell' as const,
+    };
+    const ringing = {
+      ...g,
+      views: [
+        ...g.views,
+        { kind: 'camera' as const, id: 'w_door', title: 'Front door', event: 'Rang at 14:34' },
+      ],
+      spotlight,
+    };
+    const s = lockedGrid(ringing, 'summary', title);
+    expect(s?.spotlight).toEqual(spotlight);
+    expect(s?.views.find((v) => v.id === 'w_door')).toEqual({
+      kind: 'camera',
+      id: 'w_door',
+      title: 'Front door',
+      locked: true,
+    });
+    expect(lockedGrid(ringing, 'everything', title)?.spotlight).toEqual(spotlight);
+  });
+  it('shows the weather and the news as they are in A summary', () => {
+    const forecast = {
+      kind: 'weather' as const,
+      id: 'w_weather',
+      title: 'Weather',
+      place: 'Amsterdam',
+      unit: 'C' as const,
+      now: { temp: 12, symbol: 'cloudy', text: 'Cloudy' },
+      hours: [{ at: '2026-10-21T13:00:00Z', temp: 12, symbol: 'cloudy' }],
+      days: [],
+      credit: 'Data from MET Norway',
+    };
+    const news = {
+      kind: 'list' as const,
+      id: 'w_news',
+      title: 'News',
+      rows: [{ title: 'Ferry to Texel runs again' }],
+    };
+    const queue = { kind: 'list' as const, id: 'w_queue', title: 'SABnzbd', rows: [{ title: 'Shōgun S01' }] };
+    const page: DeskPage = {
+      id: 'p_news',
+      name: 'News',
+      last: '8x5',
+      layouts: {
+        '8x5': [
+          { id: 'w_weather', type: 'weather' as const, opts: {}, x: 0, y: 0, w: 2, h: 2 },
+          { id: 'w_news', type: 'news' as const, opts: {}, x: 2, y: 0, w: 3, h: 3 },
+          {
+            id: 'w_queue',
+            type: 'panel' as const,
+            ref: 'connection:con_S',
+            opts: { panel: 'queue' },
+            x: 5,
+            y: 0,
+            w: 3,
+            h: 3,
+          },
+        ],
+      },
+    };
+    const morning = {
+      ...g,
+      layout: { ...g.layout, pages: [...g.layout.pages, page] },
+      views: [...g.views, forecast, news, queue],
+    };
+    const s = lockedGrid(morning, 'summary', title);
+    expect(s?.views.find((v) => v.id === 'w_weather')).toEqual(forecast);
+    expect(s?.views.find((v) => v.id === 'w_news')).toEqual(news);
+    expect(s?.views.find((v) => v.id === 'w_queue')).toEqual({
+      kind: 'list',
+      id: 'w_queue',
+      title: 'SABnzbd',
+      locked: true,
+      rows: [],
+    });
+  });
 });
 
 describe('the copies of the contract', () => {
@@ -441,6 +699,15 @@ describe('the copies of the contract', () => {
       "export const DESK_WIDGET_TYPES = [...DESK_OWN_WIDGETS, 'server', 'figures', 'panel', 'widget'] as const;",
     );
     expect(deskScreensSource).toContain(`kind: z.literal('${VIEW_KINDS[0]}')`);
+    // The moments the page keeps are the contract's, and the drawing has words for each.
+    expect([...DESK_SPOTLIGHT_REASONS]).toEqual(constList(deskScreensSource, 'DESK_SPOTLIGHT_REASONS'));
+    expect([...DESK_SPOTLIGHT_REASONS]).toEqual(Object.keys(SCREEN_WORDS.spotlight));
     for (const k of VIEW_KINDS) expect(deskScreensSource).toContain(`kind: z.literal('${k}')`);
+  });
+
+  it('are the vendored weather.ts', () => {
+    expect(WEATHER_HOURS_MAX).toBe(constant(weatherSource, 'WEATHER_HOURS_MAX'));
+    expect(WEATHER_DAYS_MAX).toBe(constant(weatherSource, 'WEATHER_DAYS_MAX'));
+    expect(weatherSource).toContain(`WeatherSymbol = z.string().regex(${String(WEATHER_SYMBOL_RE)});`);
   });
 });

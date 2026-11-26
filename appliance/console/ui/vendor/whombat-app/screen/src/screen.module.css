@@ -227,6 +227,58 @@
   transform: none;
 }
 
+/* A widget taking over for a moment: what happened and Back, centred; a line under the bar runs down. */
+
+.spot {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* The chips leave no room in the middle: right after the name, as the pages. */
+.spotAfter {
+  position: static;
+  margin-left: 24px;
+  transform: none;
+}
+
+.spotWords {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font: 650 18px var(--font-sans);
+}
+
+.spotWords i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 28%, transparent);
+}
+
+.spotBack {
+  position: static;
+  transform: none;
+}
+
+.spotTime {
+  position: absolute;
+  z-index: 8;
+  top: 54px;
+  left: 0;
+  width: var(--left, 100%);
+  height: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--brand);
+  pointer-events: none;
+}
+
 .chips {
   display: flex;
   align-items: center;

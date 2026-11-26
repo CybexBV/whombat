@@ -210,6 +210,43 @@ export function photoEveryMs(every: number | undefined): number {
   return Math.max(min, Math.min(max, every ?? PHOTO_EVERY_S.default)) * 1000;
 }
 
+/**
+ * The weather (Whombat weather-news.md): one cell is its sign and the temperature (`tile`); two cells wide and one high
+ * adds the highest and lowest and what the sky does (`line`); wider and one high, the next hours beside it (`strip`);
+ * two or three wide and higher, the next hours under it (`block`, and the days when there's room); four wide or more,
+ * the hours beside it (`wide`) and, three high or more, the days under (`large`, which opening big shows).
+ */
+export type WeatherForm = 'tile' | 'line' | 'strip' | 'block' | 'wide' | 'large';
+export function weatherForm(w: number, h: number): WeatherForm {
+  if (w === 1) return 'tile';
+  if (h === 1) return w >= 3 ? 'strip' : 'line';
+  if (w < 4) return 'block';
+  return h >= 3 ? 'large' : 'wide';
+}
+
+/** MET Norway's credit, on every form two cells or more each way (its licence asks for it wherever there's room). */
+export function weatherCredit(w: number, h: number): boolean {
+  return w >= 2 && h >= 2;
+}
+
+/** An hour's column in the strip, at least this wide (px). */
+export const WEATHER_HOUR_W = 56;
+
+/**
+ * Which of the next hours a strip `inner` px wide shows (their places in `hours`): as many columns as fit, each hour
+ * when twelve or more fit, else every second or third hour so a narrow strip still reaches into the evening.
+ */
+export function weatherHourPicks(total: number, inner: number): number[] {
+  const fits = Math.max(1, Math.floor((inner + 4) / WEATHER_HOUR_W));
+  const step = fits >= 12 ? 1 : fits >= 6 ? 2 : 3;
+  const picks: number[] = [];
+  for (let i = 0; i < total && picks.length < fits; i += step) picks.push(i);
+  return picks;
+}
+
+/** A day's row under the hours (px). */
+export const WEATHER_DAY_H = 38;
+
 export type ChartForm = 'spark' | 'chart';
 export function chartForm(h: number): ChartForm {
   return h === 1 ? 'spark' : 'chart';
@@ -249,6 +286,11 @@ export type PagesAt = 'centre' | 'after' | 'dots' | 'dotsAfter';
 /** A screen narrower than this shows its pages as dots (the mockups' tablet), names or not. */
 export const PAGE_NAMES_MIN = 900;
 
+/** The room kept between what sits in the middle of the top bar and the name or the chips. */
+const BAR_ROOM = 24;
+const centredInBar = (m: { bar: number; left: number; chips: number }, w: number) =>
+  (m.bar - w) / 2 >= m.left + BAR_ROOM && (m.bar + w) / 2 <= m.chips - BAR_ROOM;
+
 /**
  * The pages never touch the name, the pill or the host's chips (any width): names centred while they fit between them
  * with room to spare, else right after the name, else dots, centred or after it; a narrow screen has dots. All in the
@@ -262,10 +304,16 @@ export function pagesAt(m: {
   names: number;
   dots: number;
 }): PagesAt {
-  const room = 24;
-  const centred = (w: number) => (m.bar - w) / 2 >= m.left + room && (m.bar + w) / 2 <= m.chips - room;
   const names = m.bar >= PAGE_NAMES_MIN;
-  if (names && centred(m.names)) return 'centre';
-  if (names && m.left + 34 + m.names <= m.chips - room) return 'after';
-  return centred(m.dots) ? 'dots' : 'dotsAfter';
+  if (names && centredInBar(m, m.names)) return 'centre';
+  if (names && m.left + 34 + m.names <= m.chips - BAR_ROOM) return 'after';
+  return centredInBar(m, m.dots) ? 'dots' : 'dotsAfter';
+}
+
+/**
+ * Where a moment's words and *Back* go in the top bar, as the pages: centred while they fit between the name and the
+ * chips, else right after the name (the box's own screen has its widest chips while it's unlocked).
+ */
+export function spotAt(m: { bar: number; left: number; chips: number; spot: number }): 'centre' | 'after' {
+  return centredInBar(m, m.spot) ? 'centre' : 'after';
 }

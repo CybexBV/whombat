@@ -26,11 +26,21 @@ export interface DeskWidget {
   h: number;
 }
 
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+/** When a page is in the turning: `from`–`to` (`HH:MM`) in the person's zone, on `days` (every day without). */
+export interface DeskPageShow {
+  from: string;
+  to: string;
+  days?: Weekday[] | undefined;
+}
+
 export interface DeskPage {
   id: string;
   name: string;
   layouts: Record<string, DeskWidget[]>;
   last: string;
+  show?: DeskPageShow | undefined;
 }
 
 export interface DeskLayout {
@@ -180,6 +190,45 @@ export interface DeskBoardView extends DeskViewBase {
   empty?: string | undefined;
 }
 
+export interface DeskWeatherHour {
+  at: string;
+  temp: number;
+  symbol: string;
+  rainMm?: number | undefined;
+}
+
+export interface DeskWeatherDay {
+  date: string;
+  high: number;
+  low: number;
+  symbol: string;
+  rainMm?: number | undefined;
+}
+
+export interface DeskWeatherView extends DeskViewBase {
+  kind: 'weather';
+  place?: string | undefined;
+  unit: 'C' | 'F';
+  now?:
+    | {
+        temp: number;
+        symbol: string;
+        text: string;
+        wind?: string | undefined;
+        feels?: number | undefined;
+      }
+    | undefined;
+  today?:
+    | { high: number; low: number; rainMm?: number | undefined; rainChance?: number | undefined }
+    | undefined;
+  hours: DeskWeatherHour[];
+  days: DeskWeatherDay[];
+  sun?:
+    | { rise?: string | undefined; set?: string | undefined; polar?: 'day' | 'night' | undefined }
+    | undefined;
+  credit: string;
+}
+
 export type DeskWidgetView =
   | DeskFiguresView
   | DeskListView
@@ -189,7 +238,8 @@ export type DeskWidgetView =
   | DeskServerView
   | DeskTextView
   | DeskPhotoView
-  | DeskBoardView;
+  | DeskBoardView
+  | DeskWeatherView;
 
 export type DeskWidgetViewKind = DeskWidgetView['kind'];
 
@@ -219,6 +269,14 @@ export interface DeskAttention {
 
 /* The screen's grid ----------------------------------------------------------------------------------------------- */
 
+/** A widget taking over the screen for a moment: the doorbell rang. */
+export interface DeskSpotlight {
+  id: string;
+  widget: { id: string; type: WidgetType; ref?: string | undefined; opts: Record<string, string> };
+  until: string;
+  reason: 'doorbell';
+}
+
 export interface DeskGrid {
   screen: string;
   layout: DeskLayout;
@@ -226,6 +284,7 @@ export interface DeskGrid {
   attention: DeskAttention;
   popups: DeskPopups;
   trying?: { until: string } | undefined;
+  spotlight?: DeskSpotlight | undefined;
 }
 
 /* The calm glance's parts Whombat's own widgets read -------------------------------------------------------------- */

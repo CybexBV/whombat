@@ -1,9 +1,10 @@
 /**
- * `<Screen>` (DK-126…DK-141): the whole screen at its logical size, scaled to the box it's given — the fixed top bar
- * (the Whombat's name, the pill, the pages, the host's chips), the current page's widgets on the screen's grid, the thin
- * edge and the modal for outages and questions, a widget opened big, and *Try on the screen*'s banner. Pages turn by a
- * swipe or a touched name, by themselves when the layout says so, and go back to the first after a while untouched.
- * In `editing` it draws the cells and nothing reacts to touch; the editor draws its selection over it (`overlay`).
+ * `<Screen>` (DK-126…DK-141): the whole screen at its logical size, scaled to the box it's given — the
+ * fixed top bar (the Whombat's name, the pill, the pages, the host's chips), the current page's widgets on the screen's
+ * grid, the thin edge and the modal for outages and questions, a widget opened big, *Try on the screen*'s banner, and a
+ * widget taking over for a moment (the doorbell). Pages turn by a swipe or a touched name, by themselves when the layout
+ * says so, within the pages whose time it is, and go back to the screen's home after a while untouched. In `editing` it
+ * draws every page's cells and nothing reacts to touch; the editor draws its selection over it (`overlay`).
  */
 import {
   type CSSProperties,
@@ -18,13 +19,14 @@ import {
 } from 'react';
 import { type AttentionActions, AttentionModal, LockIcon } from './AttentionModal';
 import { edgeTone, MODAL_CLOSED, type ModalState, modalView, pill } from './attention';
-import { bigSize, PAGE_NAMES_MIN, type PagesAt, pagesAt } from './forms';
+import { bigSize, PAGE_NAMES_MIN, type PagesAt, pagesAt, SPOTLIGHT_S, spotAt } from './forms';
 import { BAR, cellRect, GAP, type Grid, PAD, type Placed, pageOn, screenGrid } from './grid';
 import { type Pager, pagerGo, pagerProgress, pagerStart, pagerTick, pagerTouch } from './pager';
 import { cx, EnvProvider, type ScreenEnv } from './parts';
 import st from './screen.module.css';
 import { sizeOf } from './specs';
-import type { DeskGrid, DeskImage, DeskWidget, DeskWidgetView, ScreenCalm } from './types';
+import { everyPage, rotationNow } from './times';
+import type { DeskGrid, DeskImage, DeskSpotlight, DeskWidget, DeskWidgetView, ScreenCalm } from './types';
 import { WidgetView } from './WidgetView';
 import ws from './widgets.module.css';
 import { clockText, dateText, fillWords, SCREEN_WORDS } from './words';
@@ -217,23 +219,33 @@ export function Screen(props: ScreenProps) {
   const pages = layout.pages;
   const latest = useLatest(props);
 
-  /* Pages (DK-133) */
-  const [pager, setPager] = useState<Pager>(() => pagerStart(now));
+  /* Pages (DK-133), only those whose time it is; the editor and a host that decides show them all */
   const controlled = props.page !== undefined;
+  const rotation = useMemo(
+    () => (controlled || editing ? everyPage(pages.length) : rotationNow(pages, now, props.timeZone)),
+    [controlled, editing, pages, now, props.timeZone],
+  );
+  const [pager, setPager] = useState<Pager>(() => pagerStart(now, rotation));
   const page = Math.min(controlled ? (props.page ?? 0) : pager.page, pages.length - 1);
   useEffect(() => {
     if (controlled || editing) return;
-    setPager((p) => pagerTick(p, now, pages.length, layout.turn));
-  }, [now, controlled, editing, pages.length, layout.turn]);
+    setPager((p) => pagerTick(p, now, rotation, layout.turn));
+  }, [now, controlled, editing, rotation, layout.turn]);
+  // The pages the top bar names, in the layout's order, and the shown one's place among them.
+  const turning = rotation.pages;
+  const place = turning.indexOf(page);
+  const latestTurning = useLatest(turning);
+  /** To the `to`th page of the turning (a name touched, a swipe), round at the ends. */
   const go = useCallback(
     (to: number) => {
       const p = latest.current;
-      const n = p.grid.layout.pages.length;
-      const next = ((to % n) + n) % n;
+      const list = latestTurning.current;
+      const n = list.length;
+      const next = list[((to % n) + n) % n] ?? 0;
       if (p.page !== undefined) p.onPage?.(next);
-      else setPager(pagerGo(next, n, p.now));
+      else setPager((before) => pagerGo(next, p.grid.layout.pages.length, p.now, before));
     },
-    [latest],
+    [latest, latestTurning],
   );
   // The host hears of every page the screen turns to, by touch or by itself.
   useEffect(() => {
@@ -260,9 +272,21 @@ export function Screen(props: ScreenProps) {
       [...prev].every((k) => live.has(k)) ? prev : new Set([...prev].filter((k) => live.has(k))),
     );
   }, [state.attention, props.away]);
+  /* A widget taking over for a moment: until its time is up, or Back on this screen */
+  const [spotAway, setSpotAway] = useState<string | null>(null);
+  const spotlight: DeskSpotlight | null =
+    state.spotlight &&
+    !editing &&
+    !props.onlyTime &&
+    spotAway !== state.spotlight.id &&
+    Date.parse(state.spotlight.until) > now
+      ? state.spotlight
+      : null;
+
   const pillView = pill(state.attention);
   const edge = edgeTone(state.attention);
-  const modalOpen = !editing && !props.onlyTime && modalView(state.attention, away, modal).open;
+  // The modal waits while the moment lasts: the door first.
+  const modalOpen = !editing && !props.onlyTime && !spotlight && modalView(state.attention, away, modal).open;
 
   /* A widget opened big (DK-140) */
   const [big, setBig] = useState<string | null>(null);
@@ -279,6 +303,11 @@ export function Screen(props: ScreenProps) {
   useEffect(() => {
     if (big && !bigWidget) setBig(null);
   }, [big, bigWidget]);
+  // Back from the moment, or from a widget opened big.
+  const back = useCallback(() => {
+    if (spotlight) setSpotAway(spotlight.id);
+    else setBig(null);
+  }, [spotlight]);
 
   // The context stays the same while the host's callbacks change identity: they're read from the latest props, so the
   // widgets (memoized on what they show) don't draw again for a new callback.
@@ -327,7 +356,7 @@ export function Screen(props: ScreenProps) {
     g.width < PAGE_NAMES_MIN ? 'dots' : g.width < PAGES_CENTRED_MIN ? 'after' : 'centre',
   );
   // The names' own size changes are watched; a second page appearing brings the names to watch.
-  const hasPages = pages.length > 1;
+  const hasPages = turning.length > 1;
   useLayoutEffect(() => {
     if (!hasPages) return;
     const els = [barRef.current, leftRef.current, chipsRef.current, namesRef.current];
@@ -349,6 +378,30 @@ export function Screen(props: ScreenProps) {
     for (const el of els) if (el) o.observe(el);
     return () => o.disconnect();
   }, [hasPages]);
+  // A moment's words and Back, measured the same way: after the name when the chips leave no room in the middle.
+  const spotRef = useRef<HTMLDivElement>(null);
+  const [spotPlace, setSpotPlace] = useState<'centre' | 'after'>('centre');
+  const spotOn = spotlight !== null;
+  useLayoutEffect(() => {
+    if (!spotOn) return;
+    const els = [barRef.current, leftRef.current, chipsRef.current, spotRef.current];
+    const [bar, left, chips, spot] = els;
+    if (!bar || !left || !chips || !spot) return;
+    const measure = () =>
+      setSpotPlace(
+        spotAt({
+          bar: bar.offsetWidth,
+          left: left.offsetLeft + left.offsetWidth,
+          chips: chips.offsetLeft,
+          spot: spot.offsetWidth,
+        }),
+      );
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const o = new ResizeObserver(measure);
+    for (const el of els) if (el) o.observe(el);
+    return () => o.disconnect();
+  }, [spotOn]);
 
   /* Touch: swipes turn pages, any touch makes the turning wait */
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -361,15 +414,17 @@ export function Screen(props: ScreenProps) {
   const onPointerUp = (e: PointerEvent) => {
     const from = swipe.current;
     swipe.current = null;
-    if (!from || editing || big || modalOpen || pages.length < 2) return;
+    if (!from || editing || big || spotlight || modalOpen || turning.length < 2) return;
     const dx = (e.clientX - from.x) / (scale * g.zoom);
     const dy = (e.clientY - from.y) / (scale * g.zoom);
-    if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.5) go(page + (dx < 0 ? 1 : -1));
+    if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.5)
+      go(Math.max(0, place) + (dx < 0 ? 1 : -1));
   };
 
   const at = barAt;
   const dots = at === 'dots' || at === 'dotsAfter';
   const tryingS = state.trying ? Math.ceil((Date.parse(state.trying.until) - now) / 1000) : 0;
+  const spotLeft = spotlight ? Math.max(0, Date.parse(spotlight.until) - now) : 0;
   const modalWidth = Math.min(860, g.width - 2 * 40);
 
   return (
@@ -391,7 +446,7 @@ export function Screen(props: ScreenProps) {
         }}
         onKeyDown={(e) => {
           if (e.key !== 'Escape') return;
-          if (big) setBig(null);
+          if (spotlight || big) back();
           else if (modal.pill) setModal(MODAL_CLOSED);
         }}
       >
@@ -413,26 +468,37 @@ export function Screen(props: ScreenProps) {
                 </button>
               )}
             </div>
-            {pages.length > 1 && (
+            {turning.length > 1 && (
               <div className={cx(st.pages, st.measure)} ref={namesRef} aria-hidden="true">
-                {pages.map((p) => (
-                  <span key={p.id} className={st.page}>
-                    {p.name}
+                {turning.map((i) => (
+                  <span key={pages[i]?.id ?? i} className={st.page}>
+                    {pages[i]?.name}
                   </span>
                 ))}
               </div>
             )}
-            {bigWidget && !editing ? (
+            {spotlight ? (
+              <div className={cx(st.spot, spotPlace === 'after' && st.spotAfter)} ref={spotRef}>
+                <span className={st.spotWords} role="status">
+                  <i aria-hidden="true" />
+                  {SCREEN_WORDS.spotlight[spotlight.reason]}
+                </span>
+                <button type="button" className={cx(st.back, st.spotBack, st.focus)} onClick={back}>
+                  <span aria-hidden="true">‹</span>
+                  {SCREEN_WORDS.back}
+                </button>
+              </div>
+            ) : bigWidget && !editing ? (
               <button
                 type="button"
                 className={cx(st.back, at !== 'centre' && at !== 'dots' && st.backAfter, st.focus)}
-                onClick={() => setBig(null)}
+                onClick={back}
               >
                 <span aria-hidden="true">‹</span>
                 {SCREEN_WORDS.back}
               </button>
             ) : (
-              pages.length > 1 && (
+              turning.length > 1 && (
                 <nav
                   className={cx(
                     st.pages,
@@ -441,28 +507,32 @@ export function Screen(props: ScreenProps) {
                   )}
                   aria-label={SCREEN_WORDS.pages}
                 >
-                  {pages.map((p, i) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className={cx(dots ? st.dot : st.page, st.focus)}
-                      data-on={i === page || undefined}
-                      aria-current={i === page ? 'page' : undefined}
-                      aria-label={
-                        dots
-                          ? fillWords(SCREEN_WORDS.page, { name: p.name, i: i + 1, n: pages.length })
-                          : undefined
-                      }
-                      style={
-                        i === page && progress !== null
-                          ? ({ '--turn': `${Math.round(progress * 100)}%` } as CSSProperties)
-                          : undefined
-                      }
-                      onClick={() => go(i)}
-                    >
-                      {dots ? null : p.name}
-                    </button>
-                  ))}
+                  {turning.map((i, k) => {
+                    const p = pages[i];
+                    if (!p) return null;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={cx(dots ? st.dot : st.page, st.focus)}
+                        data-on={i === page || undefined}
+                        aria-current={i === page ? 'page' : undefined}
+                        aria-label={
+                          dots
+                            ? fillWords(SCREEN_WORDS.page, { name: p.name, i: k + 1, n: turning.length })
+                            : undefined
+                        }
+                        style={
+                          i === page && progress !== null
+                            ? ({ '--turn': `${Math.round(progress * 100)}%` } as CSSProperties)
+                            : undefined
+                        }
+                        onClick={() => go(k)}
+                      >
+                        {dots ? null : p.name}
+                      </button>
+                    );
+                  })}
                 </nav>
               )
             )}
@@ -501,17 +571,37 @@ export function Screen(props: ScreenProps) {
             </div>
           )}
           {tryingS > 0 && <div className={st.trying}>{fillWords(SCREEN_WORDS.trying, { s: tryingS })}</div>}
-          {bigWidget && !editing && !props.onlyTime && (
-            <BigWidget
-              g={g}
-              widget={bigWidget}
-              view={views.get(bigWidget.id)}
-              calm={props.calm}
-              now={now}
-              onBack={() => setBig(null)}
-            />
+          {spotlight ? (
+            <>
+              <BigWidget
+                g={g}
+                widget={{ ...spotlight.widget, x: 0, y: 0, w: 1, h: 1 }}
+                view={views.get(spotlight.widget.id)}
+                calm={props.calm}
+                now={now}
+                onBack={back}
+              />
+              <div
+                className={st.spotTime}
+                style={{ '--left': `${(spotLeft / (SPOTLIGHT_S * 1000)) * 100}%` } as CSSProperties}
+                aria-hidden="true"
+              />
+            </>
+          ) : (
+            bigWidget &&
+            !editing &&
+            !props.onlyTime && (
+              <BigWidget
+                g={g}
+                widget={bigWidget}
+                view={views.get(bigWidget.id)}
+                calm={props.calm}
+                now={now}
+                onBack={back}
+              />
+            )
           )}
-          {!editing && !props.onlyTime && (
+          {!editing && !props.onlyTime && !spotlight && (
             <AttentionModal
               attention={state.attention}
               away={away}

@@ -26,6 +26,7 @@ import {
   notifications,
 } from '../db/schema/index';
 import { messageDedupKey } from '../domain/message-notify';
+import { useOpenDataForTests } from '../lib/open-data';
 import { AHEAD_TOOLS } from '../mcp/served';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS, TEST_BURROW_ID } from '../seed/test-world';
@@ -33,6 +34,7 @@ import { grantKey } from '../test/grants';
 import { useTestServer } from '../test/harness';
 import { mcpClient } from '../test/mcp';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
+import { metAnswer } from '../weather/testing';
 import { sealWebSearchKey } from '../web-search/store';
 import { aheadSettingsOf, updateLooksAhead } from './commands';
 import { useAheadDocsForTests } from './docs';
@@ -343,6 +345,26 @@ describe('Looks ahead (looks-ahead.md)', () => {
     const box = await mcp.client.callTool({ name: 'mail_search', arguments: { query: '' } });
     const mailId = (box.structuredContent as { messages: { id: string }[] }).messages[0]?.id ?? '';
     await mcp.client.callTool({ name: 'mail_read', arguments: { messageId: mailId } });
+    // The weather where the Whombat is, and the person's news (weather-news.md): another place only while the web is
+    // open, and no site on.
+    await t.services.db
+      .update(burrows)
+      .set({ place: { name: 'Utrecht', lat: 52.09, lon: 5.12, country: 'NL', region: 'NL-UT' } })
+      .where(eq(burrows.id, TEST_BURROW_ID));
+    useOpenDataForTests(t.services, async (url) =>
+      url.startsWith('https://api.met.no/')
+        ? { status: 200, headers: {}, body: Buffer.from(JSON.stringify(metAnswer('2026-12-13T15:00:00Z'))) }
+        : { status: 404, headers: {}, body: Buffer.alloc(0) },
+    );
+    const weather = await mcp.client.callTool({ name: 'weather_forecast', arguments: { days: 2 } });
+    expect(weather.structuredContent).toMatchObject({ status: 'ok', place: { name: 'Utrecht' } });
+    const elsewhere = await mcp.client.callTool({
+      name: 'weather_forecast',
+      arguments: { place: 'Amsterdam' },
+    });
+    expect(elsewhere.isError).toBe(true);
+    const headlines = await mcp.client.callTool({ name: 'news_headlines', arguments: {} });
+    expect(headlines.structuredContent).toMatchObject({ status: 'none' });
 
     // Report with primary kind, extraKinds, one-tap action chip, note, and multiple verified sources.
     const told = await mcp.client.callTool({
@@ -358,6 +380,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
           { url: 'https://venue.example.com/the-script' },
           { mailId },
           { docId: 'paperless:ccn_paperless_ahead:42' },
+          { weather: true },
         ],
       },
     });
@@ -378,6 +401,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
     expect(root?.text).toContain('[venue.example.com](https://venue.example.com/the-script)');
     expect(root?.text).toContain('(mail)');
     expect(root?.text).toContain('Paperless');
+    expect(root?.text).toContain('Data from MET Norway');
     expect(root?.text).not.toContain('evil.example.net');
     expect(root?.suggestions).toEqual(['Update event to 20:45', ...AHEAD_REPLIES]);
 

@@ -19,7 +19,7 @@ import {
 } from 'react';
 import { type AttentionActions, AttentionModal, LockIcon } from './AttentionModal';
 import { edgeTone, MODAL_CLOSED, type ModalState, modalView, pill } from './attention';
-import { bigSize, PAGE_NAMES_MIN, type PagesAt, pagesAt, SPOTLIGHT_S } from './forms';
+import { bigSize, PAGE_NAMES_MIN, type PagesAt, pagesAt, SPOTLIGHT_S, spotAt } from './forms';
 import { BAR, cellRect, GAP, type Grid, PAD, type Placed, pageOn, screenGrid } from './grid';
 import { type Pager, pagerGo, pagerProgress, pagerStart, pagerTick, pagerTouch } from './pager';
 import { cx, EnvProvider, type ScreenEnv } from './parts';
@@ -378,6 +378,30 @@ export function Screen(props: ScreenProps) {
     for (const el of els) if (el) o.observe(el);
     return () => o.disconnect();
   }, [hasPages]);
+  // A moment's words and Back, measured the same way: after the name when the chips leave no room in the middle.
+  const spotRef = useRef<HTMLDivElement>(null);
+  const [spotPlace, setSpotPlace] = useState<'centre' | 'after'>('centre');
+  const spotOn = spotlight !== null;
+  useLayoutEffect(() => {
+    if (!spotOn) return;
+    const els = [barRef.current, leftRef.current, chipsRef.current, spotRef.current];
+    const [bar, left, chips, spot] = els;
+    if (!bar || !left || !chips || !spot) return;
+    const measure = () =>
+      setSpotPlace(
+        spotAt({
+          bar: bar.offsetWidth,
+          left: left.offsetLeft + left.offsetWidth,
+          chips: chips.offsetLeft,
+          spot: spot.offsetWidth,
+        }),
+      );
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const o = new ResizeObserver(measure);
+    for (const el of els) if (el) o.observe(el);
+    return () => o.disconnect();
+  }, [spotOn]);
 
   /* Touch: swipes turn pages, any touch makes the turning wait */
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -454,7 +478,7 @@ export function Screen(props: ScreenProps) {
               </div>
             )}
             {spotlight ? (
-              <div className={st.spot}>
+              <div className={cx(st.spot, spotPlace === 'after' && st.spotAfter)} ref={spotRef}>
                 <span className={st.spotWords} role="status">
                   <i aria-hidden="true" />
                   {SCREEN_WORDS.spotlight[spotlight.reason]}

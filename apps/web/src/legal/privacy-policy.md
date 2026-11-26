@@ -1,4 +1,4 @@
-> Version `2026-11-25`.
+> Version `2026-11-26`.
 
 # Whombat Privacy Policy
 
@@ -226,6 +226,13 @@ so they see its IP address and what it asks for, and their own privacy policies 
 - **Hugging Face** hosts the speech models. Your Whombat downloads its speech-to-text model while voice typing is on
   (it is at first), and the Dutch voice only after you turn it on and agree to its licence.
 - **Time servers** keep its clock right: Cloudflare, Netnod, PTB and SIDN's TimeNL.
+- **MET Norway** (the Norwegian Meteorological Institute) gives the weather forecast for where your Whombat is, or for
+  a place you or your assistant ask about. Your Whombat sends it that place's coordinates, rounded to about a kilometre.
+- **OpenStreetMap**'s place search (**Nominatim**, run by the OpenStreetMap Foundation) finds the place you type, or
+  the town at your device's location (rounded to about a kilometre), when you set where your Whombat is or ask your
+  assistant about the weather somewhere.
+- **The news sites you choose** send your Whombat their headlines. It reads only the sites you turned on or added,
+  every quarter of an hour while something shows the news; until you turn one on, it reads none.
 
 Tailscale, the AI providers and the services you connect are yours to choose; section 3 says how your Whombat talks
 to them.

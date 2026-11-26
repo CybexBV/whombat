@@ -222,8 +222,11 @@ describe('Add a widget (DK-139)', () => {
       'work',
       'coming',
       'done',
+      'weather',
+      'news',
     ]);
     expect(own.items.find((i) => i.type === 'work')?.name).toContain('Dusty');
+    expect(own.items.find((i) => i.type === 'weather')?.view).toBe('weather');
     const fleet: DeskFleet = {
       cards: [card(), card({ id: undefined, name: 'no id' })],
       rows: new Map([['pve-01', { platform: 'proxmox', os: null, cpu: { cores: 16 } } as never]]),

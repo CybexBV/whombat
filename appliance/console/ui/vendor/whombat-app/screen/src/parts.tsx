@@ -90,6 +90,24 @@ const ICONS = {
     </>
   ),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  // The sun behind a cloud, whose fill is the tile's so the sun stays behind it.
+  weather: (
+    <>
+      <circle cx="8.5" cy="8.5" r="3.2" />
+      <path d="M8.5 2.6v.9M2.6 8.5h.9M4.3 4.3l.7.7M12.7 4.3l-.7.7" />
+      <path
+        d="M7 19h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 10.6 4.25 4.25 0 0 0 7 19Z"
+        transform="translate(3 2.4) scale(0.88)"
+        fill="var(--sf2)"
+      />
+    </>
+  ),
+  news: (
+    <>
+      <rect x="3.5" y="5" width="13.5" height="14" rx="2" />
+      <path d="M17 9h3.5v8a2 2 0 0 1-2 2H17M7 9h6.5M7 12.5h6.5M7 16h4" />
+    </>
+  ),
   server: (
     <>
       <rect x="4" y="4.5" width="16" height="6.5" rx="2" />

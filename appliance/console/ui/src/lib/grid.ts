@@ -3,7 +3,8 @@
  * socket's `DeskGlance.grid` (core's `DeskGrid`) and each monitor's in `DeskGlance.outputs`, checked member by member
  * like the rest of the state: what the page doesn't understand goes (a widget of an unknown type, a view of an unknown
  * kind, a field of the wrong type), a part without what it can't do without goes, and what is left is always drawable.
- * A grid with no page left is none, and the page draws the calm glance instead.
+ * A grid with no page left is none, and the page draws the calm glance instead. A page's times (`show`) and a widget
+ * taking over for a moment (`spotlight`, the doorbell) go to the drawing, which turns the pages and draws the moment.
  *
  * The shapes are `@whombat/screen`'s (the drawing's), which mirror core's member for member.
  */
@@ -14,13 +15,18 @@ import type {
   DeskImage,
   DeskLayout,
   DeskPage,
+  DeskPageShow,
+  DeskSpotlight,
   DeskViewBase,
   DeskViewPoster,
   DeskViewRow,
+  DeskWeatherDay,
+  DeskWeatherHour,
   DeskWidget,
   DeskWidgetView,
+  Weekday,
 } from '@whombat/screen';
-import { SCREEN_SIZES, VIEW_KINDS, type ViewKind, WIDGET_TYPES } from '@whombat/screen';
+import { SCREEN_SIZES, VIEW_KINDS, type ViewKind, WEEKDAYS, WIDGET_TYPES } from '@whombat/screen';
 
 export type {
   DeskAttention,
@@ -29,6 +35,8 @@ export type {
   DeskImage,
   DeskLayout,
   DeskPage,
+  DeskPageShow,
+  DeskSpotlight,
   DeskViewBase,
   DeskWidget,
   DeskWidgetView,
@@ -58,12 +66,23 @@ export const DESK_WIDGET_REF_RE =
   /^(server|connection|device|widget|account):[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 export const DESK_SHAPE_RE = /^([1-9]|[1-3][0-9])x([1-9]|[1-3][0-9])$/;
 export const DESK_OUTPUT_KEY_RE = /^[a-z0-9-]{1,40}$/;
+/** The forecast's bounds (core weather.ts): hours from now on, and today and the days after it. */
+export const WEATHER_HOURS_MAX = 24;
+export const WEATHER_DAYS_MAX = 7;
+/** MET Norway's `symbol_code` (`partlycloudy_night`, `heavyrain`), as core's `WeatherSymbol`. */
+export const WEATHER_SYMBOL_RE = /^[a-z]{2,48}(_(day|night|polartwilight))?$/;
+/** Why a widget takes over the screen for a moment (`DESK_SPOTLIGHT_REASONS`): the drawing has words for each. */
+export const DESK_SPOTLIGHT_REASONS = ['doorbell'] as const satisfies readonly DeskSpotlight['reason'][];
+/** A page's window opens and closes at a wall-clock time, `HH:MM` (notify.ts `ClockTime`). */
+export const DESK_CLOCK_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const SPOTLIGHT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const PAGE_ID_RE = /^p_[A-Za-z0-9_-]{1,32}$/;
 const WIDGET_ID_RE = /^w_[A-Za-z0-9_-]{1,32}$/;
 const OPT_KEY_RE = /^[a-z][a-zA-Z0-9]{0,23}$/;
 const IMAGE_REF_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 const MARK_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 const SERVER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const DATE_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 const TIME_RE =
   /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$/;
 
@@ -103,6 +122,14 @@ const points = (v: unknown, nullable: boolean): (number | null)[] =>
     const n = num(p);
     return n !== undefined ? [n] : nullable && p === null ? [null] : [];
   });
+/** A whole degree, Celsius or Fahrenheit as the view says. */
+const degrees = (v: unknown) => int(v, -150, 150);
+/** Rain in millimetres. */
+const rainMm = (v: unknown) => {
+  const n = num(v);
+  return n !== undefined && n >= 0 && n <= 1000 ? n : undefined;
+};
+const symbol = (v: unknown) => matching(v, WEATHER_SYMBOL_RE);
 
 export function parseImage(v: unknown): DeskImage | undefined {
   if (!isObj(v)) return undefined;
@@ -131,27 +158,52 @@ function parseOpts(v: unknown): Record<string, string> {
   return out;
 }
 
+/** What a widget is and shows (`DeskWidgetSpec`): an id, a type the page can draw, a sound ref; null otherwise. */
+function parseSpec(w: unknown): Pick<DeskWidget, 'id' | 'type' | 'ref' | 'opts'> | null {
+  if (!isObj(w)) return null;
+  const id = matching(w.id, WIDGET_ID_RE);
+  const type = oneOf(w.type, WIDGET_TYPES);
+  const ref = w.ref === undefined ? undefined : matching(w.ref, DESK_WIDGET_REF_RE);
+  if (!id || !type || (w.ref !== undefined && !ref)) return null;
+  return defined({ id, type, ref, opts: parseOpts(w.opts) });
+}
+
 /** A shape's widgets: the ones the page can draw, inside the shape, each id once, none on another. */
 function parseWidgets(v: unknown, cols: number, rows: number): DeskWidget[] {
   const out: DeskWidget[] = [];
   for (const w of list(v, DESK_PAGE_WIDGETS_MAX)) {
     if (!isObj(w)) continue;
-    const id = matching(w.id, WIDGET_ID_RE);
-    const type = oneOf(w.type, WIDGET_TYPES);
+    const spec = parseSpec(w);
+    if (!spec) continue;
     const x = int(w.x, 0, DESK_GRID_MAX - 1);
     const y = int(w.y, 0, DESK_GRID_MAX - 1);
     const width = int(w.w, 1, DESK_GRID_MAX);
     const height = int(w.h, 1, DESK_GRID_MAX);
-    if (!id || !type || x === undefined || y === undefined || width === undefined || height === undefined)
-      continue;
+    if (x === undefined || y === undefined || width === undefined || height === undefined) continue;
     if (x + width > cols || y + height > rows) continue;
-    const ref = w.ref === undefined ? undefined : matching(w.ref, DESK_WIDGET_REF_RE);
-    if (w.ref !== undefined && !ref) continue;
-    const widget: DeskWidget = defined({ id, type, ref, opts: parseOpts(w.opts), x, y, w: width, h: height });
-    if (out.some((o) => o.id === id || overlaps(o, widget))) continue;
+    const widget: DeskWidget = { ...spec, x, y, w: width, h: height };
+    if (out.some((o) => o.id === widget.id || overlaps(o, widget))) continue;
     out.push(widget);
   }
   return out;
+}
+
+/**
+ * When a page is in the turning: both times `HH:MM`, and the days it names that are days (each once). A window that
+ * isn't one (a time it can't read, no day it knows) goes, and the page is always in: shown too often beats never.
+ */
+function parseShow(v: unknown): DeskPageShow | undefined {
+  if (!isObj(v)) return undefined;
+  const from = matching(v.from, DESK_CLOCK_RE);
+  const to = matching(v.to, DESK_CLOCK_RE);
+  if (!from || !to) return undefined;
+  if (v.days === undefined) return { from, to };
+  const days: Weekday[] = [];
+  for (const d of list(v.days, WEEKDAYS.length)) {
+    const day = oneOf(d, WEEKDAYS);
+    if (day && !days.includes(day)) days.push(day);
+  }
+  return days.length > 0 ? { from, to, days } : undefined;
 }
 
 function parsePage(v: unknown): DeskPage | null {
@@ -167,7 +219,7 @@ function parsePage(v: unknown): DeskPage | null {
   const shapes = Object.keys(layouts);
   if (shapes.length === 0) return null;
   const last = typeof v.last === 'string' && v.last in layouts ? v.last : (shapes[0] as string);
-  return { id, name, layouts, last };
+  return defined({ id, name, layouts, last, show: parseShow(v.show) });
 }
 
 export function parseLayout(v: unknown): DeskLayout | null {
@@ -226,6 +278,26 @@ const words = (v: unknown, max: number, each: number): string[] | undefined => {
   const out = some(v, max, (x) => text(x, each) ?? null);
   return out.length > 0 ? out : undefined;
 };
+
+function parseWeatherHour(v: unknown): DeskWeatherHour | null {
+  if (!isObj(v)) return null;
+  const at = time(v.at);
+  const temp = degrees(v.temp);
+  const sign = symbol(v.symbol);
+  return at && temp !== undefined && sign
+    ? defined({ at, temp, symbol: sign, rainMm: rainMm(v.rainMm) })
+    : null;
+}
+
+function parseWeatherDay(v: unknown): DeskWeatherDay | null {
+  if (!isObj(v)) return null;
+  const date = matching(v.date, DATE_RE);
+  const high = degrees(v.high);
+  const low = degrees(v.low);
+  const sign = symbol(v.symbol);
+  if (!date || high === undefined || low === undefined || !sign) return null;
+  return defined({ date, high, low, symbol: sign, rainMm: rainMm(v.rainMm) });
+}
 
 /** A view the page can draw, its members checked; null for an unknown kind or one without what it needs. */
 export function parseView(v: unknown): DeskWidgetView | null {
@@ -371,6 +443,50 @@ export function parseView(v: unknown): DeskWidgetView | null {
         empty: text(v.empty, 120),
       });
     }
+    case 'weather': {
+      // Without its unit the numbers mean nothing, and MET Norway's forecast is shown with its credit.
+      const unit = oneOf(v.unit, ['C', 'F'] as const);
+      const credit = text(v.credit, 60);
+      if (!unit || !credit) return null;
+      const n = isObj(v.now) ? v.now : {};
+      const nowTemp = degrees(n.temp);
+      const nowSign = symbol(n.symbol);
+      const nowText = text(n.text, 60);
+      const t = isObj(v.today) ? v.today : {};
+      const high = degrees(t.high);
+      const low = degrees(t.low);
+      const sun = isObj(v.sun)
+        ? defined({
+            rise: time(v.sun.rise),
+            set: time(v.sun.set),
+            polar: oneOf(v.sun.polar, ['day', 'night'] as const),
+          })
+        : undefined;
+      return defined({
+        ...base,
+        kind,
+        place: text(v.place, 80),
+        unit,
+        now:
+          nowTemp !== undefined && nowSign && nowText
+            ? defined({
+                temp: nowTemp,
+                symbol: nowSign,
+                text: nowText,
+                wind: text(n.wind, 24),
+                feels: degrees(n.feels),
+              })
+            : undefined,
+        today:
+          high !== undefined && low !== undefined
+            ? defined({ high, low, rainMm: rainMm(t.rainMm), rainChance: pct(t.rainChance) })
+            : undefined,
+        hours: some(v.hours, WEATHER_HOURS_MAX, parseWeatherHour),
+        days: some(v.days, WEATHER_DAYS_MAX, parseWeatherDay),
+        sun: sun && Object.keys(sun).length > 0 ? sun : undefined,
+        credit,
+      });
+    }
   }
 }
 
@@ -422,6 +538,19 @@ export function parseAttention(v: unknown): DeskAttention {
 
 /* The grid -------------------------------------------------------------------------------------------------------- */
 
+/**
+ * A widget taking over the screen for a moment (the doorbell): its id, a widget the page can draw (no place: it's
+ * drawn big), until when, and a reason the drawing has words for; none when any of it isn't right.
+ */
+export function parseSpotlight(v: unknown): DeskSpotlight | undefined {
+  if (!isObj(v)) return undefined;
+  const id = matching(v.id, SPOTLIGHT_ID_RE);
+  const widget = parseSpec(v.widget);
+  const until = time(v.until);
+  const reason = oneOf(v.reason, DESK_SPOTLIGHT_REASONS);
+  return id && widget && until && reason ? { id, widget, until, reason } : undefined;
+}
+
 /** A screen's grid, checked; null when it has no page the page can draw (then the calm glance shows). */
 export function parseGrid(v: unknown): DeskGrid | null {
   if (!isObj(v)) return null;
@@ -441,6 +570,7 @@ export function parseGrid(v: unknown): DeskGrid | null {
     attention: parseAttention(v.attention),
     popups: oneOf(v.popups, ['all', 'problems', 'none'] as const) ?? 'all',
     trying: until ? { until } : undefined,
+    spotlight: parseSpotlight(v.spotlight),
   });
 }
 
@@ -459,11 +589,24 @@ export function parseOutputGrids(v: unknown): DeskOutputGrid[] {
 
 /* Locked by the page ----------------------------------------------------------------------------------------------- */
 
+/** Whombat's own widgets whose views are never private: the weather where the box is, public headlines. */
+const PUBLIC_OWN_WIDGETS: ReadonlySet<string> = new Set(['weather', 'news']);
+
+/** The ids of a layout's widgets that show as they are on a locked screen (by id, the first seen, as the runtime). */
+function publicWidgetIds(layout: DeskLayout): Set<string> {
+  const types = new Map<string, string>();
+  for (const page of layout.pages)
+    for (const widgets of Object.values(page.layouts))
+      for (const w of widgets) if (!types.has(w.id)) types.set(w.id, w.type);
+  return new Set([...types].filter(([, type]) => PUBLIC_OWN_WIDGETS.has(type)).map(([id]) => id));
+}
+
 /**
  * A grid as a locked screen may show it, for a desk the page can't vouch for (Whombat away, an unlock that ran out):
  * what the runtime would have sent for the lock view, as far as the page can tell. *Only the time* has no grid. Every
- * view shows everything; *A summary* shows the servers and Whombat's own widgets, and every other widget says “Unlock
- * to see it” (the page can't tell which are private). No ask's words in either: `askTitle` (“Dusty has a question”).
+ * view shows everything; *A summary* shows the servers and Whombat's own widgets (the weather and the news as they
+ * are: nothing in them is private), and every other widget says “Unlock to see it” (the page can't tell which are
+ * private). No ask's words in either: `askTitle` (“Dusty has a question”).
  */
 export function lockedGrid(
   g: DeskGrid,
@@ -478,7 +621,9 @@ export function lockedGrid(
     ),
   };
   if (view === 'everything') return { ...g, attention };
+  const open = publicWidgetIds(g.layout);
   const views = g.views.map((v): DeskWidgetView => {
+    if (open.has(v.id)) return v;
     const base: DeskViewBase = defined({
       id: v.id,
       title: v.title,
@@ -488,6 +633,7 @@ export function lockedGrid(
     });
     switch (v.kind) {
       case 'server':
+      case 'weather':
         return v;
       case 'figures':
         return { ...base, kind: v.kind, items: [] };
