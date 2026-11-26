@@ -434,9 +434,7 @@ describe('what the installer says', () => {
       control: 'watch',
     });
     expect(job).toMatchObject({ state: 'ready', serverId: 'far-1', error: null });
-    expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.get('hub')).toBe(
-      'wss://100.64.0.3:8443',
-    );
+    expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.get('via')).toBe('100.64.0.3');
 
     // One that can't download from there says so with that address.
     ssh.installer = () => ({
@@ -462,7 +460,30 @@ describe('what the installer says', () => {
       control: 'watch',
     });
     expect(near).toMatchObject({ state: 'ready', serverId: 'near-1' });
-    expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.has('hub')).toBe(false);
+    expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.has('via')).toBe(false);
+  });
+
+  it('asks for the tailnet installer on the hub’s own listener, whatever port the agents’ address names', async () => {
+    // The agents' address is a forwarded port; the hub's listener on the tailnet is its own 8443.
+    const agentsUrl = hub.hubMeta.agents_url;
+    hub.hubMeta.agents_url = 'wss://hosts.example:443';
+    try {
+      ssh.installer = () => ({
+        stdout: '',
+        stderr: 'install.sh: cannot reach https://100.64.0.3:8443/download/whombat-agent-linux-amd64\n',
+        code: 1,
+      });
+      const job = await install({
+        address: overTailnet(17),
+        username: 'root',
+        auth: { kind: 'password', password: ROOT_PASSWORD },
+        control: 'watch',
+      });
+      expect(job.error?.code).toBe('cant_reach_whombat');
+      expect(job.error?.message).toContain('at 100.64.0.3:8443.');
+    } finally {
+      hub.hubMeta.agents_url = agentsUrl;
+    }
   });
 
   it('keeps the hub’s own address when the hub doesn’t have the one the connection came from', async () => {
@@ -476,7 +497,7 @@ describe('what the installer says', () => {
     });
     expect(job).toMatchObject({ state: 'ready', serverId: 'vpn-1', error: null });
     const asked = hub.calls('GET', '/api/v1/agent-install.sh').slice(before);
-    expect(asked.map((c) => c.query.get('hub'))).toEqual(['wss://100.70.0.9:8443', null]);
+    expect(asked.map((c) => c.query.get('via'))).toEqual(['100.70.0.9', null]);
   });
 
   it('leaves a server of another Whombat alone', async () => {

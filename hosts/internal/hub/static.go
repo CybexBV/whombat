@@ -358,18 +358,21 @@ func (h *Hub) installScript(viaAgent bool) http.HandlerFunc {
 // Unix socket headless): the script the agent listener serves at
 // /install.sh, for the Whombat server to run over SSH (SI-02). Its
 // downloads come from the agents' address with the listener's key pinned,
-// not from the Host the request named. `?hub=wss://host:port` names another
-// of the hub's own addresses for this server (its tailnet address, when
-// Whombat reached the server over the tailnet): the script downloads from
-// it and the agent dials it.
+// not from the Host the request named. `?via=<address>` is the machine's
+// own end of Whombat's connection to the server: when it is an address of
+// the Tailscale interface, the script downloads from it and the agent dials
+// it, on the listener's port (a server reached over the tailnet may have no
+// way to the LAN); any other address is refused, and Whombat asks again
+// without it. The answer names the agents' URL it chose in
+// X-Whombat-Agent-URL.
 func (h *Hub) apiAgentInstallScript(w http.ResponseWriter, r *http.Request, p *principal) error {
-	if raw := r.URL.Query().Get("hub"); raw != "" {
-		au := h.ownHubAddr(r.Context(), raw)
+	if via := r.URL.Query().Get("via"); via != "" {
+		au := h.tailnetAgentURL(via)
 		if au == "" {
-			return apiErr(http.StatusBadRequest, "bad_request", "hub must be one of the hub's own addresses, like wss://10.100.1.97:8443.")
+			return apiErr(http.StatusBadRequest, "bad_request", "via must be an address of this machine's Tailscale interface.")
 		}
 		if !h.writeInstallScript(w, "https://"+strings.TrimPrefix(au, "wss://"), au, h.listenerPin()) {
-			return apiErr(http.StatusBadRequest, "bad_request", "hub is not usable: "+au+".")
+			return apiErr(http.StatusBadRequest, "bad_request", "The tailnet address is not usable: "+au+".")
 		}
 		return nil
 	}
@@ -410,11 +413,15 @@ func (h *Hub) writeInstallScript(w http.ResponseWriter, origin, agentURL, pin st
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(HeaderAgentURL, agentURL)
 	if err := installTmpl.Execute(w, data); err != nil {
 		h.log.Error("install.sh", "err", err)
 	}
 	return true
 }
+
+// HeaderAgentURL names the agents' URL an install script carries.
+const HeaderAgentURL = "X-Whombat-Agent-URL"
 
 // AgentUnit is the systemd unit install.sh writes: the agent package's unit
 // (packaging/agent/whombat-agent.service) with the binary in /usr/local/bin.

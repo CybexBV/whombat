@@ -28,6 +28,7 @@ import {
   HostsClient,
   HostsError,
   type HostsRequest,
+  type HostsResponse,
   type HostsRole,
   HostsUnavailable,
   problemOf,
@@ -265,10 +266,15 @@ export class HostsService {
 
   /** A text answer (the agent installer, `GET /agent-install.sh`); a non-2xx status throws `HostsError`. */
   async text(req: HostsRequest): Promise<string> {
+    return (await this.textAnswer(req)).text;
+  }
+
+  /** A text answer with its headers (the installer names the agents' URL it carries in one). */
+  async textAnswer(req: HostsRequest): Promise<{ text: string; headers: HostsResponse['headers'] }> {
     if (!this.client) throw new HostsUnavailable('not_configured', HOSTS_TEXT.absent);
     const res = await this.client.send(req);
     if (res.status < 200 || res.status >= 300) throw problemOf(res.status, res.body);
-    return res.body.toString('utf8');
+    return { text: res.body.toString('utf8'), headers: res.headers };
   }
 
   /** A cached read with Whombat as the actor. */

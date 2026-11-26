@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"net/netip"
-	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -195,19 +194,34 @@ func tailnetInterface(ifc netaddrs.Interface) bool {
 	return ifc.Up && !ifc.Loopback && strings.HasPrefix(ifc.Name, "tailscale")
 }
 
-// ownHubAddr is raw as one of the hub's own addresses now (wss://host:port),
-// or "" when it isn't a wss URL with a port and nothing else, or isn't one
-// of them.
-func (h *Hub) ownHubAddr(ctx context.Context, raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Scheme != "wss" || u.Hostname() == "" || u.Port() == "" || u.User != nil ||
-		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+// tailnetAgentURL is the agents' URL on via, an address of the machine's
+// Tailscale interface, on the agent listener's own port (whatever port the
+// agents' URL names); "" when via isn't one, or the listener isn't bound to
+// it. Another interface's address in Tailscale's ranges (another VPN) is
+// never one: a server reached that way keeps the agents' URL.
+func (h *Hub) tailnetAgentURL(via string) string {
+	a, err := netip.ParseAddr(via)
+	if err != nil || a.Zone() != "" || !tailnetAddr(a) {
 		return ""
 	}
-	target := "wss://" + u.Host
-	for _, a := range h.computeHubAddrs(h.currentAgentURL(ctx)) {
-		if strings.EqualFold(a, target) {
-			return a
+	a = a.Unmap()
+	if host, _, err := net.SplitHostPort(h.cfg.AgentListen); err == nil && host != "" && host != "0.0.0.0" && host != "::" {
+		if b, err := netip.ParseAddr(host); err != nil || b.Unmap() != a {
+			return ""
+		}
+	}
+	ifs, err := h.interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, ifc := range ifs {
+		if !tailnetInterface(ifc) {
+			continue
+		}
+		for _, p := range ifc.Prefixes {
+			if p.Addr().Unmap() == a {
+				return "wss://" + net.JoinHostPort(a.String(), h.agentPort())
+			}
 		}
 	}
 	return ""

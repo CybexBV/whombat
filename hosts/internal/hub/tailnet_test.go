@@ -39,28 +39,74 @@ func TestTailnetAddressForAgents(t *testing.T) {
 	}
 
 	svc := e.service("pe_1|John")
-	for _, hub := range []string{"wss://100.64.0.3:4744", "wss://[fd7a:115c:a1e0::3]:4744"} {
-		code, b, _ := svc.req(http.MethodGet, "/api/v1/agent-install.sh?hub="+url.QueryEscape(hub), nil, nil)
+	for via, hub := range map[string]string{"100.64.0.3": "wss://100.64.0.3:4744", "fd7a:115c:a1e0::3": "wss://[fd7a:115c:a1e0::3]:4744"} {
+		code, b, hdr := svc.req(http.MethodGet, "/api/v1/agent-install.sh?via="+url.QueryEscape(via), nil, nil)
 		if code != 200 {
-			t.Fatalf("%s: %d %s", hub, code, b)
+			t.Fatalf("%s: %d %s", via, code, b)
+		}
+		if got := hdr.Get("X-Whombat-Agent-URL"); got != hub {
+			t.Errorf("%s: X-Whombat-Agent-URL %q, want %q", via, got, hub)
 		}
 		script := string(b)
 		for _, s := range []string{"HUB_URL='" + hub + "'", "DOWNLOAD_BASE='https://" + strings.TrimPrefix(hub, "wss://") + "/download'",
 			"TLS_PIN='" + e.h.listenerPin() + "'"} {
 			if !strings.Contains(script, s) {
-				t.Errorf("%s: script lacks %q", hub, s)
+				t.Errorf("%s: script lacks %q", via, s)
 			}
 		}
 		if strings.Contains(script, "10.100.1.5") {
-			t.Errorf("%s: the script names the LAN address", hub)
+			t.Errorf("%s: the script names the LAN address", via)
 		}
 	}
-	// Only the hub's own addresses, as wss://host:port.
-	for _, bad := range []string{"wss://100.64.0.9:4744", "wss://10.9.0.1:4744", "https://100.64.0.3:4744",
-		"wss://100.64.0.3", "wss://100.64.0.3:4744/x", "wss://u@100.64.0.3:4744"} {
-		if p := svc.problem(http.MethodGet, "/api/v1/agent-install.sh?hub="+url.QueryEscape(bad), nil, 400); p.Code != "bad_request" {
+	// Only an address of the Tailscale interface, as an address alone.
+	for _, bad := range []string{"100.64.0.9", "10.100.1.5", "10.9.0.1", "fe80::3", "wss://100.64.0.3:4744", "100.64.0.3:4744", "x"} {
+		if p := svc.problem(http.MethodGet, "/api/v1/agent-install.sh?via="+url.QueryEscape(bad), nil, 400); p.Code != "bad_request" {
 			t.Errorf("%s: %+v", bad, p)
 		}
+	}
+	// The agents' address as usual: named in the header too.
+	if code, _, hdr := svc.req(http.MethodGet, "/api/v1/agent-install.sh", nil, nil); code != 200 || hdr.Get("X-Whombat-Agent-URL") != "wss://10.100.1.5:4744" {
+		t.Errorf("default: %d %q", code, hdr.Get("X-Whombat-Agent-URL"))
+	}
+}
+
+// The tailnet installer is on the hub listener's own port, whatever port the
+// agents' URL names (a forwarded port, or wss's own 443), and only for the
+// Tailscale interface: an address of another VPN in Tailscale's ranges is
+// turned away, so Whombat keeps the agents' URL as before, and doesn't take
+// a tailnet place in the list.
+func TestTailnetInstallerOnlyOnTheTailscaleListener(t *testing.T) {
+	pfx := netip.MustParsePrefix
+	ifs := []netaddrs.Interface{
+		{Name: "enp1s0", Up: true, Prefixes: []netip.Prefix{pfx("10.100.1.5/24")}},
+		{Name: "vpn0", Up: true, Prefixes: []netip.Prefix{pfx("100.70.0.9/24"), pfx("fd7a:115c:a1e0::9/64")}},
+		{Name: "tailscale0", Up: true, Prefixes: []netip.Prefix{pfx("100.64.0.3/32")}},
+	}
+	for _, c := range []struct{ agentURL, listen, want string }{
+		{"wss://hosts.example:443", ":8443", "wss://100.64.0.3:8443"},
+		{"wss://hosts.example", "0.0.0.0:443", "wss://100.64.0.3:443"},
+	} {
+		t.Run(c.listen, func(t *testing.T) {
+			e := headlessEnv(t, func(cfg *Config) {
+				cfg.AgentURL, cfg.AgentListen = c.agentURL, c.listen
+				cfg.Interfaces = func() ([]netaddrs.Interface, error) { return ifs, nil }
+			})
+			svc := e.service("pe_1|John")
+			code, b, hdr := svc.req(http.MethodGet, "/api/v1/agent-install.sh?via=100.64.0.3", nil, nil)
+			if code != 200 || hdr.Get("X-Whombat-Agent-URL") != c.want || !strings.Contains(string(b), "HUB_URL='"+c.want+"'") ||
+				!strings.Contains(string(b), "DOWNLOAD_BASE='https://"+strings.TrimPrefix(c.want, "wss://")+"/download'") {
+				t.Fatalf("installer: %d %q\n%s", code, hdr.Get("X-Whombat-Agent-URL"), b)
+			}
+			for _, other := range []string{"100.70.0.9", "fd7a:115c:a1e0::9"} {
+				if p := svc.problem(http.MethodGet, "/api/v1/agent-install.sh?via="+url.QueryEscape(other), nil, 400); p.Code != "bad_request" {
+					t.Errorf("%s: %+v", other, p)
+				}
+			}
+			got := e.h.computeHubAddrs(e.h.currentAgentURL(context.Background()))
+			if got[len(got)-1] != c.want {
+				t.Fatalf("addrs = %v: the Tailscale interface's address last", got)
+			}
+		})
 	}
 }
 
@@ -104,7 +150,7 @@ func TestTailnetAddressSurvivesTheLimit(t *testing.T) {
 		!slices.Equal(got[len(got)-2:], []string{"wss://100.64.0.3:8443", "wss://[fd7a:115c:a1e0::3]:8443"}) {
 		t.Fatalf("addrs = %v", got)
 	}
-	if code, b, _ := e.service("pe_1|John").req(http.MethodGet, "/api/v1/agent-install.sh?hub="+url.QueryEscape("wss://100.64.0.3:8443"), nil, nil); code != 200 {
+	if code, b, _ := e.service("pe_1|John").req(http.MethodGet, "/api/v1/agent-install.sh?via=100.64.0.3", nil, nil); code != 200 {
 		t.Fatalf("installer for the tailnet address: %d %s", code, b)
 	}
 

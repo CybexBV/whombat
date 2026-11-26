@@ -5,7 +5,7 @@
  */
 import { GuideCard, HOST_INSTALL_DETAIL_MAX } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { installCommand, KEEP_KEY_COMMAND, tailnetAgentUrl } from './install';
+import { installCommand, KEEP_KEY_COMMAND, tailnetSource } from './install';
 import {
   agentsPlace,
   hubSwitches,
@@ -127,26 +127,22 @@ describe('levels, commands and words', () => {
     expect(KEEP_KEY_COMMAND).not.toMatch(/ssh-ed25519/);
   });
 
-  it('hands a server reached over the tailnet the box’s tailnet address, with the agents’ port', () => {
-    const lan = 'wss://10.100.0.2:8443';
-    expect(tailnetAgentUrl('100.64.0.3', lan)).toBe('wss://100.64.0.3:8443');
-    expect(tailnetAgentUrl('::ffff:100.127.255.1', 'wss://10.100.0.2:9443')).toBe('wss://100.127.255.1:9443');
-    expect(tailnetAgentUrl('fd7a:115c:a1e0::3', lan)).toBe('wss://[fd7a:115c:a1e0::3]:8443');
-    expect(tailnetAgentUrl('100.64.0.3', null)).toBe('wss://100.64.0.3:8443');
-    // wss's own port is left out of a parsed URL: it is still the hub's port.
-    expect(tailnetAgentUrl('100.64.0.3', 'wss://10.100.0.2:443')).toBe('wss://100.64.0.3:443');
-    // Reached any other way: the hub's own address stays.
+  it('names the box’s end of a connection over the tailnet, and nothing for any other way in', () => {
+    expect(tailnetSource('100.64.0.3')).toBe('100.64.0.3');
+    expect(tailnetSource('::ffff:100.127.255.1')).toBe('100.127.255.1');
+    expect(tailnetSource('fd7a:115c:a1e0::3')).toBe('fd7a:115c:a1e0::3');
     for (const local of [
       '10.100.0.2',
       '100.128.0.1',
       '100.63.255.255',
       'fd00::5',
       '127.0.0.1',
+      'fe80::1%eth0',
       '',
       null,
       undefined,
     ])
-      expect(tailnetAgentUrl(local, lan)).toBeNull();
+      expect(tailnetSource(local)).toBeNull();
   });
 
   it('says what changed, plainly', () => {

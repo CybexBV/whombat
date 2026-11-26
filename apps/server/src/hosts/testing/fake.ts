@@ -167,8 +167,11 @@ export class FakeHostsService implements ManageHost {
   readonly tokens = new Map<string, string>();
   /** What `GET /agent-install.sh` serves (the agent listener's `install.sh`, hosts HS-93…). */
   installScript = '#!/bin/sh\n# Whombat agent installer (fake)\nset -eu\n';
-  /** The hub's other own addresses `GET /agent-install.sh?hub=` takes (its tailnet's); any other is 400. */
-  ownAddrs = ['wss://100.64.0.3:8443'];
+  /**
+   * The Tailscale interface's addresses `GET /agent-install.sh?via=` takes, and the agents' URL on the listener's own
+   * port each gives; any other address is 400.
+   */
+  tailnet: Record<string, string> = { '100.64.0.3': 'wss://100.64.0.3:8443' };
   readonly maintenance: Json[] = [];
   readonly checks: Json[] = [];
   readonly sessions = new Map<string, ConsoleSession>();
@@ -669,13 +672,18 @@ export class FakeHostsService implements ManageHost {
         method: 'GET',
         path: `${api}/agent-install.sh`,
         handler: (r) => {
-          const hub = r.query.get('hub');
-          if (hub && hub !== this.hubMeta.agents_url && !this.ownAddrs.includes(hub))
-            return problem(400, 'bad_request', "hub must be one of the hub's own addresses.");
+          const via = r.query.get('via');
+          const agentUrl = via ? this.tailnet[via] : this.hubMeta.agents_url;
+          if (!agentUrl)
+            return problem(
+              400,
+              'bad_request',
+              "via must be an address of this machine's Tailscale interface.",
+            );
           return {
             status: 200,
             body: this.installScript,
-            headers: { 'content-type': 'text/x-shellscript; charset=utf-8' },
+            headers: { 'content-type': 'text/x-shellscript; charset=utf-8', 'x-whombat-agent-url': agentUrl },
           };
         },
       },
@@ -1448,7 +1456,7 @@ export class FakeHostsService implements ManageHost {
         install_command: ` curl -fsSL --pinnedpubkey 'sha256//AAAA' https://10.100.0.2:8443/install.sh | sudo sh -s -- --token ${token}${control ? ` --control ${control}` : ''}`,
         install_url: 'https://10.100.0.2:8443/install.sh',
         tls_pin: 'sha256//AAAA',
-        agent_url: 'wss://10.100.0.2:8443',
+        agent_url: this.hubMeta.agents_url,
         ca_sha256: 'e57c',
         approve: e.approve,
         control,

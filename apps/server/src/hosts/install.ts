@@ -15,7 +15,6 @@ import { randomBytes } from 'node:crypto';
 import { BlockList, isIPv4, isIPv6 } from 'node:net';
 import {
   HOST_MACOS_MIN_MAJOR,
-  HOSTS_AGENT_PORT_DEFAULT,
   type HostControlLevel,
   type HostInstall,
   type HostInstallBody,
@@ -111,25 +110,13 @@ TAILNET.addSubnet('100.64.0.0', 10, 'ipv4');
 TAILNET.addSubnet('fd7a:115c:a1e0::', 48, 'ipv6');
 
 /**
- * The agents' URL on the box's tailnet address, when the box reached the server from it (`local`, the SSH
- * connection's own end), with the port of the hub's agents' URL; null when the connection didn't go over the tailnet.
+ * The box's own end of the SSH connection (`local`) when it is in Tailscale's ranges, as a plain address; else null.
+ * The hosts service decides whether it is its Tailscale interface's and on which port its agents reach it there.
  */
-export function tailnetAgentUrl(
-  local: string | null | undefined,
-  agentUrl: string | null | undefined,
-): string | null {
+export function tailnetSource(local: string | null | undefined): string | null {
   const ip = (local ?? '').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
   const family = isIPv4(ip) ? 'ipv4' : isIPv6(ip) ? 'ipv6' : null;
-  if (!family || !TAILNET.check(ip, family)) return null;
-  let port = String(HOSTS_AGENT_PORT_DEFAULT);
-  try {
-    const u = new URL(agentUrl ?? '');
-    // A parsed URL leaves out its scheme's own port (443 for wss).
-    port = u.port || (u.protocol === 'wss:' ? '443' : port);
-  } catch {
-    // No agents' URL: the listener's default port.
-  }
-  return `wss://${family === 'ipv6' ? `[${ip}]` : ip}:${port}`;
+  return family && TAILNET.check(ip, family) ? ip : null;
 }
 
 /** A path `mktemp` printed that is safe on a command line. */
@@ -402,27 +389,27 @@ export class HostInstalls {
       job.secrets.token = token;
       job.enrollment = str(made.id) ? { id: str(made.id) as string, claimed: false } : null;
       // A server Whombat reached over the tailnet may have no way to the box's LAN address: it calls home on the box's
-      // tailnet address instead, the one this connection came from. The hub refuses an address it doesn't have (the
-      // range is shared with other VPNs): then its own address, as for any other server.
-      const installer = (hub?: string) =>
-        this.#hosts.text({
+      // tailnet address instead, the one this connection came from, on the port the hosts service listens on there. The
+      // service refuses an address that isn't its Tailscale interface's (another VPN in the same range): then its own
+      // agents' address, as for any other server.
+      const installer = (via?: string) =>
+        this.#hosts.textAnswer({
           path: `${HOSTS_API}/agent-install.sh`,
-          ...(hub ? { query: { hub } } : {}),
+          ...(via ? { query: { via } } : {}),
           actor: job.actor,
           timeoutMs: 30_000,
         });
-      let hub = tailnetAgentUrl(opened.localAddress, str(made.agent_url));
-      let script: string | null = null;
-      if (hub)
-        script = await installer(hub).catch((err: unknown) => {
-          if (err instanceof HostsError && err.status === 400) return null;
-          throw err;
-        });
-      if (script === null) {
-        hub = null;
-        script = await installer();
-      }
-      job.agents = agentsPlace(hub ?? str(made.agent_url));
+      const via = tailnetSource(opened.localAddress);
+      const answer =
+        (via
+          ? await installer(via).catch((err: unknown) => {
+              if (err instanceof HostsError && err.status === 400) return null;
+              throw err;
+            })
+          : null) ?? (await installer());
+      const script = answer.text;
+      const chosen = answer.headers['x-whombat-agent-url'];
+      job.agents = agentsPlace(typeof chosen === 'string' && chosen ? chosen : str(made.agent_url));
 
       // 4. Install: the script in a mktemp file, run as root with the token (and sudo's password) on stdin.
       const mk = await exec('mktemp');
