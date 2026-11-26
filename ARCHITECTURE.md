@@ -1828,8 +1828,9 @@ Setup and operation: `docs/github.md`.
   - **A calendar check** reads the plan and the rest of its day's accepted plans: first the web (`search_web` on Brave
     with public words only, `read_web_page` with JSON-LD event data and an incognito headless Chromium behind a local
     SSRF-checked proxy), then mail, Drive/OneDrive files and read-only Paperless-ngx and Notion docs
-    (`ahead_read_docs`); reading any private source closes the web for the check. Later stages of the same event get
-    the earlier stages' scrubbed `note`s.
+    (`ahead_read_docs`); reading any private source closes the web for the check. It is given the forecast where the
+    Whombat is for the plan's day, and may ask `weather_forecast` (another town only while the web is open) and
+    `news_headlines`. Later stages of the same event get the earlier stages' scrubbed `note`s.
   - **Findings**: `ahead_report` posts a sourced finding (Whombat names each source itself) in the person's Chat with a
     push, in one thread per event, mail or matter (news on one the person asked for goes in the thread they asked in),
     with an optional one-tap action chip, “Not useful” (with an optional reason later checks read) and “Stop checking
