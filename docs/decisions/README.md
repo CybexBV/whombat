@@ -340,6 +340,8 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
   do in three words, old addresses, connections added on Connections, developer things gated, the Vault in plain words.
 - `mobile-app.md`, `mobile-live.md`, `phone-connect.md`, `bp-fix-mobile.md` — the Android app (*mobile-app in part*).
 - `../app/decisions/phone-audit-1112.md` — the phone after the 2026-11-12 audit: failures in an alert, never a toast; the updater has no Stop.
+- `../app/decisions/weather-news-apps.md` — the weather and news widgets' forms and signs on every screen, and Place and
+  News in This Whombat on the web and the phone.
 - `phone-shell-final.md` — the phone's final shell: the tabs with Search and Places above them, the Places sheet, Back
   first on pushed pages, the Search page, readable iPhone badges, Spend shown as Usage.
 

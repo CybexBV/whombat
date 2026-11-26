@@ -9,7 +9,9 @@ import type {
   DeskGrid,
   DeskImage,
   DeskLayout,
+  DeskListView,
   DeskPage,
+  DeskWeatherView,
   DeskWidget,
   DeskWidgetView,
   ScreenCalm,
@@ -687,6 +689,115 @@ export const FIXTURE_PHOTO_BOARD_VIEWS: DeskWidgetView[] = [
     empty: 'No devices adopted yet',
     at,
   },
+];
+
+/* The weather and the news --------------------------------------------------------------------------------------- */
+
+const HOUR = 3_600_000;
+/** The hour the forecast starts at: 14:00 in Amsterdam. */
+const FORECAST_FROM = Date.parse('2026-10-27T13:00:00Z');
+/** An afternoon in late October: a shower at tea time, clear in the night, a grey morning. */
+const HOUR_SKY: readonly string[] = [
+  'partlycloudy_day',
+  'partlycloudy_day',
+  'lightrainshowers_day',
+  'rainshowers_day',
+  'cloudy',
+  'partlycloudy_night',
+  'fair_night',
+  'clearsky_night',
+  'clearsky_night',
+  'clearsky_night',
+  'fair_night',
+  'fair_night',
+  'partlycloudy_night',
+  'cloudy',
+  'cloudy',
+  'fog',
+  'fog',
+  'cloudy',
+  'partlycloudy_day',
+  'partlycloudy_day',
+  'fair_day',
+  'fair_day',
+  'partlycloudy_day',
+  'lightrain',
+];
+const HOUR_TEMP = [11, 12, 11, 10, 9, 9, 8, 8, 7, 7, 6, 6, 6, 5, 5, 5, 6, 7, 8, 10, 11, 12, 12, 11];
+const HOUR_RAIN: Readonly<Record<number, number>> = { 2: 0.4, 3: 1.6, 23: 0.3 };
+
+/** The weather in Amsterdam at the fixtures' moment, from MET Norway (`weather`'s view). */
+export const FIXTURE_WEATHER: DeskWeatherView = {
+  kind: 'weather',
+  id: 'w_weather',
+  title: 'Weather',
+  place: 'Amsterdam',
+  unit: 'C',
+  now: { temp: 11, symbol: 'partlycloudy_day', text: 'Partly cloudy', wind: '5 m/s SW', feels: 9 },
+  today: { high: 12, low: 7, rainMm: 2.3, rainChance: 60 },
+  hours: HOUR_SKY.map((symbol, i) => ({
+    at: new Date(FORECAST_FROM + i * HOUR).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    temp: HOUR_TEMP[i] ?? 10,
+    symbol,
+    ...(HOUR_RAIN[i] !== undefined ? { rainMm: HOUR_RAIN[i] } : {}),
+  })),
+  days: [
+    { date: '2026-10-27', high: 12, low: 7, symbol: 'rainshowers_day', rainMm: 2.3 },
+    { date: '2026-10-28', high: 13, low: 5, symbol: 'partlycloudy_day' },
+    { date: '2026-10-29', high: 11, low: 6, symbol: 'rain', rainMm: 8.4 },
+    { date: '2026-10-30', high: 9, low: 4, symbol: 'heavyrainshowersandthunder_day', rainMm: 12.1 },
+    { date: '2026-10-31', high: 8, low: 2, symbol: 'clearsky_day' },
+    { date: '2026-11-01', high: 6, low: 0, symbol: 'lightsleetshowers_day', rainMm: 1.2 },
+    { date: '2026-11-02', high: 4, low: -2, symbol: 'snow', rainMm: 3.5 },
+  ],
+  sun: { rise: '2026-10-27T06:26:00Z', set: '2026-10-27T16:16:00Z' },
+  credit: 'Data from MET Norway',
+  at,
+};
+
+/** Headlines from the two sites Mara turned on (`news`'s list). */
+export const FIXTURE_NEWS: DeskListView = {
+  kind: 'list',
+  id: 'w_news',
+  title: 'News',
+  rows: [
+    {
+      title: 'Trains between Utrecht and Amsterdam run again after the signal fault',
+      detail: 'NOS',
+      time: '14:12',
+    },
+    { title: 'New cycle bridge over the IJ opens next spring', detail: 'AT5', time: '13:40' },
+    { title: 'Storm warning for the coast on Thursday night', detail: 'NOS', time: '12:55' },
+    { title: 'Museum night sells out in under an hour', detail: 'AT5', time: '11:30' },
+    { title: 'Parliament agrees on the housing plan after a long night', detail: 'NOS', time: '10:02' },
+    { title: 'Markets open higher as energy prices fall', detail: 'NOS', time: '09:15' },
+  ],
+  at,
+};
+
+/** The weather and the news at every size, with no site on, without a place, and not read. */
+export const FIXTURE_WEATHER_NEWS_VIEWS: DeskWidgetView[] = [
+  FIXTURE_WEATHER,
+  {
+    ...FIXTURE_WEATHER,
+    id: 'w_weather_night',
+    place: 'Tromsø',
+    now: { temp: -4, symbol: 'lightsnowshowersandthunder_night', text: 'Light snow showers and thunder' },
+    today: { high: -1, low: -6 },
+    sun: { polar: 'night' },
+  },
+  {
+    ...FIXTURE_WEATHER,
+    id: 'w_weather_wrong',
+    now: undefined,
+    today: undefined,
+    hours: [],
+    days: [],
+    tone: 'bad',
+    problem: { text: 'Can’t read the weather just now' },
+  },
+  FIXTURE_NEWS,
+  { ...FIXTURE_NEWS, id: 'w_news_none', rows: [], empty: 'Choose your news in Settings' },
 ];
 
 /** The same widgets with pve-02 down: what ran on it says so (DK-135). */

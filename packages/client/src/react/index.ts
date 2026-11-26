@@ -34,3 +34,4 @@ export * from './teamReports';
 export * from './thingButtons';
 export * from './threadUnread';
 export * from './turns';
+export * from './weatherNews';

@@ -11,4 +11,5 @@ export * from './grid';
 export * from './pager';
 export * from './specs';
 export * from './types';
+export * from './weather';
 export * from './words';

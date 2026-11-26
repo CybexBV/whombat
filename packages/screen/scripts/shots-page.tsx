@@ -20,6 +20,7 @@ import {
   FIXTURE_TABLET_GRID,
   FIXTURE_TIME_ZONE,
   FIXTURE_VIEWS,
+  FIXTURE_WEATHER_NEWS_VIEWS,
   fixtureLoadImage,
 } from '../src/fixtures';
 import { cellRect, screenGrid } from '../src/grid';
@@ -444,7 +445,99 @@ export const SHOTS: Record<string, () => ReactNode> = {
   'f-sizes': () => <Sizes />,
   'f-servers': () => <Servers />,
   'f-photo-board': () => <PhotoBoard />,
+  'f-weather-news': () => <WeatherNews />,
 };
+
+/** `f-weather-news`: the weather (Whombat weather-news.md) in every form, at night, not read; the news, and with none on. */
+function WeatherNews() {
+  const g = screenGrid(1280, 800);
+  const rows: [string, string, [string, 'weather' | 'news', number, number][]][] = [
+    [
+      'Weather, small',
+      'the sign and the temperature, then the words',
+      [
+        ['w_weather', 'weather', 1, 1],
+        ['w_weather', 'weather', 2, 1],
+        ['w_weather', 'weather', 3, 1],
+        ['w_weather_night', 'weather', 1, 1],
+        ['w_weather_night', 'weather', 2, 1],
+      ],
+    ],
+    ['Weather, a strip', 'the next hours beside it', [['w_weather', 'weather', 6, 1]]],
+    [
+      'Weather, middle',
+      'the next hours under it',
+      [
+        ['w_weather', 'weather', 2, 2],
+        ['w_weather', 'weather', 3, 2],
+        ['w_weather', 'weather', 2, 3],
+        ['w_weather_night', 'weather', 2, 2],
+      ],
+    ],
+    [
+      'Weather, wide',
+      'the hours beside, the days under',
+      [
+        ['w_weather', 'weather', 4, 2],
+        ['w_weather', 'weather', 4, 3],
+      ],
+    ],
+    ['Weather, big', 'opened', [['w_weather', 'weather', 8, 4]]],
+    [
+      'Not read',
+      'as every problem',
+      [
+        ['w_weather_wrong', 'weather', 1, 1],
+        ['w_weather_wrong', 'weather', 2, 2],
+      ],
+    ],
+    [
+      'News',
+      'headlines, none on',
+      [
+        ['w_news', 'news', 2, 1],
+        ['w_news', 'news', 3, 2],
+        ['w_news', 'news', 4, 3],
+        ['w_news_none', 'news', 3, 2],
+      ],
+    ],
+  ];
+  return (
+    <EnvProvider value={{ assistant: FIXTURE_ASSISTANT, timeZone: FIXTURE_TIME_ZONE, editing: false }}>
+      <div className="sheet">
+        <h2>Weather and news</h2>
+        {rows.map(([name, sub, shots]) => (
+          <div key={name} className="srow" style={{ flexWrap: 'wrap' }}>
+            <div className="tl">
+              {name}
+              <span>{sub}</span>
+            </div>
+            {shots.map(([id, type, w, h]) => {
+              const r = cellRect(g, { x: 0, y: 0, w, h });
+              return (
+                <div key={`${id}-${w}x${h}`} className="smp">
+                  <div className="sz">
+                    {w} × {h}
+                  </div>
+                  <div style={{ position: 'relative', width: r.width, height: r.height }}>
+                    <WidgetView
+                      widget={{ id, type, opts: {} }}
+                      view={FIXTURE_WEATHER_NEWS_VIEWS.find((v) => v.id === id)}
+                      w={w}
+                      h={h}
+                      pw={r.width}
+                      ph={r.height}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </EnvProvider>
+  );
+}
 
 const name = decodeURIComponent(location.hash.slice(1)) || 'f-overview';
 const root = document.getElementById('root');

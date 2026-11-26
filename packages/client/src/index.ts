@@ -89,5 +89,6 @@ export * from './vaultAsk';
 export * from './vaultForm';
 export * from './vaultRow';
 export * from './vaultSaved';
+export * from './weatherNews';
 export * from './working';
 export * from './workLine';

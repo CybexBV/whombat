@@ -61,6 +61,7 @@ import {
   type OnePasswordFixtureKind,
   onePasswordFixtureOf,
 } from './onePasswordFixtures';
+import { createPlaceNewsFixtures } from './placeNewsFixtures';
 import { createPromptFixtures, type PromptWorldOptions } from './promptFixtures';
 import { createResourcefulFixtures } from './resourcefulFixtures';
 import { createRichFixtures } from './richFixtures';
@@ -905,6 +906,20 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
         if (own) return own;
       }
       return webSearch.decorate(req, await inner(req));
+    };
+  }
+  {
+    // Where this Whombat is and the news it reads (weather-news.md): its ops and its part of the burrow, outside web
+    // search so the burrow it answers carries both.
+    const inner = out;
+    const placeNews = createPlaceNewsFixtures();
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const own = await placeNews.handle(req.clone(), (r) => inner(r));
+        if (own) return own;
+      }
+      return placeNews.decorate(req, await inner(req));
     };
   }
   {
