@@ -525,6 +525,22 @@ export const GuideConnectAsk = z.object({
 });
 export type GuideConnectAsk = z.infer<typeof GuideConnectAsk>;
 
+/**
+ * An `add_connection` card whose sign-in is OAuth: the primary button starts OAuth directly with these server-chosen
+ * values and returns to `returnTo` (the card's thread with its guide marker), locking the card and waking the
+ * assistant. Older apps ignore this field and follow the action's fallback link instead.
+ */
+export const GuideConnectOAuth = z.object({
+  catalogId: z.string().regex(/^[a-z][a-z0-9_]{1,30}$/),
+  method: z.enum(['ha_oauth', 'mcp_oauth', 'app_oauth']),
+  label: z.string().trim().min(1).max(CONNECTION_LABEL_MAX).optional(),
+  url: z.string().min(1).max(2048).optional(),
+  access: ConnectionAccessLevel.optional(),
+  connectionId: ConnectionId.optional(),
+  returnTo: ReturnPath,
+});
+export type GuideConnectOAuth = z.infer<typeof GuideConnectOAuth>;
+
 /** One step of a guide, posted by the agent in the person's Chat (AG-02). Stored as it is. */
 export const GuideCard = z.object({
   kind: z.literal('guide'),
@@ -542,6 +558,8 @@ export const GuideCard = z.object({
   vaultAsk: GuideVaultAsk.optional(),
   /** An `add_connection` card that connects on the card (connect-by-talking.md); absent on the form-link cards. */
   connectAsk: GuideConnectAsk.optional(),
+  /** An `add_connection` card that starts OAuth directly from the card; absent on non-OAuth cards. */
+  connectOAuth: GuideConnectOAuth.optional(),
   /**
    * A standing card states something already done (a setting as set) and keeps its buttons as controls for later:
    * it is `open`, so they still work, but it waits for nobody, so its thread can be settled and it never expires.

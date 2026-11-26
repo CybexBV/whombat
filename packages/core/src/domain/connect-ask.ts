@@ -33,6 +33,7 @@ import {
   isAgentConnection,
   tokenAuthProblem,
 } from './connections-catalog.js';
+import { ReturnPath } from './connectors.js';
 import { GuideCard, GuideConnectAsk } from './guides.js';
 
 /**
@@ -112,6 +113,8 @@ export interface ConnectAsk {
   /** The address to identify at once; null: the form asks where it is. */
   url: string | null;
   access: ConnectionAccessLevel;
+  /** Where to return once connected (the card's thread, with its guide marker). */
+  returnTo?: string | null | undefined;
 }
 
 /** The connect form's address on this Whombat, filled in: `/settings?tab=connections&connection=…&url=…&access=…`. */
@@ -121,6 +124,7 @@ export function connectAskHref(ask: ConnectAsk): string {
     ['connection', ask.catalogId],
     ...(ask.url ? ([['url', ask.url]] as [string, string][]) : []),
     ['access', ask.access],
+    ...(ask.returnTo ? ([['returnTo', ask.returnTo]] as [string, string][]) : []),
   ];
   return `/settings?${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`;
 }
@@ -128,6 +132,12 @@ export function connectAskHref(ask: ConnectAsk): string {
 /** The level a link asks the form for (`&access=read|manage`), or null when it names none. */
 export function connectAccessOf(raw: unknown): ConnectionAccessLevel | null {
   return raw === 'read' || raw === 'manage' ? raw : null;
+}
+
+/** A local return path from a connect link (`&returnTo=`), or null when absent or invalid. */
+export function connectReturnPathOf(raw: unknown): string | null {
+  const parsed = ReturnPath.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 /* An MCP server or API set up by talking (Whombat connect-by-talking.md) ------------------------------------------------ */
@@ -154,6 +164,7 @@ export const CONNECT_HERE_TEXT = {
   signIn: 'Sign in…',
   notNow: 'Not now',
   connected: (label: string) => `Connected · ${label}`,
+  allowed: (label: string) => `Allowed · ${label}`,
   declined: 'Not now',
   empty: {
     token: 'Paste the token.',
@@ -315,23 +326,25 @@ export function connectHereCard(entry: CatalogEntry, ask: GuideConnectAsk, assis
 }
 
 /**
- * The card for an MCP server that signs in with its own account (OAuth): what it is and where, and one button to the
- * connect form filled in, which opens the server's sign-in (the sign-in needs the browser).
+ * The card for an MCP server that signs in with its own account (OAuth): what it is and where, with a button that
+ * starts OAuth directly from the card (and falls back to the connect form on older apps) and returns to the thread.
  */
 export function connectSignInCard(
   entry: CatalogEntry,
-  ask: { label: string; url: string; access: ConnectionAccessLevel },
+  ask: { label: string; url: string; access: ConnectionAccessLevel; returnTo?: string | null },
   assistant: string,
 ): GuideCard {
   const at = connectHereAddress(ask.url);
+  const returnTo = connectReturnPathOf(ask.returnTo);
+  const label = ask.label.trim().slice(0, CONNECTION_LABEL_MAX);
   return GuideCard.parse({
     kind: 'guide',
     guide: 'add_connection',
     node: 'connect',
-    title: CONNECT_HERE_TEXT.signInTitle(ask.label).slice(0, 120),
+    title: CONNECT_HERE_TEXT.signInTitle(label).slice(0, 120),
     body: [
       CONNECT_HERE_TEXT.where.mcp(at),
-      CONNECT_HERE_TEXT.oauth(ask.label),
+      CONNECT_HERE_TEXT.oauth(label),
       connectAccessWords(entry, ask.access, assistant),
     ]
       .join('\n\n')
@@ -344,18 +357,45 @@ export function connectSignInCard(
             id: 'connect',
             label: CONNECT_HERE_TEXT.signIn,
             style: 'primary',
-            href: connectAskHref({ catalogId: entry.id, url: ask.url, access: ask.access }),
+            href: connectAskHref({
+              catalogId: entry.id,
+              url: ask.url,
+              access: ask.access,
+              ...(returnTo ? { returnTo } : {}),
+            }),
           },
+          ...(returnTo
+            ? [
+                {
+                  id: CONNECT_HERE_DECLINE,
+                  label: CONNECT_HERE_TEXT.notNow,
+                  style: 'quiet' as const,
+                  href: null,
+                },
+              ]
+            : []),
         ],
       },
     ],
     state: 'open',
+    ...(returnTo
+      ? {
+          connectOAuth: {
+            catalogId: entry.id,
+            method: 'mcp_oauth' as const,
+            label,
+            url: ask.url,
+            access: ask.access,
+            returnTo,
+          },
+        }
+      : {}),
   });
 }
 
 /** What the locked card says. */
-export function connectHereLocked(outcome: 'connected' | 'declined', label: string): string {
-  return outcome === 'connected'
-    ? CONNECT_HERE_TEXT.connected(label).slice(0, 200)
-    : CONNECT_HERE_TEXT.declined;
+export function connectHereLocked(outcome: 'connected' | 'allowed' | 'declined', label: string): string {
+  if (outcome === 'connected') return CONNECT_HERE_TEXT.connected(label).slice(0, 200);
+  if (outcome === 'allowed') return CONNECT_HERE_TEXT.allowed(label).slice(0, 200);
+  return CONNECT_HERE_TEXT.declined;
 }

@@ -46,6 +46,7 @@ import {
   limitNote,
   NO_PROBLEM,
   nameHelp,
+  oauthStartBody,
   ownsAuth,
   PLACED_FIELDS,
   probeNote,
@@ -59,7 +60,7 @@ import {
   visibleFields,
 } from '@whombat/client/connections';
 import { useCatalogConnections, useConnectionsCatalog, useConnectionWrite } from '@whombat/client/react';
-import { connectAccessOf, thingId } from '@whombat/core';
+import { connectAccessOf, connectReturnPathOf, thingId } from '@whombat/core';
 import { api, type IdentifyConnectionResponse, type ProbeConnectionResponse } from '@whombat/core/contracts';
 import {
   type CatalogEntry,
@@ -96,7 +97,8 @@ import { holdPhoneConnect } from '../managed/connectReturn';
 import { useManaged } from '../managed/context';
 import { OFFER_LINK } from '../managed/useReach';
 import { connectErrorOf, linkedAddress } from '../navigation/connectionLinks';
-import type { RootStackParamList } from '../navigation/routes';
+import { openAppUrl } from '../navigation/hooks';
+import { appScreenUrlForPath, type RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ConnectionLogo } from '../ui/ConnectionLogo';
@@ -163,8 +165,9 @@ export function ConnectScreen({ route, navigation }: Props) {
   const status = catalog.data?.entries.find((e) => e.catalogId === entry.id);
   const appMethod = entry.signIn.find((m) => m.kind === 'app_oauth');
   const gate = list.data || list.error ? connectGate({ entry, status, offerLink: OFFER_LINK }) : null;
-  // The level the assistant's card chose (`&access=`, connect-in-chat.md); else the form chooses by risk.
+  // The level the assistant's card chose (`&access=`); else the form chooses by risk.
   const access = connectAccessOf(route.params.access) ?? undefined;
+  const returnTo = connectReturnPathOf(route.params.returnTo) ?? undefined;
   // Proxmox VE, its Backup Server and Unraid: Add as a server first (connect-in-chat.md).
   const server = asServerNote(entry, url);
   const appSetup =
@@ -226,12 +229,14 @@ export function ConnectScreen({ route, navigation }: Props) {
             entry={entry}
             initialUrl={url}
             {...(access ? { initialAccess: access } : {})}
+            {...(returnTo ? { returnTo } : {})}
             notice={returned}
             top={top}
             bottomInset={insets.bottom}
             onConnected={(connectionId, label) => {
               showNotice(CONNECT_FORM_TEXT.connected(label));
-              // The connection's page replaces this one (PC-10), as the web opens it.
+              const target = returnTo ? appScreenUrlForPath(returnTo) : null;
+              if (target && openAppUrl(target)) return;
               navigation.replace('Thing', {
                 thingId: thingId('connection', connectionId),
                 title: label,
@@ -273,6 +278,7 @@ function ConnectForm({
   entry,
   initialUrl,
   initialAccess,
+  returnTo,
   notice,
   top,
   bottomInset,
@@ -282,8 +288,10 @@ function ConnectForm({
   entry: CatalogEntry;
   /** `&url=` (Found on your network, CS-51): filled in and identified at once. */
   initialUrl?: string;
-  /** `&access=` (the assistant's card, connect-in-chat.md); left out, chosen by risk (`suggestedAccess`). */
+  /** `&access=` (the assistant's card); left out, chosen by risk (`suggestedAccess`). */
   initialAccess?: ConnectionAccessLevel;
+  /** Where to return once connected (e.g. back to the chat thread that opened this form). */
+  returnTo?: string;
   /** A sign-in elsewhere's refusal, said once above the form. */
   notice: string | null;
   /** The entry's app (Dropbox, PC-07), and Add as a server for an entry looked after best as one. */
@@ -514,16 +522,11 @@ function ConnectForm({
       } else if (way === 'none' || !managed) {
         setProblem({ ...NO_PROBLEM, message: CONNECT_SCREEN_TEXT.demo });
       } else if (method.kind === 'ha_oauth' || method.kind === 'mcp_oauth' || method.kind === 'app_oauth') {
-        // A managed Whombat: started over this phone's session; the provider sends the browser back to the hosted UI's
-        // `/connect/<id>`, which the app catches and finishes (PC-05). Which Whombat started it is held first.
+        const target = connectReturnTo(entry.id, slug, returnTo);
         holdPhoneConnect({ device: managed.applianceId, flow: 'connection' });
         const result = await startOAuth.mutateAsync({
           params: { burrow: slug },
-          body: {
-            ...connectBase(entry, shown, draft(current)),
-            method: method.kind,
-            returnTo: connectReturnTo(entry.id, slug),
-          },
+          body: oauthStartBody(entry, shown, draft(current), method.kind, target),
         });
         if (result.status === 'ok') openOutside(result.data.authorizeUrl);
       }

@@ -26,6 +26,7 @@ import { GuideConnect } from './GuideConnect';
 import { GuideForm, type GuideFormProblem } from './GuideForm';
 import { GuideIconView } from './guideIcons';
 import { CardAction, CardLink, type NavigateHandler, TONE_CLASS } from './parts';
+import { useConnectCardOAuth } from './useConnectCardOAuth';
 import { VaultAskForm } from './VaultAskForm';
 
 export interface GuideCardProps {
@@ -38,6 +39,8 @@ export interface GuideCardProps {
   /** The last form submit's `invalid_values` (the server's words, per field id). */
   formProblem?: GuideFormProblem | null;
   onNavigate?: NavigateHandler;
+  /** Where an OAuth sign-in navigates (tests); a full-page navigation by default. */
+  navigate?: (url: string) => void;
 }
 
 /** “You chose Google” for a choice, the server's words (“Client ID 1234567890ab… saved”) for anything else. */
@@ -68,6 +71,7 @@ export function GuideCard({
   busy = false,
   formProblem,
   onNavigate,
+  navigate,
 }: GuideCardProps) {
   const open = card.state === 'open' && !!act;
   const answer = guideAnswerText(card);
@@ -129,6 +133,7 @@ export function GuideCard({
           onAct={onAct}
           formProblem={formProblem ?? null}
           onNavigate={onNavigate}
+          navigate={navigate}
         />
       ))}
       {answer ? (
@@ -153,6 +158,7 @@ interface BlockProps {
   onAct: GuideCardProps['onAct'];
   formProblem: GuideFormProblem | null;
   onNavigate: NavigateHandler | undefined;
+  navigate: ((url: string) => void) | undefined;
 }
 
 function GuideBlockView({ block, ...props }: BlockProps & { block: GuideBlock }) {
@@ -320,36 +326,77 @@ function OptionFace({
 
 const BUTTON_VARIANT = { primary: 'primary', secondary: 'secondary', quiet: 'ghost' } as const;
 
-function ActionsBlock({ block, open, busy, onAct, onNavigate }: BlockProps & { block: GuideActionsBlock }) {
+function ActionsBlock({
+  burrow,
+  card,
+  block,
+  open,
+  busy,
+  onAct,
+  onNavigate,
+  navigate,
+}: BlockProps & { block: GuideActionsBlock }) {
+  const oauth = useConnectCardOAuth(burrow, open ? card.connectOAuth : undefined, navigate);
+  // Answered or expired connect cards hide their sign-in/connect links so completed cards stay clean.
+  const hideLinks = card.guide === 'add_connection' && (card.answer !== null || card.state === 'expired');
   // A locked card keeps only the links (a settings tab, a help page): nothing else acts any more.
-  const shown = open ? block.actions : block.actions.filter((a) => a.href);
+  const shown = open ? block.actions : hideLinks ? [] : block.actions.filter((a) => a.href);
   if (shown.length === 0) return null;
+  const fallbackHref = shown.find((a) => (a.id === 'connect' || a.id === 'allow') && a.href)?.href ?? null;
   return (
-    <div className={guide.actions}>
-      {shown.map((a) =>
-        a.href ? (
-          <CardAction
-            key={a.id}
-            href={a.href}
-            onNavigate={onNavigate}
-            variant={a.style === 'primary' ? 'primary' : 'secondary'}
-            className={cx(guide.linkAction, a.style === 'quiet' && guide.quietLink)}
-          >
-            {a.label}
-          </CardAction>
-        ) : (
-          <Button
-            key={a.id}
-            variant={BUTTON_VARIANT[a.style]}
-            size="lg"
-            disabled={busy}
-            onClick={() => void onAct?.({ actionId: a.id })}
-          >
-            {a.label}
-          </Button>
-        ),
-      )}
-    </div>
+    <>
+      <div className={guide.actions}>
+        {shown.map((a) => {
+          if (open && card.connectOAuth && (a.id === 'connect' || a.id === 'allow')) {
+            return (
+              <Button
+                key={a.id}
+                variant={BUTTON_VARIANT[a.style]}
+                size="lg"
+                disabled={busy || oauth.busy}
+                onClick={() => void oauth.start()}
+              >
+                {a.label}
+              </Button>
+            );
+          }
+          return a.href ? (
+            <CardAction
+              key={a.id}
+              href={a.href}
+              onNavigate={onNavigate}
+              variant={a.style === 'primary' ? 'primary' : 'secondary'}
+              className={cx(guide.linkAction, a.style === 'quiet' && guide.quietLink)}
+            >
+              {a.label}
+            </CardAction>
+          ) : (
+            <Button
+              key={a.id}
+              variant={BUTTON_VARIANT[a.style]}
+              size="lg"
+              disabled={busy || oauth.busy}
+              onClick={() => void onAct?.({ actionId: a.id })}
+            >
+              {a.label}
+            </Button>
+          );
+        })}
+      </div>
+      {oauth.problem ? (
+        <p className={guide.problem} role="alert">
+          {oauth.problem}
+          {fallbackHref ? (
+            <>
+              {' '}
+              <CardLink href={fallbackHref} onNavigate={onNavigate}>
+                Open Settings instead
+              </CardLink>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+    </>
   );
 }
 

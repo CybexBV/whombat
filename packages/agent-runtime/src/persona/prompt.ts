@@ -397,8 +397,13 @@ export function vaultCardLine(person: string, card: Pick<GuideCard, 'title' | 'a
   }
 }
 
-/** What the turn a connect card woke is told (connect-by-talking.md): it is connected, by its id, ready to use. */
-export function connectCardLine(person: string, card: Pick<GuideCard, 'title' | 'answer'>): string {
+/** What the turn a connect card woke is told: it is connected (or allowed more), by its id, ready to use. */
+export function connectCardLine(
+  person: string,
+  card: Pick<GuideCard, 'title' | 'answer'> & { node?: GuideCard['node'] },
+): string {
+  if (card.node === 'allow_more')
+    return `${person} allowed it on your card (“${card.title}”): connection ${card.answer?.connectionId} has the new permission now. Carry on with what they wanted.`;
   return `${person} connected it on your card (“${card.title}”): it is in your connections now (${card.answer?.connectionId}), by the handle your instructions list, for connection_tools and connection_call. Carry on with what they wanted it for; if that was only connecting it, say in one short line what you can do with it now. Also give it its logo and a page of its own with connection_look, as the whombat:connection-pages skill says, and mention it in that same reply.`;
 }
 

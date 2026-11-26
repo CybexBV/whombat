@@ -7,22 +7,28 @@ import {
   CONNECT_HERE_DECLINE,
   CONNECT_HERE_FORM,
   type ConnectErrorCode,
+  type ConnectionConnectError,
   type ConnectorService,
   clientIdHint,
+  connectHereLocked,
   type GuideActBody,
+  type GuideCard,
   type ReauthReason,
   VAULT_ASK_DECLINE,
 } from '@whombat/core';
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { applyContext, loadBurrowRow } from '../commit/pipeline';
 import type { ApplyContext } from '../commit/types';
-import { answerConnectHere, declineConnectHere } from '../connections/ask';
+import { answerConnectHere, declineConnectHere, hostOfAddress } from '../connections/ask';
 import { claimFoundTold, foundNowFor, foundScansFor } from '../connections/found-scans';
 import { saveGoogleApp } from '../connectors/app';
 import { accounts, assistantStates, connections, messages, principals } from '../db/schema/index';
+import { enqueueDispatches } from '../domain/dispatch';
+import { postMessage } from '../domain/messages';
 import { ApiError } from '../lib/errors';
 import { iso } from '../lib/time';
+import { loadConversationRow } from '../read/conversations';
 import { loadPrincipalRow, toActor } from '../read/principals';
 import type { Services } from '../services';
 import { declineVaultAsk, saveVaultAsk } from '../vault/ask';
@@ -66,7 +72,16 @@ export interface GoogleOutcome {
   outcome: { connectionId: string } | { error: ConnectErrorCode };
 }
 
-/** Where a connect card sent the person back: their Chat and the card's message (`/{burrow}/chat?…&guide=<id>`), or null. */
+/** What `finishConnectionOAuth` tells the guides when a connect card started the sign-in. */
+export interface ConnectionOAuthOutcome {
+  accountId: string;
+  burrowId: string;
+  returnPath: string;
+  catalogId: string;
+  outcome: { connectionId: string; label: string; reconnected: boolean } | { error: ConnectionConnectError };
+}
+
+/** Where a connect card sent the person back: the burrow and the card's message (`?…&guide=<id>`), or null. */
 export function parseGuideReturn(returnPath: string): { slug: string; messageId: string } | null {
   let url: URL;
   try {
@@ -74,14 +89,89 @@ export function parseGuideReturn(returnPath: string): { slug: string; messageId:
   } catch {
     return null;
   }
-  const m = /^\/([^/]+)\/chat$/.exec(url.pathname);
   const messageId = url.searchParams.get('guide');
-  if (!m || !messageId || !/^msg_[A-Za-z0-9_-]{1,64}$/.test(messageId)) return null;
-  try {
-    return { slug: decodeURIComponent(m[1] ?? ''), messageId };
-  } catch {
-    return null;
+  if (!messageId || !/^msg_[A-Za-z0-9_-]{1,64}$/.test(messageId)) return null;
+  const withBurrow = /^\/([^/]+)\/(chat|feedback|chats\/[^/]+|pr\/\d+)$/.exec(url.pathname);
+  if (withBurrow) {
+    try {
+      return { slug: decodeURIComponent(withBurrow[1] ?? ''), messageId };
+    } catch {
+      return null;
+    }
   }
+  const burrowParam = url.searchParams.get('burrow');
+  if (burrowParam && /^\/(chat|feedback|chats\/[^/]+|pr\/\d+)$/.test(url.pathname))
+    return { slug: burrowParam, messageId };
+  return null;
+}
+
+function oauthRetryText(code: ConnectionConnectError): string {
+  switch (code) {
+    case 'access_denied':
+      return 'Sign-in was cancelled. Click Sign in on the card whenever you’re ready to try again.';
+    case 'no_app':
+      return 'That app isn’t set up on this Whombat yet. Open Settings → Connections to finish setting it up, then try again.';
+    case 'limit_reached':
+      return 'This Whombat already has as many connections as it can hold. Remove one in Settings → Connections, then try again.';
+    case 'destination_refused':
+      return 'Whombat isn’t allowed to reach that address yet. Allow the network in Settings, then try again.';
+    default:
+      return 'Sign-in didn’t finish. Click Sign in on the card to try again.';
+  }
+}
+
+/** Catalog id and optional URL an `add_connection` card asks to connect. */
+function connectCardTarget(card: GuideCard): { catalogId: string; url: string | null } | null {
+  if (card.connectOAuth)
+    return { catalogId: card.connectOAuth.catalogId, url: card.connectOAuth.url ?? null };
+  if (card.connectAsk) return { catalogId: card.connectAsk.catalogId, url: card.connectAsk.url };
+  for (const block of card.blocks) {
+    if (block.type !== 'actions') continue;
+    const action = block.actions.find((a) => a.id === 'connect' && a.href);
+    if (!action?.href) continue;
+    try {
+      const parsed = new URL(action.href, 'http://whombat.invalid');
+      const catalogId = parsed.searchParams.get('connection');
+      if (catalogId) return { catalogId, url: parsed.searchParams.get('url') };
+    } catch {
+      // ignore malformed href
+    }
+  }
+  return null;
+}
+
+/** Connection id an `allow_more` card asks permissions for. */
+function allowMoreTargetId(card: GuideCard): string | null {
+  if (card.connectOAuth?.connectionId) return card.connectOAuth.connectionId;
+  for (const block of card.blocks) {
+    if (block.type !== 'actions') continue;
+    const action = block.actions.find((a) => a.id === 'allow' && a.href);
+    if (!action?.href) continue;
+    try {
+      const parsed = new URL(action.href, 'http://whombat.invalid');
+      const id = parsed.searchParams.get('id');
+      if (id) return id;
+    } catch {
+      // ignore malformed href
+    }
+  }
+  return null;
+}
+
+function sameAddressOrHost(cardUrl: string, savedBaseUrl: string): boolean {
+  const norm = (u: string) => {
+    try {
+      const parsed = new URL(u);
+      parsed.hash = '';
+      return parsed.toString().replace(/\/+$/, '');
+    } catch {
+      return u.replace(/\/+$/, '');
+    }
+  };
+  if (norm(cardUrl) === norm(savedBaseUrl)) return true;
+  const a = hostOfAddress(cardUrl);
+  const b = hostOfAddress(savedBaseUrl);
+  return a !== null && a === b;
 }
 
 /** The steps to post: at the top of the Chat, or with the thread they go in. */
@@ -360,6 +450,249 @@ export class GuideService {
     } catch (err) {
       this.services.log.warn({ err: String(err) }, 'guides: the Google result could not be posted');
     }
+  }
+
+  /* Coming back from a catalog connection OAuth sign-in ------------------------------------------ */
+
+  /**
+   * After a catalog connection's OAuth redirect when the return path carries a `guide=<messageId>` marker:
+   * - on success, locks the open `add_connection` card with the new connection (or allowed permissions) and wakes the
+   *   assistant in that card's thread so it continues automatically;
+   * - on failure, keeps the card open and posts one short retry note in the card's thread.
+   * Never throws: the redirect continues whatever happens here.
+   */
+  async afterConnectionOAuth(args: ConnectionOAuthOutcome): Promise<void> {
+    try {
+      const target = parseGuideReturn(args.returnPath);
+      if (!target) return;
+      const [person] = await this.services.db
+        .select()
+        .from(principals)
+        .where(
+          and(
+            eq(principals.burrowId, args.burrowId),
+            eq(principals.accountId, args.accountId),
+            eq(principals.kind, 'person'),
+          ),
+        );
+      if (!person) return;
+      await this.services.pipeline.transact(args.burrowId, async (session) => {
+        const place = await personalPlace(session.tx, args.burrowId, person.id);
+        if (!place) return;
+        const [marker] = await session.tx
+          .select()
+          .from(messages)
+          .where(and(eq(messages.id, target.messageId), eq(messages.burrowId, args.burrowId)));
+        const card =
+          marker?.card?.kind === 'guide' &&
+          marker.card.guide === 'add_connection' &&
+          marker.authorId === place.agent.id
+            ? marker.card
+            : null;
+        if (!marker || !card || card.state !== 'open') return;
+        const now = this.services.clock();
+        const ctx = applyContext(session, {
+          burrow: place.burrow,
+          actor: toActor(place.agent),
+          now,
+          at: iso(now),
+          decision: null,
+          requirement: null,
+          approvalId: null,
+          onBehalfOf: {},
+        });
+        if ('error' in args.outcome) {
+          const conversation = await loadConversationRow(session.tx, marker.conversationId);
+          if (!conversation) return;
+          await postMessage(ctx, {
+            conversation,
+            threadRootId: marker.threadRootId ?? marker.id,
+            text: oauthRetryText(args.outcome.error),
+            dispatch: false,
+            notifyDmPerson: false,
+          });
+          return;
+        }
+        const allowMore = card.node === 'allow_more';
+        const locked = await lockCard(ctx, marker, card, {
+          actionId: allowMore ? 'allow' : 'connect',
+          optionIds: null,
+          label: connectHereLocked(allowMore ? 'allowed' : 'connected', args.outcome.label),
+          at: ctx.at,
+          connectionId: args.outcome.connectionId,
+        });
+        if (!locked) return;
+        this.#wakeForCard(ctx, place, marker);
+      });
+    } catch (err) {
+      this.services.log.warn(
+        { err: String(err) },
+        'guides: the connection OAuth result could not be applied',
+      );
+    }
+  }
+
+  /**
+   * When a connection is saved outside a card's direct OAuth return (e.g. through Settings), locks any matching open
+   * `add_connection` card in the burrow and wakes the assistant in its thread so stale cards never stay waiting.
+   */
+  async closeMatchingConnectCards(args: {
+    burrowId: string;
+    personId: string;
+    connectionId: string;
+    catalogId: string;
+    label: string;
+    baseUrl: string;
+  }): Promise<void> {
+    try {
+      await this.services.pipeline.transact(args.burrowId, async (session) => {
+        const place = await personalPlace(session.tx, args.burrowId, args.personId);
+        if (!place) return;
+        const rows = await session.tx
+          .select()
+          .from(messages)
+          .where(
+            and(
+              eq(messages.burrowId, args.burrowId),
+              eq(messages.authorId, place.agent.id),
+              sql`${messages.card}->>'kind' = 'guide'`,
+              sql`${messages.card}->>'guide' = 'add_connection'`,
+              sql`${messages.card}->>'state' = 'open'`,
+              sql`${messages.card}->>'node' <> 'allow_more'`,
+            ),
+          )
+          .orderBy(desc(messages.createdAt))
+          .limit(20);
+        const matching = rows.filter((row) => {
+          if (row.card?.kind !== 'guide') return false;
+          const target = connectCardTarget(row.card);
+          if (!target || target.catalogId !== args.catalogId) return false;
+          return target.url ? sameAddressOrHost(target.url, args.baseUrl) : true;
+        });
+        if (!matching.length) return;
+        const now = this.services.clock();
+        const ctx = applyContext(session, {
+          burrow: place.burrow,
+          actor: toActor(place.agent),
+          now,
+          at: iso(now),
+          decision: null,
+          requirement: null,
+          approvalId: null,
+          onBehalfOf: {},
+        });
+        const wokenThreads = new Set<string>();
+        for (const row of matching) {
+          if (row.card?.kind !== 'guide') continue;
+          const locked = await lockCard(ctx, row, row.card, {
+            actionId: 'connect',
+            optionIds: null,
+            label: connectHereLocked('connected', args.label),
+            at: ctx.at,
+            connectionId: args.connectionId,
+          });
+          if (!locked) continue;
+          const key = `${row.conversationId}:${row.threadRootId ?? ''}`;
+          if (!wokenThreads.has(key)) {
+            wokenThreads.add(key);
+            this.#wakeForCard(ctx, place, row);
+          }
+        }
+      });
+    } catch (err) {
+      this.services.log.warn({ err: String(err) }, 'guides: matching connect cards could not be closed');
+    }
+  }
+
+  /** When a connection reconnects with newly granted scopes via Settings, closes matching open `allow_more` cards. */
+  async closeMatchingAllowMoreCards(args: {
+    burrowId: string;
+    personId: string;
+    connectionId: string;
+    label: string;
+  }): Promise<void> {
+    try {
+      await this.services.pipeline.transact(args.burrowId, async (session) => {
+        const place = await personalPlace(session.tx, args.burrowId, args.personId);
+        if (!place) return;
+        const rows = await session.tx
+          .select()
+          .from(messages)
+          .where(
+            and(
+              eq(messages.burrowId, args.burrowId),
+              eq(messages.authorId, place.agent.id),
+              sql`${messages.card}->>'kind' = 'guide'`,
+              sql`${messages.card}->>'guide' = 'add_connection'`,
+              sql`${messages.card}->>'state' = 'open'`,
+              sql`${messages.card}->>'node' = 'allow_more'`,
+            ),
+          )
+          .orderBy(desc(messages.createdAt))
+          .limit(20);
+        const matching = rows.filter(
+          (row) => row.card?.kind === 'guide' && allowMoreTargetId(row.card) === args.connectionId,
+        );
+        if (!matching.length) return;
+        const now = this.services.clock();
+        const ctx = applyContext(session, {
+          burrow: place.burrow,
+          actor: toActor(place.agent),
+          now,
+          at: iso(now),
+          decision: null,
+          requirement: null,
+          approvalId: null,
+          onBehalfOf: {},
+        });
+        const wokenThreads = new Set<string>();
+        for (const row of matching) {
+          if (row.card?.kind !== 'guide') continue;
+          const locked = await lockCard(ctx, row, row.card, {
+            actionId: 'allow',
+            optionIds: null,
+            label: connectHereLocked('allowed', args.label),
+            at: ctx.at,
+            connectionId: args.connectionId,
+          });
+          if (!locked) continue;
+          const key = `${row.conversationId}:${row.threadRootId ?? ''}`;
+          if (!wokenThreads.has(key)) {
+            wokenThreads.add(key);
+            this.#wakeForCard(ctx, place, row);
+          }
+        }
+      });
+    } catch (err) {
+      this.services.log.warn({ err: String(err) }, 'guides: matching allow-more cards could not be closed');
+    }
+  }
+
+  /** Queues the assistant in a locked connect card's thread unless the licence is lapsed. */
+  #wakeForCard(
+    ctx: ApplyContext,
+    place: PersonalPlace,
+    marker: { id: string; conversationId: string; threadRootId: string | null },
+  ): void {
+    try {
+      this.services.licence.assertNotLapsed();
+    } catch {
+      return;
+    }
+    const inChat = marker.conversationId === place.dm.id;
+    const services = this.services;
+    const wakeArgs = {
+      burrowId: place.burrow.id,
+      causedById: place.person.id,
+      conversationId: marker.conversationId,
+      messageId: marker.id,
+      threadRootId: marker.threadRootId,
+      requests: [{ agentId: place.agent.id, trigger: inChat ? ('dm' as const) : ('mention' as const) }],
+      at: ctx.now,
+    };
+    ctx.after(async () => {
+      await enqueueDispatches(services, wakeArgs);
+    });
   }
 
   /* Repair (AG-13) --------------------------------------------------------------------------------- */

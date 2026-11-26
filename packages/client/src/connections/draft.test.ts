@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   authNameOf,
   type ConnectDraft,
+  cardOAuthStartBody,
   codeShown,
   connectReturnTo,
   connectsHere,
@@ -11,6 +12,7 @@ import {
   draftProblems,
   fixedAccountOf,
   initialFields,
+  oauthStartBody,
   ownsAuth,
   reconnectServiceLoginBody,
   serviceLoginBody,
@@ -216,9 +218,50 @@ describe('the connect form’s draft (CS-50, PC-04)', () => {
     expect(connectsHere({ kind: 'nextcloud_login' })).toBe(false);
   });
 
-  it('comes back to the entry’s form in its burrow', () => {
+  it('comes back to the entry’s form in its burrow, or keeps a valid return path', () => {
     expect(connectReturnTo('dropbox', 'burrow-hq')).toContain('connection=dropbox');
     expect(connectReturnTo('dropbox', 'burrow-hq')).toContain('burrow-hq');
+    const thread = '/burrow-hq/chat?thread=msg_1&guide=msg_2';
+    expect(connectReturnTo('custom_mcp', 'burrow-hq', thread)).toBe(thread);
+    expect(connectReturnTo('custom_mcp', 'burrow-hq', 'https://evil.example/x')).toContain(
+      'connection=custom_mcp',
+    );
     expect(fieldsFor(entry('dropbox'), 'app_oauth')).toBeDefined();
+    const mcp = entry('custom_mcp');
+    const oauth = signInChoices(mcp).find((c) => c.kind === 'mcp_oauth');
+    if (!oauth) throw new Error('custom_mcp oauth');
+    expect(
+      oauthStartBody(
+        mcp,
+        visibleFields(mcp, oauth),
+        draft({ fields: { url: 'https://mcp.example.com/mcp' }, access: 'read', label: ' Docs ' }),
+        'mcp_oauth',
+        thread,
+      ),
+    ).toEqual({
+      catalogId: 'custom_mcp',
+      label: 'Docs',
+      fields: { url: 'https://mcp.example.com/mcp' },
+      method: 'mcp_oauth',
+      access: 'read',
+      returnTo: thread,
+    });
+    expect(
+      cardOAuthStartBody({
+        catalogId: 'custom_mcp',
+        method: 'mcp_oauth',
+        label: 'Docs',
+        url: 'https://mcp.example.com/mcp',
+        access: 'read',
+        returnTo: thread,
+      }),
+    ).toEqual({
+      catalogId: 'custom_mcp',
+      method: 'mcp_oauth',
+      label: 'Docs',
+      fields: { url: 'https://mcp.example.com/mcp' },
+      access: 'read',
+      returnTo: thread,
+    });
   });
 });

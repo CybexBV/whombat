@@ -19,6 +19,7 @@ import {
   CONNECTOR_PROVIDERS,
   CONNECTOR_SERVICES,
   type Connection,
+  type ConnectionAccessLevel,
   type ConnectorProvider,
   type ConnectorService,
   type ConnectorsStatus,
@@ -105,6 +106,10 @@ export interface ConnectionsTabProps {
   connectionId?: string;
   /** The address a catalog entry's connect page starts with (`&url=`, from Found on your network; AP-846). */
   url?: string;
+  /** The access level chosen by the assistant's card (`&access=read|manage`). */
+  access?: ConnectionAccessLevel;
+  /** Where to return once connected (`&returnTo=`). */
+  returnTo?: string;
   /** Add a connection opened at On your network (`&found=1`, the assistant's link; Whombat desk-found.md DF-05, AP-3801). */
   found?: boolean;
   outcome?: ConnectOutcome;
@@ -128,6 +133,8 @@ export function ConnectionsTab({
   provider,
   connectionId,
   url,
+  access,
+  returnTo,
   found = false,
   outcome,
   onOutcomeSeen,
@@ -152,6 +159,8 @@ export function ConnectionsTab({
         burrow={burrow}
         entry={entry}
         url={url}
+        access={access}
+        returnTo={returnTo}
         outcome={outcome}
         onOutcomeSeen={onOutcomeSeen}
         navigate={navigate}

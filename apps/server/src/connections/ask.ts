@@ -38,6 +38,7 @@ import {
   type GuideAction,
   type GuideCard,
   GuideConnectAsk,
+  newId,
   suggestedAccess,
   UPTIME_HUB_RUNNER,
   UPTIME_ID,
@@ -45,7 +46,7 @@ import {
   UptimeFields,
 } from '@whombat/core';
 import type { z } from 'zod';
-import { postAskCard } from '../guides/ask';
+import { cardReturnTo, postAskCard } from '../guides/ask';
 import { makeCard, type SavedConnection } from '../guides/flows';
 import { guideError, type PersonalPlace } from '../guides/place';
 import { addServerHref } from '../hosts/tools';
@@ -56,6 +57,7 @@ import type { Services } from '../services';
 import { plural } from '../things/words';
 import { ownTurn } from '../vault/self-serve';
 import { probeMcp } from './checks';
+import { appClient } from './clients';
 import { createConnection, requireDestination, viewerFor } from './connect';
 import { burrowFound, type Found, newFoundTest } from './discover';
 import { foundViewerOf } from './found-scans';
@@ -135,23 +137,41 @@ export function connectAddress(
 /** The card (topic `add_connection`): what, where, how it signs in, the level in plain words, one button. */
 export function connectCard(
   entry: CatalogEntry,
-  ask: { url: string | null; found: boolean; access: ConnectionAccessLevel; agent: string },
+  ask: {
+    url: string | null;
+    found: boolean;
+    access: ConnectionAccessLevel;
+    agent: string;
+    returnTo?: string | null;
+    oauthMethod?: 'mcp_oauth' | 'app_oauth' | null;
+  },
 ): GuideCard {
   const host = ask.url ? hostOfAddress(ask.url) : null;
+  const returnTo = ask.returnTo ?? null;
+  const oauthMethod = !entry.asServer && returnTo ? (ask.oauthMethod ?? null) : null;
   const where = ask.url
     ? ask.found
       ? `Whombat found it on your network at ${host ?? ask.url}.`
       : `At ${ask.url}.`
-    : 'The form asks where it is.';
-  const signIn = catalogSignIn(entry, 'password')
-    ? 'Sign in to it once: Whombat makes its own key and forgets the password.'
-    : 'The form shows how to give Whombat a sign-in key for it.';
+    : oauthMethod
+      ? null
+      : 'The form asks where it is.';
+  const signIn = oauthMethod
+    ? CONNECT_HERE_TEXT.oauth(entry.name)
+    : catalogSignIn(entry, 'password')
+      ? 'Sign in to it once: Whombat makes its own key and forgets the password.'
+      : 'The form shows how to give Whombat a sign-in key for it.';
   const level = connectAccessWords(entry, ask.access, ask.agent);
   const connect: GuideAction = {
     id: 'connect',
-    label: catalogSignIn(entry, 'password') ? 'Sign in…' : 'Connect…',
+    label: oauthMethod || catalogSignIn(entry, 'password') ? 'Sign in…' : 'Connect…',
     style: 'primary',
-    href: connectAskHref({ catalogId: entry.id, url: ask.url, access: ask.access }),
+    href: connectAskHref({
+      catalogId: entry.id,
+      url: ask.url,
+      access: ask.access,
+      ...(returnTo ? { returnTo } : {}),
+    }),
   };
   if (entry.asServer) {
     const server = `Whombat looks after ${entry.name} best as a server: its helper there sees everything, with no sign-in key to keep. Sign in to it once and Whombat installs it.`;
@@ -159,7 +179,7 @@ export function connectCard(
       guide: 'add_connection',
       node: 'server',
       title: `Add ${entry.name}${host ? ` at ${host}` : ''} as a server`.slice(0, 120),
-      body: [where, server].join('\n\n'),
+      body: [where, server].filter(Boolean).join('\n\n'),
       blocks: [
         {
           type: 'actions',
@@ -176,12 +196,32 @@ export function connectCard(
       ],
     });
   }
+  const notNow: GuideAction = {
+    id: CONNECT_HERE_DECLINE,
+    label: CONNECT_HERE_TEXT.notNow,
+    style: 'quiet',
+    href: null,
+  };
   return makeCard({
     guide: 'add_connection',
     node: 'connect',
-    title: `Connect ${entry.name}${host ? ` at ${host}` : ''}`.slice(0, 120),
-    body: [where, signIn, level].join('\n\n'),
-    blocks: [{ type: 'actions', actions: [connect] }],
+    title: `${oauthMethod ? 'Sign in to' : 'Connect'} ${entry.name}${host ? ` at ${host}` : ''}`.slice(
+      0,
+      120,
+    ),
+    body: [where, signIn, level].filter(Boolean).join('\n\n'),
+    blocks: [{ type: 'actions', actions: returnTo ? [connect, notNow] : [connect] }],
+    ...(oauthMethod && returnTo
+      ? {
+          connectOAuth: {
+            catalogId: entry.id,
+            method: oauthMethod,
+            ...(ask.url ? { url: ask.url } : {}),
+            access: ask.access,
+            returnTo,
+          },
+        }
+      : {}),
   });
 }
 
@@ -226,8 +266,32 @@ export async function connectionAddTool(ctx: ToolContext, input: Input): Promise
   }
 
   const access = input.access ?? suggestedAccess(entry);
-  const card = connectCard(entry, { ...at, access, agent: shortName(turn.agent) });
-  const messageId = await postAskCard(ctx, card);
+  const messageId = newId('message');
+  const returnTo = await cardReturnTo(
+    services.db,
+    ctx.burrowId,
+    ctx.dispatch.conversationId,
+    ctx.dispatch.threadRootId ?? null,
+    messageId,
+  );
+  const firstSignIn = entry.signIn[0];
+  let oauthMethod: 'mcp_oauth' | 'app_oauth' | null = null;
+  if (!entry.asServer && returnTo) {
+    const requiredMissing = entry.fields.some((f) => f.required && (f.id !== 'url' || !at.url));
+    if (!requiredMissing) {
+      if (firstSignIn?.kind === 'mcp_oauth') oauthMethod = 'mcp_oauth';
+      else if (firstSignIn?.kind === 'app_oauth' && (await appClient(services, entry.id)))
+        oauthMethod = 'app_oauth';
+    }
+  }
+  const card = connectCard(entry, {
+    ...at,
+    access,
+    agent: shortName(turn.agent),
+    returnTo,
+    oauthMethod,
+  });
+  await postAskCard(ctx, card, { messageId });
   return {
     status: 'ok',
     messageId,
@@ -372,8 +436,16 @@ async function connectByTalking(
       );
     label ??= probe.serverName?.trim() || host;
     if (probe.needs === 'oauth') {
-      const card = connectSignInCard(entry, { label, url, access }, assistant);
-      const messageId = await postAskCard(ctx, card);
+      const messageId = newId('message');
+      const returnTo = await cardReturnTo(
+        services.db,
+        ctx.burrowId,
+        ctx.dispatch.conversationId,
+        ctx.dispatch.threadRootId ?? null,
+        messageId,
+      );
+      const card = connectSignInCard(entry, { label, url, access, returnTo }, assistant);
+      await postAskCard(ctx, card, { messageId });
       return byHandOk(messageId, entry, url, access, 'oauth', false);
     }
     signIn = probe.needs === 'open' ? 'none' : input.signIn === 'header' ? 'header' : 'bearer';
@@ -462,7 +534,7 @@ export async function answerConnectHere(
   const viewer = await viewerFor(services, place.accountId, place.burrow.id);
   if (!viewer) throw guideError('not_yours', 'Only the person this is for connects it.');
   try {
-    const { row } = await createConnection(services, viewer, body.data);
+    const { row } = await createConnection(services, viewer, body.data, { closeConnectCards: false });
     return { connectionId: row.id, name: row.label, outcome: 'connected', wake: true };
   } catch (err) {
     // The connections' own refusal (the check failed, the address isn't allowed, the key was turned down): its words.

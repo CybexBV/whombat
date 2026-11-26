@@ -52,6 +52,7 @@ export function NextcloudWait({
   entry,
   login,
   access = 'manage',
+  onConnected,
   onCancel,
   onFailed,
 }: {
@@ -60,6 +61,8 @@ export function NextcloudWait({
   login: StartNextcloudLoginResponse;
   /** The level asked on the connect form (CT-314): the login connects at Manage, then is set to Look only. */
   access?: ConnectionAccessLevel;
+  /** Connected: by default the toast and the connection's page. */
+  onConnected?: (connection: Pick<ConnectionView, 'id' | 'label'>) => void;
   onCancel: () => void;
   onFailed: (message: string) => void;
 }) {
@@ -75,8 +78,8 @@ export function NextcloudWait({
   const mutate = useRef(poll.mutateAsync);
   mutate.current = poll.mutateAsync;
   const open = useOpenConnection();
-  const done = useRef({ onFailed, toast, open });
-  done.current = { onFailed, toast, open };
+  const done = useRef({ onFailed, onConnected, toast, open });
+  done.current = { onFailed, onConnected, toast, open };
 
   useEffect(() => {
     let stopped = false;
@@ -98,8 +101,11 @@ export function NextcloudWait({
             await setLevel
               .current({ params: { burrow, connectionId: c.id }, body: { access: 'read' } })
               .catch(() => undefined);
-          done.current.toast.show(`${c.label} connected.`);
-          done.current.open(entry.id, c.id);
+          if (done.current.onConnected) done.current.onConnected(c);
+          else {
+            done.current.toast.show(`${c.label} connected.`);
+            done.current.open(entry.id, c.id);
+          }
           return;
         }
         if (step.kind === 'failed') return done.current.onFailed(step.message);

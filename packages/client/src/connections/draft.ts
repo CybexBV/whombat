@@ -7,6 +7,7 @@
 import type {
   CreateConnectionBody,
   SetConnectionSecretBody,
+  StartConnectionOAuthBody,
   StartServiceLoginBody,
 } from '@whombat/core/contracts';
 import {
@@ -14,8 +15,11 @@ import {
   type CatalogSignIn,
   type ConnectionAccessLevel,
   type ConnectionView,
+  connectReturnPathOf,
   fieldProblem,
   type fieldsFor,
+  type GuideConnectOAuth,
+  type OAuthSignInKind,
   type TokenAuth,
 } from '@whombat/core/domain';
 import { withBurrow } from '../paths';
@@ -312,7 +316,41 @@ export function setSecretBody(
   return { secret, ...(asksTwoStepCode(method) && typed ? { code: typed } : {}) };
 }
 
-/** Where a sign-in elsewhere comes back to: this entry's form in this burrow (AP-756; the server adds the outcome). */
-export function connectReturnTo(entryId: string, burrow: string): string {
-  return withBurrow(`/settings?tab=connections&connection=${entryId}`, burrow);
+/** `connections.startOAuth`'s body for a new connection, including its access level when agents use it. */
+export function oauthStartBody(
+  entry: CatalogEntry,
+  shown: readonly Pick<Field, 'id'>[],
+  draft: Pick<ConnectDraft, 'fields' | 'label' | 'access'>,
+  method: OAuthSignInKind,
+  returnTo: string,
+): StartConnectionOAuthBody {
+  return {
+    ...connectBase(entry, shown, draft),
+    method,
+    ...(usedByAgents(entry) ? { access: draft.access } : {}),
+    returnTo,
+  };
+}
+
+/** `connections.startOAuth`'s body from a chat guide card's `connectOAuth` payload. */
+export function cardOAuthStartBody(oauth: GuideConnectOAuth): StartConnectionOAuthBody {
+  return {
+    catalogId: oauth.catalogId,
+    method: oauth.method,
+    ...(oauth.label ? { label: oauth.label } : {}),
+    fields: oauth.url ? { url: oauth.url } : {},
+    ...(oauth.access ? { access: oauth.access } : {}),
+    ...(oauth.connectionId ? { connectionId: oauth.connectionId } : {}),
+    returnTo: oauth.returnTo,
+  };
+}
+
+/**
+ * Where a sign-in elsewhere comes back to: the caller's validated return path when one was passed (e.g. a chat thread
+ * from the assistant's card), otherwise this entry's form in this burrow.
+ */
+export function connectReturnTo(entryId: string, burrow: string, returnTo?: string | null): string {
+  return (
+    connectReturnPathOf(returnTo) ?? withBurrow(`/settings?tab=connections&connection=${entryId}`, burrow)
+  );
 }
