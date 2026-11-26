@@ -977,3 +977,6 @@ Session protocol minor 15 (`SCREEN_TIMES_MINOR`). Runtime decisions `desk-displa
 - **DK-188 Older apps keep working.** A page's `show`, `desk.screen.addPage`, a screen's `doorbell`, a grid's
   `spotlight` and a screen's `timeZone` came with session minor 15; an older app ignores them, and the box keeps the
   page times its layouts leave out (DK-183). *Why:* a phone that updates a day later shouldn't undo the times.
+- **DK-189 The doorbell's words keep clear of the chips.** “Someone’s at the door” and *Back* sit in the middle of the
+  top bar while they fit between the Whombat's name and the chips, else right after the name, as the pages do. *Why:*
+  the box's own screen, unlocked, has chips wide enough to reach the middle, and the words ran over them.

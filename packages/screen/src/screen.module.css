@@ -239,6 +239,13 @@
   transform: translateX(-50%);
 }
 
+/* The chips leave no room in the middle: right after the name, as the pages. */
+.spotAfter {
+  position: static;
+  margin-left: 24px;
+  transform: none;
+}
+
 .spotWords {
   display: flex;
   align-items: center;

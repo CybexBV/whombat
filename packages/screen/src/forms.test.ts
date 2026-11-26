@@ -14,6 +14,7 @@ import {
   postersForm,
   postersInRow,
   serverForm,
+  spotAt,
   statusForm,
   stripForm,
   tilesThatFit,
@@ -122,6 +123,12 @@ describe('the forms by size', () => {
     expect(pagesAt({ ...bar, left: 500, chips: 700 })).toBe('dots');
     expect(pagesAt({ ...bar, left: 600, chips: 700 })).toBe('dotsAfter');
     expect(pagesAt({ bar: 820, left: 80, chips: 620, names: 140, dots: 34 })).toBe('dots');
+  });
+
+  it('keeps a moment’s words clear of the chips', () => {
+    expect(spotAt({ bar: 1280, left: 80, chips: 900, spot: 320 })).toBe('centre');
+    // The box's own screen unlocked: its chips start left of the middle.
+    expect(spotAt({ bar: 1280, left: 80, chips: 610, spot: 320 })).toBe('after');
   });
 
   it('shrinks a long big line to fit, down to half', () => {
