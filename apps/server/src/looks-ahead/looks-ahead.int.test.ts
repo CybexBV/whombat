@@ -489,7 +489,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
 
   it('checks incoming mail proactively with web closed from the start and 14-day schedule context', async () => {
     const booking = minimalPdf(['Hotel Chiado', 'Check-in 22 December 2026 from 15:00', 'Room 214']);
-    const terms = Buffer.from('Terms. '.repeat(2000));
+    const terms = Buffer.from('Terms. '.repeat(5000));
     await t.services.db.delete(aheadChecks).where(eq(aheadChecks.burrowId, TEST_BURROW_ID));
     await t.services.db.update(dispatches).set({ state: 'done' }).where(eq(dispatches.trigger, 'ahead'));
     const google = (t.services.google.workspace as FakeGoogleWorkspace).stateFor(FAKE_ACCESS_TOKEN);
@@ -575,7 +575,7 @@ describe('Looks ahead (looks-ahead.md)', () => {
     });
     const cut = (long.structuredContent as { attachment: { text: string; truncated: boolean } }).attachment;
     expect(cut.truncated).toBe(true);
-    expect(cut.text.length).toBeLessThan(terms.length / 2);
+    expect(cut.text.length).toBeLessThan(terms.length / 3);
     const reported = await mcp.client.callTool({
       name: 'ahead_report',
       arguments: {
