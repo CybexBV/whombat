@@ -1,5 +1,6 @@
 /**
- * The phone's layout draft (Whombat desk-display.md DK-132, DK-133, DK-143…DK-145; desk-display-android.md AP-6010…):
+ * The phone's layout draft (Whombat desk-display.md DK-132, DK-133, DK-143…DK-145, DK-164…DK-167; desk-display-android.md
+ * AP-6010…, AP-9980…):
  * the editor's state around the shared rules of `@whombat/client/desk`'s editor — the layout as changed so far, the
  * page shown, the widget chosen, what *Didn’t fit* after a rearranging, the screen's *What’s going on* and *Servers*
  * choices changed with it, and Undo. Every change is a new draft or the reason it can't be made; nothing reaches the
@@ -9,6 +10,8 @@
 import {
   addPage,
   addWidget,
+  chooseWidget,
+  type DeskCatalogItem,
   type DeskLayout,
   type DeskScreenDetail,
   type DeskShowPatch,
@@ -29,16 +32,17 @@ import {
   pushUndo,
   removeWidget,
   renamePage,
+  resizeWidget,
   sameLayout,
   setLayoutSize,
   setLayoutTurn,
   setWidgetSpec,
+  tidyPage,
   type UndoStack,
   type ViewOf,
   widgetSize,
 } from '@whombat/client/desk';
-import { deskLayoutProblem } from '@whombat/core';
-import { type Grid, shapeKey, sizeOf } from '@whombat/screen';
+import { type Grid, shapeKey } from '@whombat/screen';
 
 /** What Undo puts back. */
 interface Snapshot {
@@ -59,7 +63,7 @@ export interface Draft extends Snapshot {
 }
 
 export type DraftResult =
-  | { ok: true; draft: Draft }
+  | { ok: true; draft: Draft; swapped?: string }
   | { ok: false; why: EditorRefusal; grow?: boolean; size?: { w: number; h: number } };
 
 /** A new draft of a screen as it is. */
@@ -130,12 +134,19 @@ function changed(d: Draft, next: Partial<Snapshot> & { selected?: string | null 
 const widgetOn = (d: Draft, id: string, viewOf?: ViewOf) =>
   editorPage(d.layout, d.page, draftGrid(d), viewOf).widgets.find((w) => w.id === id);
 
-/** *Move*'s arrows: one cell left, right, up or down; a taken spot or the edge refuses. */
+/**
+ * *Move*'s arrows: one cell left, right, up or down; onto exactly one other widget the two change places (`swapped`,
+ * DK-167); another taken spot or the edge refuses.
+ */
 export function draftNudge(d: Draft, id: string, dx: number, dy: number, viewOf?: ViewOf): DraftResult {
   const r = nudgeWidget(d.layout, d.page, draftGrid(d), id, dx, dy, viewOf);
   if (!r.ok) return r;
   if (r.layout === d.layout) return { ok: true, draft: d };
-  return { ok: true, draft: changed(d, { layout: r.layout }, viewOf) };
+  return {
+    ok: true,
+    draft: changed(d, { layout: r.layout }, viewOf),
+    ...(r.swapped ? { swapped: r.swapped } : {}),
+  };
 }
 
 /** *Size*'s − and +: one cell narrower or wider (`w`), lower or higher (`h`), within its sizes and the room it has. */
@@ -148,6 +159,19 @@ export function draftGrow(d: Draft, id: string, dim: 'w' | 'h', by: number, view
     const limit = s && (r.why === 'tooSmall' ? s.min : r.why === 'tooBig' ? s.max : null);
     return { ok: false, why: r.why, grow: true, ...(limit ? { size: { w: limit[0], h: limit[1] } } : {}) };
   }
+  if (r.layout === d.layout) return { ok: true, draft: d };
+  return { ok: true, draft: changed(d, { layout: r.layout }, viewOf) };
+}
+
+/** *Size*'s shapes (DK-165): `w` × `h` at once, within its sizes and the room it has. */
+export function draftResize(
+  d: Draft,
+  id: string,
+  size: { w: number; h: number },
+  viewOf?: ViewOf,
+): DraftResult {
+  const r = resizeWidget(d.layout, d.page, draftGrid(d), id, size, viewOf);
+  if (!r.ok) return { ok: false, why: r.why };
   if (r.layout === d.layout) return { ok: true, draft: d };
   return { ok: true, draft: changed(d, { layout: r.layout }, viewOf) };
 }
@@ -203,42 +227,26 @@ export function draftSpec(
 }
 
 /**
- * A widget switched to another item, one that draws `view` (an account's *Today* to its *Next meeting*), on every
- * shape it's on: it shrinks to the new one's largest and grows to its smallest where there's room; where there isn't,
- * it stays as it was and says so.
+ * *What it shows* (DK-164): the widget shows another view of its connection, server or account (figures and panels
+ * alike), on every shape it's on, in its place: it shrinks to the new view's largest and grows to its smallest where
+ * there's room; where there isn't, it stays as it was and says so.
  */
-export function draftChoose(
+export function draftChoose(d: Draft, id: string, item: DeskCatalogItem, viewOf?: ViewOf): DraftResult {
+  const r = chooseWidget(d.layout, id, item);
+  if (!r.ok) return r;
+  const chosen: ViewOf = (w) => (w.id === id ? item.view : viewOf?.(w));
+  return { ok: true, draft: changed(d, { layout: r.layout }, chosen) };
+}
+
+/** *Tidy up* (DK-166): the page shown packed up and to the left; `moved` none when it was tidy already. */
+export function draftTidy(
   d: Draft,
-  id: string,
-  spec: { ref?: string; opts: Record<string, string> },
-  view: string | undefined,
   viewOf?: ViewOf,
-): DraftResult {
-  const set = setWidgetSpec(d.layout, id, spec);
-  const layout: DeskLayout = {
-    ...set,
-    pages: set.pages.map((page) => ({
-      ...page,
-      layouts: Object.fromEntries(
-        Object.entries(page.layouts).map(([key, widgets]) => [
-          key,
-          widgets.map((w) => {
-            if (w.id !== id) return w;
-            const s = sizeOf(w, view);
-            return {
-              ...w,
-              w: Math.max(s.min[0], Math.min(s.max[0], w.w)),
-              h: Math.max(s.min[1], Math.min(s.max[1], w.h)),
-            };
-          }),
-        ]),
-      ),
-    })),
-  };
-  // Grown onto another widget or past the grid's edge somewhere: no room for it.
-  if (deskLayoutProblem(layout)) return { ok: false, why: 'noRoom' };
-  const chosen: ViewOf = (w) => (w.id === id ? view : viewOf?.(w));
-  return { ok: true, draft: changed(d, { layout }, chosen) };
+): { ok: true; draft: Draft; moved: number } | { ok: false; why: EditorRefusal } {
+  const r = tidyPage(d.layout, d.page, draftGrid(d), viewOf);
+  if (!r.ok) return r;
+  if (r.moved === 0) return { ok: true, draft: d, moved: 0 };
+  return { ok: true, draft: changed(d, { layout: r.layout }, viewOf), moved: r.moved };
 }
 
 /** Two changes to the screen's choices as one: the later wins, item by item. */

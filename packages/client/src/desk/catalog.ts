@@ -25,13 +25,6 @@ export interface CatalogSection {
   groups: DeskCatalogGroup[];
 }
 
-/** Sections that start folded (DK-155): Whombat's own and the servers, so the connections show first. */
-export const CATALOG_FOLDED_AT_FIRST: ReadonlySet<CatalogSectionKind> = new Set(['own', 'servers']);
-
-/** How many items a section lists. */
-export const sectionCount = (section: CatalogSection) =>
-  section.groups.reduce((n, g) => n + g.items.length, 0);
-
 /** A server's group (`server:<id>`), or an older runtime's single *Servers* group. */
 export const isServerGroup = (group: Pick<DeskCatalogGroup, 'key'>) =>
   group.key === 'servers' || group.key.startsWith('server:');

@@ -1,11 +1,13 @@
 /**
- * A chosen widget's sheet on the phone (Whombat desk-display.md DK-140, DK-143…DK-145, DK-159; desk-display-android.md
- * AP-6015, AP-6016, AP-6018…AP-6020, AP-6123): what it is and where (an account's widget names its account, “Google ·
- * anna@example.com”); *Move* — four arrows, one cell each (an arrow at the grid's edge is off, a taken spot says so);
- * *Size* — − and + for wide and high, within its smallest and largest; its own settings (*What’s going on*'s choices and
- * *Servers*' order, moved here from the older *Screen* page; a server's server, the part of it it shows and its chart's
- * range; what a connection's widget shows; which of its account's widgets an account's shows; *On a locked screen*); what
- * touching it on the screen does; *Remove from this page* and *Done*. Every button 44dp and named for TalkBack with the widget's name. Changes go into the draft.
+ * A chosen widget's sheet on the phone (Whombat desk-display.md DK-140, DK-143…DK-145, DK-159, DK-164, DK-165, DK-167;
+ * desk-display-android.md AP-6015, AP-6016, AP-6018…AP-6020, AP-6123, AP-9980…): what it is and where (an account's
+ * widget names its account, “Google · anna@example.com”); *Move* — four arrows, one cell each (an arrow at the grid's
+ * edge is off; onto one other widget the two change places, any other taken spot says so); *Size* — its shapes as the
+ * Overview's gear draws them, then − and + for wide and high, within its smallest and largest; its own settings
+ * (*What’s going on*'s choices and *Servers*' order; a server's server; *What it shows* — every view of its connection,
+ * server or account as the Overview's options; a server's chart's range; *On a locked screen*); what touching it on the
+ * screen does; *Remove from this page* and *Done*. Every button 44dp and named for TalkBack with the widget's name.
+ * Changes go into the draft.
  */
 import {
   DESK_SCREENS_TEXT,
@@ -18,10 +20,12 @@ import {
   type DeskWidget,
   fillDeskWords,
   gridText,
+  sameWidget,
+  sizePresets,
   type ViewOf,
   widgetSize,
 } from '@whombat/client/desk';
-import { SERVER_SHOW_VIEWS, serverShow } from '@whombat/screen';
+import { type Grid, SERVER_SHOW_VIEWS, serverShow } from '@whombat/screen';
 import { type ReactNode, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Text } from '../../theme/Text';
@@ -41,29 +45,22 @@ import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 import { DeskMiddleCard, DeskServersCard } from '../DeskShowsPart';
-import { accountShows } from './catalog';
 import { PHONE_SCREENS_TEXT, sizesLine, type TileLabel, tileWhere } from './tiles';
-import { ACCOUNT_ICONS, WidgetLogo } from './WidgetLogo';
+import { WidgetLogo } from './WidgetLogo';
 
 const E = DESK_SCREENS_TEXT.editor;
 const M = PHONE_SCREENS_TEXT;
-
-/** A part of a server *Shows* offers: its `opts.show` (the overview's empty) and name. */
-export interface ServerPart {
-  show: string;
-  name: string;
-}
 
 export interface WidgetSheetActions {
   nudge(dx: number, dy: number): void;
   grow(dim: 'w' | 'h', by: number): void;
   canNudge(dx: number, dy: number): boolean;
+  /** One of *Size*'s shapes: `w` × `h` at once. */
+  resize(w: number, h: number): void;
   setOpts(opts: Record<string, string>): void;
   setRef(ref: string): void;
-  /** A server widget's part (`opts.show`; the overview's is empty), its other choices kept. */
-  setPart(show: string): void;
-  /** An account widget switched to another of its account's widgets. */
-  setItem(item: DeskCatalogItem): void;
+  /** *What it shows*: another view of its connection, server or account. */
+  choose(item: DeskCatalogItem): void;
   setShow(patch: DeskShowPatch): void;
   remove(): void;
 }
@@ -73,21 +70,25 @@ export function WidgetSheet({
   onClose,
   widget,
   label,
+  grid,
   viewOf,
   actions,
   options,
   show,
   servers,
-  parts,
   choices = [],
+  reading = false,
   pairFirst = false,
   lockable = false,
   note,
+  noteTone = 'bad',
 }: {
   visible: boolean;
   onClose: () => void;
   widget: DeskWidget | null;
   label: TileLabel | null;
+  /** The page's grid: the shapes it has room for. */
+  grid: Pick<Grid, 'cols' | 'rows'>;
   viewOf: ViewOf;
   actions: WidgetSheetActions;
   /**
@@ -102,12 +103,14 @@ export function WidgetSheet({
   show: DeskShow;
   /** The servers a server widget can show, once each. */
   servers: readonly DeskCatalogItem[];
-  /** The parts the chosen server widget's server offers (`serverParts`), for *Shows*. */
-  parts: readonly ServerPart[];
-  /** The widgets of an account widget's account it can switch to (`accountChoices`), for *Shows*. */
+  /** Every view of its connection, server or account (`catalogGroupOf`'s items), for *What it shows*. */
   choices?: readonly DeskCatalogItem[];
-  /** What a button here couldn't do, said under Move and Size (the toasts are behind the sheet). */
+  /** The rest of its views are being read (a connection listed only partly). */
+  reading?: boolean;
+  /** What a button here did or couldn't do, said under Move and Size (the toasts are behind the sheet). */
   note: string | null;
+  /** `bad` for what couldn't be done, `ok` for what was (two widgets swapped). */
+  noteTone?: 'bad' | 'ok';
 }) {
   const theme = useTheme();
   const [dragging, setDragging] = useState(false);
@@ -133,12 +136,12 @@ export function WidgetSheet({
             </View>
           </View>
           <MovePart name={name} actions={actions} />
-          <SizePart widget={widget} name={name} viewOf={viewOf} actions={actions} />
+          <SizePart widget={widget} name={name} grid={grid} viewOf={viewOf} actions={actions} />
           {note ? (
             <Text
               size={14}
               lh={1.45}
-              color={theme.colors.bad}
+              color={noteTone === 'ok' ? theme.colors.ink2 : theme.colors.bad}
               accessibilityLiveRegion="polite"
               style={{ paddingHorizontal: 6, marginTop: -6 }}
             >
@@ -147,13 +150,12 @@ export function WidgetSheet({
           ) : null}
           <OwnSettings
             widget={widget}
-            label={label}
             actions={actions}
             options={options}
             show={show}
             servers={servers}
-            parts={parts}
             choices={choices}
+            reading={reading}
             pairFirst={pairFirst}
             lockable={lockable}
             onDragging={setDragging}
@@ -201,16 +203,19 @@ function MovePart({ name, actions }: { name: string; actions: WidgetSheetActions
 function SizePart({
   widget,
   name,
+  grid,
   viewOf,
   actions,
 }: {
   widget: DeskWidget;
   name: string;
+  grid: Pick<Grid, 'cols' | 'rows'>;
   viewOf: ViewOf;
   actions: WidgetSheetActions;
 }) {
   const theme = useTheme();
   const size = widgetSize(widget, viewOf);
+  const presets = sizePresets(size, grid);
   const stepper = (dim: 'w' | 'h') => {
     const value = widget[dim];
     const i = dim === 'w' ? 0 : 1;
@@ -248,6 +253,14 @@ function SizePart({
   return (
     <View style={{ gap: 8 }}>
       <SectionLabel>{E.sizeLabel.toUpperCase()}</SectionLabel>
+      {presets.length > 1 ? (
+        <Shapes
+          name={name}
+          presets={presets}
+          value={{ w: widget.w, h: widget.h }}
+          onPick={(p) => actions.resize(p.w, p.h)}
+        />
+      ) : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 18, rowGap: 8 }}>
         {stepper('w')}
         {stepper('h')}
@@ -255,6 +268,91 @@ function SizePart({
       <Text size={13} lh={1.4} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
         {`${gridText(widget.w, widget.h)} · ${sizesLine(size)}`}
       </Text>
+    </View>
+  );
+}
+
+/**
+ * *Size*'s shapes (DK-165), the Overview gear's way (its `Shapes`): a `line` trough padded 3, each shape 44dp and more
+ * with its cells drawn small over its name and size, the one it is on `sf`. Radios for TalkBack, named with the widget.
+ */
+function Shapes({
+  name,
+  presets,
+  value,
+  onPick,
+}: {
+  name: string;
+  presets: readonly { key: keyof typeof E.shapes; w: number; h: number }[];
+  value: { w: number; h: number };
+  onPick: (p: { w: number; h: number }) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={`${E.sizeLabel}, ${name}`}
+      style={{
+        flexDirection: 'row',
+        gap: 2,
+        padding: 3,
+        borderRadius: 12,
+        backgroundColor: theme.colors.line,
+      }}
+    >
+      {presets.map((p) => {
+        const on = p.w === value.w && p.h === value.h;
+        const cell = Math.max(3, Math.min(6, Math.floor(40 / p.w), Math.floor(24 / p.h)));
+        return (
+          <Touchable
+            key={p.key}
+            onPress={() => onPick(p)}
+            feedback={on ? 'none' : 'wash'}
+            ringRadius={9}
+            accessibilityRole="radio"
+            accessibilityLabel={fillDeskWords(E.shape, { name: E.shapes[p.key], size: gridText(p.w, p.h) })}
+            accessibilityState={{ selected: on }}
+            style={{
+              flex: 1,
+              minHeight: 44,
+              paddingTop: 8,
+              paddingBottom: 6,
+              paddingHorizontal: 2,
+              borderRadius: 9,
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 4,
+              backgroundColor: on ? theme.colors.sf : 'transparent',
+            }}
+          >
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={{ width: p.w * cell + (p.w - 1), flexDirection: 'row', flexWrap: 'wrap', gap: 1 }}
+            >
+              {Array.from({ length: p.w * p.h }, (_, i) => (
+                <View
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a shape's cells are fixed places
+                  key={i}
+                  style={{
+                    width: cell,
+                    height: cell,
+                    borderRadius: 1,
+                    backgroundColor: on ? theme.colors.ink : theme.colors.mut,
+                    opacity: on ? 1 : 0.55,
+                  }}
+                />
+              ))}
+            </View>
+            <Text size={12.5} weight={500} color={on ? theme.colors.ink : theme.colors.mut} numberOfLines={1}>
+              {E.shapes[p.key]}
+            </Text>
+            <Text size={11} mono color={on ? theme.colors.ink2 : theme.colors.mut}>
+              {`${p.w}×${p.h}`}
+            </Text>
+          </Touchable>
+        );
+      })}
     </View>
   );
 }
@@ -302,25 +400,23 @@ function SquareButton({
 
 function OwnSettings({
   widget,
-  label,
   actions,
   options,
   show,
   servers,
-  parts,
   choices,
+  reading,
   pairFirst,
   lockable,
   onDragging,
 }: {
   widget: DeskWidget;
-  label: TileLabel;
   actions: WidgetSheetActions;
   options: readonly DeskShowOption[] | undefined;
   show: DeskShow;
   servers: readonly DeskCatalogItem[];
-  parts: readonly ServerPart[];
   choices: readonly DeskCatalogItem[];
+  reading: boolean;
   pairFirst: boolean;
   /** It shows something private: *On a locked screen* is offered. */
   lockable: boolean;
@@ -360,7 +456,6 @@ function OwnSettings({
       const part = serverShow(widget.opts);
       // The overview draws its processor over the range when it's high enough; the charted parts always do.
       const ranged = part === 'overview' || SERVER_SHOW_VIEWS[part] === 'chart';
-      const chosenPart = part === 'overview' ? '' : part;
       return (
         <>
           {servers.length > 0 ? (
@@ -381,22 +476,7 @@ function OwnSettings({
               </ChoiceCard>
             </View>
           ) : null}
-          {parts.length > 1 ? (
-            <View style={{ gap: 6 }}>
-              <SectionLabel>{E.panel.toUpperCase()}</SectionLabel>
-              <ChoiceCard label={E.panel}>
-                {parts.map((p, i) => (
-                  <ChoiceRow
-                    key={p.show || 'overview'}
-                    name={p.name}
-                    first={i === 0}
-                    chosen={p.show === chosenPart}
-                    onPress={() => actions.setPart(p.show)}
-                  />
-                ))}
-              </ChoiceCard>
-            </View>
-          ) : null}
+          <ShowsPart widget={widget} choices={choices} reading={reading} onChoose={actions.choose} />
           {ranged ? (
             <View style={{ gap: 8 }}>
               <SectionLabel>{E.chart.toUpperCase()}</SectionLabel>
@@ -421,48 +501,81 @@ function OwnSettings({
     case 'widget':
       return (
         <>
-          {choices.length > 1 ? (
-            // An account's widget: another of its account's, as a server's parts.
-            <View style={{ gap: 6 }}>
-              <SectionLabel>{E.panel.toUpperCase()}</SectionLabel>
-              <ChoiceCard label={E.panel}>
-                {choices.map((item, i) => {
-                  const shows = accountShows(item);
-                  return (
-                    <ChoiceRow
-                      key={item.opts.panel ?? item.name}
-                      name={item.name}
-                      line={item.line}
-                      logo={
-                        <WidgetLogo
-                          type={item.type}
-                          mark={item.mark}
-                          name={item.name}
-                          icon={shows ? ACCOUNT_ICONS[shows] : undefined}
-                        />
-                      }
-                      first={i === 0}
-                      chosen={(item.opts.panel ?? '') === (widget.opts.panel ?? '')}
-                      onPress={() => actions.setItem(item)}
-                    />
-                  );
-                })}
-              </ChoiceCard>
-            </View>
-          ) : widget.type !== 'widget' && label.of ? (
-            <View style={{ gap: 4 }}>
-              <SectionLabel>{E.panel.toUpperCase()}</SectionLabel>
-              <Text size={15} lh={1.4} style={{ paddingHorizontal: 6 }}>
-                {fillDeskWords(M.shows, { panel: label.name, thing: label.of })}
-              </Text>
-            </View>
-          ) : null}
+          <ShowsPart widget={widget} choices={choices} reading={reading} onChoose={actions.choose} />
           {lockable ? <LockPart widget={widget} onLock={(lock) => opt('lock', lock)} /> : null}
         </>
       );
     default:
       return null;
   }
+}
+
+/**
+ * *What it shows* (DK-164): every view of its connection, server or account as the Overview gear's options — 44dp and
+ * more, a hairline on `sf`, its name over its line, the one it shows ringed in `ink` — radios for TalkBack. Choosing one
+ * changes the widget in its place, fitted to the new view.
+ */
+function ShowsPart({
+  widget,
+  choices,
+  reading,
+  onChoose,
+}: {
+  widget: DeskWidget;
+  choices: readonly DeskCatalogItem[];
+  reading: boolean;
+  onChoose: (item: DeskCatalogItem) => void;
+}) {
+  const theme = useTheme();
+  if (choices.length < 2 && !reading) return null;
+  return (
+    <View style={{ gap: 6 }}>
+      <SectionLabel>{E.shows.toUpperCase()}</SectionLabel>
+      <View accessibilityRole="radiogroup" accessibilityLabel={E.shows} style={{ gap: 6 }}>
+        {choices.map((item) => {
+          const on = sameWidget(widget, item);
+          return (
+            <Touchable
+              key={`${item.type}|${item.opts.panel ?? ''}|${item.opts.show ?? ''}`}
+              onPress={() => {
+                if (!on) onChoose(item);
+              }}
+              feedback="wash"
+              ringRadius={12}
+              accessibilityRole="radio"
+              accessibilityLabel={item.line ? `${item.name}, ${item.line}` : item.name}
+              accessibilityState={{ selected: on }}
+              style={{
+                minHeight: 44,
+                justifyContent: 'center',
+                gap: 2,
+                paddingVertical: on ? 8 : 9,
+                paddingHorizontal: on ? 11 : 12,
+                borderRadius: 12,
+                borderWidth: on ? 2 : 1,
+                borderColor: on ? theme.colors.ink : theme.colors.line,
+                backgroundColor: theme.colors.sf,
+              }}
+            >
+              <Text size={14.5} weight={500} lh={1.35}>
+                {item.name}
+              </Text>
+              {item.line ? (
+                <Text size={12.5} lh={1.4} color={theme.colors.mut} numberOfLines={2}>
+                  {item.line}
+                </Text>
+              ) : null}
+            </Touchable>
+          );
+        })}
+      </View>
+      {reading ? (
+        <Text size={12.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
+          {E.reading}
+        </Text>
+      ) : null}
+    </View>
+  );
 }
 
 /** *On a locked screen*: *Show it* · *Hide it*, hidden unless chosen, for a widget that shows something private. */
@@ -484,7 +597,7 @@ function LockPart({ widget, onLock }: { widget: DeskWidget; onLock: (lock: strin
   );
 }
 
-/** A card of radio rows: *Server*'s servers, *Shows*' parts or an account's widgets. */
+/** A card of radio rows: *Server*'s servers. */
 function ChoiceCard({ label, children }: { label: string; children: ReactNode }) {
   const theme = useTheme();
   return (
@@ -504,10 +617,7 @@ function ChoiceCard({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-/**
- * A choice: a server or an account's widget with its mark, name and line, or a part by its name; the chosen one
- * checked (a radio for TalkBack).
- */
+/** A choice: a server with its mark, name and line; the chosen one checked (a radio for TalkBack). */
 function ChoiceRow({
   name,
   line,
