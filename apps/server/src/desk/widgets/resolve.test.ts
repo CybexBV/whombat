@@ -1,7 +1,9 @@
-import { type DeskWidgetSpec, DeskWidgetView, type Widget } from '@whombat/core';
+import { type DeskWidgetSpec, DeskWidgetView, NEWS_WORDS, WEATHER_WORDS, type Widget } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { PrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
+import { parseMetForecast } from '../../weather/forecast';
+import { metAnswer } from '../../weather/testing';
 import type { DeskServer } from '../shapes';
 import { type GlanceFacts, screenViews, trimView, WidgetResolver } from './resolve';
 import type { ServerLine } from './servers';
@@ -298,5 +300,75 @@ describe('the lock’s trimming (DK-138)', () => {
     );
     expect(views.map((v) => v.id)).toEqual(['w_now']);
     expect(warned).toEqual(['w_bad']);
+  });
+});
+
+describe('the weather and the news', () => {
+  it('are read once per burrow for every such widget, and show with their own views', async () => {
+    const asked: string[] = [];
+    const weatherFixture = parseMetForecast(metAnswer('2026-10-27T14:00:00Z'));
+    const r = new WidgetResolver(services, () => fakeThings().things, {
+      weather: async (burrowId) => {
+        asked.push(`weather ${burrowId}`);
+        return {
+          place: { name: 'Amsterdam', lat: 52.37, lon: 4.9, country: 'NL', guessed: true },
+          forecast: weatherFixture,
+        };
+      },
+      news: async (burrowId) => {
+        asked.push(`news ${burrowId}`);
+        return {
+          sources: 1,
+          anyRead: true,
+          headlines: [
+            {
+              sourceId: 'nl-nos',
+              source: 'NOS Nieuws',
+              title: 'Bridge closed all weekend',
+              at: '2026-10-27T13:00:00.000Z',
+              link: 'https://news.example.com/1',
+            },
+          ],
+        };
+      },
+    });
+    const specs = [
+      spec('w_weather', { type: 'weather' }),
+      spec('w_weather2', { type: 'weather' }),
+      spec('w_news', { type: 'news' }),
+    ];
+    const out = await r.resolve(ctx(), specs, facts, 1_000);
+    expect(asked.sort()).toEqual(['news brw_1', 'weather brw_1']);
+    const views = screenViews(specs, out, 'summary');
+    expect(views.map((v) => [v.id, v.kind])).toEqual([
+      ['w_weather', 'weather'],
+      ['w_weather2', 'weather'],
+      ['w_news', 'list'],
+    ]);
+    // Not private: a locked screen shows them as they are.
+    expect(views.every((v) => !v.locked)).toBe(true);
+    const news = views[2];
+    expect(news?.kind === 'list' && news.rows[0]).toMatchObject({
+      title: 'Bridge closed all weekend',
+      detail: 'NOS Nieuws',
+      time: '14:00',
+    });
+  });
+
+  it('say where to choose them when nothing is set', async () => {
+    const r = new WidgetResolver(services, () => fakeThings().things, {
+      weather: async () => ({ place: null, forecast: null }),
+      news: async () => ({ sources: 0, headlines: [], anyRead: false }),
+    });
+    const out = await r.resolve(
+      ctx(),
+      [spec('w_weather', { type: 'weather' }), spec('w_news', { type: 'news' })],
+      facts,
+      1_000,
+    );
+    const weather = out.get('w_weather')?.view;
+    const news = out.get('w_news')?.view;
+    expect(weather?.problem?.text).toBe(WEATHER_WORDS.noPlace);
+    expect(news?.kind === 'list' && news.empty).toBe(NEWS_WORDS.widgetEmpty);
   });
 });

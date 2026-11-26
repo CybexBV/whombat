@@ -66,6 +66,43 @@ describe('a Looks ahead check’s request', () => {
     expect(text).toContain('found false');
     expect(text).toContain('search_web');
     expect(text).toContain('read_web_page');
+    expect(text).toContain('weather_forecast');
+    expect(text).toContain('news_headlines');
+    expect(text).toContain('{ weather: true }');
+    // No forecast given: none is shown.
+    expect(text).not.toContain('[[forecast');
+  });
+
+  it('shows the forecast for the plan’s day as data, with its credit, when it was given', () => {
+    const withWeather = DispatchContext.parse({
+      ...check,
+      ahead: {
+        ...ahead,
+        weather: {
+          place: 'Utrecht',
+          date: '2026-12-14',
+          units: { temperature: '°C', wind: 'm/s' },
+          text: 'Heavy snow',
+          high: 1,
+          low: -4,
+          rain: 12.5,
+          rainChance: 90,
+          windMax: 14,
+          hours: [
+            { at: '2026-12-14T20:00+01:00', temperature: -2, text: 'Heavy snow', rain: 2.1, windSpeed: 12 },
+          ],
+          credit: 'Data from MET Norway',
+        },
+      },
+    });
+    const text = aheadTurnLines(withWeather).join('\n');
+    expect(text).toContain('[[forecast');
+    expect(text).toContain('Utrecht');
+    expect(text).toContain('2026-12-14');
+    expect(text).toContain('Heavy snow');
+    expect(text).toContain('-4 to 1 °C');
+    expect(text).toContain('Data from MET Norway');
+    expect(text).toContain('[[end of forecast]]');
   });
 
   it('tailors instructions for early, morning and incoming-mail checks', () => {
@@ -445,6 +482,8 @@ describe('a Looks ahead check’s tool policy', () => {
     expect(policy.rules[0]?.tools).toContain('mcp__editor_whombat_*__mail_read');
     expect(policy.rules[0]?.tools).toContain('mcp__whombat__files_search');
     expect(policy.rules[0]?.tools).toContain('mcp__whombat__ahead_read_docs');
+    expect(policy.rules[0]?.tools).toContain('mcp__whombat__weather_forecast');
+    expect(policy.rules[0]?.tools).toContain('mcp__whombat__news_headlines');
     expect(policy.rules[0]?.tools).not.toContain('mcp__whombat__*');
     expect(policy.rules[0]?.tools?.some((t) => t.includes('post_message') || t.includes('vault'))).toBe(
       false,

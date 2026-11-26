@@ -8,6 +8,7 @@ import {
   placeLabel,
   roundCoord,
   roundPlace,
+  timeZoneNear,
 } from './place.js';
 import { ZONE_LINKS, ZONE_PLACES } from './place-zones.js';
 
@@ -53,6 +54,17 @@ describe('the place a time zone suggests', () => {
     }
     for (const [name, zone] of Object.entries(ZONE_LINKS))
       expect([name, zone in ZONE_PLACES]).toEqual([name, true]);
+  });
+});
+
+describe('the time zone of a place', () => {
+  it('is the nearest zone’s, within the place’s country when it has some', () => {
+    expect(timeZoneNear(38.72, -9.14, 'PT')).toBe('Europe/Lisbon');
+    expect(timeZoneNear(51.59, 4.78, 'NL')).toBe('Europe/Amsterdam');
+    // Closer to Brussels, but in the Netherlands.
+    expect(timeZoneNear(51.44, 3.57, 'NL')).toBe('Europe/Amsterdam');
+    expect(timeZoneNear(51.44, 3.57)).toBe('Europe/Brussels');
+    expect(timeZoneNear(40.71, -74.0, 'US')).toBe('America/New_York');
   });
 });
 

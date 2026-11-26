@@ -78,6 +78,30 @@ export function placeFromTimeZone(timeZone: string): Place | null {
   return { name: zoneCity(zone), lat, lon, country, guessed: true };
 }
 
+/**
+ * The time zone a place most likely keeps: the zone whose city is nearest, among its country's when the country has any
+ * (a forecast for Lisbon is told in Lisbon's hours). Null without any zone in the table, which never happens.
+ */
+export function timeZoneNear(lat: number, lon: number, country?: string): string | null {
+  const zones = Object.entries(ZONE_PLACES);
+  const own = country ? zones.filter(([, [c]]) => c === country) : [];
+  let best: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const [zone, [, zLat, zLon]] of own.length ? own : zones) {
+    // The angle between the two on the globe (the haversine's), enough to compare.
+    const dLat = ((zLat - lat) * Math.PI) / 180;
+    const dLon = ((zLon - lon) * Math.PI) / 180;
+    const h =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat * Math.PI) / 180) * Math.cos((zLat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+    if (h < bestDistance) {
+      bestDistance = h;
+      best = zone;
+    }
+  }
+  return best;
+}
+
 /** What Settings shows of a place: “Utrecht”, “Breda, Noord-Brabant” (its region when that isn't its name). */
 export function placeLabel(place: Pick<Place, 'name' | 'regionName'>): string {
   return place.regionName && place.regionName !== place.name
