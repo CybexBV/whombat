@@ -214,7 +214,8 @@ const FILES: Record<string, number> = {
   'src/ui/deviceSkillCard.tsx': 1,
   // The headline's sentence that opens its Inbox row, 44dp (phone-refresh-status.md).
   'src/screens/HomeScreen.tsx': 1,
-  'src/screens/NeedsYouSheet.tsx': 0,
+  // A Looks ahead finding's 44dp send for the reply and its sources' links (32dp, padded).
+  'src/screens/NeedsYouSheet.tsx': 2,
   'src/screens/NewChatSheet.tsx': 0,
   'src/screens/ChatScreen.tsx': 0,
   // Chat (chat-channel.md AP-2461): the 44dp Feedback beside its title; Settled's 44dp “Show more” and its rows (44dp
