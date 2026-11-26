@@ -30,8 +30,8 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
     expect(text).not.toContain('never contains your content');
   });
 
-  it('is version 2026-11-25 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
-    expect(text).toContain('Version `2026-11-25`');
+  it('is version 2026-11-26 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
+    expect(text).toContain('Version `2026-11-26`');
     expect(text).not.toMatch(/\bowners?\b|\bmembers?\b|\broles?\b/i);
     expect(text).not.toContain('no remote access');
     expect(text).toContain('no standing vendor login');
@@ -57,6 +57,10 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
       '**Certificate Transparency logs**',
       '**Cert Spotter**',
       '**Hugging Face**',
+      // The weather, the place search and the news (weather-news.md).
+      '**MET Norway**',
+      '**Nominatim**',
+      '**The news sites you choose**',
     ])
       expect(text).toContain(party);
   });
