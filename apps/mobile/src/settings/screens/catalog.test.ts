@@ -5,8 +5,21 @@ import { widgetLimits } from './catalog';
 const groups = [
   {
     items: [
-      { type: 'panel' as const, ref: 'connection:con_f', opts: { panel: 'subscriptions' }, limits: true },
-      { type: 'panel' as const, ref: 'connection:con_f', opts: { panel: 'people' } },
+      {
+        type: 'panel' as const,
+        ref: 'connection:con_f',
+        opts: { panel: 'subscriptions' },
+        name: 'Subscriptions',
+        line: 'Every subscription',
+        limits: true,
+      },
+      {
+        type: 'panel' as const,
+        ref: 'connection:con_f',
+        opts: { panel: 'people' },
+        name: 'People',
+        line: 'Who used it most',
+      },
     ],
   },
 ];
