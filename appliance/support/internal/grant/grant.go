@@ -1,6 +1,7 @@
 // Package grant is the owner's grant of remote help (Whombat RH-01…RH-05; NX-413): which level support may use and
 // until when, who turned it on, and on prod images the help code support must give. It is the only judge: Forever only
-// where the image's environment isn't prod (RH-03), the help code only on prod (RH-05), five wrong codes end it.
+// where the image's environment isn't prod or root marked the box as a maintainer's test Whombat (RH-03, RH-17), the
+// help code only on prod (RH-05), five wrong codes end it.
 //
 // The grant survives restarts in one file (grant.json, 0600, replaced atomically). Every change closes and replaces the
 // channel Changed returns, so the relay worker and the open connections look again at once; every change is an event
@@ -48,6 +49,9 @@ type Events interface {
 type Options struct {
 	Path        string // grant.json
 	Environment string // whombat.environment: local, dev or prod
+	// ForeverFile is a marker only root can make (in the service's 0700 state directory). While it exists a prod image
+	// offers Forever too: a maintainer's own test Whombat on the one image. Its help code stays. "" for none.
+	ForeverFile string
 	Events      Events
 	Now         func() time.Time                                   // time.Now unless a test sets it
 	After       func(d time.Duration, f func()) (stop func() bool) // time.AfterFunc unless a test sets it
@@ -160,8 +164,18 @@ func (s *Store) fits(g *state) string {
 // Environment is the image's environment.
 func (s *Store) Environment() string { return s.o.Environment }
 
-// ForeverAllowed: Forever only on test Whombats (RH-03).
-func (s *Store) ForeverAllowed() bool { return s.o.Environment != wire.EnvProd }
+// ForeverAllowed: Forever only on test Whombats (RH-03): images that aren't prod, and boxes root marked as one. The marker
+// is looked at every time, so removing it ends a Forever grant at the next look without a restart.
+func (s *Store) ForeverAllowed() bool {
+	if s.o.Environment != wire.EnvProd {
+		return true
+	}
+	if s.o.ForeverFile == "" {
+		return false
+	}
+	_, err := os.Lstat(s.o.ForeverFile)
+	return err == nil
+}
 
 // HelpCodeRequired: the help code only on prod images (RH-05).
 func (s *Store) HelpCodeRequired() bool { return s.o.Environment == wire.EnvProd }
@@ -326,9 +340,16 @@ func (s *Store) Close() {
 	}
 }
 
-// expireLocked ends a grant whose time has passed; true when it did.
+// expireLocked ends a grant whose time has passed, or a Forever grant the box no longer allows; true when it did.
 func (s *Store) expireLocked() bool {
-	if s.g == nil || s.g.Until == nil || s.o.Now().Before(*s.g.Until) {
+	switch {
+	case s.g == nil:
+		return false
+	case s.g.Until == nil:
+		if s.ForeverAllowed() {
+			return false
+		}
+	case s.o.Now().Before(*s.g.Until):
 		return false
 	}
 	_ = s.endLocked(wire.Event{Kind: wire.EventExpired})

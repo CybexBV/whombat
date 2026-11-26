@@ -131,7 +131,7 @@ in
 
     systemd.services.whombat-support = {
       description = "Whombat remote help: the owners' grant, and Whombat support's way in while it lasts";
-      # At boot too: a grant that runs (Forever on a DEV box) dials the relay without anyone asking first.
+      # At boot too: a grant that runs (Forever on a test Whombat) dials the relay without anyone asking first.
       wantedBy = [ "multi-user.target" ];
       requires = [ "whombat-support.socket" ];
       after = [
