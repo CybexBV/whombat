@@ -400,15 +400,27 @@ export class HostInstalls {
       job.secrets.token = token;
       job.enrollment = str(made.id) ? { id: str(made.id) as string, claimed: false } : null;
       // A server Whombat reached over the tailnet may have no way to the box's LAN address: it calls home on the box's
-      // tailnet address instead, the one this connection came from.
-      const hub = tailnetAgentUrl(opened.localAddress, str(made.agent_url));
+      // tailnet address instead, the one this connection came from. The hub refuses an address it doesn't have (the
+      // range is shared with other VPNs): then its own address, as for any other server.
+      const installer = (hub?: string) =>
+        this.#hosts.text({
+          path: `${HOSTS_API}/agent-install.sh`,
+          ...(hub ? { query: { hub } } : {}),
+          actor: job.actor,
+          timeoutMs: 30_000,
+        });
+      let hub = tailnetAgentUrl(opened.localAddress, str(made.agent_url));
+      let script: string | null = null;
+      if (hub)
+        script = await installer(hub).catch((err: unknown) => {
+          if (err instanceof HostsError && err.status === 400) return null;
+          throw err;
+        });
+      if (script === null) {
+        hub = null;
+        script = await installer();
+      }
       job.agents = agentsPlace(hub ?? str(made.agent_url));
-      const script = await this.#hosts.text({
-        path: `${HOSTS_API}/agent-install.sh`,
-        ...(hub ? { query: { hub } } : {}),
-        actor: job.actor,
-        timeoutMs: 30_000,
-      });
 
       // 4. Install: the script in a mktemp file, run as root with the token (and sudo's password) on stdin.
       const mk = await exec('mktemp');

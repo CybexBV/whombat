@@ -708,11 +708,14 @@ fetch() {
 		*) echo "install.sh: download failed: $1 (curl exit $rc)" >&2 ;;
 		esac
 	elif command -v wget >/dev/null 2>&1; then
+		# A 30 s timeout where this wget has one (BusyBox can be built without -T).
+		wt=""
+		if wget --help 2>&1 | grep -qE '(^|[[:space:]])-T[ ,]'; then wt="-T 30"; fi
 		if [ -n "$TLS_PIN" ]; then
 			# wget cannot pin a key: the checksum below verifies the binary.
-			wget -q --no-check-certificate -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?
+			wget -q $wt --no-check-certificate -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?
 		else
-			wget -qO "$2" "$1" 2>"$TMP/wget.err" || rc=$?
+			wget -q $wt -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?
 		fi
 		[ "$rc" = 0 ] || cat "$TMP/wget.err" >&2
 		# GNU wget: 4 network, 5 TLS; BusyBox wget exits 1 and says why.

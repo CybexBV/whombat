@@ -2,10 +2,12 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
+	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
@@ -80,5 +82,76 @@ func TestInstallerDownloadGivesUpQuickly(t *testing.T) {
 	}
 	if n, err := strconv.Atoi(args[i+1]); err != nil || n < 1 || n > 30 {
 		t.Fatalf("--connect-timeout %q", args[i+1])
+	}
+}
+
+// A machine with many addresses still lists its tailnet one: the hub
+// serves installers only for addresses it lists, so dropping it at the
+// limit would refuse the install it was meant for.
+func TestTailnetAddressSurvivesTheLimit(t *testing.T) {
+	pfx := netip.MustParsePrefix
+	ifs := []netaddrs.Interface{{Name: "tailscale0", Up: true, Prefixes: []netip.Prefix{pfx("100.64.0.3/32"), pfx("fd7a:115c:a1e0::3/128")}}}
+	for i := range 20 {
+		ifs = append(ifs, netaddrs.Interface{Name: fmt.Sprintf("enp%ds0", i), Up: true,
+			Prefixes: []netip.Prefix{pfx(fmt.Sprintf("10.100.%d.5/24", i))}})
+	}
+	e := headlessEnv(t, func(c *Config) {
+		c.AgentURL, c.AgentListen = "wss://hosts.example:8443", ":8443"
+		c.Interfaces = func() ([]netaddrs.Interface, error) { return ifs, nil }
+	})
+	got := e.h.computeHubAddrs(e.h.currentAgentURL(context.Background()))
+	if len(got) != maxHubAddrs || got[0] != "wss://hosts.example:8443" ||
+		!slices.Equal(got[len(got)-2:], []string{"wss://100.64.0.3:8443", "wss://[fd7a:115c:a1e0::3]:8443"}) {
+		t.Fatalf("addrs = %v", got)
+	}
+	if code, b, _ := e.service("pe_1|John").req(http.MethodGet, "/api/v1/agent-install.sh?hub="+url.QueryEscape("wss://100.64.0.3:8443"), nil, nil); code != 200 {
+		t.Fatalf("installer for the tailnet address: %d %s", code, b)
+	}
+}
+
+// wget gets a timeout too, where it has one: BusyBox can be built
+// without -T, and then it is left out rather than failing the install.
+func TestInstallerWgetGivesUpQuickly(t *testing.T) {
+	for _, c := range []struct {
+		name, help string
+		want       bool
+	}{
+		{"GNU", "  -T,  --timeout=SECONDS          set all timeout values to SECONDS", true},
+		{"BusyBox", "\t-T SEC\t\tNetwork read timeout is SEC seconds", true},
+		{"BusyBox without timeouts", "\t-q\t\tQuiet", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			sb := newInstallSandbox(t, "systemd")
+			os.Remove(sb.root + "/mock/curl")
+			bin := sb.root + "/bin"
+			os.MkdirAll(bin, 0o755)
+			for _, tool := range []string{"sh", "cat", "cp", "mv", "rm", "mkdir", "mktemp", "chmod", "install", "sed", "awk", "grep",
+				"cut", "tr", "head", "sha256sum", "base64", "basename", "printf", "sleep"} {
+				if p, err := exec.LookPath(tool); err == nil {
+					os.Symlink(p, bin+"/"+tool)
+				}
+			}
+			sb.write("/bin/wget", "#!/bin/sh\nif [ \"$1\" = --help ]; then printf '"+c.help+"\\n'; exit 0; fi\nprintf '%s\\n' \"$@\" > \"$WGET_ARGS\"\nexit 4\n", 0o755)
+			_, errOut, err := sb.install([]string{"PATH=" + sb.root + "/mock:" + bin, "WGET_ARGS=" + sb.root + "/wget-args"},
+				"--token", "installer-test-token")
+			if err == nil || !strings.Contains(errOut, "install.sh: cannot reach ") {
+				t.Fatalf("%v\n%s", err, errOut)
+			}
+			b, _ := os.ReadFile(sb.root + "/wget-args")
+			args := strings.Split(strings.TrimSpace(string(b)), "\n")
+			i := slices.Index(args, "-T")
+			if !c.want {
+				if i >= 0 {
+					t.Fatalf("wget %q: -T without support for it", args)
+				}
+				return
+			}
+			if i < 0 || i+1 >= len(args) {
+				t.Fatalf("wget %q has no -T", args)
+			}
+			if n, err := strconv.Atoi(args[i+1]); err != nil || n < 1 || n > 60 {
+				t.Fatalf("-T %q", args[i+1])
+			}
+		})
 	}
 }

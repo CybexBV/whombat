@@ -97,7 +97,7 @@ link-local, or container, VM and VPN interfaces (`wbc*`, `incusbr*`,
 `kube*`, `podman*`; `internal/netaddrs`) — and last the addresses of the
 Tailscale interface (`tailscale*`) in Tailscale's ranges (100.64.0.0/10,
 `fd7a:115c:a1e0::/48`): the way in for servers that reach the hub only over
-the tailnet, a fallback for the others; at most 16. A listener bound to
+the tailnet, a fallback for the others; at most 16, the tailnet's kept. A listener bound to
 one address names only that one. The hub looks every 30 s and sends
 `hub_addrs` (`HubAddrs{addrs}`, the same list) to every connected agent
 that was told another list.

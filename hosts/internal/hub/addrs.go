@@ -162,7 +162,14 @@ func (h *Hub) computeHubAddrs(first string) []string {
 			}
 		}
 	}
-	out = dedupe(slices.Concat(out, v4, v6, tail4, tail6))
+	// The tailnet's addresses keep their place at the limit: the hub serves
+	// installers only for the addresses it lists.
+	tail := slices.Concat(tail4, tail6)
+	out = dedupe(slices.Concat(out, v4, v6))
+	if room := max(maxHubAddrs-len(tail), 1); len(out) > room {
+		out = out[:room]
+	}
+	out = dedupe(append(out, tail...))
 	if len(out) > maxHubAddrs {
 		out = out[:maxHubAddrs]
 	}

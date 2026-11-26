@@ -167,6 +167,8 @@ export class FakeHostsService implements ManageHost {
   readonly tokens = new Map<string, string>();
   /** What `GET /agent-install.sh` serves (the agent listener's `install.sh`, hosts HS-93…). */
   installScript = '#!/bin/sh\n# Whombat agent installer (fake)\nset -eu\n';
+  /** The hub's other own addresses `GET /agent-install.sh?hub=` takes (its tailnet's); any other is 400. */
+  ownAddrs = ['wss://100.64.0.3:8443'];
   readonly maintenance: Json[] = [];
   readonly checks: Json[] = [];
   readonly sessions = new Map<string, ConsoleSession>();
@@ -666,11 +668,16 @@ export class FakeHostsService implements ManageHost {
       {
         method: 'GET',
         path: `${api}/agent-install.sh`,
-        handler: () => ({
-          status: 200,
-          body: this.installScript,
-          headers: { 'content-type': 'text/x-shellscript; charset=utf-8' },
-        }),
+        handler: (r) => {
+          const hub = r.query.get('hub');
+          if (hub && hub !== this.hubMeta.agents_url && !this.ownAddrs.includes(hub))
+            return problem(400, 'bad_request', "hub must be one of the hub's own addresses.");
+          return {
+            status: 200,
+            body: this.installScript,
+            headers: { 'content-type': 'text/x-shellscript; charset=utf-8' },
+          };
+        },
       },
       {
         method: 'GET',

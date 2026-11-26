@@ -156,9 +156,11 @@ beforeAll(async () => {
     resolve: async (host) => {
       throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
     },
-    dialAddress: (a) => (a.startsWith('10.100.0.') || a.startsWith('100.101.0.') ? '127.0.0.1' : a),
+    dialAddress: (a) => (/^(10\.100\.0|100\.10[12]\.0)\./.test(a) ? '127.0.0.1' : a),
     // Servers at 100.101.0.x are reached over the tailnet: the box's end of the connection is its tailnet address.
-    sourceAddress: (a) => (a.startsWith('100.101.0.') ? TAILNET_SOURCE : undefined),
+    // At 100.102.0.x the box's end is in the same range but isn't one of the hub's addresses (another VPN).
+    sourceAddress: (a) =>
+      a.startsWith('100.101.0.') ? TAILNET_SOURCE : a.startsWith('100.102.0.') ? '100.70.0.9' : undefined,
     deadlineMs: 3000,
   });
   installsFor(t.services).timing = { ...INSTALL_TIMING, signInMs: 3000, reportMs: 1500, pollMs: 100 };
@@ -461,6 +463,20 @@ describe('what the installer says', () => {
     });
     expect(near).toMatchObject({ state: 'ready', serverId: 'near-1' });
     expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.has('hub')).toBe(false);
+  });
+
+  it('keeps the hub’s own address when the hub doesn’t have the one the connection came from', async () => {
+    ssh.installer = added('vpn-1');
+    const before = hub.calls('GET', '/api/v1/agent-install.sh').length;
+    const job = await install({
+      address: `100.102.0.14:${ssh.port}`,
+      username: 'root',
+      auth: { kind: 'password', password: ROOT_PASSWORD },
+      control: 'watch',
+    });
+    expect(job).toMatchObject({ state: 'ready', serverId: 'vpn-1', error: null });
+    const asked = hub.calls('GET', '/api/v1/agent-install.sh').slice(before);
+    expect(asked.map((c) => c.query.get('hub'))).toEqual(['wss://100.70.0.9:8443', null]);
   });
 
   it('leaves a server of another Whombat alone', async () => {
