@@ -22,7 +22,7 @@ export function roundCoord(value: number): number {
 
 /** A country, ISO 3166-1 alpha-2, upper case: `NL`. */
 export const PlaceCountry = z.string().regex(/^[A-Z]{2}$/);
-/** A part of a country, ISO 3166-2: `NL-NB` (a province), `BE-VOV`, `FR-20R`, `AT-6`. */
+/** A part of a country, ISO 3166-2: `NL-NB` (a province), `BE-VOV`, `FR-20R`, Austria's Länder by number. */
 export const PlaceRegionCode = z.string().regex(/^[A-Z]{2}-[A-Z0-9]{1,3}$/);
 
 export const PLACE_NAME_MAX = 80;

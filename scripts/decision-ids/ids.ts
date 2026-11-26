@@ -35,6 +35,18 @@ const DEFINITIONS = [
   new RegExp(String.raw`^#{1,6}\s+\**(${ID})\b`),
 ];
 const CODE = /\.(ts|tsx|js|mjs|cjs|py|go|sh|kt|swift)$/;
+/** A whole ISO 3166-2 code (`NL-NB`; Austria's Länder are numbers): data, not a decision id, when it is a string. */
+const ISO_3166_2 = /^[A-Z]{2}-[A-Z0-9]{1,3}$/;
+const QUOTES = new Set(["'", '"']);
+
+/**
+ * Whether the id at `index` of `text` is a whole string literal shaped as an ISO 3166-2 code: a region in a
+ * table of news sites or a test, which shares its shape with a decision id but is none.
+ */
+export function isRegionCode(text: string, index: number, id: string): boolean {
+  const before = text[index - 1] ?? '';
+  return ISO_3166_2.test(id) && QUOTES.has(before) && text[index + id.length] === before;
+}
 const CODE_ROOTS = ['apps/', 'packages/', 'contracts/', 'tools/', 'scripts/'];
 
 /** A decision file: one workstream's decisions (not its archive or history, not a spec that quotes them). */
@@ -81,9 +93,11 @@ export function scan(tree: Tree): Findings {
   const unresolved = new Set<string>();
   for (const path of tree.files) {
     if (!CODE.test(path) || !CODE_ROOTS.some((r) => path.startsWith(r))) continue;
-    for (const m of tree.read(path).matchAll(TOKEN)) {
+    const text = tree.read(path);
+    for (const m of text.matchAll(TOKEN)) {
       const id = m[1] as string;
       if (!prefixes.has(prefixOf(id)) || mentioned.has(id)) continue;
+      if (isRegionCode(text, m.index, id)) continue;
       // A lettered id (`SG-15e`, `MA-21c`) belongs to its decision.
       if (/[a-z]$/.test(id) && mentioned.has(id.slice(0, -1))) continue;
       unresolved.add(id);
