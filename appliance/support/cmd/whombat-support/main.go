@@ -10,7 +10,8 @@
 //
 // Under socket activation (whombat-support.socket) the socket is systemd's; otherwise it is made at --socket, 0660. In
 // the state directory: grant.json (the grant), events.json (what happened, for the runtime's follower), visits/ (the
-// record) and the SSH server's host key.
+// record), the SSH server's host key, and forever-allowed when root marked this box as a maintainer's test Whombat (its
+// owner may then choose Forever on a prod image; `touch` it to mark, remove it to unmark).
 package main
 
 import (
@@ -76,7 +77,8 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	g, err := grant.Open(grant.Options{Path: filepath.Join(*stateDir, "grant.json"), Environment: *env, Events: ev, Logf: logf})
+	g, err := grant.Open(grant.Options{Path: filepath.Join(*stateDir, "grant.json"), Environment: *env,
+		ForeverFile: filepath.Join(*stateDir, "forever-allowed"), Events: ev, Logf: logf})
 	if err != nil {
 		fail(err)
 	}

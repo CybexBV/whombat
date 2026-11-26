@@ -98,18 +98,21 @@ type fixture struct {
 	clock *clock
 	log   *events.Log
 	codes []string
+	// forever is the marker that lets a prod image give Forever (Options.ForeverFile); it exists only when a test makes it.
+	forever string
 }
 
 func newFixture(t *testing.T) *fixture {
 	dir := t.TempDir()
 	c := &clock{now: time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)}
 	return &fixture{t: t, dir: dir, clock: c, log: events.Open(filepath.Join(dir, "events.json"), c.Now, t.Logf),
-		codes: []string{"KQ72MX", "AB34CD", "ZZ99YY"}}
+		codes: []string{"KQ72MX", "AB34CD", "ZZ99YY"}, forever: filepath.Join(dir, "forever-allowed")}
 }
 
 func (f *fixture) open(env string) *Store {
 	f.t.Helper()
-	s, err := Open(Options{Path: filepath.Join(f.dir, "grant.json"), Environment: env, Events: f.log, Now: f.clock.Now,
+	s, err := Open(Options{Path: filepath.Join(f.dir, "grant.json"), Environment: env, ForeverFile: f.forever, Events: f.log,
+		Now:   f.clock.Now,
 		After: f.clock.After, Logf: f.t.Logf, NewCode: func() (string, error) {
 			c := f.codes[0]
 			f.codes = f.codes[1:]
@@ -362,6 +365,44 @@ func TestPersistence(t *testing.T) {
 	_ = s.Stop(wire.StopDesk, nil)
 	if s = f.open(wire.EnvProd); s.Grant() != nil {
 		t.Fatal("a stopped grant came back")
+	}
+}
+
+// A maintainer's own Whombat on the prod image: root's marker lets its owner choose Forever, the help code stays, and
+// taking the marker away ends the grant at the next look, as it would after a restart.
+func TestForeverOnAMarkedProdBox(t *testing.T) {
+	f := newFixture(t)
+	s := f.open(wire.EnvProd)
+	if err := os.WriteFile(f.forever, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.Start(wire.LevelFix, nil, owner)
+	if err != nil || !s.ForeverAllowed() || g.Until != nil || g.HelpCode == nil || *g.HelpCode != "KQ72MX" {
+		t.Fatalf("marked prod box: %+v %v", g, err)
+	}
+	// A week on, still on, the same code; a restart keeps it.
+	f.clock.advance(7 * 24 * time.Hour)
+	s.Close()
+	s = f.open(wire.EnvProd)
+	if s.Level() != wire.LevelFix || !s.CheckCode("KQ7-2MX") {
+		t.Fatalf("a marked box's forever grant didn't last: %q", s.Level())
+	}
+	// Changing the level keeps the code support saved.
+	if g, err = s.Start(wire.LevelLook, nil, owner); err != nil || *g.HelpCode != "KQ72MX" {
+		t.Fatalf("change: %+v %v", g, err)
+	}
+	after := int64(len(f.kinds(0)))
+	if err := os.Remove(f.forever); err != nil {
+		t.Fatal(err)
+	}
+	if s.ForeverAllowed() || s.Level() != "" {
+		t.Fatal("forever outlived the marker")
+	}
+	if k := f.kinds(after); len(k) != 1 || k[0] != string(wire.EventExpired) {
+		t.Fatalf("events after the marker went: %v", k)
+	}
+	if _, err := s.Start(wire.LevelFix, nil, owner); !errors.Is(err, ErrForeverNotAllowed) {
+		t.Fatalf("forever without the marker: %v", err)
 	}
 }
 
