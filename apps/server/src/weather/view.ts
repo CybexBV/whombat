@@ -56,7 +56,7 @@ export interface WeatherRead {
 }
 
 /**
- * The `weather` widget's view (DK-142): the place, now, today's highest and lowest with its rain, the next hours, the
+ * The `weather` widget's view: the place, now, today's highest and lowest with its rain, the next hours, the
  * days ahead, today's sunrise and sunset, and MET Norway's credit. Without a place it says where to choose one; without a
  * forecast, that it can't be read now. Never private on a locked screen.
  */

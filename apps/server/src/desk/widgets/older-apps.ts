@@ -1,5 +1,5 @@
 /**
- * What an older app can't read (docs/decisions/desk-display.md DK-161; weather-news.md): an app parses a screen's
+ * What an older app can't read (docs/decisions/desk-display.md, weather-news.md): an app parses a screen's
  * layout, its views and *Add a widget* with the contract it was built with, and refuses a whole answer with a widget type
  * or a view it doesn't know. So its answers leave those out — its editor shows such a widget empty, or not at all, until
  * the app is updated — and a newer app gets everything.
