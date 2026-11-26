@@ -2,7 +2,7 @@
  * Whombat Link at the account site (link-account-site.md, account-home.md): the code as typed, `/add` from a code in
  * the address to the confirm, the account with the plan's one button, and the home with each Whombat.
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   ADD_TEXT,
@@ -216,7 +216,8 @@ describe('the Web address on the confirm step', () => {
     await user.clear(field);
     await user.type(field, 'home');
     expect(await screen.findByText(N.free('home.whombat.app'))).toBeTruthy();
-    expect(confirm.disabled).toBe(false);
+    // The row tells the confirm step about the free name a render after it shows it.
+    await waitFor(() => expect(confirm.disabled).toBe(false));
     // Only the name as it stands was asked about once the typing paused.
     expect(linkNameCheck).not.toHaveBeenCalledWith('hom');
     await user.click(confirm);
