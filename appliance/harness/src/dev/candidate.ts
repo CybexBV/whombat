@@ -36,7 +36,7 @@
  * `--dry-run` does steps 1 to 5 and says what the rest would do; it keeps nothing and signs nothing. While
  * ~/.config/whombat/candidate-freeze exists every run refuses, except a dry run. When a run ends it removes the copies
  * of the source tree it left in the Nix store (340 MB a commit), when nothing refers to them, and says how much that
- * freed.
+ * freed; after a run that ended well, old release folders go too (`release/ship prune`'s keep rule, ship/prune.ts).
  * Everything is logged to ~/.cache/wb-tmp/rel-<version>/ (plan.json, candidate.log, build.log, hosted-*.log,
  * github.log, summary.json). WHOMBAT_CLOUD names the whombat-cloud checkout, WB_DEPLOY_SH its deploy.sh,
  * WB_PROD_APP_URL the account site and WB_PROD_CONTROL_URL control. WB_CANDIDATE_STOP_AFTER=<step> ends a run after
@@ -58,6 +58,7 @@ import {
   topOf,
 } from '../lib/source.ts';
 import { cloneChannelIds, DEFAULT_ROOT, shipContext } from '../ship/context.ts';
+import { pruneAfterCandidate } from '../ship/prune.ts';
 import * as plan from './candidate-plan.ts';
 import * as release from './release-plan.ts';
 import { commitRunbook } from './runbook.ts';
@@ -1226,6 +1227,9 @@ async function main(): Promise<void> {
       revsRead.add(release.releaseCommit(p));
     }
     await dropSourceCopies(repo, p ? Math.min(started, Date.parse(p.began ?? p.at) || started) : started);
+    // Old release folders go after a run that ended well (a stopped one may still need its folders to carry on).
+    if (!a.dryRun && !keepWorktree)
+      await pruneAfterCandidate(RELEASES, github.dir, shipContext().heavyLock, say);
   }
 }
 

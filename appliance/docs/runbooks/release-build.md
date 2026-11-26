@@ -83,6 +83,12 @@ runtime outside the host closure, and a toplevel whose `selfFactoryRelease` isn'
 The ISO is reproducible: `nix build --rebuild` of the same commit and id gives the same bytes (checked for
 `pve-dev-20260927.1`, V-63), so `iso.json`'s sha256 can be checked against a rebuild.
 
+Old folders go by themselves: whombat-ops `candidate` prunes after every run that ended well, and `release/ship prune
+[--dry-run]` does it by hand (skipped while a candidate or other heavy work holds its lock). What every release Beta or
+Production lists needs stays, with the build before each, the newest 10, anything changed in the last day and the host
+of all of these; ISOs stay only for Production's two newest and Beta's newest (`promote` builds one again when it has
+none); the `nar/` cache drops the blobs no folder links any more (`harness/src/ship/prune.ts`, IN-863).
+
 ## Publish: Beta, then Production
 
 Every box reads the GitHub repository's channels (releases.whombat.com, LNK-20…LNK-27): Beta is the `development`

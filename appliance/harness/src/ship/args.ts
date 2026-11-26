@@ -8,13 +8,14 @@
  *                      [--skip-upgrade-gates] [--rerun-gates] [--rerun-upgrade-gates] [--serial] [--previous <id>,<id>]
  *                      [--cloud <whombat-cloud commit>] [--out-root DIR]
  *   release/ship status [--dev] [--out-root DIR]
+ *   release/ship prune [--dry-run] [--out-root DIR]: old release folders go (prune.ts)
  *
  * `publish-dev`, `promote-prod` and `all` went with DEV and the Hetzner update repository (ONE-01, ONE-19): a release
  * goes to Beta with whombat-ops `candidate` and to Production with whombat-ops `promote <id> --yes`. So did build's
  * DEV twin and its options (`--dev-only`, `--twin`, `--reuse-host-twin`, `--dev-allow-downgrade-from`,
  * `--ahead-of-line`, `--override-input`) and `iso --dev|--both`.
  */
-export type Command = 'build' | 'validate' | 'status' | 'iso';
+export type Command = 'build' | 'validate' | 'status' | 'iso' | 'prune';
 
 export interface Parsed {
   command: Command;
@@ -46,6 +47,7 @@ export interface Parsed {
     cloud: string | null;
   };
   status: { dev: boolean };
+  prune: { dryRun: boolean };
 }
 
 /** `90s`, `10m`, `2h` → milliseconds (a bare number is minutes). */
@@ -55,7 +57,7 @@ export function validateDuration(s: string): number {
   return Number(m[1]) * { s: 1000, m: 60_000, h: 3_600_000 }[(m[2] ?? 'm') as 's' | 'm' | 'h'];
 }
 
-const COMMANDS: Command[] = ['build', 'validate', 'status', 'iso'];
+const COMMANDS: Command[] = ['build', 'validate', 'status', 'iso', 'prune'];
 
 /** The stages that went with DEV (ONE-01, ONE-19), and what replaced them. */
 const RETIRED: Record<string, string> = {
@@ -98,6 +100,7 @@ const OPTIONS: Record<Command, { flags: string[]; valued: string[]; repeat?: str
   },
   status: { flags: ['--dev'], valued: ['--out-root'] },
   iso: { flags: [], valued: ['--out-root'] },
+  prune: { flags: ['--dry-run'], valued: ['--out-root'] },
 };
 
 export function parseShipArgs(argv: readonly string[]): Parsed {
@@ -124,10 +127,11 @@ export function parseShipArgs(argv: readonly string[]): Parsed {
         `release/ship ${command} ${a}: the DEV twin went with DEV (ONE-01); there is one release`,
       );
     else if (a.startsWith('-')) throw new Error(`release/ship ${command}: unknown option ${a}`);
-    else if (id === null && command !== 'status') id = a;
+    else if (id === null && command !== 'status' && command !== 'prune') id = a;
     else throw new Error(`release/ship ${command}: unexpected argument ${a}`);
   }
-  if (command !== 'status' && !id) throw new Error(`release/ship ${command} <prod id> (whombat-YYYYMMDD.N)`);
+  if (command !== 'status' && command !== 'prune' && !id)
+    throw new Error(`release/ship ${command} <prod id> (whombat-YYYYMMDD.N)`);
   const one = (k: string) => values.get(k)?.[0] ?? null;
   const jobs = Number(one('--jobs') ?? 2);
   if (!Number.isInteger(jobs) || jobs < 1 || jobs > 16) throw new Error('--jobs takes 1…16');
@@ -163,5 +167,6 @@ export function parseShipArgs(argv: readonly string[]): Parsed {
       cloud: one('--cloud'),
     },
     status: { dev: flags.has('--dev') },
+    prune: { dryRun: flags.has('--dry-run') },
   };
 }

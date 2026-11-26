@@ -10,6 +10,7 @@
 #                      [--skip-upgrade-gates] [--rerun-gates] [--rerun-upgrade-gates] [--serial] [--previous <id>,<id>]
 #   release/ship status [--dev]
 #   release/ship iso <id>   the installer ISO of the build (its host's for a runtime-only release; UP-X15)
+#   release/ship prune [--dry-run]   old release folders go; what Beta or Production lists stays (harness/src/ship/prune.ts)
 #
 # Publishing is the maintainers' `candidate` (Beta, `tufrepo gh-publish`) and `promote` (Production, `tufrepo
 # gh-promote`); publish-dev, promote-prod and all went with DEV and the Hetzner update repository (ONE-01) and say so.
