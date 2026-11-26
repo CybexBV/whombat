@@ -36,9 +36,12 @@ implies no endorsement.
 | `elementary.svg` | elementary | Simple Icons `elementary` (<https://elementary.io/brand>) | CC0-1.0 |
 | `endeavouros.svg` | EndeavourOS | Simple Icons `endeavouros` (<https://github.com/endeavouros-team/endeavouros-theming/blob/135f642c980ed8d8fc212783eb478f96226f6c72/endeavouros-logo-text.svg>) | CC0-1.0 |
 | `esphome.svg` | ESPHome | Simple Icons `esphome` (<https://github.com/esphome/developers.esphome.io/blob/7c0304aa36536c63c93b1f19ba18969f96df0e08/docs/images/logo.svg>) | CC0-1.0 |
+| `feedback.svg` | Website feedback | Lucide `message-square-text` | ISC |
 | `fedora.svg` | Fedora | Simple Icons `fedora` (<https://docs.fedoraproject.org/en-US/project/brand/>) | custom |
+| `findmy.svg` | Find My | drawn for Whombat in Lucide's stroke: a location pin over two people (never Apple's Find My icon) | own |
 | `forgejo.svg` | Forgejo | Simple Icons `forgejo` (<https://codeberg.org/forgejo/meta/raw/branch/readme/branding/logo/forgejo-monochrome.svg>) | CC-BY-SA-4.0 (Caesar Schinas) |
 | `freebsd.svg` | FreeBSD | Simple Icons `freebsd` (<https://www.freebsdfoundation.org/about/project/>) | CC0-1.0 |
+| `frigate.svg` | Frigate | Simple Icons `frigate` (<https://frigate.video>) | CC0-1.0 |
 | `fusebox.svg` | Fusebox | Fusebox's `assets/icon.svg` (John's own product) | Unlicense |
 | `gentoo.svg` | Gentoo | Simple Icons `gentoo` (<https://wiki.gentoo.org/wiki/Project:Artwork/Artwork#Variations_of_the_.22g.22_logo>) | CC-BY-SA-2.5 |
 | `github.svg` | GitHub | Simple Icons `github` (<https://github.com/logos>) | CC0-1.0 |
@@ -52,6 +55,7 @@ implies no endorsement.
 | `hubspot.svg` | HubSpot | Simple Icons `hubspot` (<https://www.hubspot.com/style-guide>) | CC0-1.0 |
 | `imap.svg` | Email | Lucide `mail` | ISC |
 | `immich.svg` | Immich | Simple Icons `immich` (<https://github.com/immich-app/immich/blob/25c9b779e4d19bc34551f8b137266a459e0d70e1/design/immich-logo.svg>) | CC0-1.0 |
+| `jellyfin.svg` | Jellyfin | Simple Icons `jellyfin` (<https://jellyfin.org/docs/general/contributing/branding.html>) | CC0-1.0 |
 | `kalilinux.svg` | Kali Linux | Simple Icons `kalilinux` (<https://www.kali.org/docs/policy/trademark/>) | CC0-1.0 |
 | `kdeneon.svg` | KDE neon | Simple Icons `kdeneon` (<https://community.kde.org/Neon>) | CC0-1.0 |
 | `kubuntu.svg` | Kubuntu | Simple Icons `kubuntu` (<https://kubuntu.org>) | CC0-1.0 |
@@ -72,6 +76,7 @@ implies no endorsement.
 | `nobaralinux.svg` | Nobara Linux | Simple Icons `nobaralinux` (<https://wiki.nobaraproject.org>) | CC0-1.0 |
 | `notion.svg` | Notion | Simple Icons `notion` (<https://www.notion.so>) | CC0-1.0 |
 | `nzbhydra.svg` | NZBHydra2 | Lucide `search` (NZBHydra2's own logo is GPL-3.0 artwork) | ISC |
+| `onepassword.svg` | 1Password | Simple Icons `1password` (<https://1password.com/press>) | CC0-1.0 |
 | `openai.svg` | OpenAI | Simple Icons `openai` (an earlier release; since removed there) | CC0-1.0 |
 | `openbsd.svg` | OpenBSD | Simple Icons `openbsd` (<https://en.wikipedia.org/wiki/OpenBSD>) | CC0-1.0 |
 | `openmediavault.svg` | openmediavault | Simple Icons `openmediavault` (<https://github.com/openmediavault/openmediavault/blob/12f8ef70f19f967733b744d6fb6156a4181f1ddc/deb/openmediavault/workbench/src/favicon.svg>) | CC0-1.0 |
@@ -91,6 +96,7 @@ implies no endorsement.
 | `proxmox.svg` | Proxmox | Simple Icons `proxmox` (<https://www.proxmox.com/en/news/media-kit>) | CC0-1.0 |
 | `proxmox_backup.svg` | Proxmox | Simple Icons `proxmox` (<https://www.proxmox.com/en/news/media-kit>) | CC0-1.0 |
 | `pterodactyl.svg` | Pterodactyl | Simple Icons `pterodactyl` (<https://github.com/pterodactyl/panel/blob/eaf46429f2a001469fb5f18f7891ce8e5be7f049/public/favicons/favicon-96x96.png>) | CC0-1.0 |
+| `qbittorrent.svg` | qBittorrent | Simple Icons `qbittorrent` (<https://github.com/qbittorrent/qBittorrent/blob/73028f9930d9ab9d89edb60ed4aedb66d75669d9/src/icons/qbittorrent-tray-light.svg>) | CC0-1.0 |
 | `qemu.svg` | QEMU | Simple Icons `qemu` (<https://wiki.qemu.org/Logo>) | CC0-1.0 |
 | `qnap.svg` | QNAP | Simple Icons `qnap` (<https://marketing.qnap.com/resource/qnap-logo-k100>) | CC0-1.0 |
 | `qubesos.svg` | Qubes OS | Simple Icons `qubesos` (<https://github.com/QubesOS/qubes-attachment/blob/ed7e552eb8a5fca4e099361d137793d3551b3968/icons/qubes-logo-home.svg>) | CC0-1.0 |
@@ -117,6 +123,7 @@ implies no endorsement.
 | `unifi_network.svg` | Ubiquiti | Simple Icons `ubiquiti` (<https://www.ui.com>) | CC0-1.0 |
 | `unifi_protect.svg` | Ubiquiti | Simple Icons `ubiquiti` (<https://www.ui.com>) | CC0-1.0 |
 | `unraid.svg` | Unraid | Simple Icons `unraid` (<https://unraid.net>) | CC0-1.0 |
+| `uptime.svg` | Website or address | Lucide `activity` | ISC |
 | `voidlinux.svg` | Void Linux | Simple Icons `voidlinux` (<https://alpha.de.repo.voidlinux.org/logos/void-dark2.svg>) | CC0-1.0 |
 | `xubuntu.svg` | Xubuntu | Simple Icons `xubuntu` (<https://commons.wikimedia.org/wiki/File:Xubuntu_Icon.svg>) | CC0-1.0 |
 | `zorin.svg` | Zorin | Simple Icons `zorin` (<https://zorin.com/press>) | CC0-1.0 |

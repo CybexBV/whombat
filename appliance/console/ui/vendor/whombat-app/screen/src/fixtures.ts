@@ -1032,3 +1032,39 @@ export const FIXTURE_KINDS_GRID: DeskGrid = {
   attention: FIXTURE_ATTENTION_NONE,
   popups: 'all',
 };
+
+/* The doorbell rang ---------------------------------------------------------------------------------- */
+
+const PROTECT = 'connection:con_unifi_protect';
+
+/** The doorbell's camera as the moment shows it: its latest picture and when it rang. */
+export const FIXTURE_DOORBELL_VIEW: DeskWidgetView = {
+  kind: 'camera',
+  id: 'w_spotlight',
+  title: 'Front door',
+  mark: 'unifi_protect',
+  image: img(PROTECT, 'frontdoor', 'wide', 'The front door'),
+  event: 'Rang at 14:34',
+  at: '2026-10-27T13:34:10Z',
+};
+
+/** The box's own screen while the doorbell rings: the doorbell big for a minute, 40 seconds of it left. */
+export const FIXTURE_DOORBELL_GRID: DeskGrid = {
+  ...FIXTURE_BOX_GRID,
+  views: [...FIXTURE_BOX_GRID.views, FIXTURE_DOORBELL_VIEW],
+  spotlight: {
+    id: 'ring_fixture',
+    widget: { id: 'w_spotlight', type: 'panel', ref: PROTECT, opts: { panel: 'cameras', item: 'cam_front' } },
+    until: '2026-10-27T13:35:00Z',
+    reason: 'doorbell',
+  },
+};
+
+/** The same on a locked screen: no picture, the camera's locked form. */
+export const FIXTURE_DOORBELL_GRID_LOCKED: DeskGrid = {
+  ...FIXTURE_DOORBELL_GRID,
+  views: [
+    ...FIXTURE_BOX_GRID.views,
+    { kind: 'camera', id: 'w_spotlight', title: 'Front door', mark: 'unifi_protect', locked: true },
+  ],
+};
