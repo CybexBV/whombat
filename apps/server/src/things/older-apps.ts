@@ -20,6 +20,7 @@ import {
   FEEDBACK_THING_ID,
   FIND_MY_TIMELINE_TAB,
   type HomeOverview,
+  type NeedsYouItem,
   ONEPASSWORD_TAB,
   type ThingPage,
   type ThingPageTab,
@@ -29,6 +30,7 @@ import {
 import {
   ACCOUNT_PAGES_MINOR,
   FIND_MY_TIMELINE_MINOR,
+  LOOKS_AHEAD_INBOX_MINOR,
   ONEPASSWORD_SYNC_MINOR,
 } from '@whombat/protocol/session';
 import { mailThingHref } from '../home/mail-glance';
@@ -88,11 +90,27 @@ export function thingsFor(things: readonly ThingSummary[], minor: number | undef
 export const readsOnePassword = (minor: number | undefined) =>
   minor === undefined || minor >= ONEPASSWORD_SYNC_MINOR;
 
+/** Whether a session at `minor` knows Inbox Looks ahead findings (`kind: 'ahead'`). */
+export const readsLooksAheadInbox = (minor: number | undefined) =>
+  minor === undefined || minor >= LOOKS_AHEAD_INBOX_MINOR;
+
+/** Adapts `kind: 'ahead'` Inbox items for older apps that do not recognize that enum member. */
+function needsYouListFor(items: readonly NeedsYouItem[], minor: number | undefined): NeedsYouItem[] {
+  if (readsLooksAheadInbox(minor)) return [...items];
+  return items.map((item) => {
+    if (item.kind !== 'ahead') return item;
+    const { ahead: _ahead, ...rest } = item;
+    // Map to `backup` (neither a watched line nor a waiting ask), so older apps show Settle, Remind me tomorrow,
+    // and Talk to {assistant} (which promotes the finding cleanly via `needsYou.discuss`).
+    return { ...rest, kind: 'backup' as const };
+  });
+}
+
 const UPTIME_CATALOG_MINOR = 9;
 
 /**
- * An op's answer as an app at `minor` reads it: `things.page`'s without the tabs it can't draw, `home.overview`'s things as
- * it opens them, and `connections.catalog` without entries whose forms it can't draw.
+ * An op's answer as an app at `minor` reads it: `things.page`'s without the tabs it can't draw, `home.overview`'s things
+ * and Inbox items as it reads them, and `connections.catalog` without entries whose forms it can't draw.
  */
 export function thingAnswerFor(op: string, body: unknown, minor: number | undefined): unknown {
   if (!body || typeof body !== 'object') return body;
@@ -104,9 +122,24 @@ export function thingAnswerFor(op: string, body: unknown, minor: number | undefi
     );
     return entries.length === status.entries.length ? body : { ...status, entries };
   }
-  if (op === 'home.overview' && !readsAccountPages(minor)) {
+  if (op === 'home.overview') {
     const overview = body as HomeOverview;
-    return Array.isArray(overview.things) ? { ...overview, things: thingsFor(overview.things, minor) } : body;
+    const adaptThings = !readsAccountPages(minor) && Array.isArray(overview.things);
+    const adaptAhead =
+      !readsLooksAheadInbox(minor) &&
+      ((Array.isArray(overview.needsYouList) && overview.needsYouList.some((i) => i.kind === 'ahead')) ||
+        (Array.isArray(overview.needsYou) && overview.needsYou.some((i) => i.kind === 'ahead')));
+    if (!adaptThings && !adaptAhead) return body;
+    return {
+      ...overview,
+      ...(adaptThings ? { things: thingsFor(overview.things, minor) } : {}),
+      ...(adaptAhead && Array.isArray(overview.needsYou)
+        ? { needsYou: needsYouListFor(overview.needsYou, minor) }
+        : {}),
+      ...(adaptAhead && overview.needsYouList
+        ? { needsYouList: needsYouListFor(overview.needsYouList, minor) }
+        : {}),
+    };
   }
   if (op !== 'things.page' || (readsFindMyTimeline(minor) && readsOnePassword(minor))) return body;
   return thingPageFor(body as ThingPage, minor);

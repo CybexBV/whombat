@@ -171,6 +171,30 @@ describe('Settings → the assistant → Looks ahead', () => {
     expect(within(followUp).getByRole('link', { name: T.openThread })).toBeTruthy();
   });
 
+  it('links an unpromoted finding in recent checks to the Inbox', async () => {
+    open({
+      looksAhead: {
+        recent: [
+          {
+            id: 'ahc_inbox_1',
+            source: 'calendar',
+            stage: 'eve',
+            title: 'The Script',
+            at: '2026-12-13T14:15:00Z',
+            state: 'told',
+            kind: 'time',
+            threadRootId: null,
+            inboxItemId: 'ahead:ahc_inbox_1',
+            feedback: null,
+          },
+        ],
+      },
+    });
+    const recent = await screen.findByRole('region', { name: T.recent });
+    const link = within(recent).getByRole('link', { name: T.openInInbox });
+    expect(link.getAttribute('href')).toBe('/inbox?item=ahead%3Aahc_inbox_1');
+  });
+
   it('saves each change at once, manages standing rules and triggers Check now', async () => {
     const user = userEvent.setup();
     const { updates, checks } = open();

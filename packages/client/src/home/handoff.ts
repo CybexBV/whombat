@@ -38,6 +38,7 @@ export function needsYouButtonGoes(button: Pick<NeedsYouButton, 'kind' | 'action
     case 'askFix':
     case 'handle':
     case 'talk':
+    case 'aheadAction':
       return 'thread';
     case 'see':
       return 'page';

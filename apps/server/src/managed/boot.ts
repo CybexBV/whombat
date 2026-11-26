@@ -24,6 +24,7 @@ import { screenSessionsFor } from '../desk/screen-sessions';
 import { DeskService } from '../desk/service';
 import { DeskSocket } from '../desk/socket';
 import { registerBoxBackupSource } from '../home/box-backup';
+import { registerLooksAheadSource } from '../looks-ahead/inbox';
 import type { Services } from '../services';
 import { useShares } from '../shares/publish';
 import { startShareRound } from '../shares/round';
@@ -165,6 +166,7 @@ export async function startManaged(
     else void teamReportsLinkChanged(services);
   });
   registerTeamReportsSource();
+  registerLooksAheadSource();
   startTeamReportsFollow(services);
   // A backup opened to bring one thing back closes when unused for two hours and when the box stops (backup-look.md).
   const looks = runtime.dispatcher.backup ? looksFor(services) : null;

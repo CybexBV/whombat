@@ -323,6 +323,10 @@ export function LooksAheadPart({ burrow }: { burrow: string }) {
                   <Link to="/chat" search={{ thread: item.threadRootId }} className={own.threadLink}>
                     {T.openThread}
                   </Link>
+                ) : item.inboxItemId && item.of !== 'triage' ? (
+                  <Link to="/inbox" search={{ item: item.inboxItemId }} className={own.threadLink}>
+                    {T.openInInbox}
+                  </Link>
                 ) : null}
               </li>
             ))}

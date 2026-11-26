@@ -36,6 +36,7 @@ import {
   type HandleLookOutcome,
   handleLookOutcome,
   lookFixOutcome,
+  useAheadFeedback,
   useBringBackWatch,
   useDecideApproval,
   useDiscussNeedsYou,
@@ -44,17 +45,26 @@ import {
   useHomeOverview,
   useIgnoreNeedsYou,
   useOnePasswordWrite,
+  usePromoteAhead,
   useSnoozeNeedsYou,
   useStartChat,
   useStopWatchingNeedsYou,
+  useUpdateLooksAhead,
 } from '@whombat/client/react';
-import type { ChatSubject, HomeOverview, HomeRef, NeedsYouItem } from '@whombat/core';
+import {
+  type AheadNamedSource,
+  type ChatSubject,
+  type HomeOverview,
+  type HomeRef,
+  LOOKS_AHEAD_WORDS,
+  type NeedsYouItem,
+} from '@whombat/core';
 import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
 import { api } from '@whombat/core/contracts';
 import { formatClock } from '@whombat/core/text';
 import { isBackupPasskeyHref } from '@whombat/protocol/session';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Linking, TextInput, View } from 'react-native';
 import { answerMayHaveGoneThrough } from '../data/approval';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { startedChatRoute, threadRoute } from '../data/chatRoom';
@@ -68,10 +78,12 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ApprovalFact, TonightBox } from '../ui/approvalFacts';
 import { haptic } from '../ui/haptics';
+import { ArrowUp } from '../ui/icons';
 import { LookSays } from '../ui/LookSays';
 import { OneCardBody, type OneCardContent, OneCardPage, OneSheet } from '../ui/oneSheet';
 import { ErrorState, QuietText, SkeletonRows } from '../ui/primitives';
 import { useAfterSheet } from '../ui/sheet';
+import { Touchable } from '../ui/Touchable';
 import { showFailure, showLookFix, showNotice, useDecisionFeedback } from './feedback';
 
 /** Takes an item out of the list at once; the function it returns puts Home back as it was (a refusal). */
@@ -258,6 +270,9 @@ export function useNeedsYouPress(
   const start = useStartChat(slug);
   const discuss = useDiscussNeedsYou(slug);
   const handle = useHandleLook(slug);
+  const promoteAhead = usePromoteAhead(slug);
+  const aheadFeedback = useAheadFeedback(slug);
+  const updateLooksAhead = useUpdateLooksAhead(slug);
   const backupPasskey = useBackupPasskeyTap();
   const fix = useFixLook(slug, (outcome) => {
     const text = lookFixOutcomeText(outcome);
@@ -366,6 +381,46 @@ export function useNeedsYouPress(
           showNotice(NEEDS_YOU_WORDS.backDone);
           return true;
         }
+        case 'aheadPromote': {
+          haptic('approve');
+          const result = await promoteAhead.mutateAsync({
+            checkId: intent.checkId,
+            ...(intent.text ? { text: intent.text } : {}),
+          });
+          if (result.status !== 'ok') {
+            feedback.onResult(result);
+            return false;
+          }
+          show(startedChatRoute(result.data, NEEDS_YOU_TAB.title));
+          return true;
+        }
+        case 'aheadFeedback': {
+          const result = await aheadFeedback.mutateAsync({
+            checkId: intent.checkId,
+            verdict: intent.verdict,
+          });
+          if (result.status !== 'ok') {
+            feedback.onResult(result);
+            return false;
+          }
+          haptic('success');
+          if (intent.verdict === 'not_useful') {
+            showNotice(LOOKS_AHEAD_WORDS.markedNotUseful);
+          } else if (result.data.stopped === 'matter') {
+            showNotice(LOOKS_AHEAD_WORDS.stoppedMatterToast);
+          } else {
+            showToast(LOOKS_AHEAD_WORDS.stoppedKindToast(intent.kind), {
+              undo: () =>
+                void updateLooksAhead.mutateAsync({ kind: intent.kind, on: true }).then(
+                  (back) => {
+                    if (back.status !== 'ok') feedback.onResult(back);
+                  },
+                  (error: unknown) => feedback.onError(error),
+                ),
+            });
+          }
+          return true;
+        }
         case 'stop': {
           // Set up so on purpose: the check behind it off until they turn it on again, with Undo (on-purpose.md).
           const { watch } = intent;
@@ -466,11 +521,15 @@ function useNeedsYouCard(
 ): OneCardContent | null {
   const theme = useTheme();
   const { slug, timeZone, clock } = useBurrowBase();
+  const navigation = useAppNavigation();
+  const feedback = useDecisionFeedback();
   const home = useHomeOverview({ params: { burrow: slug } }, { retry: false });
   const press = useNeedsYouPress(open);
+  const promoteAhead = usePromoteAhead(slug);
   const passkey = useBackupPasskeyTap();
   const words = useAgentWords();
   const [busy, setBusy] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState('');
   if (!item) return null;
   const row = needsYouListRow(item, {
     now: clock(),
@@ -490,6 +549,27 @@ function useNeedsYouCard(
     home.data ? needsYouListItems(home.data) : undefined,
     busy !== null,
   );
+  const sendAheadReply = async () => {
+    const checkId = item.ahead?.checkId;
+    const text = replyDraft.trim();
+    if (!checkId || !text || busy !== null) return;
+    setBusy('ahead_reply');
+    try {
+      const result = await promoteAhead.mutateAsync({ checkId, text });
+      if (result.status !== 'ok') {
+        feedback.onResult(result);
+        return;
+      }
+      setReplyDraft('');
+      const route = startedChatRoute(result.data, NEEDS_YOU_TAB.title);
+      if (open) open(route);
+      else navigateTo(navigation, route);
+    } catch (error) {
+      feedback.onError(error);
+    } finally {
+      setBusy(null);
+    }
+  };
   return {
     badge: view.badge,
     tone: view.tone,
@@ -501,6 +581,58 @@ function useNeedsYouCard(
       <View style={{ gap: 14, marginTop: 12 }}>
         <ApprovalFact label={APPROVAL_CARD_WORDS.permission}>{view.approval.permission}</ApprovalFact>
         {view.approval.tonight ? <TonightBox tonight={view.approval.tonight} /> : null}
+      </View>
+    ) : item.kind === 'ahead' && item.ahead ? (
+      <View style={{ gap: 12, marginTop: 10 }}>
+        {item.ahead.sources.length ? <AheadSourcesList sources={item.ahead.sources} /> : null}
+        {offers && row.group === 'you' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TextInput
+              value={replyDraft}
+              onChangeText={setReplyDraft}
+              placeholder={LOOKS_AHEAD_WORDS.replyPlaceholder(words.name)}
+              placeholderTextColor={theme.colors.mut}
+              editable={busy === null}
+              returnKeyType="send"
+              onSubmitEditing={() => void sendAheadReply()}
+              accessibilityLabel={LOOKS_AHEAD_WORDS.replyPlaceholder(words.name)}
+              style={{
+                flex: 1,
+                minHeight: 44,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderWidth: 1,
+                borderColor: theme.colors.line2,
+                borderRadius: theme.radii.button,
+                backgroundColor: theme.colors.sf,
+                color: theme.colors.ink,
+                fontSize: 15,
+              }}
+            />
+            <Touchable
+              onPress={() => void sendAheadReply()}
+              disabled={busy !== null || !replyDraft.trim()}
+              feedback="wash"
+              ringRadius={theme.radii.button}
+              accessibilityRole="button"
+              accessibilityLabel={LOOKS_AHEAD_WORDS.sendReply}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: theme.radii.button,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: replyDraft.trim() && busy === null ? theme.colors.btn : theme.colors.sf2,
+              }}
+            >
+              <ArrowUp
+                size={18}
+                color={replyDraft.trim() && busy === null ? theme.colors.btnfg : theme.colors.mut}
+                strokeWidth={2}
+              />
+            </Touchable>
+          </View>
+        ) : null}
       </View>
     ) : view.says ? (
       <>
@@ -535,4 +667,39 @@ function useNeedsYouCard(
       },
     })),
   };
+}
+
+/** Verified sources under a Looks ahead Inbox finding: links open in the browser, private sources are plain text. */
+function AheadSourcesList({ sources }: { sources: readonly AheadNamedSource[] }) {
+  const theme = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+      {sources.map((s, i) => (
+        <View key={`${s.label}-${s.url ?? i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {i > 0 ? (
+            <Text size={13} color={theme.colors.mut}>
+              ·
+            </Text>
+          ) : null}
+          {s.url ? (
+            <Touchable
+              onPress={() => void Linking.openURL(s.url as string)}
+              feedback="wash"
+              accessibilityRole="link"
+              accessibilityLabel={s.label}
+              style={{ minHeight: 32, justifyContent: 'center' }}
+            >
+              <Text size={13.5} color={theme.colors.brand} style={{ textDecorationLine: 'underline' }}>
+                {s.label}
+              </Text>
+            </Touchable>
+          ) : (
+            <Text size={13.5} color={theme.colors.mut}>
+              {s.label}
+            </Text>
+          )}
+        </View>
+      ))}
+    </View>
+  );
 }

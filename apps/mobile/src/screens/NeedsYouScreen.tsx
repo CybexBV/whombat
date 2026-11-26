@@ -41,12 +41,14 @@ import { OneCard } from '../ui/assistant';
 import { tint } from '../ui/glanceColors';
 import { Screen } from '../ui/headers';
 import {
+  Calendar,
   Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Ellipsis,
   type LucideIcon,
+  Mail,
   MessageCircleQuestion,
   Plug,
   Power,
@@ -75,6 +77,8 @@ const GLYPHS: Record<NeedsYouGlyph, LucideIcon> = {
   question: MessageCircleQuestion,
   connection: Plug,
   server: Server,
+  calendar: Calendar,
+  mail: Mail,
 };
 
 export function NeedsYouScreen() {

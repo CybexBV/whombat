@@ -138,6 +138,9 @@ export const PEOPLE_SETTINGS = {
     'Change Looks ahead switches, calendars, rules or what it keeps an eye on',
   ),
   'looksAhead.checkNow': change('agent.ahead', 'Check upcoming plans and incoming mail now'),
+  // Acting on a finding in the person's Inbox is the person's own, never an assistant setting.
+  'looksAhead.promote': NONE,
+  'looksAhead.feedback': NONE,
 
   // Replacing the notes or a memory file loses the old text, so it asks.
   'memory.clear': never('agent.memory', 'Make the assistant forget what it remembers about you'),

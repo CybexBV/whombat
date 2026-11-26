@@ -17,6 +17,7 @@ import {
 import {
   ACCOUNT_PAGES_MINOR,
   FIND_MY_TIMELINE_MINOR,
+  LOOKS_AHEAD_INBOX_MINOR,
   ONEPASSWORD_SYNC_MINOR,
 } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
@@ -156,5 +157,48 @@ describe('the catalog for an older app (onepassword-sync.md)', () => {
     });
     expect(thingAnswerFor('connections.catalog', withUptime, 9)).toBe(withUptime);
     expect(thingAnswerFor('connections.catalog', withUptime, undefined)).toBe(withUptime);
+  });
+});
+
+describe('Looks ahead Inbox findings for an older app (looks-ahead.md)', () => {
+  const aheadItem = {
+    id: 'ahead:ahc_1',
+    ref: { kind: 'ahead', id: 'ahc_1' },
+    kind: 'ahead',
+    severity: 'info',
+    title: 'The Script starts at 20:45',
+    body: 'Starts at 20:45 instead of 20:00.',
+    at: '2026-12-13T15:00:00.000Z',
+    actions: [],
+    group: 'you',
+    ahead: {
+      checkId: 'ahc_1',
+      source: 'calendar',
+      kind: 'time',
+      sources: [{ label: 'venue.example.com', url: 'https://venue.example.com/show' }],
+      action: 'Update event to 20:45',
+    },
+  };
+  const withAhead = {
+    ...overview,
+    needsYou: [aheadItem],
+    needsYouList: [aheadItem],
+  } as unknown as HomeOverview;
+
+  it('adapts kind: ahead to a plain backup row without ahead metadata below minor 17', () => {
+    const older = thingAnswerFor('home.overview', withAhead, LOOKS_AHEAD_INBOX_MINOR - 1) as HomeOverview;
+    expect(older.needsYouList?.[0]).toMatchObject({
+      id: 'ahead:ahc_1',
+      kind: 'backup',
+      title: 'The Script starts at 20:45',
+      body: 'Starts at 20:45 instead of 20:00.',
+    });
+    expect(older.needsYouList?.[0]).not.toHaveProperty('ahead');
+    expect(older.needsYou[0]?.kind).toBe('backup');
+  });
+
+  it('keeps kind: ahead and its metadata intact from minor 17 on and outside a session', () => {
+    expect(thingAnswerFor('home.overview', withAhead, LOOKS_AHEAD_INBOX_MINOR)).toBe(withAhead);
+    expect(thingAnswerFor('home.overview', withAhead, undefined)).toBe(withAhead);
   });
 });

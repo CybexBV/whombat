@@ -7,6 +7,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NEEDS_YOU_WORDS } from '@whombat/client';
+import { LOOKS_AHEAD_WORDS, type NeedsYouItem } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { HA_LOOK_THREAD, PVE_LOOK_THREAD, UNIFI_LOOK_THREAD } from '../../app/lookFixtures';
 import { fixtureServices, renderApp } from '../../test/renderApp';
@@ -203,5 +204,104 @@ describe('Neo, from a row (IBX-05…IBX-07; NYL-06; look-research-web.md AP-5905
     const unifi = await within(you).findByRole('article', { name: 'The hallway access point is offline' });
     await more(user, unifi, 'Talk to Neo about it');
     await waitFor(() => expect(app.location()).toBe(`/chat?thread=${UNIFI_LOOK_THREAD}`));
+  });
+});
+
+describe('Looks ahead findings in Inbox (looks-ahead.md)', () => {
+  const calendarFinding: NeedsYouItem = {
+    id: 'ahead:ahc_web_1',
+    ref: { kind: 'ahead', id: 'ahc_web_1' },
+    kind: 'ahead',
+    severity: 'info',
+    title: 'The Script starts at 20:45',
+    body: 'Doors open at 19:30 and the show starts at 20:45 instead of 20:00.',
+    at: '2026-10-30T08:00:00.000Z',
+    actions: [],
+    group: 'you',
+    ahead: {
+      checkId: 'ahc_web_1',
+      source: 'calendar',
+      kind: 'time',
+      sources: [
+        { label: 'venue.example.com', url: 'https://venue.example.com/the-script' },
+        { label: 'Your calendar' },
+      ],
+      action: 'Update event to 20:45',
+    },
+  };
+  const matterFinding: NeedsYouItem = {
+    id: 'ahead:ahc_web_2',
+    ref: { kind: 'ahead', id: 'ahc_web_2' },
+    kind: 'ahead',
+    severity: 'info',
+    title: 'Still no answer on kettle refund',
+    body: 'No reply from the shop since 11 Dec.',
+    at: '2026-10-30T07:30:00.000Z',
+    actions: [],
+    group: 'you',
+    ahead: {
+      checkId: 'ahc_web_2',
+      source: 'matter',
+      kind: 'other',
+      sources: [{ label: LOOKS_AHEAD_WORDS.matters }],
+      matter: true,
+      matterTitle: 'Refund for the kettle',
+    },
+  };
+  const withAhead = () => fixtureServices({ looksAheadInbox: [calendarFinding, matterFinding] });
+
+  it('shows verified sources, one-tap action and Settle, and promotes to Chat on the action button', async () => {
+    const user = userEvent.setup();
+    const app = renderApp('/inbox', withAhead());
+    const you = await group('Needs you');
+    const row = await within(you).findByRole('article', { name: 'The Script starts at 20:45' });
+    const srcLink = within(row).getByRole('link', { name: 'venue.example.com' });
+    expect(srcLink.getAttribute('href')).toBe('https://venue.example.com/the-script');
+    expect(within(row).getByText(/Your calendar/)).toBeTruthy();
+    await user.click(within(row).getByRole('button', { name: 'Update event to 20:45' }));
+    await waitFor(() => expect(app.location()).toMatch(/^\/chat\?thread=/));
+  });
+
+  it('promotes to Chat when the person writes an inline reply on the row', async () => {
+    const user = userEvent.setup();
+    const app = renderApp('/inbox', withAhead());
+    const you = await group('Needs you');
+    const row = await within(you).findByRole('article', { name: 'The Script starts at 20:45' });
+    const input = within(row).getByRole('textbox', { name: LOOKS_AHEAD_WORDS.replyPlaceholder('Neo') });
+    await user.type(input, 'Move it to 20:45 and add 30 min travel');
+    await user.click(within(row).getByRole('button', { name: LOOKS_AHEAD_WORDS.sendReply }));
+    await waitFor(() => expect(app.location()).toMatch(/^\/chat\?thread=/));
+  });
+
+  it('records Not useful and Stop checking / Stop keeping an eye on directly from More', async () => {
+    const user = userEvent.setup();
+    renderApp('/inbox', withAhead());
+    const you = await group('Needs you');
+    const cal = await within(you).findByRole('article', { name: 'The Script starts at 20:45' });
+    await more(user, cal, LOOKS_AHEAD_WORDS.stopCheckingAction);
+    expect(await screen.findByText(LOOKS_AHEAD_WORDS.stoppedKindToast('time'))).toBeTruthy();
+    await waitFor(() =>
+      expect(within(you).queryByRole('article', { name: 'The Script starts at 20:45' })).toBeNull(),
+    );
+
+    const mat = within(you).getByRole('article', { name: 'Still no answer on kettle refund' });
+    await more(user, mat, LOOKS_AHEAD_WORDS.stopMatterAction);
+    expect(await screen.findByText(LOOKS_AHEAD_WORDS.stoppedMatterToast)).toBeTruthy();
+    await waitFor(() =>
+      expect(within(you).queryByRole('article', { name: 'Still no answer on kettle refund' })).toBeNull(),
+    );
+  });
+
+  it('marks Not useful directly from More without opening Chat', async () => {
+    const user = userEvent.setup();
+    const app = renderApp('/inbox', withAhead());
+    const you = await group('Needs you');
+    const cal = await within(you).findByRole('article', { name: 'The Script starts at 20:45' });
+    await more(user, cal, LOOKS_AHEAD_WORDS.notUsefulAction);
+    expect(await screen.findByText(LOOKS_AHEAD_WORDS.markedNotUseful)).toBeTruthy();
+    await waitFor(() =>
+      expect(within(you).queryByRole('article', { name: 'The Script starts at 20:45' })).toBeNull(),
+    );
+    expect(app.location()).toBe('/inbox');
   });
 });

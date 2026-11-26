@@ -4,16 +4,33 @@
  * one standing rule, one stopped kind, four checks in the last week, four recent checks (a look through new mail and a
  * follow-up among them) and three things kept an eye on.
  */
-import { AHEAD_KINDS, AHEAD_RULES_MAX, LooksAheadUpdate, type LooksAheadView } from '@whombat/core';
-import { burrow } from '@whombat/fixtures';
+import {
+  AHEAD_KINDS,
+  AHEAD_RULES_MAX,
+  AheadInboxFeedbackBody,
+  AheadPromoteBody,
+  type HomeOverview,
+  LooksAheadUpdate,
+  type LooksAheadView,
+  type NeedsYouItem,
+  needsYouCount,
+} from '@whombat/core';
+import { burrow, mara } from '@whombat/fixtures';
 
 const PATH = `/api/v1/burrows/${burrow.slug}/looks-ahead`;
 const CHECK_PATH = `${PATH}/check`;
+const HOME_PATH = `/api/v1/burrows/${burrow.slug}/home`;
+const FINDING_PROMOTE = new RegExp(`^${PATH}/findings/([^/]+)/promote$`);
+const FINDING_FEEDBACK = new RegExp(`^${PATH}/findings/([^/]+)/feedback$`);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
+export function createLooksAheadFixtures(
+  seed?: Partial<LooksAheadView>,
+  inboxSeed?: readonly NeedsYouItem[],
+) {
+  let inboxItems: NeedsYouItem[] = inboxSeed ? [...inboxSeed] : [];
   let view: LooksAheadView = {
     on: true,
     calendars: [
@@ -113,8 +130,82 @@ export function createLooksAheadFixtures(seed?: Partial<LooksAheadView>) {
     ...seed,
   };
 
-  async function handle(req: Request): Promise<Response | null> {
+  async function handle(req: Request, inner?: (req: Request) => Promise<Response>): Promise<Response | null> {
     const pathname = new URL(req.url, 'http://fixtures.local').pathname;
+    if (pathname === HOME_PATH && req.method === 'GET' && inboxItems.length && inner) {
+      const res = await inner(req);
+      if (!res.ok) return res;
+      const data = (await res.json()) as HomeOverview;
+      const list = [...(data.needsYouList ?? data.needsYou), ...inboxItems];
+      const next: HomeOverview = {
+        ...data,
+        needsYouList: list,
+        summary: { ...data.summary, needsYou: needsYouCount(list) },
+      };
+      return json(next);
+    }
+    const promoteMatch = FINDING_PROMOTE.exec(pathname);
+    if (promoteMatch && req.method === 'POST') {
+      const checkId = decodeURIComponent(promoteMatch[1] ?? '');
+      const parsed = AheadPromoteBody.safeParse(await req.json().catch(() => ({})));
+      if (!parsed.success)
+        return json({ error: { code: 'invalid', message: 'That request isn’t valid.' } }, 400);
+      const item = inboxItems.find((i) => i.ahead?.checkId === checkId || i.ref.id === checkId);
+      if (!item) return json({ error: { code: 'not_found', message: 'Finding not found.' } }, 404);
+      inboxItems = inboxItems.filter((i) => i.id !== item.id);
+      if (inner) {
+        // Start a real thread in the fixture Chat layer so navigating to startedChatPath loads it cleanly.
+        const text = parsed.data.text
+          ? `${item.title}\n\n${item.body}\n\n${parsed.data.text}`
+          : `${item.title}\n\n${item.body}`;
+        return inner(
+          new Request(new URL(`/api/v1/burrows/${burrow.slug}/chats`, req.url), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text }),
+          }),
+        );
+      }
+      const nowIso = new Date().toISOString();
+      return json({
+        conversation: {
+          id: 'cnv_dm-mara',
+          burrowId: burrow.id,
+          kind: 'dm',
+          title: 'Chat',
+          createdAt: nowIso,
+          lastMessageAt: nowIso,
+        },
+        message: {
+          id: `msg_ahead_${checkId}`,
+          conversationId: 'cnv_dm-mara',
+          authorId: mara.id,
+          text: parsed.data.text ?? item.title,
+          createdAt: nowIso,
+        },
+      });
+    }
+    const feedbackMatch = FINDING_FEEDBACK.exec(pathname);
+    if (feedbackMatch && req.method === 'POST') {
+      const checkId = decodeURIComponent(feedbackMatch[1] ?? '');
+      const parsed = AheadInboxFeedbackBody.safeParse(await req.json().catch(() => null));
+      if (!parsed.success)
+        return json({ error: { code: 'invalid', message: 'That feedback isn’t valid.' } }, 400);
+      const item = inboxItems.find((i) => i.ahead?.checkId === checkId || i.ref.id === checkId);
+      if (!item?.ahead) return json({ error: { code: 'not_found', message: 'Finding not found.' } }, 404);
+      inboxItems = inboxItems.filter((i) => i.id !== item.id);
+      const kind = item.ahead.kind;
+      const stopped =
+        parsed.data.verdict === 'stop_kind'
+          ? item.ahead.matter
+            ? ('matter' as const)
+            : ('kind' as const)
+          : null;
+      if (stopped === 'kind' && !view.stopped.includes(kind)) {
+        view = { ...view, stopped: AHEAD_KINDS.filter((k) => k === kind || view.stopped.includes(k)) };
+      }
+      return json({ ok: true, kind, stopped });
+    }
     if (pathname === CHECK_PATH && req.method === 'POST') {
       const started = view.on;
       if (started) {

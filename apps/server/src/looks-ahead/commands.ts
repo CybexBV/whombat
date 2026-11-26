@@ -24,12 +24,15 @@ import {
   AHEAD_REPLIES,
   AHEAD_RULES_MAX,
   AHEAD_SOURCES_MAX,
+  AHEAD_TITLE_MAX,
   AHEAD_TRIAGE_GAP_MS,
   AHEAD_TRIAGE_MAIL_MAX,
   AHEAD_TRIAGE_PER_DAY,
+  AheadCheckId,
   type AheadKind,
   AheadMailContext,
   AheadMatterReason,
+  AheadNamedSource,
   AheadReportInput,
   AheadScheduleEntry,
   AheadStage,
@@ -37,11 +40,13 @@ import {
   aheadHours,
   aheadMatterExpired,
   LooksAheadUpdate,
+  needsYouItemHref,
   newId,
 } from '@whombat/core';
 import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { settleResolvedThreads } from '../chats/settle';
+import { applyContext } from '../commit/pipeline';
 import type { ApplyContext } from '../commit/types';
 import { defineCommand } from '../commit/types';
 import type { Tx } from '../db/client';
@@ -53,15 +58,21 @@ import {
   dispatches,
   looksAheadSettings,
   messages,
+  needsYouSnoozes,
+  notifications,
 } from '../db/schema/index';
 import { postMessage } from '../domain/messages';
+import { publishNotificationsRead } from '../domain/notification-read';
+import { notifyInCommit } from '../domain/notify';
 import { ensurePersonalDm } from '../domain/personal-dm';
+import { GENERIC_PUSH_TITLE } from '../domain/push-preview';
 import { isThePerson } from '../domain/the-person';
 import { wakeQuietly } from '../domain/wake';
+import { publishHomeChanged } from '../home/notify';
 import { startOfLocalDay } from '../home/time';
 import { forbidden, notFound } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
-import { loadPrincipalRow } from '../read/principals';
+import { loadPrincipalRow, toActor } from '../read/principals';
 import { dropSessions, endedAheadSessions } from '../runtime/sessions';
 import { type AheadSettings, calendarKey } from './calendars';
 import {
@@ -377,18 +388,47 @@ export const markAheadMailRead = defineCommand({
 /* The report --------------------------------------------------------------------------------------------------------- */
 
 /** A source as Whombat names it: the site with its link, or a mail/file/doc/calendar label. */
-export const NamedSourceInput = z.object({
-  label: z.string().min(1).max(80),
-  url: z.string().url().max(2048).optional(),
-});
+export const NamedSourceInput = AheadNamedSource;
 
-/** A finding's message: the assistant's words, then its sources on one line (a page as a link, private sources by name). */
-export function findingText(text: string, sources: readonly z.infer<typeof NamedSourceInput>[]): string {
+/** Dedup key and push group for one Inbox finding's notification. */
+export const aheadNoticeDedupKey = (checkId: string) => `ahead-finding:${checkId}`;
+export const aheadPushGroup = (checkId: string) => `ahead-finding:${checkId}`;
+
+/**
+ * Short plain title for a finding: the model's scrubbed `title` when it gave one, else the opening sentence of its
+ * words, else the event or matter name.
+ */
+export function findingTitle(rawTitle: string | undefined, words: string, fallback: string): string {
+  const own = cleanShortLabel(rawTitle, AHEAD_TITLE_MAX);
+  if (own) return own;
+  const first = words.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
+  if (first.length >= 2) {
+    const clipped =
+      first.length <= AHEAD_TITLE_MAX ? first : `${first.slice(0, AHEAD_TITLE_MAX - 1).trimEnd()}…`;
+    return clipped.replace(/\.$/, '');
+  }
+  return cleanShortLabel(fallback, AHEAD_TITLE_MAX) ?? 'Looks ahead';
+}
+
+/**
+ * A finding's Chat message: optional bold title on its own line (so Chat's thread list shows the short headline),
+ * the assistant's plain words, then its verified sources on one line.
+ */
+export function findingText(
+  text: string,
+  sources: readonly z.infer<typeof NamedSourceInput>[],
+  title?: string | null,
+): string {
   const flat = (s: string) =>
     s
       .replace(/[[\]\n\r*_`]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  const body = findingWords(text);
+  const head = title ? cleanShortLabel(title, AHEAD_TITLE_MAX) : null;
+  const withHead =
+    head && !body.toLowerCase().startsWith(head.toLowerCase()) ? `**${head}**\n\n${body}` : body;
+  if (!sources.length) return withHead;
   const line = sources
     .map((s) =>
       s.url
@@ -396,7 +436,64 @@ export function findingText(text: string, sources: readonly z.infer<typeof Named
         : flat(s.label),
     )
     .join(' · ');
-  return `${findingWords(text)}\n\n${line}`;
+  return `${withHead}\n\n${line}`;
+}
+
+/** Marks Inbox finding notifications read (and removes them when dismissed/promoted/expired) and clears phone pushes. */
+export async function settleAheadNotices(
+  ctx: ApplyContext,
+  checkIds: readonly string[],
+  how: 'read' | 'remove',
+): Promise<number> {
+  if (!checkIds.length) return 0;
+  const keys = checkIds.map(aheadNoticeDedupKey);
+  const read = await ctx.tx
+    .update(notifications)
+    .set({ readAt: ctx.now })
+    .where(
+      and(
+        eq(notifications.burrowId, ctx.burrow.id),
+        inArray(notifications.dedupKey, keys),
+        isNull(notifications.readAt),
+      ),
+    )
+    .returning({
+      id: notifications.id,
+      principalId: notifications.principalId,
+      dedupKey: notifications.dedupKey,
+    });
+  if (how === 'remove')
+    await ctx.tx
+      .delete(notifications)
+      .where(and(eq(notifications.burrowId, ctx.burrow.id), inArray(notifications.dedupKey, keys)));
+  if (!read.length) return 0;
+  const byPerson = new Map<string, string[]>();
+  for (const r of read) byPerson.set(r.principalId, [...(byPerson.get(r.principalId) ?? []), r.id]);
+  for (const [principalId, ids] of byPerson) await publishNotificationsRead(ctx, principalId, { ids });
+  const control = ctx.services.push.control;
+  if (control) {
+    const slug = ctx.burrow.slug;
+    const clears = new Set(read.map((r) => `${r.principalId}|${r.dedupKey ?? ''}`));
+    ctx.background('ahead finding push cleared', async () => {
+      for (const clear of clears) {
+        const [principalId = '', group = ''] = clear.split('|');
+        if (!principalId || !group) continue;
+        await control(
+          [principalId],
+          {
+            burrow: slug,
+            notificationId: null,
+            kind: 'agent_update',
+            title: GENERIC_PUSH_TITLE,
+            body: '',
+            path: `/${slug}`,
+          },
+          { group, clear: true },
+        ).catch(() => {});
+      }
+    });
+  }
+  return read.length;
 }
 
 /** The least time before an event a finding is still worth telling. */
@@ -557,6 +654,7 @@ export const reportAhead = defineCommand({
     const anyAllowedKind = allKinds.some((k) => !settings.stopped.includes(k));
     // Its words as they would be posted: nothing left of them (only links or markup) is nothing to tell.
     const words = report.text ? findingWords(report.text) : '';
+    const title = words ? findingTitle(report.title, words, about?.title ?? row.summary) : null;
     const actionLabel = cleanShortLabel(report.action, AHEAD_ACTION_MAX);
     const note = cleanShortLabel(report.note, AHEAD_NOTE_MAX);
     const leadOk = fromMail || row.event.allDay || row.startAt.getTime() - ctx.now.getTime() >= TELL_LEAD_MS;
@@ -576,36 +674,61 @@ export const reportAhead = defineCommand({
         (await findingsSince(tx, ctx.burrow.id, startOfLocalDay(ctx.now, timeZone))) <
           AHEAD_FINDINGS_PER_DAY);
     let told = false;
+    let promotedAt: Date | null = null;
     let conversationId = row.conversationId;
     // The thread a matter's finding joins: its matter's, while that message is still there.
     const matterThread = about ? await matterThreadRoot(tx, about) : null;
     if (tellable) {
-      // Otherwise an earlier stage's thread of the same event, or a thread of its own.
+      // Otherwise an earlier stage's thread of the same event (only if it was already opened in Chat).
       const eventRoot = about ? null : await existingEventThreadRoot(tx, row);
       const thread =
         matterThread ?? (eventRoot ? { rootId: eventRoot, conversationId: row.conversationId } : null);
-      const where = thread?.conversationId ?? about?.conversationId ?? row.conversationId;
-      const conversation =
-        (await loadConversationRow(tx, where)) ?? (await loadConversationRow(tx, row.conversationId));
-      if (conversation) {
-        const suggestions = actionLabel ? [actionLabel, ...AHEAD_REPLIES] : [...AHEAD_REPLIES];
-        await postMessage(ctx, {
-          conversation,
-          id: row.threadRootId,
-          ...(thread && thread.conversationId === conversation.id ? { threadRootId: thread.rootId } : {}),
-          text: findingText(words, input.sources),
-          suggestions,
-          // The person's Chat tells them, inbox and push, as any message of the assistant's there.
-          dispatch: false,
-          linkPreviews: false,
-        });
+      // What the person explicitly asked Whombat to watch, or an event/matter that already has a Chat thread, posts
+      // right into Chat. Everything else lands calmly in the person's Inbox until they choose to act or reply.
+      const goToChat = asked || thread !== null;
+      if (goToChat) {
+        const where = thread?.conversationId ?? about?.conversationId ?? row.conversationId;
+        const conversation =
+          (await loadConversationRow(tx, where)) ?? (await loadConversationRow(tx, row.conversationId));
+        if (conversation) {
+          const suggestions = actionLabel ? [actionLabel, ...AHEAD_REPLIES] : [...AHEAD_REPLIES];
+          await postMessage(ctx, {
+            conversation,
+            id: row.threadRootId,
+            ...(thread && thread.conversationId === conversation.id ? { threadRootId: thread.rootId } : {}),
+            text: findingText(words, input.sources, title),
+            suggestions,
+            // The person's Chat tells them, inbox and push, as any message of the assistant's there.
+            dispatch: false,
+            linkPreviews: false,
+          });
+          told = true;
+          promotedAt = ctx.now;
+          conversationId = conversation.id;
+        }
+      } else {
         told = true;
-        conversationId = conversation.id;
+        const noticeText =
+          title && !words.toLowerCase().startsWith(title.toLowerCase()) ? `${title} — ${words}` : words;
+        await notifyInCommit(ctx, {
+          burrowId: ctx.burrow.id,
+          burrowSlug: ctx.burrow.slug,
+          principalId: row.personId,
+          kind: 'agent_update',
+          actorId: row.agentId,
+          where: 'Direct',
+          text: noticeText,
+          link: { type: 'external', url: needsYouItemHref(`ahead:${row.id}`) },
+          createdAt: ctx.now,
+          dedupKey: aheadNoticeDedupKey(row.id),
+          group: aheadPushGroup(row.id),
+        });
+        publishHomeChanged(ctx, [row.personId], ['needsYou']);
       }
     }
-    // Where the finding started a thread of its own, that is the matter's thread from now on.
+    // Where the finding started a Chat thread of its own, that is the matter's thread from now on.
     const startedThread =
-      told && !(matterThread && matterThread.conversationId === conversationId)
+      told && promotedAt !== null && !(matterThread && matterThread.conversationId === conversationId)
         ? { rootId: row.threadRootId, conversationId }
         : null;
     // A finding that isn't about the matter its mail matched stands on its own, with its own thread and replies, and
@@ -653,10 +776,13 @@ export const reportAhead = defineCommand({
         state: told ? 'told' : row.source === 'mail' && !daytime && !report.found ? 'failed' : 'quiet',
         kind: report.found ? (report.kind ?? null) : null,
         extraKinds: report.found ? extraKinds : [],
+        title: told ? title : null,
         text: told ? words : null,
+        sources: told ? input.sources : [],
         actionLabel: told ? actionLabel : null,
         note,
         reportedAt: ctx.now,
+        promotedAt: told ? promotedAt : null,
         conversationId,
         matterId,
       })
@@ -669,6 +795,7 @@ export const reportAhead = defineCommand({
       payload: {
         aheadCheckId: row.id,
         told,
+        inbox: told && promotedAt === null,
         source: row.source,
         stage: row.stage,
         ...(told && report.kind ? { kind: report.kind } : {}),
@@ -796,6 +923,310 @@ export const aheadFeedback = defineCommand({
   },
 });
 
+/**
+ * Promotes a Looks ahead Inbox finding into a Chat thread so the person can act on it or reply.
+ * When `text` is supplied (a one-tap action or a direct reply), it is posted as the person's reply in that thread
+ * and wakes the assistant with full finding context. Already-promoted findings open their existing thread idempotently.
+ */
+export const promoteAheadFinding = defineCommand({
+  name: 'ahead.promote',
+  schema: z.object({
+    checkId: AheadCheckId,
+    text: z.string().trim().min(1).max(4000).optional(),
+  }),
+  async apply(tx, ctx, input): Promise<{ conversationId: string; messageId: string }> {
+    if (ctx.actor.kind !== 'person' || !(await isThePerson(tx, ctx.burrow.id, ctx.actor.id)))
+      throw forbidden('Only you can open this finding in Chat.');
+    if (input.text) ctx.services.licence.assertNotLapsed();
+    const [row] = await tx
+      .select()
+      .from(aheadChecks)
+      .where(and(eq(aheadChecks.burrowId, ctx.burrow.id), eq(aheadChecks.id, input.checkId)))
+      .for('update');
+    if (row?.state !== 'told' || row.personId !== ctx.actor.id || !row.text) throw notFound('Finding');
+
+    // Already in Chat (promoted before, or posted directly): open that thread and post any reply there.
+    const [existingMsg] = await tx
+      .select({
+        id: messages.id,
+        threadRootId: messages.threadRootId,
+        conversationId: messages.conversationId,
+      })
+      .from(messages)
+      .where(and(eq(messages.id, row.threadRootId), isNull(messages.deletedAt)));
+    if (existingMsg) {
+      const rootId = existingMsg.threadRootId ?? existingMsg.id;
+      const conversation = await loadConversationRow(tx, existingMsg.conversationId);
+      if (!conversation) throw notFound('Chat');
+      if (!row.promotedAt)
+        await tx.update(aheadChecks).set({ promotedAt: ctx.now }).where(eq(aheadChecks.id, row.id));
+      await tx
+        .delete(needsYouSnoozes)
+        .where(
+          and(
+            eq(needsYouSnoozes.personId, row.personId),
+            eq(needsYouSnoozes.refKind, 'ahead'),
+            eq(needsYouSnoozes.refId, row.id),
+          ),
+        );
+      await settleAheadNotices(ctx, [row.id], 'remove');
+      publishHomeChanged(ctx, [row.personId], ['needsYou']);
+      if (input.text) {
+        const reply = await postMessage(ctx, {
+          conversation,
+          threadRootId: rootId,
+          text: input.text,
+          dispatch: true,
+        });
+        return { conversationId: conversation.id, messageId: reply.id };
+      }
+      return { conversationId: conversation.id, messageId: rootId };
+    }
+
+    const agent = await loadPrincipalRow(tx, row.agentId);
+    const person = await loadPrincipalRow(tx, row.personId);
+    if (!agent || !person) throw notFound('Chat');
+    const matter = row.matterId ? await matterForUpdate(tx, ctx.burrow.id, row.matterId) : null;
+    const matterThread = matter ? await matterThreadRoot(tx, matter) : null;
+    const eventRoot = matter ? null : await existingEventThreadRoot(tx, row);
+    const existingThread =
+      matterThread ?? (eventRoot ? { rootId: eventRoot, conversationId: row.conversationId } : null);
+
+    // If this finding is open (unmarked) and belongs to a calendar event or matter that has other open unpromoted
+    // findings, pull them into the same thread in chronological order so the whole story lives in one place.
+    const [rowMark] = await tx
+      .select({ refId: needsYouSnoozes.refId })
+      .from(needsYouSnoozes)
+      .where(
+        and(
+          eq(needsYouSnoozes.personId, row.personId),
+          eq(needsYouSnoozes.refKind, 'ahead'),
+          eq(needsYouSnoozes.refId, row.id),
+        ),
+      )
+      .limit(1);
+    let batch: AheadCheckRow[] = [row];
+    if (!rowMark && !row.settledAt && !row.feedback) {
+      const siblingWhere =
+        row.source === 'calendar'
+          ? eq(aheadChecks.eventKey, row.eventKey)
+          : row.matterId
+            ? eq(aheadChecks.matterId, row.matterId)
+            : null;
+      if (siblingWhere) {
+        const siblings = await tx
+          .select()
+          .from(aheadChecks)
+          .where(
+            and(
+              eq(aheadChecks.burrowId, ctx.burrow.id),
+              eq(aheadChecks.personId, row.personId),
+              eq(aheadChecks.state, 'told'),
+              isNull(aheadChecks.promotedAt),
+              isNull(aheadChecks.settledAt),
+              isNull(aheadChecks.feedback),
+              siblingWhere,
+              ne(aheadChecks.id, row.id),
+              sql`not exists (select 1 from ${messages} m where m.id = ${aheadChecks.threadRootId})`,
+              sql`not exists (select 1 from ${needsYouSnoozes} s where s.person_id = ${row.personId} and s.ref_kind = 'ahead' and s.ref_id = ${aheadChecks.id})`,
+            ),
+          );
+        if (siblings.length) {
+          batch = [...siblings, row].sort(
+            (a, b) =>
+              (a.reportedAt ?? a.startedAt).getTime() - (b.reportedAt ?? b.startedAt).getTime() ||
+              a.id.localeCompare(b.id),
+          );
+        }
+      }
+    }
+
+    const where = existingThread?.conversationId ?? matter?.conversationId ?? row.conversationId;
+    const conversation =
+      (await loadConversationRow(tx, where)) ??
+      (await loadConversationRow(tx, await ensurePersonalDm(ctx, agent, person)));
+    if (!conversation) throw notFound('Chat');
+
+    const asAgent = applyContext(ctx, {
+      burrow: ctx.burrow,
+      actor: toActor(agent),
+      now: ctx.now,
+      at: ctx.at,
+      decision: null,
+      requirement: null,
+      approvalId: null,
+      onBehalfOf: {},
+    });
+
+    let rootId: string | null =
+      existingThread && existingThread.conversationId === conversation.id ? existingThread.rootId : null;
+    for (let i = 0; i < batch.length; i++) {
+      const item = batch[i] as AheadCheckRow;
+      if (!item.text) continue;
+      const isLast = i === batch.length - 1;
+      const suggestions =
+        isLast && !input.text
+          ? item.actionLabel
+            ? [item.actionLabel, ...AHEAD_REPLIES]
+            : [...AHEAD_REPLIES]
+          : [];
+      const posted = await postMessage(asAgent, {
+        conversation,
+        id: item.threadRootId,
+        ...(rootId ? { threadRootId: rootId } : {}),
+        text: findingText(item.text, item.sources ?? [], item.title),
+        suggestions,
+        mentions: [],
+        dispatch: false,
+        notify: false,
+        linkPreviews: false,
+      });
+      if (!rootId) rootId = posted.id;
+    }
+    if (!rootId) throw notFound('Finding');
+
+    const batchIds = batch.map((b) => b.id);
+    await tx
+      .update(aheadChecks)
+      .set({ promotedAt: ctx.now, conversationId: conversation.id })
+      .where(inArray(aheadChecks.id, batchIds));
+
+    if (matter && !matterThread) {
+      await tx
+        .update(aheadMatters)
+        .set({ threadRootId: rootId, conversationId: conversation.id, updatedAt: ctx.now })
+        .where(eq(aheadMatters.id, matter.id));
+    }
+
+    await tx
+      .delete(needsYouSnoozes)
+      .where(
+        and(
+          eq(needsYouSnoozes.personId, row.personId),
+          eq(needsYouSnoozes.refKind, 'ahead'),
+          inArray(needsYouSnoozes.refId, batchIds),
+        ),
+      );
+    await settleAheadNotices(ctx, batchIds, 'remove');
+    publishHomeChanged(ctx, [row.personId], ['needsYou']);
+
+    let returnMessageId = rootId;
+    if (input.text) {
+      const reply = await postMessage(ctx, {
+        conversation,
+        threadRootId: rootId,
+        text: input.text,
+        dispatch: true,
+      });
+      returnMessageId = reply.id;
+    }
+
+    await ctx.emit({
+      type: 'ahead.promoted',
+      kind: 'System',
+      text: null,
+      where: null,
+      payload: { aheadCheckId: row.id, threadRootId: rootId, replied: Boolean(input.text) },
+    });
+    return { conversationId: conversation.id, messageId: returnMessageId };
+  },
+});
+
+/**
+ * Direct feedback on a Looks ahead finding from the Inbox (“Not useful” or “Stop checking for this”), without
+ * opening a Chat thread. Records calibration feedback (or stops the kind / closes the matter) and removes it from Inbox.
+ */
+export const aheadInboxFeedback = defineCommand({
+  name: 'ahead.inbox_feedback',
+  schema: z.object({
+    checkId: AheadCheckId,
+    verdict: z.enum(['not_useful', 'stop_kind']),
+    reason: z.string().trim().min(1).max(AHEAD_FEEDBACK_REASON_MAX).optional(),
+  }),
+  async apply(tx, ctx, input): Promise<{ ok: true; kind: AheadKind; stopped: 'kind' | 'matter' | null }> {
+    if (ctx.actor.kind !== 'person' || !(await isThePerson(tx, ctx.burrow.id, ctx.actor.id)))
+      throw forbidden('Only you can mark Looks ahead findings.');
+    const [row] = await tx
+      .select()
+      .from(aheadChecks)
+      .where(and(eq(aheadChecks.burrowId, ctx.burrow.id), eq(aheadChecks.id, input.checkId)))
+      .for('update');
+    if (row?.state !== 'told' || !row.kind || row.personId !== ctx.actor.id) throw notFound('Finding');
+
+    const reason = cleanShortLabel(input.reason, AHEAD_FEEDBACK_REASON_MAX);
+    const settledIds = [row.id];
+    await tx
+      .update(aheadChecks)
+      .set({
+        feedback: input.verdict,
+        ...(reason ? { feedbackNote: reason } : {}),
+        settledAt: row.settledAt ?? ctx.now,
+      })
+      .where(eq(aheadChecks.id, row.id));
+
+    let stopped: 'kind' | 'matter' | null = null;
+    if (input.verdict === 'stop_kind') {
+      if (row.matterId) {
+        const matter = await matterForUpdate(tx, ctx.burrow.id, row.matterId);
+        if (matter) await closeMatterIn(ctx, matter, 'removed');
+        // Clear any other open unpromoted Inbox findings of the stopped matter too.
+        const others = await tx
+          .update(aheadChecks)
+          .set({ settledAt: ctx.now })
+          .where(
+            and(
+              eq(aheadChecks.burrowId, ctx.burrow.id),
+              eq(aheadChecks.matterId, row.matterId),
+              eq(aheadChecks.state, 'told'),
+              isNull(aheadChecks.promotedAt),
+              isNull(aheadChecks.settledAt),
+              ne(aheadChecks.id, row.id),
+            ),
+          )
+          .returning({ id: aheadChecks.id });
+        for (const o of others) settledIds.push(o.id);
+        stopped = 'matter';
+      } else {
+        const settings = await aheadSettingsOf(tx, ctx.burrow.id);
+        if (!settings.stopped.includes(row.kind))
+          await saveSettings(ctx, { ...settings, stopped: [...settings.stopped, row.kind] });
+        stopped = 'kind';
+      }
+    }
+
+    await tx
+      .delete(needsYouSnoozes)
+      .where(
+        and(
+          eq(needsYouSnoozes.personId, row.personId),
+          eq(needsYouSnoozes.refKind, 'ahead'),
+          inArray(needsYouSnoozes.refId, settledIds),
+        ),
+      );
+    await settleAheadNotices(ctx, settledIds, 'remove');
+    publishHomeChanged(ctx, [row.personId], ['needsYou']);
+
+    await ctx.emit({
+      type: 'ahead.feedback',
+      kind: 'System',
+      text:
+        stopped === 'kind'
+          ? 'Stopped a kind of Looks ahead check'
+          : stopped === 'matter'
+            ? 'Stopped keeping an eye on something'
+            : null,
+      where: null,
+      payload: {
+        aheadCheckId: row.id,
+        verdict: input.verdict,
+        kind: row.kind,
+        ...(stopped === 'matter' && row.matterId ? { aheadMatterId: row.matterId } : {}),
+      },
+    });
+    return { ok: true, kind: row.kind, stopped };
+  },
+});
+
 /* The watcher's bookkeeping ------------------------------------------------------------------------------------------ */
 
 /** Open matters that ran out by `now` (`aheadMatterExpired`), as a query. */
@@ -894,12 +1325,14 @@ export const tidyAhead = defineCommand({
           inArray(messages.id, [...passed.map((p) => p.threadRootId), ...pending.map((p) => p.threadRootId)]),
         );
       const rootOf = new Map(msgRows.map((m) => [m.id, m.threadRootId ?? m.id]));
+      const inChat = passed.filter((p) => rootOf.has(p.threadRootId));
+      const inInbox = passed.filter((p) => !rootOf.has(p.threadRootId));
       const waiting = new Set(pending.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId));
       // Only a thread a finding of its own began is Looks ahead's to settle: one the person began (their ask, where a
       // matter they asked for is told) is their conversation.
       const replyRoots = [
         ...new Set(
-          passed.flatMap((p) => {
+          inChat.flatMap((p) => {
             const root = rootOf.get(p.threadRootId);
             return root && root !== p.threadRootId ? [root] : [];
           }),
@@ -921,7 +1354,7 @@ export const tidyAhead = defineCommand({
         const root = rootOf.get(p.threadRootId);
         return root === p.threadRootId || (root !== undefined && ownRoots.has(root));
       };
-      const actualRoots = [...new Set(passed.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId))];
+      const actualRoots = [...new Set(inChat.map((p) => rootOf.get(p.threadRootId) ?? p.threadRootId))];
       const wrote = new Set(
         actualRoots.length
           ? (
@@ -933,7 +1366,7 @@ export const tidyAhead = defineCommand({
                     inArray(messages.threadRootId, actualRoots),
                     inArray(
                       messages.authorId,
-                      passed.map((p) => p.personId),
+                      inChat.map((p) => p.personId),
                     ),
                   ),
                 )
@@ -941,7 +1374,7 @@ export const tidyAhead = defineCommand({
           : [],
       );
       const byChat = new Map<string, Set<string>>();
-      for (const p of passed) {
+      for (const p of inChat) {
         const rootId = rootOf.get(p.threadRootId) ?? p.threadRootId;
         if (!began(p) || wrote.has(rootId) || waiting.has(rootId)) continue;
         const set = byChat.get(p.conversationId) ?? new Set<string>();
@@ -949,6 +1382,17 @@ export const tidyAhead = defineCommand({
         byChat.set(p.conversationId, set);
       }
       for (const [chat, roots] of byChat) settled += await settleResolvedThreads(ctx, chat, [...roots]);
+      // Unpromoted Inbox findings whose event passed (or 48 h elapsed for mail) leave the Inbox quietly.
+      if (inInbox.length) {
+        const inboxIds = inInbox.map((p) => p.id);
+        await tx
+          .delete(needsYouSnoozes)
+          .where(and(eq(needsYouSnoozes.refKind, 'ahead'), inArray(needsYouSnoozes.refId, inboxIds)));
+        await settleAheadNotices(ctx, inboxIds, 'remove');
+        const people = [...new Set(inInbox.map((p) => p.personId))];
+        publishHomeChanged(ctx, people, ['needsYou']);
+        settled += inInbox.length;
+      }
       await tx
         .update(aheadChecks)
         .set({ settledAt: ctx.now })
@@ -1070,6 +1514,8 @@ export const AHEAD_COMMANDS = [
   markAheadMailRead,
   reportAhead,
   aheadFeedback,
+  promoteAheadFinding,
+  aheadInboxFeedback,
   tidyAhead,
   updateLooksAhead,
   triageAhead,

@@ -1842,21 +1842,27 @@ Setup and operation: `docs/github.md`.
     (`ahead_read_docs`); reading any private source closes the web for the check. It is given the forecast where the
     Whombat is for the plan's day, and may ask `weather_forecast` (another town only while the web is open) and
     `news_headlines`. Later stages of the same event get the earlier stages' scrubbed `note`s.
-  - **Findings**: `ahead_report` posts a sourced finding (Whombat names each source itself) in the person's Chat with a
-    push, in one thread per event, mail or matter (news on one the person asked for goes in the thread they asked in),
-    with an optional one-tap action chip, “Not useful” (with an optional reason later checks read) and “Stop checking
-    for this”, which stops the finding's kind or, under a finding about a matter, that matter (`ahead_feedback`); both
-    act on the newest finding in their thread (quick replies show only under the last message). What the person asked
-    for (its matched mail, linked picks whose mail matches it, and follow-ups) is never held back by the day's findings,
-    and its news is told whatever kinds are stopped, never at night. Threads settle 2 hours after the event or 48 hours
-    after a mail finding when the person didn't write in them, by their newest finding; Looks ahead settles only threads
-    its own finding started. What lasts is only the notes of an event's stages, the matters, the person's rules and
-    their recent verdicts (a mail finding's without its title).
+  - **Findings**: `ahead_report` takes a short `title` (3–10 words), the finding `text`, an optional one-tap `action`,
+    and verified sources (Whombat names each source itself). Unsolicited findings without an existing thread land in the
+    person's Inbox first (`apps/server/src/looks-ahead/inbox.ts`, `kind: 'ahead'`, `severity: 'info'`, push linking to
+    the Inbox item), keeping Chat clear for real conversations. From the Inbox, the person can tap the proposed action
+    or type a reply right on the row (`looksAhead.promote` with `text`) to open a Chat thread and wake the assistant,
+    choose “Talk to {assistant} about it” (`looksAhead.promote` without `text`, or `needsYou.discuss` for older apps) to
+    open the thread without waking it, settle or snooze the row directly, or give feedback (“Not useful” / “Stop
+    checking for this” / “Stop keeping an eye on this”, `looksAhead.feedback`). News on a watch the person asked for
+    (`ahead_watch`) goes straight into the Chat thread where they asked, and later findings for an event or matter that
+    already has a Chat thread continue in that thread (with quick replies backed by `ahead_feedback` acting on the newest
+    finding in the thread). What the person asked for (its matched mail, linked picks whose mail matches it, and
+    follow-ups) is never held back by the day's findings, and its news is told whatever kinds are stopped, never at
+    night. Unpromoted Inbox findings and untouched finding threads settle 2 hours after the event or 48 hours after a
+    mail finding, by their newest finding; Looks ahead settles only threads its own finding started. What lasts is only
+    the notes of an event's stages, the matters, the person's rules and their recent verdicts (a mail finding's without
+    its title).
   - Settings → {assistant} → Looks ahead (`looksAhead.get`, `looksAhead.update`, `looksAhead.checkNow`) shows the switch
     with “Check now”, calendars, the incoming mail switch, “Keeping an eye on” (each matter with Remove, while a mailbox
     is connected or any matter is kept), standing rules, stopped kinds, the week's count and the 15 most recent checks
-    (a told one's “Open thread” opens the thread its finding is in); the assistant reads and changes it as the person
-    asks.
+    (a told one's “Open thread” opens its Chat thread, or “Open in Inbox” when it is still in the Inbox); the assistant
+    reads and changes it as the person asks.
 - **Weather and local news** (`apps/server/src/place/`, `weather/`, `news/`, [weather-news.md](docs/decisions/weather-news.md)):
   where the Whombat is is the place the person chose (`burrows.place`, two decimals), else its time zone's guess
   (`placeFromTimeZone`, from `zone.tab`); `place.find` looks one up on OpenStreetMap's Nominatim (`PlaceFinder`: one

@@ -72,9 +72,17 @@ export function investigateText(item: Pick<NeedsYouItem | WatchItem, 'title'>): 
 }
 
 /** The glyph in an item's tile: by kind, and for approvals a power sign (restarts, updates, actions to run). */
-export type NeedsYouGlyph = 'alert' | 'power' | 'skill' | 'question' | 'connection' | 'server';
+export type NeedsYouGlyph =
+  | 'alert'
+  | 'power'
+  | 'skill'
+  | 'question'
+  | 'connection'
+  | 'server'
+  | 'calendar'
+  | 'mail';
 
-export function needsYouGlyph(item: Pick<NeedsYouItem, 'kind'>): NeedsYouGlyph {
+export function needsYouGlyph(item: Pick<NeedsYouItem, 'kind' | 'ahead'>): NeedsYouGlyph {
   switch (item.kind) {
     case 'alert':
       return 'alert';
@@ -94,6 +102,8 @@ export function needsYouGlyph(item: Pick<NeedsYouItem, 'kind'>): NeedsYouGlyph {
       return 'connection';
     case 'automation_run':
       return 'alert';
+    case 'ahead':
+      return item.ahead?.source === 'calendar' ? 'calendar' : 'mail';
   }
 }
 

@@ -36,7 +36,16 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
 import { mcpClient } from '../test/mcp';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
-import { aheadSettingsOf, findingsSince, startAheadCheck, tidyAhead, updateLooksAhead } from './commands';
+import {
+  aheadInboxFeedback,
+  aheadSettingsOf,
+  findingsSince,
+  promoteAheadFinding,
+  startAheadCheck,
+  tidyAhead,
+  updateLooksAhead,
+} from './commands';
+import { looksAheadNeedsYou } from './inbox';
 import { looksAheadView } from './settings';
 import { aheadWatchServed } from './turn';
 import { checkAheadNow, watchAhead } from './watch';
@@ -508,9 +517,17 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     const [posted] = await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId));
     expect(posted?.threadRootId).toBe(askedIn);
     expect((await matter(asked)).lastNewsAt.getTime()).toBe(now.getTime());
+    // Person-asked watch news stays in Chat and never appears in Inbox.
+    const inbox = await looksAheadNeedsYou({
+      db: t.services.db,
+      burrowId: TEST_BURROW_ID,
+      personId: IDS.mara,
+      now,
+    });
+    expect(inbox.some((i) => i.ref.id === r.id)).toBe(false);
   });
 
-  it('tells a watched sender’s mail about something else as an ordinary finding, in a thread of its own', async () => {
+  it('tells a watched sender’s mail about something else as an ordinary Inbox finding, outside the watch thread', async () => {
     // Yesterday's findings don't count towards today's.
     await t.services.db
       .update(aheadChecks)
@@ -533,6 +550,7 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
       arguments: {
         found: true,
         kind: 'deadline',
+        title: 'Notary invoice is overdue',
         text: 'The notary’s invoice is overdue.',
         sources: [{ mailId: 'm_other' }],
         unrelated: true,
@@ -541,9 +559,19 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     expect(told.structuredContent).toMatchObject({ status: 'ok', told: true });
     await mcp.close();
     await endTurns();
-    const [posted] = await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId));
-    expect(posted?.threadRootId ?? null).toBeNull();
-    expect(await row(r.id)).toMatchObject({ state: 'told', matterId: null });
+    // Unsolicited finding lands in Inbox rather than opening a Chat thread.
+    expect(await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId))).toEqual([]);
+    expect(await row(r.id)).toMatchObject({ state: 'told', matterId: null, promotedAt: null });
+    const inbox = await looksAheadNeedsYou({
+      db: t.services.db,
+      burrowId: TEST_BURROW_ID,
+      personId: IDS.mara,
+      now,
+    });
+    expect(inbox.find((i) => i.ref.id === r.id)).toMatchObject({
+      kind: 'ahead',
+      title: 'Notary invoice is overdue',
+    });
     expect((await matter(asked)).lastNewsAt.getTime()).toBe(before);
   });
 
@@ -728,6 +756,7 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
       arguments: {
         found: true,
         kind: 'other',
+        title: 'Still no reply on kettle refund',
         text: 'Still nothing from the shop about your refund since the 11th.',
         sources: [{ matter: true }],
         action: 'Draft a reminder',
@@ -736,9 +765,27 @@ describe('Looks ahead: keeping an eye on (looks-ahead.md)', () => {
     expect(told.structuredContent).toMatchObject({ status: 'ok', told: true });
     await mcp.close();
     await endTurns();
-    const [posted] = await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId));
-    expect(posted?.text).toContain(LOOKS_AHEAD_WORDS.matters);
-    expect((await matter(quiet)).threadRootId).toBe(r.threadRootId);
+    // Unsolicited follow-up lands in Inbox until promoted.
+    expect(await t.services.db.select().from(messages).where(eq(messages.id, r.threadRootId))).toEqual([]);
+    const inbox = await looksAheadNeedsYou({
+      db: t.services.db,
+      burrowId: TEST_BURROW_ID,
+      personId: IDS.mara,
+      now,
+    });
+    expect(inbox.find((i) => i.ref.id === r.id)).toMatchObject({
+      kind: 'ahead',
+      title: 'Still no reply on kettle refund',
+      ahead: {
+        checkId: r.id,
+        source: 'matter',
+        action: 'Draft a reminder',
+        matter: true,
+        matterTitle: 'Refund for the kettle',
+        sources: [{ label: LOOKS_AHEAD_WORDS.matters }],
+      },
+    });
+    expect((await matter(quiet)).threadRootId).toBeNull();
     expect((await matter(quiet)).followedUp).toEqual(['no_answer']);
     // Once per reason.
     expect(await pass()).toBeNull();
@@ -1527,10 +1574,10 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     expect((await row(r.id)).matterId).toBeNull();
   });
 
-  it('settles a thread its own finding began, replies in it included', async () => {
+  it('settles a promoted thread its own finding began, replies in it included, and bundles unpromoted siblings', async () => {
     await clean();
     now = new Date('2026-12-29T09:00:00Z');
-    await insertMatter({
+    const firmMatter = await insertMatter({
       title: 'Answer from the firm',
       match: {
         threads: [{ connectionId: mine.connectionId ?? '', threadId: 'thr_firm' }],
@@ -1556,6 +1603,14 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     now = new Date('2026-12-29T09:30:00Z');
     const b = await tell('g_second', '2026-12-29T09:20:00Z');
     expect([a.state, b.state]).toEqual(['told', 'told']);
+    // Both land in Inbox before promotion.
+    expect(await t.services.db.select().from(messages).where(eq(messages.id, a.threadRootId))).toEqual([]);
+    expect(await t.services.db.select().from(messages).where(eq(messages.id, b.threadRootId))).toEqual([]);
+
+    // Promoting b without replying pulls sibling a into the same Chat thread chronologically.
+    const promoted = await t.commit(IDS.mara, promoteAheadFinding, { checkId: b.id });
+    expect(promoted.status).toBe('ok');
+    expect((await matter(firmMatter)).threadRootId).toBe(a.threadRootId);
     const [reply] = await t.services.db.select().from(messages).where(eq(messages.id, b.threadRootId));
     expect(reply?.threadRootId).toBe(a.threadRootId);
     await t.services.db
@@ -1568,6 +1623,43 @@ describe('Looks ahead: senders, picks, retries, deferred mail and threads (looks
     // “Open thread” on the reply opens that thread.
     const view = await looksAheadView(t.services, TEST_BURROW_ID);
     expect(view.recent?.find((r) => r.id === b.id)?.threadRootId).toBe(a.threadRootId);
+  });
+
+  it('closes a matter directly from the Inbox on “Stop keeping an eye on this” without stopping the kind', async () => {
+    await clean();
+    now = new Date('2026-12-29T11:00:00Z');
+    const kept = await insertMatter({
+      title: 'Refund for the lamp',
+      createdAt: new Date('2026-12-23T10:00:00Z'),
+      lastNewsAt: new Date('2026-12-23T10:00:00Z'),
+    });
+    const r = await row(await pass());
+    expect(r).toMatchObject({ source: 'matter', matterId: kept });
+    const mcp = await inTurn(r.dispatchId);
+    await mcp.client.callTool({
+      name: 'ahead_report',
+      arguments: {
+        found: true,
+        kind: 'deadline',
+        title: 'No answer on lamp refund',
+        text: 'Still nothing on the lamp refund.',
+        sources: [{ matter: true }],
+      },
+    });
+    await mcp.close();
+    await endTurns();
+
+    const fb = await t.commit(IDS.mara, aheadInboxFeedback, { checkId: r.id, verdict: 'stop_kind' });
+    expect(fb).toMatchObject({ status: 'ok', result: { ok: true, kind: 'deadline', stopped: 'matter' } });
+    expect(await matter(kept)).toMatchObject({ state: 'closed', closedReason: 'removed' });
+    expect((await aheadSettingsOf(t.services.db, TEST_BURROW_ID)).stopped).not.toContain('deadline');
+    const inbox = await looksAheadNeedsYou({
+      db: t.services.db,
+      burrowId: TEST_BURROW_ID,
+      personId: IDS.mara,
+      now,
+    });
+    expect(inbox.some((i) => i.ref.id === r.id)).toBe(false);
   });
 
   it('may still try a failed date follow-up again until the evening of its date', async () => {

@@ -1,13 +1,27 @@
 /**
  * Looks ahead (Whombat looks-ahead.md): its switch, calendars, incoming mail switch, standing rules, stopped kinds,
- * what it keeps an eye on, recent checks and an on-demand check, in Settings under the assistant. Session ops `looksAhead.get`,
- * `looksAhead.update` and `looksAhead.checkNow`; the person's own.
+ * what it keeps an eye on, recent checks, an on-demand check, and Inbox finding actions (promote to Chat, direct
+ * feedback). The person's own.
  */
 import { z } from 'zod';
-import { LooksAheadCheckNowResult, LooksAheadUpdate, LooksAheadView } from '../domain/looks-ahead.js';
+import { Conversation } from '../domain/conversation.js';
+import {
+  AheadInboxFeedbackBody,
+  AheadInboxFeedbackResponse,
+  AheadPromoteBody,
+  LooksAheadCheckNowResult,
+  LooksAheadUpdate,
+  LooksAheadView,
+} from '../domain/looks-ahead.js';
+import { Message } from '../domain/message.js';
+import { AheadCheckId } from '../ids.js';
 import { BurrowParam, endpoint } from './endpoint.js';
 
 const B = z.object({ burrow: BurrowParam });
+const FindingParams = B.extend({ checkId: AheadCheckId });
+
+export const AheadPromoteResponse = z.object({ conversation: Conversation, message: Message });
+export type AheadPromoteResponse = z.infer<typeof AheadPromoteResponse>;
 
 export const looksAheadEndpoints = {
   get: endpoint({
@@ -37,5 +51,25 @@ export const looksAheadEndpoints = {
     params: B,
     body: z.strictObject({}),
     response: LooksAheadCheckNowResult,
+  }),
+  promote: endpoint({
+    id: 'looksAhead.promote',
+    method: 'POST',
+    path: '/burrows/:burrow/looks-ahead/findings/:checkId/promote',
+    summary:
+      'Open a Looks ahead Inbox finding as a thread in Chat, optionally posting the person’s reply or one-tap action to wake the assistant.',
+    params: FindingParams,
+    body: AheadPromoteBody,
+    response: AheadPromoteResponse,
+  }),
+  feedback: endpoint({
+    id: 'looksAhead.feedback',
+    method: 'POST',
+    path: '/burrows/:burrow/looks-ahead/findings/:checkId/feedback',
+    summary:
+      'Mark a Looks ahead Inbox finding as not useful or stop checking for that kind (or matter) directly from the Inbox.',
+    params: FindingParams,
+    body: AheadInboxFeedbackBody,
+    response: AheadInboxFeedbackResponse,
   }),
 };

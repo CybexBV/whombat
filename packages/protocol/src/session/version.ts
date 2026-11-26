@@ -84,9 +84,17 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * page's `show`, `desk.screen.addPage`, a screen's `doorbell` choice, a grid's `spotlight` and a screen elsewhere's
  * `timeZone` (Whombat desk-display.md); minor 16 is the weather and local news: the burrow's `place`, `place.find`,
  * `place.set`, `news.sources`, `news.setSources` and `news.addSite`, and the screens' `weather` and `news` widgets and
- * `weather` view, which a box sends only to a session at minor 16 or later (Whombat weather-news.md).
+ * `weather` view, which a box sends only to a session at minor 16 or later (Whombat weather-news.md); minor 17 brings
+ * unsolicited Looks ahead findings into the Inbox (`NeedsYouKind` `ahead`, `looksAhead.promote`, `looksAhead.feedback`,
+ * and `LooksAheadCheckItem.inboxItemId`; Whombat looks-ahead.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 16 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 17 };
+
+/**
+ * Session protocol minor (major 5) that lands unsolicited Looks ahead findings in the Inbox (`kind: 'ahead'`,
+ * `looksAhead.promote`, `looksAhead.feedback`). Older apps receive them as `backup` items without `ahead` metadata.
+ */
+export const LOOKS_AHEAD_INBOX_MINOR = 17;
 
 /**
  * Session protocol minor (major 5) that keeps pages by time of day (`DeskPage.show`), makes a page for the assistant

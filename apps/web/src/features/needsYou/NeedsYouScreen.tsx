@@ -26,18 +26,23 @@ import {
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import { queryKeys } from '@whombat/client/query';
 import {
+  useAheadFeedback,
   useBringBackWatch,
   useDiscussNeedsYou,
   useHandleLook,
   useHomeOverview,
   useIgnoreNeedsYou,
+  usePromoteAhead,
   useStartChat,
   useStopWatchingNeedsYou,
   useTheAgent,
+  useUpdateLooksAhead,
 } from '@whombat/client/react';
-import type { AgentFace } from '@whombat/core';
+import { type AgentFace, type AheadNamedSource, LOOKS_AHEAD_WORDS } from '@whombat/core';
 import { isBackupPasskeyHref } from '@whombat/protocol/session';
 import {
+  ArrowUp,
+  Calendar,
   Check,
   ChevronDown,
   ChevronRight,
@@ -45,6 +50,7 @@ import {
   Ellipsis,
   Inbox,
   type LucideIcon,
+  Mail,
   MessageCircleQuestion,
   Plug,
   Power,
@@ -82,6 +88,8 @@ const GLYPHS: Record<NeedsYouGlyph, LucideIcon> = {
   question: MessageCircleQuestion,
   connection: Plug,
   server: Server,
+  calendar: Calendar,
+  mail: Mail,
 };
 
 /**
@@ -189,6 +197,7 @@ export function NeedsYouScreen({ burrow }: NeedsYouScreenProps) {
                   focus={focus}
                   busy={act.busy}
                   onPress={act.press}
+                  onReply={act.replyAhead}
                 />
               ))}
             </>
@@ -311,6 +320,7 @@ function Group({
   focus,
   busy,
   onPress,
+  onReply,
 }: {
   group: NeedsYouListGroupView;
   burrow: string;
@@ -320,6 +330,7 @@ function Group({
   focus: string | null;
   busy: string | null;
   onPress: (row: NeedsYouListRow, button: NeedsYouButton) => void;
+  onReply?: (row: NeedsYouListRow, text: string) => Promise<boolean>;
 }) {
   const holdsFocus = group.rows.some((r) => r.id === focus);
   // Unfolded by the person (or a link to one of its rows); until then as the group says, so an empty Settled that gets
@@ -361,6 +372,7 @@ function Group({
               focused={row.id === focus}
               busy={busy === row.id}
               onPress={(b) => onPress(row, b)}
+              onReply={onReply ? (text) => onReply(row, text) : undefined}
             />
           ))}
         </div>
@@ -378,6 +390,7 @@ function Row({
   focused,
   busy,
   onPress,
+  onReply,
 }: {
   row: NeedsYouListRow;
   burrow: string;
@@ -387,6 +400,7 @@ function Row({
   focused: boolean;
   busy: boolean;
   onPress: (button: NeedsYouButton) => void;
+  onReply?: (text: string) => Promise<boolean>;
 }) {
   const ref = useRef<HTMLElement>(null);
   const passkey = useBackupPasskeyTap();
@@ -443,7 +457,11 @@ function Row({
           )}
         </h3>
         {row.body ? <p className={styles.body}>{row.body}</p> : null}
+        {row.item.ahead?.sources.length ? <AheadSources sources={row.item.ahead.sources} /> : null}
         {meta ? <p className={styles.meta}>{meta}</p> : null}
+        {row.item.kind === 'ahead' && row.item.ahead && row.group === 'you' && onReply ? (
+          <AheadReplyForm name={name} disabled={busy} onSubmit={onReply} />
+        ) : null}
         {hasPasskey && passkey?.note ? (
           <p className={styles.feedback} role="status">
             {passkey.note}
@@ -487,6 +505,71 @@ function Row({
         </div>
       ) : null}
     </article>
+  );
+}
+
+/** Verified sources on a Looks ahead Inbox finding: web pages as external links, private sources as plain text. */
+function AheadSources({ sources }: { sources: readonly AheadNamedSource[] }) {
+  return (
+    <p className={styles.sources}>
+      {sources.map((s, i) => (
+        <span key={`${s.label}-${s.url ?? i}`}>
+          {i > 0 ? ' · ' : null}
+          {s.url ? (
+            <a href={s.url} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>
+              {s.label}
+            </a>
+          ) : (
+            s.label
+          )}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** Inline reply box on an open Looks ahead Inbox finding: submitting promotes the finding into a Chat thread. */
+function AheadReplyForm({
+  name,
+  disabled,
+  onSubmit,
+}: {
+  name: string;
+  disabled: boolean;
+  onSubmit: (text: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState('');
+  const trimmed = draft.trim();
+  const placeholder = LOOKS_AHEAD_WORDS.replyPlaceholder(name);
+  return (
+    <form
+      className={styles.replyForm}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!trimmed || disabled) return;
+        void onSubmit(trimmed).then((ok) => {
+          if (ok) setDraft('');
+        });
+      }}
+    >
+      <input
+        type="text"
+        className={styles.replyInput}
+        value={draft}
+        disabled={disabled}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <button
+        type="submit"
+        className={styles.replySend}
+        disabled={disabled || !trimmed}
+        aria-label={LOOKS_AHEAD_WORDS.sendReply}
+      >
+        <Icon icon={ArrowUp} size={15} />
+      </button>
+    </form>
   );
 }
 
@@ -666,6 +749,9 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
   const stopWatching = useStopWatchingNeedsYou(burrow);
   const settling = useIgnoreNeedsYou(burrow);
   const discuss = useDiscussNeedsYou(burrow);
+  const promoteAhead = usePromoteAhead(burrow);
+  const aheadFeedback = useAheadFeedback(burrow);
+  const updateLooksAhead = useUpdateLooksAhead(burrow);
   // Handed over: the row moves to the assistant's group at once; with nothing to look into, the question instead.
   const handling = useRef<{ text: string; subject: NeedsYouListRow['item']['subject'] } | null>(null);
   // Handed over: its thread opens, where the assistant works on it (backup-places.md BPL-15); without one, a toast.
@@ -686,6 +772,27 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
     const result = await start.mutateAsync({ text, subject, reuseThread: true });
     if (result.status === 'ok') navigateHref(startedChatPath(result.data));
     else toast.show(SOMETHING_WENT_WRONG);
+  };
+
+  /** Reply directly to a Looks ahead finding from the Inbox: promotes to Chat and wakes the assistant. */
+  const replyAhead = async (row: NeedsYouListRow, text: string): Promise<boolean> => {
+    const checkId = row.item.ahead?.checkId;
+    if (!checkId) return false;
+    setBusy(row.id);
+    try {
+      const result = await promoteAhead.mutateAsync({ checkId, text });
+      if (result.status === 'ok') {
+        navigateHref(startedChatPath(result.data));
+        return true;
+      }
+      toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+      return false;
+    } catch {
+      toast.show(SOMETHING_WENT_WRONG);
+      return false;
+    } finally {
+      setBusy(null);
+    }
   };
 
   const press = (row: NeedsYouListRow, button: NeedsYouButton) => {
@@ -726,11 +833,50 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
       case 'settle':
       case 'back':
       case 'stop':
+      case 'aheadPromote':
+      case 'aheadFeedback':
         break;
     }
     setBusy(row.id);
     const run = async () => {
       switch (intent.type) {
+        case 'aheadPromote': {
+          const result = await promoteAhead.mutateAsync({
+            checkId: intent.checkId,
+            ...(intent.text ? { text: intent.text } : {}),
+          });
+          if (result.status === 'ok') navigateHref(startedChatPath(result.data));
+          else toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+          return;
+        }
+        case 'aheadFeedback': {
+          const moveFocus = focusAfter(row.id);
+          const pending = aheadFeedback.mutateAsync({ checkId: intent.checkId, verdict: intent.verdict });
+          moveFocus();
+          const result = await pending;
+          if (result.status !== 'ok') {
+            toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+            return;
+          }
+          if (intent.verdict === 'not_useful') {
+            toast.show(LOOKS_AHEAD_WORDS.markedNotUseful);
+          } else if (result.data.stopped === 'matter') {
+            toast.show(LOOKS_AHEAD_WORDS.stoppedMatterToast);
+          } else {
+            toast.show(LOOKS_AHEAD_WORDS.stoppedKindToast(intent.kind), {
+              duration: SETTLE_TOAST_MS,
+              action: {
+                label: NEEDS_YOU_WORDS.undo,
+                onAction: () =>
+                  void updateLooksAhead.mutateAsync({ kind: intent.kind, on: true }).then(
+                    (r) => r.status !== 'ok' && toast.show(SOMETHING_WENT_WRONG),
+                    () => toast.show(SOMETHING_WENT_WRONG),
+                  ),
+              },
+            });
+          }
+          return;
+        }
         case 'settle': {
           const { ref } = intent;
           const moveFocus = focusAfter(row.id);
@@ -802,5 +948,5 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
   const askAboutRead = () =>
     void ask(NEEDS_YOU_WORDS.readFailedAsk, null).catch(() => toast.show(SOMETHING_WENT_WRONG));
 
-  return { press, askAboutRead, busy: busy ?? actions.busy };
+  return { press, replyAhead, askAboutRead, busy: busy ?? actions.busy };
 }

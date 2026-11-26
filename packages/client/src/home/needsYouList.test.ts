@@ -443,3 +443,106 @@ describe('withNeedsYouListItem', () => {
     expect(decided.summary.needsYou).toBe(3);
   });
 });
+
+describe('Looks ahead findings in Inbox (looks-ahead.md)', () => {
+  const calendarFinding = base({
+    id: 'ahead:ahc_cal1',
+    ref: { kind: 'ahead', id: 'ahc_cal1' },
+    kind: 'ahead',
+    severity: 'info',
+    title: 'The Script starts at 20:45',
+    body: 'Doors open at 19:30 and the show starts at 20:45 instead of 20:00.',
+    group: 'you',
+    ahead: {
+      checkId: 'ahc_cal1',
+      source: 'calendar',
+      kind: 'time',
+      sources: [{ label: 'venue.example.com', url: 'https://venue.example.com/show' }],
+      action: 'Update event to 20:45',
+    },
+  });
+  const matterFinding = base({
+    id: 'ahead:ahc_mat1',
+    ref: { kind: 'ahead', id: 'ahc_mat1' },
+    kind: 'ahead',
+    severity: 'info',
+    title: 'Still no answer on kettle refund',
+    body: 'No reply from the shop since 11 Dec.',
+    group: 'you',
+    ahead: {
+      checkId: 'ahc_mat1',
+      source: 'matter',
+      kind: 'other',
+      sources: [{ label: 'Keeping an eye on' }],
+      matter: true,
+      matterTitle: 'Refund for the kettle',
+    },
+  });
+  const settledFinding: NeedsYouItem = {
+    ...calendarFinding,
+    id: 'ahead:ahc_old1',
+    ref: { kind: 'ahead', id: 'ahc_old1' },
+    group: 'quiet',
+    state: 'acknowledged',
+  };
+
+  it('uses Calendar/Mail glyphs and labels, shows the proposed action + Settle, and puts feedback in More', () => {
+    const v = view([calendarFinding, matterFinding, settledFinding]);
+    const cal = needsYouRowById(v, calendarFinding.id);
+    expect(cal?.glyph).toBe('calendar');
+    expect(cal?.meta).toBe('Calendar · 09:00');
+    expect(cal?.buttons.filter((b) => !b.more).map((b) => [b.kind, b.label])).toEqual([
+      ['aheadAction', 'Update event to 20:45'],
+      ['settle', 'Settle'],
+    ]);
+    expect(cal?.buttons.filter((b) => b.more).map((b) => [b.kind, b.label])).toEqual([
+      ['talk', 'Talk to Neo about it'],
+      ['snooze', 'Remind me tomorrow'],
+      ['notUseful', 'Not useful'],
+      ['stopAhead', 'Stop checking for this'],
+    ]);
+    expect(cal && needsYouSwipe(cal)?.kind).toBe('settle');
+
+    const mat = needsYouRowById(v, matterFinding.id);
+    expect(mat?.glyph).toBe('mail');
+    expect(mat?.meta).toBe('Mail · 09:00');
+    expect(mat?.buttons.filter((b) => !b.more).map((b) => b.kind)).toEqual(['settle']);
+    expect(mat?.buttons.find((b) => b.kind === 'stopAhead')?.label).toBe('Stop keeping an eye on this');
+
+    const old = needsYouRowById(v, settledFinding.id);
+    expect(old?.buttons.map((b) => b.kind)).toEqual(['back', 'talk', 'notUseful', 'stopAhead']);
+    expect(old && needsYouSwipe(old)?.kind).toBe('back');
+  });
+
+  it('maps action, talk and feedback buttons to aheadPromote and aheadFeedback intents', () => {
+    const v = view([calendarFinding]);
+    const cal = needsYouRowById(v, calendarFinding.id);
+    const intentFor = (kind: string) => {
+      const btn = cal?.buttons.find((b) => b.kind === kind);
+      return btn ? needsYouListIntent(calendarFinding, btn, NOW, TZ) : null;
+    };
+    expect(intentFor('aheadAction')).toEqual({
+      type: 'aheadPromote',
+      checkId: 'ahc_cal1',
+      text: 'Update event to 20:45',
+    });
+    expect(intentFor('talk')).toEqual({
+      type: 'aheadPromote',
+      checkId: 'ahc_cal1',
+    });
+    expect(intentFor('notUseful')).toEqual({
+      type: 'aheadFeedback',
+      checkId: 'ahc_cal1',
+      verdict: 'not_useful',
+      kind: 'time',
+      matter: false,
+    });
+    expect(intentFor('stopAhead')).toEqual({
+      type: 'aheadFeedback',
+      checkId: 'ahc_cal1',
+      verdict: 'stop_kind',
+      kind: 'time',
+      matter: false,
+    });
+  });
+});

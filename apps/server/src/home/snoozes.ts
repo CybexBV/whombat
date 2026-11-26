@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { needsYouSnoozes } from '../db/schema/index';
 import { badRequest, forbidden } from '../lib/errors';
+import { settleAheadNotices } from '../looks-ahead/commands';
 import { publishHomeChanged } from './notify';
 
 /** The longest snooze: a month. */
@@ -39,6 +40,7 @@ export const snoozeNeedsYou = defineCommand({
         target: [needsYouSnoozes.personId, needsYouSnoozes.refKind, needsYouSnoozes.refId],
         set: { state: 'snoozed', until, createdAt: ctx.now },
       });
+    if (input.ref.kind === 'ahead') await settleAheadNotices(ctx, [input.ref.id], 'read');
     publishHomeChanged(ctx, [ctx.actor.id], ['needsYou', 'watch']);
     return { ref: input.ref, snoozedUntil: until.toISOString() };
   },
@@ -95,7 +97,7 @@ export const ignoreNeedsYou = defineCommand({
   schema: z.object({ ref: HomeRef, ignored: z.boolean() }),
   async apply(tx, ctx, input) {
     if (ctx.actor.kind !== 'person') throw forbidden('Only people ignore what needs them.');
-    if (input.ignored)
+    if (input.ignored) {
       await tx
         .insert(needsYouSnoozes)
         .values({
@@ -111,7 +113,8 @@ export const ignoreNeedsYou = defineCommand({
           target: [needsYouSnoozes.personId, needsYouSnoozes.refKind, needsYouSnoozes.refId],
           set: { state: 'ignored', until: null, createdAt: ctx.now },
         });
-    else
+      if (input.ref.kind === 'ahead') await settleAheadNotices(ctx, [input.ref.id], 'read');
+    } else
       await tx
         .delete(needsYouSnoozes)
         .where(

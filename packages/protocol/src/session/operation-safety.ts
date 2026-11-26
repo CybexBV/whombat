@@ -460,10 +460,12 @@ const TABLE = {
   // The quiet hours for changes (care-plan.md): one signed row, the same value when sent again.
   'changeWindow.get': READ,
   'changeWindow.set': RECEIPT,
-  // Looks ahead's switch and on-demand pass: each change sets the same state again.
+  // Looks ahead's switch, on-demand pass, and Inbox finding actions: each is covered by its commit receipt.
   'looksAhead.get': READ,
   'looksAhead.update': RECEIPT,
   'looksAhead.checkNow': RECEIPT,
+  'looksAhead.promote': RECEIPT,
+  'looksAhead.feedback': RECEIPT,
   // Where the Whombat is and its news sites (weather-news.md). `place.find` asks OpenStreetMap and keeps nothing;
   // `news.addSite` reads the site once to check it before its commit, which is harmless to repeat.
   'place.find': READ,

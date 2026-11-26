@@ -307,6 +307,8 @@ export interface WebFixtureOptions {
   councilSetups?: CouncilSetupWorldOptions;
   /** Settings → the assistant → Looks ahead (`looksAheadFixtures.ts`): what differs from Mara's (on, two calendars). */
   looksAhead?: Partial<LooksAheadView>;
+  /** Optional Looks ahead findings injected into Mara's Inbox for tests (`looksAheadFixtures.ts`). */
+  looksAheadInbox?: readonly import('@whombat/core').NeedsYouItem[];
   /**
    * The person's prompts (`promptFixtures.ts`, Whombat prompts.md): the six Whombat ships and one of Mara's own, T3 Code's
    * projects. Default: known, T3 Code ready (`VITE_FIXTURE_PROMPTS_T3` says otherwise).
@@ -1001,13 +1003,13 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
     };
   }
   {
-    // Looks ahead (Whombat looks-ahead.md): Settings → the assistant → Looks ahead.
+    // Looks ahead (Whombat looks-ahead.md): Settings → the assistant → Looks ahead, and Inbox finding actions.
     const inner = out;
-    const ahead = createLooksAheadFixtures(options.looksAhead);
+    const ahead = createLooksAheadFixtures(options.looksAhead, options.looksAheadInbox);
     out = async (input, init) => {
       const req = input instanceof Request ? input : new Request(input, init);
       if (signedIn) {
-        const own = await ahead.handle(req.clone());
+        const own = await ahead.handle(req.clone(), (r) => inner(r));
         if (own) return own;
       }
       return inner(req);
