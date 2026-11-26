@@ -8,6 +8,7 @@ import {
   DEFAULT_PREFERENCES,
   type MessagePage,
   PR_STATUS_TONES,
+  placeFromTimeZone,
   type ThreadView,
   topics,
 } from '@whombat/core';
@@ -53,6 +54,8 @@ export function toBurrow(row: BurrowRow, aiGateway: BurrowAiGateway | null = nul
     localModel: localModelView(row),
     // Web search with a Brave Search key (web-search.md): never the key.
     webSearch: webSearchView(row),
+    // Where the Whombat is (weather-news.md): the time zone's guess until the person's own place is kept.
+    place: placeFromTimeZone(row.timeZone),
   };
 }
 

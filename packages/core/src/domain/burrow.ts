@@ -4,6 +4,7 @@ import { isValidBurrowSlug } from '../text/slug.js';
 import { Timestamp } from './common.js';
 import { BurrowAiGateway } from './gateway.js';
 import { LocalModelView } from './local-model.js';
+import { Place } from './place.js';
 import { WebSearchView } from './web-search.js';
 
 export const BurrowName = z.string().trim().min(1).max(80);
@@ -48,6 +49,12 @@ export const Burrow = z.object({
    * changes it with `burrows.setWebSearch` and `burrows.clearWebSearch`; `burrows.testWebSearch` updates its `check`.
    */
   webSearch: WebSearchView.nullable().default(null),
+  /**
+   * Where this Whombat is, for the weather and the suggested news (Whombat weather-news.md): the place the person chose,
+   * else the one its time zone suggests (`guessed`, `placeFromTimeZone`); null when neither (a zone of no country). The
+   * person or the assistant changes it with `place.set`.
+   */
+  place: Place.nullable().default(null),
   createdAt: Timestamp,
 });
 export type Burrow = z.infer<typeof Burrow>;
