@@ -2,16 +2,19 @@
  * The screen of widgets' fixtures (Whombat desk-display.md “Screens of widgets”, mockups `docs/design/desk-widgets/`):
  * the calm glance's fixtures with the box's grid laid over them (`glance.grid`), and a monitor beside the Z13
  * (`glance.outputs` and the kiosk's outputs). The world is `@whombat/screen`'s fixtures (the mockups'): three pages, a
- * server, Home Assistant, UniFi, Plex, SABnzbd, Seerr, the backups, the outage and the question, pages by time of day
- * and the doorbell taking over the screen. `desk-grid-*`.
+ * server, Home Assistant, UniFi, Plex, SABnzbd, Seerr, the backups, the outage and the question, pages by time of day,
+ * the doorbell taking over the screen, and the weather and the news. `desk-grid-*`.
  */
-import type { DeskGrid, DeskWidget } from '@whombat/screen';
+import type { DeskGrid, DeskWidget, DeskWidgetView } from '@whombat/screen';
 import {
   FIXTURE_BOX_GRID,
   FIXTURE_BOX_GRID_WRONG,
   FIXTURE_DOORBELL_GRID,
   FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_MONITOR_GRID,
+  FIXTURE_NEWS,
+  FIXTURE_WEATHER,
+  FIXTURE_WEATHER_NEWS_VIEWS,
 } from '@whombat/screen/fixtures';
 import { lockedGrid } from '../lib/grid';
 import type { KioskOutput } from '../lib/outputs';
@@ -155,6 +158,71 @@ const UNLOCKED = {
   },
 };
 
+/** A one-page grid of Whombat's own widgets on the box's 8 × 5, with their views. */
+const onePage = (name: string, widgets: DeskWidget[], views: DeskWidgetView[]): DeskGrid => ({
+  ...DEFAULT,
+  layout: { ...DEFAULT.layout, pages: [{ id: 'p_first', name, layouts: { '8x5': widgets }, last: '8x5' }] },
+  views,
+});
+/** The screen package's forecast under another widget's id (each widget has its own view). */
+const forecastAs = (id: string, from = FIXTURE_WEATHER.id): DeskWidgetView => {
+  const v = FIXTURE_WEATHER_NEWS_VIEWS.find((x) => x.id === from) ?? FIXTURE_WEATHER;
+  return { ...v, id };
+};
+
+/** A morning page: the forecast big, the headlines beside it, and the small forms under them. */
+const WEATHER_MORNING = onePage(
+  'Morning',
+  [
+    w('w_wx_large', 'weather', 0, 0, 4, 3),
+    w('w_news', 'news', 4, 0, 4, 3),
+    w('w_wx_tile', 'weather', 0, 3, 1, 1),
+    w('w_wx_night', 'weather', 1, 3, 1, 1),
+    w('w_wx_line', 'weather', 2, 3, 2, 1),
+    w('w_wx_strip', 'weather', 4, 3, 4, 1),
+    w('w_news_line', 'news', 0, 4, 4, 1),
+    w('w_wx_night_line', 'weather', 4, 4, 2, 1),
+    w('w_clock', 'clock', 6, 4, 2, 1),
+  ],
+  [
+    forecastAs('w_wx_large'),
+    { ...FIXTURE_NEWS, id: 'w_news' },
+    forecastAs('w_wx_tile'),
+    forecastAs('w_wx_night', 'w_weather_night'),
+    forecastAs('w_wx_line'),
+    forecastAs('w_wx_strip'),
+    { ...FIXTURE_NEWS, id: 'w_news_line' },
+    forecastAs('w_wx_night_line', 'w_weather_night'),
+  ],
+);
+
+/** The weather's other forms: two and three wide, four wide and two high, strips, not read, and no news chosen. */
+const WEATHER_SIZES = onePage(
+  'Weather',
+  [
+    w('w_wx_b22', 'weather', 0, 0, 2, 2),
+    w('w_wx_b32', 'weather', 2, 0, 3, 2),
+    w('w_wx_b33', 'weather', 5, 0, 3, 3),
+    w('w_wx_wide', 'weather', 0, 2, 4, 2),
+    w('w_wx_wrong', 'weather', 4, 2, 1, 1),
+    w('w_wx_night', 'weather', 4, 3, 1, 1),
+    w('w_wx_night_strip', 'weather', 5, 3, 3, 1),
+    w('w_wx_strip6', 'weather', 0, 4, 6, 1),
+    w('w_news_none', 'news', 6, 4, 2, 1),
+  ],
+  [
+    forecastAs('w_wx_b22'),
+    forecastAs('w_wx_b32'),
+    forecastAs('w_wx_b33'),
+    forecastAs('w_wx_wide'),
+    forecastAs('w_wx_wrong', 'w_weather_wrong'),
+    forecastAs('w_wx_night', 'w_weather_night'),
+    forecastAs('w_wx_night_strip', 'w_weather_night'),
+    forecastAs('w_wx_strip6'),
+    { ...FIXTURE_NEWS, id: 'w_news_none', rows: [], empty: 'Choose your news in Settings' },
+  ],
+);
+
 export const SCREEN_FIXTURES: Record<string, Fixture> = {
   'desk-grid': gridOver(
     calmOver('desk-looks-nothing', 'A screen nobody arranged: the calm glance as widgets (DK-127)', FINE),
@@ -245,6 +313,22 @@ export const SCREEN_FIXTURES: Record<string, Fixture> = {
       FINE,
     ),
     ringing(FIXTURE_DOORBELL_GRID_LOCKED),
+  ),
+  'desk-grid-weather': gridOver(
+    calmOver(
+      'desk-looks-nothing',
+      'The weather and the news on a morning page, locked: both show as they are (nothing in them is private)',
+      FINE,
+    ),
+    WEATHER_MORNING,
+  ),
+  'desk-grid-weather-sizes': gridOver(
+    calmOver(
+      'desk-looks-nothing',
+      'The weather’s other forms, one not read, and the news with no site chosen',
+      FINE,
+    ),
+    WEATHER_SIZES,
   ),
   'desk-grid-welcome': gridOver(
     calmOver(
