@@ -129,23 +129,9 @@ export interface FuseboxOverview {
   models: number | null;
 }
 
-/**
- * When a subscription charges next, or ends when it was cancelled (`quota.renewal`): the date ChatGPT gives, or the
- * billing day someone set in Fusebox where the provider gives none (Claude's, Meta's).
- */
-export interface FuseboxRenewal {
-  at: Date;
-  /** A billing day set by hand: a day without a time, the next charge until that day is over. */
-  day: boolean;
-  ends: boolean;
-  /** Moved on a period from a date that passed, until Fusebox reads the next one. */
-  estimated: boolean;
-}
-
 /** Of one account, what `/api/accounts` says beyond its limits: when it was last used, who used its windows. */
 export interface FuseboxAccountMore {
   lastUsed: Date | null;
-  renews?: FuseboxRenewal;
   /** The current windows' use per client (`quota_attribution.current`, 0.6+): percentage points of the window. */
   shares: { window: string; outside: number; clients: { id: string; label: string; points: number }[] }[];
 }
@@ -249,22 +235,7 @@ export function parseAccountsMore(
             .filter((c): c is NonNullable<typeof c> => c !== null),
         };
       });
-    const renewal = rec(rec(a.quota).renewal);
-    const at = dateOf(renewal.at);
-    out.set(keyOf(id), {
-      lastUsed: dateOf(a.last_used),
-      shares,
-      ...(at
-        ? {
-            renews: {
-              at,
-              day: renewal.manual === true,
-              ends: renewal.ends === true,
-              estimated: renewal.estimated === true,
-            },
-          }
-        : {}),
-    });
+    out.set(keyOf(id), { lastUsed: dateOf(a.last_used), shares });
   }
   return out;
 }
@@ -682,29 +653,7 @@ export function subscriptionsOf(
 
 const working = (a: Pick<Subscription, 'status'>) => a.status === 'ok' || a.status === 'rate_limited';
 
-/**
- * When a subscription renews, as its row says it after the plan: “Renews 3 Dec”, “Renews tomorrow”, “Ends 3 Dec” once
- * cancelled, “Renews about 3 Dec” when Fusebox only counted on from a date that passed. A day set by hand holds until
- * it's over; nothing once the date has passed.
- */
-export function renewsWords(r: FuseboxRenewal, now: Date, timeZone: string): string | null {
-  const day = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone }).format(d);
-  const today = day(now);
-  if (r.day ? day(r.at) < today : r.at.getTime() <= now.getTime()) return null;
-  const when =
-    day(r.at) === today
-      ? 'today'
-      : day(r.at) === day(new Date(now.getTime() + DAY))
-        ? 'tomorrow'
-        : new Intl.DateTimeFormat('en-GB', { timeZone, day: 'numeric', month: 'short' }).format(r.at);
-  if (r.ends) return `Ends ${when}`;
-  return `Renews ${r.estimated ? 'about ' : ''}${when}`;
-}
-
-/**
- * The Subscriptions table's rows: each with its tool's mark for the screen, its plan and when it renews, its 5 hours
- * and week, and how it is.
- */
+/** The Subscriptions table's rows: each with its tool's mark for the screen, its 5 hours and week, and how it is. */
 function subscriptionRows(input: FuseboxInput, subs: readonly Subscription[]): ThingPageRow[] {
   const { snapshot, now, timeZone } = input;
   return subs.map((a) => {
@@ -724,9 +673,7 @@ function subscriptionRows(input: FuseboxInput, subs: readonly Subscription[]): T
     const status = ACCOUNT_STATUS[a.status];
     const until =
       a.until && (a.status === 'used_up' || a.status === 'rate_limited') ? new Date(a.until) : null;
-    const more = snapshot.more.get(a.key);
-    const last = more?.lastUsed ?? null;
-    const renews = more?.renews ? renewsWords(more.renews, now, timeZone) : null;
+    const last = snapshot.more.get(a.key)?.lastUsed ?? null;
     const tool = fuseboxToolName(a.provider);
     const mark = fuseboxProviderMark(a.provider);
     return {
@@ -734,7 +681,7 @@ function subscriptionRows(input: FuseboxInput, subs: readonly Subscription[]): T
       cells: {
         subscription: {
           text: clip(a.label, 200),
-          note: clip([tool, a.plan, renews].filter(Boolean).join(' · '), 80),
+          note: a.plan ? `${tool} · ${a.plan}` : tool,
           ...(mark ? { mark } : {}),
         },
         five: meter('five_hour'),
