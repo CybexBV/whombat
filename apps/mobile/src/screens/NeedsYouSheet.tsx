@@ -84,6 +84,7 @@ import { OneCardBody, type OneCardContent, OneCardPage, OneSheet } from '../ui/o
 import { ErrorState, QuietText, SkeletonRows } from '../ui/primitives';
 import { useAfterSheet } from '../ui/sheet';
 import { Touchable } from '../ui/Touchable';
+import { hitSlopFor } from '../ui/touchTarget';
 import { showFailure, showLookFix, showNotice, useDecisionFeedback } from './feedback';
 
 /** Takes an item out of the list at once; the function it returns puts Home back as it was (a refusal). */
@@ -687,6 +688,7 @@ function AheadSourcesList({ sources }: { sources: readonly AheadNamedSource[] })
               feedback="wash"
               accessibilityRole="link"
               accessibilityLabel={s.label}
+              hitSlop={hitSlopFor(32)}
               style={{ minHeight: 32, justifyContent: 'center' }}
             >
               <Text size={13.5} color={theme.colors.brand} style={{ textDecorationLine: 'underline' }}>
