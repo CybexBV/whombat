@@ -4,6 +4,7 @@
  * and the refusals in plain words. The contract's own (`DESK_SCREEN_WORDS`) are used where it has them.
  */
 import { screenGrid } from '@whombat/screen';
+import { ARRANGE_WORDS } from '../home/arrange';
 import { OperationError } from '../session/managed-ops';
 import {
   DESK_SCREEN_WORDS,
@@ -15,7 +16,7 @@ import {
   type DeskWidgetType,
   fillDeskWords,
 } from './contract';
-import type { EditorRefusal } from './editor';
+import type { EditorRefusal, SizePresetKey } from './editor';
 import { deskErrorCode } from './model';
 
 /** The words of Settings → Screens and the editor, beyond the contract's. */
@@ -131,9 +132,17 @@ export const DESK_SCREENS_TEXT = {
     hint2: '. A chosen widget moves with',
     hint3: ', resizes with',
     hint4: 'and the arrows, and goes with',
+    hintSwap: 'Moved onto one other widget, the two change places.',
+    hintTidy: ' moves every widget up and to the left, each keeping its size.',
+    keys: 'Keys',
+    tidy: 'Tidy up',
+    tidied: 'Tidied up.',
+    alreadyTidy: 'Already tidy.',
+    swapped: 'Swapped {a} and {b}.',
     empty: 'An empty page.',
     emptyHint: 'Drag widgets here, or press + on one.',
     addWidget: 'Add a widget',
+    connections: 'Connections',
     search: 'Search widgets',
     noMatch: 'No widget called “{q}” yet.',
     onThisPage: 'On this page',
@@ -158,6 +167,16 @@ export const DESK_SCREENS_TEXT = {
     lower: 'Lower',
     higher: 'Higher',
     sizes: 'From {min} to {max}. It shows more as it grows.',
+    shows: ARRANGE_WORDS.shows,
+    reading: ARRANGE_WORDS.reading,
+    shapes: {
+      small: ARRANGE_WORDS.sizes.s,
+      normal: DESK_SCREEN_WORDS.sizes.normal,
+      wide: ARRANGE_WORDS.sizes.w,
+      tall: 'Tall',
+      large: ARRANGE_WORDS.sizes.l,
+    } satisfies Record<SizePresetKey, string>,
+    shape: '{name}, {size}',
     touch: 'Touching it on the screen',
     touchServer: 'Opens {name}’s page, full screen.',
     touchBig: 'Opens it big, with Back.',
@@ -193,6 +212,7 @@ export const DESK_SCREENS_TEXT = {
       full: 'No room on this page. Make a widget smaller, or add a page.',
       pagesFull: 'A screen has at most 6 pages.',
       lastPage: 'A screen keeps at least one page.',
+      tidy: 'They don’t all fit packed together, so nothing moved.',
     },
   },
 } as const;
