@@ -41,4 +41,4 @@ the way a feed reader does, only from sites the person turned on.
 - **The place and the news sites in a backup file**: the box's own backups keep them with the database; a backup file
   doesn't yet.
 
-Open for John: MET Norway's terms ask that a responsible person read and accept them once.
+MET Norway's terms ask that a responsible person read and accept them once: John accepted them for Cybex on 2026-11-26.
