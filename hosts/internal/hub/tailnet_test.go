@@ -107,6 +107,18 @@ func TestTailnetAddressSurvivesTheLimit(t *testing.T) {
 	if code, b, _ := e.service("pe_1|John").req(http.MethodGet, "/api/v1/agent-install.sh?hub="+url.QueryEscape("wss://100.64.0.3:8443"), nil, nil); code != 200 {
 		t.Fatalf("installer for the tailnet address: %d %s", code, b)
 	}
+
+	// The agents' URL already the tailnet address: it takes no second place.
+	ifs = ifs[:16] // tailscale0 and 15 LAN addresses
+	e2 := headlessEnv(t, func(c *Config) {
+		c.AgentURL, c.AgentListen = "wss://100.64.0.3:8443", ":8443"
+		c.Interfaces = func() ([]netaddrs.Interface, error) { return ifs, nil }
+	})
+	got = e2.h.computeHubAddrs(e2.h.currentAgentURL(context.Background()))
+	if len(got) != maxHubAddrs || got[0] != "wss://100.64.0.3:8443" || got[15] != "wss://[fd7a:115c:a1e0::3]:8443" ||
+		!slices.Contains(got, "wss://10.100.13.5:8443") {
+		t.Fatalf("addrs with the tailnet agents' URL = %v", got)
+	}
 }
 
 // wget gets a timeout too, where it has one: BusyBox can be built
@@ -116,7 +128,7 @@ func TestInstallerWgetGivesUpQuickly(t *testing.T) {
 		name, help string
 		want       bool
 	}{
-		{"GNU", "  -T,  --timeout=SECONDS          set all timeout values to SECONDS", true},
+		{"GNU", "  -t,  --tries=NUMBER            set number of retries to NUMBER\\n  -T,  --timeout=SECONDS          set all timeout values to SECONDS", true},
 		{"BusyBox", "\t-T SEC\t\tNetwork read timeout is SEC seconds", true},
 		{"BusyBox without timeouts", "\t-q\t\tQuiet", false},
 	} {
@@ -151,6 +163,10 @@ func TestInstallerWgetGivesUpQuickly(t *testing.T) {
 			}
 			if n, err := strconv.Atoi(args[i+1]); err != nil || n < 1 || n > 60 {
 				t.Fatalf("-T %q", args[i+1])
+			}
+			// GNU wget tries 20 times by default; one try, as curl. BusyBox has no such option.
+			if gnu := strings.Contains(c.help, "--tries"); slices.Contains(args, "--tries=1") != gnu {
+				t.Fatalf("wget %q: --tries=1 should be there only for GNU wget", args)
 			}
 		})
 	}

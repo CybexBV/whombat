@@ -708,9 +708,11 @@ fetch() {
 		*) echo "install.sh: download failed: $1 (curl exit $rc)" >&2 ;;
 		esac
 	elif command -v wget >/dev/null 2>&1; then
-		# A 30 s timeout where this wget has one (BusyBox can be built without -T).
+		# A 30 s timeout where this wget has one (BusyBox can be built without -T),
+		# and one try like curl (GNU wget tries 20 times; BusyBox once).
 		wt=""
 		if wget --help 2>&1 | grep -qE '(^|[[:space:]])-T[ ,]'; then wt="-T 30"; fi
+		if wget --help 2>&1 | grep -q -- '--tries'; then wt="$wt --tries=1"; fi
 		if [ -n "$TLS_PIN" ]; then
 			# wget cannot pin a key: the checksum below verifies the binary.
 			wget -q $wt --no-check-certificate -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?

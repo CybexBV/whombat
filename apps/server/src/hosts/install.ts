@@ -123,7 +123,9 @@ export function tailnetAgentUrl(
   if (!family || !TAILNET.check(ip, family)) return null;
   let port = String(HOSTS_AGENT_PORT_DEFAULT);
   try {
-    port = new URL(agentUrl ?? '').port || port;
+    const u = new URL(agentUrl ?? '');
+    // A parsed URL leaves out its scheme's own port (443 for wss).
+    port = u.port || (u.protocol === 'wss:' ? '443' : port);
   } catch {
     // No agents' URL: the listener's default port.
   }

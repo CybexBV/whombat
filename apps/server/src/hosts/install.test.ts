@@ -133,6 +133,8 @@ describe('levels, commands and words', () => {
     expect(tailnetAgentUrl('::ffff:100.127.255.1', 'wss://10.100.0.2:9443')).toBe('wss://100.127.255.1:9443');
     expect(tailnetAgentUrl('fd7a:115c:a1e0::3', lan)).toBe('wss://[fd7a:115c:a1e0::3]:8443');
     expect(tailnetAgentUrl('100.64.0.3', null)).toBe('wss://100.64.0.3:8443');
+    // wss's own port is left out of a parsed URL: it is still the hub's port.
+    expect(tailnetAgentUrl('100.64.0.3', 'wss://10.100.0.2:443')).toBe('wss://100.64.0.3:443');
     // Reached any other way: the hub's own address stays.
     for (const local of [
       '10.100.0.2',
