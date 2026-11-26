@@ -20971,7 +20971,7 @@
           }
         ]
       },
-      "valid": false
+      "valid": true
     },
     {
       "state": {
@@ -21030,6 +21030,35 @@
         ]
       },
       "valid": false
+    },
+    {
+      "state": {
+        "v": 1,
+        "available": true,
+        "foreverAllowed": true,
+        "helpCodeRequired": true,
+        "environment": "prod",
+        "hostKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINW5nEYpnLC/ggxoMZMtKIrMTB3zH3cpPnngDIgx6CrR",
+        "grant": {
+          "level": "fix",
+          "since": "2026-10-21T14:00:00Z",
+          "until": null,
+          "grantedBy": {
+            "accountId": "acc_mara0001",
+            "name": "Mara Jansen"
+          },
+          "helpCode": "KQ72MX",
+          "wrongCodes": 0
+        },
+        "connected": [
+          {
+            "visitId": "12345",
+            "who": "Claude",
+            "since": "2026-10-21T14:05:00Z"
+          }
+        ]
+      },
+      "valid": true
     },
     {
       "state": {
