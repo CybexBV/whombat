@@ -994,3 +994,39 @@ weather-news.md WN-08, WN-09; runtime rows `desk-display-server.md` DK-S320…DK
 - **DK-201 *News*.** One of Whombat's own widgets: the newest headlines of the news sites the person turned on, each
   with its site and time, as a list. With no site on: “Choose your news in Settings”. Shown as it is on a locked
   screen. *Why:* John asked for local news; headlines are public.
+
+## Fusebox's subscriptions as blocks, every bar as blocks (2026-11-26)
+
+John, 2026-11-26 (main checkout), with a picture of Fusebox's *Subscriptions* on Home's screen showing four of six: “I
+expected to see all subscriptions here, similarly as we see them on the Fusebox dashboard. I would like to use the same
+bar as on the server info widget (blocks as the bar) for all bars in widgets.” Mockup first; then “I want to show
+provider icons also” and “we should be able to toggle usage left / remaining (in settings of the widget)”; then “build
+this fully”. Mockup: `/scratch/tmp/john/fusebox-subs-mockup/mockup.html`. Which subscriptions the page lists is
+fusebox-page.md FP-16. Contract: optional fields only (`DeskViewRow` `meters`, `mark`, `note`; `DeskCatalogItem`
+`limits`; `ThingPageCell` `mark`), no session minor: a screen that doesn't know meters draws the row's `progress` and
+words as before. The box's console reads the new fields (`grid.ts`) with the app 3.169.0 vendored.
+
+- **DK-210 Every bar is the server card's blocks.** Every bar a widget draws — a list row's, a figure's, a poster's, a
+  card's, the calm page's moments — is DK-152's blocks: lit up to the value, as many as fit at the server card's size
+  (about 9 px wide, 2 px apart), ten to twenty, so a long bar has wider blocks; measured where it is drawn. Colours stay
+  as they were. *Why:* John asked; one kind of bar reads as one system.
+- **DK-211 Rows of limits.** A list whose rows carry `meters` draws them as limits, by the widget's width: from 900 px
+  wide, each row its mark, name and plan, each limit's line (its short name, the blocks, “62 % used”) with when it
+  resets, and how it is on the right with its note under it (“used 2 min ago”); from 560 px, the limits beside the name
+  and how it is after the plan; narrower, the name with the last limit's words (or how it is, when that isn't fine) and
+  its blocks under it. Where those rows don't all fit, each becomes one tight line with its last limit only, its name in
+  the colour of how it is, so a 4 × 2 widget on the Z13 still shows six. A wide row grows to 104 px where there is room.
+  *Why:* the Fusebox dashboard's table, at a screen's sizes.
+- **DK-212 A row's mark.** A row may carry a brand's `mark` (`claude`, `openai`, `meta`), drawn before its name; a name
+  without a mark in `@whombat/brand` draws its first letter. Fusebox's providers have their dashboard's marks (LobeHub
+  Icons, MIT: Meta, Gemini, Vertex AI, Grok, Kimi, Devin); Antigravity's is drawn with blurs and masks a mark can't
+  hold, so it is its letter. *Why:* John asked for the providers' icons.
+- **DK-213 Used or left.** A widget of limits (Fusebox's *Subscriptions* and *Limits now*: the catalog item says
+  `limits`) has *Limits*: *Used* · *Left* in its settings on the web and the phone, used unless chosen (`opts.limits`
+  `left`). Left lights the blocks that are left and says “38 % left”; the colours follow what is used either way (amber
+  from 80 % used, red when all of it is). *Why:* John asked; Fusebox's dashboard has the same choice.
+- **DK-214 Fusebox's subscriptions on a screen.** Each subscription is a row: its tool's mark, its address, “Claude ·
+  Ultra”, the 5 hours only where the subscription has that limit and the week (unlit with a dash when nothing was read),
+  the week's reset, how it is (“Working”, “Used up until Fri 09:00”, “Off in Fusebox”) with when it was last used; the
+  header says how many work (“4 of 6 working”). *Limits now* draws each pool's week and 5 hours the same way with the
+  tool's mark. *Why:* as Fusebox's dashboard lists them.
