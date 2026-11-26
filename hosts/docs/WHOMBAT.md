@@ -515,7 +515,12 @@ no default route). Errors: 400 `invalid_control`, `invalid_name`,
 `/install.sh`, byte for byte: downloads from the agents' address
 (`https://<agents address>:<port>/download`, the listener's key pinned) and
 the agents' URL baked in, whatever `Host` the socket request named. 503
-`no_agent_url` like above. Whombat streams it to the server over SSH (§6).
+`no_agent_url` like above. `?via=<address>` is the machine's own end of
+Whombat's connection to the server: when it is an address of the Tailscale
+interface, both are that address on the agent listener's own port (400
+`bad_request` for any other address, and Whombat asks again without it).
+The answer names the agents' URL it carries in `X-Whombat-Agent-URL`. Whombat
+streams it to the server over SSH (§6).
 
 ### Consoles (`hosts.consoles.create`)
 

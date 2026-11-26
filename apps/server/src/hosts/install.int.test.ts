@@ -109,6 +109,9 @@ async function install(body: Record<string, unknown>): Promise<Job> {
 }
 
 const at = (n: number) => `10.100.0.${n}:${ssh.port}`;
+/** A server reached only over the tailnet, and the box's own tailnet address it is reached from. */
+const overTailnet = (n: number) => `100.101.0.${n}:${ssh.port}`;
+const TAILNET_SOURCE = '100.64.0.3';
 
 /** The real installer's lines for a server added as `hostname`. */
 function added(hostname: string, options: { report?: boolean } = {}) {
@@ -153,7 +156,11 @@ beforeAll(async () => {
     resolve: async (host) => {
       throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
     },
-    dialAddress: (a) => (a.startsWith('10.100.0.') ? '127.0.0.1' : a),
+    dialAddress: (a) => (/^(10\.100\.0|100\.10[12]\.0)\./.test(a) ? '127.0.0.1' : a),
+    // Servers at 100.101.0.x are reached over the tailnet: the box's end of the connection is its tailnet address.
+    // At 100.102.0.x the box's end is in the same range but isn't one of the hub's addresses (another VPN).
+    sourceAddress: (a) =>
+      a.startsWith('100.101.0.') ? TAILNET_SOURCE : a.startsWith('100.102.0.') ? '100.70.0.9' : undefined,
     deadlineMs: 3000,
   });
   installsFor(t.services).timing = { ...INSTALL_TIMING, signInMs: 3000, reportMs: 1500, pollMs: 100 };
@@ -416,6 +423,81 @@ describe('what the installer says', () => {
     expect(job.detail).not.toContain(token);
     expect(job.detail).not.toContain(ROOT_PASSWORD);
     expect(hub.tokens.has(token)).toBe(false);
+  });
+
+  it('gives a server reached over the tailnet the box’s tailnet address to call home on', async () => {
+    ssh.installer = added('far-1');
+    const job = await install({
+      address: overTailnet(14),
+      username: 'root',
+      auth: { kind: 'password', password: ROOT_PASSWORD },
+      control: 'watch',
+    });
+    expect(job).toMatchObject({ state: 'ready', serverId: 'far-1', error: null });
+    expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.get('via')).toBe('100.64.0.3');
+
+    // One that can't download from there says so with that address.
+    ssh.installer = () => ({
+      stdout: '',
+      stderr: 'install.sh: cannot reach https://100.64.0.3:8443/download/whombat-agent-linux-amd64\n',
+      code: 1,
+    });
+    const failed = await install({
+      address: overTailnet(15),
+      username: 'root',
+      auth: { kind: 'password', password: ROOT_PASSWORD },
+      control: 'watch',
+    });
+    expect(failed.error?.code).toBe('cant_reach_whombat');
+    expect(failed.error?.message).toContain('100.64.0.3:8443');
+
+    // A server on the box's own network keeps the box's LAN address (the hub's own choice).
+    ssh.installer = added('near-1');
+    const near = await install({
+      address: at(16),
+      username: 'root',
+      auth: { kind: 'password', password: ROOT_PASSWORD },
+      control: 'watch',
+    });
+    expect(near).toMatchObject({ state: 'ready', serverId: 'near-1' });
+    expect(hub.calls('GET', '/api/v1/agent-install.sh').at(-1)?.query.has('via')).toBe(false);
+  });
+
+  it('asks for the tailnet installer on the hub’s own listener, whatever port the agents’ address names', async () => {
+    // The agents' address is a forwarded port; the hub's listener on the tailnet is its own 8443.
+    const agentsUrl = hub.hubMeta.agents_url;
+    hub.hubMeta.agents_url = 'wss://hosts.example:443';
+    try {
+      ssh.installer = () => ({
+        stdout: '',
+        stderr: 'install.sh: cannot reach https://100.64.0.3:8443/download/whombat-agent-linux-amd64\n',
+        code: 1,
+      });
+      const job = await install({
+        address: overTailnet(17),
+        username: 'root',
+        auth: { kind: 'password', password: ROOT_PASSWORD },
+        control: 'watch',
+      });
+      expect(job.error?.code).toBe('cant_reach_whombat');
+      expect(job.error?.message).toContain('at 100.64.0.3:8443.');
+    } finally {
+      hub.hubMeta.agents_url = agentsUrl;
+    }
+  });
+
+  it('keeps the hub’s own address when the hub doesn’t have the one the connection came from', async () => {
+    ssh.installer = added('vpn-1');
+    const before = hub.calls('GET', '/api/v1/agent-install.sh').length;
+    const job = await install({
+      address: `100.102.0.14:${ssh.port}`,
+      username: 'root',
+      auth: { kind: 'password', password: ROOT_PASSWORD },
+      control: 'watch',
+    });
+    expect(job).toMatchObject({ state: 'ready', serverId: 'vpn-1', error: null });
+    const asked = hub.calls('GET', '/api/v1/agent-install.sh').slice(before);
+    expect(asked.map((c) => c.query.get('via'))).toEqual(['100.70.0.9', null]);
   });
 
   it('leaves a server of another Whombat alone', async () => {

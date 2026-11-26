@@ -933,7 +933,12 @@ A malformed `Host` gets 400 `bad host`.
 `install.sh` for a client that runs it itself (Whombat over SSH): the
 downloads and the agent URL are the agents' address with the listener's key
 pinned, never the request's `Host`. 503 `no_agent_url` when the hub does
-not know that address.
+not know that address. `?via=<address>` (the machine's own end of the
+caller's connection to the server): when it is an address of the Tailscale
+interface, the downloads and the agent URL are that address on the agent
+listener's own port, whatever port the agents' URL names; 400
+`bad_request` for any other address (another VPN in Tailscale's ranges
+included). `X-Whombat-Agent-URL` names the agent URL the script carries.
 
 **`GET /download/{name}`** (UI and agent listener):
 `whombat-agent-{linux,darwin}-{amd64,arm64}`, `whombat-helper-macos.zip`

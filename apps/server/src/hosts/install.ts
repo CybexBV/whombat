@@ -12,6 +12,7 @@
  * travel on stdin, never on a command line, and are never logged, signed, recorded or put in `detail` (SI-03).
  */
 import { randomBytes } from 'node:crypto';
+import { BlockList, isIPv4, isIPv6 } from 'node:net';
 import {
   HOST_MACOS_MIN_MAJOR,
   type HostControlLevel,
@@ -101,6 +102,21 @@ export function installCommand(way: RootWay, file: string, control: HostControlL
   if (way === 'root') return run;
   // `-k`: sudo always reads its password line, so the token is never taken for it, nor the password for the token.
   return way === 'sudo' ? `sudo -n ${run}` : `sudo -k -S -p '' ${run}`;
+}
+
+/** Tailscale's address ranges: 100.64.0.0/10 and its IPv6 prefix. */
+const TAILNET = new BlockList();
+TAILNET.addSubnet('100.64.0.0', 10, 'ipv4');
+TAILNET.addSubnet('fd7a:115c:a1e0::', 48, 'ipv6');
+
+/**
+ * The box's own end of the SSH connection (`local`) when it is in Tailscale's ranges, as a plain address; else null.
+ * The hosts service decides whether it is its Tailscale interface's and on which port its agents reach it there.
+ */
+export function tailnetSource(local: string | null | undefined): string | null {
+  const ip = (local ?? '').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  const family = isIPv4(ip) ? 'ipv4' : isIPv6(ip) ? 'ipv6' : null;
+  return family && TAILNET.check(ip, family) ? ip : null;
 }
 
 /** A path `mktemp` printed that is safe on a command line. */
@@ -372,12 +388,28 @@ export class HostInstalls {
       if (!token) throw new InstallStop({ code: 'failed', message: HOSTS_TEXT.down });
       job.secrets.token = token;
       job.enrollment = str(made.id) ? { id: str(made.id) as string, claimed: false } : null;
-      job.agents = agentsPlace(str(made.agent_url));
-      const script = await this.#hosts.text({
-        path: `${HOSTS_API}/agent-install.sh`,
-        actor: job.actor,
-        timeoutMs: 30_000,
-      });
+      // A server Whombat reached over the tailnet may have no way to the box's LAN address: it calls home on the box's
+      // tailnet address instead, the one this connection came from, on the port the hosts service listens on there. The
+      // service refuses an address that isn't its Tailscale interface's (another VPN in the same range): then its own
+      // agents' address, as for any other server.
+      const installer = (via?: string) =>
+        this.#hosts.textAnswer({
+          path: `${HOSTS_API}/agent-install.sh`,
+          ...(via ? { query: { via } } : {}),
+          actor: job.actor,
+          timeoutMs: 30_000,
+        });
+      const via = tailnetSource(opened.localAddress);
+      const answer =
+        (via
+          ? await installer(via).catch((err: unknown) => {
+              if (err instanceof HostsError && err.status === 400) return null;
+              throw err;
+            })
+          : null) ?? (await installer());
+      const script = answer.text;
+      const chosen = answer.headers['x-whombat-agent-url'];
+      job.agents = agentsPlace(typeof chosen === 'string' && chosen ? chosen : str(made.agent_url));
 
       // 4. Install: the script in a mktemp file, run as root with the token (and sudo's password) on stdin.
       const mk = await exec('mktemp');

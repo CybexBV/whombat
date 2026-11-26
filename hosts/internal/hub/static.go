@@ -358,8 +358,24 @@ func (h *Hub) installScript(viaAgent bool) http.HandlerFunc {
 // Unix socket headless): the script the agent listener serves at
 // /install.sh, for the Whombat server to run over SSH (SI-02). Its
 // downloads come from the agents' address with the listener's key pinned,
-// not from the Host the request named.
+// not from the Host the request named. `?via=<address>` is the machine's
+// own end of Whombat's connection to the server: when it is an address of
+// the Tailscale interface, the script downloads from it and the agent dials
+// it, on the listener's port (a server reached over the tailnet may have no
+// way to the LAN); any other address is refused, and Whombat asks again
+// without it. The answer names the agents' URL it chose in
+// X-Whombat-Agent-URL.
 func (h *Hub) apiAgentInstallScript(w http.ResponseWriter, r *http.Request, p *principal) error {
+	if via := r.URL.Query().Get("via"); via != "" {
+		au := h.tailnetAgentURL(via)
+		if au == "" {
+			return apiErr(http.StatusBadRequest, "bad_request", "via must be an address of this machine's Tailscale interface.")
+		}
+		if !h.writeInstallScript(w, "https://"+strings.TrimPrefix(au, "wss://"), au, h.listenerPin()) {
+			return apiErr(http.StatusBadRequest, "bad_request", "The tailnet address is not usable: "+au+".")
+		}
+		return nil
+	}
 	base, err := h.agentInstallBase()
 	if err != nil {
 		return apiErr(http.StatusServiceUnavailable, "no_agent_url", "The hub does not know the address agents reach it at: "+err.Error()+".")
@@ -397,11 +413,15 @@ func (h *Hub) writeInstallScript(w http.ResponseWriter, origin, agentURL, pin st
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(HeaderAgentURL, agentURL)
 	if err := installTmpl.Execute(w, data); err != nil {
 		h.log.Error("install.sh", "err", err)
 	}
 	return true
 }
+
+// HeaderAgentURL names the agents' URL an install script carries.
+const HeaderAgentURL = "X-Whombat-Agent-URL"
 
 // AgentUnit is the systemd unit install.sh writes: the agent package's unit
 // (packaging/agent/whombat-agent.service) with the binary in /usr/local/bin.
@@ -685,9 +705,9 @@ fetch() {
 	rc=0
 	if command -v curl >/dev/null 2>&1; then
 		if [ -n "$TLS_PIN" ]; then
-			curl -fsSL --insecure --pinnedpubkey "$TLS_PIN" -o "$2" "$1" || rc=$?
+			curl -fsSL --insecure --pinnedpubkey "$TLS_PIN" --connect-timeout 15 -o "$2" "$1" || rc=$?
 		else
-			curl -fsSL -o "$2" "$1" || rc=$?
+			curl -fsSL --connect-timeout 15 -o "$2" "$1" || rc=$?
 		fi
 		case "$rc" in
 		0) return 0 ;;
@@ -695,11 +715,16 @@ fetch() {
 		*) echo "install.sh: download failed: $1 (curl exit $rc)" >&2 ;;
 		esac
 	elif command -v wget >/dev/null 2>&1; then
+		# A 30 s timeout where this wget has one (BusyBox can be built without -T),
+		# and one try like curl (GNU wget tries 20 times; BusyBox once).
+		wt=""
+		if wget --help 2>&1 | grep -qE '(^|[[:space:]])-T[ ,]'; then wt="-T 30"; fi
+		if wget --help 2>&1 | grep -q -- '--tries'; then wt="$wt --tries=1"; fi
 		if [ -n "$TLS_PIN" ]; then
 			# wget cannot pin a key: the checksum below verifies the binary.
-			wget -q --no-check-certificate -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?
+			wget -q $wt --no-check-certificate -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?
 		else
-			wget -qO "$2" "$1" 2>"$TMP/wget.err" || rc=$?
+			wget -q $wt -O "$2" "$1" 2>"$TMP/wget.err" || rc=$?
 		fi
 		[ "$rc" = 0 ] || cat "$TMP/wget.err" >&2
 		# GNU wget: 4 network, 5 TLS; BusyBox wget exits 1 and says why.

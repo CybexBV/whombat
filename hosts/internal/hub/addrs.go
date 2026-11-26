@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -112,8 +113,10 @@ func (h *Hub) agentURLState() (previous string, changedAt time.Time) {
 // computeHubAddrs lists the addresses agents may reach the listener on: the
 // agents' URL first, then the addresses of the machine's own interfaces on
 // the listener's port (IPv4, then global IPv6; not loopback, link-local,
-// or container, VM and VPN interfaces, netaddrs.Virtual). A listener bound
-// to one address has only that one.
+// or container, VM and VPN interfaces, netaddrs.Virtual), then its Tailscale
+// addresses: servers at other sites may reach the box only over the
+// tailnet, and the agents on its own network keep it as a fallback. A
+// listener bound to one address has only that one.
 func (h *Hub) computeHubAddrs(first string) []string {
 	var out []string
 	if first != "" {
@@ -131,9 +134,10 @@ func (h *Hub) computeHubAddrs(first string) []string {
 		h.log.Debug("listing the network interfaces", "err", err)
 		return dedupe(out)
 	}
-	var v4, v6 []string
+	var v4, v6, tail4, tail6 []string
 	for _, ifc := range ifs {
-		if !ifc.Physical() {
+		tailnet := tailnetInterface(ifc)
+		if !ifc.Physical() && !tailnet {
 			continue
 		}
 		for _, p := range ifc.Prefixes {
@@ -141,19 +145,86 @@ func (h *Hub) computeHubAddrs(first string) []string {
 			if !a.IsGlobalUnicast() || a.IsLinkLocalUnicast() || a.IsLoopback() {
 				continue
 			}
+			if tailnet && !tailnetAddr(a) {
+				continue
+			}
 			u := "wss://" + net.JoinHostPort(a.String(), port)
-			if a.Is4() {
+			switch {
+			case tailnet && a.Is4():
+				tail4 = append(tail4, u)
+			case tailnet:
+				tail6 = append(tail6, u)
+			case a.Is4():
 				v4 = append(v4, u)
-			} else {
+			default:
 				v6 = append(v6, u)
 			}
 		}
 	}
-	out = dedupe(append(append(out, v4...), v6...))
+	// The tailnet's addresses keep their place at the limit: the hub serves
+	// installers only for the addresses it lists.
+	out = dedupe(slices.Concat(out, v4, v6))
+	tail := slices.DeleteFunc(slices.Concat(tail4, tail6), func(u string) bool { return slices.Contains(out, u) })
+	if room := max(maxHubAddrs-len(tail), 1); len(out) > room {
+		out = out[:room]
+	}
+	out = dedupe(append(out, tail...))
 	if len(out) > maxHubAddrs {
 		out = out[:maxHubAddrs]
 	}
 	return out
+}
+
+// Tailscale's address ranges: 100.64.0.0/10 (shared with carrier-grade NAT,
+// so only on a Tailscale interface) and its IPv6 ULA prefix.
+var (
+	tailnet4 = netip.MustParsePrefix("100.64.0.0/10")
+	tailnet6 = netip.MustParsePrefix("fd7a:115c:a1e0::/48")
+)
+
+// tailnetAddr reports whether a is in Tailscale's address ranges.
+func tailnetAddr(a netip.Addr) bool {
+	a = a.Unmap()
+	return tailnet4.Contains(a) || tailnet6.Contains(a)
+}
+
+// tailnetInterface reports whether ifc is the machine's Tailscale interface
+// (tailscale0), up.
+func tailnetInterface(ifc netaddrs.Interface) bool {
+	return ifc.Up && !ifc.Loopback && strings.HasPrefix(ifc.Name, "tailscale")
+}
+
+// tailnetAgentURL is the agents' URL on via, an address of the machine's
+// Tailscale interface, on the agent listener's own port (whatever port the
+// agents' URL names); "" when via isn't one, or the listener isn't bound to
+// it. Another interface's address in Tailscale's ranges (another VPN) is
+// never one: a server reached that way keeps the agents' URL.
+func (h *Hub) tailnetAgentURL(via string) string {
+	a, err := netip.ParseAddr(via)
+	if err != nil || a.Zone() != "" || !tailnetAddr(a) {
+		return ""
+	}
+	a = a.Unmap()
+	if host, _, err := net.SplitHostPort(h.cfg.AgentListen); err == nil && host != "" && host != "0.0.0.0" && host != "::" {
+		if b, err := netip.ParseAddr(host); err != nil || b.Unmap() != a {
+			return ""
+		}
+	}
+	ifs, err := h.interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, ifc := range ifs {
+		if !tailnetInterface(ifc) {
+			continue
+		}
+		for _, p := range ifc.Prefixes {
+			if p.Addr().Unmap() == a {
+				return "wss://" + net.JoinHostPort(a.String(), h.agentPort())
+			}
+		}
+	}
+	return ""
 }
 
 // interfaces lists the machine's interfaces (Config.Interfaces in tests).

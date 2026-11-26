@@ -5,7 +5,7 @@
  */
 import { GuideCard, HOST_INSTALL_DETAIL_MAX } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { installCommand, KEEP_KEY_COMMAND } from './install';
+import { installCommand, KEEP_KEY_COMMAND, tailnetSource } from './install';
 import {
   agentsPlace,
   hubSwitches,
@@ -125,6 +125,24 @@ describe('levels, commands and words', () => {
     );
     // The key goes on stdin, never on the command line.
     expect(KEEP_KEY_COMMAND).not.toMatch(/ssh-ed25519/);
+  });
+
+  it('names the box’s end of a connection over the tailnet, and nothing for any other way in', () => {
+    expect(tailnetSource('100.64.0.3')).toBe('100.64.0.3');
+    expect(tailnetSource('::ffff:100.127.255.1')).toBe('100.127.255.1');
+    expect(tailnetSource('fd7a:115c:a1e0::3')).toBe('fd7a:115c:a1e0::3');
+    for (const local of [
+      '10.100.0.2',
+      '100.128.0.1',
+      '100.63.255.255',
+      'fd00::5',
+      '127.0.0.1',
+      'fe80::1%eth0',
+      '',
+      null,
+      undefined,
+    ])
+      expect(tailnetSource(local)).toBeNull();
   });
 
   it('says what changed, plainly', () => {

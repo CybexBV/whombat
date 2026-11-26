@@ -119,7 +119,8 @@ func newInstallSandbox(t *testing.T, manager string) *installSandbox {
 	sb.write("/etc/os-release", "NAME=\"Debian GNU/Linux\"\nPRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\n", 0o644)
 	sb.write("/mock/id", "#!/bin/sh\necho \"${FAKE_UID:-0}\"\n", 0o755)
 	sb.write("/mock/uname", "#!/bin/sh\nif [ \"$1\" = -m ]; then echo \"${FAKE_ARCH:-x86_64}\"; else echo Linux; fi\n", 0o755)
-	sb.write("/mock/curl", "#!/bin/sh\ncp \"$FAKE_AGENT\" \"$3\"\n", 0o755)
+	// The fake curl writes the agent to the file after -o, wherever it is.
+	sb.write("/mock/curl", "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && exec cp \"$FAKE_AGENT\" \"$2\"; shift; done\nexit 2\n", 0o755)
 	// Platform probes answer nothing unless a test says so (the machine
 	// running the tests may have incus itself).
 	sb.write("/mock/incus", "#!/bin/sh\nexit 1\n", 0o755)
