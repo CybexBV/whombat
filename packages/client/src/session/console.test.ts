@@ -131,6 +131,7 @@ describe('consoles through the session', () => {
     expect(r.events.slice(0, 2)).toEqual(['open', 'message']);
   });
 
+  // 600 KB through the encrypted session takes about a second alone and several on a busy CI runner.
   it('carries messages larger than a frame and the window, paced by credit', async () => {
     const { session, got } = world();
     await connected(session);
@@ -144,11 +145,11 @@ describe('consoles through the session', () => {
     );
     socket.send(big);
     expect(socket.bufferedAmount).toBeGreaterThan(0);
-    await until(() => r.messages.length === 2, 5000);
+    await until(() => r.messages.length === 2, 15_000);
     expect(got.at(-1)).toEqual(big);
     expect(r.messages[1]).toEqual(big);
     await until(() => socket.bufferedAmount === 0);
-  });
+  }, 20_000);
 
   it('says why it was refused, in the appliance’s words', async () => {
     const { session } = world();
