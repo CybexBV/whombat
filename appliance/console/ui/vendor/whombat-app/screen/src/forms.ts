@@ -51,13 +51,17 @@ export function serverForm(w: number, h: number, down: boolean): ServerForm {
   return w < 4 ? 'meters' : 'chart';
 }
 
+/** Blocks in a bar `width` px wide, as the server card's are sized (about 9 px and 2 px apart): ten to twenty. */
+export function blocksIn(width: number): number {
+  return Math.max(10, Math.min(20, Math.floor((width + 2) / 11)));
+}
+
 /**
  * How many blocks a server's meters have in `width` px (the line's whole width: its name, the blocks, the percentage):
  * twenty as the cards had when there's room, fewer on a narrow widget so each block stays about 9 px wide, at least ten.
  */
 export function meterBlocks(width: number): number {
-  const blocks = width - 46 - 50 - 2 * 12;
-  return Math.max(10, Math.min(20, Math.floor((blocks + 2) / 11)));
+  return blocksIn(width - 46 - 50 - 2 * 12);
 }
 
 /** Posters with who's watching and how far are *Now playing*; without, a row of pictures (*Recently added*). */
@@ -122,6 +126,72 @@ export function figuresForm(
 export type ListForm = 'line' | 'rows';
 export function listForm(h: number): ListForm {
   return h === 1 ? 'line' : 'rows';
+}
+
+/**
+ * How rows of limits are drawn in a widget `pw` px wide: `wide` with each limit's reset and the row's state in
+ * a column of its own, `mid` with the limits beside the name, `narrow` with the last limit's blocks under the name.
+ */
+export type MeterRowsForm = 'wide' | 'mid' | 'narrow';
+export function meterRowsForm(pw: number): MeterRowsForm {
+  return pw >= 900 ? 'wide' : pw >= 560 ? 'mid' : 'narrow';
+}
+
+/** A wide row of limits grows to this height when there's room. */
+const METER_ROW_MAX = 104;
+
+/** The least height of a row of limits with `n` of them, in a form; a tight row has one line and its last limit. */
+function meterRowMin(form: MeterRowsForm, n: number, tight: boolean): number {
+  if (form === 'narrow') return tight ? 35 : 46;
+  if (tight) return 32;
+  const lines = Math.max(1, n);
+  if (form === 'mid') return Math.max(35, 18 * lines + 5 * (lines - 1)) + 10;
+  return Math.max(48, 18 * lines + 7 * (lines - 1)) + 20;
+}
+
+function fitRows(
+  rows: readonly { meters?: readonly unknown[] | undefined }[],
+  form: MeterRowsForm,
+  room: number,
+  tight: boolean,
+): { count: number; tallest: number } {
+  let used = 0;
+  let count = 0;
+  let tallest = 0;
+  for (const r of rows) {
+    const min = meterRowMin(form, r.meters?.length ?? 0, tight);
+    if (count > 0 && used + min > room) break;
+    used += min;
+    count += 1;
+    tallest = Math.max(tallest, min);
+  }
+  return { count, tallest };
+}
+
+/**
+ * How many rows of limits fit in `room` px (at least one), whether they are tight — one line each, the last limit only,
+ * where that shows them all and the usual rows don't (a 4 × 2 widget's six subscriptions) — and, on a wide widget, how
+ * high each is: as much as they share, up to 104 px, never less than the tallest needs.
+ */
+export function meterRowsFit(
+  rows: readonly { meters?: readonly unknown[] | undefined }[],
+  form: MeterRowsForm,
+  room: number,
+): { count: number; rowH: number; tight: boolean } {
+  let fit = fitRows(rows, form, room, false);
+  let tight = false;
+  if (form !== 'wide' && fit.count < rows.length) {
+    const tighter = fitRows(rows, form, room, true);
+    if (tighter.count > fit.count) {
+      fit = tighter;
+      tight = true;
+    }
+  }
+  const rowH =
+    form === 'wide' && fit.count > 0
+      ? Math.max(fit.tallest, Math.min(METER_ROW_MAX, Math.floor(room / fit.count)))
+      : fit.tallest;
+  return { count: Math.max(1, fit.count), rowH, tight };
 }
 
 /** Rows that fit under the header in `ph` px, `rowH` each, at least one. */

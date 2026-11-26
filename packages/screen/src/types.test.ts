@@ -9,6 +9,7 @@ import {
   FIXTURE_DOORBELL_GRID,
   FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_KINDS_GRID,
+  FIXTURE_LIMITS_VIEWS,
   FIXTURE_MONITOR_GRID,
   FIXTURE_PHOTO_BOARD_VIEWS,
   FIXTURE_SERVER_VIEWS,
@@ -88,7 +89,12 @@ describe('the fixtures', () => {
       expect(Core.DeskGrid.safeParse(grid).error?.issues).toBeUndefined();
       expect(Core.deskLayoutProblem(grid.layout)).toBeNull();
     }
-    for (const v of [...FIXTURE_VIEWS, ...FIXTURE_SERVER_VIEWS, ...FIXTURE_PHOTO_BOARD_VIEWS])
+    for (const v of [
+      ...FIXTURE_VIEWS,
+      ...FIXTURE_SERVER_VIEWS,
+      ...FIXTURE_PHOTO_BOARD_VIEWS,
+      ...FIXTURE_LIMITS_VIEWS,
+    ])
       expect(Core.DeskWidgetView.safeParse(v).error?.issues).toBeUndefined();
     expect(Core.DeskAttention.safeParse(FIXTURE_ATTENTION).success).toBe(true);
     for (const calm of [FIXTURE_CALM, FIXTURE_CALM_WRONG]) {

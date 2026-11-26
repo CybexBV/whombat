@@ -123,15 +123,19 @@ CC0 1.0 Universal. The others:
 | AI gateway | Lucide `sparkles` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | API | Lucide `braces` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Debian | Simple Icons `debian` (<https://www.debian.org/logos>) | the Debian Open Use Logo, Copyright (c) 1999 Software in the Public Interest, Inc., and others: LGPL-3.0-or-later or, at your option, CC BY-SA 3.0 (<https://www.debian.org/logos/>) |
+| Devin | LobeHub Icons `devin` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>) | MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above) |
 | Website feedback | Lucide `message-square-text` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Fedora | Simple Icons `fedora` (<https://docs.fedoraproject.org/en-US/project/brand/>) | its owner’s brand terms |
 | Find My | drawn for Whombat in Lucide's stroke: a location pin over two people (never Apple's Find My icon) | Cybex BV’s own |
 | Forgejo | Simple Icons `forgejo` (<https://codeberg.org/forgejo/meta/raw/branch/readme/branding/logo/forgejo-monochrome.svg>) | CC BY-SA 4.0, by Caesar Schinas |
 | Fusebox | Fusebox's `assets/icon.svg` (John's own product) | Unlicense |
+| Gemini | LobeHub Icons `gemini` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>), its colour gradients left out | MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above) |
 | Gentoo | Simple Icons `gentoo` (<https://wiki.gentoo.org/wiki/Project:Artwork/Artwork#Variations_of_the_.22g.22_logo>) | CC BY-SA 2.5 |
 | Google | Google's Sign-In branding “G” | Google’s brand terms |
 | Email | Lucide `mail` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
+| Kimi | LobeHub Icons `kimi` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>), its white letter in `currentColor` | MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above) |
 | Mac | Lucide `monitor` (Apple’s logo is a trademark and isn’t drawn) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
+| Meta | LobeHub Icons `meta` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>), its blue gradients drawn as flat blues | MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above) |
 | Microsoft | Microsoft's logo (four squares) | Microsoft’s brand terms |
 | Mollie | the “m” of docs.mollie.com `Mollie-Logo-Black-2023-Clearspace.svg`, on its app icon’s tile | Mollie’s brand, drawn as published |
 | Moneybird | moneybird.nl `/assets/images/moneybird-logo-mark-blue.svg` | Moneybird’s brand, drawn as published |
@@ -146,6 +150,8 @@ CC0 1.0 Universal. The others:
 | T3 Code | the “T3” of T3 Code's `assets/prod/logo.svg` (<https://github.com/pingdotgg/t3code>), without its black tile | MIT, Copyright (c) 2026 T3 Tools Inc. (the licence text under T3 Code above) |
 | Report tracker | Lucide `inbox` (a tracker connection shows its driver's own logo instead) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Website or address | Lucide `activity` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
+| Vertex AI | LobeHub Icons `vertexai` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>) | MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above) |
+| Grok | LobeHub Icons `grok` as Fusebox's dashboard draws it (<https://github.com/lobehub/lobe-icons>) | MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above) |
 
 The marks and the names are trademarks of their owners; showing them names the service or system and implies no
 endorsement.

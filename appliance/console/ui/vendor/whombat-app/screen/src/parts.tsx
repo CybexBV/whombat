@@ -4,7 +4,17 @@
  */
 import { isBrandMark, WORDMARKS } from '@whombat/brand';
 import { BrandMark } from '@whombat/brand/react';
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { blocksIn } from './forms';
 import type { DeskImage, DeskViewTone } from './types';
 import s from './widgets.module.css';
 
@@ -198,6 +208,13 @@ export function Header({
 
 /* Bars ----------------------------------------------------------------------------------------------------------- */
 
+/** A layout effect in the browser; on the server (a test's static markup) nothing to measure. */
+const useMeasure = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/**
+ * Every widget's bar is the server card's blocks: as many as fit at the server card's size, ten to twenty, so
+ * a long bar has wider blocks and a short one smaller. Measured where it is drawn; twenty until then.
+ */
 export function Bar({
   pct,
   colour,
@@ -210,15 +227,33 @@ export function Bar({
   className?: string;
 }) {
   const p = Math.max(0, Math.min(100, pct));
+  const ref = useRef<HTMLSpanElement>(null);
+  const count = useBlockCount(ref);
   return (
-    <span
-      className={cx(s.bar, thin && s.thin, toneClass(colour), className)}
-      role="img"
-      aria-label={`${p} %`}
-    >
-      <i style={{ width: `${p}%` }} />
+    <span ref={ref} className={cx(s.bar, thin && s.thin, className)} role="img" aria-label={`${p} %`}>
+      <Blocks pct={p} tone={colour ?? 'ok'} count={count} />
     </span>
   );
+}
+
+/** How many blocks fit in the element, again whenever its width changes. */
+export function useBlockCount(ref: { current: HTMLElement | null }): number {
+  const [count, setCount] = useState(METER_BLOCKS);
+  useMeasure(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      // Its layout width, before the screen's scale: the blocks are sized in the screen's own pixels.
+      const width = el.offsetWidth;
+      if (width > 0) setCount(blocksIn(width));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [ref]);
+  return count;
 }
 
 /** How many blocks a meter has: the server cards' twenty (Whombat desk-display.md DK-152). */

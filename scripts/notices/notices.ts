@@ -207,6 +207,7 @@ const MARK_LICENCES: Record<string, string> = {
   'CC0-1.0': 'CC0 1.0',
   ISC: 'ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies)',
   'MIT (sct)': 'MIT, Copyright (c) 2020 sct (the MIT License text under T3 Code above)',
+  'MIT (LobeHub)': 'MIT, Copyright (c) 2023 LobeHub (the MIT License text under T3 Code above)',
   'MIT (T3 Tools Inc.)': `MIT, ${T3_COPYRIGHT} (the licence text under T3 Code above)`,
   'CC-BY-4.0': 'CC BY 4.0',
   'CC-BY-SA-4.0': 'CC BY-SA 4.0',

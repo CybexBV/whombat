@@ -8,6 +8,7 @@ import {
   FIXTURE_CALM_WRONG,
   FIXTURE_DOORBELL_GRID,
   FIXTURE_DOORBELL_GRID_LOCKED,
+  FIXTURE_LIMITS_VIEWS,
   FIXTURE_NOW,
   FIXTURE_QUESTION,
   FIXTURE_TABLET_GRID,
@@ -37,7 +38,9 @@ const widget = (id: string, type: DeskWidget['type'], w: number, h: number) =>
   renderToStaticMarkup(
     <WidgetView
       widget={{ id, type, opts: {} }}
-      view={[...FIXTURE_VIEWS, ...FIXTURE_WEATHER_NEWS_VIEWS].find((v) => v.id === id)}
+      view={[...FIXTURE_VIEWS, ...FIXTURE_WEATHER_NEWS_VIEWS, ...FIXTURE_LIMITS_VIEWS].find(
+        (v) => v.id === id,
+      )}
       calm={FIXTURE_CALM}
       w={w}
       h={h}
@@ -335,5 +338,45 @@ describe('<WidgetPreview>', () => {
     expect(html).toContain('pve-01');
     expect(html).toContain('data-theme="dark"');
     expect(html).not.toContain('<button');
+  });
+});
+
+describe('limits and bars as blocks', () => {
+  const lit = (html: string) => (html.match(/data-on="true"/g) ?? []).length;
+
+  it('draws every subscription wide: its mark, its limits as blocks with their resets, how it is', () => {
+    const html = widget('w_fusebox_subs', 'panel', 8, 5);
+    for (const words of [
+      'work@example.com',
+      'Meta · Muse Code Max',
+      '5H',
+      'WEEK',
+      'resets 30 Nov',
+      'used 2 min ago',
+    ])
+      expect(html, words).toContain(words);
+    expect(html).toContain('4 of 6 working');
+    expect(html).toContain('Used up until Fri 09:00');
+    // Six rows, Meta's with two meters: seven lines of blocks.
+    expect(html.match(/role="img" aria-label="(5H|WEEK) /g)).toHaveLength(7);
+  });
+
+  it('keeps all six on half the screen, the state under the name; the week alone on a small one', () => {
+    const half = widget('w_fusebox_subs', 'panel', 4, 3);
+    expect(half).toContain('Claude · Max · Used up until Fri 09:00');
+    // The resets stay in what a screen reader hears, not on the half-screen row.
+    expect(half).not.toContain('>resets 2 Dec<');
+    expect(half.match(/muse@example.com/g)).toHaveLength(1);
+    const small = widget('w_fusebox_subs', 'panel', 2, 3);
+    expect(small).toContain('muse@example.com');
+    expect(small).toContain('1 % used');
+    expect(small).not.toContain('5H');
+  });
+
+  it('draws a bar as the server card’s blocks', () => {
+    const html = widget('w_queue', 'panel', 3, 2);
+    expect(html).not.toContain('width:78%');
+    // Twenty blocks until measured: 78 % lights sixteen of the first bar's.
+    expect(lit(html)).toBeGreaterThanOrEqual(16);
   });
 });

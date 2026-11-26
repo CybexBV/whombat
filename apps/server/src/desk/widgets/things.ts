@@ -28,6 +28,7 @@ import {
   type DeskWidgetSpec,
   DeskWidgetView,
   type DeskWidgetViewKind,
+  deskWidgetLimits,
   type ThingPage,
   thingId,
 } from '@whombat/core';
@@ -484,6 +485,7 @@ export function createThingWidgets(
       panel,
       item: spec.opts?.item,
       hint,
+      limits: deskWidgetLimits(spec.opts),
       now: ctx.now,
       timeZone: ctx.timeZone,
     });

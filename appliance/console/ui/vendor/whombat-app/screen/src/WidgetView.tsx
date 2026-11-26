@@ -4,7 +4,7 @@
  * a locked view says to unlock, a tone colours the card; touching it opens it big (DK-140), a server's own screen, or
  * what Whombat's own opened before.
  */
-import { type CSSProperties, memo, type ReactNode, useEffect, useState } from 'react';
+import { type CSSProperties, memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   BOARD_TILE_STACKED,
   chartForm,
@@ -15,6 +15,8 @@ import {
   headInCorner,
   listForm,
   meterBlocks,
+  meterRowsFit,
+  meterRowsForm,
   nowForm,
   photoEveryMs,
   pictureGrid,
@@ -34,6 +36,7 @@ import {
 } from './forms';
 import {
   Bar,
+  Blocks,
   cx,
   Face,
   Header,
@@ -46,6 +49,7 @@ import {
   Picture,
   strokeOf,
   toneClass,
+  useBlockCount,
   useEnv,
   useImage,
 } from './parts';
@@ -63,6 +67,7 @@ import type {
   DeskStripServer,
   DeskTextView,
   DeskViewFigure,
+  DeskViewMeter,
   DeskViewRow,
   DeskWeatherView,
   DeskWidget,
@@ -596,8 +601,141 @@ function ListRow({ r, queue }: { r: DeskViewRow; queue: boolean }) {
   );
 }
 
+/** One limit as the server card's line: its short name, the blocks, its words and, where there's room, its reset. */
+function MeterLine({
+  m,
+  withKey,
+  reset,
+  tight,
+}: {
+  m: DeskViewMeter;
+  withKey: boolean;
+  reset: boolean;
+  tight: boolean;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const count = useBlockCount(ref);
+  return (
+    <div
+      className={cx(s.lim, !withKey && s.limNoKey, reset && s.limReset, tight && s.limTight)}
+      role="img"
+      aria-label={[m.key, m.text, m.reset].filter(Boolean).join(' ')}
+    >
+      {withKey && <span className={s.meterKey}>{m.key ?? ''}</span>}
+      <span ref={ref} className={s.limBlocks}>
+        <Blocks pct={m.pct} tone={m.tone ?? 'ok'} count={count} />
+      </span>
+      <b className={s.limWords}>{m.text}</b>
+      {reset && <span className={s.limWhen}>{m.reset ?? ''}</span>}
+    </div>
+  );
+}
+
+/** A row's brand mark (Claude's, ChatGPT's); a brand without one, its name's first letter. */
+function RowMark({ r, size }: { r: DeskViewRow; size: number }) {
+  if (!r.mark) return null;
+  return (
+    <span className={cx(s.rowMark, r.tone === 'off' && s.rowMarkOff)}>
+      <Mark mark={r.mark} name={r.mark} size={size} />
+    </span>
+  );
+}
+
+/**
+ * Rows of limits (Fusebox's subscriptions): wide, each with its mark, name and plan, its limits as blocks with
+ * when they reset, and how it is; half as wide, the limits beside the name with how it is under it; narrow, the name
+ * with the last limit's words and its blocks under it (what isn't fine says so instead). Where they don't all fit so,
+ * each is one tight line with its last limit, its name in the colour of how it is.
+ */
+function MeterRows({ v, pw, ph }: { v: DeskListView; pw: number; ph: number }) {
+  const form = meterRowsForm(pw);
+  // The padding, the header and the space under it.
+  const used = 30 + 24 + 8;
+  const fit = meterRowsFit(v.rows, form, ph - used);
+  const tight = fit.tight;
+  const shown = v.rows.slice(0, fit.count);
+  const keys = v.rows.some((r) => r.meters?.some((m) => m.key));
+  const more = v.count !== undefined ? v.count : v.rows.length;
+  const right = v.head ?? (more > shown.length ? fillWords(W.list.count, { n: more }) : undefined);
+  return (
+    <>
+      <ViewHeader v={v} right={right} />
+      <div className={cx(s.limRows, form === 'wide' && s.limRowsWide)}>
+        {keyed(shown, (x) => x.title).map(([key, r]) => {
+          const meters = r.meters ?? [];
+          const tone = r.tone === 'ok' ? undefined : r.tone;
+          if (form === 'narrow') {
+            const last = meters[meters.length - 1];
+            const says = (!r.tone || r.tone === 'ok') && last ? last.text : (r.meta ?? last?.text);
+            return (
+              <div key={key} className={cx(s.limRow, s.limNarrow, tight && s.limNarrowTight)}>
+                <div className={s.limTop}>
+                  <RowMark r={r} size={tight ? 15 : 17} />
+                  <b className={cx(s.limTopTitle, r.tone === 'off' && s.cOff)}>{r.title}</b>
+                  {says && <em className={cx(s.limSays, toneClass(tone))}>{says}</em>}
+                </div>
+                {last && <MeterBlocks m={last} />}
+              </div>
+            );
+          }
+          const wide = form === 'wide';
+          const under = tight ? '' : wide ? r.detail : [r.detail, r.meta].filter(Boolean).join(' · ');
+          const lines = tight ? meters.slice(-1) : meters;
+          return (
+            <div
+              key={key}
+              className={cx(s.limRow, wide ? s.limWide : s.limMid, tight && s.limMidTight)}
+              style={wide ? { minHeight: fit.rowH } : undefined}
+            >
+              <div className={s.limWho}>
+                <RowMark r={r} size={wide ? 28 : tight ? 18 : 22} />
+                <div className={s.limName}>
+                  <b
+                    className={cx(s.limTitle, toneClass(tight ? tone : r.tone === 'off' ? 'off' : undefined))}
+                  >
+                    {r.title}
+                  </b>
+                  {under && <span className={s.limSub}>{under}</span>}
+                </div>
+              </div>
+              <div className={s.lims}>
+                {keyed(lines, (m) => m.key ?? m.text).map(([mk, m]) => (
+                  <MeterLine key={mk} m={m} withKey={keys} reset={wide} tight={!wide} />
+                ))}
+              </div>
+              {wide && (
+                <div className={s.limSt}>
+                  {r.meta && (
+                    <span>
+                      <i className={cx(s.limDot, toneClass(r.tone ?? 'ok'))} />
+                      <b className={cx(s.limState, toneClass(tone))}>{r.meta}</b>
+                    </span>
+                  )}
+                  {r.note && <span className={s.limNote}>{r.note}</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/** A narrow row's blocks, as wide as the row. */
+function MeterBlocks({ m }: { m: DeskViewMeter }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const count = useBlockCount(ref);
+  return (
+    <span ref={ref} className={s.limBar} role="img" aria-label={[m.key, m.text].filter(Boolean).join(' ')}>
+      <Blocks pct={m.pct} tone={m.tone ?? 'ok'} count={count} />
+    </span>
+  );
+}
+
 function ListBody({ v, w, h, pw, ph }: { v: DeskListView; w: number; h: number; pw: number; ph: number }) {
   const form = listForm(h);
+  if (form === 'rows' && v.rows.some((r) => r.meters?.length)) return <MeterRows v={v} pw={pw} ph={ph} />;
   const corner = headInCorner(v.head);
   const count =
     v.count !== undefined && v.count > v.rows.length ? fillWords(W.list.count, { n: v.count }) : null;

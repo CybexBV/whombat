@@ -111,7 +111,8 @@ export type DeskWidgetRef = z.infer<typeof DeskWidgetRef>;
 
 /**
  * A widget's own settings, small strings (DK-144): `panel` the panel's id, `range` a chart's (`1h`, `24h`, `7d`),
- * `lock` what it shows on a locked screen (`show`, `hide`). Unknown keys are kept and ignored.
+ * `lock` what it shows on a locked screen (`show`, `hide`), `limits` whether a widget of limits says what is used or
+ * what is left (`used`, `left`; used unless chosen). Unknown keys are kept and ignored.
  */
 export const DESK_WIDGET_OPTS_MAX = 8;
 export const DeskWidgetOpts = z
@@ -120,6 +121,12 @@ export const DeskWidgetOpts = z
 export type DeskWidgetOpts = z.infer<typeof DeskWidgetOpts>;
 export const DESK_WIDGET_RANGES = ['1h', '24h', '7d'] as const;
 export const DESK_WIDGET_LOCK = ['show', 'hide'] as const;
+export const DESK_WIDGET_LIMITS = ['used', 'left'] as const;
+export type DeskWidgetLimits = (typeof DESK_WIDGET_LIMITS)[number];
+/** What a widget of limits says (`opts.limits`): what is left only when chosen. */
+export function deskWidgetLimits(opts: Readonly<Record<string, string>> | undefined): DeskWidgetLimits {
+  return opts?.limits === 'left' ? 'left' : 'used';
+}
 
 /** What a widget is and shows, without its place: the editor asks the runtime for views of these. */
 export const DeskWidgetSpec = z.object({
@@ -399,14 +406,36 @@ export const DeskViewFigure = z.object({
 });
 export type DeskViewFigure = z.infer<typeof DeskViewFigure>;
 
-/** A row of a list: “21:00” “The Bear” “S3 E5 · tonight” “1.1 GB”, with a bar, a light's state or a picture. */
+/**
+ * One of a row's limits or shares, drawn as the server card's blocks: its short name (“5H”, “WEEK”), the blocks lit up to
+ * `pct`, its words (“62 % used”, “38 % left”), when it resets (“resets 2 Dec”) and its colour.
+ */
+export const DeskViewMeter = z.object({
+  key: line(8).optional(),
+  pct: Pct,
+  text: line(24),
+  reset: line(24).optional(),
+  tone: DeskViewTone.optional(),
+});
+export type DeskViewMeter = z.infer<typeof DeskViewMeter>;
+export const DESK_VIEW_METERS_MAX = 3;
+
+/**
+ * A row of a list: “21:00” “The Bear” “S3 E5 · tonight” “1.1 GB”, with a bar, a light's state or a picture. A row of
+ * limits (a subscription's 5 hours and week) has its `meters` instead of one bar, its brand's `mark` before the title
+ * (Claude's, ChatGPT's) and a `note` under `meta` where the row is wide (“used 2 min ago” under “Working”); `progress`
+ * and `detail` still say the same for a screen that doesn't draw meters.
+ */
 export const DeskViewRow = z.object({
   title: line(120),
   detail: line(120).optional(),
   meta: line(40).optional(),
+  note: line(40).optional(),
   time: line(16).optional(),
   tone: DeskViewTone.optional(),
   progress: Pct.optional(),
+  meters: z.array(DeskViewMeter).max(DESK_VIEW_METERS_MAX).optional(),
+  mark: Mark.optional(),
   state: z.enum(['on', 'off']).optional(),
   image: DeskImage.optional(),
 });
@@ -730,6 +759,8 @@ export const DeskCatalogItem = z.object({
     .optional(),
   /** It shows what a locked screen leaves out unless chosen (DK-138): the editor offers *On a locked screen*. */
   private: z.boolean().optional(),
+  /** Its bars are limits (Fusebox's subscriptions): the editor offers *Limits*, what is used or what is left. */
+  limits: z.boolean().optional(),
 });
 export type DeskCatalogItem = z.infer<typeof DeskCatalogItem>;
 

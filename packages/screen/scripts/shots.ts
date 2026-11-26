@@ -63,6 +63,7 @@ const SHOTS: Record<string, { width: number; height: number; act?: (page: Page) 
   'f-servers': { width: 1900, height: 1700 },
   'f-photo-board': { width: 1900, height: 2600 },
   'f-weather-news': { width: 1900, height: 2700 },
+  'f-limits': { width: 1900, height: 1900 },
 };
 
 async function bundle(): Promise<void> {
@@ -116,7 +117,7 @@ async function main() {
       await page.waitForFunction(() => [...document.images].every((i) => i.complete && i.naturalWidth > 0));
       await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
       const file = join(out, `${name}.png`);
-      if (['f-sizes', 'f-servers', 'f-photo-board', 'f-weather-news'].includes(name))
+      if (['f-sizes', 'f-servers', 'f-photo-board', 'f-weather-news', 'f-limits'].includes(name))
         await page.locator('.sheet').screenshot({ path: file });
       else await page.screenshot({ path: file });
       await page.close();

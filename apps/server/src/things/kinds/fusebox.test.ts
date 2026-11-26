@@ -390,6 +390,8 @@ const SNAPSHOT: FuseboxSnapshot = {
     models: 38,
   },
   accounts: ACCOUNTS,
+  others: [],
+  signedIn: new Set(),
   more: new Map([
     [
       JOHN,
@@ -578,6 +580,59 @@ describe('the page (FP-06…FP-11), in slots', () => {
     // Without a combined 5 hours, its row is left out.
     const live = panel(v, 'limits');
     expect(live?.kind === 'gallery' && live.items.some((i) => i.id === 'claude-5h')).toBe(false);
+  });
+
+  it('lists every subscription Fusebox does: one that is off, and other tools’ with their marks', () => {
+    const OFF = `gwa_${'e'.repeat(24)}`;
+    const META = `gwa_${'f'.repeat(24)}`;
+    const off: GatewayAccountUsage = {
+      key: OFF,
+      label: 'old@example.com',
+      provider: 'claude',
+      plan: null,
+      status: 'off',
+      until: null,
+      windows: [],
+    };
+    const snapshot: FuseboxSnapshot = {
+      ...SNAPSHOT,
+      accounts: [...ACCOUNTS, off],
+      signedIn: new Set([JOHN, OPS, DEV, CODEX, OFF]),
+      others: [
+        {
+          key: META,
+          label: 'muse@example.com',
+          provider: 'meta',
+          plan: 'Muse Code Max',
+          noFiveHourLimit: false,
+          status: 'ok',
+          until: null,
+          windows: [
+            { kind: 'five_hour', label: '5-hour', usedPct: 3, resetsAt: null, status: 'ok' },
+            { kind: 'seven_day', label: '7-day', usedPct: 1, resetsAt: null, status: 'ok' },
+          ],
+        },
+      ],
+    };
+    const v = fuseboxView(input({ snapshot }));
+    const subs = panel(v, 'subscriptions');
+    if (subs?.kind !== 'table') throw new Error('no subscriptions');
+    expect(subs.meta).toBe('5 of 6 working');
+    const cells = (key: string) => subs.rows.find((r) => r.id === key)?.cells;
+    expect(cells(OFF)?.subscription).toMatchObject({
+      text: 'old@example.com',
+      note: 'Claude',
+      mark: 'claude',
+    });
+    expect(cells(OFF)?.status?.text).toBe('Off in Fusebox');
+    expect(cells(CODEX)?.subscription?.mark).toBe('openai');
+    expect(cells(META)?.subscription).toMatchObject({ note: 'Meta · Muse Code Max', mark: 'meta' });
+    expect(cells(META)?.five?.text).toBe('3 %');
+    // The other tools count in Through Fusebox and in the facts; the pools stay Claude's and ChatGPT's.
+    const inv = panel(v, 'gateway');
+    expect(inv?.kind === 'list' && inv.items[0]?.figure?.value).toBe('6');
+    expect(JSON.stringify(v.facts[0])).toContain('1 Meta');
+    expect(panel(v, 'limits')?.kind === 'gallery').toBe(true);
   });
 
   it('draws the forecast only when it is within the range ahead (FP-S03)', () => {

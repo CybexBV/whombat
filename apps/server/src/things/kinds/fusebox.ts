@@ -25,8 +25,13 @@ import { and, count, eq, gte } from 'drizzle-orm';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { burrows, dispatches, type StoredGatewayFault } from '../../db/schema/index';
 import {
+  type FuseboxOtherSubscription,
+  fuseboxProviderMark,
+  fuseboxSignedIn,
+  fuseboxToolName,
   gatewayAccountKey,
   mapFuseboxAccounts,
+  mapFuseboxOtherSubscriptions,
   mergeFaults,
   parseFuseboxFaults,
   planWords,
@@ -157,6 +162,10 @@ export interface FuseboxSnapshot {
   readAt: Date;
   overview: FuseboxOverview | null;
   accounts: GatewayAccountUsage[];
+  /** The subscriptions of other tools (Meta, Gemini, Grok…), listed beside the pools'. */
+  others: FuseboxOtherSubscription[];
+  /** The keys of the Claude and ChatGPT accounts Fusebox signs in to: subscriptions also while off and unread. */
+  signedIn: ReadonlySet<string>;
   /** By account key. */
   more: Map<string, FuseboxAccountMore>;
   faults: StoredGatewayFault[];
@@ -368,6 +377,8 @@ async function readFusebox(
     readAt: now,
     overview: parseOverview(overview),
     accounts: mapped,
+    others: mapFuseboxOtherSubscriptions(row.id, accounts, parsedFaults, now),
+    signedIn: fuseboxSignedIn(row.id, accounts),
     more: parseAccountsMore(accounts, (id) => keys.get(id) ?? id),
     faults: parsedFaults,
     ids: keys,
@@ -605,9 +616,47 @@ export function requestLines(input: Pick<FuseboxInput, 'points' | 'range' | 'now
 }
 
 /** The Subscriptions table (FP-07). */
-function subscriptionRows(input: FuseboxInput, labelOf: (key: string) => string): ThingPageRow[] {
+/** A subscription as the page lists it: one of the pools' (Claude, ChatGPT) or another tool's (Meta). */
+interface Subscription {
+  key: string;
+  label: string;
+  /** Fusebox's provider id (`claude`, `codex`, `meta`). */
+  provider: string;
+  plan: string | null;
+  status: GatewayAccountUsage['status'];
+  until: string | null;
+  windows: GatewayAccountUsage['windows'];
+  noFiveHourLimit: boolean;
+}
+
+/**
+ * Every subscription Fusebox's dashboard lists: the Claude and ChatGPT ones, also one that is off and so has no
+ * limits read, then the other tools' in Fusebox's order.
+ */
+export function subscriptionsOf(
+  snapshot: Pick<FuseboxSnapshot, 'accounts' | 'others' | 'signedIn'>,
+): Subscription[] {
+  const pools = snapshot.accounts
+    .filter((a) => isSubscription(a) || snapshot.signedIn.has(a.key))
+    .map((a) => ({
+      key: a.key,
+      label: a.label,
+      provider: a.provider as string,
+      plan: a.planName ?? planWords(a.plan),
+      status: a.status,
+      until: a.until,
+      windows: a.windows,
+      noFiveHourLimit: !!a.noFiveHourLimit,
+    }));
+  return [...pools, ...snapshot.others];
+}
+
+const working = (a: Pick<Subscription, 'status'>) => a.status === 'ok' || a.status === 'rate_limited';
+
+/** The Subscriptions table's rows: each with its tool's mark for the screen, its 5 hours and week, and how it is. */
+function subscriptionRows(input: FuseboxInput, subs: readonly Subscription[]): ThingPageRow[] {
   const { snapshot, now, timeZone } = input;
-  return snapshot.accounts.filter(isSubscription).map((a) => {
+  return subs.map((a) => {
     const window = (kind: string) => a.windows.find((w) => w.kind === kind);
     const meter = (kind: string) => {
       if (kind === 'five_hour' && a.noFiveHourLimit) return { text: 'No limit', tone: 'muted' as const };
@@ -625,13 +674,15 @@ function subscriptionRows(input: FuseboxInput, labelOf: (key: string) => string)
     const until =
       a.until && (a.status === 'used_up' || a.status === 'rate_limited') ? new Date(a.until) : null;
     const last = snapshot.more.get(a.key)?.lastUsed ?? null;
-    const plan = a.planName ?? planWords(a.plan);
+    const tool = fuseboxToolName(a.provider);
+    const mark = fuseboxProviderMark(a.provider);
     return {
       id: a.key,
       cells: {
         subscription: {
-          text: clip(labelOf(a.key), 200),
-          note: plan ? `${TOOL_NAME[a.provider]} · ${plan}` : TOOL_NAME[a.provider],
+          text: clip(a.label, 200),
+          note: a.plan ? `${tool} · ${a.plan}` : tool,
+          ...(mark ? { mark } : {}),
         },
         five: meter('five_hour'),
         week: meter('seven_day'),
@@ -807,8 +858,7 @@ const sumOf = (m: ReadonlyMap<string, number>, keys: readonly string[]) =>
 export function fuseboxInventory(input: FuseboxInput): InventoryPanel | null {
   const { snapshot, now, timeZone, url } = input;
   const items: ThingPageItem[] = [];
-  const subs = snapshot.accounts.filter(isSubscription);
-  const working = (a: GatewayAccountUsage) => a.status === 'ok' || a.status === 'rate_limited';
+  const subs = subscriptionsOf(snapshot);
   if (subs.length) {
     const on = subs.filter((a) => a.status !== 'off');
     const broken = on.filter((a) => !working(a)).length;
@@ -829,7 +879,7 @@ export function fuseboxInventory(input: FuseboxInput): InventoryPanel | null {
       }),
     );
   }
-  const keys = snapshot.accounts.filter((a) => !isSubscription(a));
+  const keys = snapshot.accounts.filter((a) => !isSubscription(a) && !snapshot.signedIn.has(a.key));
   if (keys.length) {
     const ids = new Set(keys.map((a) => a.key));
     const dry = snapshot.faults.filter(
@@ -1014,16 +1064,15 @@ function fuseboxMore(
       panels.push(rest);
     }
   }
-  const subs = subscriptionRows(input, labelOf);
+  const all = subscriptionsOf(snapshot);
+  const subs = subscriptionRows(input, all);
   if (subs.length) {
-    const working = accounts.filter(
-      (a) => isSubscription(a) && (a.status === 'ok' || a.status === 'rate_limited'),
-    ).length;
+    const on = all.filter(working).length;
     panels.push({
       kind: 'table',
       id: 'subscriptions',
       title: 'Subscriptions',
-      meta: `${working} working`,
+      meta: on === all.length ? `All ${on} working` : `${on} of ${all.length} working`,
       columns: [
         { key: 'subscription', label: 'Subscription' },
         { key: 'five', label: '5 hours', numeric: true },
@@ -1107,13 +1156,13 @@ export function fuseboxView(input: FuseboxInput): KindView {
   const labelOf = (key: string) => labels.get(key) ?? 'A subscription';
 
   const facts: ThingLine[] = [];
-  const subsOf = (tool: GatewayProvider) =>
-    accounts.filter((a) => a.provider === tool && isSubscription(a)).length;
-  const counts = POOL_TOOLS.filter((t) => subsOf(t) > 0).map((t) => `**${subsOf(t)} ${TOOL_NAME[t]}**`);
+  const subs = subscriptionsOf(snapshot);
+  const tools = [...new Set(subs.map((a) => a.provider))];
+  const counts = tools.map((t) => `**${subs.filter((a) => a.provider === t).length} ${fuseboxToolName(t)}**`);
   if (counts.length)
     facts.push(
       line(
-        `${counts.join(' and ')} ${accounts.filter(isSubscription).length === 1 ? 'subscription' : 'subscriptions'}`,
+        `${counts.length > 1 ? `${counts.slice(0, -1).join(', ')} and ${counts[counts.length - 1]}` : counts[0]} ${subs.length === 1 ? 'subscription' : 'subscriptions'}`,
       ),
     );
   if (snapshot.overview?.version) facts.push(line(`Fusebox **${snapshot.overview.version}**`));
@@ -1208,6 +1257,8 @@ export async function fuseboxPage(ctx: KindCtx): Promise<KindView> {
           readAt: stored.observedAt ?? now,
           overview: null,
           accounts: stored.accounts,
+          others: [],
+          signedIn: new Set(),
           more: new Map(),
           faults: stored.faults,
           ids: new Map(

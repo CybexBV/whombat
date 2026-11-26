@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { FIXTURE_VIEWS } from './fixtures';
 import {
   bigSize,
+  blocksIn,
   clockForm,
   figuresForm,
   fitFont,
   headInCorner,
   meterBlocks,
+  meterRowsFit,
+  meterRowsForm,
   nowForm,
   pagesAt,
   photoEveryMs,
@@ -109,6 +112,9 @@ describe('the forms by size', () => {
   it('gives a server’s meters the cards’ twenty blocks where there’s room, never fewer than ten', () => {
     // The old card's width (a third of the Z13) has room for twenty, a 2 × 2 widget for thirteen.
     expect(meterBlocks(354)).toBe(20);
+    expect(blocksIn(300)).toBe(20);
+    expect(blocksIn(150)).toBe(13);
+    expect(blocksIn(40)).toBe(10);
     expect(meterBlocks(265)).toBe(13);
     expect(meterBlocks(120)).toBe(10);
   });
@@ -231,5 +237,24 @@ describe('a photo view (DK-160)', () => {
     expect(photoEveryMs(undefined)).toBe(120_000);
     expect(photoEveryMs(45)).toBe(45_000);
     expect(photoEveryMs(5)).toBe(30_000);
+  });
+});
+
+describe('rows of limits', () => {
+  const rows = (...n: number[]) => n.map((count) => ({ meters: Array.from({ length: count }, () => ({})) }));
+
+  it('is wide with resets from 900 px, beside the name from 560, else the week under the name', () => {
+    expect([1204, 900, 614, 560, 457].map(meterRowsForm)).toEqual(['wide', 'wide', 'mid', 'mid', 'narrow']);
+  });
+
+  it('fits as many rows as there is room for, a wide one up to 104 px high', () => {
+    expect(meterRowsFit(rows(1, 1, 1, 1, 1, 2), 'wide', 654)).toEqual({ count: 6, rowH: 104, tight: false });
+    expect(meterRowsFit(rows(1, 1, 1, 1, 1, 2), 'mid', 368)).toMatchObject({ count: 6, tight: false });
+    // A 4 × 2 widget on the Z13 has 220 px for its rows: six tight ones fit where four usual ones do.
+    expect(meterRowsFit(rows(1, 1, 1, 1, 1, 2), 'mid', 220)).toMatchObject({ count: 6, tight: true });
+    expect(meterRowsFit(rows(1, 1, 1, 1, 1, 2), 'narrow', 220)).toMatchObject({ count: 6, tight: true });
+    expect(meterRowsFit(rows(1, 1, 1, 1, 1, 2), 'narrow', 150)).toMatchObject({ count: 4, tight: true });
+    // Never none.
+    expect(meterRowsFit(rows(2), 'wide', 10).count).toBe(1);
   });
 });

@@ -14,6 +14,7 @@ import {
   FIXTURE_DOORBELL_GRID,
   FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_KINDS_GRID,
+  FIXTURE_LIMITS_VIEWS,
   FIXTURE_MONITOR_GRID,
   FIXTURE_NAME,
   FIXTURE_NOW,
@@ -451,7 +452,79 @@ export const SHOTS: Record<string, () => ReactNode> = {
   'f-servers': () => <Servers />,
   'f-photo-board': () => <PhotoBoard />,
   'f-weather-news': () => <WeatherNews />,
+  'f-limits': () => <Limits />,
 };
+
+/** `f-limits`: Fusebox's subscriptions and limits as rows of blocks in every form, and bars as blocks. */
+function Limits() {
+  const g = screenGrid(1280, 800);
+  const views = [...FIXTURE_LIMITS_VIEWS, ...FIXTURE_VIEWS, ...FIXTURE_SERVER_VIEWS];
+  const rows: [string, string, [string, 'panel', number, number][]][] = [
+    ['Subscriptions, wide', 'the whole screen', [['w_fusebox_subs', 'panel', 8, 5]]],
+    [
+      'Subscriptions',
+      'half, small',
+      [
+        ['w_fusebox_subs', 'panel', 4, 2],
+        ['w_fusebox_subs', 'panel', 4, 3],
+        ['w_fusebox_subs', 'panel', 2, 2],
+        ['w_fusebox_subs', 'panel', 2, 3],
+      ],
+    ],
+    [
+      'Limits',
+      'the pools, left',
+      [
+        ['w_fusebox_limits', 'panel', 4, 2],
+        ['w_fusebox_limits', 'panel', 2, 2],
+      ],
+    ],
+    [
+      'Bars as blocks',
+      'a queue, storage, a figure',
+      [
+        ['w_queue', 'panel', 3, 2],
+        ['w_pve01_storage', 'panel', 3, 2],
+        ['w_storage', 'panel', 2, 1],
+      ],
+    ],
+  ];
+  return (
+    <EnvProvider value={{ assistant: FIXTURE_ASSISTANT, timeZone: FIXTURE_TIME_ZONE, editing: false }}>
+      <div className="sheet">
+        <h2>Limits and bars</h2>
+        {rows.map(([name, sub, shots]) => (
+          <div key={name} className="srow" style={{ flexWrap: 'wrap' }}>
+            <div className="tl">
+              {name}
+              <span>{sub}</span>
+            </div>
+            {shots.map(([id, type, w, h]) => {
+              const r = cellRect(g, { x: 0, y: 0, w, h });
+              return (
+                <div key={`${id}-${w}x${h}`} className="smp">
+                  <div className="sz">
+                    {w} × {h}
+                  </div>
+                  <div style={{ position: 'relative', width: r.width, height: r.height }}>
+                    <WidgetView
+                      widget={{ id, type, opts: {} }}
+                      view={views.find((v) => v.id === id)}
+                      w={w}
+                      h={h}
+                      pw={r.width}
+                      ph={r.height}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </EnvProvider>
+  );
+}
 
 /** `f-weather-news`: the weather (Whombat weather-news.md) in every form, at night, not read; the news, and with none on. */
 function WeatherNews() {

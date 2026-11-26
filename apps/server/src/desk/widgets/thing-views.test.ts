@@ -5,6 +5,7 @@
  */
 import { DeskWidgetView, type ThingPagePanel } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
+import { kindHints } from './thing-kinds';
 import { NOW, pageOf, pictureRef, TZ } from './thing-testing';
 import {
   catalogItems,
@@ -14,6 +15,7 @@ import {
   figuresView,
   NO_HINTS,
   type PanelHint,
+  panelHint,
   panelView,
   rowTime,
   slotFigures,
@@ -427,5 +429,147 @@ describe('a slots page’s figures', () => {
       ['f-tank', '92 %', 'warn'],
       ['f-fast', '40 %', undefined],
     ]);
+  });
+});
+
+describe('limits as meters of blocks', () => {
+  const fusebox = kindHints('fusebox');
+  const subsHint = panelHint(fusebox, 'subscriptions');
+  const limitsHint = panelHint(fusebox, 'limits');
+  const meter = (used: number) => ({ text: `${used} %`, mono: true, meter: used / 100 });
+  const subs: ThingPagePanel = {
+    kind: 'table',
+    id: 'subscriptions',
+    place: 'main',
+    title: 'Subscriptions',
+    meta: '2 of 3 working',
+    columns: [
+      { key: 'subscription', label: 'Subscription' },
+      { key: 'five', label: '5 hours', numeric: true },
+      { key: 'week', label: 'Week', numeric: true },
+      { key: 'resets', label: 'Week resets' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      {
+        id: 'a',
+        cells: {
+          subscription: { text: 'work@example.com', note: 'Claude · Ultra', mark: 'claude' },
+          five: { text: 'No limit', tone: 'muted' },
+          week: { ...meter(92), tone: 'warn' },
+          resets: { text: '2 Dec', mono: true },
+          status: { text: 'Working', dot: 'ok', note: '2 min ago' },
+        },
+      },
+      {
+        id: 'b',
+        cells: {
+          subscription: { text: 'muse@example.com', note: 'Meta · Muse Code Max', mark: 'meta' },
+          five: meter(3),
+          week: meter(1),
+          resets: { text: '30 Nov', mono: true },
+          status: { text: 'Working', dot: 'ok' },
+        },
+      },
+      {
+        id: 'c',
+        cells: {
+          subscription: { text: 'old@example.com', note: 'Claude', mark: 'claude' },
+          five: { text: '—', tone: 'muted' },
+          week: { text: '—', tone: 'muted' },
+          resets: { text: '—', tone: 'muted' },
+          status: { text: 'Off in Fusebox', dot: 'off' },
+        },
+      },
+    ],
+  };
+  const draw = (panel: ThingPagePanel, hint: PanelHint | undefined, limits?: 'used' | 'left') =>
+    panelView({
+      b,
+      thing: THING,
+      page: pageOf({ panels: [panel] }, { catalogId: 'fusebox', name: 'Fusebox' }),
+      panel,
+      hint,
+      limits,
+      now: NOW,
+      timeZone: TZ,
+    });
+
+  it('draws each subscription with its mark, its limits as blocks, the week’s reset and how it is', () => {
+    const v = listOf(draw(subs, subsHint));
+    expect(DeskWidgetView.safeParse(v).success).toBe(true);
+    expect(v.head).toBe('2 of 3 working');
+    expect(v.rows[0]).toMatchObject({
+      title: 'work@example.com',
+      detail: 'Claude · Ultra',
+      meta: 'Working',
+      note: 'used 2 min ago',
+      tone: 'ok',
+      mark: 'claude',
+      // A screen without meters draws the week's bar, as it did.
+      progress: 92,
+    });
+    // No 5-hour limit: only the week, amber from 80 %.
+    expect(v.rows[0]?.meters).toEqual([
+      { key: 'WEEK', pct: 92, text: '92 % used', reset: 'resets 2 Dec', tone: 'warn' },
+    ]);
+    expect(v.rows[1]?.meters?.map((m) => [m.key, m.text, m.reset])).toEqual([
+      ['5H', '3 % used', undefined],
+      ['WEEK', '1 % used', 'resets 30 Nov'],
+    ]);
+    // Off and unread: the week unlit, the row grey.
+    expect(v.rows[2]).toMatchObject({ tone: 'off', meters: [{ key: 'WEEK', pct: 0, text: '–' }] });
+    expect(v.rows[2]?.progress).toBeUndefined();
+  });
+
+  it('says what is left when the widget’s settings chose it, its colours still from what is used', () => {
+    const v = listOf(draw(subs, subsHint, 'left'));
+    expect(v.rows[0]?.meters?.[0]).toMatchObject({ pct: 8, text: '8 % left', tone: 'warn' });
+    expect(v.rows[1]?.meters?.map((m) => m.text)).toEqual(['97 % left', '99 % left']);
+    expect(v.rows[0]?.progress).toBe(8);
+  });
+
+  it('draws the pools’ limits with their tool’s mark and when they reset or run out', () => {
+    const pools: ThingPagePanel = {
+      kind: 'gallery',
+      id: 'limits',
+      place: 'chart',
+      look: 'rows',
+      shape: 'square',
+      title: 'Limits now',
+      items: [
+        {
+          id: 'claude-week',
+          title: 'Claude · week',
+          sub: '3 subscriptions',
+          progress: 1,
+          note: '100 % used',
+          noteEnd: 'resets Fri 09:00',
+          badge: { text: 'Used up', tone: 'bad' },
+        },
+        {
+          id: 'codex-week',
+          title: 'ChatGPT · week',
+          sub: '1 subscription',
+          progress: 0.22,
+          noteEnd: 'resets 1 Dec',
+        },
+      ],
+    };
+    const v = listOf(draw(pools, limitsHint, 'left'));
+    expect(
+      v.rows.map((r) => [r.mark, r.title, r.detail, r.meta, r.meters?.[0]?.text, r.meters?.[0]?.reset]),
+    ).toEqual([
+      ['claude', 'Claude · week', '3 subscriptions', 'Used up', '0 % left', 'resets Fri 09:00'],
+      ['openai', 'ChatGPT · week', '1 subscription', undefined, '78 % left', 'resets 1 Dec'],
+    ]);
+    expect(v.rows[0]?.meters?.[0]?.tone).toBe('bad');
+  });
+
+  it('offers the choice in the editor for Fusebox’s limits and subscriptions only', () => {
+    const page = pageOf({ panels: [subs] }, { catalogId: 'fusebox', name: 'Fusebox' });
+    const items = catalogItems(page, THING, fusebox, 'fusebox');
+    expect(items.find((i) => i.opts.panel === 'subscriptions')?.limits).toBe(true);
+    expect(items.filter((i) => i.limits).map((i) => i.opts.panel)).toEqual(['subscriptions']);
   });
 });

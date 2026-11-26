@@ -221,42 +221,14 @@
   color: var(--mut);
 }
 
-/* Bars and meters */
+/* Bars and meters: every bar is the server cards' blocks, sized where it is drawn. */
 
 .bar {
   display: block;
-  height: 7px;
   margin-top: 12px;
-  overflow: hidden;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 10%, var(--sf));
-}
-
-.bar i {
-  display: block;
-  height: 100%;
-  border-radius: 4px;
-  background: var(--ok);
-}
-
-.bar.cWarn i {
-  background: var(--warn);
-}
-
-.bar.cBad i {
-  background: var(--bad);
-}
-
-.bar.cSand i {
-  background: var(--brand);
-}
-
-.bar.cFace i {
-  background: var(--face-dusty);
 }
 
 .thin {
-  height: 4px;
   margin-top: 8px;
 }
 
@@ -319,6 +291,277 @@
 
 .blocks.cBad .blk[data-on] {
   background: var(--bad);
+}
+
+.blocks.cOff .blk[data-on] {
+  background: color-mix(in srgb, var(--mut) 70%, var(--sf));
+}
+
+.blocks.cSand .blk[data-on] {
+  background: var(--brand);
+}
+
+.blocks.cFace .blk[data-on] {
+  background: var(--face-dusty);
+}
+
+/* Rows of limits: Fusebox's subscriptions, each with its mark, its limits as blocks and how it is. */
+
+.limRows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+
+.limRow {
+  border-top: 1px solid var(--line);
+}
+
+.limRow:first-child {
+  border-top: 0;
+}
+
+.limWide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) 200px;
+  align-items: center;
+  gap: 40px;
+}
+
+.limMid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  align-items: center;
+  gap: 18px;
+  min-height: 45px;
+  padding: 4px 0;
+}
+
+.limNarrow {
+  padding: 6px 0 7px;
+}
+
+.limNarrowTight {
+  padding: 3px 0 4px;
+}
+
+.limMid.limMidTight {
+  min-height: 32px;
+  padding: 2px 0;
+}
+
+.limWho {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.limWide .limWho {
+  gap: 14px;
+}
+
+.limName {
+  min-width: 0;
+}
+
+.limTitle {
+  display: block;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.limSub {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.limWide .limTitle {
+  font-size: 18px;
+}
+
+.limWide .limSub {
+  margin-top: 3px;
+  font-size: 15px;
+}
+
+.limMid .limTitle {
+  font-size: 15px;
+  line-height: 19px;
+}
+
+.limMid .limSub {
+  margin-top: 0;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.rowMark {
+  display: inline-grid;
+  flex: none;
+}
+
+.rowMarkOff {
+  opacity: 0.45;
+}
+
+.lims {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.limMid .lims {
+  gap: 5px;
+}
+
+.lim {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 12px;
+  height: 18px;
+}
+
+.lim.limReset {
+  grid-template-columns: 46px minmax(0, 1fr) 96px 136px;
+}
+
+.lim.limNoKey {
+  grid-template-columns: minmax(0, 1fr) 96px;
+}
+
+.lim.limNoKey.limReset {
+  grid-template-columns: minmax(0, 1fr) 96px 136px;
+}
+
+.lim.limTight {
+  grid-template-columns: 38px minmax(0, 1fr) 82px;
+  gap: 10px;
+}
+
+.lim.limTight.limNoKey {
+  grid-template-columns: minmax(0, 1fr) 82px;
+}
+
+.limWords {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.limBlocks {
+  min-width: 0;
+}
+
+.limWhen {
+  overflow: hidden;
+  color: var(--mut);
+  font: 13.5px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.limSt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  font-size: 15px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.limState {
+  font-weight: 600;
+}
+
+.limDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  vertical-align: 1px;
+}
+
+.limDot.cWarn {
+  background: var(--warn);
+}
+
+.limDot.cBad {
+  background: var(--bad);
+}
+
+.limDot.cOff {
+  background: color-mix(in srgb, var(--ink) 22%, var(--sf));
+}
+
+.limNote {
+  margin-top: 2px;
+  color: var(--mut);
+  font: 13.5px var(--font-mono);
+}
+
+.limTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.limTopTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.limSays {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 14px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.limSays.cWarn {
+  color: var(--warn);
+}
+
+.limSays.cBad {
+  color: var(--bad);
+}
+
+.limBar {
+  display: block;
+  margin-top: 6px;
+}
+
+.limNarrowTight .limBar {
+  margin-top: 4px;
+}
+
+.limNarrowTight .limTopTitle {
+  font-size: 14px;
 }
 
 /* Lists */

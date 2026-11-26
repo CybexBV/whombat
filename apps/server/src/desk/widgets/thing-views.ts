@@ -26,11 +26,13 @@ import {
   type DeskCatalogItem,
   type DeskImage,
   type DeskViewFigure,
+  type DeskViewMeter,
   type DeskViewPhoto,
   type DeskViewPoster,
   type DeskViewRow,
   type DeskViewTile,
   type DeskViewTone,
+  type DeskWidgetLimits,
   type DeskWidgetRef,
   type DeskWidgetView,
   type DeskWidgetViewKind,
@@ -86,6 +88,12 @@ export interface PanelHint {
   };
   /** A row's title as a person reads it (a release's file name as its show and episode). */
   title?: (text: string) => string;
+  /**
+   * Its bars are limits (Fusebox's subscriptions and pools): each row draws them as meters of blocks, says them as
+   * what is used or, chosen in the widget's settings (`opts.limits`), what is left, and *Add a widget* says so, so the
+   * editor offers the choice.
+   */
+  limits?: LimitsHint;
   /** A poster's words where the gallery's own say two things in one (“2024 · John · Living room TV”). */
   poster?: (item: ThingGalleryItem) => Partial<Pick<DeskViewPoster, 'detail' | 'who' | 'time'>>;
   /** It shows words or pictures a locked screen leaves out (DK-138). */
@@ -111,6 +119,18 @@ export interface PanelHint {
   board?: BoardHint;
   /** A photo view shows its next picture after this many seconds (two minutes unless said). */
   every?: number;
+}
+
+/** How a panel's limits become a row's meters. */
+export interface LimitsHint {
+  /** A table's columns that are limits, with their short names on a screen (“5H”, “WEEK”), in order. */
+  meters?: Readonly<Record<string, string>>;
+  /** A table's column that says when the last of them resets (“2 Dec”). */
+  reset?: string;
+  /** The words under the row's state on a wide screen, `{text}` the state's note (“used {text}” for “2 min ago”). */
+  note?: string;
+  /** A row's brand mark by its id, where its page's rows carry none (Fusebox's limits: the tool's). */
+  mark?: (id: string) => string | undefined;
 }
 
 /** How a board makes its tiles from a panel's rows. */
@@ -611,6 +631,7 @@ export function catalogItems(
             line: words(hint?.line ?? panelLine(p, page), 120) || name,
             view,
             ...(secret(p, view) ? { private: true } : {}),
+            ...(hint?.limits ? { limits: true } : {}),
           },
         });
     }
@@ -774,9 +795,12 @@ function row(r: {
   title: string;
   detail?: string | null | undefined;
   meta?: string | null | undefined;
+  note?: string | null | undefined;
   time?: string | undefined;
   tone?: string | null | undefined;
   progress?: number | undefined;
+  meters?: DeskViewMeter[] | undefined;
+  mark?: string | undefined;
   state?: 'on' | 'off' | undefined;
   image?: DeskImage | undefined;
 }): DeskViewRow | null {
@@ -787,17 +811,53 @@ function row(r: {
   const time = words(r.time, 16);
   const meta = words(r.meta, 40) === time ? '' : words(r.meta, 40);
   const said = detail === meta ? '' : detail;
+  const note = words(r.note, 40);
   return {
     title,
     ...(said ? { detail: said } : {}),
     ...(meta ? { meta } : {}),
+    ...(note ? { note } : {}),
     ...(time ? { time } : {}),
     ...tone(r.tone),
     ...(r.progress !== undefined ? { progress: r.progress } : {}),
+    ...(r.meters?.length ? { meters: r.meters } : {}),
+    ...(r.mark && MARK_RE.test(r.mark) ? { mark: r.mark } : {}),
     ...(r.state ? { state: r.state } : {}),
     ...(r.image ? { image: r.image } : {}),
   };
 }
+
+/** A brand mark's name as the contract takes it. */
+const MARK_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+
+/**
+ * A limit as a meter of blocks: its share used, 0…1, said as used or as left; amber from 80 % used, red when
+ * it's all used, either way.
+ */
+export function limitMeter(
+  share: number,
+  mode: DeskWidgetLimits,
+  extra: { key?: string | undefined; reset?: string | undefined } = {},
+): DeskViewMeter {
+  const used = Math.max(0, Math.min(100, Math.round(share * 100)));
+  const shown = mode === 'left' ? 100 - used : used;
+  const key = words(extra.key, 8);
+  const reset = words(extra.reset, 24);
+  return {
+    ...(key ? { key } : {}),
+    pct: shown,
+    text: `${shown} % ${mode}`,
+    ...(reset ? { reset } : {}),
+    ...(used >= 100 ? { tone: 'bad' as const } : used >= 80 ? { tone: 'warn' as const } : {}),
+  };
+}
+
+/** A limit without a reading: its blocks unlit, a dash for its words. */
+const unreadMeter = (key: string | undefined): DeskViewMeter => ({
+  ...(key ? { key } : {}),
+  pct: 0,
+  text: '–',
+});
 
 const rowsOf = (xs: (DeskViewRow | null)[]) => xs.filter((r): r is DeskViewRow => r !== null);
 
@@ -847,7 +907,25 @@ function itemRows(
 }
 
 /** A gallery's items as rows: its words, what it is on the right, how far, and how long is left (or its tag). */
-function galleryRows(p: PanelOf<'gallery'>, title?: PanelHint['title']) {
+function galleryRows(p: PanelOf<'gallery'>, title?: PanelHint['title'], limits?: Limits) {
+  if (limits)
+    return rowsOf(
+      p.items.slice(0, DESK_VIEW_ROWS_MAX).map((i) => {
+        const meter =
+          typeof i.progress === 'number'
+            ? limitMeter(i.progress, limits.mode, { reset: i.noteEnd })
+            : unreadMeter(undefined);
+        return row({
+          title: title ? title(i.title) : i.title,
+          detail: i.sub,
+          meta: i.badge?.text,
+          tone: i.badge?.tone,
+          meters: [meter],
+          progress: typeof i.progress === 'number' ? meter.pct : undefined,
+          mark: limits.hint.mark?.(i.id),
+        });
+      }),
+    );
   return rowsOf(
     p.items.slice(0, DESK_VIEW_ROWS_MAX).map((i) =>
       row({
@@ -882,8 +960,10 @@ function tableRows(
   p: PanelOf<'table'>,
   chosen?: PanelHint['columns'],
   title?: PanelHint['title'],
+  limits?: Limits,
 ): DeskViewRow[] {
   const columns = p.columns;
+  if (limits?.hint.meters) return limitRows(p, limits, chosen, title);
   return rowsOf(
     p.rows.slice(0, DESK_VIEW_ROWS_MAX).map((r) => {
       const cells = columns
@@ -936,6 +1016,61 @@ function tableRows(
         time: time?.cell?.text,
         tone: rowTone(first.cell, all),
         progress: pct(meter),
+      });
+    }),
+  );
+}
+
+/** A panel's limits as the widget says them: the kind's hint and what the widget's settings chose. */
+export interface Limits {
+  hint: LimitsHint;
+  mode: DeskWidgetLimits;
+}
+
+/**
+ * A table of limits as rows (Fusebox's subscriptions): its first column the title (its note under it, its mark
+ * before it), each limit column a meter (one that has no limit, “No limit”, left out; none read at all, one unlit), the
+ * last one's reset beside it, the state on the right with its note under it, and the state's colour the row's.
+ */
+function limitRows(
+  p: PanelOf<'table'>,
+  limits: Limits,
+  chosen?: PanelHint['columns'],
+  title?: PanelHint['title'],
+): DeskViewRow[] {
+  const meters = Object.entries(limits.hint.meters ?? {});
+  const first = p.columns[0]?.key;
+  return rowsOf(
+    p.rows.slice(0, DESK_VIEW_ROWS_MAX).map((r) => {
+      const head = first ? r.cells[first] : undefined;
+      if (!head || NOTHING.test(head.text)) return null;
+      const reset = limits.hint.reset ? r.cells[limits.hint.reset] : undefined;
+      const resetWords = reset && !NOTHING.test(reset.text) ? `resets ${reset.text}` : undefined;
+      const drawn: DeskViewMeter[] = [];
+      for (const [i, [column, key]] of meters.entries()) {
+        const cell = r.cells[column];
+        if (typeof cell?.meter !== 'number') continue;
+        drawn.push(
+          limitMeter(cell.meter, limits.mode, {
+            key,
+            ...(i === meters.length - 1 ? { reset: resetWords } : {}),
+          }),
+        );
+      }
+      if (!drawn.length && meters.length) drawn.push(unreadMeter(meters[meters.length - 1]?.[1]));
+      const state = chosen?.meta ? r.cells[chosen.meta] : undefined;
+      const said = state && !NOTHING.test(state.text) ? state : undefined;
+      const read = drawn.filter((m) => m.text !== '–');
+      return row({
+        title: title ? title(head.text) : head.text,
+        detail: head.note,
+        meta: said?.text,
+        note: said?.note && limits.hint.note ? limits.hint.note.replace('{text}', said.note) : said?.note,
+        tone: said?.dot ?? said?.tone ?? head.dot ?? head.tone,
+        meters: drawn,
+        // A screen that draws no meters shows the last one's blocks, as it did.
+        progress: read.length ? read[read.length - 1]?.pct : undefined,
+        mark: head.mark ?? limits.hint.mark?.(r.id),
       });
     }),
   );
@@ -1247,11 +1382,16 @@ export function panelView(input: {
   panel: Panel;
   item?: string | undefined;
   hint?: PanelHint | undefined;
+  /** What a widget of limits says (`opts.limits`): used unless chosen. */
+  limits?: DeskWidgetLimits | undefined;
   now: Date;
   timeZone: string;
 }): DeskWidgetView | null {
   const { b, thing, page, panel: p, hint, now, timeZone } = input;
   const head = hint?.head?.(page, p) ?? null;
+  const limits: Limits | undefined = hint?.limits
+    ? { hint: hint.limits, mode: input.limits ?? 'used' }
+    : undefined;
   if (input.item !== undefined) {
     if (p.kind === 'gallery') {
       const camera = p.items.find((i) => i.id === input.item);
@@ -1295,7 +1435,7 @@ export function panelView(input: {
     return boardView(b, p, hint, head);
   if (drawn === 'list' && p.kind === 'gallery')
     return listView(b, {
-      rows: galleryRows(p, hint?.title),
+      rows: galleryRows(p, hint?.title, limits),
       total: p.total ?? p.items.length,
       empty: hint?.empty ?? p.empty,
       head,
@@ -1314,7 +1454,7 @@ export function panelView(input: {
       });
     case 'table':
       return listView(b, {
-        rows: tableRows(p, hint?.columns, hint?.title),
+        rows: tableRows(p, hint?.columns, hint?.title, limits),
         total: panelTotal(page, p),
         empty: hint?.empty ?? p.empty,
         head,

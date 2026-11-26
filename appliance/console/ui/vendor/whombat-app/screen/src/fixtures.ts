@@ -800,6 +800,107 @@ export const FIXTURE_WEATHER_NEWS_VIEWS: DeskWidgetView[] = [
   { ...FIXTURE_NEWS, id: 'w_news_none', rows: [], empty: 'Choose your news in Settings' },
 ];
 
+/** Fusebox's subscriptions and its pools' limits: rows of limits with their tools' marks. */
+export const FIXTURE_LIMITS_VIEWS: DeskWidgetView[] = [
+  {
+    kind: 'list',
+    id: 'w_fusebox_subs',
+    title: 'Subscriptions',
+    name: 'Fusebox',
+    mark: 'fusebox',
+    head: '4 of 6 working',
+    rows: [
+      {
+        title: 'work@example.com',
+        detail: 'Claude · Ultra',
+        meta: 'Working',
+        note: 'used 2 min ago',
+        tone: 'ok',
+        mark: 'claude',
+        progress: 4,
+        meters: [{ key: 'WEEK', pct: 4, text: '4 % used', reset: 'resets 2 Dec' }],
+      },
+      {
+        title: 'home@example.com',
+        detail: 'Claude · Max',
+        meta: 'Working',
+        note: 'used 1 h ago',
+        tone: 'ok',
+        mark: 'claude',
+        progress: 92,
+        meters: [{ key: 'WEEK', pct: 92, text: '92 % used', reset: 'resets 28 Nov', tone: 'warn' }],
+      },
+      {
+        title: 'team@example.com',
+        detail: 'Claude · Max',
+        meta: 'Used up until Fri 09:00',
+        tone: 'warn',
+        mark: 'claude',
+        progress: 100,
+        meters: [{ key: 'WEEK', pct: 100, text: '100 % used', reset: 'resets Fri 09:00', tone: 'bad' }],
+      },
+      {
+        title: 'old@example.com',
+        detail: 'Claude',
+        meta: 'Off in Fusebox',
+        tone: 'off',
+        mark: 'claude',
+        meters: [{ key: 'WEEK', pct: 0, text: '–' }],
+      },
+      {
+        title: 'home@example.com',
+        detail: 'ChatGPT · Pro',
+        meta: 'Working',
+        note: 'used 5 min ago',
+        tone: 'ok',
+        mark: 'openai',
+        progress: 9,
+        meters: [{ key: 'WEEK', pct: 9, text: '9 % used', reset: 'resets 1 Dec' }],
+      },
+      {
+        title: 'muse@example.com',
+        detail: 'Meta · Muse Code Max',
+        meta: 'Working',
+        note: 'used yesterday',
+        tone: 'ok',
+        mark: 'meta',
+        progress: 1,
+        meters: [
+          { key: '5H', pct: 3, text: '3 % used' },
+          { key: 'WEEK', pct: 1, text: '1 % used', reset: 'resets 30 Nov' },
+        ],
+      },
+    ],
+    at,
+  },
+  {
+    kind: 'list',
+    id: 'w_fusebox_limits',
+    title: 'Limits now',
+    name: 'Fusebox',
+    mark: 'fusebox',
+    rows: [
+      {
+        title: 'Claude · week',
+        detail: '3 subscriptions',
+        meta: 'Runs out early',
+        tone: 'warn',
+        mark: 'claude',
+        progress: 32,
+        meters: [{ pct: 32, text: '32 % left', reset: 'out about Fri 14:00' }],
+      },
+      {
+        title: 'ChatGPT · week',
+        detail: '1 subscription',
+        mark: 'openai',
+        progress: 78,
+        meters: [{ pct: 78, text: '78 % left', reset: 'resets 1 Dec' }],
+      },
+    ],
+    at,
+  },
+];
+
 /** The same widgets with pve-02 down: what ran on it says so (DK-135). */
 export const FIXTURE_VIEWS_WRONG: DeskWidgetView[] = FIXTURE_VIEWS.map((v) => {
   if (v.id === 'w_playing' || v.id === 'w_recent' || v.id === 'w_library')
