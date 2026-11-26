@@ -123,6 +123,101 @@
   color: var(--ink2);
 }
 
+/* *Ask {assistant}* beside *+ Page*: the assistant makes a page from a request. */
+.askPage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-weight: 500;
+}
+
+/* A page at set times: a small clock and its hours after its name. */
+.pageHours {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 7px;
+  color: var(--mut);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.timesRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.timesLabel {
+  min-width: 40px;
+  color: var(--ink2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.clockInput {
+  width: 150px;
+  font: var(--type-mono-meta);
+  font-size: 14px;
+}
+
+.days {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-segmented);
+}
+
+.day {
+  min-width: 44px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.day[aria-pressed="true"] {
+  background: var(--btn);
+  color: var(--btnfg);
+}
+
+.day:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.timesHint {
+  margin: 14px 0 0;
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.timesNote {
+  margin: 10px 0 0;
+  color: var(--bad);
+  font-size: 13.5px;
+}
+
+.timesButtons {
+  margin-top: 22px;
+}
+
+.timesAlways {
+  margin-right: auto;
+}
+
 .pageButton:focus-visible,
 .pageMenuButton:focus-visible {
   outline: 2px solid var(--brand);
@@ -131,6 +226,8 @@
 
 .pageMenuWrap {
   position: absolute;
+  /* Above the screen under the toolbar, so the open menu isn't drawn behind it. */
+  z-index: 30;
   right: 4px;
   top: 50%;
   transform: translateY(-50%);

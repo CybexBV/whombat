@@ -1042,7 +1042,7 @@ export const FIXTURE_DOORBELL_VIEW: DeskWidgetView = {
   kind: 'camera',
   id: 'w_spotlight',
   title: 'Front door',
-  mark: 'unifi',
+  mark: 'unifi_protect',
   image: img(PROTECT, 'frontdoor', 'wide', 'The front door'),
   event: 'Rang at 14:34',
   at: '2026-10-27T13:34:10Z',
@@ -1065,6 +1065,6 @@ export const FIXTURE_DOORBELL_GRID_LOCKED: DeskGrid = {
   ...FIXTURE_DOORBELL_GRID,
   views: [
     ...FIXTURE_BOX_GRID.views,
-    { kind: 'camera', id: 'w_spotlight', title: 'Front door', mark: 'unifi', locked: true },
+    { kind: 'camera', id: 'w_spotlight', title: 'Front door', mark: 'unifi_protect', locked: true },
   ],
 };

@@ -8,6 +8,7 @@ import {
   addWidget,
   DESK_SCREENS_TEXT,
   type DeskLayout,
+  type DeskPageShow,
   type DeskSize,
   type DeskTurn,
   type DeskWidget,
@@ -24,6 +25,7 @@ import {
   moveWidget,
   type NewWidget,
   nudgeWidget,
+  pageShowSaid,
   popUndo,
   pushUndo,
   refusalText,
@@ -33,6 +35,7 @@ import {
   sameLayout,
   setLayoutSize,
   setLayoutTurn,
+  setPageShow,
   setWidgetSpec,
   type UndoStack,
   type ViewOf,
@@ -87,6 +90,8 @@ export interface ScreenEditor {
   renamePage(index: number, name: string): void;
   movePage(index: number, by: -1 | 1): void;
   deletePage(index: number): string;
+  /** Page `index` at set times, or always (`null`): what to say, or why it can't be (no day chosen). */
+  setPageShow(index: number, show: DeskPageShow | null): { ok: boolean; text: string };
   setSize(size: DeskSize): string;
   setTurn(turn: DeskTurn): string;
   /** After *Save*: what's saved now. */
@@ -256,6 +261,16 @@ export function useScreenEditor(
           selected: null,
         });
         return fillDeskWords(E.deletedPage, { name });
+      },
+      setPageShow(index, show) {
+        const s = live.current;
+        const next = setPageShow(s.draft, index, show);
+        if (!next) return { ok: false, text: E.times.noDays };
+        if (next !== s.draft) set(commit(s, next));
+        return {
+          ok: true,
+          text: pageShowSaid(next.pages[index]?.name ?? '', next.pages[index]?.show ?? null),
+        };
       },
       setSize(size) {
         const s = live.current;

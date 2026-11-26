@@ -55,7 +55,7 @@ export interface ScreenModeDeps {
   onLeave(): void;
   /** Removed in Settings: its key was revoked, so becoming a screen again needs a new one. */
   onRemoved?(): void;
-  /** The time zone the clock is in when the lock shows only the time. */
+  /** The time zone the screen draws in when its Whombat doesn't say the person's (an older box). */
   timeZone?: string;
 }
 
@@ -330,7 +330,7 @@ function LiveScreen({ deps, onRemoved }: { deps: ScreenModeDeps; onRemoved: () =
         calm={state.calm}
         name={state.whombat}
         assistant={assistantOf(state)}
-        timeZone={deps.timeZone}
+        timeZone={state.timeZone ?? deps.timeZone}
         now={now}
         chips={chips}
         onlyTime={state.grid === null}
