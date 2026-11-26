@@ -156,7 +156,7 @@
     },
     {
       "name": "appliance-nix-eval",
-      "about": "Evaluates the appliance's Nix checks without building them (about 2 minutes): for a change to the Nix files, and to the few files of the other folders that Nix reads while it evaluates (the runtime's version, the Hermes pin, the schema's numbers, Whombat Helper).",
+      "about": "Evaluates the appliance's Nix checks without building them (about 2 minutes, in The Beast's Nix container): for a change to the Nix files, and to the few files of the other folders that Nix reads while it evaluates (the runtime's version, the Hermes pin, the schema's numbers, Whombat Helper).",
       "when": [
         "appliance/nix/**",
         "appliance/flake.nix",
@@ -173,6 +173,7 @@
         "appliance/nix/packages/hosts/manifest-check/**/*.go"
       ],
       "timeout": 15,
+      "where": "beast-nix",
       "run": "cd appliance && scripts/ci/nix-eval.sh"
     },
     {
@@ -184,7 +185,8 @@
         "appliance/scripts/ci/source-matrix.sh"
       ],
       "timeout": 20,
-      "run": "appliance/scripts/ci/source-matrix.sh --nothing",
+      "where": "beast-nix",
+      "run": "cd appliance && nix shell \"github:NixOS/nixpkgs/$(nix eval --raw --impure --expr '(builtins.fromJSON (builtins.readFile ./flake.lock)).nodes.nixpkgs.locked.rev')#jq\" --command scripts/ci/source-matrix.sh --nothing",
       "retry": false
     },
     {
