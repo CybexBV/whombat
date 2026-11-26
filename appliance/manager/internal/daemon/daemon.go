@@ -106,7 +106,13 @@ type Daemon struct {
 	// engineNow wakes the engine loop (a coalescing signal): an assignment the control loop accepted is taken at once,
 	// not at the engine's next idle step, up to a minute later (MG-68).
 	engineNow chan struct{}
-	Outbox    *outbox.Outbox
+	// tufNow has the TUF loop refresh now (a coalescing signal): the helper refused the candidate as no longer the newest
+	// release (newerElsewhere).
+	tufNow chan struct{}
+	// refusedNewest is the digest of the last candidate the helper refused as not assigned (guarded by mu): its
+	// refusals wake the TUF loop once, not at every retry.
+	refusedNewest string
+	Outbox        *outbox.Outbox
 	// DrainTimeout bounds how long Run waits for its loops once it stops (SR-02); 0: 20 s.
 	DrainTimeout time.Duration
 	// statusMu guards outboxProblem, the outbox's write failure shown in the unit's status line (SR-08).
@@ -183,7 +189,7 @@ func New(cfg *config.Config, recovery bool, log *slog.Logger) (*Daemon, error) {
 		return nil, err
 	}
 	d := &Daemon{Cfg: cfg, Dev: dev, Log: log, Recovery: recovery, started: time.Now(), wake: make(chan struct{}, 1), statusNow: make(chan struct{}, 1), lastErr: map[string]string{},
-		pollNow: make(chan chan<- checkReply), engineNow: make(chan struct{}, 1),
+		pollNow: make(chan chan<- checkReply), engineNow: make(chan struct{}, 1), tufNow: make(chan struct{}, 1),
 		Outbox: outbox.Open(filepath.Join(cfg.JournalDir, "progress-outbox-v2.json")),
 		lease:  claimLease{wake: make(chan struct{}, 1)}, Waits: DefaultWaits()}
 	d.loadClaimState()
@@ -347,6 +353,32 @@ func (d *Daemon) onTransition(st update.State) {
 	select {
 	case d.statusNow <- struct{}{}:
 	default: // a report is already asked for: it reads the journal when it is sent
+	}
+	d.newerElsewhere(&st)
+}
+
+// newerElsewhere has the TUF loop refresh at once when the helper refused the candidate as not assigned: on a box that
+// takes its channel's newest release (or its repository's), the helper reads the repository again at activation, so a
+// release published since the manager's last refresh makes the candidate no longer the newest. The manager retried that
+// one until its next refresh, up to an hour later, the owner told “The last update didn't work” meanwhile (Home,
+// 2026-11-26, two releases a minute apart); the refresh offers the newest, which replaces it. Once per candidate, so a
+// refusal that lasts costs one refresh, not one a retry. It never waits: the TUF loop refreshes, and decides whether
+// this box takes the newest (newestUpdates).
+func (d *Daemon) newerElsewhere(st *update.State) {
+	c := st.Candidate
+	if st.Phase != update.Failed || c == nil || c.Failure == nil || c.Failure.Code != "not_assigned" || c.Tuple == nil {
+		return
+	}
+	d.mu.Lock()
+	first := d.refusedNewest != c.Tuple.Digest
+	d.refusedNewest = c.Tuple.Digest
+	d.mu.Unlock()
+	if !first {
+		return
+	}
+	select {
+	case d.tufNow <- struct{}{}:
+	default: // a refresh is already asked for
 	}
 }
 
@@ -786,7 +818,8 @@ func (d *Daemon) applyRepo(ctx context.Context, repo *trust.Repo, offer, now boo
 	return defaultRes, nil
 }
 
-// tufLoop refreshes metadata periodically. Failures never touch the installed release.
+// tufLoop refreshes metadata periodically, and at once when the helper refused a candidate that a newer release may have
+// replaced (newerElsewhere). Failures never touch the installed release.
 func (d *Daemon) tufLoop(ctx context.Context) {
 	every := config.Seconds(d.Cfg.RefreshSec, time.Hour)
 	bo := &Backoff{Base: time.Minute, Max: every}
@@ -810,6 +843,7 @@ func (d *Daemon) tufLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case <-time.After(wait):
+		case <-d.tufNow:
 		}
 	}
 }
