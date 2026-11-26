@@ -27,12 +27,12 @@ import {
   DISK_USAGE_MINOR,
   FIND_MY_MINOR,
   FIND_MY_TIMELINE_MINOR,
-  LOOKS_AHEAD_INBOX_MINOR,
   negotiateCapabilities,
   negotiateVersion,
   ONEPASSWORD_SYNC_MINOR,
   protocolAtLeast,
   SESSION_PROTOCOL,
+  T3_REVIEW_ROUNDS_MINOR,
   VERSION_REFUSAL_COPY,
 } from './version.js';
 
@@ -98,7 +98,7 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: LOOKS_AHEAD_INBOX_MINOR });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: T3_REVIEW_ROUNDS_MINOR });
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });
