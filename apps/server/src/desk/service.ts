@@ -286,6 +286,8 @@ const noVoice = () => deskError('no_voice', DESK_WORDS.errors.no_voice);
 const noOwnAssistant = () => new ApiError('conflict', 'You need your assistant on this Whombat first.');
 /** A screen that never said its size is drawn at the Z13's (the editor's too). */
 const DEFAULT_SCREEN_SIZE = { width: 1280, height: 800 } as const;
+/** How long a screen's time zone is kept before it is read again. */
+const ZONE_KEPT_MS = 60_000;
 
 /** A new PIN (DK-26, DK-27): 4 to 6 digits and not too easy to guess, checked before it is hashed or anything used up. */
 function checkNewPin(pin: string): void {
@@ -474,6 +476,8 @@ export class DeskService {
   readonly #trying = new Map<string, { layout: DeskLayout; until: number }>();
   /** A widget taking over a screen for a moment (the doorbell), per screen while it lasts: memory only. */
   readonly #spotlights = new ScreenSpotlights();
+  /** Each screen's time zone as last read (`#zoneFor`). */
+  readonly #zones = new Map<string, { at: number; zone: string | null }>();
   /** Per screen, the pictures its views named when last drawn, for the lock view they were drawn for (DK-142). */
   readonly #shown = new Map<string, { view: DeskCalmView; at: number; pictures: ReadonlySet<string> }>();
   /** The outputs the box's page reported last, and the burrow its screens are in (DK-147). */
@@ -2129,11 +2133,21 @@ export class DeskService {
     );
   }
 
-  /** The time zone a screen is drawn in: its person's own, else the Whombat's; null without a person. */
+  /**
+   * The time zone a screen is drawn in: its person's own, else the Whombat's; null without a person. Kept a minute per
+   * screen: a screen elsewhere asks every few seconds.
+   */
   async #zoneFor(record: ScreenRecord): Promise<string | null> {
+    const now = this.#now();
+    const kept = this.#zones.get(record.id);
+    if (kept && now - kept.at < ZONE_KEPT_MS) return kept.zone;
     const who = await this.#whoFor(record);
-    if (!who) return null;
-    return (await this.placeOf({ burrowId: record.burrowId, personId: who }))?.timeZone ?? null;
+    const zone = who
+      ? ((await this.placeOf({ burrowId: record.burrowId, personId: who }))?.timeZone ?? null)
+      : null;
+    if (this.#zones.size >= 64) this.#zones.clear();
+    this.#zones.set(record.id, { at: now, zone });
+    return zone;
   }
 
   /**
@@ -2401,18 +2415,18 @@ export class DeskService {
     await this.#commit(target, updateScreen, { id: record.id, layout: placed.layout });
     await this.#screensChanged(target.burrowId);
     const noRoom = new Set(known.filter((_, i) => placed.ids[i] === null).map((k) => k.w));
-    const left = asked.flatMap(({ w, item }) =>
-      item && !noRoom.has(w)
-        ? []
-        : [
-            {
-              type: w.type,
-              ...(w.ref ? { ref: w.ref } : {}),
-              ...(item ? { name: screenText(item.name, 60) } : {}),
-              why: item ? ('no_room' as const) : ('unknown' as const),
-            },
-          ],
-    );
+    const left = asked.flatMap(({ w, item }) => {
+      if (item && !noRoom.has(w)) return [];
+      const named = item ? screenText(item.name, 60) : '';
+      return [
+        {
+          type: w.type,
+          ...(w.ref ? { ref: w.ref } : {}),
+          ...(named ? { name: named } : {}),
+          why: item ? ('no_room' as const) : ('unknown' as const),
+        },
+      ];
+    });
     return { screen: record.id, page: placed.page, left };
   }
 
