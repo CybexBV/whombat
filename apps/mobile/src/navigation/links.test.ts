@@ -62,6 +62,9 @@ describe('web paths on the phone (AP-366)', () => {
     ['/settings?tab=usage', 'whombat://settings/agent?part=ai'],
     ['/burrow-hq/settings?tab=appliance', 'whombat://settings/whombat'],
     ['/settings?tab=notifications', 'whombat://settings/notifications'],
+    // News and weather, a page of its own.
+    ['/settings?tab=news', 'whombat://settings/news'],
+    ['/settings/news', 'whombat://settings/news'],
     // The four groups: You's parts, This Whombat's that moved.
     ['/settings?part=notifications', 'whombat://settings/notifications'],
     ['/settings?part=prompts', 'whombat://settings/prompts'],

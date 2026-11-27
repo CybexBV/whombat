@@ -108,6 +108,7 @@ describe('Settings → Agent (MQ-01, MQ-02; one-agent.md AP-4961)', () => {
   it('names a path for each linked parity screen', () => {
     expect(LINKING_SCREENS).toMatchObject({
       SettingsAgent: 'settings/agent',
+      SettingsNews: 'settings/news',
       Spend: 'spend',
       AuditLog: 'log',
     });

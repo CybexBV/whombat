@@ -4,7 +4,8 @@
  * Android: the title and one line, a newer app on top (`UpdateCard`), **Often used** — Notifications on a Whombat, and
  * the theme (Light · Dark · Auto, saved to the account) — then **All settings**, the groups in the web's order:
  * You (your face and what You holds), the assistant by its name (its face, what it runs on or its AI sign-in in
- * trouble), Connections (what needs you, else how many are connected), This Whombat, Screens where it has them, and
+ * trouble), Connections (what needs you, else how many are connected), This Whombat, News and weather (where the
+ * Whombat is and the news it reads, where it answers them), Screens where it has them, and
  * Advanced (`settingsRows`), each with one line on how it is doing and a chevron. This Whombat's state is read here:
  * while it loads or can't be read a card in Often used says so and every row keeps working. VERSION under it, then
  * Sign out and Switch Whombat (none in the demo). Pulling the page down reads it again and asks for a newer app.
@@ -41,6 +42,7 @@ import {
   type LucideIcon,
   Monitor,
   Moon,
+  Newspaper,
   Plug,
   Settings as SettingsIcon,
   SlidersVertical,
@@ -67,6 +69,7 @@ const LEADING = { width: 24, alignItems: 'center', justifyContent: 'center' } as
 const ICONS: Record<Exclude<SettingsRowKey, 'agent'>, LucideIcon> = {
   connections: Plug,
   appliance: Box,
+  news: Newspaper,
   screen: Monitor,
   advanced: SlidersVertical,
 };
@@ -76,6 +79,7 @@ const ROW_ROUTES: Record<SettingsRowKey, readonly string[]> = {
   agent: ['SettingsAgent'],
   connections: ['Connections'],
   appliance: ['Whombat', 'SettingsWhombat', 'WhombatAbout'],
+  news: ['SettingsNews'],
   screen: ['SettingsDesk'],
   advanced: ['SettingsAdvanced'],
 };
@@ -93,6 +97,8 @@ function openRow(navigation: AppNavigation, row: SettingsRowView, managed: boole
       // the owner opens About, where Update now is.
       if (managed && row.opens === 'about') return navigation.navigate('WhombatAbout');
       return managed ? navigation.navigate('Whombat') : navigation.navigate('SettingsWhombat');
+    case 'news':
+      return navigation.navigate('SettingsNews');
     case 'screen':
       return navigation.navigate('SettingsDesk');
     case 'advanced':

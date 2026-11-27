@@ -40,6 +40,7 @@ import {
   CircleUser,
   type LucideIcon,
   Monitor,
+  Newspaper,
   Plug,
   Search,
   Server,
@@ -62,6 +63,7 @@ const SETTING_ICONS: Record<SearchSetting['icon'], LucideIcon> = {
   assistant: Smile,
   connections: Plug,
   box: Server,
+  news: Newspaper,
   screen: Monitor,
   advanced: SlidersHorizontal,
   part: SlidersHorizontal,
@@ -95,6 +97,7 @@ export function SearchScreen({ navigation, route }: Props) {
   const servers = useServerFacts();
   const settingsRows = useSettingsRows();
   const screenRow = settingsRows.find((r) => r.key === 'screen')?.title ?? null;
+  const newsRow = settingsRows.some((r) => r.key === 'news');
   const managed = mode === 'managed';
 
   const settings = useMemo(
@@ -104,9 +107,10 @@ export function SearchScreen({ navigation, route }: Props) {
         managed,
         you: youLine(youPartsHere({ mode })),
         screen: screenRow,
+        news: newsRow,
         advanced: advancedRowsOnPhone(words.name, { mode }),
       }),
-    [words.Name, words.name, managed, mode, screenRow],
+    [words.Name, words.name, managed, mode, screenRow, newsRow],
   );
   const threads = useMemo(
     () => threadRows([...chat.threads, ...feedback.threads], now, timeZone),

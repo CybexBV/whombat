@@ -60,7 +60,6 @@ import { ChatSettleSection } from './ChatSettleSection';
 import { youPartsHere } from './groups';
 import { SETTINGS_TEXT } from './list';
 import { NotificationsSection } from './NotificationsSection';
-import { PlaceNewsCards } from './PlaceNewsCards';
 import { ProfileRow } from './ProfileRow';
 import { VersionCard } from './VersionCard';
 
@@ -124,7 +123,7 @@ const LINKS_LINE = 'Links to copies of your threads, and stopping them';
 
 /**
  * You: who you are and your photo (PA-06), your notifications — Do not disturb and quiet hours where the Whombat keeps
- * them (AP-513), push on this phone (MN-05) — then CHAT: when threads settle by themselves (chat-settle.md AP-6156),
+ * them (AP-513), push on this phone — then CHAT: when threads settle by themselves (chat-settle.md AP-6156),
  * and on a Whombat a row to Devices. What the assistant remembers is its own page's (Memory).
  */
 export function SettingsProfileScreen() {
@@ -317,8 +316,6 @@ export function SettingsWhombatScreen() {
       <TailscaleSection here={tailscale} />
       <BluetoothSection machine={machine} />
       <VersionCard />
-      {/* Where this Whombat is and the news it reads (weather-news-apps.md), after VERSION as About has them. */}
-      <PlaceNewsCards />
       <HardwareSection machine={machine} />
       <RemoteHelpSection here={remoteHelp} />
       {/* “Keep server agents up to date” where servers are (agent-updates-app.md AP-2992). */}

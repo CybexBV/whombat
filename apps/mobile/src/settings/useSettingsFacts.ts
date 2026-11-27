@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { deskScreenLine, deskSectionShown } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
 import { updateReady, whombatOverview } from '@whombat/client/managed';
+import { placeNewsShown, useSessionProtocol } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
 import Constants from 'expo-constants';
 import { useMemo } from 'react';
@@ -100,6 +101,8 @@ export function useSettingsRows(): SettingsRowView[] {
   const asked = useDeskScreens(deskApi);
   const screens = screensOffered(asked) === 'screens' ? asked.data : undefined;
   // Screens of widgets: how many there are (AP-6000); else the box's own screen's line where it has one.
+  // News and weather where the Whombat answers the place and the news.
+  const news = placeNewsShown(useSessionProtocol());
   const screenLine = screens
     ? screensRowLine(screens)
     : desk && deskSectionShown(desk)
@@ -115,7 +118,8 @@ export function useSettingsRows(): SettingsRowView[] {
         connections,
         screen: screenLine === null ? null : { value: screenLine, tone: null },
         screens: screens !== undefined,
+        news,
       }),
-    [screenLine, screens, mode, agent, ai, appliance, connections],
+    [screenLine, screens, mode, agent, ai, appliance, connections, news],
   );
 }

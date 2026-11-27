@@ -881,6 +881,13 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
               .SettingsDeskScreen
           }
         />
+        {/* Settings → News and weather: the place and the news sources. */}
+        <Stack.Screen
+          name="SettingsNews"
+          getComponent={() =>
+            (require('../settings/NewsScreen') as typeof import('../settings/NewsScreen')).SettingsNewsScreen
+          }
+        />
         {/* Settings → Screens: a screen's page and its layout (desk-display-android.md AP-6004, AP-6010). */}
         <Stack.Screen
           name="SettingsScreen"

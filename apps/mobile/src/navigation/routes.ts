@@ -237,6 +237,8 @@ export type RootStackParamList = {
    * `night`, `talk`; checked by the page); in the demo world `desk` a state its screen starts over in.
    */
   SettingsDesk: { part?: string; desk?: string } | undefined;
+  /** Settings → News and weather: where the Whombat is, for the weather, and the news sources it reads. */
+  SettingsNews: undefined;
   /**
    * Settings → Screens → a screen (desk-display-android.md AP-6004): `screen` its id (`box`, `out_…`, `scr_…`), `part`
    * one of the box's parts (`bar`, `lock`, `night`, `talk`; checked by the page).
@@ -548,6 +550,8 @@ export const LINKING_SCREENS = {
   WhombatBackups: 'settings/whombat/backups',
   // Settings → Screen (AP-5860), Settings → Screens where the Whombat has them (AP-6000): the web's `?tab=screen`.
   SettingsDesk: { path: 'settings/screen', alias: ['settings/screens'] },
+  // Settings → News and weather: the web's `?tab=news`.
+  SettingsNews: 'settings/news',
   // Settings → Screens → a screen and its layout (AP-6004, AP-6010): the web's `/settings/screens/:id(/layout)`.
   SettingsScreen: 'settings/screens/:screen',
   SettingsScreenLayout: 'settings/screens/:screen/layout',
@@ -885,6 +889,8 @@ function settingsScreenUrl(tab: string | undefined, search = ''): string {
       return `${base}settings/notifications`;
     case 'screen':
       return `${base}settings/screen`;
+    case 'news':
+      return `${base}settings/news`;
     default:
       return `${base}settings`;
   }

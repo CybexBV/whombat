@@ -1,3 +1,4 @@
+import { NEWS_WORDS } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
   aiLine,
@@ -69,6 +70,23 @@ describe('the Settings list in five groups', () => {
     expect(screens.find((r) => r.key === 'screen')).toMatchObject({
       title: 'Screens',
       label: 'Screens, 3 screens',
+    });
+  });
+
+  it('has News and weather after This Whombat only where the Whombat answers it', () => {
+    expect(settingsRows(base).map((r) => r.key)).not.toContain('news');
+    const rows = settingsRows({ ...base, news: true, screen: { value: 'Built-in screen', tone: null } });
+    expect(rows.map((r) => r.key)).toEqual([
+      'agent',
+      'connections',
+      'appliance',
+      'news',
+      'screen',
+      'advanced',
+    ]);
+    expect(rows.find((r) => r.key === 'news')).toMatchObject({
+      title: NEWS_WORDS.page,
+      value: NEWS_WORDS.homeLine,
     });
   });
 

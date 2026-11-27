@@ -1,4 +1,4 @@
-# The weather and the news in the apps (AP-10000 … AP-10014)
+# The weather and the news in the apps (AP-10000 … AP-10014, AP-10051 … AP-10058)
 
 John, 2026-11-26: “I realized that we need to improve more capabilities in Whombat by default, for example weather
 information which will be useful for Dusty in both dashboard view (morning page for example), but also for Dusty's
@@ -66,6 +66,8 @@ On the web they are This Whombat → About's PLACE and NEWS, right after the qui
 zone). On the phone they are cards after VERSION on This Whombat's About and on the demo world's This Whombat. Both are
 asked only of a Whombat at `WEATHER_NEWS_MINOR` or later (`placeNewsShown`); an older one shows neither.
 
+On the phone superseded by AP-10051.
+
 ## AP-10009 Changing the place
 
 The row says “Amsterdam · guessed from the time zone” or the place chosen (“Eindhoven, Noord-Brabant”), with the
@@ -89,6 +91,8 @@ else the country (“the Netherlands”) — each with *Turn on*, in the server'
 the address and *Add*; a refusal (not https, not a feed, the twelfth) says the server's words under the field, and an
 added site says “AT5 is on.”. With twelve on, the line says so and *Turn on* and *Add* wait.
 
+On the phone superseded by AP-10052 … AP-10056.
+
 ## AP-10012 Buttons, not switches, and no confirm
 
 A site turned off leaves *Your news* (a suggestion goes back to the suggestions), so a switch that made its own row
@@ -109,3 +113,66 @@ that carries the burrow. The fake screens serve the weather and news views from 
 Everything said is the contracts' (`PLACE_SETTING_WORDS`, `NEWS_WORDS`, `WEATHER_WORDS`) or the screen's own
 (`SCREEN_WORDS.weather`, `.news`), a test keeping the screen's equal to core's. A country is named in English by the
 device (`Intl.DisplayNames`), its code where the device can't, with “the” where English says it.
+
+## The phone's News and weather page (2026-11-27)
+
+John, 2026-11-27: Settings gets a News and weather group of its own, with up to 30 sources, browsing by country and
+topic, and importing a list (Whombat `docs/decisions/weather-news.md`, session minor 19). These are the phone's.
+
+## AP-10051 A page of its own
+
+Settings → News and weather is a row after This Whombat (lucide's `Newspaper`, the line `NEWS_WORDS.homeLine`) and a
+page at `whombat://settings/news`, which the web's `/settings?tab=news` and `/settings/news` open too; Search finds it
+by “weather”, “place”, “headlines”, “feeds” and “sources”, and the app reopens on it. The row and the page are there
+only where the Whombat answers the place and the news (`placeNewsShown`). PLACE and the news left This Whombat →
+About and the demo world's This Whombat. The demo world serves `createFakePlaceNews`, which answers browsing and
+importing as the runtime does.
+
+## AP-10052 The page: PLACE, YOUR SOURCES, FIND MORE
+
+The page's line (`pageLine`), then PLACE as before (AP-10009, AP-10010), then YOUR SOURCES with “5 of 30” at the label's
+end and the line that nothing is read until a source is on. Each source has its mark, its name, a line saying what it
+is (“Netherlands · national”, “Noord-Brabant · regional”, “Netherlands · Tech”, “YouTube · added by you”, the feed's
+host when the suggestion isn't known) and its problem in amber, with *Turn off* (a suggestion) or *Remove* (one the
+person added). With every place taken the list says so (“Up to 30 sources. Turn one off first.”), and *Add* and
+*Import* wait. Then FIND MORE, with three underlined tabs: *Suggested*, *Add your own* (the address and *Add*, as
+before) and *Import*.
+
+## AP-10053 *Change order* instead of dragging
+
+Under the list, *Change order* swaps each row's *Turn off* or *Remove* for *Move up* and *Move down* (44 dp each, named
+“Move NOS up”) until *Done*. A row isn't wide enough for *Turn off* and two arrows, and the app has no shared drag list
+to reuse. Each move is saved at once; the first can't go up and the last can't go down.
+
+## AP-10054 *Suggested*: a country and topic chips
+
+A *Country* row with the country's name opens a sheet listing the countries the Whombat has sites for, by name, the
+chosen one ticked; it starts at the place's country. Under it the chips All · Near you · National · Tech · Sport ·
+Business · Science · Culture, only those with sites in that country (Near you: the place's region or area; National:
+the country's general news). Each site has its mark, its name, its line (“National”, “Tech”, “Noord-Brabant ·
+regional”) and *Add*, or a tick and “On” in the ok colour where it is on already. Adding says “AT5 is on.”.
+
+## AP-10055 *Import* with the document picker
+
+*Import* opens the system's file picker (`expo-document-picker`, already in the app) for an OPML file from another
+news reader, reads at most 1 MB of it, takes its feed addresses, sends up to 30 to the Whombat, and says what came of
+it in a notice (“2 sources added. 1 couldn’t be added.”). A file with no addresses says so under the button. The
+picker's copy is deleted afterwards.
+
+## AP-10056 An older Whombat keeps the old part
+
+A Whombat before the browse and import contracts (`newsMoreShown` false) keeps the limit of twelve (“5 of 12”), its
+*Suggested* is the old list of suggestions for the place (titled “Suggested for Noord-Brabant”), and there is no
+*Import* tab, country or chips.
+
+## AP-10057 Source marks
+
+A source's mark is a 32 dp square with radius 8 in the avatar tone for its id (`toneFor`), with up to three letters
+in the avatars' initials colour: an abbreviation its name starts with (“NOS”, “RTL”), else the first letters of its
+first two words (“OB” for Omroep Brabant). The phone loads no pictures from news sites.
+
+## AP-10058 The phone's words
+
+Everything said is the contracts' (`NEWS_WORDS`, `NEWS_TOPIC_WORDS`, `NEWS_KIND_WORDS`, `PLACE_SETTING_WORDS`).
+The phone needed five more, kept at the end of `NEWS_WORDS` under “phone”: “On”, “Change order”, “Done”, “Move {name}
+up” and “Move {name} down”.

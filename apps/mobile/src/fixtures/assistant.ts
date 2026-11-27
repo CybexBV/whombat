@@ -876,7 +876,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     on: options.webSearch ?? process.env.EXPO_PUBLIC_WHOMBAT_WEB_SEARCH === '1',
     burrow: worldBurrow,
   });
-  // Where Lumio is and the news it reads (weather-news.md): Settings → This Whombat's PLACE and NEWS. The time zone's
+  // Where Lumio is and the news it reads (weather-news.md): Settings → News and weather. The time zone's
   // guess (Amsterdam) and AT5 on to start; choosing a place publishes the burrow.
   const placeNews = createFakePlaceNews({
     guess: placeFromTimeZone(fixtureBurrow.timeZone),
