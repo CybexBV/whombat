@@ -19,6 +19,10 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@whombat/avatars/react', replacement: vendor('avatars/src/react.tsx') },
+      { find: '@whombat/avatars/live', replacement: vendor('avatars/src/live.tsx') },
+      { find: '@whombat/avatars/face', replacement: vendor('avatars/src/face.ts') },
+      { find: '@whombat/avatars/motion', replacement: vendor('avatars/src/faceMotion.ts') },
+      { find: '@whombat/avatars/puppet', replacement: vendor('avatars/src/puppet.ts') },
       { find: '@whombat/avatars/urls', replacement: vendor('avatars/src/urls.ts') },
       { find: '@whombat/avatars', replacement: vendor('avatars/src/index.ts') },
       { find: '@whombat/brand/react', replacement: vendor('brand/src/react.tsx') },
