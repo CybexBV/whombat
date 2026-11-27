@@ -1,7 +1,7 @@
 /**
  * The one-time “Whombat updated” notice in the strip under the status bar, under the passkey nudge when that shows
  * too: once per update of this Whombat, with See what’s new (the web app's page in the in-app browser) and Dismiss.
- * The release is kept as seen as soon as it shows; the notice stays until one of the two is tapped. It reads the status
+ * The release is kept as seen once the notice is drawn with the app in front; it stays until one of the two is tapped. It reads the status
  * the Settings list already asks for (same query), again whenever the session opens after a drop and every few
  * seconds while an update is being installed; no poll of its own otherwise.
  */
@@ -9,18 +9,26 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WHATS_NEW_TEXT, whatsNewRefetchInterval } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { secureStore } from '../lib/storage';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { applianceStatusQuery } from './useApplianceStatus';
-import { markWhatsNewTold, WHATS_NEW_URL, watchStatusOnReopen, whatsNewWatcher } from './whatsNew';
+import {
+  markWhatsNewTold,
+  markWhenOnScreen,
+  WHATS_NEW_URL,
+  watchStatusOnReopen,
+  whatsNewWatcher,
+} from './whatsNew';
 
 export interface WhatsNewNoticeState {
   see: () => void;
   dismiss: () => void;
+  /** The notice is drawn in front of the person: it counts as told. */
+  onScreen: () => void;
 }
 
 export function useWhatsNewNotice({
@@ -71,27 +79,27 @@ export function useWhatsNewNotice({
     watcher.current?.see(status);
   }, [status]);
   const release = shown?.whombat === whombat ? shown.release : null;
-  // The strip draws it while the session is open (`stripNotices`): only then is it told, so one found while the
-  // connection is down still shows after the app is closed or another Whombat opened.
-  useEffect(() => {
-    if (open && release) void markWhatsNewTold(secureStore, whombat, release);
-  }, [open, release, whombat]);
   return useMemo(() => {
     if (!release) return null;
     const close = () => setShown(null);
     return {
+      // Drawn in front of the person: told, so it doesn't come back (`WhatsNewNoticeView`).
+      onScreen: () => void markWhatsNewTold(secureStore, whombat, release),
       see: () => {
         close();
         void openSignInPage(WHATS_NEW_URL);
       },
       dismiss: close,
     };
-  }, [release]);
+  }, [release, whombat]);
 }
 
 /** Drawn as the passkey nudge is: a calm card with its sentence and the two buttons under it. */
 export function WhatsNewNoticeView({ notice }: { notice: WhatsNewNoticeState }) {
   const theme = useTheme();
+  // Told only once it is drawn with the app in front: not while the app is still loading or in the background.
+  const { onScreen } = notice;
+  useEffect(() => markWhenOnScreen(AppState, onScreen), [onScreen]);
   return (
     <View
       accessibilityLiveRegion="polite"

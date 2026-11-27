@@ -80,8 +80,9 @@ export function whatsNewToShow(
 }
 
 /**
- * Keeps that the notice for `release` is on screen, so it doesn't come back. Called by the strip once it draws it, not
- * when an answer finds it: found while the connection is down (the strip is hidden), it must still tell next time.
+ * Keeps that the notice for `release` is on screen, so it doesn't come back. Called by the notice once it is drawn with
+ * the app in the foreground (`markWhenOnScreen`), not when an answer finds it: found while the connection is down or the
+ * app is still loading (nothing draws it), it must still tell next time.
  */
 export function markWhatsNewTold(store: KeyValueStore, whombat: string, release: string): Promise<void> {
   const key = whatsNewSeenKey(whombat);
@@ -157,4 +158,27 @@ export function stripNotices({
   whatsNew: boolean;
 } {
   return { nudge: open && nudge, whatsNew: open && whatsNew };
+}
+
+/** The app's foreground state, as React Native's `AppState` gives it. */
+interface Foreground {
+  readonly currentState: string;
+  addEventListener(type: 'change', listener: (state: string) => void): { remove(): void };
+}
+
+/**
+ * Calls `mark` once the notice drawn now is in front of the person: at once when the app is in the foreground, else
+ * when it comes there. Returns the way to stop (the notice went away first, or the app was closed).
+ */
+export function markWhenOnScreen(app: Foreground, mark: () => void): () => void {
+  if (app.currentState === 'active') {
+    mark();
+    return () => {};
+  }
+  const sub = app.addEventListener('change', (state) => {
+    if (state !== 'active') return;
+    sub.remove();
+    mark();
+  });
+  return () => sub.remove();
 }

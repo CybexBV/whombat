@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { type KeyValueStore, memoryStore } from '../lib/kv';
 import {
   markWhatsNewTold,
+  markWhenOnScreen,
   stripNotices,
   WHATS_NEW_ROW,
   WHATS_NEW_URL,
@@ -344,6 +345,49 @@ describe('the one-time “Whombat updated” notice', () => {
     // On screen at last: told, and never again.
     await markWhatsNewTold(store, WHOMBAT, 'pve-20260928.6');
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
+  });
+
+  it('counts as on screen only while the app is in the foreground, and then once', () => {
+    let state = 'background';
+    const listeners = new Set<(s: string) => void>();
+    const app = {
+      get currentState() {
+        return state;
+      },
+      addEventListener: (_type: 'change', cb: (s: string) => void) => {
+        listeners.add(cb);
+        return { remove: () => listeners.delete(cb) };
+      },
+    };
+    const move = (next: string) => {
+      state = next;
+      for (const cb of [...listeners]) cb(next);
+    };
+    let marks = 0;
+    // Drawn while the app is in the background (or still starting): not yet seen.
+    const stop = markWhenOnScreen(app, () => {
+      marks += 1;
+    });
+    expect(marks).toBe(0);
+    move('active');
+    expect(marks).toBe(1);
+    move('background');
+    move('active');
+    expect(marks).toBe(1);
+    stop();
+    // Gone before the app came to the foreground (closed while loading): never marked, so the next start tells.
+    move('background');
+    const gone = markWhenOnScreen(app, () => {
+      marks += 1;
+    });
+    gone();
+    move('active');
+    expect(marks).toBe(1);
+    // Drawn in the foreground: seen at once.
+    markWhenOnScreen(app, () => {
+      marks += 1;
+    });
+    expect(marks).toBe(2);
   });
 
   it('is drawn in the strip with the passkey nudge, never waiting for it', () => {
