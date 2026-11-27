@@ -371,7 +371,10 @@ function KpisPanel({
   };
   return (
     <section className={things.card} aria-label="At a glance">
-      <div className={styles.figs} style={{ '--figs': panel.items.length } as CSSProperties}>
+      <div
+        className={cx(styles.figs, panel.items.length === 4 && styles.figsFour)}
+        style={{ '--figs': panel.items.length } as CSSProperties}
+      >
         {panel.items.map((k) => (
           <Figure
             key={k.key}
@@ -1032,7 +1035,18 @@ function ListPanel({ panel, ctx }: { panel: PanelOf<'list'>; ctx: DashboardConte
                   )}
                   {item.detail ? <small>{item.detail}</small> : null}
                 </div>
-                {end ? (
+                {item.figure?.note &&
+                (item.figure.tone === 'warn' || item.figure.tone === 'bad') &&
+                !item.at &&
+                !item.right ? (
+                  // A count that shows a problem has it under it (“44 of 45” over “1 offline”), in its tone, said once
+                  // (servers-connections-places.md); other notes repeat the line's words, so they stay out. A line
+                  // with a time or its own end keeps it.
+                  <span className={cx(styles.lineEnd, styles.lineFigure)}>
+                    <span className={FIGURE_TONES[item.figure.tone]}>{item.figure.value}</span>
+                    <small className={FIGURE_TONES[item.figure.tone]}>{item.figure.note}</small>
+                  </span>
+                ) : end ? (
                   item.at && !item.right ? (
                     <time className={styles.lineEnd} dateTime={item.at}>
                       {end}

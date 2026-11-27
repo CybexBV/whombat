@@ -1,13 +1,28 @@
 /**
- * Places (docs/decisions/phone-shell-final.md): the one list of where the app goes, in the web sidebar's order —
- * Search, Chat, Inbox, Overview, Automations, Files, Vault, Usage, Settings — and below it a shortcut to each server and
- * connection with its real logo. Chat, the Inbox, Overview, Automations and Settings are the bar's tabs; Files, Vault
- * and Usage are pages pushed over them, Search its own page. Pure: the sheet is `ui/places.tsx`, the row above a tab's
- * screen `ui/topRow.tsx`.
+ * Places (docs/decisions/phone-shell-final.md, servers-connections-places.md): the one list of where the app goes, in
+ * the web sidebar's order — Search, Chat, Inbox, Overview, Servers, Connections, Automations, Files, Vault, Usage,
+ * Settings. Chat, the Inbox, Overview, Automations and Settings are the bar's tabs; Servers and Connections are list
+ * screens (each a list beside the picked page from the two-page width); Files, Vault and Usage are pages pushed over
+ * the tabs, Search its own page. Servers shows once there is a server or the hosts service runs, Connections once
+ * something is connected; each carries the worst mark of what it holds. The two lists' rows are the shared
+ * `serverPlaceRows` and `connectionPlaceRows` (`@whombat/client`) with the phone's glyph and the address a thing without
+ * a page follows. Pure: the sheet is `ui/places.tsx`, the row above a tab's screen `ui/topRow.tsx`, the lists
+ * `screens/PlaceScreen.tsx`.
  */
 import type { MarkLike } from '@whombat/brand';
-import { type ThingRow, thingRows } from '@whombat/client';
-import type { ThingSummary } from '@whombat/core';
+import {
+  connectionPlaceRows,
+  PLACE_WORDS as LIST_WORDS,
+  type OverviewTile,
+  type PlaceRow,
+  placeRowsTone,
+  serverPlaceRows,
+  serverQuietWords,
+  type ThingPlace,
+  type ThingRow,
+  thingRows,
+} from '@whombat/client';
+import type { HostServer, ThingSummary } from '@whombat/core';
 import { serviceRowOpens } from './home';
 import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from './shell';
 import { type PhoneGlyph, phoneThingGlyph } from './thingLook';
@@ -17,6 +32,8 @@ export type PlaceId =
   | 'chat'
   | 'inbox'
   | 'overview'
+  | 'servers'
+  | 'connections'
   | 'automations'
   | 'files'
   | 'vault'
@@ -29,6 +46,8 @@ export const PLACES: readonly PlaceId[] = [
   'chat',
   'inbox',
   'overview',
+  'servers',
+  'connections',
   'automations',
   'files',
   'vault',
@@ -36,12 +55,14 @@ export const PLACES: readonly PlaceId[] = [
   'settings',
 ];
 
-/** What each place is called: the tabs' own words, Overview's title, and Usage for what was Spend. */
+/** What each place is called: the tabs' own words, Overview's title, the lists' titles, and Usage for what was Spend. */
 export const PLACE_WORDS: Record<PlaceId, string> = {
   search: 'Search',
   chat: TAB_WORDS.ChatRoom,
   inbox: TAB_WORDS.NeedsYou,
   overview: OVERVIEW_TITLE,
+  servers: LIST_WORDS.servers.title,
+  connections: LIST_WORDS.connections.title,
   automations: TAB_WORDS.Automations,
   files: 'Files',
   vault: 'Vault',
@@ -54,8 +75,6 @@ export const PLACES_COPY = {
   /** What opens the sheet, for VoiceOver and TalkBack too. */
   open: 'Places',
   close: 'Close Places',
-  servers: 'Servers',
-  connections: 'Connections',
 } as const;
 
 /** One line on what is in each place, under its name in Search's results. */
@@ -67,6 +86,10 @@ export function placeLine(place: Exclude<PlaceId, 'search'>, assistant: string):
       return 'What needs you';
     case 'overview':
       return 'Servers and connections';
+    case 'servers':
+      return 'Your servers and how they are';
+    case 'connections':
+      return 'What’s connected and how it is';
     case 'automations':
       return 'Plans and schedules';
     case 'files':
@@ -95,10 +118,31 @@ export const PLACE_TABS: Partial<Record<PlaceId, Tab>> = {
  */
 export type PlaceRoute =
   | { kind: 'tab'; tab: Tab }
-  | { kind: 'page'; name: 'Search' | 'Files' | 'Vault' | 'Spend'; params: { back: string } };
+  | {
+      kind: 'page';
+      name: 'Search' | 'ServersPlace' | 'ConnectionsPlace' | 'Files' | 'Vault' | 'Spend';
+      params: { back: string };
+    };
+
+/** The list screen of each of the two list places. */
+export const PLACE_SCREENS = {
+  servers: 'ServersPlace',
+  connections: 'ConnectionsPlace',
+} as const satisfies Record<ThingPlace, string>;
+
+/** The list place a screen is, for the list screens. */
+export function listPlaceOfScreen(name: string | undefined): ThingPlace | null {
+  return name === PLACE_SCREENS.servers
+    ? 'servers'
+    : name === PLACE_SCREENS.connections
+      ? 'connections'
+      : null;
+}
 
 const PLACE_PAGES = {
   search: 'Search',
+  servers: PLACE_SCREENS.servers,
+  connections: PLACE_SCREENS.connections,
   files: 'Files',
   vault: 'Vault',
   usage: 'Spend',
@@ -126,6 +170,10 @@ export function placeOfScreen(name: string | undefined): PlaceId | null {
       return 'settings';
     case 'Search':
       return 'search';
+    case 'ServersPlace':
+      return 'servers';
+    case 'ConnectionsPlace':
+      return 'connections';
     case 'Files':
       return 'files';
     case 'Vault':
@@ -147,13 +195,13 @@ export interface PlaceThingRow extends Omit<ThingRow, 'glyph'> {
   opens: string | null;
 }
 
-/** The shortcuts under the places: the servers, then the connections and devices, in the server's order. */
+/** Every server and connection with its logo, for Search's Things: the servers, then the connections and devices. */
 export interface PlacesThings {
   servers: PlaceThingRow[];
   connections: PlaceThingRow[];
 }
 
-/** What the hosts service says of a server that the thing list doesn't: its system's logo and name, how it is. */
+/** What the hosts service says of a server that the thing list doesn't (for Search): its logo, its system, how it is. */
 export interface ServerFacts {
   thingId: string;
   mark: MarkLike | null;
@@ -164,8 +212,8 @@ export interface ServerFacts {
 }
 
 /**
- * The servers' and connections' rows; a server wears the logo of what it runs where the hosts service knows it (as on
- * Overview), never a plain server where there is a real logo.
+ * The servers' and connections' rows Search finds; a server wears the logo of what it runs where the hosts service
+ * knows it (as on Overview), never a plain server where there is a real logo.
  */
 export function placesThings(
   things: readonly ThingSummary[] | undefined,
@@ -205,3 +253,75 @@ export function placeLabel(place: PlaceId, count: number, broken = false): strin
   }
   return name;
 }
+
+/* Servers and Connections ------------------------------------------------------------------------------------------ */
+
+/** A row of the Servers or Connections list: the shared row, its glyph as the phone draws it, where it opens. */
+export interface PhonePlaceRow extends PlaceRow {
+  /** The glyph the phone draws where there is no logo (Website feedback's bubble rather than the plug). */
+  phoneGlyph: PhoneGlyph;
+  /** The address to follow instead of the thing's page (an account an older box gives no page); null opens the page. */
+  opens: string | null;
+}
+
+export interface PlaceLists {
+  servers: PhonePlaceRow[];
+  connections: PhonePlaceRow[];
+  /** The worst mark each place's row in the sheet carries; null when all is fine. */
+  tone: Record<ThingPlace, 'bad' | 'warn' | null>;
+  /** The hosts service runs here: Servers' `+` (Add a server) needs it. */
+  hosts: boolean;
+  /** Whether the place is in the sheet: Servers with a server or the hosts service, Connections with one connected. */
+  shown: Record<ThingPlace, boolean>;
+}
+
+/**
+ * The two lists from what Overview reads: Home's things, the hosts fleet (Servers in Overview's order and words) and
+ * Overview's connection tiles (Connections worst first with each tile's line).
+ */
+export function placeLists(input: {
+  things: readonly ThingSummary[] | undefined;
+  fleet: readonly HostServer[] | null | undefined;
+  /** The hosts service runs on this Whombat. */
+  hosts: boolean;
+  tiles: readonly OverviewTile[] | null | undefined;
+  now: number;
+  timeZone: string;
+}): PlaceLists {
+  const list = input.things ?? [];
+  const byId = new Map(list.map((t) => [t.id, t]));
+  const rows = thingRows(list);
+  const serverIds = new Set(list.filter((t) => t.kind === 'server').map((t) => t.id));
+  const serverThings = rows.filter((r) => serverIds.has(r.id));
+  const connectionThings = rows.filter((r) => !serverIds.has(r.id));
+  const phone = (row: PlaceRow): PhonePlaceRow => {
+    const thing = byId.get(row.id);
+    return {
+      ...row,
+      phoneGlyph: thing ? phoneThingGlyph(thing) : row.glyph,
+      opens: thing ? serviceRowOpens(thing) : null,
+    };
+  };
+  const quiet = serverQuietWords(list, input.now, input.timeZone);
+  const servers = serverPlaceRows(input.fleet, serverThings, input.now, input.timeZone, quiet).map(phone);
+  const connections = connectionPlaceRows(connectionThings, input.tiles).map(phone);
+  return {
+    servers,
+    connections,
+    // The marks from the rows the lists show, so the sheet and the list never disagree.
+    tone: { servers: placeRowsTone(servers), connections: placeRowsTone(connections) },
+    hosts: input.hosts,
+    shown: { servers: servers.length > 0 || input.hosts, connections: connections.length > 0 },
+  };
+}
+
+/** The places the sheet lists: every place, Servers and Connections only when they hold something. */
+export function sheetPlaces(shown: Record<ThingPlace, boolean>): PlaceId[] {
+  return PLACES.filter((p) => (p === 'servers' || p === 'connections' ? shown[p] : true));
+}
+
+/** With two pages, the right page while nothing from the list is open there. */
+export const PLACE_PICK: Record<ThingPlace, string> = {
+  servers: 'Pick a server to see it here.',
+  connections: 'Pick a connection to see it here.',
+};

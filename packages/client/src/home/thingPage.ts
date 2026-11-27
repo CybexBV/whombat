@@ -23,9 +23,11 @@ import {
   connectionHost,
   type HostGuest,
   type HostServer,
+  noticeNature,
 } from '@whombat/core/domain';
 import { daysAgo, formatClock, formatDate, toDate } from '@whombat/core/text';
 import { guestKindText } from '../hosts/model';
+import { STATUS_LEVEL_WORDS, thingStatusLevel } from './statusLevel';
 import { THING_STATUS_LABELS } from './things';
 
 /** A tab as the clients draw it: the server's, or one of their own. */
@@ -318,6 +320,48 @@ export function headFacts(facts: readonly ThingPage['facts'][number][]): {
   const text = (f: ThingPage['facts'][number]) => f.map((p) => p.text).join('');
   const checked = facts.find((f) => /^Checked\b/.test(text(f))) ?? null;
   return { checked, detail: facts.filter((f) => f !== checked) };
+}
+
+/**
+ * Whether the page's Summary tells what isn't fine itself: a Worth a look panel with something in it
+ * (servers-connections-places.md).
+ */
+export function pageTellsProblem(page: Pick<ThingPage, 'tabs'>): boolean {
+  const summary = page.tabs[0];
+  // A quiet heads-up is folded away and an FYI isn't a problem: neither tells it.
+  return !!summary?.panels.some(
+    (p) => p.kind === 'notices' && p.items.some((i) => !i.quiet && noticeNature(i) !== 'fyi'),
+  );
+}
+
+/**
+ * The status word in a page's head: none when it is fine; only the level's word (“Needs a look”,
+ * “Offline”) when the page's Worth a look tells why, so the reason is said once; else the page's own badge, the only
+ * place it is said. Before the page answers (no tabs yet) the level's word too, so the head doesn't change its words when
+ * the page comes.
+ */
+export function pageHeadBadge(
+  page: Pick<ThingPage, 'status' | 'badge'> & Partial<Pick<ThingPage, 'tabs' | 'causedBy'>>,
+): string | null {
+  if (page.status === 'ok') return null;
+  // Not known yet, being learned, or down because of something else: its own words say what to look at.
+  if (page.status === 'unknown' || page.status === 'learning') return page.badge;
+  if (page.causedBy && page.causedBy.kind !== 'quiet') return page.badge;
+  if (page.tabs && !pageTellsProblem({ tabs: page.tabs })) return page.badge;
+  if (page.status === 'offline') return THING_STATUS_LABELS.offline;
+  return STATUS_LEVEL_WORDS[thingStatusLevel(page.status)];
+}
+
+/**
+ * The sentence under a page's name: none while it isn't fine and its Worth a look already tells why, so the problem is
+ * said once; else the page's own verdict.
+ */
+export function pageHeadVerdict(
+  page: Pick<ThingPage, 'status' | 'tabs'> & { verdict?: string | null },
+): string | null {
+  const verdict = page.verdict?.trim() || null;
+  if (!verdict || page.status === 'ok') return verdict;
+  return pageTellsProblem(page) ? null : verdict;
 }
 
 /** A list line's time on the right: `Today 07:31`, else the date (`17 Oct`). */

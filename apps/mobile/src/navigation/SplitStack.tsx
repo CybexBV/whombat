@@ -5,8 +5,9 @@
  * - a phone: the stack as it always was, the tabs along the bottom;
  * - tabs down the side (the iPhone Duo closed, a medium window): the same stack beside a `SideBar`;
  * - two pages (the Duo open, an unfolded Android foldable): the tabs, the stack's first route, as the list on the left,
- *   and the routes above it as a stack of their own on the right, the wider one. The person drags the line between them;
- *   the phone keeps where it was left.
+ *   and the routes above it as a stack of their own on the right, the wider one. A list page right above the tabs
+ *   (Servers, Connections: servers-connections-places.md) is the list instead, the tabs kept under it out of sight, and
+ *   what it opened shows on the right. The person drags the line between them; the phone keeps where it was left.
  *
  * Because the state is one stack throughout, folding and unfolding keep the place: a thread open on the closed phone
  * shows beside Chat when it opens, and on top of Chat again when it closes. `splitRouter` decides what opening
@@ -42,6 +43,7 @@ import Reanimated, { type SharedValue, useAnimatedStyle, useSharedValue } from '
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { listHiding, parseFullWidthTabs, withFullWidth, writeFullWidthTabs } from '../data/fullWidth';
+import { listPlaceOfScreen } from '../data/places';
 import { dividerAt, listWidthFor, parseShare, type ScreenShape, shareOf } from '../data/screenShape';
 import { HOME_TAB, type Tab } from '../data/shell';
 import { STORAGE_KEYS } from '../lib/kv';
@@ -61,7 +63,7 @@ import {
   type RestingPage,
   RestingPageContext,
 } from './panes';
-import { besideOptions, LIST_ROUTE, splitRouter } from './splitRouter';
+import { besideOptions, LIST_ROUTE, listIndex, promotedList, splitRouter } from './splitRouter';
 import { SideBar } from './TabBar';
 
 type State = StackNavigationState<ParamListBase>;
@@ -126,6 +128,12 @@ function SplitStackNavigator({
     screenLayout,
     UNSTABLE_router: router as NativeStackNavigatorProps['UNSTABLE_router'],
   });
+  // Unfolded with a list page higher in the stack: it becomes the list, what it opened beside it.
+  useEffect(() => {
+    if (shape.pages !== 2) return;
+    const routes = promotedList(state.routes);
+    if (routes) navigation.dispatch(CommonActions.reset({ ...state, index: routes.length - 1, routes }));
+  }, [shape.pages, state, navigation]);
   const side = shape.tabs !== 'bottom';
   useSideBarHere(side);
   const list = state.routes[0];
@@ -295,13 +303,21 @@ function TwoPages({
   const headerLine = useHeaderLine();
   const composerLine = useHeaderLine();
   const listWidth = listWidthFor(shape, share);
+  // A list page right above the tabs is the list; the tabs stay mounted under it, out of sight.
+  const at = listIndex(state.routes);
+  const listPlace = at === 1 ? listPlaceOfScreen(state.routes[1]?.name) : null;
+  // Until the place has opened a page on its own, the right side is waiting for it, not asking for a pick.
+  const placeParams = state.routes[1]?.params as { opened?: boolean; idle?: boolean } | undefined;
+  const placeWaiting = !!listPlace && !placeParams?.opened && !placeParams?.idle;
   // The list hidden: it stays mounted (where it was scrolled, what was typed) but takes no room, and the right page has
   // the whole width. Chat's whenever the person hid it; another tab's only while something is open beside it, since
-  // its right page shows nothing without the list.
-  const chat = tab === 'ChatRoom';
+  // its right page shows nothing without the list. A list page's list is never hidden: it is the place.
+  const chat = tab === 'ChatRoom' && at === 0;
   const kept = chat ? fullWidth : fullTabs.has(tab);
-  const open = state.routes.length > 1;
-  const { hidden: hideList, offered } = listHiding({ chat, kept, open });
+  const open = state.routes.length > at + 1;
+  const listHid = listHiding({ chat, kept, open });
+  const hideList = at === 0 && listHid.hidden;
+  const offered = at === 0 && listHid.offered;
   // A drag moves the line through this value on the UI thread without drawing the pages again; the window and the
   // kept share set it before the frame is drawn.
   const width = useSharedValue(listWidth);
@@ -324,13 +340,14 @@ function TwoPages({
         : null,
     [offered, hideList, chat, fullWidth, onFullWidth, fullTabs, onFullTabs, tab, kept],
   );
-  const list = state.routes[0];
+  const tabs = state.routes[0];
+  const list = state.routes[at];
   const besideState = useMemo<State | null>(
     () =>
-      state.routes.length > 1
-        ? { ...state, routes: state.routes.slice(1), index: Math.max(0, state.index - 1) }
+      state.routes.length > at + 1
+        ? { ...state, routes: state.routes.slice(at + 1), index: Math.max(0, state.index - at - 1) }
         : null,
-    [state],
+    [state, at],
   );
   // The right page's first screen closes instead of going back and comes without a slide; the ones on top of it go back.
   const besideDescriptors = useMemo(() => {
@@ -350,7 +367,7 @@ function TwoPages({
   const first = besideState?.routes[0];
   const besideRoute = useMemo(() => (first ? { name: first.name, params: first.params } : null), [first]);
   const resting = useRestingPage(besideState !== null, navigation);
-  if (!list) return null;
+  if (!list || !tabs) return null;
   return (
     <BesideContext.Provider value={besideRoute}>
       <RestingPageContext.Provider value={resting}>
@@ -366,7 +383,18 @@ function TwoPages({
                   >
                     <PageSideContext.Provider value="list">
                       <PaneRoleContext.Provider value="list">
-                        {descriptors[list.key]?.render()}
+                        {/* The tabs keep their place in the tree whichever is the list, so they don't mount anew. */}
+                        <View
+                          style={at === 1 ? { display: 'none' } : { flex: 1 }}
+                          accessibilityElementsHidden={at === 1}
+                          importantForAccessibility={at === 1 ? 'no-hide-descendants' : 'auto'}
+                        >
+                          {/* Hidden under a place, the tabs are out of view: a page under another, their reads at rest. */}
+                          <PaneRoleContext.Provider value={at === 1 ? 'only' : 'list'}>
+                            {descriptors[tabs.key]?.render()}
+                          </PaneRoleContext.Provider>
+                        </View>
+                        {at === 1 ? <View style={{ flex: 1 }}>{descriptors[list.key]?.render()}</View> : null}
                       </PaneRoleContext.Provider>
                     </PageSideContext.Provider>
                   </Reanimated.View>
@@ -391,7 +419,7 @@ function TwoPages({
                           describe={describe}
                         />
                       ) : (
-                        <EmptyPage tab={tab} />
+                        <EmptyPage tab={tab} place={listPlace} waiting={placeWaiting} />
                       )}
                     </PageSideContext.Provider>
                   </View>

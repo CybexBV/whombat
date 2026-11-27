@@ -55,6 +55,8 @@ const PARITY_FILES = [
   'ui/places.tsx',
   'ui/topRow.tsx',
   'screens/SearchScreen.tsx',
+  // Servers and Connections: the heading, its line and `+`, then the rows, read top to bottom as shown.
+  'screens/PlaceScreen.tsx',
   // Backup file (backup-file-android.md AP-1220): both panels read top to bottom as shown.
   'managed/BackupFileScreen.tsx',
   // This Whombat in parts (this-whombat-sections-android.md AP-1251): the Overview, Backups, Devices, About.

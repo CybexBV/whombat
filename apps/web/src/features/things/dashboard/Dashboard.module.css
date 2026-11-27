@@ -9,8 +9,9 @@
   font-family: var(--font-mono);
 }
 
+/* Amber words take the text shade, which reads on the light surface. */
 .warn.warn {
-  color: var(--warn);
+  color: var(--warn-text);
 }
 
 .bad.bad {
@@ -75,8 +76,20 @@
   display: none;
 }
 
+/* A middling page (beside a place's list, servers-connections-places.md): the side column keeps its place, a
+   little wider, so short cards still sit side by side; one column only below 700 px. */
 @container dash (max-width: 999px) {
   .body {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+
+  .bodyEven {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bodyMain,
+  .bodySide,
+  .body:has(> .stack:empty) {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -85,6 +98,25 @@
   }
 
   .cellFull {
+    grid-column: 1 / -1;
+  }
+
+  .rowPair.rowPair {
+    grid-template-columns: var(--cols-pair);
+  }
+
+  .rowPair .cellFull {
+    grid-column: auto;
+  }
+}
+
+@container dash (max-width: 699px) {
+  .body,
+  .rowPair.rowPair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowPair .cellFull {
     grid-column: 1 / -1;
   }
 }
@@ -119,6 +151,10 @@
 
 /* A figure that opens its charts or leads to its tab: the whole cell, quiet until hovered. */
 .figButton {
+  /* A button centres what it holds in a taller row: from the top, so readings side by side line up. */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   width: 100%;
   margin: 0;
   border: 0;
@@ -183,7 +219,7 @@
 }
 
 .figWarn .figValue {
-  color: var(--warn);
+  color: var(--warn-text);
 }
 
 .figBad .figValue {
@@ -237,6 +273,11 @@
 @container card (max-width: 759px) {
   .figs {
     grid-template-columns: repeat(min(var(--figs), 3), minmax(0, 1fr));
+  }
+
+  /* Four readings two by two, not three and one left alone with a hole beside it. */
+  .figs.figsFour {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -943,6 +984,17 @@
   font: 400 12.5px var(--font-mono);
   text-align: right;
   white-space: nowrap;
+}
+
+/* A count over its short note, right-aligned. */
+.lineFigure {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+}
+
+.lineFigure small {
+  font: 400 11.5px var(--font-sans);
 }
 
 /* Facts: label over value, two to four a row */

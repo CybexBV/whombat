@@ -24,26 +24,6 @@
   }
 }
 
-.addr {
-  padding: 1px 6px;
-  border: none;
-  border-radius: var(--radius-tag);
-  background: var(--sf2);
-  color: var(--ink2);
-  font: 400 12px var(--font-mono);
-  cursor: copy;
-}
-
-.addr:hover {
-  background: var(--sel);
-  color: var(--ink);
-}
-
-.addr:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
 .runsOn {
   color: var(--brand);
   text-decoration: none;
@@ -57,28 +37,6 @@
   font: 400 13.5px var(--font-mono);
 }
 
-.factBtn {
-  margin-left: 8px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--mut);
-  font: 400 13px var(--font-sans);
-  text-decoration: underline;
-  text-decoration-color: var(--line2);
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.factBtnFirst {
-  margin-left: 0;
-}
-
-.factBtn:hover {
-  color: var(--ink);
-}
-
-.factBtn:focus-visible,
 .runsOn:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;

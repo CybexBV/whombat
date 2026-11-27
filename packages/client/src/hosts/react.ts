@@ -29,6 +29,7 @@ import {
   serverDashboardSeries,
   serverDashboardView,
   serverDashboardVolumeSeries,
+  serverPageTellsProblem,
 } from './dashboard';
 import { commitOutcomeText, hostErrorInfo } from './errors';
 import { INSTALL_POLL_MS, installRunning } from './install';
@@ -241,6 +242,8 @@ export interface ServerDashboardState {
   details: ThingPagePanel[] | null;
   /** The sentence at the top of the page, from Worth a look's lines. */
   verdict: Verdict | null;
+  /** Right now or Worth a look tells a problem (`serverPageTellsProblem`): the head need not say it again. */
+  told: boolean;
   /** The range's history, the previous range's while a new one loads. */
   series: HostSeries | undefined;
   /** The server's page is being read for the first time. */
@@ -344,6 +347,8 @@ export function useServerDashboard({
     [detail, series, guests, volumes, shown, timeZone, updates, quiet, name, assistant],
   );
   const head = useMemo(() => (detail ? serverDashboardHead(detail) : null), [detail]);
+  // Whether Right now or Worth a look tells a problem: then the head doesn't say it again in a sentence.
+  const told = useMemo(() => (detail ? serverPageTellsProblem(detail) : false), [detail]);
   const refetch = useCallback(() => {
     void detailQ.refetch();
     void metricsQ.refetch();
@@ -356,6 +361,7 @@ export function useServerDashboard({
     panels: view?.panels ?? null,
     details: view?.details ?? null,
     verdict: view?.verdict ?? null,
+    told,
     series,
     loading: !!serverId && detailQ.isPending,
     fetching: detailQ.isFetching || metricsQ.isFetching || guestQs.some((q) => q.isFetching),

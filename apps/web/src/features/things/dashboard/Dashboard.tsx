@@ -15,7 +15,7 @@ import type { ThingPagePanel } from '@whombat/core';
 import { type CSSProperties, useMemo } from 'react';
 import { cx } from '../../../components/cx';
 import styles from './Dashboard.module.css';
-import { chartRowColumns, twoColumnFull } from './layout';
+import { chartPairColumns, chartRowColumns, twoColumnFull } from './layout';
 import { type DashboardContext, Panel } from './Panels';
 
 export function Dashboard({ panels, ctx }: { panels: readonly ThingPagePanel[]; ctx: DashboardContext }) {
@@ -33,11 +33,14 @@ export function Dashboard({ panels, ctx }: { panels: readonly ThingPagePanel[]; 
       {placed.chart.map((row) => {
         const spans = row.map((c) => c.span);
         const full = twoColumnFull(spans);
+        const pair = chartPairColumns(spans);
         return (
           <div
             key={row.map((c) => c.panel.id).join(' ')}
-            className={styles.row}
-            style={{ '--cols': chartRowColumns(spans) } as CSSProperties}
+            className={cx(styles.row, pair && styles.rowPair)}
+            style={
+              { '--cols': chartRowColumns(spans), ...(pair ? { '--cols-pair': pair } : {}) } as CSSProperties
+            }
           >
             {row.map((c, i) => (
               <div key={c.panel.id} className={cx(styles.cell, full[i] && styles.cellFull)}>

@@ -153,18 +153,22 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`settings-connections-${theme}.png`);
   });
 
-  test(`sidebar, Servers and Connections tabs (${theme})`, async ({ page }) => {
-    // Servers first, Connections a tab away with its problems still in view (sidebar-tabs.md SBT-03, SBT-04).
-    await page.addInitScript(() => localStorage.removeItem('whombat.sidebar.list'));
-    await openApp(page, { path: '/connections', theme });
-    const side = page.getByRole('complementary', { name: 'Sidebar' });
-    const tabs = side.getByRole('tablist', { name: 'Servers and connections' });
-    await tabs.waitFor();
+  test(`Servers and Connections, the list beside a page (${theme})`, async ({ page }) => {
+    // Places in the menu, Chat's list beside the page it opens (servers-connections-places.md).
+    await page.addInitScript(() => {
+      localStorage.removeItem('whombat.place.servers');
+      localStorage.removeItem('whombat.place.connections');
+    });
+    await openApp(page, { path: '/servers', theme });
+    await page.getByRole('navigation', { name: 'Servers' }).waitFor();
+    await page.waitForURL(/\/things\//);
     await settle(page);
-    await expect(side).toHaveScreenshot(`sidebar-servers-${theme}.png`);
-    await tabs.getByRole('tab', { name: /^Connections/ }).click();
+    await expect(page).toHaveScreenshot(`place-servers-${theme}.png`);
+    await openApp(page, { path: '/connected', theme });
+    await page.getByRole('navigation', { name: 'Connections' }).waitFor();
+    await page.waitForURL(/\/things\//);
     await settle(page);
-    await expect(side).toHaveScreenshot(`sidebar-connections-${theme}.png`);
+    await expect(page).toHaveScreenshot(`place-connections-${theme}.png`);
   });
 
   test(`onboarding step 1, Name your Whombat (${theme})`, async ({ page }) => {

@@ -11,12 +11,14 @@ import {
   agentGroupParts,
   agentKeysText,
   appPlaceWords,
+  PLACE_WORDS,
   SEARCH_WORDS,
   SETTINGS_GROUP_TEXT,
   SETTINGS_HOME_TEXT,
   type SettingsHere,
   THING_STATUS_LABELS,
   type ThingGlyph,
+  type ThingPlace,
   thingRows,
   USAGE_HREF,
   youParts,
@@ -31,14 +33,23 @@ import {
   parseThingId,
   type ThingSummary,
 } from '@whombat/core';
+import { PLACE_HREFS as THING_PLACE_HREFS } from '../../app/shell/assistantSidebarModel';
 import { INBOX_PATH } from '../../app/shell/location';
 
 export type CatalogGroup = 'things' | 'settings' | 'places';
 
+/** The app's places and the sidebar's Servers and Connections, which Search lists right after Overview. */
+export type SearchPlace = AppPlace | ThingPlace;
+
+const THING_PLACE_LINES: Record<ThingPlace, string> = {
+  servers: 'Your servers and how they are',
+  connections: 'What’s connected and how it is',
+};
+
 export type CatalogIcon =
   | { kind: 'mark'; mark: MarkLike }
   | { kind: 'glyph'; glyph: ThingGlyph }
-  | { kind: 'place'; place: AppPlace }
+  | { kind: 'place'; place: SearchPlace }
   | { kind: 'setting'; group: 'you' | 'agent' | 'connections' | 'appliance' | 'news' | 'advanced' };
 
 export interface CatalogEntry {
@@ -198,6 +209,32 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
         icon: { kind: 'place', place },
         terms: SEARCH_WORDS.groups.places,
       });
+  // Servers and Connections after Overview, as in the sidebar, each once it holds something (an empty one is
+  // Overview's to offer).
+  const overview = entries.findIndex((e) => e.key === 'place:overview');
+  const listed = thingRows(things ?? []);
+  const serverIds = new Set((things ?? []).filter((t) => t.kind === 'server').map((t) => t.id));
+  const held: Record<ThingPlace, boolean> = {
+    servers: listed.some((r) => serverIds.has(r.id)),
+    connections: listed.some((r) => !serverIds.has(r.id)),
+  };
+  entries.splice(
+    overview + 1,
+    0,
+    ...(['servers', 'connections'] as const)
+      .filter((place) => held[place])
+      .map(
+        (place): CatalogEntry => ({
+          key: `place:${place}`,
+          group: 'places',
+          title: PLACE_WORDS[place].title,
+          line: THING_PLACE_LINES[place],
+          href: THING_PLACE_HREFS[place],
+          icon: { kind: 'place', place },
+          terms: SEARCH_WORDS.groups.places,
+        }),
+      ),
+  );
   return entries;
 }
 

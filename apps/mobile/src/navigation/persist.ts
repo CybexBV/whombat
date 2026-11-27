@@ -127,6 +127,8 @@ const ENTITY_PARAMS: Record<string, (p: Record<string, unknown>) => boolean> = {
  * is cut there like any screen not listed, so it opens on the tabs beneath.
  */
 const LISTS = new Set([
+  'ServersPlace',
+  'ConnectionsPlace',
   'Plans',
   'Deploys',
   'Vault',

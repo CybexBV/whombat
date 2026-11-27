@@ -123,6 +123,9 @@ describe('burrow-less paths (AP-360…)', () => {
       // Connections (connections-page.md AP-2501), and the Dashboard's old address.
       'connections',
       'dashboard',
+      // Servers and Connections as places (servers-connections-places.md).
+      'servers',
+      'connected',
       'things',
       'skills',
       'done',

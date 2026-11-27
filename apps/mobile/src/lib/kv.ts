@@ -22,6 +22,10 @@ export const STORAGE_KEYS = {
   fullWidthTabs: 'whombat.fullWidthTabs',
   /** `off` while this phone's “Moving faces” is off; absent: on. */
   faceMotion: 'whombat.faceMotion',
+  /** The server the Servers place opened last (its thing id), with `.<burrow>` after it: it opens on it again. */
+  placeServers: 'whombat.place.servers',
+  /** The connection the Connections place opened last (its thing id). */
+  placeConnections: 'whombat.place.connections',
 } as const;
 
 export function memoryStore(initial: Record<string, string> = {}): KeyValueStore & {

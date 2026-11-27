@@ -60,6 +60,10 @@ export const BURROW_ROUTES = [
   '/feedback',
   '/connections',
   '/dashboard',
+  // Servers and Connections as places, a list beside a page (servers-connections-places.md); `/connections` is
+  // Overview's, so Connections is `/connected`.
+  '/servers',
+  '/connected',
   '/things/$thing',
   '/skills',
   '/done',

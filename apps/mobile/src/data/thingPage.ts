@@ -19,6 +19,7 @@ import {
   noticeGroups,
   noticeLink,
   noticeRef,
+  pageHeadBadge,
   type QuietMenuView,
   quietLineText,
   quietMenu,
@@ -47,6 +48,7 @@ import {
   type ThingPageNotice,
   type ThingPagePanel,
   type ThingRunsOn,
+  type ThingStatus,
 } from '@whombat/core';
 import type { AccountPage } from '../navigation/connectionLinks';
 import { OVERVIEW_TITLE } from './shell';
@@ -189,6 +191,22 @@ export function lineText(line: ThingLine): string {
     .join('')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * The head's pill word (servers-connections-places.md): a problem says only its level (“Needs a look”,
+ * “Not working”, “Offline”) when Worth a look tells what it is; else, and for a fine or learning thing, the page's badge.
+ */
+export function headPillWord(page: {
+  status: ThingStatus | null | undefined;
+  badge: string;
+  /** The page's tabs once it has answered: when no Worth a look tells the problem, the badge is the only place it is said. */
+  tabs?: ThingPage['tabs'];
+  causedBy?: ThingPage['causedBy'];
+}): string {
+  // The web's rule (`pageHeadBadge`); the phone's pill also shows while it is fine, in the page's own words.
+  if (!page.status || page.status === 'ok') return page.badge;
+  return pageHeadBadge({ ...page, status: page.status }) ?? page.badge;
 }
 
 /** The head as TalkBack reads it: “Home Assistant, Needs a look”; the name alone before its status is known. */

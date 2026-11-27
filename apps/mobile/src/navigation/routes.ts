@@ -196,6 +196,14 @@ export type RootStackParamList = {
    * kept while a result is open), `back` the page it was opened from.
    */
   Search: { q?: string; back?: string } | undefined;
+  /**
+   * Servers and Connections as places (servers-connections-places.md): a list screen each, the web's `/servers` and
+   * `/connected`; from the two-page width the list with the picked page beside it. `back` the page it was opened from;
+   * `opened` once the right side has been filled, so folding and unfolding don't open a page the person closed;
+   * `idle` once the rows are in with nothing to open, so the right side asks for a pick rather than wait.
+   */
+  ServersPlace: { back?: string; opened?: boolean; idle?: boolean } | undefined;
+  ConnectionsPlace: { back?: string; opened?: boolean; idle?: boolean } | undefined;
   /** The audit log (MQ-03): filters as the web's `?actor=&kind=&who=&open=`, strings checked by the screen. */
   AuditLog: { actor?: string; kind?: string; who?: string; open?: string } | undefined;
   /**
@@ -529,6 +537,9 @@ export const LINKING_SCREENS = {
   Spend: 'spend',
   // Search (phone-shell-final.md): `search?q=…`.
   Search: 'search',
+  // Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`.
+  ServersPlace: 'servers',
+  ConnectionsPlace: 'connected',
   AuditLog: 'log',
   // Settings → the assistant (AP-4961): `?part=may`.
   SettingsAgent: 'settings/agent',
@@ -753,6 +764,8 @@ export function appScreenUrlForPath(path: string): string | null {
     ['connection', 'found', 'connect_error'].some((k) => query.has(k))
   )
     return connectionsScreenUrl(search);
+  const place = placeScreenUrl(pathname);
+  if (place) return place;
   const settingsTab = settingsTabScreenUrl(pathname, search);
   if (settingsTab) return settingsTab;
   const chat = chatShellScreenUrl(pathname, query);
@@ -826,6 +839,16 @@ export function appScreenUrlForPath(path: string): string | null {
     // `/search` has no screen on the phone (one-layout-android.md AP-2645): it stays on the web.
   }
   return null;
+}
+
+/**
+ * Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`, burrow-less
+ * or after a burrow (a first segment that is a screen's isn't one: `/things/servers` stays Overview's).
+ */
+function placeScreenUrl(pathname: string): string | null {
+  const m = /^(?:\/([^/]+))?\/(servers|connected)\/?$/.exec(pathname);
+  if (!m || (m[1] !== undefined && BURROW_SECTIONS.includes(m[1]))) return null;
+  return `${APP_SCHEME}://${m[2]}`;
 }
 
 /** An assistant's draft of a report, as `teamReports.draft` names it. */

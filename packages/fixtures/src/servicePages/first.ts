@@ -190,7 +190,6 @@ function unifiPage(ctx: FixtureServiceCtx): ThingPage {
         tone: 'warn',
         icon: 'network',
         title: 'AP Paardenstal is offline',
-        detail: 'Offline',
         link: { kind: 'ask', label: 'Look into it', question: 'Why is AP Paardenstal offline in UniFi?' },
       },
       'problem',
@@ -264,8 +263,8 @@ function unifiPage(ctx: FixtureServiceCtx): ThingPage {
               count('online', 'Devices online', '44 of 45', {
                 icon: 'network',
                 tone: 'warn',
-                detail: 'AP Paardenstal is offline',
-                note: 'AP Paardenstal is offline',
+                detail: 'Access points, switches and the gateway',
+                note: '1 offline',
                 noteTone: 'warn',
               }),
               count('gateway', 'Gateway', '14 %', {
@@ -299,8 +298,7 @@ function unifiPage(ctx: FixtureServiceCtx): ThingPage {
               count('updates', 'Updates waiting', '3', {
                 icon: 'update',
                 detail: 'AP 06 and 2 more',
-                note: 'Firmware to install',
-                noteTone: 'warn',
+                note: 'Firmware',
               }),
             ],
           },

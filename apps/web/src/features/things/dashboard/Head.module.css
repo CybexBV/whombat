@@ -4,7 +4,7 @@
  */
 
 .head {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 10px 14px;
 }
 
@@ -39,7 +39,8 @@
 /* The name's line over the fact line, taking what the buttons leave. */
 .nameBox {
   display: grid;
-  flex: 1 1 auto;
+  /* What is left beside the logo and the buttons: the head's first line never wraps them under it. */
+  flex: 1 1 0;
   gap: 6px;
   min-width: 0;
 }
@@ -80,6 +81,38 @@
   align-self: flex-start;
 }
 
+/* The fact line and its detail under the head, from the name's edge to the page's (the icon and its gap left). */
+.below {
+  display: grid;
+  flex: 0 0 calc(100% - 66px);
+  order: 1;
+  gap: 6px;
+  min-width: 0;
+  margin: 2px 0 0 66px;
+}
+
+/* Beside a place's list (servers-connections-places.md): the mock's smaller logo and name, so a long name and its
+   badge fit on one line with the buttons. */
+@container page (max-width: 900px) {
+  .icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .below {
+    flex-basis: calc(100% - 58px);
+    margin-left: 58px;
+  }
+
+  .name {
+    font-size: 26px;
+  }
+
+  .nameMono {
+    font-size: 25px;
+  }
+}
+
 @container page (max-width: 560px) {
   .head {
     flex-wrap: wrap;
@@ -101,17 +134,19 @@
 }
 
 /* A middling page: the buttons go under the name's two lines rather than squeeze them. */
-@container page (max-width: 760px) {
+@container page (max-width: 600px) {
   .head {
     flex-wrap: wrap;
   }
 
   .nameBox {
-    flex-basis: calc(100% - 66px);
+    flex-basis: calc(100% - 58px);
   }
 
+  /* The buttons come after the fact line. */
   .actions.actions {
-    margin-left: 66px;
+    order: 2;
+    margin-left: 58px;
   }
 }
 
@@ -119,11 +154,25 @@
   .actions.actions {
     margin-left: 0;
   }
+
+  .below {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
 }
 
 .badge.badge {
   padding: 3px 10px;
   font-size: 11.5px;
+}
+
+/* Beside the list, the mock's pill: the sans face, so the name keeps its room. */
+@container page (max-width: 900px) {
+  .badge.badge {
+    padding: 3px 10px 3px 8px;
+    font: 600 12.5px var(--font-sans);
+    letter-spacing: 0;
+  }
 }
 
 .chips {
@@ -158,15 +207,9 @@
   color: var(--mut);
 }
 
-/* A service's head: the status pill first, “More detail” last, neither set apart by a dot. */
-.facts > .lead + *::before,
+/* “More detail” at the fact line's end isn't set apart by a dot. */
 .facts > .moreSlot::before {
   content: none;
-}
-
-.lead {
-  display: inline-flex;
-  margin-right: 4px;
 }
 
 .moreSlot {
@@ -227,8 +270,8 @@
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0 12px;
-  margin: 0 -40px;
-  padding: 0 40px;
+  margin: 0 calc(-1 * var(--page-side, 40px));
+  padding: 0 var(--page-side, 40px);
   border-bottom: 1px solid var(--line);
 }
 

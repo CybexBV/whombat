@@ -1,33 +1,35 @@
 /**
- * Places (docs/decisions/phone-shell-final.md): the button that opens it and the sheet — the platform's own sheet, with
- * Close first, the nine places in the web sidebar's order (`data/places.ts`) with Chat's and the Inbox's counts, then
- * a shortcut to each server and connection with its real logo. It scrolls at large text rather than shrinking a row.
- * Choosing a place closes the sheet and, once it is down, opens the place; closing it puts a screen reader back on the
- * button that opened it.
+ * Places (docs/decisions/phone-shell-final.md, servers-connections-places.md): the button that opens it and the sheet —
+ * the platform's own sheet, with Close first, the places in the web sidebar's order (`data/places.ts`) with Chat's and
+ * the Inbox's counts; Servers and Connections, right after Overview, only when they hold something, each with the
+ * worst status mark of what it holds (the red ring for something not working, the amber dot for a look) and its name
+ * saying so. It scrolls at large text rather than shrinking a row. Choosing a place closes the sheet and, once it is
+ * down, opens the place; closing it puts a screen reader back on the button that opened it.
  */
 import { StackActions } from '@react-navigation/native';
+import { placeSpoken, type StatusLevel } from '@whombat/client';
 import { useHostsFleet, useHostsStatus } from '@whombat/client/hosts/react';
-import { useHomeOverview } from '@whombat/client/react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { serverFacts } from '../data/homeServers';
 import {
   PLACE_WORDS,
-  PLACES,
   PLACES_COPY,
   type PlaceId,
-  type PlaceThingRow,
   placeLabel,
   placeRoute,
-  placesThings,
   type ServerFacts,
+  sheetPlaces,
 } from '../data/places';
-import { openHref, useAppNavigation } from '../navigation/hooks';
+import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from '../data/shell';
+import { usePlaceLists } from '../data/usePlaceLists';
+import { useAppNavigation } from '../navigation/hooks';
+import { useLastTab, usePaneRole } from '../navigation/panes';
+import { LIST_PAGES } from '../navigation/splitRouter';
 import { useBadges } from '../navigation/TabBar';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
-import { ThingIcon } from './assistant';
 import {
   ChartNoAxesColumn,
   Folder,
@@ -37,13 +39,16 @@ import {
   type LucideIcon,
   Menu,
   MessageCircle,
+  Plug,
   Search,
+  Server,
   Settings as SettingsIcon,
   X,
   Zap,
 } from './icons';
 import { focusRowSoon, registerRowFocus } from './rowFocus';
-import { Sheet, useAfterSheet } from './sheet';
+import { Sheet, useAfterSheet, whenSheetDown } from './sheet';
+import { StatusMark } from './statusMark';
 import { Touchable } from './Touchable';
 
 /** The smallest target: 44pt on iPhone, 48dp on Android. */
@@ -55,6 +60,8 @@ export const PLACE_ICONS: Record<PlaceId, LucideIcon> = {
   chat: MessageCircle,
   inbox: Inbox,
   overview: LayoutGrid,
+  servers: Server,
+  connections: Plug,
   automations: Zap,
   files: Folder,
   vault: Lock,
@@ -63,8 +70,8 @@ export const PLACE_ICONS: Record<PlaceId, LucideIcon> = {
 };
 
 /**
- * The servers as Overview's Servers shows them (their logos, systems and how they are), from the same reads, so
- * nothing is asked again; none where the Whombat runs no hosts service.
+ * The servers as Overview's Servers shows them (their logos, systems and how they are) for Search, from the same reads,
+ * so nothing is asked again; none where the Whombat runs no hosts service.
  */
 export function useServerFacts(): ServerFacts[] {
   const { slug } = useBurrowBase();
@@ -98,7 +105,11 @@ export function PlacesButton({
     <>
       <Touchable
         ref={ref}
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          // Two pages can each show a Places button: the focus comes back to the one that opened the sheet.
+          registerRowFocus(OPENER, ref);
+          setOpen(true);
+        }}
         feedback="wash"
         ringRadius={iconOnly ? SHELL_TARGET / 2 : 10}
         accessibilityRole="button"
@@ -151,34 +162,49 @@ function PlacesSheet({
 }) {
   const theme = useTheme();
   const navigation = useAppNavigation();
-  const { slug } = useBurrowBase();
   const badges = useBadges();
-  const overview = useHomeOverview({ params: { burrow: slug } });
-  const servers = useServerFacts();
-  const things = useMemo(
-    () => placesThings(overview.data?.things, servers),
-    [overview.data?.things, servers],
-  );
+  const role = usePaneRole();
   const after = useAfterSheet();
-  const go = after.onDismissed;
+  // The rows (and the reads behind Servers' and Connections' marks) only while the sheet is up or going down; drawn
+  // in the very render that opens it, so the sheet takes its height at once.
+  const [mounted, setMounted] = useState(visible);
+  useEffect(() => {
+    if (visible) setMounted(true);
+  }, [visible]);
+  // Android's sheet never says it is down: let the rows go once it surely is.
+  useEffect(() => {
+    if (!visible && mounted) return whenSheetDown(() => setMounted(false));
+  }, [visible, mounted]);
+  const lastTab = useLastTab();
+  // A place that is the left page gives way to the tabs: what opens next goes back to them, by their name.
+  const fromList = role === 'list' && (current === 'servers' || current === 'connections');
+  const backWord = fromList ? (TAB_WORDS[lastTab as Tab] ?? OVERVIEW_TITLE) : here;
+  const go = () => {
+    after.onDismissed();
+    setMounted(false);
+  };
   const choose = (run: () => void) => {
     after.later(run);
     onChosen();
   };
-  const openPlace = (place: PlaceId) =>
+  const openPlace = (place: PlaceId) => {
+    // The place already open: nothing to open, and its own back stays as it was.
+    if (place === current) {
+      onClose();
+      return;
+    }
     choose(() => {
-      const route = placeRoute(place, here);
+      const route = placeRoute(place, backWord);
       // Back to the tabs, the pages above them closing, on the tab chosen.
       if (route.kind === 'tab') navigation.dispatch(StackActions.popTo('Tabs', { screen: route.tab }));
-      else (navigation.navigate as (name: string, params: object) => void)(route.name, route.params);
+      else {
+        // From a place that is the left page, another place takes its page: back to the tabs first, so it opens
+        // beside them rather than beside the list.
+        if (fromList && !LIST_PAGES.includes(route.name)) navigation.dispatch(StackActions.popTo('Tabs'));
+        (navigation.navigate as (name: string, params: object) => void)(route.name, route.params);
+      }
     });
-  // A thing the box gives no page (an account on an older box) follows its address, as Home's rows do.
-  const openThing = (t: PlaceThingRow) =>
-    choose(() =>
-      t.opens
-        ? openHref(t.opens)
-        : navigation.navigate('Thing', { thingId: t.id, title: t.name, back: here }),
-    );
+  };
   const counts: Partial<Record<PlaceId, { count: number; tone: 'ink' | 'warn' | 'bad' }>> = {
     chat: { count: badges.ChatRoom?.count ?? 0, tone: 'ink' },
     inbox: {
@@ -222,91 +248,75 @@ function PlacesSheet({
         style={{ flexShrink: 1 }}
         contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 8 }}
       >
-        {PLACES.map((place) => {
-          const badge = counts[place];
-          const count = badge?.count ?? 0;
-          const Icon = PLACE_ICONS[place];
-          return (
-            <PlaceRow
-              key={place}
-              label={placeLabel(place, count, badge?.tone === 'bad')}
-              title={PLACE_WORDS[place]}
-              selected={place === current}
-              leading={<Icon size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
-              count={count}
-              tone={badge?.tone ?? 'ink'}
-              onPress={() => openPlace(place)}
-            />
-          );
-        })}
-        {things.servers.length ? (
-          <ThingsSection title={PLACES_COPY.servers}>
-            {things.servers.map((t) => (
-              <PlaceRow
-                key={t.id}
-                label={t.label}
-                title={t.name}
-                mono
-                leading={<ThingIcon glyph={t.glyph} mark={t.mark} size={20} />}
-                onPress={() => openThing(t)}
-              />
-            ))}
-          </ThingsSection>
-        ) : null}
-        {things.connections.length ? (
-          <ThingsSection title={PLACES_COPY.connections}>
-            {things.connections.map((t) => (
-              <PlaceRow
-                key={t.id}
-                label={t.label}
-                title={t.name}
-                leading={<ThingIcon glyph={t.glyph} mark={t.mark} size={20} />}
-                onPress={() => openThing(t)}
-              />
-            ))}
-          </ThingsSection>
-        ) : null}
+        {visible || mounted ? <SheetRows current={current} counts={counts} onOpen={openPlace} /> : null}
       </ScrollView>
     </Sheet>
   );
 }
 
-function ThingsSection({ title, children }: { title: string; children: ReactNode }) {
+/** The sheet's places in order, Servers and Connections with the worst mark of what they hold. */
+function SheetRows({
+  current,
+  counts,
+  onOpen,
+}: {
+  current: PlaceId | null;
+  counts: Partial<Record<PlaceId, { count: number; tone: 'ink' | 'warn' | 'bad' }>>;
+  onOpen: (place: PlaceId) => void;
+}) {
   const theme = useTheme();
+  const lists = usePlaceLists();
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.line, marginTop: 8, paddingTop: 8 }}>
-      <Text
-        size={12}
-        weight={500}
-        color={theme.colors.mut}
-        accessibilityRole="header"
-        style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-      >
-        {title}
-      </Text>
-      {children}
-    </View>
+    <>
+      {sheetPlaces(lists.shown).map((place) => {
+        const badge = counts[place];
+        const count = badge?.count ?? 0;
+        const Icon = PLACE_ICONS[place];
+        // Servers and Connections carry the worst mark of what they hold, and say it.
+        const list = place === 'servers' || place === 'connections' ? place : null;
+        const tone = list ? lists.tone[list] : null;
+        return (
+          <PlaceRow
+            key={place}
+            label={list ? placeSpoken(list, tone) : placeLabel(place, count, badge?.tone === 'bad')}
+            title={PLACE_WORDS[place]}
+            selected={place === current}
+            leading={<Icon size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
+            count={count}
+            tone={badge?.tone ?? 'ink'}
+            mark={tone ? TONE_LEVEL[tone] : null}
+            onPress={() => onOpen(place)}
+          />
+        );
+      })}
+    </>
   );
 }
 
-/** A row of the sheet: icon or logo, the name (wrapping at large text, the row growing), a count at the end. */
+/** A list place's mark by its worst tone: the red ring for something not working, the amber dot for a look. */
+const TONE_LEVEL: Record<'bad' | 'warn', StatusLevel> = { bad: 'notWorking', warn: 'needsLook' };
+
+/**
+ * A row of the sheet: the icon, the name (wrapping at large text, the row growing), a count or a status mark at the
+ * end (decorative: the row's name says it).
+ */
 function PlaceRow({
   title,
   label,
   leading,
   selected = false,
-  mono = false,
   count = 0,
   tone = 'ink',
+  mark = null,
   onPress,
 }: {
   title: string;
   label: string;
   leading: ReactNode;
   selected?: boolean;
-  mono?: boolean;
   count?: number;
   tone?: 'ink' | 'warn' | 'bad';
+  mark?: StatusLevel | null;
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -330,10 +340,11 @@ function PlaceRow({
       }}
     >
       <View style={{ width: 22, alignItems: 'center' }}>{leading}</View>
-      <Text size={15} weight={selected ? 600 : 400} mono={mono} style={{ flex: 1 }}>
+      <Text size={15} weight={selected ? 600 : 400} style={{ flex: 1 }}>
         {title}
       </Text>
       {count > 0 ? <CountPill count={count} tone={tone} /> : null}
+      {mark ? <StatusMark level={mark} /> : null}
     </Touchable>
   );
 }

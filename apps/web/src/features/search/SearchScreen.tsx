@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { BrandMark } from '@whombat/brand/react';
-import { type AppPlace, agentFaceOf, appPath, hasLooksAhead, SEARCH_WORDS } from '@whombat/client';
+import { agentFaceOf, appPath, hasLooksAhead, SEARCH_WORDS } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
 import {
   placeNewsShown,
@@ -36,6 +36,7 @@ import {
   Newspaper,
   Plug,
   Search as SearchIcon,
+  Server,
   Settings,
   SlidersHorizontal,
   UserRound,
@@ -62,6 +63,7 @@ import {
   type CatalogGroup,
   type CatalogIcon,
   matchCatalog,
+  type SearchPlace,
   searchCatalog,
   searchSuggestions,
 } from './searchCatalog';
@@ -576,11 +578,13 @@ const SETTING_ICONS: Record<Extract<CatalogIcon, { kind: 'setting' }>['group'], 
   advanced: SlidersHorizontal,
 };
 
-const PLACE_ICONS: Record<AppPlace, LucideIcon> = {
+const PLACE_ICONS: Record<SearchPlace, LucideIcon> = {
   search: SearchIcon,
   chat: MessageCircle,
   inbox: Inbox,
   overview: LayoutGrid,
+  servers: Server,
+  connections: Plug,
   automations: Zap,
   files: Folder,
   vault: Lock,

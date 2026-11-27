@@ -1,0 +1,228 @@
+/*
+ * Servers and Connections (servers-connections-places.md; docs/design-handoff/servers-connections/index.html): the
+ * list in Chat's column beside a server's or connection's page, or alone on a narrow window. Tokens only.
+ */
+
+/* The list beside the page: Chat's 392px column (INBOX_LIST_WIDTH), each side scrolling on its own. */
+.split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split > .list {
+  flex: none;
+  width: 392px;
+  border-right: 1px solid var(--line);
+}
+
+/* The list alone (a narrow window, or nothing listed): the whole column, as Chat's list is. */
+.alone {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Beside the list the page's sides are the mock's 32 px, so its head has the room for one line. */
+.split > .list + .page {
+  --page-side: 32px;
+}
+
+.list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.head {
+  display: grid;
+  flex: none;
+  gap: 4px;
+  padding: 18px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font: 700 20px / 1.3 var(--font-sans);
+  letter-spacing: var(--type-header-title-tracking);
+}
+
+.add {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  color: var(--ink2);
+}
+
+.add:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+/* A finger's target on a touch screen. */
+@media (max-width: 640px), (pointer: coarse) {
+  .add {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.summary {
+  margin: 0;
+  color: var(--mut);
+  font: 400 13.5px / 1.35 var(--font-sans);
+}
+
+.rows {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 8px 16px;
+  overflow: auto;
+}
+
+.empty {
+  margin: 12px 10px;
+  color: var(--mut);
+  font: 400 14px / 1.4 var(--font-sans);
+}
+
+/* A row: the logo over two lines, the name with the figure at its end, how it is under them. */
+.row,
+.row:hover {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 12px;
+  min-height: 60px;
+  padding: 10px;
+  border-radius: var(--radius-button-large);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.row:hover,
+.menuOpen,
+.on,
+.on:hover {
+  background: var(--sel);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.logo {
+  display: flex;
+  grid-row: span 2;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+  color: var(--ink2);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  font: 600 15px / 1.3 var(--font-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* What tells two of a kind apart (“dev” of “Hetzner Cloud · dev”), quieter, as the sidebar drew it. */
+.note {
+  color: var(--mut);
+  font-weight: 400;
+}
+
+.figure {
+  justify-self: end;
+  color: var(--mut);
+  font: 400 11.5px var(--font-mono);
+  white-space: nowrap;
+}
+
+.line {
+  display: flex;
+  grid-column: 2 / 4;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--mut);
+  font: 400 13px / 1.35 var(--font-sans);
+}
+
+.lineText {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.toneBad .line,
+.summary .toneBad {
+  color: var(--bad);
+}
+
+.toneWarn .line,
+.summary .toneWarn {
+  color: var(--warn-text);
+}
+
+/* A server that runs on another: set in under it, with an elbow line from its parent. */
+.child {
+  margin-left: 22px;
+}
+
+.child::before {
+  position: absolute;
+  top: -8px;
+  left: -12px;
+  width: 10px;
+  height: 38px;
+  border-bottom: 1.5px solid var(--line2);
+  border-left: 1.5px solid var(--line2);
+  border-bottom-left-radius: 7px;
+  content: "";
+}
+
+.renaming {
+  align-items: start;
+  background: var(--sel);
+}
+
+.renameBox {
+  grid-column: 2 / 4;
+  grid-row: span 2;
+  min-width: 0;
+}

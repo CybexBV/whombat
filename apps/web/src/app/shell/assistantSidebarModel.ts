@@ -2,17 +2,15 @@
  * The assistant shell's sidebar (mock 1; one-whombat.md ONE-04; app one-whombat-shell.md AP-1256): pure, so its rules
  * are unit-tested.
  *
- * - The burrow's name (its switcher), then the six places in one order: Chat, Inbox, Overview, Automations, Files,
- *   Vault. Settings is in the account menu (and ⌘, / Ctrl ,), Search is ⌘K / Ctrl K, Usage opens only at its address:
- *   none is a row of its own. Chat's badge
- *   counts its unread replies and Feedback's (Feedback opens from Chat's head); the Inbox's is the one count of what
- *   needs the person (`summary.needsYou`) in the colour of the worst of them. A count shows once the Whombat has
- *   answered and never at zero.
- * - SERVERS and CONNECTIONS, one at a time as tabs (sidebar-tabs.md, `sidebarLists`). Servers (sidebar-servers.md
- *   AP-1748): its `+` Add a server on Overview (connections-page.md AP-2523), the servers in the server's order with a
- *   status mark each; shown once there is a server or the Whombat runs the hosts service. Connections: connections and
- *   devices in the server's order (`thingRows`; servers only under Servers), their real logos and a status mark each.
- *   A problem in the tab that isn't open still shows.
+ * - The burrow's name (its switcher), then the places in one order: Chat, Inbox, Overview, Servers, Connections,
+ *   Automations, Files, Vault (servers-connections-places.md). Settings is in the account menu (and ⌘, / Ctrl ,),
+ *   Search is ⌘K / Ctrl K, Usage opens only at its address: none is a row of its own. Chat's badge counts its unread
+ *   replies and Feedback's (Feedback opens from Chat's head); the Inbox's is the one count of what needs the person
+ *   (`summary.needsYou`) in the colour of the worst of them. A count shows once the Whombat has answered and never at
+ *   zero.
+ * - Servers shows once there is a server or the Whombat runs the hosts service, Connections once something is
+ *   connected; each carries the worst mark of what it holds and is the selected place on the page of one of its
+ *   own. Their lists are drawn beside the page (`features/things/places`), not in the sidebar.
  * - The person at the bottom, with the account menu.
  *
  * Before the Chat shell (no rooms; tests and an older Whombat): Overview is the home page (`/`), and CONVERSATIONS and
@@ -24,8 +22,12 @@ import {
   type ChatRooms,
   type ChatRow,
   chatRows,
+  PLACE_WORDS,
   PLACES_WORDS,
+  placeSpoken,
+  placeTone,
   SETTLE_WORDS,
+  type ThingPlace,
   type ThingRow,
   theAgentOf,
   thingRows,
@@ -43,7 +45,19 @@ import { VAULT_COPY } from '@whombat/core/vault';
 import { clearChatWords } from '../../features/chats/clearWords';
 import { INBOX_PATH, type ShellLocation } from './location';
 
-export type AssistantNavId = 'chat' | 'needsYou' | 'dashboard' | 'home' | 'automations' | 'files' | 'vault';
+export type AssistantNavId =
+  | 'chat'
+  | 'needsYou'
+  | 'dashboard'
+  | 'home'
+  | 'servers'
+  | 'connections'
+  | 'automations'
+  | 'files'
+  | 'vault';
+
+/** The addresses of the two places: `/connections` stays Overview's, so Connections is `/connected`. */
+export const PLACE_HREFS: Record<ThingPlace, string> = { servers: '/servers', connections: '/connected' };
 
 export interface AssistantNavRow {
   id: AssistantNavId;
@@ -59,6 +73,13 @@ export interface AssistantNavRow {
   badgeTone: HomeSeverity | null;
   /** Chat's threads with something new, Feedback's with them; null at none. */
   unread: number | null;
+  /** Servers' and Connections' mark: the worst of what they hold when it isn't fine; null otherwise. */
+  mark: 'bad' | 'warn' | null;
+  /**
+   * Servers' or Connections' item while one of its pages is open: on a wide window the list is beside it already, so
+   * the item leaves the page as it is rather than open the place again.
+   */
+  pageOpen?: boolean;
   /** “Inbox, 3 things need you”, “Chat, 2 unread replies”: the badge is said once, in the name. */
   ariaLabel: string;
 }
@@ -73,9 +94,9 @@ export interface AssistantSidebarModel {
   roomPaths: string[];
   /** There is a Feedback room: Chat's right-click menu has its entries too. */
   feedback: boolean;
-  /** SERVERS: null while there is nothing to show (no server, no hosts service). */
+  /** Servers: null while there is nothing to show (no server, no hosts service). */
   servers: AssistantServersSection | null;
-  /** CONNECTIONS: everything but the servers. */
+  /** Connections: everything listed but the servers. */
   things: ThingRow[];
   /** Null until the Whombat has answered (no section flashes empty). */
   thingsKnown: boolean;
@@ -123,6 +144,7 @@ export function buildAssistantSidebarModel(
     badge: null,
     badgeTone: null,
     unread: null,
+    mark: null,
     ariaLabel: label,
   });
   // The view of every guest is reached from Overview's Servers (“All guests”, CN-09): Overview stays selected.
@@ -143,6 +165,25 @@ export function buildAssistantSidebarModel(
     inbox.badgeTone = input.needsYouWorst ?? 'bad';
     inbox.ariaLabel = PLACES_WORDS.inboxWaiting(input.needsYou, !!input.needsYouBroken);
   }
+  const { me } = bootstrap;
+  const rows = thingRows(input.things ?? [], location.kind === 'thing' ? location.id : null);
+  const serverIds = new Set((input.things ?? []).filter((t) => t.kind === 'server').map((t) => t.id));
+  const servers = serversSection(
+    input,
+    rows.filter((r) => serverIds.has(r.id)),
+  );
+  const connections = rows.filter((r) => !serverIds.has(r.id));
+  // Servers and Connections: the place is selected on its address and on the page of one of its own.
+  const placeRow = (place: ThingPlace, held: readonly ThingRow[]) => {
+    const here =
+      (location.kind === 'place' && location.place === place) ||
+      (location.kind === 'thing' && held.some((r) => r.id === location.id));
+    const r = row(place, PLACE_WORDS[place].title, PLACE_HREFS[place], here);
+    r.mark = placeTone(held);
+    r.pageOpen = location.kind === 'thing' && here;
+    r.ariaLabel = placeSpoken(place, r.mark);
+    return r;
+  };
   const nav: AssistantNavRow[] = [
     chat,
     inbox,
@@ -150,14 +191,14 @@ export function buildAssistantSidebarModel(
     rooms
       ? row('dashboard', words.overview.label, CONNECTIONS_HREF, location.kind === 'dashboard' || allGuests)
       : row('home', words.overview.label, '/', location.kind === 'home' || allGuests),
+    ...(servers ? [placeRow('servers', servers.rows)] : []),
+    // Nothing connected yet: no empty place (first-day.md); Overview leads to adding one.
+    ...(connections.length ? [placeRow('connections', connections)] : []),
     // Automations without a count: a total says nothing, a failed run is in the Inbox (SB-07, AP-2606).
     row('automations', words.automations.label, '/automations', location.kind === 'automations'),
     row('files', words.files.label, '/files', location.kind === 'files'),
     row('vault', words.vault.label, '/vault', location.kind === 'vault'),
   ];
-  const { me } = bootstrap;
-  const rows = thingRows(input.things ?? [], location.kind === 'thing' ? location.id : null);
-  const serverIds = new Set((input.things ?? []).filter((t) => t.kind === 'server').map((t) => t.id));
   return {
     burrowName: bootstrap.burrow.name,
     burrowSlug: bootstrap.burrow.slug,
@@ -165,11 +206,8 @@ export function buildAssistantSidebarModel(
     nav,
     roomPaths: rooms ? ['/chat', ...(rooms.feedback ? ['/feedback'] : [])] : [],
     feedback: !!rooms?.feedback,
-    servers: serversSection(
-      input,
-      rows.filter((r) => serverIds.has(r.id)),
-    ),
-    things: rows.filter((r) => !serverIds.has(r.id)),
+    servers,
+    things: connections,
     thingsKnown: input.things !== undefined,
     chats: rooms ? [] : chatRows(input.chats ?? [], location.kind === 'chat' ? location.id : null),
     me: {
@@ -184,9 +222,8 @@ export function buildAssistantSidebarModel(
 }
 
 /**
- * SERVERS (AP-1748): shown with a server or the hosts service; the `+` with the hosts service, Add a server on
- * Overview's Servers tab (`/connections?tab=servers&add=1`, AP-2523, AP-2608; before the Chat shell `/?…`, the same
- * page), as the Connections tab's `+` opens the Add a connection the page's own button opens.
+ * Servers: shown with a server or the hosts service; Add a server with the hosts service, on Overview's Servers
+ * section (`/connections?tab=servers&add=1`; before the Chat shell `/?…`, the same page).
  */
 function serversSection(input: AssistantSidebarInput, rows: ThingRow[]): AssistantServersSection | null {
   if (!rows.length && !input.hosts?.present) return null;
@@ -197,91 +234,8 @@ function serversSection(input: AssistantSidebarInput, rows: ThingRow[]): Assista
   };
 }
 
-/** The sidebar's two lists, one at a time as tabs (sidebar-tabs.md): Servers, then Connections. */
-export type SidebarList = 'servers' | 'connections';
-
-export const SIDEBAR_LIST_WORDS: Record<SidebarList, string> = {
-  servers: 'Servers',
-  connections: 'Connections',
-};
-
 /** Add a connection, the page Overview's own button opens. */
 export const ADD_CONNECTION_HREF = `${CONNECTIONS_HREF}?connection=add`;
-
-export interface SidebarListTab {
-  key: SidebarList;
-  label: string;
-  /** The worst of what it holds when that isn't fine, for the dot beside a tab that isn't open; null when all is. */
-  tone: 'warn' | 'bad' | null;
-  /** “Connections, something needs a look”, “Servers, something isn’t working”. */
-  spoken: string;
-}
-
-export interface SidebarListsView {
-  /** Both lists: two tabs. One list alone: its heading, no tabs. */
-  tabs: SidebarListTab[];
-  open: SidebarList;
-  /** The open list's rows. */
-  rows: ThingRow[];
-  /**
-   * The other list's rows that aren't fine, and the one open now, under the open list: a problem never hides behind a
-   * tab.
-   */
-  carried: ThingRow[];
-  /** The `+`: what it adds where, for the open list; null when it can't (no hosts service). */
-  add: { href: string; label: string } | null;
-}
-
-function rowTone(row: ThingRow): SidebarListTab['tone'] {
-  if (row.status === 'bad' || row.status === 'offline') return 'bad';
-  return row.status === 'warn' ? 'warn' : null;
-}
-
-function worstTone(rows: readonly ThingRow[]): SidebarListTab['tone'] {
-  const tones = rows.map(rowTone);
-  return tones.includes('bad') ? 'bad' : tones.includes('warn') ? 'warn' : null;
-}
-
-/**
- * SERVERS and CONNECTIONS as tabs (sidebar-tabs.md): the asked one when both show (the browser remembers it), else the
- * first, Servers. The tab that isn't open carries a dot in its worst tone, and its rows that aren't fine (and the one open
- * now) show under the open list. Null with neither list.
- */
-export function sidebarLists(
-  model: Pick<AssistantSidebarModel, 'servers' | 'things'>,
-  asked: SidebarList | null,
-): SidebarListsView | null {
-  const lists: { key: SidebarList; rows: ThingRow[]; add: SidebarListsView['add'] }[] = [];
-  if (model.servers)
-    lists.push({
-      key: 'servers',
-      rows: model.servers.rows,
-      add: model.servers.addHref ? { href: model.servers.addHref, label: 'Add a server' } : null,
-    });
-  // Nothing connected yet: no empty list (first-day.md); Overview leads to adding one.
-  if (model.things.length)
-    lists.push({
-      key: 'connections',
-      rows: model.things,
-      add: { href: ADD_CONNECTION_HREF, label: 'Add a connection' },
-    });
-  const open = lists.find((l) => l.key === asked) ?? lists[0];
-  if (!open) return null;
-  return {
-    tabs: lists.map((l) => {
-      const tone = worstTone(l.rows);
-      const label = SIDEBAR_LIST_WORDS[l.key];
-      const said = tone === 'bad' ? 'something isn’t working' : 'something needs a look';
-      return { key: l.key, label, tone, spoken: tone ? `${label}, ${said}` : label };
-    }),
-    open: open.key,
-    rows: open.rows,
-    carried: lists
-      .filter((l) => l !== open)
-      .flatMap((l) => l.rows.filter((r) => rowTone(r) !== null || r.selected)),
-    add: open.add,
-  };
-}
 
 /**
  * The chats' paths in sidebar order (Alt+↑/↓ steps through them, as through the crew shell's conversations); in the Chat
@@ -317,7 +271,8 @@ export interface NavMenuEntry {
 /**
  * A place's right-click menu (John, 2026-10-21; chat-clear.md AP-4500, AP-4501): Chat opens its Settled, clears and
  * settles its finished threads (chat-settle.md AP-6155), and, with a Feedback room, does the same for Feedback below a
- * line (Feedback has no row of its own); Overview adds a server (the SERVERS `+`'s) or a connection, Automations starts
+ * line (Feedback has no row of its own); Overview adds a server or a connection, Servers a server, Connections a
+ * connection (servers-connections-places.md), Automations starts
  * a new one, the Vault adds to it. The other places have nothing a menu would add, so they have none and keep the
  * browser's own.
  */
@@ -371,6 +326,13 @@ export function navMenu(
           href: ADD_CONNECTION_HREF,
         },
       ];
+    // Servers adds a server, Connections a connection.
+    case 'servers':
+      return model.servers?.addHref
+        ? [{ id: 'add-server', label: PLACE_WORDS.servers.add, href: model.servers.addHref }]
+        : [];
+    case 'connections':
+      return [{ id: 'add-connection', label: PLACE_WORDS.connections.add, href: ADD_CONNECTION_HREF }];
     case 'automations':
       return [{ id: 'new-automation', label: 'New automation', href: '/automations?new=1' }];
     case 'vault':
