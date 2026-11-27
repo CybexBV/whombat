@@ -352,3 +352,14 @@ export function settingsPlaceTitle(place: SettingsPlace, agent: string): string 
   }
   return capital(groups[place.group]);
 }
+
+/**
+ * The theme's three choices, the same words and order on the web and the phone: light, dark, or Auto, which follows the
+ * device (the account's `system`).
+ */
+export const THEME_CHOICES = ['light', 'dark', 'system'] as const;
+export type ThemeChoice = (typeof THEME_CHOICES)[number];
+export const THEME_WORDS = {
+  title: 'Theme',
+  choices: { light: 'Light', dark: 'Dark', system: 'Auto' } satisfies Record<ThemeChoice, string>,
+} as const;

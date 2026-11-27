@@ -249,6 +249,22 @@ export function updateView(
   };
 }
 
+/**
+ * Whether an update waits for the owner's yes (“Ask before updating” is on and a release is ready), the release it
+ * would install, else null: the account menu's and the phone's Settings line say “Update ready” then.
+ */
+export function updateReady(status: Pick<ApplianceStatus, 'update'> | null | undefined): string | null {
+  const u = status?.update;
+  if (!u || u.paused) return null;
+  return u.waiting?.reason === 'owner' && u.candidate ? u.candidate : null;
+}
+
+/** The short words for whether this Whombat is up to date, beside its version. */
+export const UPDATE_STATE_WORDS = {
+  upToDate: 'Up to date',
+  ready: 'Update ready',
+} as const;
+
 /** The “Ask before updating” switch (ABU-01): null where the box's manager can't hold updates for the owner. */
 export function askFirstView(
   status: Pick<ApplianceStatus, 'update'>,

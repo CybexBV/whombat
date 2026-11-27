@@ -11,6 +11,7 @@ import {
   type UpdateStatus,
   updateCheckNotice,
   updatePollMs,
+  updateReady,
   updateView,
 } from './updates';
 
@@ -310,6 +311,22 @@ describe('Ask before updating (Whombat ask-before-updating.md ABU-01, ABU-03)', 
     expect(v.rows[1]).toMatchObject({ dot: 'warn', action: 'install', release: 'pve-20261116.1' });
     expect(v.rows[1]?.meta).toContain('pve-20261116.1');
     expect(v.pollMs).toBe(15_000);
+  });
+
+  it('updateReady names the release waiting for the owner, and nothing else', () => {
+    const owner = { reason: 'owner', since: '2026-09-29T11:02:00Z', blockers: [] } as const;
+    const waiting = {
+      ...base,
+      state: 'WaitingForSafeBoundary',
+      candidate: 'pve-20261116.1',
+      askFirst: true,
+      waiting: owner,
+    } as UpdateStatus;
+    expect(updateReady({ update: waiting })).toBe('pve-20261116.1');
+    expect(updateReady({ update: { ...waiting, paused: true } })).toBeNull();
+    expect(updateReady({ update: { ...waiting, waiting: { ...owner, reason: 'boundary' } } })).toBeNull();
+    expect(updateReady({ update: base })).toBeNull();
+    expect(updateReady(null)).toBeNull();
   });
 
   it('the switch shows only where the box’s manager keeps it', () => {
