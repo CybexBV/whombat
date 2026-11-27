@@ -82,7 +82,7 @@ export interface ShellKeyboardOptions {
 /** Focusable element on the search screen that ⌘K focuses when search is already open. */
 export const SEARCH_INPUT_SELECTOR = '[data-search-input]';
 
-/** Global shortcuts: ⌘K / Ctrl K, Esc (modal → pane → search), Alt+↑/↓. */
+/** Global shortcuts: ⌘K / Ctrl K, ⌘, / Ctrl , (Settings), Esc (modal → pane → search), Alt+↑/↓. */
 export function useShellKeyboard(options: ShellKeyboardOptions) {
   const navigate = useNavigate();
   const navigateHref = useNavigateHref();
@@ -107,6 +107,9 @@ export function useShellKeyboard(options: ShellKeyboardOptions) {
           void navigate({ to: '/search' });
           return;
         }
+        case 'openSettings':
+          void navigate({ to: '/settings' });
+          return;
         case 'closeModal':
           void updateSearch((prev) => ({ ...prev, approval: undefined }));
           return;
