@@ -68,17 +68,27 @@ ${linkLines.join('\n')}
 `;
 }
 
+/** What a suggested site is about, as `NewsTopic` in `@whombat/core` names it. */
+const TOPICS = ['news', 'tech', 'business', 'sport', 'science', 'culture'] as const;
+
 /** One row of `news-feeds.psv`. */
 export interface FeedRow {
   id: string;
   country: string;
   regions: string[];
   areas: string[];
+  /** The region's or area's own name (“Noord-Brabant”); empty for the whole country. */
+  where: string;
   lang: string;
+  /** Empty: all the news. */
+  topic: string;
   name: string;
   url: string;
   checked: string;
 }
+
+/** The columns of a row, in order. */
+export const FEED_COLUMNS = 10;
 
 /** The rows of `news-feeds.psv`, each checked for what the table may hold. */
 export function feedRows(psv: string): FeedRow[] {
@@ -88,8 +98,11 @@ export function feedRows(psv: string): FeedRow[] {
   for (const line of psv.split('\n')) {
     if (!line.trim() || line.startsWith('#')) continue;
     const f = line.split('|');
-    if (f.length !== 8) throw new Error(`news-feeds.psv: 8 columns, not ${f.length}: ${line}`);
-    const [id, country, regions, areas, lang, name, url, checked] = f as [
+    if (f.length !== FEED_COLUMNS)
+      throw new Error(`news-feeds.psv: ${FEED_COLUMNS} columns, not ${f.length}: ${line}`);
+    const [id, country, regions, areas, where, lang, topic, name, url, checked] = f as [
+      string,
+      string,
       string,
       string,
       string,
@@ -105,7 +118,9 @@ export function feedRows(psv: string): FeedRow[] {
       country,
       regions: list(regions),
       areas: list(areas),
+      where,
       lang,
+      topic,
       name,
       url,
       checked,
@@ -115,9 +130,15 @@ export function feedRows(psv: string): FeedRow[] {
     for (const code of [...row.regions, ...row.areas])
       if (!new RegExp(`^${country}-[A-Z0-9]{1,3}$`).test(code)) throw new Error(`${id}: code ${code}`);
     if (row.regions.length > 0 && row.areas.length > 0) throw new Error(`${id}: regions or areas, not both`);
+    const regional = row.regions.length > 0 || row.areas.length > 0;
+    if (regional !== (where.trim() !== '') || where !== where.trim() || where.length > 120)
+      throw new Error(`${id}: where (a region's or area's name, only for those)`);
     if (!/^[a-z]{2,3}$/.test(lang)) throw new Error(`${id}: language ${lang}`);
+    if (topic && !(TOPICS as readonly string[]).includes(topic)) throw new Error(`${id}: topic ${topic}`);
     if (!url.startsWith('https://') || new URL(url).href !== url) throw new Error(`${id}: url ${url}`);
     if (!name.trim() || name.length > 80) throw new Error(`${id}: name`);
+    if (!/^\d{4}-\d{2}-\d{2}: /.test(checked))
+      throw new Error(`${id}: not checked (scripts/weather-news/check.ts)`);
     if (ids.has(id) || urls.has(url)) throw new Error(`${id}: twice`);
     ids.add(id);
     urls.add(url);
@@ -134,7 +155,9 @@ export function newsSource(rows: FeedRow[]): string {
     (r) =>
       `  { id: ${q(r.id)}, country: ${q(r.country)}, ${r.regions.length ? `regions: ${arr(r.regions)}, ` : ''}${
         r.areas.length ? `areas: ${arr(r.areas)}, ` : ''
-      }lang: ${q(r.lang)}, name: ${q(r.name)}, url: ${q(r.url)} },`,
+      }${r.where ? `where: ${q(r.where)}, ` : ''}lang: ${q(r.lang)}, ${
+        r.topic && r.topic !== 'news' ? `topic: ${q(r.topic)}, ` : ''
+      }name: ${q(r.name)}, url: ${q(r.url)} },`,
   );
   return `/**
  * Written by \`node --import tsx scripts/weather-news/gen.ts\` from scripts/weather-news/news-feeds.psv, where each
@@ -143,14 +166,17 @@ export function newsSource(rows: FeedRow[]): string {
 
 /**
  * A suggested news site: its country (ISO 3166-1), the regions (ISO 3166-2 level 4) or areas (level 6) it is for, none
- * for the whole country, its language (ISO 639-1), its name and its feed.
+ * for the whole country, the name of where that is (\`where\`, “Noord-Brabant”), its language (ISO 639-1), its topic
+ * (all the news when left out), its name and its feed.
  */
 export interface NewsSuggestionRow {
   readonly id: string;
   readonly country: string;
   readonly regions?: readonly string[];
   readonly areas?: readonly string[];
+  readonly where?: string;
   readonly lang: string;
+  readonly topic?: 'news' | 'tech' | 'business' | 'sport' | 'science' | 'culture';
   readonly name: string;
   readonly url: string;
 }
