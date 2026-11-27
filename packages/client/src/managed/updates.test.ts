@@ -314,7 +314,7 @@ describe('Ask before updating (Whombat ask-before-updating.md ABU-01, ABU-03)', 
   });
 
   it('updateReady names the release waiting for the owner, and nothing else', () => {
-    const owner = { reason: 'owner', since: '2026-09-29T11:02:00Z', blockers: [] } as const;
+    const owner = { reason: 'owner' as const, since: '2026-09-29T11:02:00Z', blockers: [] };
     const waiting = {
       ...base,
       state: 'WaitingForSafeBoundary',
