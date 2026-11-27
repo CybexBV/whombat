@@ -1,13 +1,29 @@
 /** “What’s new” on the phone: About's row and the one-time “Whombat updated” notice. */
 import { readFileSync } from 'node:fs';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { WHATS_NEW_TEXT, whatsNewSeenKey } from '@whombat/client/managed';
 import type { ApplianceStatus } from '@whombat/client/session';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type KeyValueStore, memoryStore } from '../lib/kv';
-import { WHATS_NEW_ROW, WHATS_NEW_URL, whatsNewToShow } from './whatsNew';
+import { stripNotices, WHATS_NEW_ROW, WHATS_NEW_URL, watchStatusOnReopen, whatsNewToShow } from './whatsNew';
 
 const WHOMBAT = 'wb-test-0001';
 const KEY = whatsNewSeenKey(WHOMBAT);
+
+/** When a release was installed: its day from its name (`pve-20260928.6` on 28 September), then its number. */
+const installedAt = (release: string) =>
+  release.replace(/^pve-(\d{4})(\d{2})(\d{2})\.(\d+)$/, '$1-$2-$3T12:0$4:00Z');
+
+/** The release a store keeps as seen (it keeps when the release was installed beside it). */
+function seenIn(store: { data: Map<string, string> }): string | undefined {
+  const raw = store.data.get(KEY);
+  if (raw === undefined) return undefined;
+  try {
+    return (JSON.parse(raw) as { release: string }).release;
+  } catch {
+    return raw;
+  }
+}
 
 const status = (release: string | null): Pick<ApplianceStatus, 'update'> =>
   ({
@@ -18,7 +34,7 @@ const status = (release: string | null): Pick<ApplianceStatus, 'update'> =>
       lastCheckedAt: null,
       deferredReason: null,
       failure: null,
-      ...(release && { lastUpdate: { release, from: 'pve-20260901.1', at: '2026-09-29T12:00:00Z' } }),
+      ...(release && { lastUpdate: { release, from: 'pve-20260901.1', at: installedAt(release) } }),
     },
   }) as unknown as Pick<ApplianceStatus, 'update'>;
 
@@ -43,7 +59,7 @@ describe('the one-time “Whombat updated” notice', () => {
     const store = memoryStore({ [KEY]: 'pve-20260927.1' });
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
     // Kept as seen as soon as it shows: the app closed before Dismiss doesn't show it again.
-    expect(store.data.get(KEY)).toBe('pve-20260928.6');
+    expect(seenIn(store)).toBe('pve-20260928.6');
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
     // The next update shows it again.
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20261001.2'))).toBe('pve-20261001.2');
@@ -57,7 +73,7 @@ describe('the one-time “Whombat updated” notice', () => {
   it('only remembers the release on the very first look', async () => {
     const store = memoryStore();
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
-    expect(store.data.get(KEY)).toBe('pve-20260928.6');
+    expect(seenIn(store)).toBe('pve-20260928.6');
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
   });
 
@@ -80,16 +96,65 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(written).toEqual([]);
   });
 
-  it('asks for the status again each time the session opens after a drop, however fresh the last answer', () => {
-    const source = readFileSync(new URL('./WhatsNewNotice.tsx', import.meta.url), 'utf8');
-    expect(source).toMatch(/onSessionReopen\(session,[\s\S]*?invalidateQueries\(\{ queryKey \}\)/);
-    expect(source).toMatch(/whatsNewPollMs\(q\.state\.data, \{ justBack:/);
+  it('a newer release kept already: an older answer neither tells nor goes back to it', async () => {
+    const store = memoryStore({
+      [KEY]: JSON.stringify({ release: 'pve-20260928.6', at: installedAt('pve-20260928.6') }),
+    });
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260927.1'))).toBeNull();
+    expect(seenIn(store)).toBe('pve-20260928.6');
   });
 
-  it('is drawn in the strip every screen shows, whether or not the passkey nudge is there', () => {
-    const source = readFileSync(new URL('./ApplianceRoot.tsx', import.meta.url), 'utf8');
-    const line = source.split('\n').find((l) => l.includes('<WhatsNewNoticeView notice={whatsNew} />'));
-    expect(line).toBeDefined();
-    expect(line).not.toMatch(/nudge/);
+  it('asks for the status again each time the session opens after a drop, however fresh the last answer', async () => {
+    let state = 'open';
+    const listeners = new Set<(s: { status: string }) => void>();
+    const session = {
+      state: () => ({ status: state }),
+      onState: (cb: (s: { status: string }) => void) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+    };
+    const move = (next: string) => {
+      state = next;
+      for (const cb of [...listeners]) cb({ status: state });
+    };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let reads = 0;
+    const queryKey = ['settings', 'appliance-status', 'scope'];
+    const observer = new QueryObserver(client, {
+      queryKey,
+      queryFn: async () => ++reads,
+      staleTime: 60_000,
+    });
+    const off = observer.subscribe(() => {});
+    await vi.waitFor(() => expect(client.getQueryData(queryKey)).toBe(1));
+    const watch = watchStatusOnReopen(session, client, queryKey);
+    expect(watch.backAt()).toBe(0);
+    move('connecting');
+    move('open');
+    // The answer is seconds old, but the box was gone: asked again at once.
+    await vi.waitFor(() => expect(client.getQueryData(queryKey)).toBe(2));
+    expect(watch.backAt()).toBeGreaterThan(0);
+    watch.stop();
+    move('connecting');
+    move('open');
+    await Promise.resolve();
+    expect(reads).toBe(2);
+    off();
+  });
+
+  it('is drawn in the strip with the passkey nudge, never waiting for it', () => {
+    expect(stripNotices({ open: true, nudge: true, whatsNew: true })).toEqual({
+      nudge: true,
+      whatsNew: true,
+    });
+    expect(stripNotices({ open: true, nudge: false, whatsNew: true })).toEqual({
+      nudge: false,
+      whatsNew: true,
+    });
+    expect(stripNotices({ open: false, nudge: true, whatsNew: true })).toEqual({
+      nudge: false,
+      whatsNew: false,
+    });
   });
 });

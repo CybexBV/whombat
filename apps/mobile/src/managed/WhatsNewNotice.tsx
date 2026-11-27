@@ -6,7 +6,7 @@
  * seconds while an update is being installed; no poll of its own otherwise.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { onSessionReopen, WHATS_NEW_BACK_MS, WHATS_NEW_TEXT, whatsNewPollMs } from '@whombat/client/managed';
+import { WHATS_NEW_TEXT, whatsNewRefetchInterval } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -16,7 +16,7 @@ import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { applianceStatusQuery } from './useApplianceStatus';
-import { WHATS_NEW_URL, whatsNewToShow } from './whatsNew';
+import { WHATS_NEW_URL, watchStatusOnReopen, whatsNewToShow } from './whatsNew';
 
 export interface WhatsNewNoticeState {
   see: () => void;
@@ -38,21 +38,22 @@ export function useWhatsNewNotice({
 }): WhatsNewNoticeState | null {
   const queryClient = useQueryClient();
   // When the session last opened again: for a short while after, a status without update facts is asked again.
-  const backAt = useRef(0);
+  const backAt = useRef<() => number>(() => 0);
   // While an update is being installed its last update changes when it is done: ask until then.
   const status = useQuery({
     ...applianceStatusQuery({ session, cacheScope }),
     enabled: open,
-    refetchInterval: (q) =>
-      whatsNewPollMs(q.state.data, { justBack: Date.now() - backAt.current < WHATS_NEW_BACK_MS }),
+    refetchInterval: whatsNewRefetchInterval(() => backAt.current()),
   }).data;
   // The box comes back after a drop (an update restarts it): ask again at once, however fresh the last answer.
   useEffect(() => {
-    const { queryKey } = applianceStatusQuery({ session, cacheScope });
-    return onSessionReopen(session, () => {
-      backAt.current = Date.now();
-      void queryClient.invalidateQueries({ queryKey });
-    });
+    const watch = watchStatusOnReopen(
+      session,
+      queryClient,
+      applianceStatusQuery({ session, cacheScope }).queryKey,
+    );
+    backAt.current = watch.backAt;
+    return watch.stop;
   }, [session, queryClient, cacheScope]);
   const [shown, setShown] = useState<{ whombat: string; release: string } | null>(null);
   useEffect(() => {

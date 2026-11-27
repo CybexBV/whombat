@@ -3,7 +3,14 @@
  * phone opens it in the browser), its row in About, and the one-time “Whombat updated” notice after an update. What
  * this phone saw last is kept per Whombat in the secure store; a store that can't be read shows nothing.
  */
-import { WHATS_NEW_PATH, WHATS_NEW_TEXT, whatsNewNotice, whatsNewSeenKey } from '@whombat/client/managed';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import {
+  onSessionReopen,
+  WHATS_NEW_PATH,
+  WHATS_NEW_TEXT,
+  whatsNewNotice,
+  whatsNewSeenKey,
+} from '@whombat/client/managed';
 import type { ApplianceStatus } from '@whombat/client/session';
 import type { KeyValueStore } from '../lib/kv';
 import { UI_ORIGINS } from './config';
@@ -33,8 +40,42 @@ export async function whatsNewToShow(
   } catch {
     return null;
   }
-  const { action, release } = whatsNewNotice(status, seen);
+  // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
+  const { action, release, value } = whatsNewNotice(status, seen);
   if (action === 'none') return null;
-  await store.set(key, release).catch(() => {});
+  await store.set(key, value).catch(() => {});
   return action === 'show' ? release : null;
+}
+
+/**
+ * Asks for the status again each time the box's session opens after a drop (an update restarts the box), however
+ * fresh the last answer, and remembers when: for a short while after, a missing or failed answer is asked again.
+ */
+export function watchStatusOnReopen(
+  session: Parameters<typeof onSessionReopen>[0],
+  queryClient: QueryClient,
+  queryKey: QueryKey,
+): { stop: () => void; backAt: () => number } {
+  let backAt = 0;
+  const stop = onSessionReopen(session, () => {
+    backAt = Date.now();
+    void queryClient.invalidateQueries({ queryKey });
+  });
+  return { stop, backAt: () => backAt };
+}
+
+/** What the strip under the status bar draws: both notices while the session is open, neither waiting for the other. */
+export function stripNotices({
+  open,
+  nudge,
+  whatsNew,
+}: {
+  open: boolean;
+  nudge: boolean;
+  whatsNew: boolean;
+}): {
+  nudge: boolean;
+  whatsNew: boolean;
+} {
+  return { nudge: open && nudge, whatsNew: open && whatsNew };
 }

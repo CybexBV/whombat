@@ -311,22 +311,46 @@ export function lastUpdatedRelease(
   return u.lastUpdate.release;
 }
 
+/** What a device keeps as seen: the release and when it was installed (null before the first update). */
+interface SeenRelease {
+  release: string;
+  at: string | null;
+}
+
+/** What is kept, read back; a bare release (kept without its time) still counts. */
+function readSeenRelease(seen: string): SeenRelease {
+  try {
+    const v = JSON.parse(seen) as Partial<SeenRelease> | null;
+    if (v && typeof v.release === 'string')
+      return { release: v.release, at: typeof v.at === 'string' ? v.at : null };
+  } catch {
+    // A bare release.
+  }
+  return { release: seen, at: null };
+}
+
 /**
  * The one-time “Whombat updated · See what’s new” notice, from the Whombat's status and what this device saw last
- * (`seen`, null when it never looked): `show` once the last update differs from what was seen; `remember` (quietly
- * keep `release` as seen) the first time a device looks, since it has nothing to compare with; else `none`. Each app
- * keeps the release as seen as soon as it shows the notice, so it shows once even when nobody taps it.
+ * (`seen`, as `value` was kept; null when it never looked): `show` once the last update is another release installed
+ * after the one seen; `remember` (quietly keep `value`) the first time a device looks, since it has nothing to compare
+ * with; else `none`, also for an answer older than what is kept (a page that hasn't asked again yet), so nothing goes
+ * back to an older release. Each app keeps `value` as soon as it shows the notice, so it shows once even when nobody
+ * taps it.
  */
 export function whatsNewNotice(
   status: Pick<ApplianceStatus, 'update'> | null | undefined,
   seen: string | null,
-): { action: 'show' | 'remember' | 'none'; release: string } {
+): { action: 'show' | 'remember' | 'none'; release: string; value: string } {
   const release = lastUpdatedRelease(status) ?? WHATS_NEW_NO_UPDATE;
+  const at = release === WHATS_NEW_NO_UPDATE ? null : (status?.update?.lastUpdate?.at ?? null);
+  const value = JSON.stringify({ release, at } satisfies SeenRelease);
   // A status without update facts (an unmanaged box, or none read yet) says nothing either way.
-  if (!status?.update) return { action: 'none', release };
-  if (seen === null) return { action: 'remember', release };
-  if (release === WHATS_NEW_NO_UPDATE || release === seen) return { action: 'none', release };
-  return { action: 'show', release };
+  if (!status?.update) return { action: 'none', release, value };
+  if (seen === null) return { action: 'remember', release, value };
+  const kept = readSeenRelease(seen);
+  if (release === WHATS_NEW_NO_UPDATE || release === kept.release) return { action: 'none', release, value };
+  if (kept.at && at && Date.parse(at) <= Date.parse(kept.at)) return { action: 'none', release, value };
+  return { action: 'show', release, value };
 }
 
 /** How long after the box's session opens again a status without update facts is asked for again. */
@@ -335,19 +359,36 @@ export const WHATS_NEW_BACK_MS = 60_000;
 /**
  * How often the notice asks for the status again: every 5 s while an update is being installed (its last update
  * changes once it is done, after the box is back), as About does, through its last checks even while updates are
- * paused; and for a short while after the box is back (`justBack`) while it hasn't said how its updates stand yet.
- * Never while an update waits (for the owner's yes, a backup, the maintenance window: that can take days).
+ * paused; and for a short while after the box is back (`justBack`) while it hasn't said how its updates stand yet or
+ * a read failed (`failed`). Never while an update waits (for the owner's yes, a backup, the maintenance window: that can take days).
  */
 export function whatsNewPollMs(
   status: Pick<ApplianceStatus, 'update'> | null | undefined,
-  { justBack = false }: { justBack?: boolean } = {},
+  { justBack = false, failed = false }: { justBack?: boolean; failed?: boolean } = {},
 ): number | false {
+  // A read that failed just after the box is back (it may still be starting): ask again soon.
+  if (justBack && failed) return 5_000;
   if (!status) return false;
   const u = status.update;
   if (!u) return justBack ? 5_000 : false;
   if (u.waiting) return false;
   if (u.paused && u.state !== 'Activating' && u.state !== 'Verifying') return false;
   return MOVING.has(u.state) ? 5_000 : false;
+}
+
+/**
+ * The notice's `refetchInterval` for a status query: `whatsNewPollMs` with the box just back (`backAt`, when the
+ * session last opened again) and whether the last read failed.
+ */
+export function whatsNewRefetchInterval(
+  backAt: () => number,
+  now: () => number = Date.now,
+): (query: { state: { data?: Pick<ApplianceStatus, 'update'> | null; status: string } }) => number | false {
+  return (query) =>
+    whatsNewPollMs(query.state.data, {
+      justBack: now() - backAt() < WHATS_NEW_BACK_MS,
+      failed: query.state.status === 'error',
+    });
 }
 
 /** What `onSessionReopen` needs of the box's session. */

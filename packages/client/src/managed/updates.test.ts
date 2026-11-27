@@ -401,17 +401,17 @@ describe('Check for updates (check-for-updates.md)', () => {
 });
 
 describe('the one-time “Whombat updated” notice', () => {
-  const updated = (release: string, state: UpdateStatus['state'] = 'Healthy') => ({
+  const updated = (release: string, state: UpdateStatus['state'] = 'Healthy', at = NOW.toISOString()) => ({
     update: {
       ...base,
       state,
       current: release,
-      lastUpdate: { release, from: 'pve-20260927.1', at: NOW.toISOString() },
+      lastUpdate: { release, from: 'pve-20260927.1', at },
     },
   });
 
   it('shows once the last update differs from the release this device saw', () => {
-    expect(whatsNewNotice(updated('pve-20260928.6'), 'pve-20260927.1')).toEqual({
+    expect(whatsNewNotice(updated('pve-20260928.6'), 'pve-20260927.1')).toMatchObject({
       action: 'show',
       release: 'pve-20260928.6',
     });
@@ -422,15 +422,14 @@ describe('the one-time “Whombat updated” notice', () => {
   });
 
   it('only remembers on the first look, with nothing to compare with', () => {
-    expect(whatsNewNotice(updated('pve-20260928.6'), null)).toEqual({
+    expect(whatsNewNotice(updated('pve-20260928.6'), null)).toMatchObject({
       action: 'remember',
       release: 'pve-20260928.6',
     });
     // No update yet: remembered as such, so the first update gets the notice.
-    expect(whatsNewNotice({ update: base }, null)).toEqual({
-      action: 'remember',
-      release: WHATS_NEW_NO_UPDATE,
-    });
+    const none = whatsNewNotice({ update: base }, null);
+    expect(none).toMatchObject({ action: 'remember', release: WHATS_NEW_NO_UPDATE });
+    expect(whatsNewNotice(updated('pve-20260928.6'), none.value).action).toBe('show');
     expect(whatsNewNotice(updated('pve-20260928.6'), WHATS_NEW_NO_UPDATE).action).toBe('show');
   });
 
@@ -472,6 +471,25 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(whatsNewPollMs(paused('Verifying'))).toBe(5_000);
     expect(whatsNewPollMs(paused('Activating'))).toBe(5_000);
     expect(whatsNewPollMs(paused('Downloading'))).toBe(false);
+  });
+
+  it('keeps the release with when it was installed, and never goes back to an older one', () => {
+    const newer = updated('pve-20260928.6', 'Healthy', '2026-09-28T03:00:00Z');
+    const older = updated('pve-20260927.1', 'Healthy', '2026-09-27T03:00:00Z');
+    const kept = whatsNewNotice(newer, 'pve-20260927.1').value;
+    expect(JSON.parse(kept)).toEqual({ release: 'pve-20260928.6', at: '2026-09-28T03:00:00Z' });
+    // A page still holding the older answer says nothing and keeps nothing.
+    expect(whatsNewNotice(older, kept).action).toBe('none');
+    expect(whatsNewNotice(newer, kept).action).toBe('none');
+    // A newer update after it shows.
+    const next = updated('pve-20261001.2', 'Healthy', '2026-10-01T03:00:00Z');
+    expect(whatsNewNotice(next, kept).action).toBe('show');
+  });
+
+  it('asks again soon after the box is back when a read failed', () => {
+    expect(whatsNewPollMs(updated('pve-20260928.6'), { justBack: true, failed: true })).toBe(5_000);
+    expect(whatsNewPollMs(updated('pve-20260928.6'), { justBack: false, failed: true })).toBe(false);
+    expect(whatsNewPollMs(null, { justBack: true, failed: true })).toBe(5_000);
   });
 
   it('asks again for a short while after the box is back but hasn’t said how its updates stand', () => {

@@ -118,6 +118,7 @@ import { pushStore, useManagedPush } from './usePush';
 import { useTailscaleTurnOn } from './useReach';
 import { VersionGate } from './VersionGate';
 import { useWhatsNewNotice, WhatsNewNoticeView } from './WhatsNewNotice';
+import { stripNotices } from './whatsNew';
 
 const REAL_CLOCK = () => new Date();
 
@@ -617,17 +618,17 @@ function Shell({
   const whatsNew = useWhatsNewNotice({ session: setup.raw, cacheScope, whombat: appliance.device, open });
   // A passkey sign-in's backup key, handed to the Whombat now its session is open (backup-passkey.md).
   useDeliverBackupKey(setup.raw, appliance.device, open);
-  const strip = useMemo(
-    () => (
+  const strip = useMemo(() => {
+    // After an update, once: under the passkey nudge when that shows too, never waiting for it.
+    const shows = stripNotices({ open, nudge: Boolean(nudge), whatsNew: Boolean(whatsNew) });
+    return (
       <>
         {line ? <StripLine line={line} onRetry={() => setup.raw.reconnectNow()} /> : null}
-        {open && nudge ? <PasskeyNudgeView nudge={nudge} /> : null}
-        {/* After an update, once: under the passkey nudge when that shows too, never waiting for it. */}
-        {open && whatsNew ? <WhatsNewNoticeView notice={whatsNew} /> : null}
+        {shows.nudge && nudge ? <PasskeyNudgeView nudge={nudge} /> : null}
+        {shows.whatsNew && whatsNew ? <WhatsNewNoticeView notice={whatsNew} /> : null}
       </>
-    ),
-    [line, nudge, whatsNew, open, setup],
-  );
+    );
+  }, [line, nudge, whatsNew, open, setup]);
   return (
     <ManagedContext.Provider value={value}>
       <ScreenStripContext.Provider value={strip}>

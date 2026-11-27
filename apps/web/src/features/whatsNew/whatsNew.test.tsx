@@ -74,6 +74,12 @@ const { ManagedAbout } = await import('../settings/ManagedTabs');
 const { APPLIANCE_STATUS_KEY } = await import('../settings/version');
 
 /** A managed Whombat's status whose last update installed `release` (none: no update yet). */
+/** When a release was installed: its day from its name (`whombat-20261127.2` on 27 November), then its number. */
+function installedAt(release: string): string {
+  const day = release.replace(/^whombat-(\d{4})(\d{2})(\d{2})\.(\d+)$/, '$1-$2-$3T08:0$4:00Z');
+  return day === release ? '2026-11-27T08:00:00Z' : day;
+}
+
 function status(release: string | null) {
   return {
     backup: { state: 'protected' },
@@ -84,7 +90,7 @@ function status(release: string | null) {
       lastCheckedAt: '2026-11-27T09:00:00Z',
       deferredReason: null,
       failure: null,
-      ...(release && { lastUpdate: { release, from: 'whombat-20261120.1', at: '2026-11-27T08:00:00Z' } }),
+      ...(release && { lastUpdate: { release, from: 'whombat-20261120.1', at: installedAt(release) } }),
     },
   };
 }
@@ -126,6 +132,17 @@ function renderAt(ui: ReactNode, path = '/') {
 }
 
 const seenEntry = whatsNewSeenKey(BOX);
+
+/** The release this browser keeps as seen (it keeps when the release was installed beside it). */
+function seenRelease(): string | null {
+  const raw = window.localStorage.getItem(seenEntry);
+  if (raw === null) return null;
+  try {
+    return (JSON.parse(raw) as { release: string }).release;
+  } catch {
+    return raw;
+  }
+}
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -172,7 +189,7 @@ describe('the notice after an update', () => {
   it('says nothing on the first look and remembers the release', async () => {
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
     renderAt(<WhatsNewNotice onWhatsNew={false} />);
-    await vi.waitFor(() => expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2'));
+    await vi.waitFor(() => expect(seenRelease()).toBe('whombat-20261127.2'));
     expect(notice()).toBeNull();
   });
 
@@ -181,7 +198,7 @@ describe('the notice after an update', () => {
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
     await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
     expect(notice()).toBeNull();
-    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
+    expect(seenRelease()).toBe('whombat-20261127.2');
   });
 
   it('shows once after an update and stays dismissed', async () => {
@@ -193,11 +210,11 @@ describe('the notice after an update', () => {
     expect(within(shown).getByText(WHATS_NEW_TEXT.notice)).toBeTruthy();
     expect(within(shown).getByRole('link', { name: WHATS_NEW_TEXT.see })).toBeTruthy();
     // Shown once: kept as seen as soon as it shows.
-    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
+    expect(seenRelease()).toBe('whombat-20261127.2');
 
     await user.click(within(shown).getByRole('button', { name: WHATS_NEW_TEXT.dismiss }));
     expect(notice()).toBeNull();
-    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
+    expect(seenRelease()).toBe('whombat-20261127.2');
 
     // Opened again: the same release says nothing.
     first.unmount();
@@ -279,7 +296,7 @@ describe('the notice after an update', () => {
   it('a second page open at the same time says nothing for an update the first one told about', async () => {
     ops.status.mockResolvedValue(status('whombat-20261126.5'));
     const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
-    await vi.waitFor(() => expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261126.5'));
+    await vi.waitFor(() => expect(seenRelease()).toBe('whombat-20261126.5'));
     // Another page of this browser showed the notice for the update and kept it.
     window.localStorage.setItem(seenEntry, 'whombat-20261127.2');
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
@@ -301,7 +318,58 @@ describe('the notice after an update', () => {
     await screen.findByTestId('whats-new-notice');
     await act(async () => {});
     expect(screen.getAllByTestId('whats-new-notice')).toHaveLength(1);
-    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
+    expect(seenRelease()).toBe('whombat-20261127.2');
+  });
+
+  it('a page still holding an older answer neither tells nor goes back to it', async () => {
+    window.localStorage.setItem(
+      seenEntry,
+      JSON.stringify({ release: 'whombat-20261127.2', at: installedAt('whombat-20261127.2') }),
+    );
+    ops.status.mockResolvedValue(status('whombat-20261126.5'));
+    await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
+    expect(notice()).toBeNull();
+    expect(seenRelease()).toBe('whombat-20261127.2');
+  });
+
+  it('a page gone before the browser lets it claim the update keeps nothing, so another can tell', async () => {
+    const queued: (() => void)[] = [];
+    const locks = {
+      request: (_name: string, take: () => unknown) =>
+        new Promise((resolve) => queued.push(() => resolve(take()))),
+    };
+    vi.stubGlobal('navigator', { ...navigator, locks });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await vi.waitFor(() => expect(queued).toHaveLength(1));
+      view.unmount();
+      await act(async () => queued.shift()?.());
+      expect(seenRelease()).toBe('whombat-20261126.5');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a read that fails just after the box is back is asked again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261126.5'));
+      await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
+      ops.status.mockRejectedValueOnce(new Error('not yet'));
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      act(() => session.move('connecting'));
+      act(() => session.move('open'));
+      await vi.waitFor(() => expect(ops.status).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+      expect(notice()).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('See what’s new opens the page and counts as seen', async () => {
@@ -312,21 +380,21 @@ describe('the notice after an update', () => {
     await user.click(await screen.findByRole('link', { name: WHATS_NEW_TEXT.see }));
     expect(await screen.findByRole('heading', { level: 1, name: 'What’s new in Whombat' })).toBeTruthy();
     expect(notice()).toBeNull();
-    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
+    expect(seenRelease()).toBe('whombat-20261127.2');
   });
 
   it('on What’s new itself it counts as seen without showing', async () => {
     window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
     renderAt(<WhatsNewNotice onWhatsNew />, '/whats-new');
-    await vi.waitFor(() => expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2'));
+    await vi.waitFor(() => expect(seenRelease()).toBe('whombat-20261127.2'));
     expect(notice()).toBeNull();
   });
 
   it('the first update after the first look gets the notice', async () => {
     ops.status.mockResolvedValue(status(null));
     const first = renderAt(<WhatsNewNotice onWhatsNew={false} />);
-    await vi.waitFor(() => expect(window.localStorage.getItem(seenEntry)).toBe('none'));
+    await vi.waitFor(() => expect(seenRelease()).toBe('none'));
     first.unmount();
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
     renderAt(<WhatsNewNotice onWhatsNew={false} />);
