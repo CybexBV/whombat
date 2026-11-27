@@ -87,9 +87,18 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * `weather` view, which a box sends only to a session at minor 16 or later (Whombat weather-news.md); minor 17 brings
  * unsolicited Looks ahead findings into the Inbox (`NeedsYouKind` `ahead`, `looksAhead.promote`, `looksAhead.feedback`,
  * and `LooksAheadCheckItem.inboxItemId`; Whombat looks-ahead.md); minor 18 adds `t3Review.maxRounds` (1–3 review
- * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md).
+ * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
+ * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 18 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 19 };
+
+/**
+ * Session protocol minor (major 5) with more news: up to `NEWS_SOURCES_MAX` sources (an older app takes twelve),
+ * browsing every country's suggestions by topic (`news.browse`) and importing another reader's list
+ * (`news.importSites`). An app asks those ops only of a box at this minor or later; a box shows an older session the
+ * first twelve sources and keeps the rest when it saves.
+ */
+export const NEWS_MORE_MINOR = 19;
 
 /**
  * Session protocol minor (major 5) that accepts `t3Review.maxRounds` on an automation recipe. Older apps parse

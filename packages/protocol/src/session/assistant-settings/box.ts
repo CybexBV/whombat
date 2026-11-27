@@ -132,6 +132,9 @@ export const BOX_SETTINGS = {
   'news.setSources': change('appliance.overview', 'Turn news sites on or off'),
   // A site of the person's own is read every quarter of an hour, and what it says reaches the assistant: their yes.
   'news.addSite': ask('appliance.overview', 'Add a news site'),
+  'news.browse': read('appliance.overview', 'Browse the news sites suggested in a country'),
+  // A list from another reader names sites as adding one does: the person's yes each time.
+  'news.importSites': ask('appliance.overview', 'Add news sources from another reader’s list'),
 
   'changeWindow.get': read('appliance.about', 'Read the quiet hours for updates and restarts'),
   'changeWindow.set': ask('appliance.about', 'Change the quiet hours for updates and restarts'),

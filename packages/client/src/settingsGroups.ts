@@ -2,13 +2,15 @@
  * Settings in five groups (settings-groups.md, sidebar-tabs.md), the same on the web and the phone: **You** (your
  * profile, notifications, devices and passkeys), **the assistant by its name** (its name and face, the AI sign-in,
  * what it remembers, and what it may do), **Connections** (what this Whombat is signed in to, and how), **This
- * Whombat** (backups, updates, the screen, network, Bluetooth, voice, About) and **Advanced**, a list of the expert
+ * Whombat** (backups, updates, the screen, network, Bluetooth, voice, About), **News and weather** (where the Whombat
+ * is and the news it reads) and **Advanced**, a list of the expert
  * pages that stays folded until one is opened. Every setting that was in Settings before is in one of them. Pure: the
  * groups, their parts, their words, and where an old address goes.
  */
+import { NEWS_WORDS } from '@whombat/core';
 import { agentWords } from './agentName';
 
-export type SettingsGroup = 'you' | 'agent' | 'connections' | 'appliance' | 'advanced';
+export type SettingsGroup = 'you' | 'agent' | 'connections' | 'appliance' | 'news' | 'advanced';
 
 /** The groups in their order. */
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
@@ -16,6 +18,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   'agent',
   'connections',
   'appliance',
+  'news',
   'advanced',
 ];
 
@@ -96,6 +99,7 @@ export const SETTINGS_GROUP_TEXT = {
     agent: agentWords(agent).Name,
     connections: 'Connections',
     appliance: 'This Whombat',
+    news: NEWS_WORDS.page,
     advanced: 'Advanced',
   }),
   you: {
@@ -135,14 +139,22 @@ export const SETTINGS_GROUP_TEXT = {
  * The Settings home (the final design, docs/decisions/final-settings-vault-files-usage.md; settings-phone-link.md):
  * **Often used** first — Notifications, Phone app and Theme — then the groups in this order everywhere: You, the
  * assistant by its name, Connections (what this Whombat is signed in to, central to it, not an expert page), This
- * Whombat, Screens and Advanced.
+ * Whombat, News and weather, Screens and Advanced.
  */
-export type SettingsHomeGroup = 'you' | 'agent' | 'connections' | 'appliance' | 'screens' | 'advanced';
+export type SettingsHomeGroup =
+  | 'you'
+  | 'agent'
+  | 'connections'
+  | 'appliance'
+  | 'news'
+  | 'screens'
+  | 'advanced';
 export const SETTINGS_HOME_GROUPS: readonly SettingsHomeGroup[] = [
   'you',
   'agent',
   'connections',
   'appliance',
+  'news',
   'screens',
   'advanced',
 ];
@@ -204,6 +216,8 @@ export function settingsHomeRows(
     // What This Whombat's parts hold: the Overview is how it's doing and its network; Screen has a row of its own.
     connections: { title: 'Connections', line: 'Accounts and services this Whombat uses' },
     appliance: { title: 'This Whombat', line: 'How it’s doing · Network · Backups · About' },
+    // Where the Whombat is and the news it reads: a page of its own (shown where the Whombat answers them).
+    news: { title: NEWS_WORDS.page, line: NEWS_WORDS.homeLine },
     screens: { title: 'Screens', line: 'Displays linked to this Whombat' },
     advanced: { title: 'Advanced', line: 'Expert settings' },
   };

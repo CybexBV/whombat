@@ -473,6 +473,9 @@ const TABLE = {
   'news.sources': READ,
   'news.setSources': RECEIPT,
   'news.addSite': RECEIPT,
+  // Browsing reads the table on the box; an import adds each address once, so sending it again adds nothing new.
+  'news.browse': READ,
+  'news.importSites': RECEIPT,
   'changes.list': READ,
   'changes.undo': DESTRUCTIVE_NEVER,
   // Arranging the Overview (overview-arranged.md): one layout written whole; views and figures only read.

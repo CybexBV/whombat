@@ -5,14 +5,17 @@
 
 /**
  * A suggested news site: its country (ISO 3166-1), the regions (ISO 3166-2 level 4) or areas (level 6) it is for, none
- * for the whole country, its language (ISO 639-1), its name and its feed.
+ * for the whole country, the name of where that is (`where`, “Noord-Brabant”), its language (ISO 639-1), its topic
+ * (all the news when left out), its name and its feed.
  */
 export interface NewsSuggestionRow {
   readonly id: string;
   readonly country: string;
   readonly regions?: readonly string[];
   readonly areas?: readonly string[];
+  readonly where?: string;
   readonly lang: string;
+  readonly topic?: 'news' | 'tech' | 'business' | 'sport' | 'science' | 'culture';
   readonly name: string;
   readonly url: string;
 }
