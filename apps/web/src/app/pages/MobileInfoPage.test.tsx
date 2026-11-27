@@ -32,11 +32,11 @@ function managedServices(
 }
 
 describe('/mobile (AP-521) and Settings → Phone app (settings-phone-link.md SPL-23)', () => {
-  it('the account menu’s “Phone app” opens it inside the app, under Settings', async () => {
+  it('the account menu’s “Get the phone app” opens it inside the app, under Settings', async () => {
     const app = renderApp('/chat');
     const side = await screen.findByRole('complementary', { name: 'Sidebar' });
     await userEvent.click(await within(side).findByRole('button', { name: /^Account,/ }));
-    await userEvent.click(within(side).getByRole('link', { name: 'Phone app' }));
+    await userEvent.click(within(side).getByRole('link', { name: 'Get the phone app' }));
     expect(await screen.findByRole('heading', { name: 'Phone app', level: 1 })).toBeTruthy();
     expect(app.location()).toBe('/settings?tab=phone');
     // The sidebar stays, and the way back is Settings'.

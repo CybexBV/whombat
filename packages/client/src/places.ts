@@ -1,8 +1,8 @@
 /**
  * The app's places, in one order everywhere (docs/decisions/final-shell-web.md): Search, Chat, Inbox,
- * Overview, Automations, Files, Vault, Usage, Settings. The web's sidebar and its phone-width Places drawer list them all; Search
- * lists them as Places. Each name has one home: Usage is the spend page under Advanced's address, shown as Usage.
- * Pure words and addresses.
+ * Overview, Automations, Files, Vault, Usage, Settings. The web's sidebar and its phone-width Places drawer list Chat to
+ * Vault (Search is ⌘K, Settings is in the account menu, Usage opens at its address); Search lists them all as Places.
+ * Each name has one home: Usage is the spend page under Advanced's address, shown as Usage. Pure words and addresses.
  */
 import { agentWords } from './agentName';
 

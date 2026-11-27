@@ -39,8 +39,8 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
         needsYou: 3,
       },
     );
-    // The seven places in one order; before the Chat shell Overview is the home page. Automations without a count
-    // (AP-2606), Skills a Settings tab (all-skills.md AP-2305).
+    // The six places in one order; before the Chat shell Overview is the home page. Automations without a count
+    // (AP-2606); Settings is in the account menu.
     expect(model.nav.map((r) => [r.label, r.href, r.badge])).toEqual([
       ['Chat', '/chat', null],
       ['Inbox', '/inbox', 3],
@@ -48,7 +48,6 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
       ['Automations', '/automations', null],
       ['Files', '/files', null],
       ['Vault', '/vault', null],
-      ['Settings', '/settings', null],
     ]);
     // An older Whombat doesn't say how bad: the badge stays red (AP-2601).
     expect(model.nav.find((r) => r.id === 'needsYou')?.badgeTone).toBe('bad');
@@ -96,7 +95,7 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
   const me = { id: 'prn_john', name: 'John' } as never;
   const rooms = { chat: { unread: 0 }, feedback: { unread: 2 } } as never;
 
-  it('lists the seven places in one order; Chat counts Feedback’s unread too; the Inbox’s badge takes the worst colour', () => {
+  it('lists the six places in one order; Chat counts Feedback’s unread too; the Inbox’s badge takes the worst colour', () => {
     const build = (
       needsYouWorst: 'bad' | 'warn' | 'info' | null,
       needsYou = 18,
@@ -121,7 +120,6 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
       'automations',
       'files',
       'vault',
-      'settings',
     ]);
     // Reading Chat, Feedback's 2 unread still show on Chat; elsewhere the two rooms' together; none: no badge.
     const chat = (model: ReturnType<typeof build>) => model.nav.find((r) => r.id === 'chat');
@@ -132,17 +130,9 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
       selected: true,
     });
     expect(build('warn').roomPaths).toEqual(['/chat', '/feedback']);
-    // Settings is selected everywhere in Settings, Usage's page too.
-    expect(
-      build('warn', 1, { kind: 'settings', usage: true })
-        .nav.filter((r) => r.selected)
-        .map((r) => r.id),
-    ).toEqual(['settings']);
-    expect(
-      build('warn', 1, { kind: 'settings' })
-        .nav.filter((r) => r.selected)
-        .map((r) => r.id),
-    ).toEqual(['settings']);
+    // Settings has no row: in Settings, Usage's page too, no place is selected.
+    expect(build('warn', 1, { kind: 'settings', usage: true }).nav.filter((r) => r.selected)).toEqual([]);
+    expect(build('warn', 1, { kind: 'settings' }).nav.filter((r) => r.selected)).toEqual([]);
     const watch = (model: ReturnType<typeof build>) => model.nav.find((r) => r.id === 'needsYou');
     expect(watch(build('warn'))).toMatchObject({
       badge: 18,
@@ -301,19 +291,36 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
     await user.click(within(tabs).getByRole('tab', { name: /^Servers/ }));
     expect(within(side).getByRole('link', { name: 'pve-01' })).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_LIST_KEY)).toBe('servers');
-    // Settings is its own place; the person's row is not a second way in.
-    expect(within(side).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings');
-    expect(within(side).queryByRole('link', { name: /, Settings$/ })).toBeNull();
-    // The theme: an action in the account menu.
-    // The person's row opens the account menu: their own settings first, then the theme and the rest.
+    // No Settings, Usage or Search among the places: Settings is in the account menu.
+    const places = within(side).getByRole('navigation', { name: 'Whombat' });
+    expect(within(places).queryByRole('link', { name: 'Settings' })).toBeNull();
     expect(within(side).queryByRole('link', { name: 'Usage' })).toBeNull();
     expect(within(side).queryByRole('link', { name: 'Search' })).toBeNull();
+    // The person's row opens the account menu: their face as the way to their profile, the theme, Settings, the rest.
     await user.click(within(side).getByRole('button', { name: /^Account,/ }));
-    expect(within(side).getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe(
-      '/settings?part=profile',
+    const menu = side.querySelector('[data-account-menu]') as HTMLElement;
+    expect(
+      within(menu)
+        .getByRole('link', { name: /Your profile/ })
+        .getAttribute('href'),
+    ).toBe('/settings?part=profile');
+    const theme = within(menu).getByRole('group', { name: 'Theme' });
+    expect(
+      within(theme)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('value')),
+    ).toEqual(['light', 'dark', 'system']);
+    const settings = within(menu).getByRole('link', { name: /^Settings/ });
+    expect(settings.getAttribute('href')).toBe('/settings');
+    expect(settings.getAttribute('aria-keyshortcuts')).toBe('Control+, Meta+,');
+    expect(within(menu).getByRole('link', { name: 'Get the phone app' }).getAttribute('href')).toBe(
+      '/settings?tab=phone',
     );
-    expect(within(side).getByRole('link', { name: 'Notifications' })).toBeTruthy();
-    expect(within(side).getByRole('button', { name: /^Switch to (light|dark) theme$/ })).toBeTruthy();
+    expect(within(menu).getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    // The person's other settings and the old one-way switches are in Settings now.
+    for (const gone of ['Profile', 'Notifications', 'Devices', 'Shared links', 'Prompts'])
+      expect(within(menu).queryByRole('link', { name: gone })).toBeNull();
+    expect(within(menu).queryByRole('button', { name: /notifications|theme/i })).toBeNull();
   });
 });
 

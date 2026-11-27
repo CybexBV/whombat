@@ -11,6 +11,7 @@ import { MessageFilesProvider } from '../../features/messaging/messageFiles';
 import { LinkBanner } from '../../managed/LinkBanner';
 import { MovedBanner } from '../../managed/MovedBanner';
 import { PasskeyNotices } from '../../managed/PasskeyNotices';
+import { useWebPushOnLoad } from '../../push/useWebPush';
 import { useOpenBurrow } from '../routing/openBurrow';
 import { AgentsBlockedNotice } from './AgentsBlockedNotice';
 import { AssistantSidebar } from './AssistantSidebar';
@@ -134,6 +135,8 @@ export function BurrowShell() {
   const split = useInboxSplit();
   const beside = split && pane?.kind === 'thread' && !!pane.room;
   useServiceWorkerRegistration();
+  // Notifications come on by themselves where this browser already allows them.
+  useWebPushOnLoad();
   useNeedsYouToast(bootstrap?.me.id);
   useUnreadIndicator(bootstrap?.sidebar);
   const signOut = useSignOut();

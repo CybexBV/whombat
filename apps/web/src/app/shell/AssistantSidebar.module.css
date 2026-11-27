@@ -493,6 +493,7 @@ a.whombatAction {
   font: 400 13px var(--font-sans);
 }
 
+/* The account menu: the person, the theme, Settings, the rest, the version; 13.5px rows with a muted 16px icon each. */
 .menu {
   position: absolute;
   right: 0;
@@ -500,22 +501,91 @@ a.whombatAction {
   left: 0;
   z-index: var(--z-pane);
   padding: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line2);
   border-radius: var(--radius-button-large);
   background: var(--sf);
   box-shadow: var(--shadow-toast);
+  font-size: 13.5px;
+}
+
+/* Its head: the person's face, name and “Your profile”, a chevron at the end. */
+.who,
+.who:hover {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-small);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.who:hover {
+  background: var(--sel);
+}
+
+.whoText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.whoText b {
+  overflow: hidden;
+  font: 600 14px var(--font-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.whoText span {
+  color: var(--mut);
+  font-size: 12px;
+}
+
+.whoChevron {
+  flex: none;
+  margin-left: auto;
+  color: var(--mut);
+}
+
+/* Light · Dark · Auto: three equal parts on a soft track, the chosen one lifted. */
+.menu .theme {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: auto;
+  gap: 2px;
+  margin: 4px 2px 2px;
+  padding: 3px;
+  border-radius: var(--radius-button-small);
+}
+
+.menu .theme > label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 0;
+  border-radius: var(--radius-tag-large);
+  font-size: 12px;
+}
+
+.menu .theme > label:has(:checked) {
+  font-weight: 600;
 }
 
 .menuItem,
 .menuItem:hover {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 8px;
   border: none;
   border-radius: var(--radius-small);
   background: transparent;
   color: var(--ink);
-  font-size: 14px;
+  font: inherit;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -525,9 +595,18 @@ a.whombatAction {
   background: var(--sel);
 }
 
-.menuItem:disabled {
+.menuIcon {
+  flex: none;
   color: var(--mut);
-  cursor: default;
+}
+
+/* Settings' shortcut, as a key cap at the row's end. */
+.menuItem .menuKbd {
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-tag);
+  font-weight: 400;
 }
 
 .menuDivider {
@@ -605,7 +684,8 @@ a.whombatAction {
   }
 
   .menuItem,
-  .menuItem:hover {
+  .menuItem:hover,
+  .menu .theme > label {
     min-height: 44px;
   }
 }

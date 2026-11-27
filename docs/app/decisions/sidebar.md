@@ -34,6 +34,8 @@ The sidebar no longer sets servers' names in mono (`ThingRow.mono` stays for oth
 
 ## AP-2605 The theme in the account menu
 
+**Superseded by account-menu.md ACM-01 and ACM-04**: Light · Dark · Auto at the top of the menu.
+
 The theme pill (`ThemeToggle`) leaves the sidebar's head (the crew shell and the brand page keep theirs). The account
 menu has “Switch to light theme” or “Switch to dark theme” above Sign out; it stays open, so the change is seen.
 

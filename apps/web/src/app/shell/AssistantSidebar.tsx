@@ -1,34 +1,48 @@
 import { replaceEqualDeep } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BrandMark } from '@whombat/brand/react';
-import type { ThingRenameTarget, ThingRow } from '@whombat/client';
-import { SETTINGS_GROUP_TEXT, TEAM_REPORT_WORDS, thingRenameTarget } from '@whombat/client';
+import type { ThemeChoice, ThingRenameTarget, ThingRow } from '@whombat/client';
+import {
+  SETTINGS_HOME_TEXT,
+  TEAM_REPORT_WORDS,
+  THEME_CHOICES,
+  THEME_WORDS,
+  thingRenameTarget,
+} from '@whombat/client';
 import { useRenameThing, useTeamReportsEntry } from '@whombat/client/react';
 import {
+  ChevronRight,
   Folder,
   Inbox,
   LayoutGrid,
   Lock,
+  LogOut,
   type LucideIcon,
   MessageCircle,
+  MessageSquare,
+  Monitor,
+  Moon,
   Plus,
-  Settings,
+  Settings2,
+  Smartphone,
+  Sun,
   Zap,
 } from 'lucide-react';
 import { type KeyboardEvent, type MouseEvent, memo, useEffect, useId, useState } from 'react';
 import { cx, variantClass } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { InlineRename } from '../../components/InlineRename';
+import { isApplePlatform, Kbd } from '../../components/Kbd';
+import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusMark } from '../../components/StatusMark';
 import { Tabs } from '../../components/Tabs';
 import { useClearChat } from '../../features/chats/useClearChat';
 import { useSettleFinishedThreads } from '../../features/chats/useSettle';
 import { AppLink } from '../../features/files/AppLink';
 import { PersonAvatar } from '../../features/messaging/PersonAvatar';
-import { useYouParts } from '../../features/settings/useYouParts';
+import { useWhombatVersions } from '../../features/settings/version';
 import { type ThingLinkProps, useThingLinkProps } from '../../features/things/prefetch';
 import { THING_ICONS } from '../../features/things/thingIcons';
-import { useWebPush } from '../../push/useWebPush';
 import { useNavigateHref } from '../routing/navigation';
 import { useTheme } from '../theme';
 import { AccountMenuVersion } from './AccountMenuVersion';
@@ -56,7 +70,6 @@ const NAV_ICONS: Record<AssistantNavId, LucideIcon> = {
   automations: Zap,
   files: Folder,
   vault: Lock,
-  settings: Settings,
 };
 
 export interface AssistantSidebarProps {
@@ -66,9 +79,10 @@ export interface AssistantSidebarProps {
 
 /**
  * The sidebar (final-shell-web.md; mock 1; one-whombat.md ONE-04): the burrow alone, with room under it (with other
- * Whombats it opens them, whombat-switcher.md AP-3080), the seven places in one order — Chat, Inbox, Overview,
- * Automations, Files, Vault, Settings (Search is ⌘K / Ctrl K) — then SERVERS and CONNECTIONS as two tabs with their
- * real logos and status marks (sidebar-tabs.md), then the person, whose row opens the account menu. Rows are links; the selected one has the
+ * Whombats it opens them, whombat-switcher.md AP-3080), the six places in one order — Chat, Inbox, Overview,
+ * Automations, Files, Vault (Search is ⌘K / Ctrl K; Settings is in the account menu and ⌘, / Ctrl ,) — then SERVERS
+ * and CONNECTIONS as two tabs with their real logos and status marks (sidebar-tabs.md), then the person, whose row
+ * opens the account menu. Rows are links; the selected one has the
  * `sel` background, weight 600 and `aria-current="page"`; a badge's number is said once, in the row's name. The lists
  * scroll between the burrow and the person. Below 1024 px the same sidebar is the Places drawer (ShellLayout).
  * Memoized: the shell renders on every realtime event, the sidebar only when what it shows changes.
@@ -455,21 +469,37 @@ function useThingRename(burrow: string): ThingRenaming {
   };
 }
 
+/** The account menu's words (the mock's “Account menu” section); the theme's and the update's are shared. */
+const ACCOUNT_MENU_TEXT = {
+  profile: 'Your profile',
+  phoneApp: 'Get the phone app',
+  signOut: 'Sign out',
+} as const;
+
+const THEME_ICONS: Record<ThemeChoice, LucideIcon> = { light: Sun, dark: Moon, system: Monitor };
+
+/** Settings' shortcut as the person's keyboard writes it: “⌘ ,” on a Mac, “Ctrl ,” elsewhere. */
+function settingsShortcut(): string {
+  return isApplePlatform() ? '⌘ ,' : 'Ctrl ,';
+}
+
 /**
- * The person at the bottom: their face and name, a button that opens the account menu above it — their own settings
- * (Profile, Notifications, and on a box Devices and Shared links), then the app on a phone, notifications in this
- * browser, the theme, Report a problem or idea (where the person may send one or has some), signing out and the
- * version.
+ * The person at the bottom: their face and name, a button that opens the account menu above it — their face and name
+ * again as the way to their profile, the theme (Light · Dark · Auto), Settings with its shortcut, then the phone app,
+ * Report a problem or idea (where the person may send one or has some) and signing out, and last the version with
+ * whether an update waits. Their other settings (notifications, devices, shared links, prompts) are in Settings → You.
  */
 function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
-  const push = useWebPush();
-  const { theme, toggleTheme } = useTheme();
   const { me } = model;
-  const you = useYouParts(model.burrowSlug);
-  // Asked with the sidebar, not when the menu opens, so the line is there at once (and nothing moves under the pointer).
+  // Asked with the sidebar, not when the menu opens, so the line is there at once (and nothing moves under the
+  // pointer).
   const teamReports = useTeamReportsEntry(model.burrowSlug);
+  // The versions are read once the pointer or the focus comes to the person's row, so opening a Whombat asks one
+  // thing less and the footer is usually there when the menu opens.
+  const [near, setNear] = useState(false);
+  const versions = useWhombatVersions(near || open);
   const close = () => setOpen(false);
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && open) {
@@ -488,47 +518,54 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
       }}
     >
       {open && (
-        <div id={menuId} className={styles.menu}>
-          {you.map((part) => (
-            <Link
-              key={part}
-              to="/settings"
-              search={{ part } as never}
-              className={styles.menuItem}
-              onClick={close}
-              data-account-part={part}
-            >
-              {SETTINGS_GROUP_TEXT.you[part]}
-            </Link>
-          ))}
+        <div id={menuId} className={styles.menu} data-account-menu="">
+          <Link
+            to="/settings"
+            search={{ part: 'profile' } as never}
+            className={styles.who}
+            onClick={close}
+            data-account-profile=""
+          >
+            <PersonAvatar avatarUrl={me.avatarUrl} initials={me.initials} tone={me.tone} size={36} />
+            <span className={styles.whoText}>
+              <b>{me.name}</b>
+              <span>{ACCOUNT_MENU_TEXT.profile}</span>
+            </span>
+            <Icon icon={ChevronRight} size={16} className={styles.whoChevron} />
+          </Link>
+          <ThemeChoices />
+          <hr className={styles.menuDivider} />
+          <Link
+            to="/settings"
+            className={styles.menuItem}
+            onClick={close}
+            aria-keyshortcuts="Control+, Meta+,"
+            data-account-settings=""
+          >
+            <Icon icon={Settings2} size={16} className={styles.menuIcon} />
+            {SETTINGS_HOME_TEXT.title}
+            <Kbd className={styles.menuKbd} aria-hidden="true">
+              {settingsShortcut()}
+            </Kbd>
+          </Link>
           <hr className={styles.menuDivider} />
           <Link to="/settings" search={{ tab: 'phone' } as never} className={styles.menuItem} onClick={close}>
-            Phone app
+            <Icon icon={Smartphone} size={16} className={styles.menuIcon} />
+            {ACCOUNT_MENU_TEXT.phoneApp}
           </Link>
-          {push.status !== 'unsupported' && (
-            <button
-              type="button"
-              className={styles.menuItem}
-              disabled={push.status === 'busy'}
-              onClick={() => void (push.status === 'on' ? push.disable() : push.enable())}
-            >
-              {push.status === 'on' ? 'Turn off notifications' : 'Turn on notifications'}
-            </button>
-          )}
-          {/* The theme, from the sidebar's head (AP-2605): the action, never the state. */}
-          <button type="button" className={styles.menuItem} onClick={toggleTheme}>
-            {theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          </button>
           {/* Reports to the Whombat Team: only where one can be sent or some exist. */}
           {teamReports ? (
             <Link to="/reports" className={styles.menuItem} onClick={close} data-account-reports="">
+              <Icon icon={MessageSquare} size={16} className={styles.menuIcon} />
               {TEAM_REPORT_WORDS.entry}
             </Link>
           ) : null}
           <button type="button" className={styles.menuItem} onClick={onSignOut}>
-            Sign out
+            <Icon icon={LogOut} size={16} className={styles.menuIcon} />
+            {ACCOUNT_MENU_TEXT.signOut}
           </button>
-          <AccountMenuVersion onNavigate={close} />
+          <hr className={styles.menuDivider} />
+          <AccountMenuVersion versions={versions} onNavigate={close} />
         </div>
       )}
       <button
@@ -539,6 +576,8 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
         aria-label={`Account, ${me.name}`}
         title="Account"
         data-me=""
+        onPointerEnter={() => setNear(true)}
+        onFocus={() => setNear(true)}
         onClick={() => setOpen((v) => !v)}
       >
         <PersonAvatar avatarUrl={me.avatarUrl} initials={me.initials} tone={me.tone} size={32} />
@@ -547,5 +586,31 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
         </span>
       </button>
     </div>
+  );
+}
+
+/**
+ * Light · Dark · Auto, the same words and order as the phone's. The menu stays open, so the change is seen; Auto
+ * follows the computer's own setting. Each choice is kept on this device and in the person's account.
+ */
+function ThemeChoices() {
+  const { choice, setChoice } = useTheme();
+  return (
+    <SegmentedControl
+      label={THEME_WORDS.title}
+      value={choice}
+      onChange={setChoice}
+      variant="soft"
+      className={styles.theme}
+      options={THEME_CHOICES.map((value) => ({
+        value,
+        label: (
+          <>
+            <Icon icon={THEME_ICONS[value]} size={14} />
+            {THEME_WORDS.choices[value]}
+          </>
+        ),
+      }))}
+    />
   );
 }

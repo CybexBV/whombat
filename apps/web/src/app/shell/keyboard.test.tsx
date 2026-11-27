@@ -22,6 +22,18 @@ describe('global keyboard', () => {
     await waitFor(() => expect(app.location()).toBe('/search'));
   });
 
+  it('opens Settings with Ctrl , and ⌘,', async () => {
+    const user = userEvent.setup();
+    const app = renderApp('/inbox');
+    await ready();
+    await user.keyboard('{Control>},{/Control}');
+    await waitFor(() => expect(app.location()).toBe('/settings'));
+    await user.click(screen.getByRole('link', { name: 'Chat' }));
+    await waitFor(() => expect(app.location()).toBe('/chat'));
+    await user.keyboard('{Meta>},{/Meta}');
+    await waitFor(() => expect(app.location()).toBe('/settings'));
+  });
+
   it('focuses the search field when search is already open', async () => {
     const user = userEvent.setup();
     renderApp('/search?q=vat');

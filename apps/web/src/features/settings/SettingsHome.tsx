@@ -1,9 +1,10 @@
 /**
  * Settings' home (`/settings`; the final design, docs/design-handoff/council-ui-2026-11/16-final/settings/,
  * docs/decisions/final-settings-vault-files-usage.md): **Often used** — Notifications, Phone app (the Phone app page,
- * saying which phone is in once one is) and Theme opening its Light / Dark choice in place — beside **All settings**, the
- * groups in their one order (You, the assistant by its name, Connections, This Whombat, News and weather where this
- * Whombat answers it, Screens where this Whombat has screens, Advanced), each with its own icon and what it holds; This Whombat's says what needs you there while
+ * saying which phone is in once one is) and Theme opening its Light / Dark / Auto choice in place — beside
+ * **All settings**, the groups in their one order (You, the assistant by its name, Connections, This Whombat, News and
+ * weather where this Whombat answers it, Screens where this Whombat has screens, Advanced), each with its own icon and
+ * what it holds; This Whombat's says what needs you there while
  * something does. Your saved settings are read here; while they load or when they can't be read a card says so in
  * Often used and every row keeps working.
  */
@@ -15,12 +16,13 @@ import {
   SETTINGS_HOME_TEXT,
   type SettingsHomeGroup,
   settingsHomeRows,
+  THEME_CHOICES,
+  THEME_WORDS,
 } from '@whombat/client';
 import { DESK_TEXT } from '@whombat/client/desk';
 import { whombatOverview } from '@whombat/client/managed';
 import { placeNewsShown, usePreferences, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
-import type { ThemeName } from '@whombat/tokens';
 import {
   Bell,
   Bot,
@@ -71,10 +73,7 @@ const GROUP_SEARCH: Record<SettingsHomeGroup, Record<string, string>> = {
   advanced: { tab: 'advanced' },
 };
 
-const THEMES: readonly { value: ThemeName; label: string }[] = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
+const THEMES = THEME_CHOICES.map((value) => ({ value, label: THEME_WORDS.choices[value] }));
 
 export function SettingsHome({ burrow }: { burrow: string }) {
   const { words } = useTheAgent(burrow);
@@ -301,11 +300,11 @@ function PhoneAppLine({ qr, phones }: { qr: boolean; phones: readonly string[] }
 }
 
 /**
- * Theme: says which one is on, and opens its Light / Dark choice in place (its chevron points down, up while open), kept on
- * this device and in your account like the menu's.
+ * Theme: says which one is chosen, and opens its Light / Dark / Auto choice in place (its chevron points down, up while
+ * open), kept on this device and in your account like the account menu's.
  */
 function ThemeRow() {
-  const { theme, setTheme } = useTheme();
+  const { choice, setChoice } = useTheme();
   const [open, setOpen] = useState(false);
   const panelId = useId();
   return (
@@ -321,7 +320,7 @@ function ThemeRow() {
         <PlaceRowBody
           icon={Contrast}
           name={SETTINGS_HOME_TEXT.theme.title}
-          line={SETTINGS_HOME_TEXT.themeNow(THEMES.find((t) => t.value === theme)?.label ?? theme)}
+          line={SETTINGS_HOME_TEXT.themeNow(THEME_WORDS.choices[choice])}
           chevron="down"
         />
       </button>
@@ -329,8 +328,8 @@ function ThemeRow() {
         <div id={panelId} className={styles.themeChoice}>
           <SegmentedControl
             label={SETTINGS_HOME_TEXT.theme.title}
-            value={theme}
-            onChange={(next) => setTheme(next)}
+            value={choice}
+            onChange={setChoice}
             options={THEMES}
           />
         </div>

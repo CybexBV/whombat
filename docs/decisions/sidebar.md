@@ -37,6 +37,8 @@ dashed one for a device being learned. Fine and not checked yet draw none, as an
 
 ## SB-05 The burrow alone at the top
 
+**Superseded in part by `docs/app/decisions/account-menu.md` ACM-04**: the account menu's theme is Light · Dark · Auto.
+
 The theme pill leaves the sidebar's head: “Light” in the dark theme read as the state, not the switch, and took room
 from the burrow's name. The switch is in the account menu as an action (“Switch to light theme”). The head has more
 room under it before the first place (John).

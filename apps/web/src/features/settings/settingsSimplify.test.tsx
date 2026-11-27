@@ -1,7 +1,7 @@
 /**
  * Settings simplified (docs/decisions/settings-simplify.md; Whombat settings-groups.md): four groups, the old addresses
  * redirected in place (SS-02), This Whombat with its VERSION on every Whombat (SS-06) and the account menu's
- * version line (SS-08).
+ * version line.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWebFixtureFetch } from '../../app/fixtureFetch';
 import { ASSISTANT_NAME } from '../../app/oneFixtures';
 import { mockedServices, renderApp } from '../../test/renderApp';
-import { appVersions, versionLine } from './version';
+import { appVersions, menuVersion, shortVersion, updateState, versionLine } from './version';
 
 const SETUP: AgentSetupStatus = {
   hermes: { ready: true, version: '0.22.5', problem: null, detail: null },
@@ -246,16 +246,22 @@ describe('Settings → This Whombat in parts (this-whombat-sections.md AP-1221�
   });
 });
 
-describe('the account menu’s version line (SS-08)', () => {
-  it('says the Whombat’s and the app’s version and opens This Whombat → About (AP-1233)', async () => {
+describe('the account menu’s version line', () => {
+  it('shows the Whombat’s version without its build, says the whole line and copies it', async () => {
     vi.stubEnv('VITE_WHOMBAT_VERSION', '0.36.0');
     const user = userEvent.setup();
-    const app = renderApp('/chat', world({ version: '0.41.1' }));
+    renderApp('/chat', world({ version: '0.41.1-20261126200100.abcdef1' }));
     await user.click(await screen.findByRole('button', { name: /^Account,/ }));
-    const line = await screen.findByRole('link', { name: 'Whombat 0.41.1 · app 0.36.0. This Whombat' });
-    expect(line.textContent).toBe('Whombat 0.41.1 · app 0.36.0');
+    const full = 'Whombat 0.41.1-20261126200100.abcdef1 · app 0.36.0';
+    const line = await screen.findByRole('button', { name: full });
+    expect(line.textContent).toBe('Whombat 0.41.1');
+    expect(line.getAttribute('title')).toBe(full);
     await user.click(line);
-    await waitFor(() => expect(app.location()).toBe('/settings?tab=appliance&section=about'));
+    expect(await navigator.clipboard.readText()).toBe(full);
+    expect(await screen.findByText('Version copied.')).toBeTruthy();
+    // A self-hosted server doesn't say whether it is up to date: the version alone.
+    const footer = line.closest('[data-account-version]') as HTMLElement;
+    expect(footer.querySelector('[data-account-update]')).toBeNull();
   });
 
   it('reads the versions from the build', () => {
@@ -272,5 +278,34 @@ describe('the account menu’s version line (SS-08)', () => {
       build: null,
       contracts: null,
     });
+  });
+
+  it('shows the version without its build, the whole line in the tooltip', () => {
+    expect(shortVersion('0.2.0-20261126200100.abcdef1')).toBe('0.2.0');
+    expect(shortVersion('0.304.0+abcdef1')).toBe('0.304.0');
+    expect(shortVersion('2026.10.24')).toBe('2026.10.24');
+    expect(menuVersion({ app: '3.171.0', runtime: '0.2.0-20261126200100.abcdef1' })).toEqual({
+      short: 'Whombat 0.2.0',
+      full: 'Whombat 0.2.0-20261126200100.abcdef1 · app 3.171.0',
+    });
+    expect(menuVersion({ app: '3.171.0', runtime: null })).toEqual({
+      short: 'app 3.171.0',
+      full: 'app 3.171.0',
+    });
+  });
+
+  it('says up to date or update ready only when the box says so', () => {
+    const update = { state: 'Healthy', current: 'pve-20261115.1', candidate: null, paused: false } as const;
+    const owner = { reason: 'owner', since: '2026-11-26T10:00:00Z', blockers: [] } as const;
+    const status = (u: object | null) => ({ update: u }) as never;
+    expect(updateState(status(update))).toBe('upToDate');
+    expect(updateState(status({ ...update, candidate: 'pve-20261126.1', waiting: owner }))).toBe('ready');
+    // On its way, waiting for something else, failed or paused: nothing rather than something untrue.
+    expect(updateState(status({ ...update, state: 'Downloading' }))).toBeNull();
+    expect(updateState(status({ ...update, waiting: { ...owner, reason: 'window' } }))).toBeNull();
+    expect(updateState(status({ ...update, state: 'Failed' }))).toBeNull();
+    expect(updateState(status({ ...update, paused: true }))).toBeNull();
+    expect(updateState(status(null))).toBeNull();
+    expect(updateState(undefined)).toBeNull();
   });
 });
