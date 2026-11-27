@@ -1,7 +1,8 @@
 /**
  * The segmented control (was the settings sheet's; settings-tab-android.md AP-2621): for picking a value — the theme, a
  * range, Off · Ask · On. Tabs, which say where you are, are `UnderlineTabs` (AP-2630). 3dp padded container, 11 radius,
- * `line2` border; items 8 radius, the chosen one filled with `btn`. On iPhone it is iOS's own (`Segmented.ios.tsx`).
+ * `line2` border; items 8 radius, the chosen one filled with `btn`, an option's icon before its word. On iPhone it is
+ * iOS's own (`Segmented.ios.tsx`).
  */
 import { View } from 'react-native';
 import { Text } from '../theme/Text';
@@ -38,6 +39,7 @@ export function Segmented<T extends string>({
     >
       {options.map((o) => {
         const selected = o.value === value;
+        const color = selected ? theme.colors.btnfg : disabled ? theme.colors.mut : theme.colors.ink;
         return (
           <Touchable
             key={o.value}
@@ -63,15 +65,18 @@ export function Segmented<T extends string>({
               backgroundColor: selected ? theme.colors.btn : 'transparent',
             }}
           >
-            <Text
-              size={dense ? 13 : 14}
-              weight={selected ? 600 : 500}
-              color={selected ? theme.colors.btnfg : disabled ? theme.colors.mut : theme.colors.ink}
-              numberOfLines={lines}
-              style={lines > 1 ? { textAlign: 'center' } : undefined}
-            >
-              {o.label}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
+              {o.icon ? <o.icon size={15} color={color} strokeWidth={selected ? 2.2 : 2} /> : null}
+              <Text
+                size={dense ? 13 : 14}
+                weight={selected ? 600 : 500}
+                color={color}
+                numberOfLines={lines}
+                style={{ flexShrink: 1, ...(lines > 1 ? { textAlign: 'center' } : null) }}
+              >
+                {o.label}
+              </Text>
+            </View>
           </Touchable>
         );
       })}

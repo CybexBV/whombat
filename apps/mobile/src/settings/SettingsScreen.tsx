@@ -2,7 +2,7 @@
  * The Settings tab (the final design, docs/design-handoff/council-ui-2026-11/16-final/settings/,
  * docs/decisions/final-settings-vault-files-usage.md; settings-tab-android.md AP-2620…AP-2627), the same on iPhone and
  * Android: the title and one line, a newer app on top (`UpdateCard`), **Often used** — Notifications on a Whombat, and
- * the theme (System · Light · Dark, saved to the account) — then **All settings**, the groups in the web's order:
+ * the theme (Light · Dark · Auto, saved to the account) — then **All settings**, the groups in the web's order:
  * You (your face and what You holds), the assistant by its name (its face, what it runs on or its AI sign-in in
  * trouble), Connections (what needs you, else how many are connected), This Whombat, Screens where it has them, and
  * Advanced (`settingsRows`), each with one line on how it is doing and a chevron. This Whombat's state is read here:
@@ -30,7 +30,7 @@ import { COPY as MANAGED_COPY } from '../managed/copy';
 import { useUpdateCheck } from '../managed/useAppUpdate';
 import { type AppNavigation, useAppNavigation } from '../navigation/hooks';
 import { useBeside } from '../navigation/panes';
-import { THEME_PREFERENCES } from '../theme/preference';
+import { THEME_PREFERENCES, type ThemePreference } from '../theme/preference';
 import { Text } from '../theme/Text';
 import { useTheme, useThemeContext } from '../theme/theme';
 import { Screen } from '../ui/headers';
@@ -40,9 +40,12 @@ import {
   Contrast,
   type LucideIcon,
   Monitor,
+  Moon,
   Plug,
   Settings as SettingsIcon,
   SlidersVertical,
+  Smartphone,
+  Sun,
 } from '../ui/icons';
 import { PLACE_SIDE, PlaceCard, PlaceRow, PlaceSection, PlaceState } from '../ui/place';
 import { Button } from '../ui/primitives';
@@ -252,7 +255,14 @@ export function SettingsScreen() {
   );
 }
 
-/** The theme in the list (AP-2622): one tap, saved to the account. The word stays whole; the switch takes the rest. */
+/** Each theme's icon, as the web's menu has them: the sun, the moon, and the phone that Auto follows. */
+const THEME_ICONS: Record<ThemePreference, LucideIcon> = { light: Sun, dark: Moon, system: Smartphone };
+const THEME_OPTIONS = THEME_PREFERENCES.map((o) => ({ ...o, icon: THEME_ICONS[o.value] }));
+
+/**
+ * The theme in the list (AP-2622): Light · Dark · Auto, as on the web, one tap, saved to the account. The word stays
+ * whole; the switch takes the rest.
+ */
 function ThemeRow({ first }: { first: boolean }) {
   const theme = useTheme();
   const { preference } = useThemeContext();
@@ -280,7 +290,7 @@ function ThemeRow({ first }: { first: boolean }) {
       <View style={{ flex: 1, minWidth: 180, alignItems: 'flex-end' }}>
         <View style={{ width: '100%', maxWidth: 216 }}>
           <Segmented
-            options={THEME_PREFERENCES}
+            options={THEME_OPTIONS}
             value={preference}
             onChange={setTheme}
             label={SETTINGS_TEXT.theme}

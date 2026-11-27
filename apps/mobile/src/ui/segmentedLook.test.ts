@@ -9,7 +9,7 @@ describe('segmentedLook', () => {
   });
 
   it('draws iOS segments when every label fits its share on one line', () => {
-    expect(segmentedLook(labels('System', 'Light', 'Dark'))).toBe('segments');
+    expect(segmentedLook(labels('Light', 'Dark', 'Auto'))).toBe('segments');
     expect(segmentedLook(labels('Just watch', 'Ask me first', 'Go ahead'))).toBe('segments');
     expect(segmentedLook(labels('Last hour', '24 hours', '7 days', '30 days'))).toBe('segments');
     expect(segmentedLook(labels('1 h', '6 h', '24 h', '7 d', '30 d'))).toBe('segments');

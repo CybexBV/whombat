@@ -24,8 +24,8 @@ range, Off · Ask · On); where the phone shows parts of a page it uses tabs wit
 
 Seven tab names don't fit across a phone, parts like This Whombat have parts of their own, and a list can say how each
 part is doing. So the tab is: the title (32/700, as Connections), “Update available” when a newer app is out, a card
-with you (your face, name, “Profile · your photo and Dusty”) that opens Profile, then one card: Theme (System · Light ·
-Dark, up to 216dp wide beside the whole word, saved to the account) and a row per part — Notifications, Vault, Members,
+with you (your face, name, “Profile · your photo and Dusty”) that opens Profile, then one card: Theme (its choices'
+words and order: Superseded by AP-2629; up to 216dp wide beside the whole word, saved to the account) and a row per part — Notifications, Vault, Members,
 AI, Skills, Connections, This Whombat — with the web's names in the web's order. The Vault sits after Notifications: the phone has no sidebar,
 and the sheet kept it under Profile. A part the phone has nothing for is left out as before (`settingsGroups`). Rows are
 60dp: an icon (bell, key, people, sparkles, book, link, server), the name over one line, a dot and the line in `warn` or
@@ -86,3 +86,12 @@ Whombat).
 
 Connections' title has no avatar any more; the settings sheet is gone. The account theme (adopt the account's, save a
 pick to it) moves to `AccountThemeProvider`, mounted where the sheet's provider was, so it works on every tab.
+
+## AP-2629 Light · Dark · Auto, as on the web
+
+John, 2026-11-27: the theme choice matches the web's account menu. The segmented control says Light · Dark · Auto in
+that order, from the shared `THEME_CHOICES` and `THEME_WORDS` (`@whombat/client`); Auto is the stored `system`, which
+follows the phone, so a choice kept before keeps working. On Android each word has its lucide icon before it — Sun,
+Moon, and Smartphone for Auto (the web draws a monitor: on a phone it is the phone that Auto follows) — 15dp in the
+word's colour, the segments still 38dp tall with the 44dp touch target. On iPhone the control stays iOS's own segmented
+control with the words alone: its segments show a word or a picture, not both side by side.
