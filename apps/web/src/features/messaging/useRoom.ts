@@ -7,10 +7,13 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
+  agentFaceOf,
   agentNowFor,
   composerMentionTargets,
   composerText,
+  isAutomationPrincipal,
   sidebarSummaries,
+  workingFaceState,
   workingLabel,
 } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
@@ -141,12 +144,19 @@ export function useTypingLines(
         const entry = agentNowFor(agentNow, t.principalId, threadRootId, nowMs);
         // Without the clock: measured at the action's own start, the label leaves it out.
         const label = workingLabel(name, entry, nowMs);
-        return { label, spoken: entry ? workingLabel(name, entry, entry.since) : label };
+        return {
+          label,
+          spoken: entry ? workingLabel(name, entry, entry.since) : label,
+          state: workingFaceState(entry),
+        };
       };
+      // An agent's line shows its face; an automation has none.
+      const face = p?.kind === 'agent' && !isAutomationPrincipal(p) ? agentFaceOf(p) : undefined;
       out.push({
         key,
         ...at(Date.now()),
         at,
+        ...(face ? { face } : {}),
         principalId: t.principalId,
         ...(t.dispatchId ? { dispatchId: t.dispatchId } : {}),
       });

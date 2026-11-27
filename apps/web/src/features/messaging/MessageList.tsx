@@ -1,5 +1,6 @@
-import type { FaceState } from '@whombat/avatars/motion';
+import { type FaceState, LIVE_BUST_MIN_SIZE } from '@whombat/avatars/motion';
 import {
+  agentFaceBackground,
   continuesMessage,
   isAutomationPrincipal,
   isSettledRoot,
@@ -12,6 +13,7 @@ import {
   withoutSettled,
 } from '@whombat/client';
 import {
+  type AgentFace,
   isDeletedMessage,
   type Message,
   type Principal,
@@ -21,6 +23,7 @@ import {
 } from '@whombat/core';
 import { type MouseEvent, memo, type ReactNode, useCallback, useMemo } from 'react';
 import { cx } from '../../components/cx';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import styles from './MessageList.module.css';
 import { MessageRow } from './MessageRow';
 import {
@@ -154,7 +157,10 @@ export interface TypingLine {
   key: string;
   label: string;
   spoken?: string;
-  at?: (nowMs: number) => { label: string; spoken?: string };
+  /** The agent's face on the line, and what it shows: thinking, at work, looking at the person. None for others. */
+  face?: AgentFace;
+  state?: FaceState;
+  at?: (nowMs: number) => { label: string; spoken?: string; state?: FaceState };
   /** The agent a thinking line is about. */
   principalId?: string;
   /** Its turn (`typing.dispatchId`, contracts 0.55): what Stop cancels (WX-10). */
@@ -166,14 +172,21 @@ export function typingLine(line: string | TypingLine): TypingLine {
   return typeof line === 'string' ? { key: line, label: line } : line;
 }
 
+/** Where a thinking line stands: a room's 40px avatars, a task chat's faces on a disc, a thread's 32px avatars. */
+export type TypingLook = 'room' | 'chat' | 'thread';
+
 /**
  * "{Agent} is thinking" (or what it does, AP-734) with three 5px dots (opacity 1, .6, .3) that pulse while it shows.
- * With `at` the line keeps its own one-second clock (WX-01).
+ * With `at` the line keeps its own one-second clock (WX-01). With the agent's `face` the line starts where the agent's
+ * next message will: its live face in the avatars' column, then the dots and the words (docs/decisions/face-motion.md).
  */
 export function TypingIndicator({
   label,
   spoken,
   at,
+  face,
+  state,
+  look = 'room',
   className,
   children,
 }: {
@@ -181,14 +194,17 @@ export function TypingIndicator({
   /** What the status says to a screen reader, when it differs from the label (no ticking clock). */
   spoken?: string;
   at?: TypingLine['at'];
-  className?: string;
+  face?: AgentFace | undefined;
+  state?: FaceState | undefined;
+  look?: TypingLook;
+  className?: string | undefined;
   /** After the words: the Stop button (WX-10). */
   children?: ReactNode;
 }) {
   const nowMs = useTicker(!!at);
-  const shown = at ? at(nowMs) : { label, spoken };
-  return (
-    <div className={cx(styles.typing, className)} role="status">
+  const shown = at ? at(nowMs) : { label, spoken, state };
+  const words = (
+    <>
       <span className={styles.dots} aria-hidden="true">
         <span className={styles.dot} />
         <span className={styles.dot} />
@@ -203,8 +219,42 @@ export function TypingIndicator({
         shown.label
       )}
       {children}
+    </>
+  );
+  if (!face)
+    return (
+      <div className={cx(styles.typing, className)} role="status">
+        {words}
+      </div>
+    );
+  return (
+    <div
+      className={cx(styles.typingRow, look !== 'room' && styles.typingNear, className)}
+      role="status"
+      data-typing-face=""
+    >
+      <TypingFace face={face} state={shown.state ?? state ?? 'thinking'} look={look} />
+      <div className={styles.typingWords}>{words}</div>
     </div>
   );
+}
+
+/**
+ * The thinking line's face, at the smallest size a face blinks, eases from one look to the next and plays its gesture,
+ * so the person sees it think and work: a task chat's head on its face's tint, elsewhere the bust like a room's avatar.
+ */
+function TypingFace({ face, state, look }: { face: AgentFace; state: FaceState; look: TypingLook }) {
+  if (look === 'chat')
+    return (
+      <span
+        className={styles.typingDisc}
+        style={{ background: agentFaceBackground(face) }}
+        aria-hidden="true"
+      >
+        <LiveAgentFace face={face} size={LIVE_BUST_MIN_SIZE} crop="head" state={state} decorative />
+      </span>
+    );
+  return <LiveAgentFace face={face} size={LIVE_BUST_MIN_SIZE} crop="bust" state={state} decorative />;
 }
 
 /** Rows from which a list lets off-screen rows skip their layout and paint (WX-02). */
@@ -359,7 +409,10 @@ export function MessageList({
     );
     if (!newest) return null;
     const agent = lookup(newest.message.authorId);
-    const typingNow = typing.map(typingLine).find((t) => t.principalId === newest.message.authorId);
+    // A thinking line with the agent's own face shows its work there; the reply's face above it stays calm.
+    const typingNow = typing
+      .map(typingLine)
+      .find((t) => t.principalId === newest.message.authorId && !t.face);
     const work = threaded
       ? (threadWork?.(newest.rowId) ?? null)
       : typingNow && agent
@@ -430,7 +483,15 @@ export function MessageList({
       ))}
       {after}
       {typing.map(typingLine).map((line) => (
-        <TypingIndicator key={line.key} label={line.label} spoken={line.spoken} at={line.at}>
+        <TypingIndicator
+          key={line.key}
+          label={line.label}
+          spoken={line.spoken}
+          at={line.at}
+          face={line.face}
+          state={line.state}
+          look={chat ? 'chat' : 'room'}
+        >
           {typingAction?.(line)}
         </TypingIndicator>
       ))}
