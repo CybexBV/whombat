@@ -1,7 +1,8 @@
 /**
  * Requests to the open services this Whombat reads for itself (docs/decisions/weather-news.md): MET Norway's forecast,
- * OpenStreetMap's Nominatim and the news sites the person turned on. Each goes through `outboundRequest` (https only,
- * public addresses, no redirects, 1 MiB, 10 s) and names Whombat the way those services ask: the product, its version
+ * OpenStreetMap's Nominatim, the news sources the person turned on, and what adding one asks (the site, YouTube's channel
+ * page, Apple's podcast look-up). Each goes through `outboundRequest` (https only, public addresses, no redirects,
+ * 1 MiB or the first part of a longer feed, 10 s) and names Whombat the way those services ask: the product, its version
  * and its website, never the person or their address (`whombatUserAgent`). Tests answer them without the network
  * (`useOpenDataForTests`).
  */
@@ -22,22 +23,47 @@ export interface OpenDataAnswer {
   status: number;
   headers: Record<string, string | string[] | undefined>;
   body: Buffer;
+  /** Only the first `keepFirst` bytes of a larger answer were read. */
+  truncated?: boolean;
+}
+
+/** How one request reads its answer. */
+export interface OpenDataOptions {
+  /**
+   * Keep the first this many bytes of a larger answer and stop reading, instead of failing: a long feed (a podcast's
+   * can be many megabytes) lists its newest items first, and a page names its feeds in its head.
+   */
+  keepFirst?: number;
 }
 
 /** One GET with these headers (the User-Agent already among them). */
-export type OpenDataRequest = (url: string, headers: Record<string, string>) => Promise<OpenDataAnswer>;
+export type OpenDataRequest = (
+  url: string,
+  headers: Record<string, string>,
+  options?: OpenDataOptions,
+) => Promise<OpenDataAnswer>;
 
 /** The most a forecast, a place look-up or a feed may be. */
 export const OPEN_DATA_MAX_BYTES = 1024 * 1024;
 const OPEN_DATA_DEADLINE_MS = 15_000;
 
-const systemRequest: OpenDataRequest = async (url, headers) => {
+const systemRequest: OpenDataRequest = async (url, headers, options = {}) => {
   const res = await outboundRequest(
     url,
     { method: 'GET', headers },
-    { maxBytes: OPEN_DATA_MAX_BYTES, timeoutMs: 10_000, deadlineMs: OPEN_DATA_DEADLINE_MS },
+    {
+      maxBytes: OPEN_DATA_MAX_BYTES,
+      ...(options.keepFirst !== undefined && { truncateAt: options.keepFirst }),
+      timeoutMs: 10_000,
+      deadlineMs: OPEN_DATA_DEADLINE_MS,
+    },
   );
-  return { status: res.status, headers: res.headers, body: res.body };
+  return {
+    status: res.status,
+    headers: res.headers,
+    body: res.body,
+    ...(res.truncated && { truncated: true }),
+  };
 };
 
 const overrides = new WeakMap<Services, OpenDataRequest>();
@@ -57,11 +83,12 @@ export function openDataGet(
   services: Services,
   url: string,
   headers: Record<string, string> = {},
+  options: OpenDataOptions = {},
 ): Promise<OpenDataAnswer> {
   // Tests never reach the network: one that didn't answer these itself gets a failed read.
   const request =
     overrides.get(services) ?? (services.config.NODE_ENV === 'test' ? refusedInTests : systemRequest);
-  return request(url, { ...headers, 'user-agent': whombatUserAgent() });
+  return request(url, { ...headers, 'user-agent': whombatUserAgent() }, options);
 }
 
 /** A header's first value, or undefined. */

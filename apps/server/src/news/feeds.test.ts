@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { NEWS_FEED_ITEMS_MAX } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { feedLinksOf, pageTitleOf, parseFeed, plainText } from './feeds';
+import { feedLinksOf, POST_HEADLINE_MAX, pageTitleOf, parseFeed, plainText } from './feeds';
+
+const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 
 const NOW = Date.parse('2026-11-26T08:00:00Z');
 
@@ -127,6 +130,39 @@ describe('a news feed', () => {
     const feed = parseFeed(`<rss><channel>${items.join('')}</channel></rss>`, 'https://example.com/', NOW);
     expect(feed?.items).toHaveLength(NEWS_FEED_ITEMS_MAX);
     expect(feed?.items.some((i) => i.title === 'Story 0')).toBe(false);
+  });
+
+  it('headlines a post without a title by the start of its own words', () => {
+    const mastodon = parseFeed(fixture('mastodon.rss'), 'https://social.example.com/@townhall.rss', NOW);
+    const [long, short] = mastodon?.items ?? [];
+    expect(long?.title.startsWith('The library on #MainStreet opens late on Friday')).toBe(true);
+    expect(long?.title.length).toBeLessThanOrEqual(POST_HEADLINE_MAX);
+    expect(long?.title.endsWith('…')).toBe(true);
+    expect(short?.title).toBe('Bins go out a day later next week.');
+    // A post that is only a picture has nothing to say.
+    expect(mastodon?.items).toHaveLength(2);
+    const bluesky = parseFeed(fixture('bluesky.rss'), 'https://bsky.app/profile/did:plc:x/rss', NOW);
+    expect(bluesky?.items[0]).toMatchObject({
+      title: 'Polls close at eight tonight. Results as they come in on our site.',
+      at: Date.parse('2026-11-26T06:33:00Z'),
+    });
+  });
+
+  it('knows a podcast by the iTunes namespace or an item’s audio', () => {
+    expect(parseFeed(fixture('podcast.rss'), 'https://feeds.example.com/p.xml', NOW)?.audio).toBe(true);
+    const audioOnly = `<rss><channel><title>Talk</title><item><title>One</title><link>https://example.com/1</link><pubDate>Thu, 26 Nov 2026 05:00:00 GMT</pubDate><enclosure type="audio/mpeg" url="https://example.com/1.mp3"/></item></channel></rss>`;
+    expect(parseFeed(audioOnly, 'https://example.com/feed', NOW)?.audio).toBe(true);
+    expect(parseFeed(RSS, 'https://news.example.com/rss', NOW)?.audio).toBe(false);
+    expect(
+      parseFeed(fixture('youtube-videos.xml'), 'https://www.youtube.com/feeds/videos.xml', NOW)?.audio,
+    ).toBe(false);
+  });
+
+  it('leaves out the last item of a feed read only in part, which was cut short', () => {
+    const whole = fixture('podcast.rss');
+    const cut = whole.slice(0, whole.indexOf('2026-11-25.mp3'));
+    const items = parseFeed(cut, 'https://feeds.example.com/p.xml', NOW, { truncated: true })?.items;
+    expect(items?.map((i) => i.link)).toEqual(['https://radio.example.com/morning/2026-11-26']);
   });
 
   it('cuts a long headline and keeps it on one line', () => {

@@ -1,7 +1,8 @@
 /**
- * A news site's feed as Whombat reads it (docs/decisions/weather-news.md): RSS 2.0, RSS 1.0 (RDF) and Atom, parsed with
- * htmlparser2 in XML mode. Only each item's headline, link and time are kept: no pictures, no article text. Headlines
- * lose any markup they carry; an item without a date or a link is left out (some feeds list their sections among their
+ * A news source's feed as Whombat reads it (docs/decisions/weather-news.md): RSS 2.0, RSS 1.0 (RDF) and Atom, parsed
+ * with htmlparser2 in XML mode. Only each item's headline, link and time are kept: no pictures, no article text.
+ * Headlines lose any markup they carry; an item without a title is headlined by the start of its own words (a Mastodon or
+ * Bluesky post has no title); an item without a date or a link is left out (some feeds list their sections among their
  * articles); a time ahead of now is taken as now (some feeds write local time as UTC). Pure.
  */
 import { NEWS_FEED_ITEMS_MAX } from '@whombat/core';
@@ -24,10 +25,14 @@ export interface ParsedFeed {
   title: string | null;
   /** Its headlines, newest first, at most `NEWS_FEED_ITEMS_MAX`. */
   items: FeedItem[];
+  /** Whether it is a podcast's: it uses the iTunes namespace, or an item carries audio. */
+  audio: boolean;
 }
 
 /** The longest headline kept. */
 export const HEADLINE_MAX = 300;
+/** The longest headline made of a post's own words, when the item has no title. */
+export const POST_HEADLINE_MAX = 200;
 
 const isElement = (n: AnyNode): n is Element => 'attribs' in n;
 /** An element's local name, without its namespace prefix, lower case. */
@@ -76,17 +81,47 @@ function feedRoot(doc: ReturnType<typeof parseDocument>): { root: Element; kind:
   return null;
 }
 
+/** Whether an item carries audio: an RSS `<enclosure>` or an Atom `rel="enclosure"` link of an audio type. */
+function hasAudio(entry: Element): boolean {
+  return kids(entry).some(
+    (c) =>
+      (local(c) === 'enclosure' || (local(c) === 'link' && c.attribs.rel === 'enclosure')) &&
+      /^audio\//i.test(c.attribs.type ?? ''),
+  );
+}
+
+/** Whether a feed uses the iTunes podcast namespace: declared on its root, or an element of it in its channel. */
+function usesItunes(root: Element, channel: Element | undefined): boolean {
+  if (Object.keys(root.attribs).some((a) => a.toLowerCase() === 'xmlns:itunes')) return true;
+  return !!channel && kids(channel).some((c) => c.name.toLowerCase().startsWith('itunes:'));
+}
+
+/** An item's headline: its title, else the start of its own words (`description`, Atom's `summary` or `content`). */
+function headlineOf(entry: Element): string {
+  const title = plainText(text(child(entry, 'title')));
+  if (title) return title;
+  const words =
+    text(child(entry, 'description')) || text(child(entry, 'summary')) || text(child(entry, 'content'));
+  return plainText(words, POST_HEADLINE_MAX);
+}
+
 /**
  * A feed's name and headlines (`base`: its address, for relative links; `now`: ms, for times ahead), or null when the
- * text isn't RSS, RDF or Atom.
+ * text isn't RSS, RDF or Atom. `truncated`: only the feed's first part was read, so its last item, cut short, is left
+ * out.
  */
-export function parseFeed(xml: string, base: string, now: number): ParsedFeed | null {
+export function parseFeed(
+  xml: string,
+  base: string,
+  now: number,
+  options: { truncated?: boolean | undefined } = {},
+): ParsedFeed | null {
   const doc = parseDocument(xml, { xmlMode: true, decodeEntities: true });
   const found = feedRoot(doc);
   if (!found) return null;
   const { root, kind } = found;
   const channel = kind === 'atom' ? root : child(root, 'channel');
-  const entries =
+  const all =
     kind === 'rss'
       ? channel
         ? kids(channel).filter((c) => local(c) === 'item')
@@ -94,9 +129,10 @@ export function parseFeed(xml: string, base: string, now: number): ParsedFeed | 
       : kind === 'rdf'
         ? kids(root).filter((c) => local(c) === 'item')
         : kids(root).filter((c) => local(c) === 'entry');
+  const entries = options.truncated ? all.slice(0, -1) : all;
   const items: FeedItem[] = [];
   for (const entry of entries) {
-    const title = plainText(text(child(entry, 'title')));
+    const title = headlineOf(entry);
     const rawLink =
       kind === 'atom'
         ? atomLink(entry)
@@ -114,7 +150,12 @@ export function parseFeed(xml: string, base: string, now: number): ParsedFeed | 
   }
   items.sort((a, b) => b.at - a.at);
   const name = plainText(text(channel ? child(channel, 'title') : undefined), 80);
-  return { kind, title: name || null, items: items.slice(0, NEWS_FEED_ITEMS_MAX) };
+  return {
+    kind,
+    title: name || null,
+    items: items.slice(0, NEWS_FEED_ITEMS_MAX),
+    audio: usesItunes(root, channel) || all.some(hasAudio),
+  };
 }
 
 /**
