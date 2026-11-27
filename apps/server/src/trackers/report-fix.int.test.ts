@@ -423,6 +423,17 @@ describe('the fix for a report (RN-S4, RN-S5)', () => {
     );
     expect(blocked.isError).toBe(true);
 
+    // Past a review that asked for changes nothing merges: the turn hears it, and the run stays as it ended.
+    const skipped = await callTool(
+      w.services,
+      { burrowId: w.burrowId, agentId: IDS.dusty, dispatchId: personDispatch.id },
+      'automation_continue_run',
+      { runId: run.id, fromStepId: 'pr' },
+    );
+    expect(JSON.stringify(skipped)).toContain('review');
+    expect(skipped.structuredContent).not.toMatchObject({ status: 'ok' });
+    expect((await w.run(run.id)).status).toBe(now.status);
+
     // The person turn continues the run from `review` with a note about the pushed follow-up commit.
     await w.fakePush(REPO, branch, 'Add empty export test');
     const resumed = await callTool(

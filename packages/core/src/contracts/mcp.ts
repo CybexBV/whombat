@@ -778,7 +778,7 @@ export const MCP_TOOLS = {
     name: 'automation_continue_run',
     title: 'Continue an unlanded report run',
     description:
-      'Continue a finished report automation run in this thread whose fix did not land yet (for example after T3 Code finished fixing review findings and pushed the branch). Resets steps from fromStepId back to pending so Whombat runs the remaining steps (review, open pull request, merge once checks pass, and release). Use fromStepId "review" whenever new commits were pushed; use "pr" or "merge" only when no new commit was pushed. Only works in the person’s turns in that run’s thread.',
+      'Continue a finished report automation run in this thread whose fix did not land yet (for example after T3 Code finished fixing review findings and pushed the branch). Resets steps from fromStepId back to pending so Whombat runs the remaining steps (review, open pull request, merge once checks pass, and release). Use fromStepId "review" whenever new commits were pushed or its review asked for changes; "pr" or "merge" only after its review approved and no new commit was pushed since (nothing merges past a review that didn’t approve, so those are refused then). Only works in the person’s turns in that run’s thread.',
     input: z.object({
       runId: AutomationRunId,
       fromStepId: z.enum(['fix', 'review', 'pr', 'merge']).optional(),

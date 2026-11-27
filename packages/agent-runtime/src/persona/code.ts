@@ -91,6 +91,6 @@ export function unlandedFixLines(
     ? 'review passes, Whombat opens and merges the pull request, and the fix ships'
     : 'review passes and Whombat opens the pull request';
   return [
-    `This thread’s report automation run (#${u.runNumber}, runId ${u.runId}, ${defuseDelimiters(u.connection)} #${u.reportNumber}${where}${onBranch}) stopped before its fix landed: ${defuseDelimiters(u.reason)} The goal is to finish landing it (${finish}), not stop after pushing commits. Once T3 Code has pushed the fix and finished its review, call automation_continue_run with runId "${u.runId}", fromStepId "${u.nextStepId}", and a short note summarizing what changed and that the branch was pushed, so Whombat runs the remaining steps instead of improvising timers or stopping early.`,
+    `This thread’s report automation run (#${u.runNumber}, runId ${u.runId}, ${defuseDelimiters(u.connection)} #${u.reportNumber}${where}${onBranch}) stopped before its fix landed: ${defuseDelimiters(u.reason)} The goal is to finish landing it (${finish}), not stop after pushing commits. Send follow-up work to the T3 Code thread this run’s look or fix used (t3_thread_send, among the threads listed above), never a new one: the run’s review reads only the threads its report started. Once T3 Code has pushed the fix and finished its review, call automation_continue_run with runId "${u.runId}", fromStepId "${u.nextStepId}", and a short note summarizing what changed and that the branch was pushed, so Whombat runs the remaining steps instead of improvising timers or stopping early.`,
   ];
 }
