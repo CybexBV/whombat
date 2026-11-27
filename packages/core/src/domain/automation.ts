@@ -1035,15 +1035,16 @@ export const AutomationRecipe = z
     t3: z.string().trim().min(1).max(64).optional(),
     /**
      * With `t3`: the model T3 Code reviews a fix with, inside the fix's own thread, as `orchestrator_capabilities` names
-     * it (`gpt-6.1-sol`), its effort (`xhigh`), and optionally how many review rounds to allow (1–3; default 1). On the
-     * final round, the fix thread fixes valid findings, re-runs checks, and pushes rather than abandoning the branch.
+     * it (`gpt-6.1-sol`), its effort (`xhigh`), and optionally how many review rounds to allow (1–10; default 1). The
+     * reviewer marks each finding blocking or later, and only blocking ones hold the fix up. On the final round, the fix
+     * thread fixes them, re-runs checks, and pushes rather than abandoning the branch.
      * Absent: a model from another provider than the one that made the fix, one review round.
      */
     t3Review: z
       .object({
         model: z.string().trim().min(1).max(80),
         effort: z.string().trim().min(1).max(20).optional(),
-        maxRounds: z.number().int().min(1).max(3).optional(),
+        maxRounds: z.number().int().min(1).max(10).optional(),
       })
       .strict()
       .optional(),

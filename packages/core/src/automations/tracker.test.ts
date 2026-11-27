@@ -8,6 +8,8 @@ import {
   REPEATABLE_EXTERNAL_STEP_KINDS,
   STEP_KIND_LABELS,
   TRIGGER_KIND_LABELS,
+  VERDICT_APPROVE,
+  VERDICT_CHANGES,
 } from '../domain/automation.js';
 import { T3_HANDOFFS_HEADING } from '../domain/handoff.js';
 import { evaluateCondition } from './expr.js';
@@ -30,6 +32,7 @@ import {
   recipeSentence,
   recipeWithTodaysWords,
   SHOTS_BRANCH_PREFIX,
+  T3_REVIEW_TITLE,
   unassessed,
 } from './recipes.js';
 import { stepContentRooms } from './rooms.js';
@@ -430,7 +433,7 @@ describe('code work in T3 Code (TA-37)', () => {
     ).toMatch(/needs T3 Code/);
   });
 
-  it('supports t3Review.maxRounds (1–3) while keeping maxRounds 1 identical to default and fixing-and-pushing on the final round', () => {
+  it('supports t3Review.maxRounds (1–10) while keeping maxRounds 1 identical to default and fixing-and-pushing on the final round', () => {
     const base = def(recipe);
     const one = def({
       ...recipe,
@@ -472,9 +475,59 @@ describe('code work in T3 Code (TA-37)', () => {
     expect(
       recipeProblem({
         ...recipe,
-        t3Review: { model: 'gpt-6.1-sol', maxRounds: 4 },
+        t3Review: { model: 'gpt-6.1-sol', maxRounds: 11 },
       }),
     ).not.toBeNull();
+  });
+
+  it('keeps the steps of up to three review rounds as they were, so automations made before stay current', () => {
+    for (const maxRounds of [undefined, 1, 2, 3]) {
+      const d = def({ ...recipe, decideFeatures: true, t3Review: { model: 'gpt-6.1-sol', maxRounds } });
+      const fix = d.steps.find((s) => s.id === 'fix');
+      const review = d.steps.find((s) => s.id === 'review');
+      if (fix?.kind !== 'dispatch_agent' || review?.kind !== 'dispatch_agent') throw new Error('steps');
+      expect([fix.timeoutMinutes, review.timeoutMinutes], `${maxRounds}`).toEqual([360, 180]);
+      expect(recipeIsCurrent(d)).toBe(true);
+      if (!maxRounds || maxRounds === 1) {
+        expect(fix.prompt).toContain('this one review is all');
+        expect(review.prompt).toContain(', once, ');
+      } else {
+        for (const fact of [`up to ${maxRounds} review rounds`, `after round ${maxRounds}’s fixes`])
+          expect(fix.prompt).toContain(fact);
+        expect(review.prompt).toContain(`up to ${maxRounds} rounds`);
+      }
+    }
+  });
+
+  it('gives more than three review rounds two hours each, and the longest fix prompt still fits a step', () => {
+    for (const maxRounds of [4, 10]) {
+      // The longest words: a feature decided by the person, and the customer told once the fix is live.
+      const d = def({
+        ...recipe,
+        decideFeatures: true,
+        replyToCustomer: true,
+        t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds },
+      });
+      expect(validateDefinition(d).problems).toEqual([]);
+      expect(AutomationDefinition.safeParse(d).success).toBe(true);
+      expect(recipeOf(d)).toEqual(d.recipe);
+      expect(recipeIsCurrent(d)).toBe(true);
+      expect(d.recipe?.t3Review?.maxRounds).toBe(maxRounds);
+      const fix = d.steps.find((s) => s.id === 'fix');
+      const review = d.steps.find((s) => s.id === 'review');
+      if (fix?.kind !== 'dispatch_agent' || review?.kind !== 'dispatch_agent') throw new Error('steps');
+      expect(fix.timeoutMinutes).toBe(120 * maxRounds);
+      expect(review.timeoutMinutes).toBe(180);
+      expect(fix.prompt.length).toBeLessThanOrEqual(4000);
+      expect(review.prompt.length).toBeLessThanOrEqual(4000);
+      for (const fact of [
+        `up to ${maxRounds} review rounds`,
+        `round ${maxRounds}`,
+        'push feat/{{trigger.ref}}',
+      ])
+        expect(fix.prompt).toContain(fact);
+      expect(review.prompt).toContain(`up to ${maxRounds} rounds`);
+    }
   });
 
   it('keeps an automation made before as its recipe and offers to update its wording', () => {
@@ -707,6 +760,51 @@ describe('an automation with an earlier version’s own words', () => {
       const today = recipeWithTodaysWords(before);
       expect(today && recipeIsCurrent(today)).toBe(true);
       expect(today).toEqual(def(today?.recipe as AutomationRecipeInput));
+    }
+  });
+
+  it('had a review whose every finding held a T3 Code fix up before findings were marked blocking or later', () => {
+    const prompt = (d: ReturnType<typeof def>, id: string) =>
+      (d.steps.find((s) => s.id === id) as { prompt: string }).prompt;
+    for (const maxRounds of [undefined, 3, 10]) {
+      const r = tracker({
+        repo: 'lumio/tracker',
+        t3: 't3',
+        t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds },
+        fix: { mode: 'auto', minImportance: 'low', merge: 'checks' },
+        replyToCustomer: true,
+        decideFeatures: true,
+      });
+      const today = def(r);
+      const before = AutomationDefinition.parse(recipeDefinition(r, 'review-every-finding'));
+      // Today's reviewer marks each finding, names the commit as “reviewed <commit>”, and only blocking ones hold it up.
+      for (const fact of [
+        'Blocking',
+        'Later',
+        `${VERDICT_APPROVE} — reviewed <commit>`,
+        `${VERDICT_CHANGES} — reviewed <commit>`,
+      ])
+        expect(prompt(today, 'fix'), `${maxRounds}`).toContain(fact);
+      for (const fact of [
+        maxRounds ? `up to ${maxRounds} review rounds` : 'this one review is all',
+        'push feat/{{trigger.ref}}',
+        T3_REVIEW_TITLE,
+        'For the customer (fixed):',
+        'For the customer (partly fixed):',
+        'later findings',
+      ])
+        expect(prompt(today, 'fix'), `${maxRounds}`).toContain(fact);
+      for (const fact of ['blocking', 'Later', `${VERDICT_APPROVE} — reviewed 8c94527`, T3_REVIEW_TITLE])
+        expect(prompt(today, 'review'), `${maxRounds}`).toContain(fact);
+      expect(prompt(before, 'fix')).not.toContain('Blocking');
+      expect(prompt(before, 'review')).not.toContain('Later');
+      // An automation made before is still its recipe, known by those words, and takes today's.
+      expect(recipeOf(before)).toEqual(before.recipe);
+      expect(recipeIsCurrent(before)).toBe(false);
+      expect(recipeHasEarlierWords(before)).toBe(true);
+      const updated = recipeWithTodaysWords(before);
+      expect(updated && recipeIsCurrent(updated)).toBe(true);
+      expect(updated).toEqual(today);
     }
   });
 

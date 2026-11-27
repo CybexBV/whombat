@@ -20,6 +20,10 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@whombat/avatars": ["./vendor/whombat-app/avatars/src/index.ts"],
+      "@whombat/avatars/live": ["./vendor/whombat-app/avatars/src/live.tsx"],
+      "@whombat/avatars/face": ["./vendor/whombat-app/avatars/src/face.ts"],
+      "@whombat/avatars/motion": ["./vendor/whombat-app/avatars/src/faceMotion.ts"],
+      "@whombat/avatars/puppet": ["./vendor/whombat-app/avatars/src/puppet.ts"],
       "@whombat/avatars/react": ["./vendor/whombat-app/avatars/src/react.tsx"],
       "@whombat/avatars/urls": ["./vendor/whombat-app/avatars/src/urls.ts"],
       "@whombat/brand": ["./vendor/whombat-app/brand/src/index.ts"],

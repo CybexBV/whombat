@@ -26,7 +26,10 @@ mkdir -p "$out/avatars/src" "$out/avatars/svg" "$out/brand/src" "$out/tokens" "$
 
 # @whombat/avatars (FA-06, FA-DA01): the pure module, the file URLs, the React DOM renderer and the fifteen static
 # SVG files, unchanged, without tests. `svg/` sits next to `src/`: urls.ts asks for `new URL('../svg/…', import.meta.url)`.
-for f in index.ts human.ts elders.ts urls.ts react.tsx; do
+# The live face comes along (`<LiveFace>`, its engine, its poses and its motion rules): the desk's faces show what the
+# agent is doing.
+for f in index.ts human.ts elders.ts urls.ts react.tsx \
+  svgParts.ts faceBuild.ts faceData.ts face.ts faceMotion.ts puppet.ts live.tsx; do
   show "packages/avatars/src/$f" >"$out/avatars/src/$f"
 done
 while IFS= read -r f; do

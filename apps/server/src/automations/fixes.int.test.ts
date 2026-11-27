@@ -20,13 +20,14 @@ import {
   recipeOf,
 } from '@whombat/core';
 import { and, asc, eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { decideApproval } from '../commands/approvals';
 import { approvals, automationRuns, dispatches, events, messages, pullRequests } from '../db/schema/index';
 import type { FakeGitHub } from '../github/fake';
 import { callTool, mcpToolList } from '../mcp/server';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
+import { FIX_TRIES_MAX } from './again';
 import { NOT_AN_ASSESSMENT } from './assessment';
 import {
   createAutomation,
@@ -516,6 +517,12 @@ describe('fixing once a person says yes', () => {
   });
 
   it('stops on a no and on “Changes needed”, and fails when the fix has no commits', async () => {
+    // How a run ends after its last try: one try here (going round again is `again.ts`'s, tested with merges and
+    // reports).
+    w.services.automations.options.fixTriesMax = 1;
+    onTestFinished(() => {
+      w.services.automations.options.fixTriesMax = FIX_TRIES_MAX;
+    });
     const id = await recipe({ mode: 'ask' });
     await poll();
 

@@ -13,6 +13,7 @@ import { startRun } from '../commands/agent-runs';
 import { decideApproval } from '../commands/approvals';
 import { sendMessage } from '../commands/messages';
 import { approvals, automations, dispatches, events, grants, pullRequests, runs } from '../db/schema/index';
+import { GitHubError } from '../github/adapter';
 import { authorizeGit } from '../runtime/git';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { controlAutomationRun } from './commands';
@@ -317,6 +318,102 @@ describe('a pull request that can’t be opened', () => {
     expect(posts[1]).toMatch(
       /^Done: the pull request from feat\/busted into whombat\/billing is ready for a person to open \(opening it failed: /,
     );
+  });
+});
+
+describe('GitHub failing for a moment while the pull request opens', () => {
+  function openDefinition(word: string): AutomationDefinitionInput {
+    return {
+      version: 1,
+      conversationId: BILLING,
+      triggers: [{ kind: 'message_posted', conversationId: BILLING, contains: [word] }],
+      steps: [
+        {
+          id: 'pr',
+          kind: 'open_pull_request',
+          repo: REPO,
+          branch: `feat/${word}`,
+          title: `Fix the ${word} totals`,
+          body: 'Rounds once.',
+          otherwise: 'post_payload',
+        },
+        { id: 'report', kind: 'post_message', text: 'Done: {{steps.pr.text}}' },
+      ],
+      limits: { runTimeoutMinutes: 600, maxConcurrentRuns: 1, maxRunsPerDay: 20 },
+    };
+  }
+
+  const fake = () => {
+    const f = w.services.github.fake;
+    if (!f) throw new Error('no FakeGitHub');
+    return f;
+  };
+
+  async function started(word: string) {
+    const id = await w.publish(openDefinition(word), {
+      name: `Open it (${word})`,
+      grants: [{ keyId: 'pr.open', tier: 'can', repos: [REPO] }],
+    });
+    await report(`Totals are ${word}`);
+    return { id, run: await onlyRun(id) };
+  }
+
+  it('opens it on the next try after a 500', async () => {
+    fake().failOpens.push({ error: new GitHubError('HTTP 500', 500) });
+    const { run: first } = await started('wonky');
+    expect(first.steps[0]).toMatchObject({ state: 'pending', error: expect.stringContaining('tried again') });
+    w.advance(30_000);
+    await w.settle();
+    const run = await w.run(first.id);
+    expect(run.status).toBe('succeeded');
+    expect(run.steps[0]?.output).toMatchObject({ opened: true, githubRetries: { open: 1 } });
+    expect(run.steps[0]?.output.alreadyOpen).toBeUndefined();
+    expect(
+      await w.services.db.select().from(pullRequests).where(eq(pullRequests.branch, 'feat/wonky')),
+    ).toHaveLength(1);
+  });
+
+  it('finds the pull request GitHub opened although it answered 500, and doesn’t post its body again', async () => {
+    fake().failOpens.push({ error: new GitHubError('HTTP 502', 502), afterOpening: true });
+    const comments = fake().comments.length;
+    const { run: first } = await started('lumpy');
+    expect(first.steps[0]?.state).toBe('pending');
+    // The mirror reads the repository before the next try.
+    await w.services.github.poller.pollNow({ burrowId: w.burrowId });
+    w.advance(30_000);
+    await w.settle();
+    const run = await w.run(first.id);
+    expect(run.status).toBe('succeeded');
+    expect(run.steps[0]?.output).toMatchObject({ opened: true, alreadyOpen: true });
+    expect(fake().comments.length).toBe(comments);
+    expect(
+      await w.services.db.select().from(pullRequests).where(eq(pullRequests.branch, 'feat/lumpy')),
+    ).toHaveLength(1);
+  });
+
+  it('is posted for a person after three tries that GitHub didn’t answer', async () => {
+    for (let i = 0; i < 3; i++) fake().failOpens.push({ error: new GitHubError('HTTP 503', 503) });
+    const { id, run: first } = await started('soggy');
+    expect(first.steps[0]?.state).toBe('pending');
+    w.advance(30_000);
+    await w.settle();
+    expect((await w.run(first.id)).steps[0]?.state).toBe('pending');
+    w.advance(2 * 60_000);
+    await w.settle();
+    const run = await w.run(first.id);
+    expect(run.status).toBe('succeeded');
+    expect(run.steps[0]?.output).toMatchObject({ opened: false });
+    expect(fake().failOpens).toHaveLength(0);
+    expect((await threadPosts(id, run.id))[0]?.text).toContain('opening it failed: HTTP 503');
+  });
+
+  it('is posted for a person at once when GitHub refuses it', async () => {
+    fake().failOpens.push({ error: new GitHubError('Validation Failed', 422) });
+    const { id, run } = await started('crumbly');
+    expect(run.status).toBe('succeeded');
+    expect(run.steps[0]?.output).toMatchObject({ opened: false });
+    expect(run.steps[0]?.output.githubRetries).toBeUndefined();
+    expect((await threadPosts(id, run.id))[0]?.text).toContain('opening it failed: Validation Failed');
   });
 });
 

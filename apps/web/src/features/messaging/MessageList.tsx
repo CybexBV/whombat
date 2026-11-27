@@ -1,5 +1,7 @@
+import type { FaceState } from '@whombat/avatars/motion';
 import {
   continuesMessage,
+  isAutomationPrincipal,
   isSettledRoot,
   shownUnreadFrom,
   type ThreadStage,
@@ -9,12 +11,26 @@ import {
   type WorkLine,
   withoutSettled,
 } from '@whombat/client';
-import type { Message, Principal, Reaction } from '@whombat/core';
-import { type MouseEvent, memo, type ReactNode, useMemo } from 'react';
+import {
+  isDeletedMessage,
+  type Message,
+  type Principal,
+  type Reaction,
+  shortNameOf,
+  typingLabel,
+} from '@whombat/core';
+import { type MouseEvent, memo, type ReactNode, useCallback, useMemo } from 'react';
 import { cx } from '../../components/cx';
 import styles from './MessageList.module.css';
 import { MessageRow } from './MessageRow';
-import { foldMessages, groupByDay, sameWorkLine } from './model';
+import {
+  foldMessages,
+  groupByDay,
+  isFailedTurn,
+  newestAgentFace,
+  replyFaceState,
+  sameWorkLine,
+} from './model';
 import { useTicker } from './useRoom';
 
 export interface MessageListProps {
@@ -228,6 +244,7 @@ interface ListRowProps {
   onSettle: ListSettle['onSettle'] | undefined;
   settleable: boolean;
   settledTag: boolean;
+  faceState: FaceState | null;
 }
 
 function sameWork(a: ThreadWork | null, b: ThreadWork | null): boolean {
@@ -319,6 +336,40 @@ export function MessageList({
   const folded = useMemo(() => foldMessages(shown), [shown]);
   const days = useMemo(() => groupByDay(folded.visible, now, timeZone), [folded, now, timeZone]);
   const skip = folded.visible.length >= SKIP_ROWS_FROM;
+  // One message of a run by the same author shows no face and no name (a plain chat's look).
+  const plainChat = chat && !threaded;
+  const continued = useCallback(
+    (dayMessages: readonly Message[], i: number) => {
+      const m = dayMessages[i];
+      return plainChat && !!m && m.id !== unread && continuesMessage(dayMessages[i - 1], m);
+    },
+    [plainChat, unread],
+  );
+  // In a chat the assistant's face beside its newest message is the live one: thinking or working while it is on the
+  // reply, sorry when that reply failed. Every older face stays still.
+  const liveFace = useMemo(() => {
+    if (!chat) return null;
+    const newest = newestAgentFace(
+      days,
+      (m) => {
+        const author = lookup(m.authorId);
+        return author?.kind === 'agent' && !isAutomationPrincipal(author) && !isDeletedMessage(m);
+      },
+      continued,
+    );
+    if (!newest) return null;
+    const agent = lookup(newest.message.authorId);
+    const typingNow = typing.map(typingLine).find((t) => t.principalId === newest.message.authorId);
+    const work = threaded
+      ? (threadWork?.(newest.rowId) ?? null)
+      : typingNow && agent
+        ? {
+            text: typingNow.label === typingLabel(shortNameOf(agent)) ? 'is thinking' : 'is working',
+            tone: 'live' as const,
+          }
+        : null;
+    return { rowId: newest.rowId, state: replyFaceState(work, isFailedTurn(newest.message)) };
+  }, [chat, days, lookup, continued, threaded, typing, threadWork]);
   const row = (m: Message, i: number, dayMessages: readonly Message[]) => (
     <ListItem key={m.clientId ? `c-${m.clientId}` : m.id} unread={m.id === unread}>
       <ListRow
@@ -340,7 +391,7 @@ export function MessageList({
         editor={renderEditor?.(m) ?? null}
         work={threadWork?.(m.id) ?? null}
         look={look}
-        continued={chat && !threaded && m.id !== unread && continuesMessage(dayMessages[i - 1], m)}
+        continued={continued(dayMessages, i)}
         threaded={!!threaded}
         selected={!!threaded && threaded.selectedId === m.id}
         threadNew={!!threaded?.isNew?.(m.id)}
@@ -362,6 +413,7 @@ export function MessageList({
         onSettle={settle?.onSettle}
         settleable={!!settle && !m.threadRootId && !m.settled && settle.settleable(m.id)}
         settledTag={!!settle && isSettledRoot(m)}
+        faceState={liveFace?.rowId === m.id ? liveFace.state : null}
       />
     </ListItem>
   );

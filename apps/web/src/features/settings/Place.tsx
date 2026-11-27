@@ -63,7 +63,7 @@ export function BackLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/** A row's inside: the icon tile (or a face), the name over its line, and the chevron. */
+/** A row's inside: the icon tile (or a face), the name over its line, and the chevron (or the row's own switch). */
 export function PlaceRowBody({
   icon,
   mark,
@@ -71,6 +71,9 @@ export function PlaceRowBody({
   line,
   bad = false,
   chevron = 'right',
+  end,
+  nameId,
+  lineId,
 }: {
   icon?: LucideIcon;
   /** In place of the icon: a face or a logo, in the same tile. */
@@ -81,6 +84,10 @@ export function PlaceRowBody({
   bad?: boolean;
   /** `down`: a row that opens something under it (Theme); its chevron turns up while open (`aria-expanded`). */
   chevron?: 'right' | 'down';
+  /** In place of the chevron: the row's own control (a switch), which `nameId` names and `lineId` describes. */
+  end?: ReactNode;
+  nameId?: string;
+  lineId?: string;
 }) {
   return (
     <>
@@ -88,12 +95,20 @@ export function PlaceRowBody({
         {mark ?? (icon ? <Icon icon={icon} size={18} /> : null)}
       </span>
       <span className={styles.main}>
-        <span className={styles.name}>{name}</span>
-        {line ? <span className={cx(styles.line, bad && styles.lineBad)}>{line}</span> : null}
+        <span className={styles.name} id={nameId}>
+          {name}
+        </span>
+        {line ? (
+          <span className={cx(styles.line, bad && styles.lineBad)} id={lineId}>
+            {line}
+          </span>
+        ) : null}
       </span>
-      <span className={cx(styles.chevron, chevron === 'down' && styles.chevronDown)} aria-hidden="true">
-        <Icon icon={chevron === 'down' ? ChevronDown : ChevronRight} size={16} />
-      </span>
+      {end ?? (
+        <span className={cx(styles.chevron, chevron === 'down' && styles.chevronDown)} aria-hidden="true">
+          <Icon icon={chevron === 'down' ? ChevronDown : ChevronRight} size={16} />
+        </span>
+      )}
     </>
   );
 }

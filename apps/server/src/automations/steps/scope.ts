@@ -48,7 +48,14 @@ export function runScope(
   const out: Record<string, unknown> = {};
   const outside = outsidersRun(run.trigger);
   for (const s of steps) {
-    const { offeredActions: _offered, resultDispatchId, ...output } = s.output as JsonObject;
+    // The count of a fix's tries and what earlier tries used (`again.ts`) are the engine's, not for a template.
+    const {
+      offeredActions: _offered,
+      again: _again,
+      earlierTokens: _earlier,
+      resultDispatchId,
+      ...output
+    } = s.output as JsonObject;
     if (outside && s.kind === 'dispatch_agent') {
       // A result this release collected says which turn it came from: one that isn't the step's turn any more is
       // dropped. A step the previous release finished keeps the result it collected then (it names no turn).

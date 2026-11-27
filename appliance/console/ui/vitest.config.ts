@@ -6,6 +6,7 @@ const vendor = (p: string) => fileURLToPath(new URL(`./vendor/whombat-app/${p}`,
 export default defineConfig({
   resolve: {
     alias: [
+      { find: '@whombat/avatars/motion', replacement: vendor('avatars/src/faceMotion.ts') },
       { find: '@whombat/avatars/react', replacement: vendor('avatars/src/react.tsx') },
       { find: '@whombat/avatars/urls', replacement: vendor('avatars/src/urls.ts') },
       { find: '@whombat/avatars', replacement: vendor('avatars/src/index.ts') },

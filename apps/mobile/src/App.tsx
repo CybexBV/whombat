@@ -11,6 +11,7 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { markFaceActivity } from './avatars/faceActivity';
 import { DEMO } from './data/config';
 import { noteEndingsAfterFirstFrame } from './errors/nativeErrorNotes';
 import { MobileI18nProvider } from './i18n/provider';
@@ -83,7 +84,8 @@ export function App() {
   // so does following the keyboard: its frame is read there as it moves, also when the window changes size under it
   // (unfolding with the keyboard up). The app already draws under Android's system bars, so the provider leaves them.
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    // Any touch wakes the faces' blinking; they go still after two quiet minutes.
+    <GestureHandlerRootView style={{ flex: 1 }} onTouchStart={markFaceActivity}>
       <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
         <SafeAreaProvider>
           <ThemeProvider store={secureStore}>

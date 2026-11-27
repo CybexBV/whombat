@@ -1,4 +1,3 @@
-import { WhombatAvatar } from '@whombat/avatars/react';
 import { AUTOMATION_ASKING, type AutomationAsker, agentFaceOf, stopAskingServer } from '@whombat/client';
 import {
   type AgentFace,
@@ -10,6 +9,7 @@ import {
 import { Button } from '../../components/Button';
 import { ModalClose, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import { CodeBlock } from '../messaging/CodeBlock';
 import { AutomationAvatar } from '../messaging/PrincipalAvatar';
 import styles from './ApprovalDetails.module.css';
@@ -72,7 +72,13 @@ export function ApprovalDetails({
         {asker ? (
           <AutomationAvatar size={64} label={asker.label} />
         ) : (
-          <WhombatAvatar face={agentFaceOf(requester)} size={64} label={requester.name} />
+          // It waits for the person while the question is open, then rests.
+          <LiveAgentFace
+            face={agentFaceOf(requester)}
+            size={64}
+            label={requester.name}
+            state={pending ? 'needs' : 'idle'}
+          />
         )}
         <div className={styles.heading}>
           <SectionLabel tone={pending ? 'warn' : view.tone === 'neutral' ? 'mut' : view.tone}>

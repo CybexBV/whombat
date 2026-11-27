@@ -1,5 +1,4 @@
 import { useRouterState } from '@tanstack/react-router';
-import { WhombatAvatar } from '@whombat/avatars/react';
 import {
   agentFaceOf,
   type InboxFilter,
@@ -27,6 +26,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
 import { CHAT_WORDS, INBOX_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { NotificationsOffer } from '../../push/NotificationsOffer';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import { AppLink } from '../files/AppLink';
 import { RoomStatus } from '../messaging/ConversationRoom';
 import roomStyles from '../messaging/ConversationRoom.module.css';
@@ -565,7 +565,16 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
           </div>
           <div className={styles.freshBody}>
             <span className={styles.freshFace} aria-hidden="true">
-              {assistant ? <WhombatAvatar face={agentFaceOf(assistant)} size={72} crop="head" /> : null}
+              {assistant ? (
+                <LiveAgentFace
+                  face={agentFaceOf(assistant)}
+                  size={72}
+                  crop="head"
+                  state="idle"
+                  pokeable
+                  decorative
+                />
+              ) : null}
             </span>
             <p>{words.chatEmpty}</p>
           </div>

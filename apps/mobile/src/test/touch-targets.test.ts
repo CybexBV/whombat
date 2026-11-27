@@ -30,6 +30,9 @@ const FILES: Record<string, number> = {
   'src/settings/SettingsScreen.tsx': 0,
   // The final places' row (Settings, Vault, Files): 64dp and more.
   'src/ui/place.tsx': 1,
+  // A face to poke (a new chat's, 44dp): play, not a control, padded to 44dp when smaller.
+  'src/avatars/LiveFace.tsx': 1,
+  'src/settings/FaceMotionRow.tsx': 0,
   // The segmented control, moved out of the settings sheet (settings-tab-android.md AP-2621).
   'src/ui/Segmented.tsx': 1,
   // Tabs with an underline (underline-tabs-android.md AP-2636): a tab, 44dp tall.
@@ -378,6 +381,8 @@ const SWITCH_FILES: Record<string, number> = {
   'src/screens/thing/Controls.tsx': 1,
   // A check's switch in What Whombat watches (quiet-notices-mobile.md AP-4865).
   'src/screens/thing/WhatWhombatWatches.tsx': 1,
+  // Settings → Often used: Moving faces.
+  'src/settings/FaceMotionRow.tsx': 1,
 };
 
 /** Finds every `<Touchable ...>` / `<Pressable ...>` (or `tags`) opening tag and its prop text (brace-depth aware). */

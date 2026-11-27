@@ -6,12 +6,13 @@
  * words wait in the box until *Send*. *Back* keeps the conversation open, *Close conversation* ends it. A server task's
  * card is a live row (TF-17); after a lock the conversation opens where it was read to (TF-18).
  */
-
+import type { FaceState } from '@whombat/avatars/motion';
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '../i18n/react';
 import { askStateWordsCopy, type Convo, type ConvoRow } from '../lib/conversation';
 import type { DeskPaired, DeskPower, DeskSessionTask } from '../lib/desk';
 import { deskCopy, deskWordsCopy, fill } from '../lib/deskCopy';
+import { liveFaceRow } from '../lib/deskFace';
 import { type Dictation, dictationLabel, dictationNotice, MAX_TALK_TEXT } from '../lib/dictation';
 import { taskRow } from '../lib/taskCard';
 import styles from './desk.module.css';
@@ -58,6 +59,8 @@ export interface TalkProps {
   pageNow: number;
   /** Waiting for the answer, or the assistant working in the conversation (the bars rest quietly). */
   thinking: boolean;
+  /** What the assistant's newest face shows (`talkFace`): listening, thinking, working, speaking, sorry or idle. */
+  faceState: FaceState;
   levels: readonly number[];
   /** A question in the box (typed, or what the mic heard), or null. */
   draft: string | null;
@@ -112,6 +115,17 @@ export function Talk(p: TalkProps) {
   const label = dictationLabel(p.dictation, p.pageNow, t);
   const notice = dictationNotice(p.dictation, p.pageNow, t);
   const dw = DESK_WORDS.dictation;
+  // The newest face shows what the assistant does; the earlier ones rest. While it listens it gets the mic's loudness
+  // through one function that stays the same (a new one would start its listening again).
+  const live = liveFaceRow(convo.rows);
+  const heard = useRef(0);
+  heard.current = p.levels.at(-1) ?? 0;
+  const micLevel = useCallback(() => heard.current, []);
+  // The answer plays without a loudness reading, so the mouth follows a talking rhythm of its own while it is said.
+  const talkLevel = useCallback(() => {
+    const t = performance.now() / 1000;
+    return Math.abs(Math.sin(t * 7.1) * Math.sin(t * 2.3 + 1));
+  }, []);
 
   // Follow the newest message while read to the bottom; else say a new one came (DK-63).
   const scroller = useRef<HTMLDivElement>(null);
@@ -217,6 +231,17 @@ export function Talk(p: TalkProps) {
               key={r.key}
               row={r}
               face={convo.rows[i - 1]?.from !== 'assistant'}
+              faceState={i === live ? p.faceState : 'idle'}
+              level={
+                i !== live
+                  ? null
+                  : p.faceState === 'listening'
+                    ? micLevel
+                    : p.faceState === 'speaking'
+                      ? talkLevel
+                      : null
+              }
+              pokeable={i === live}
               paired={paired}
               now={p.now}
               canOpenAsk={p.canOpenAsk}
@@ -338,6 +363,9 @@ export function Talk(p: TalkProps) {
 function Row({
   row,
   face,
+  faceState,
+  level,
+  pokeable,
   paired,
   now,
   canOpenAsk,
@@ -346,6 +374,9 @@ function Row({
 }: {
   row: ConvoRow;
   face: boolean;
+  faceState: FaceState;
+  level: (() => number) | null;
+  pokeable: boolean;
   paired: DeskPaired;
   now: number;
   canOpenAsk: (number: number) => boolean;
@@ -379,7 +410,14 @@ function Row({
   return (
     <div className={styles.msg} data-from="assistant" data-tone={row.tone} data-key={row.key}>
       {face ? (
-        <Face face={paired.assistant.face} size={44} label={paired.assistant.name} />
+        <Face
+          face={paired.assistant.face}
+          size={44}
+          label={paired.assistant.name}
+          state={faceState}
+          level={level}
+          pokeable={pokeable}
+        />
       ) : (
         <span className={styles.msgIndent} aria-hidden="true" />
       )}

@@ -380,13 +380,21 @@ function useArrived(
 function Say({
   say,
   paired,
+  unlocked,
   onAsk,
   onAnswer,
   onLook,
 }: GlanceProps & { say: NonNullable<ReturnType<typeof sayOf>> }) {
   const words = (
     <>
-      <Face face={paired.assistant.face} size={54} label={paired.assistant.name} />
+      {/* A tap pokes the face only where it does nothing else: not on words that open something, nor on a locked
+          screen, where a touch opens the PIN pad. */}
+      <Face
+        face={paired.assistant.face}
+        size={54}
+        label={paired.assistant.name}
+        pokeable={say.opens === undefined && unlocked}
+      />
       <p className={styles.sayText}>
         {say.text}
         {say.more && (

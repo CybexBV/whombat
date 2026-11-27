@@ -122,6 +122,8 @@ export interface FakePr {
   authorAssociation?: string | null;
   /** Logins assigned to it. */
   assignees?: string[];
+  /** It clashes with its base branch (`simulateConflict`): GitHub refuses to merge it and says `dirty`. */
+  conflict?: boolean;
 }
 
 /** An issue on the fake GitHub (automation-recipes.md). */
@@ -307,6 +309,11 @@ export class FakeGitHub implements GitHubAdapter {
   readonly comments: FakeComment[] = [];
   /** The next `commentOnIssue` fails with this (tests: a refusal, or an answer that was lost). */
   failNextComment: GitHubError | Error | null = null;
+  /**
+   * The next `createPullRequest` calls fail with these, in order (tests: an outage, a refusal); `afterOpening` opens the
+   * pull request first, as GitHub does when it opened it and its answer was still an error.
+   */
+  readonly failOpens: { error: GitHubError | Error; afterOpening?: boolean }[] = [];
   /** The next `mergePullRequest` fails with this, merging nothing (tests: a refusal, or an answer that was lost). */
   failNextMerge: GitHubError | Error | null = null;
   /** Workflow runs whose failed jobs were run again (all repos), oldest first (AR-57). */
@@ -656,6 +663,8 @@ export class FakeGitHub implements GitHubAdapter {
   }): Promise<GhPullRequest> {
     this.connected();
     await this.ready();
+    const failure = this.failOpens.shift();
+    if (failure && !failure.afterOpening) throw failure.error;
     const r = this.repo(pr.repo);
     let headSha = await this.headOf(r, pr.head);
     if (!headSha && !r.git) {
@@ -703,6 +712,7 @@ export class FakeGitHub implements GitHubAdapter {
       changedFiles: files.length,
     };
     r.prs.set(number, fake);
+    if (failure) throw failure.error;
     return this.toGhPr(r, fake, true);
   }
 
@@ -716,6 +726,11 @@ export class FakeGitHub implements GitHubAdapter {
         const [add = '0', del = '0', path = ''] = line.split('\t');
         return { path, add: Number(add) || 0, del: Number(del) || 0 };
       });
+  }
+
+  /** Tests: pull request `number` clashes with its base branch (or, `false`, no longer does). */
+  simulateConflict(repo: string, number: number, conflict = true): void {
+    this.pr(this.repo(repo), number).conflict = conflict;
   }
 
   async getPullRequest(repo: string, number: number): Promise<GhPullRequest> {
@@ -1054,7 +1069,7 @@ export class FakeGitHub implements GitHubAdapter {
     if (failure) throw failure;
     const r = this.repo(merge.repo);
     const pr = this.pr(r, merge.number);
-    if (pr.state !== 'open') throw new GitHubError('Pull Request is not mergeable', 405);
+    if (pr.state !== 'open' || pr.conflict) throw new GitHubError('Pull Request is not mergeable', 405);
     if (merge.sha && !sameSha(pr.headSha, merge.sha))
       throw new GitHubError('Head branch was modified. Review and try the merge again.', 409);
     const now = new Date().toISOString();
@@ -1226,6 +1241,7 @@ export class FakeGitHub implements GitHubAdapter {
       additions: single ? pr.additions : null,
       deletions: single ? pr.deletions : null,
       changedFiles: single ? pr.changedFiles : null,
+      ...(single && pr.state === 'open' ? { mergeableState: pr.conflict ? 'dirty' : 'clean' } : {}),
     };
   }
 

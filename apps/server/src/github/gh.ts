@@ -136,6 +136,7 @@ interface RawPr {
   additions?: number;
   deletions?: number;
   changed_files?: number;
+  mergeable_state?: string | null;
 }
 
 /** An issue (or, with `pull_request`, a pull request) as the issues API returns it. */
@@ -242,6 +243,7 @@ export function toPr(d: RawPr): GhPullRequest {
     additions: d.additions ?? null,
     deletions: d.deletions ?? null,
     changedFiles: d.changed_files ?? null,
+    mergeableState: d.mergeable_state ?? null,
   };
 }
 

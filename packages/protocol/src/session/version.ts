@@ -89,16 +89,17 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * unsolicited Looks ahead findings into the Inbox (`NeedsYouKind` `ahead`, `looksAhead.promote`, `looksAhead.feedback`,
  * and `LooksAheadCheckItem.inboxItemId`; Whombat looks-ahead.md); minor 18 adds `t3Review.maxRounds` (1–3 review
  * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
- * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor
- * 20 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
+ * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
+ * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
+ * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 20 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim
  * requests). Clients omit `locale` from strict claim bodies when talking to an older box.
  */
-export const LOCALE_MINOR = 20;
+export const LOCALE_MINOR = 21;
 
 /**
  * Session protocol minor (major 5) with more news: up to `NEWS_SOURCES_MAX` sources (an older app takes twelve),
@@ -113,6 +114,12 @@ export const NEWS_MORE_MINOR = 19;
  * `t3Review` strictly, so the server hides definitions and drafts that set `maxRounds` from sessions below this minor.
  */
 export const T3_REVIEW_ROUNDS_MINOR = 18;
+
+/**
+ * Session protocol minor (major 5) that accepts `t3Review.maxRounds` up to 10. Apps at minor 18 or 19 parse it as 1–3,
+ * so the server hides definitions and drafts with more rounds from sessions below this minor.
+ */
+export const T3_REVIEW_MORE_ROUNDS_MINOR = 20;
 
 /**
  * Session protocol minor (major 5) that lands unsolicited Looks ahead findings in the Inbox (`kind: 'ahead'`,

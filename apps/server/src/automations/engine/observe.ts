@@ -22,6 +22,7 @@ import { publishDispatch } from '../../runtime/activity';
 import { outsidersTurn } from '../../runtime/person';
 import { outsidersTurnsInFlight } from '../../runtime/places';
 import type { Services } from '../../services';
+import { againMarkOf, NOT_REVIEWED_THIS_TRY, reviewedThisTry } from '../again';
 import { dispatchResult, openedPr, openPrFrom, runScope, type StepOp, stepTimeoutMs } from '../steps';
 import { queuedNoteOf, turnFailedWords, turnWaitsWords } from '../steps/turn-words';
 import { type AutomationRunRow, type AutomationStepRow, loadStepRows } from '../store';
@@ -111,7 +112,7 @@ export async function observeStep(
             };
       });
     case 'merge_pull_request':
-      return observeMerge(db, run, row, step, now);
+      return observeMerge(services, run, row, step, now);
     case 'connection_actions':
       return awaitingYes(db, row, step, now, (name) => {
         const reason = `${name} declined the proposed actions.`;
@@ -229,15 +230,19 @@ async function observeTurn(
       const pushed = !ws && verdict === 'approve' ? await reviewedHead(services, run, row.idx) : null;
       if (pushed) {
         // The reviewer's own last answer decides, on the commit it read; the step's reply only relays it (TA-57).
-        const scope = runScope(run, await loadStepRows(services.db, run.id));
+        const rows = await loadStepRows(services.db, run.id);
+        const scope = runScope(run, rows);
         const own = await reviewerVerdict(services, run, scope);
         // The reviewer the automation chose needs no providers (`reviewBinds`); any other does.
         const chosen =
           (run.definition as { recipe?: { t3Review?: { model?: string } } }).recipe?.t3Review?.model ?? null;
         // Asked once more (a fresh turn) when the reviewer couldn't be read or GitHub didn't answer: the run goes on
-        // by itself; still without them, it is no approval, and the person hears (TA-61).
+        // by itself; still without them, it is no approval (and the run goes round again, or the person hears). Once
+        // per try at the fix: a run that went again starts its review at a later attempt (`again.ts`).
+        const mark = againMarkOf(rows.find((r) => r.stepId === 'fix')?.output);
+        const firstAttempt = mark?.reviewAttempt ?? 0;
         if (
-          row.attempt === 0 &&
+          row.attempt === firstAttempt &&
           (!own ||
             !modelKnown(own.model) ||
             !modelKnown(own.fixerModel) ||
@@ -249,6 +254,7 @@ async function observeTurn(
             idx: row.idx,
             state: 'pending',
             retry: true,
+            retryFrom: firstAttempt,
             error: !pushed.head
               ? 'GitHub didn’t say which commit the branch is at, so the review is read again.'
               : 'The review couldn’t be read in T3 Code, so it is read again.',
@@ -257,15 +263,19 @@ async function observeTurn(
         extra.reviewer = own ? 'read' : 'unread';
         // Its “Changes needed” no longer stops the fix by itself: the fix thread deals with what one review found and
         // pushes, and this step's verdict says whether it did.
+        // On a try the engine started after an earlier one, the review must have begun since: an earlier try's review
+        // never read the commits pushed after it.
         const bound = !own
           ? { ok: false as const, reason: 'Its review couldn’t be read in T3 Code.' }
           : !pushed.head
             ? { ok: false as const, reason: 'The reviewed branch couldn’t be read on GitHub.' }
-            : reviewBinds(
-                own,
-                { sha: pushed.head, committedAt: pushed.committedAt, commits: pushed.commits },
-                chosen,
-              );
+            : !reviewedThisTry(mark, own.startedAt)
+              ? { ok: false as const, reason: NOT_REVIEWED_THIS_TRY }
+              : reviewBinds(
+                  own,
+                  { sha: pushed.head, committedAt: pushed.committedAt, commits: pushed.commits },
+                  chosen,
+                );
         if (bound.ok) extra.head = pushed.head;
         else {
           extra.verdict = 'changes_needed';

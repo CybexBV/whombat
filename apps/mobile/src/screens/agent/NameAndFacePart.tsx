@@ -12,6 +12,7 @@ import { AGENT_NAME_MAX, type AgentFace } from '@whombat/core';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, TextInput, View } from 'react-native';
 import { WhombatAvatar } from '../../avatars/Avatars';
+import { LiveFace } from '../../avatars/LiveFace';
 import {
   agentNameProblem,
   canSaveName,
@@ -50,6 +51,8 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
   const [busy, setBusy] = useState<'name' | 'face' | null>(null);
   // The face just picked, shown at once until the agent has it (or it was refused).
   const [picked, setPicked] = useState<AgentFace | null>(null);
+  // Counts picks: the big face greets each one with its own gesture.
+  const [picks, setPicks] = useState(0);
 
   // A new name (saved here, or elsewhere) is the field's again.
   useEffect(() => setDraft(agent.name), [agent.name]);
@@ -102,6 +105,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
   const pickFace = (next: AgentFace) => {
     if (busy || next === (picked ?? face)) return;
     setPicked(next);
+    setPicks((n) => n + 1);
     setNote(null);
     setBusy('face');
     update
@@ -154,7 +158,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
                 backgroundColor: tint(theme.faces[wears].accent, FACE_WASH),
               }}
             >
-              <WhombatAvatar face={wears} size={76} crop="bust" label={agentFaceLabel(wears)} />
+              <LiveFace face={wears} size={76} label={agentFaceLabel(wears)} gestureKey={picks} />
             </View>
             <View style={{ flex: 1, gap: 6 }}>
               <Text size={12} weight={500} mono color={theme.colors.mut}>

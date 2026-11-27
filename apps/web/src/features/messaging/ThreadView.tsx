@@ -386,6 +386,16 @@ export function ThreadView({
     if (from < 0) return null;
     return messages.slice(from).find((m) => !folded.hidden.has(m.id))?.id ?? null;
   }, [newFrom, messages, folded]);
+  // While an agent thinks here, the face beside its newest message thinks too (a 32px live face changes pose only).
+  const thinkingFace = useMemo(() => {
+    const thinkers = new Set(typing.map((line) => typingLine(line).principalId).filter(Boolean));
+    if (!thinkers.size) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m && thinkers.has(m.authorId) && !folded.hidden.has(m.id) && !isDeletedMessage(m)) return m.id;
+    }
+    return null;
+  }, [typing, messages, folded]);
   // Before a reply that ran on something else than the previous one, a quiet divider (chat-runtime.md CR-07, AP-2696).
   const switches = useMemo(() => ranOnSwitches(messages.slice(1)), [messages]);
   // A long thread lets off-screen replies skip their layout and paint (WX-02).
@@ -633,7 +643,11 @@ export function ThreadView({
                           <T3Mark size={32} />
                         </span>
                       ) : (
-                        <PrincipalAvatar principal={author} size={32} />
+                        <PrincipalAvatar
+                          principal={author}
+                          size={32}
+                          state={m.id === thinkingFace ? 'thinking' : null}
+                        />
                       )}
                     </div>
                     <div className={styles.content}>

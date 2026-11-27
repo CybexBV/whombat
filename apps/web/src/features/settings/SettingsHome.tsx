@@ -1,7 +1,8 @@
 /**
  * Settings' home (`/settings`; the final design, docs/design-handoff/council-ui-2026-11/16-final/settings/,
  * docs/decisions/final-settings-vault-files-usage.md): **Often used** — Notifications, Phone app (the Phone app page,
- * saying which phone is in once one is) and Theme opening its Light / Dark / Auto choice in place — beside
+ * saying which phone is in once one is), Theme opening its Light / Dark / Auto choice in place and Moving faces, this
+ * device's switch for the agents' live faces — beside
  * **All settings**, the groups in their one order (You, the assistant by its name, Connections, This Whombat, News and
  * weather where this Whombat answers it, Screens where this Whombat has screens, Advanced), each with its own icon and
  * what it holds; This Whombat's says what needs you there while
@@ -10,6 +11,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { useFaceMotionSetting } from '@whombat/avatars/live';
 import {
   agentGroupParts,
   hasLooksAhead,
@@ -33,6 +35,7 @@ import {
   Settings as SettingsIcon,
   SlidersVertical,
   Smartphone,
+  Smile,
   User,
 } from 'lucide-react';
 import { Fragment, type ReactNode, useId, useMemo, useState } from 'react';
@@ -41,6 +44,7 @@ import { useTheme } from '../../app/theme';
 import { cx } from '../../components/cx';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { Toggle } from '../../components/Toggle';
 import { useWebI18n } from '../../i18n/provider';
 import { useSettingsHomeText, useThemeWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
@@ -128,6 +132,9 @@ export function SettingsHome({ burrow }: { burrow: string }) {
             </li>
             <li>
               <ThemeRow />
+            </li>
+            <li>
+              <MovingFacesRow />
             </li>
           </ul>
           {prefs.data === undefined && prefs.error ? (
@@ -339,5 +346,39 @@ function ThemeRow() {
         </div>
       ) : null}
     </>
+  );
+}
+
+const MOVING_FACES = {
+  title: 'Moving faces',
+  line: 'Faces blink and show what your agents are doing.',
+};
+
+/**
+ * Moving faces: this device's switch for the agents' live faces. Off, or with the system's reduce motion, a face still
+ * changes its expression but nothing moves. The whole row switches it.
+ */
+function MovingFacesRow() {
+  const [on, setOn] = useFaceMotionSetting();
+  const id = useId();
+  return (
+    <label className={p.row} htmlFor={id} data-settings-row="moving-faces">
+      <PlaceRowBody
+        icon={Smile}
+        name={MOVING_FACES.title}
+        line={MOVING_FACES.line}
+        nameId={`${id}-name`}
+        lineId={`${id}-line`}
+        end={
+          <Toggle
+            id={id}
+            checked={on}
+            onCheckedChange={setOn}
+            aria-labelledby={`${id}-name`}
+            aria-describedby={`${id}-line`}
+          />
+        }
+      />
+    </label>
   );
 }

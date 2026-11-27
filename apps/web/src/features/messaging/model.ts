@@ -3,7 +3,8 @@
  * (mentions and commands). Everything that formats copy comes from
  * `@whombat/core`; this only arranges it for the components and is unit-tested.
  */
-import { foldIntoRuns, type WorkLine } from '@whombat/client';
+import type { FaceState } from '@whombat/avatars/motion';
+import { ANSWERING_T3_CODE, foldIntoRuns, type ThreadWork, type WorkLine } from '@whombat/client';
 import {
   type Bootstrap,
   dayKey,
@@ -170,4 +171,56 @@ export function sameWorkLine(a: WorkLine | null | undefined, b: WorkLine | null 
     JSON.stringify(a.progress) === JSON.stringify(b.progress) &&
     JSON.stringify(a.members) === JSON.stringify(b.members)
   );
+}
+
+/* The assistant's face in a chat ------------------------------------------------------------------- */
+
+/** Thread work that is the agent thinking (its dots pulse): thinking, looking into a thread, answering T3 Code. */
+export const THINKING_WORK: ReadonlySet<string> = new Set([
+  'is thinking',
+  'is looking into it',
+  ANSWERING_T3_CODE,
+]);
+
+/**
+ * What the assistant's face beside its newest message shows: thinking or working while it is on the reply (its own turn,
+ * not work it handed to T3 Code), waiting while a run of its needs the person, sorry when that message is a turn that
+ * failed, else at rest.
+ */
+export function replyFaceState(
+  work: Pick<ThreadWork, 'text' | 'tone' | 'by'> | null,
+  failed: boolean,
+): FaceState {
+  if (work && !work.by) {
+    if (work.tone === 'warn') return 'needs';
+    return THINKING_WORK.has(work.text) ? 'thinking' : 'working';
+  }
+  return failed ? 'sorry' : 'idle';
+}
+
+/** An agent's turn that failed, and nobody has tried it again. */
+export function isFailedTurn(message: Pick<Message, 'card'>): boolean {
+  return message.card?.kind === 'turn_failed' && !message.card.retriedAt;
+}
+
+/**
+ * Where the assistant's live face goes in a chat: the row that shows the face of its newest message (a message that
+ * continues the one before shows none; the first of them does), and that message. Null until it has written.
+ */
+export function newestAgentFace(
+  days: readonly Pick<DayGroup, 'messages'>[],
+  isAgent: (message: Message) => boolean,
+  continued: (messages: readonly Message[], i: number) => boolean,
+): { rowId: string; message: Message } | null {
+  for (let d = days.length - 1; d >= 0; d--) {
+    const messages = days[d]?.messages ?? [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (!message || !isAgent(message)) continue;
+      let row = i;
+      while (row > 0 && continued(messages, row)) row--;
+      return { rowId: messages[row]?.id ?? message.id, message };
+    }
+  }
+  return null;
 }

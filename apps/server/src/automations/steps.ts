@@ -26,6 +26,7 @@ import { reportProduct } from '../trackers/connection';
 import { followFix, openedLine } from '../trackers/fixes';
 import { scopeReport } from '../trackers/items';
 import { replyLine } from '../trackers/reply';
+import { againMarkOf, goAgain } from './again';
 import { assessmentOutput, assessmentReported } from './assessment';
 import { keyDecision, publisherCheck } from './authority';
 import { MERGE_RERUN_MAX_CHECKS, MERGE_WORDS, mergeOutputOf } from './merge';
@@ -42,6 +43,7 @@ import { executeMergePullRequest } from './steps/merge-pull-request';
 import {
   alreadyOpenOutput,
   executeOpenPullRequest,
+  githubRetriesOf,
   openPrFrom,
   postPreparedPr,
   useOpenPr,
@@ -65,7 +67,13 @@ export { branchHead, stepBinding } from './steps/binding';
 export { stepRoomsCheck } from './steps/checks';
 export { dispatchResult } from './steps/dispatch-agent';
 export { commentPlan, NOTHING_TO_COMMENT_ON } from './steps/github-comment';
-export { alreadyOpenOutput, mayCommentOnPr, openedPr, openPrFrom } from './steps/open-pull-request';
+export {
+  alreadyOpenOutput,
+  githubRetriesOf,
+  mayCommentOnPr,
+  openedPr,
+  openPrFrom,
+} from './steps/open-pull-request';
 export {
   definitionStep,
   GateFactsInput,
@@ -109,6 +117,8 @@ export const StepOp = z.discriminatedUnion('op', [
     error: z.string().max(1000).nullable().optional(),
     /** For `pending`: a retry (attempt + 1, after a backoff). */
     retry: z.boolean().optional(),
+    /** The retry's backoff counts from this attempt, not the step's first (a later try at a fix starts its own). */
+    retryFrom: z.number().int().nonnegative().optional(),
     /** `request_approval`: ask again (a new approval) because the old one no longer covers it. */
     reRequest: z.boolean().optional(),
     /** The step's input summary from now on: a merge step's says what it found (“Checks failed on PR #10”, AR-46). */
@@ -180,6 +190,16 @@ export const StepOp = z.discriminatedUnion('op', [
     op: z.literal('turn_resume'),
     idx: z.number().int().nonnegative(),
     dispatchId: z.string(),
+  }),
+  /**
+   * A run that would end without its fix landing goes round again (`again.ts`): its steps from `fix` (or `review`) back
+   * to pending, when it still may. `max`: the most tries.
+   */
+  z.object({
+    op: z.literal('again'),
+    /** The fix branch's head as GitHub had it just before: a commit, no branch (`sha` null), or unread (null). */
+    head: z.object({ sha: z.string().max(100).nullable() }).nullable(),
+    max: z.number().int().positive(),
   }),
 ]);
 export type StepOp = z.infer<typeof StepOp>;
@@ -309,21 +329,27 @@ export const automationStep = defineCommand({
           const { queuedBehind: _noted, ...kept } = row.output as JsonObject;
           // A card of proposed connection actions tried again starts fresh: no earlier yes, and its names read again
           // from where the calls go now; only what the caller says (which connections changed since the yes) stays.
+          // Any other step keeps its output, with what the caller adds (how often it tried something again).
           const fresh = step.kind === 'connection_actions';
+          const added = (input.output ?? {}) as JsonObject;
           await updateStep(
             tx,
             run.id,
             input.idx,
             {
               ...(fresh
-                ? { output: (input.output ?? {}) as JsonObject }
+                ? { output: added }
                 : noted
-                  ? { inputSummary: noted.asked, output: kept }
-                  : {}),
+                  ? { inputSummary: noted.asked, output: { ...kept, ...added } }
+                  : input.output
+                    ? { output: { ...(row.output as JsonObject), ...added } }
+                    : {}),
               state: 'pending',
               attempt: row.attempt + 1,
               error: input.error ?? null,
-              wakeAt: input.retry ? new Date(ctx.now.getTime() + retryBackoffMs(row.attempt)) : null,
+              wakeAt: input.retry
+                ? new Date(ctx.now.getTime() + retryBackoffMs(row.attempt - (input.retryFrom ?? 0)))
+                : null,
               dispatchId: null,
               approvalId: null,
             },
@@ -492,6 +518,8 @@ export const automationStep = defineCommand({
         await publishRun(ctx, run.id);
         return { status: used };
       }
+      case 'again':
+        return goAgain(ctx, run, steps, input);
       case 'execute': {
         const row = steps[input.idx];
         if (row?.state !== 'pending') return { status: 'unchanged' };
@@ -793,6 +821,7 @@ export const openPrStep = defineCommand({
           publisher: who.publisher,
           output: { ...(row.output as JsonObject), command: null, ...alreadyOpenOutput(already, {}) },
           fields: {},
+          bodyOnIt: githubRetriesOf(row.output).open > 0,
         },
         announcePr,
       );
@@ -951,6 +980,8 @@ async function announcePr(
       for (const conversationId of jobs) await publishHandoffs(services, run.burrowId, conversationId);
     });
   }
+  // A later try finds the pull request its thread already heard about: nothing more to say there.
+  if (alreadyOpen && (await prSaidBefore(ctx.tx, run.id, number))) return null;
   const link = url ? `[PR #${number}](${url})` : `PR #${number}`;
   const report = scopeReport(run.scope);
   const product = report
@@ -971,6 +1002,15 @@ async function announcePr(
           : []),
       ].join(' '),
   );
+}
+
+/** Whether an earlier try of the run already said where pull request `number` is (`again.ts`). */
+async function prSaidBefore(db: Db, runId: string, number: number): Promise<boolean> {
+  const [fix] = await db
+    .select({ output: automationRunSteps.output })
+    .from(automationRunSteps)
+    .where(and(eq(automationRunSteps.runId, runId), eq(automationRunSteps.stepId, 'fix')));
+  return againMarkOf(fix?.output)?.prSaid === number;
 }
 
 /** The address of a pull request the burrow mirrors (null: not mirrored, or GitHub gave none). */

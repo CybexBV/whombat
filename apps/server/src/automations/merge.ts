@@ -34,6 +34,17 @@ export type MergeStep = Extract<AutomationStep, { kind: 'merge_pull_request' }>;
 export const MERGE_CHECKS_GRACE_MS = 10 * 60_000;
 
 /**
+ * The grace in a repository known to run no checks on its merges (`MergeHistory.quiet`). GitHub registers a pull
+ * request's checks within seconds, and the mirror reads a repository at least every three minutes even when nobody is
+ * there, so after four minutes a repository that just gained CI shows its checks as running, and the step then waits
+ * for them as usual.
+ */
+export const MERGE_NO_CHECKS_GRACE_MS = 4 * 60_000;
+
+/** How many merges without a single check make a repository known to run none: one or two could be chance. */
+export const QUIET_MERGES_KNOWN = 3;
+
+/**
  * How long a merge waits for a check its repository runs on its merges that hasn't reported at all, once the others
  * passed (TA-58): a check that still runs has the step's whole wait, one that never shows doesn't.
  */
@@ -105,6 +116,28 @@ export const MERGE_SUMMARIES = {
   unknown: (n: number) => `PR #${n} not found`,
 } as const;
 
+/**
+ * Why a merge step failed, kept on its row (`output.cause`) so what comes next reads it from there, never from its words:
+ * a run whose merge failed for something new commits can change goes round again (`again.ts`).
+ */
+export type MergeCause =
+  | 'unknown'
+  | 'closed'
+  | 'changed'
+  | 'review_changes'
+  | 'changes_requested'
+  | 'checks_failed'
+  | 'checks_failed_again'
+  | 'timed_out'
+  | 'missing_checks'
+  | 'no_checks'
+  | 'needs_review'
+  | 'refused'
+  /** GitHub refused it and says it clashes with its base branch (`mergeable_state` dirty). */
+  | 'conflict'
+  | 'merge_failed'
+  | 'declined';
+
 /** What a merge step's row keeps (`output`). */
 export interface MergeOutput {
   repo?: string;
@@ -120,6 +153,8 @@ export interface MergeOutput {
   rerun?: MergeRerun;
   /** Why it didn't run them once more, when the repository re-runs only infrastructure faults (merge-rerun.ts). */
   noRerun?: string;
+  /** Why it failed, once it did. */
+  cause?: MergeCause;
 }
 
 /** A merge step's one re-run of failed checks (AR-57). */
@@ -185,6 +220,14 @@ export async function mergePlan(
   };
 }
 
+/** What a repository's last merged pull requests into a base say about the checks it runs on its merges. */
+export interface MergeHistory {
+  /** The checks it runs on them (`expectedChecks`). */
+  expected: string[];
+  /** It merged at least `QUIET_MERGES_KNOWN` of them and none had a check at all. */
+  quiet: boolean;
+}
+
 /**
  * The checks a repository runs on its merges into `base` (TA-58): the names that passed on at least two of its last
  * five merged pull requests there (on its only one, when it merged one) and passed on the newest of them it reported
@@ -197,6 +240,16 @@ export async function expectedChecks(
   base: string,
   exceptPrId: string,
 ): Promise<string[]> {
+  return (await mergeHistory(db, repoId, base, exceptPrId)).expected;
+}
+
+/** `expectedChecks` and whether the same merges show the repository runs no checks at all (`MergeHistory`). */
+export async function mergeHistory(
+  db: Db,
+  repoId: string,
+  base: string,
+  exceptPrId: string,
+): Promise<MergeHistory> {
   const merged = await db
     .select({ id: pullRequests.id })
     .from(pullRequests)
@@ -210,7 +263,7 @@ export async function expectedChecks(
     )
     .orderBy(desc(pullRequests.mergedAt))
     .limit(5);
-  if (!merged.length) return [];
+  if (!merged.length) return { expected: [], quiet: false };
   const rows = await db
     .select({ prId: prChecks.prId, name: prChecks.name, state: prChecks.state })
     .from(prChecks)
@@ -220,10 +273,13 @@ export async function expectedChecks(
         merged.map((m) => m.id),
       ),
     );
-  return usualChecks(
-    merged.map((m) => m.id),
-    rows,
-  );
+  return {
+    expected: usualChecks(
+      merged.map((m) => m.id),
+      rows,
+    ),
+    quiet: merged.length >= QUIET_MERGES_KNOWN && !rows.length,
+  };
 }
 
 /**
@@ -303,7 +359,7 @@ export type MergeReadiness =
   /** Someone merged it meanwhile: the step succeeds. */
   | { kind: 'merged'; summary: string }
   /** A person should look: the step fails with this line. */
-  | { kind: 'fail'; error: string; summary: string }
+  | { kind: 'fail'; error: string; summary: string; cause: MergeCause }
   /** Checks failed in GitHub Actions: run these workflow runs' failed jobs once more and keep waiting (AR-57). */
   | { kind: 'rerun'; runIds: number[]; checks: MergeRerun['checks']; summary: string }
   /** Merge it now; `reviewed`: the run's own review approved exactly its head. */
@@ -314,8 +370,9 @@ export type MergeReadiness =
  * of that head and its reviews — and the run's own review. In this order: merged meanwhile (succeeded); closed; changed
  * after the run's review (its head isn't the commit the review read); the review asked for changes; someone requested
  * changes; checks failed (run once more first when GitHub Actions can, `failedChecks`); checks passed (merge); checks
- * running (wait, until `waitMinutes` after it began waiting); no checks (wait up to `MERGE_CHECKS_GRACE_MS` after the
- * pull request opened — never past its wait — then merge; a report's fix only on the run's review of its head). Pure.
+ * running (wait, until `waitMinutes` after it began waiting); no checks (wait up to the grace after the pull request
+ * opened — never past its wait — then merge; a report's fix only on the run's review of its head). The grace is
+ * `MERGE_CHECKS_GRACE_MS`, and `MERGE_NO_CHECKS_GRACE_MS` in a repository known to run no checks (`quiet`). Pure.
  */
 export function mergeReadiness(p: {
   number: number;
@@ -331,26 +388,30 @@ export function mergeReadiness(p: {
   expected?: readonly string[];
   /** Never merge without checks (a fix of a customer's report, TA-58). */
   requireChecks?: boolean;
+  /** The repository is known to run no checks on its merges (`MergeHistory.quiet`): the shorter grace applies. */
+  quiet?: boolean;
 }): MergeReadiness {
   const n = p.number;
   const S = MERGE_SUMMARIES;
-  const fail = (summary: string, error: string) => ({ kind: 'fail', error, summary }) as const;
-  if (!p.target) return fail(S.unknown(n), MERGE_WORDS.unknown(n, p.repo));
+  const fail = (summary: string, error: string, cause: MergeCause) =>
+    ({ kind: 'fail', error, summary, cause }) as const;
+  if (!p.target) return fail(S.unknown(n), MERGE_WORDS.unknown(n, p.repo), 'unknown');
   const { row, pr } = p.target;
   if (row.state === 'merged') return { kind: 'merged', summary: S.merged(n) };
-  if (row.state !== 'open') return fail(S.closed(n), MERGE_WORDS.closed(n));
+  if (row.state !== 'open') return fail(S.closed(n), MERGE_WORDS.closed(n), 'closed');
   const review = p.review;
   if (review?.verdict === 'approve' && review.head && !sameSha(review.head, row.headSha))
-    return fail(S.changed(n), MERGE_WORDS.changed(n));
+    return fail(S.changed(n), MERGE_WORDS.changed(n), 'changed');
   if (review?.verdict === 'changes_needed')
-    return fail(S.reviewAskedChanges(n), MERGE_WORDS.reviewAskedChanges(n));
+    return fail(S.reviewAskedChanges(n), MERGE_WORDS.reviewAskedChanges(n), 'review_changes');
   if (pr.reviewers.some((r) => r.state === 'changes_requested'))
-    return fail(S.changesRequested(n), MERGE_WORDS.changesRequested(n));
+    return fail(S.changesRequested(n), MERGE_WORDS.changesRequested(n), 'changes_requested');
   const reviewed = review?.verdict === 'approve' && !!review.head;
   const checks = checksState(pr.checks);
   const timeout = p.waitingSince.getTime() + p.waitMinutes * 60_000;
   if (checks === 'failed') return failedChecks(n, p.repo, pr.checks, p.rerun, p.now.getTime(), timeout);
   const expected = p.expected ?? [];
+  const grace = p.quiet && !expected.length ? MERGE_NO_CHECKS_GRACE_MS : MERGE_CHECKS_GRACE_MS;
   if (checks === 'passed') {
     // The checks this repository runs on its merges must have reported too: some only report once they finish (TA-58).
     const missing = expected.filter((name) => !pr.checks.some((c) => c.name === name));
@@ -358,13 +419,13 @@ export function mergeReadiness(p: {
     const settling =
       !expected.length &&
       p.requireChecks === true &&
-      p.now.getTime() < Math.max(row.openedAt.getTime(), p.waitingSince.getTime()) + MERGE_CHECKS_GRACE_MS;
+      p.now.getTime() < Math.max(row.openedAt.getTime(), p.waitingSince.getTime()) + grace;
     if (!missing.length && !settling) return { kind: 'merge', reviewed, summary: S.passed(n) };
     if (!missing.length) return { kind: 'wait' };
     // A check that never reports is left for a person sooner than one that still runs (TA-58).
     const missingBy = Math.min(timeout, p.waitingSince.getTime() + MERGE_MISSING_CHECKS_MS);
     return p.now.getTime() > missingBy
-      ? fail(S.missing(n), MERGE_WORDS.missing(n, missing))
+      ? fail(S.missing(n), MERGE_WORDS.missing(n, missing), 'missing_checks')
       : { kind: 'wait' };
   }
   if (checks === 'none') {
@@ -373,14 +434,16 @@ export function mergeReadiness(p: {
     // thread before it pushes: a customer's report's fix merges there only on the run's own review of this very head.
     if (expected.length || (p.requireChecks && !reviewed))
       return p.now.getTime() > Math.min(timeout, p.waitingSince.getTime() + MERGE_MISSING_CHECKS_MS)
-        ? fail(S.noChecks(n), MERGE_WORDS.noChecks(n))
+        ? fail(S.noChecks(n), MERGE_WORDS.noChecks(n), 'no_checks')
         : { kind: 'wait' };
     const opened = Math.min(row.openedAt.getTime(), p.waitingSince.getTime());
-    return p.now.getTime() >= Math.min(opened + MERGE_CHECKS_GRACE_MS, timeout)
+    return p.now.getTime() >= Math.min(opened + grace, timeout)
       ? { kind: 'merge', reviewed, summary: S.none(n) }
       : { kind: 'wait' };
   }
-  return p.now.getTime() > timeout ? fail(S.timedOut(n), MERGE_WORDS.timedOut(n)) : { kind: 'wait' };
+  return p.now.getTime() > timeout
+    ? fail(S.timedOut(n), MERGE_WORDS.timedOut(n), 'timed_out')
+    : { kind: 'wait' };
 }
 
 /**
@@ -399,11 +462,21 @@ function failedChecks(
 ): MergeReadiness {
   const S = MERGE_SUMMARIES;
   const failed = all.filter((c) => c.state === 'failed');
-  const leave = { kind: 'fail', error: MERGE_WORDS.checksFailed(n), summary: S.failed(n) } as const;
+  const leave = {
+    kind: 'fail',
+    error: MERGE_WORDS.checksFailed(n),
+    summary: S.failed(n),
+    cause: 'checks_failed',
+  } as const;
   if (rerun) {
     const asked = new Map(rerun.checks.map((c) => [c.name, c.url]));
     if (!failed.some((c) => asked.get(c.name) === c.url))
-      return { kind: 'fail', error: MERGE_WORDS.checksFailedAgain(n), summary: S.failedAgain(n) };
+      return {
+        kind: 'fail',
+        error: MERGE_WORDS.checksFailedAgain(n),
+        summary: S.failedAgain(n),
+        cause: 'checks_failed_again',
+      };
     return now < Date.parse(rerun.at) + MERGE_RERUN_SEEN_MS && now <= timeout ? { kind: 'wait' } : leave;
   }
   // Many failing at once is no flaky test (and more than a step notes).

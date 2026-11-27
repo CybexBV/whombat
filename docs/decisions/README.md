@@ -327,6 +327,8 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
 - `fixtures.md` — the mock world as typed fixtures.
 - `client.md` — `@whombat/client`.
 - `tokens-primitives.md`, `brand.md`, `crew.md` — tokens, the logo, the five faces' art (*crew in part*).
+- `face-motion.md` — the live face: states, poses from the drawn expressions, gestures, sizes, motion modes, the box's
+  calm screen, Moving faces.
 - `web-shell.md`, `messaging.md`, `cards.md`, `runs-approvals.md`, `audit-search.md`, `canvas-editor.md`,
   `canvas-onboarding.md`, `states.md`, `accessibility.md`, `visual-regression.md` — the web app's workstreams
   (*messaging, canvas-onboarding in part*).

@@ -14,7 +14,7 @@ import type { Message, Principal, Receipt } from '@whombat/core';
 import { Children, memo, type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { type AccessibilityActionEvent, Pressable, View } from 'react-native';
 import { NativeMenuView } from '../../modules/whombat-menu';
-import { PrincipalAvatar } from '../avatars/Avatars';
+import { ReplyFace, type ReplyPlace } from '../avatars/ReplyFace';
 import { useBurrowBase, useNowLabel } from '../data/BurrowProvider';
 import type { FileAccess } from '../data/fileAccess';
 import type { GuideWeb } from '../data/guides';
@@ -221,6 +221,8 @@ export interface MessageRowProps {
   movedCard?: MovedCardLink | null;
   /** Under the message, outside its long press: an ended T3 Code job's parts that stay where it finished. */
   below?: ReactNode;
+  /** The assistant's newest message in Chat: its face shows what the assistant does about the next reply. */
+  liveFace?: ReplyPlace | null;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -252,6 +254,7 @@ export const MessageRow = memo(function MessageRow({
   jobLine = null,
   movedCard = null,
   below = null,
+  liveFace = null,
 }: MessageRowProps) {
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
@@ -711,7 +714,9 @@ export const MessageRow = memo(function MessageRow({
         >
           {item.showAuthor ? (
             <AuthorLine
-              avatar={<PrincipalAvatar principal={author} size={24} />}
+              avatar={
+                <ReplyFace principal={author} size={24} live={liveFace} failed={item.turnFailed !== null} />
+              }
               name={bare ? null : item.authorName}
               time={item.edited ? `${time} (edited)` : time}
               // An automation posts as itself: “Automation” beside its name, its mark for a face (AP-1000).

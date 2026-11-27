@@ -5,12 +5,26 @@ them once they have been tried on Beta.
 
 ## 27 November 2026
 
+- Your agent’s face shows what it’s doing: it thinks, works, waits for you, is glad when a run is done and says sorry
+  when one fails. It blinks, has a little move of its own, and you can tap it. Turn it off under Settings → Moving
+  faces.
+- On your Whombat’s screen the face listens, thinks and talks along with a spoken answer, and dozes while nobody’s
+  there.
 - This page is in the app now: open What’s new under Settings → This Whombat → About. After an update, the app
   tells you once, with a link here.
 - An automation that fixes a report keeps going after you send its T3 Code thread more work from the report’s own
   Chat thread: it can still read that thread and its review.
 - Restarting such a run never skips a review that asked for changes, and the fix is told to keep the commits its
   review read.
+- A fix that doesn’t get through is worked on again by itself: when its review asks for changes, a step fails or
+  the pull request’s checks fail, Whombat sends it back, up to ten tries, and asks for you only when that no longer
+  helps.
+- A report automation can ask for up to ten review rounds instead of three.
+- A fix’s review now says which of its findings are blocking and which can wait. Only blocking ones hold a fix up;
+  the rest are written down in the pull request, so a fix isn’t reviewed round after round over small things.
+- In a repository that runs no checks, a reviewed fix merges after four minutes instead of ten.
+- When GitHub fails for a moment while a pull request is opened, Whombat tries again by itself.
+- Three report fixes can be worked on at the same time instead of two.
 
 ## 22 November 2026
 
