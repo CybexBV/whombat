@@ -6,7 +6,7 @@
  * limits; a run stopped just as it would go again stays stopped; and a fix branch GitHub can't read is no progress.
  */
 import type { AutomationDefinitionInput, AutomationRun } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { automations, dispatches, events } from '../db/schema/index';
 import { FakeGitHub } from '../github/fake';
@@ -119,6 +119,8 @@ const againEvents = async (runId: string) =>
       .select()
       .from(events)
       .where(and(eq(events.type, 'automation.run.again')))
+      // In the order they were written: without it Postgres may answer them in any order.
+      .orderBy(asc(events.seq))
   ).filter((e) => (e.payload as { runId?: unknown }).runId === runId);
 
 const CHANGES = 'Changes needed: the new test passes on main too.';

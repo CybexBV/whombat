@@ -585,10 +585,14 @@ describe('a fix whose merge didn’t get through goes round again by itself', ()
     expect(told).not.toContain('"tries"');
     const line = 'The pull request’s checks failed, so the fix is being worked on again (try 2 of 10).';
     expect((await threadLines(runId, id)).filter((t) => t === line)).toHaveLength(1);
-    const [again] = await w.services.db
-      .select()
-      .from(events)
-      .where(and(eq(events.type, 'automation.run.again')));
+    // This run's own: other tests in this file go round again too.
+    const [again] = (
+      await w.services.db
+        .select()
+        .from(events)
+        .where(and(eq(events.type, 'automation.run.again')))
+        .orderBy(asc(events.seq))
+    ).filter((e) => (e.payload as { runId?: unknown }).runId === runId);
     expect(again?.payload).toMatchObject({ runId, fromStepId: 'fix', cause: 'checks_failed', tries: 2 });
 
     // The fix pushes a new commit; the review approves it; the pull request already open is the one.
