@@ -468,6 +468,14 @@ export const NEWS_WORDS = {
   /** The `news` widget with no site on, and with none read. */
   widgetEmpty: 'Choose your news in Settings',
   widgetProblem: 'Can’t read the news just now',
+  // phone
+  /** A suggestion that is on already, where the others say Add. */
+  isOn: 'On',
+  /** YOUR SOURCES' order on the phone: a mode with Move up and Move down on each row. */
+  order: 'Change order',
+  orderDone: 'Done',
+  moveUp: 'Move {name} up',
+  moveDown: 'Move {name} down',
 } as const;
 
 /** A topic's name (“Tech”). */
