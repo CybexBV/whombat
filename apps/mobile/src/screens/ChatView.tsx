@@ -47,6 +47,7 @@ import {
   type GuideActInput,
   guideFailureText,
   guideRefusalOf,
+  isAutomationPrincipal,
   PROMPT_WORDS,
   thingMark,
   threadHandoffs,
@@ -109,6 +110,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeMenuView } from '../../modules/whombat-menu';
+import type { ReplyPlace } from '../avatars/ReplyFace';
 import { fromDocumentAsset, type PickedFile } from '../data/attachments';
 import { useBurrow, useNowLabel, useNowStore } from '../data/BurrowProvider';
 import { PROMPTS_ADD, PROMPTS_HINT, threadReadable, threadReadUpTo } from '../data/chatInbox';
@@ -828,6 +830,21 @@ export function ChatView({
   );
   keptItems.current = items;
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  // In Chat the assistant's newest face shows what it does about the next reply; every older face stays still.
+  const replyPlace = useMemo<ReplyPlace | null>(
+    () => (chatRoom === 'chat' && conversationId ? { conversationId, threadRootId } : null),
+    [chatRoom, conversationId, threadRootId],
+  );
+  const liveFaceAt = useMemo(() => {
+    if (!replyPlace) return null;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (!item?.showAuthor) continue;
+      const author = people.get(item.authorId);
+      if (author?.kind === 'agent' && !isAutomationPrincipal(author)) return item.id;
+    }
+    return null;
+  }, [replyPlace, items, people]);
   // Work in the threads under this conversation's roots (AP-735): asked for when a root here has replies, and in a
   // threaded room, where the agent answers every top-level message in a thread under it.
   const threadWork = useThreadWork(
@@ -1379,6 +1396,7 @@ export function ChatView({
           jobLine={roomTop ? jobLineFor(item.id) : null}
           movedCard={cardLinks.get(item.id) ?? null}
           below={item.id === footerAt ? footer : null}
+          liveFace={item.id === liveFaceAt ? replyPlace : null}
         />
       );
     },
@@ -1416,6 +1434,8 @@ export function ChatView({
       earlierRow,
       roomTop,
       threadUnread,
+      liveFaceAt,
+      replyPlace,
     ],
   );
 

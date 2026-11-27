@@ -23,6 +23,7 @@ import type { ChatRoom } from '@whombat/core';
 import { type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform, useWindowDimensions, View } from 'react-native';
 import { WhombatAvatar } from '../avatars/Avatars';
+import { LiveFace } from '../avatars/LiveFace';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { CHAT_COPY } from '../data/chatRoom';
 import { fitHeaderButtons, HEADER_GAP, type HeaderButtonSpec } from '../data/headerFit';
@@ -198,7 +199,7 @@ function RoomBody({
     <RoomEmpty
       avatar={
         agent ? (
-          <WhombatAvatar face={agentFaceOf(agent)} size={44} label={agent.name} />
+          <LiveFace face={agentFaceOf(agent)} size={44} label={agent.name} pokeable />
         ) : (
           <WhombatAvatar size={44} silhouette />
         )
@@ -328,7 +329,7 @@ export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom
             <RoomEmpty
               avatar={
                 agent ? (
-                  <WhombatAvatar face={agentFaceOf(agent)} size={44} label={agent.name} />
+                  <LiveFace face={agentFaceOf(agent)} size={44} label={agent.name} pokeable />
                 ) : (
                   <WhombatAvatar size={44} silhouette />
                 )
