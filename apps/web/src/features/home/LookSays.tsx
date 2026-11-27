@@ -1,7 +1,7 @@
-import { WhombatAvatar } from '@whombat/avatars/react';
 import type { LookResearchView } from '@whombat/client';
 import type { AgentFace } from '@whombat/core';
 import { cx } from '../../components/cx';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import styles from './LookSays.module.css';
 
 /**
@@ -25,7 +25,14 @@ export function LookSays({
 }) {
   return (
     <p className={cx(styles.says, className)} data-look-says={view.state}>
-      <WhombatAvatar face={face} crop="head" size={size} label={name} className={styles.face} />
+      {/* Thinking while it works on it; under 25px, the size cards use, it is the still small head. */}
+      <LiveAgentFace
+        face={face}
+        size={size}
+        label={name}
+        state={view.busy ? 'thinking' : 'idle'}
+        className={styles.face}
+      />
       <span>
         {view.busy ? <span className={styles.spin} aria-hidden="true" /> : null}
         {view.text}

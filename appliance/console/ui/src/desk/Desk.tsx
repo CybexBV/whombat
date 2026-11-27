@@ -50,6 +50,7 @@ import {
   type ServerRange,
 } from '../lib/desk';
 import { DESK, DESK_WORDS, fill } from '../lib/deskCopy';
+import { deskMood, facesAsleep, talkFace } from '../lib/deskFace';
 import { lockedDesk, unlockLapsed } from '../lib/deskHold';
 import {
   type AskSig,
@@ -103,7 +104,7 @@ import { CalmGlance } from './Calm';
 import styles from './desk.module.css';
 import { ClockOnly, Glance, type GlanceProps } from './Glance';
 import { Night, Pairing } from './Night';
-import { LockChip } from './parts';
+import { FaceMood, LockChip } from './parts';
 import {
   GridGlance,
   type MonitorMode,
@@ -331,6 +332,11 @@ export function Desk({
   // when it dimmed (DK-97). The glance itself only shows while someone uses or looks at it, so it stays put.
   const night = burnIn(now - lastUse, scene === 'night');
   const drift = scene === 'idle' ? driftAt(now - (idleSince.current ?? now)) : night.dimmed ? night : null;
+  // The glance's faces doze while nobody's there and in quiet hours, and say hello when someone is back.
+  const asleep = facesAsleep(scene, paired?.quiet === true);
+  const dozed = useRef(false);
+  if (asleep) dozed.current = true;
+  const mood = deskMood(asleep, dozed.current);
 
   // The ask the sheet shows, kept when it leaves the glance (answered somewhere else); dropped when the screen locks,
   // and drawn locked without its words or buttons (CG-50).
@@ -1168,6 +1174,7 @@ export function Desk({
         dictation={dictation}
         pageNow={now}
         thinking={waiting || convoWorking}
+        faceState={talkFace({ dictation, pageNow: now, talk, followed, speaking, convoWorking })}
         startAtTop={initial?.convoTop}
         canOpenAsk={(n) => glance?.needsYou.items.some((a) => a.number === n) ?? false}
         onOpenAsk={openAsk}
@@ -1562,27 +1569,29 @@ export function Desk({
         data-overflow-ok={drift ? true : undefined}
         style={drift ? { transform: `translate(${drift.x}px, ${drift.y}px)` } : undefined}
       >
-        {body}
+        <FaceMood value={mood}>{body}</FaceMood>
       </div>
       {sheet}
       {att.glow && !sheet && !modalPops && <div className={styles.glow} />}
       {monitorsHost &&
         placed.length > 1 &&
         createPortal(
-          <MonitorScreens
-            monitors={placed.slice(1)}
-            grids={glance?.outputs ?? []}
-            mode={monitorMode(scene, held)}
-            calm={glance?.calm ?? null}
-            name={desk.name ?? burrow ?? ''}
-            assistant={paired?.assistant.name ?? ''}
-            face={paired?.assistant.face ?? null}
-            now={serverNow}
-            timeZone={paired?.timeZone ?? 'UTC'}
-            unlocked={unlocked}
-            onlyTime={!unlocked && paired?.lockedView === 'time'}
-            loadImage={loadImage}
-          />,
+          <FaceMood value={mood}>
+            <MonitorScreens
+              monitors={placed.slice(1)}
+              grids={glance?.outputs ?? []}
+              mode={monitorMode(scene, held)}
+              calm={glance?.calm ?? null}
+              name={desk.name ?? burrow ?? ''}
+              assistant={paired?.assistant.name ?? ''}
+              face={paired?.assistant.face ?? null}
+              now={serverNow}
+              timeZone={paired?.timeZone ?? 'UTC'}
+              unlocked={unlocked}
+              onlyTime={!unlocked && paired?.lockedView === 'time'}
+              loadImage={loadImage}
+            />
+          </FaceMood>,
           monitorsHost,
         )}
     </div>

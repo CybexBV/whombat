@@ -21,6 +21,7 @@ import {
 } from '../lib/calm';
 import type { DeskGlance, DeskLook, DeskPaired, DeskPower } from '../lib/desk';
 import { ago, clockText, DESK_WORDS, dateText, duration, fill, powerChip } from '../lib/deskCopy';
+import { researchFace } from '../lib/deskFace';
 import { type LookStage, lookStep, researchSays } from '../lib/needsYou';
 import { chipView } from '../lib/wifiCopy';
 import { Bars, Icon as WifiIcon } from '../wifi/icons';
@@ -387,7 +388,7 @@ function Hero(props: CalmProps & { hero: CalmHero }) {
         <span className={styles.heroTitle}>{title}</span>
         {says ? (
           <span className={styles.heroSays}>
-            <Face face={paired.assistant.face} size={36} />
+            <Face face={paired.assistant.face} size={36} state={researchFace(stage)} />
             <span className={styles.heroSaysText}>
               {(stage === 'looking' || stage === 'fixing') && (
                 <span className={styles.spinner} aria-hidden="true" />

@@ -8,11 +8,16 @@
     ".": "./src/index.ts",
     "./react": "./src/react.tsx",
     "./urls": "./src/urls.ts",
+    "./face": "./src/face.ts",
+    "./motion": "./src/faceMotion.ts",
+    "./live": "./src/live.tsx",
+    "./puppet": "./src/puppet.ts",
     "./svg/*": "./svg/*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "face-data": "tsx scripts/face-data.ts"
   },
   "peerDependencies": {
     "react": "^19.0.0"

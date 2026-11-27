@@ -5,6 +5,7 @@
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { FACE_MOTION_KEY } from '@whombat/avatars/live';
 import type { AgentSetupStatus } from '@whombat/core/domain';
 import { burrow } from '@whombat/fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -84,6 +85,19 @@ describe('Settings’ home (final-settings-vault-files-usage.md)', () => {
     expect(screen.queryByText('AI PROVIDER')).toBeNull();
     await user.click(screen.getByRole('link', { name: 'Back to Settings' }));
     await waitFor(() => expect(app.location()).toBe('/settings'));
+  });
+
+  it('switches this device’s moving faces from Often used', async () => {
+    const user = userEvent.setup();
+    renderApp('/settings', world());
+    const often = await screen.findByRole('region', { name: 'Often used' });
+    const faces = within(often).getByRole('switch', { name: 'Moving faces' });
+    expect(faces.getAttribute('aria-checked')).toBe('true');
+    await user.click(faces);
+    expect(faces.getAttribute('aria-checked')).toBe('false');
+    expect(localStorage.getItem(FACE_MOTION_KEY)).toBe('off');
+    await user.click(faces);
+    expect(localStorage.getItem(FACE_MOTION_KEY)).toBeNull();
   });
 
   it('keeps every row working when your saved settings can’t be read, with Try again', async () => {

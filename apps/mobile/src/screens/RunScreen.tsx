@@ -13,7 +13,8 @@ import { useRun, useSubscription } from '@whombat/client/react';
 import { topics } from '@whombat/core';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WhombatAvatar } from '../avatars/Avatars';
+import { runFaceState } from '../avatars/faceEngine';
+import { LiveFace } from '../avatars/LiveFace';
 import { useBurrow, useViewContext } from '../data/BurrowProvider';
 import { whereOf } from '../data/people';
 import { pullRequestTarget } from '../data/pullRequest';
@@ -212,7 +213,12 @@ export function RunScreen({ route, navigation }: Props) {
       >
         <View style={{ alignItems: 'center', gap: 10, paddingHorizontal: 22 }}>
           {model.agentFace ? (
-            <WhombatAvatar face={model.agentFace} size={112} label={model.agentName} />
+            <LiveFace
+              face={model.agentFace}
+              size={112}
+              state={runFaceState(detail.run)}
+              label={model.agentName}
+            />
           ) : null}
           <View
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}

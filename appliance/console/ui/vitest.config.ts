@@ -7,6 +7,7 @@ export default defineConfig({
   // The pure vendored modules the logic imports (vite.config.ts has the rest).
   resolve: {
     alias: [
+      { find: '@whombat/avatars/motion', replacement: vendor('avatars/src/faceMotion.ts') },
       { find: '@whombat/avatars', replacement: vendor('avatars/src/index.ts') },
       { find: '@whombat/brand', replacement: vendor('brand/src/index.ts') },
       { find: '@whombat/screen/react', replacement: vendor('screen/src/react.tsx') },

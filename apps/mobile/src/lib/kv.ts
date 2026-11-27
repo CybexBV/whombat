@@ -20,6 +20,8 @@ export const STORAGE_KEYS = {
   chatFullWidth: 'whombat.chatFullWidth',
   /** With two pages, the other tabs whose list is hidden while something is open beside it (`Dashboard,Automations`). */
   fullWidthTabs: 'whombat.fullWidthTabs',
+  /** `off` while this phone's “Moving faces” is off; absent: on. */
+  faceMotion: 'whombat.faceMotion',
 } as const;
 
 export function memoryStore(initial: Record<string, string> = {}): KeyValueStore & {

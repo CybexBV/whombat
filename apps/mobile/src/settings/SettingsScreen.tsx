@@ -1,8 +1,8 @@
 /**
  * The Settings tab (the final design, docs/design-handoff/council-ui-2026-11/16-final/settings/,
  * docs/decisions/final-settings-vault-files-usage.md; settings-tab-android.md AP-2620…AP-2627), the same on iPhone and
- * Android: the title and one line, a newer app on top (`UpdateCard`), **Often used** — Notifications on a Whombat, and
- * the theme (Light · Dark · Auto, saved to the account) — then **All settings**, the groups in the web's order:
+ * Android: the title and one line, a newer app on top (`UpdateCard`), **Often used** — Notifications on a Whombat, the
+ * theme (Light · Dark · Auto, saved to the account) and Moving faces (this phone's own) — then **All settings**, the groups in the web's order:
  * You (your face and what You holds), the assistant by its name (its face, what it runs on or its AI sign-in in
  * trouble), Connections (what needs you, else how many are connected), This Whombat, News and weather (where the
  * Whombat is and the news it reads, where it answers them), Screens where it has them, and
@@ -55,6 +55,7 @@ import { Segmented } from '../ui/Segmented';
 import { useBottomRoom } from '../ui/screenBottom';
 import { TabTop } from '../ui/topRow';
 import { useSetTheme } from './accountTheme';
+import { FaceMotionRow } from './FaceMotionRow';
 import { youLine, youPartsHere } from './groups';
 import { SETTINGS_TEXT, type SettingsRowKey, type SettingsRowView } from './list';
 import { UpdateCard } from './UpdateCard';
@@ -190,6 +191,7 @@ export function SettingsScreen() {
               />
             ) : null}
             <ThemeRow first={!notifications} />
+            <FaceMotionRow />
           </PlaceCard>
           {/* This Whombat's state is read here; while it loads or can't be read, every row still works. */}
           {managed && applianceLine === null ? (

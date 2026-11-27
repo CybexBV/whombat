@@ -41,6 +41,7 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Input } from '../../components/Input';
 import { useToast } from '../../components/Toast';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import { agentNameProblem } from '../agent/settings/ProfileTab';
 import faceStyles from '../agent/settings/ProfileTab.module.css';
 import { AiSetup, useClientsStatus, useSignInsStatus } from '../ai';
@@ -493,13 +494,7 @@ export function OnboardingScreen({
           {step === AGENT_STEP && (
             <div className={styles.meetAgent}>
               <span className={styles.meetBust} style={{ background: agentFaceBackground(shownFace) }}>
-                <WhombatAvatar
-                  face={shownFace}
-                  size={128}
-                  crop="bust"
-                  eager
-                  label={agentFaceLabel(shownFace)}
-                />
+                <MeetFace face={shownFace} />
               </span>
               <div className={styles.meetFields}>
                 <label htmlFor="onboarding-agent-name" className={styles.label}>
@@ -611,5 +606,24 @@ export function OnboardingScreen({
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * The agent met for the first time, big: it wakes and greets the person when the step shows, a tap pokes it, and a face
+ * just picked plays its own move.
+ */
+function MeetFace({ face }: { face: AgentFace }) {
+  return (
+    <LiveAgentFace
+      face={face}
+      size={128}
+      eager
+      label={agentFaceLabel(face)}
+      state="welcome"
+      greet
+      pokeable
+      gestureKey={face}
+    />
   );
 }

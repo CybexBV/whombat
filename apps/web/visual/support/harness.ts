@@ -4,7 +4,7 @@
  * - `test` routes unpkg and Google Fonts through the disk cache with retries (tools/visual `network.ts`).
  * - `openApp` opens the web app (fixture mode) deterministically: theme in localStorage and the colour scheme, macOS
  *   platform (B-03: the ⌘K hint), clock frozen at 2026-09-23 11:22 Europe/Amsterdam, fixed viewport.
- * - `settle` waits for network idle, the web fonts (not a fallback) and two frames.
+ * - `settle` waits for network idle, the web fonts (not a fallback), every live agent face drawn and two frames.
  * - `patchQueries` / `neutraliseWorld` patch the cached fixture data where the fixture world differs from
  *   the mock's hard-coded seed (documented per call site, never a mask).
  * - `deviationMasks` returns the only masks the suite allows: Lucide icons in the mock's glyph slots
@@ -71,12 +71,25 @@ export async function openApp(page: Page, { path, theme, width = 1440, height = 
   await page.goto(path);
 }
 
-/** Network idle, web fonts loaded, two animation frames and a short settle. */
+/** Network idle, web fonts loaded, the live faces drawn, two animation frames and a short settle. */
 export async function settle(page: Page, ms = 250): Promise<void> {
   await page.waitForLoadState('networkidle');
   await waitForWebFonts(page);
+  await waitForFaces(page);
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.waitForTimeout(ms);
+}
+
+/**
+ * Every live agent face drawn: the still file it shows first is gone and its drawing is in. A browser driven by tests
+ * gets faces that change pose without moving (the app's `LiveAgentFace`), so once drawn a face stays as it is.
+ */
+export async function waitForFaces(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('[data-live-face]')].every(
+      (face) => !face.querySelector(':scope > img') && face.querySelector('[data-face-svg]'),
+    ),
+  );
 }
 
 /**

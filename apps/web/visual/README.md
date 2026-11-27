@@ -8,3 +8,6 @@ extend it: `tools/visual/README.md`. Shared helpers: `support/harness.ts`. The H
   fixture app's query cache.
 - `cards.html` / `avatars.html` — dev-only harness pages served by Vite at `/visual/…`.
 - `__screenshots__/` — baselines (`toHaveScreenshot`), one set for every platform.
+
+Live agent faces (`LiveAgentFace`) change pose without moving in a browser driven by tests, and `settle` waits until
+each one has replaced its still file with its drawing, so a shot never catches a blink or the swap.

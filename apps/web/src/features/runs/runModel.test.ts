@@ -1,7 +1,7 @@
 import type { Run } from '@whombat/core';
 import { run as fixtureRun } from '@whombat/fixtures';
 import { describe, expect, it } from 'vitest';
-import { runAttention, runControls, runDot, runNotice } from './runModel';
+import { runAttention, runControls, runDot, runFaceState, runNotice } from './runModel';
 
 const _TZ = 'Europe/Amsterdam';
 const names = {
@@ -50,5 +50,33 @@ describe('Try again and attention (CT-197, AP-596, AP-597)', () => {
     expect(runAttention({ status: 'live' })).toBeNull();
     expect(runAttention({ status: 'live', attention: '  ' })).toBeNull();
     expect(runAttention({ status: 'failed', attention: text })).toBeNull();
+  });
+});
+
+describe('the agent’s face in the header', () => {
+  const started: Run = { ...fixtureRun, status: 'live', attention: null, progress: 40 };
+
+  it('thinks until the run has started on something, then works', () => {
+    const queued: Run = {
+      ...started,
+      progress: 0,
+      logCount: 0,
+      steps: started.steps.map((s) => ({ ...s, state: 'queued' as const, at: null })),
+    };
+    expect(runFaceState(queued)).toBe('thinking');
+    expect(runFaceState(started)).toBe('working');
+  });
+
+  it('waits for the person when the run needs one', () => {
+    expect(runFaceState({ ...started, attention: 'Banjo stopped without finishing this run.' })).toBe(
+      'needs',
+    );
+  });
+
+  it('is glad when done, sorry when failed and rests when paused or taken over', () => {
+    expect(runFaceState({ ...started, status: 'done' })).toBe('done');
+    expect(runFaceState({ ...started, status: 'failed' })).toBe('sorry');
+    expect(runFaceState({ ...started, status: 'paused' })).toBe('idle');
+    expect(runFaceState({ ...started, status: 'taken_over' })).toBe('idle');
   });
 });

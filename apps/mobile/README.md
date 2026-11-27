@@ -4,7 +4,8 @@ Whombat for phones: Expo SDK 57 / React Native 0.86 (new architecture, Hermes), 
 buildable (DECISIONS D-08). A Whombat is one person's, with one agent (Whombat one-person.md OP-01, one-agent.md
 OA-01): the tabs are **Chat** (your Chat and Feedback room with the agent, software work included), **Inbox**,
 **Overview**, **Automations** and **Settings**,
-which opens, as on the web, on **Often used** (Notifications on a Whombat, and the theme) and then six groups —
+which opens, as on the web, on **Often used** (Notifications on a Whombat, the theme, and Moving faces for this phone)
+and then six groups —
 **You**, **the assistant by its name** (its name and face, AI sign-in, Memory, what it may do and the council it asks),
 **Connections**, **This Whombat**, **Screens** (where the Whombat has a screen) and **Advanced** (model and effort, AI on
 this Whombat, usage, what it runs, skills, the audit log and diagnostics) — beside the approval, run, branch room and

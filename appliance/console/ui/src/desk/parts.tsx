@@ -1,8 +1,8 @@
 /** The desk's shared pieces: the top bar, the agent's face, a server card, a home tile, the power line. */
-import { WhombatAvatar } from '@whombat/avatars/react';
+import { type FaceState, LiveFace } from '@whombat/avatars/live';
 import { isBrandMark } from '@whombat/brand';
 import { BrandMark, WhombatLogo } from '@whombat/brand/react';
-import type { ReactNode, Ref } from 'react';
+import { createContext, type ReactNode, type Ref, useContext } from 'react';
 import type { AgentFace, DeskMeter, DeskPower, DeskServer, DeskTile } from '../lib/desk';
 import { DESK_WORDS, fill, percent, powerBanner, powerChip, unlockedText } from '../lib/deskCopy';
 import styles from './desk.module.css';
@@ -27,15 +27,47 @@ export function ClockText({ text }: { text: string }) {
   );
 }
 
-/** The agent's round face on its drawing's colour (the mockups' avatar). */
-export function Face({ face, size, label }: { face: AgentFace; size: number; label?: string }) {
+/**
+ * What the desk's faces show when nothing else says (`deskMood`): asleep while nobody's there and in quiet hours, a
+ * hello once they woke. The sheets' faces stay outside it.
+ */
+export const FaceMood = createContext<FaceState>('idle');
+
+/**
+ * The agent's round face on its drawing's colour (the mockups' avatar), alive: it shows what the agent is doing.
+ * Always `calm`: the box's screen draws without a graphics chip, where blinks, pose changes and gestures cost about 1 %
+ * of a core but anything that moves without end costs 5–9 %; the page can't tell whether a chip draws it.
+ */
+export function Face({
+  face,
+  size,
+  label,
+  state,
+  level,
+  pokeable = false,
+}: {
+  face: AgentFace;
+  size: number;
+  label?: string;
+  /** What the agent is doing; the desk's mood (`FaceMood`) without it. */
+  state?: FaceState;
+  /** The voice's loudness now, 0–1, while listening or speaking: the same function from render to render. */
+  level?: (() => number) | null;
+  /** A tap pokes it: only where a tap does nothing else. */
+  pokeable?: boolean;
+}) {
+  const mood = useContext(FaceMood);
   return (
-    <WhombatAvatar
+    <LiveFace
       face={face}
       size={size}
-      crop="head"
+      state={state ?? mood}
+      level={level}
+      pokeable={pokeable}
+      motion="calm"
       eager
       label={label}
+      crop="head"
       className={styles.face}
       style={{ background: `var(--face-${face})` }}
     />

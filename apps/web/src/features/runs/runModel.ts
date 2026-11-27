@@ -1,9 +1,11 @@
 /**
- * Run page view model: everything the page derives from a `Run` (status → dot, controls and notice;
+ * Run page view model: everything the page derives from a `Run` (status → dot, controls, notice and the agent's face;
  * steps → timeline markers; log → visible lines and tones). Pure, so it is unit-tested and shared by
  * the page and its stories. Copy is verbatim from the mock where the mock shows it; the paused,
  * taken-over and failed notices are ours (docs/decisions/runs-approvals.md).
  */
+import type { FaceState } from '@whombat/avatars/motion';
+import { runAttention } from '@whombat/client';
 import {
   formatClock,
   formatRunKicker,
@@ -40,6 +42,29 @@ export function runDot(status: RunStatus): RunDot {
       return { tone: 'bad', halo: false };
     case 'taken_over':
       return { tone: 'mut', halo: false };
+  }
+}
+
+/**
+ * What the agent's face in the header shows: thinking until the run has started on something, working while it runs,
+ * waiting for a person when the run needs one, glad once done and sorry when it failed. Paused or taken over, it rests.
+ */
+export function runFaceState(
+  run: Pick<Run, 'status' | 'attention' | 'steps' | 'progress' | 'logCount'>,
+): FaceState {
+  switch (run.status) {
+    case 'live': {
+      if (runAttention(run)) return 'needs';
+      const started = run.progress > 0 || run.logCount > 0 || run.steps.some((s) => s.state !== 'queued');
+      return started ? 'working' : 'thinking';
+    }
+    case 'done':
+      return 'done';
+    case 'failed':
+      return 'sorry';
+    case 'paused':
+    case 'taken_over':
+      return 'idle';
   }
 }
 
