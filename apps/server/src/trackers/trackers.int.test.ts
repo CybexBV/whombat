@@ -66,6 +66,7 @@ import { OUTSIDERS_TOOLS } from '../mcp/served';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadPrincipalRow } from '../read/principals';
 import { buildDispatchContext, WINDOW_SIZE } from '../runtime/context';
+import { followT3Thread } from '../t3code/follow';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
@@ -994,6 +995,53 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
       ).not.toBe('blocked');
       expect((await claim(dispatchId)).t3Handoffs).toEqual([
         { connection: handle, threadId: 'mcp:started-here', title: 'Look into exports', state: 'working' },
+      ]);
+      // The person's turn hands the report's own thread more work, here or from another thread (a follow-up after
+      // the run stopped): it wakes them now, and stays the report's, so the run's review still reads it.
+      const place = {
+        conversationId: turn?.conversationId as string,
+        threadRootId: turn?.threadRootId ?? null,
+      };
+      const arm = (threadId: string, from: { threadRootId: string | null }, report: boolean) =>
+        w.services.pipeline.commit(
+          followT3Thread,
+          {
+            how: 'arm',
+            connectionId: t3,
+            threadId,
+            title: null,
+            conversationId: place.conversationId,
+            threadRootId: from.threadRootId,
+            personId: report ? null : IDS.mara,
+            wakes: !report,
+            ...(report ? { report: true } : {}),
+          },
+          { burrowId: w.burrowId, actorId: IDS.dusty },
+        );
+      const own = async (threadId: string) =>
+        (await call('t3_thread_send', { threadId, message: 'Go on.' })).body.status !== 'blocked';
+      // One from before threads were marked, still as the report's turn left it.
+      await arm('mcp:started-here', place, false);
+      // One a report's turn started since, then followed up from the top of the conversation.
+      await arm('mcp:fix-here', place, true);
+      await arm('mcp:fix-here', { threadRootId: null }, false);
+      const [followed] = await w.services.db
+        .select()
+        .from(t3Watches)
+        .where(and(eq(t3Watches.connectionId, t3), eq(t3Watches.threadId, 'mcp:fix-here')));
+      expect(followed).toMatchObject({ personId: IDS.mara, wakes: true, threadRootId: null });
+      expect(await own('mcp:started-here')).toBe(true);
+      expect(await own('mcp:fix-here')).toBe(true);
+      expect((await call('t3_thread_read', { threadId: 'mcp:started-here' })).body.status).not.toBe(
+        'blocked',
+      );
+      // A thread the person's turn started in this Chat thread is still theirs, however often they hand it work.
+      await arm('mcp:person-in-same-thread', place, false);
+      expect(await own('mcp:person-in-same-thread')).toBe(false);
+      // The turn's context still names the report's own two, also the one last handed work from elsewhere.
+      expect(((await claim(dispatchId)).t3Handoffs ?? []).map((h) => h.threadId).sort()).toEqual([
+        'mcp:fix-here',
+        'mcp:started-here',
       ]);
       // Another outsiders' turn (no report behind it) sees no connection at all.
       const seen = await visibleConnections(w.services.db, IDS.dusty, {

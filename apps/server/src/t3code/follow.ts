@@ -6,13 +6,16 @@
  *   it a message or answering its question watches it from that turn's conversation and thread, for its person;
  *   stopping it ends the watch; what a call showed it (a wait that saw it end, a read, its questions) is seen. A thread
  *   an automation's step (or another turn that waits for its thread itself) hands work to is watched without waking anyone (that turn waits for it
- *   itself), only so it is settled once its work completed.
+ *   itself), only so it is settled once its work completed. A thread a customer's report's turn starts is marked as
+ *   that report's, and stays so when a person's turn later hands it more work (`connections/report-turn.ts`).
  * - `t3code.thread_moved`: the watcher (`watch.ts`) read something the agent hasn't told or seen. Under the burrow's
  *   lock it checks again and wakes the agent there with a `t3_thread` turn — a queued one in the same place takes up to
  *   `T3_THREADS_MAX` threads — once per key; while a turn of the agent is at work there it waits for the next pass.
  * - `t3ThreadsOf` is a `t3_thread` turn's `DispatchContext.t3Threads`.
  * - `t3CallArgs`: a thread the agent starts carries its name first, so the person sees in T3 Code who handed it over,
- *   and a message to a thread carries what the person wrote, unchanged, when their own message started the turn.
+ *   and a message to a thread carries what the person wrote, unchanged, when their own message started the turn. A
+ *   report's fix step's message that asks for a review also says to keep the commits a review read
+ *   (`withReviewedCommitRules`).
  */
 import {
   type DispatchContext,
@@ -29,7 +32,13 @@ import { z } from 'zod';
 import { readsRoom } from '../chats/rooms';
 import { type ApplyContext, defineCommand } from '../commit/types';
 import type { Db, Tx } from '../db/client';
-import { catalogConnections, dispatches, type T3WatchRow, t3Watches } from '../db/schema/index';
+import {
+  automationRunSteps,
+  catalogConnections,
+  dispatches,
+  type T3WatchRow,
+  t3Watches,
+} from '../db/schema/index';
 import { SUBAGENT_MARK, subagentRules } from '../delegate/briefs';
 import { agentBriefOf } from '../domain/agent-brief';
 import { wakeQuietly } from '../domain/wake';
@@ -76,6 +85,11 @@ export const followT3Thread = defineCommand({
       wakes: z.boolean(),
       /** A prompt's thread whose pull request Whombat merges once it is done (`mergeAsked`); a later arm keeps it. */
       merge: z.boolean().optional(),
+      /**
+       * A turn on a customer's report hands it work: the thread is that report's from here on, where its turns work. A
+       * later arm by anyone else keeps the mark.
+       */
+      report: z.boolean().optional(),
     }),
     z.object({ how: z.literal('seen'), connectionId: Id, threadId: ThreadId, key: Key }),
     z.object({ how: z.literal('stop'), connectionId: Id, threadId: ThreadId }),
@@ -128,6 +142,20 @@ export const followT3Thread = defineCommand({
       runStartedAt: null,
       runEndedAt: null,
     };
+    // Whose thread it is doesn't follow the latest hand-over: a report's turn can only start a thread or hand work to
+    // one that is its own already, and a person's follow-up there leaves it the report's.
+    const reports = input.report
+      ? { reportConversationId: conversation.id, reportThreadRootId: input.threadRootId }
+      : {};
+    // A thread from before the mark that is still as a report's turn left it (for nobody, with no wake) gets the mark
+    // from where it was handed over, before this hand-over moves it.
+    const unmarkedReports = sql`${t3Watches.reportConversationId} is null and ${t3Watches.personId} is null and ${t3Watches.wakes} = false and ${t3Watches.councilId} is null and ${t3Watches.delegationTaskId} is null`;
+    const keptReports = input.report
+      ? reports
+      : {
+          reportConversationId: sql`case when ${unmarkedReports} then ${t3Watches.conversationId} else ${t3Watches.reportConversationId} end`,
+          reportThreadRootId: sql`case when ${unmarkedReports} then ${t3Watches.threadRootId} else ${t3Watches.reportThreadRootId} end`,
+        };
     // The latest hand-over says where it is told; what the agent knew of it stays known.
     await tx
       .insert(t3Watches)
@@ -137,12 +165,14 @@ export const followT3Thread = defineCommand({
         threadId: input.threadId,
         title: input.title ?? 'A T3 Code thread',
         ...place,
+        ...reports,
         ...(input.merge ? { merge: { state: 'wanted' as const } } : {}),
       })
       .onConflictDoUpdate({
         target: [t3Watches.connectionId, t3Watches.threadId],
         set: {
           ...place,
+          ...keptReports,
           ...(input.title ? { title: input.title } : {}),
           ...(input.merge ? { merge: { state: 'wanted' as const } } : {}),
           // The job's track goes on through answers and messages; work on a thread whose job was over starts it anew.
@@ -375,6 +405,37 @@ export async function personWordsFor(db: Db, turn: T3CallTurn): Promise<string |
   });
 }
 
+/** How `REVIEWED_COMMIT_LINES` begin: a message that has them already keeps it. */
+export const REVIEWED_COMMITS_MARK = 'Keep every commit a review has read';
+
+/**
+ * What a report's fix thread is told about the commits its reviews read. Whombat merges the fix only when the commit
+ * the last review names is on the pushed branch; a thread that rewrote its history after the review (a push hook
+ * refused something in an earlier commit) left a fix nobody could merge, and the run stopped for the person.
+ */
+export const REVIEWED_COMMIT_LINES = [
+  `${REVIEWED_COMMITS_MARK}: never amend, rebase or squash it afterwards. The fix is merged only when the commit the last review names is on the pushed branch.`,
+  'Before the first review, run git push --dry-run for the branch, so a hook that refuses the push shows while nothing was reviewed yet.',
+  'If history must change after a review all the same, have the new head reviewed again the same way before you finish, and name the commit that review read.',
+] as const;
+
+/** A fix step's message that asks for a review, with `REVIEWED_COMMIT_LINES` at its end (once). Pure. */
+export function withReviewedCommitRules(message: string): string {
+  if (!/\breview/i.test(message) || message.includes(REVIEWED_COMMITS_MARK)) return message;
+  return `${message.trimEnd()}\n\n${REVIEWED_COMMIT_LINES.join('\n')}`;
+}
+
+/** Whether this turn is the fix step of a run on a customer's report (the step named `fix`, as `unlanded.ts` reads it). */
+async function reportFixTurn(db: Db, turn: T3CallTurn): Promise<boolean> {
+  if (!turn.reportTurn) return false;
+  const [row] = await db
+    .select({ stepId: automationRunSteps.stepId })
+    .from(automationRunSteps)
+    .where(eq(automationRunSteps.dispatchId, turn.dispatch.id))
+    .limit(1);
+  return row?.stepId === 'fix';
+}
+
 /**
  * The arguments of an agent's call to T3 Code as they go out. A message that starts a thread or goes to one ends with
  * what the person wrote, word for word, when their own message started the turn, so the coding agents read the request
@@ -396,6 +457,7 @@ export async function t3CallArgs(
     const given = threadId !== null && wordsGiven.get(turn.dispatch.id)?.has(threadId) === true;
     if (!given) message = withPersonWords(message, await personWordsFor(db, turn));
     if (launches) message = withLaunchRules(message as string, turn.dispatch);
+    if (await reportFixTurn(db, turn)) message = withReviewedCommitRules(message as string);
   }
   if (!launches) return message === args.message ? args : { ...args, message };
   const agent = await loadPrincipalRow(db, turn.agentId);
@@ -474,6 +536,8 @@ export async function followT3Call(
       'id' | 'trigger' | 'mode' | 'onBehalfOfAccountId' | 'conversationId' | 'threadRootId' | 'messageId'
     >;
     personId: string | null;
+    /** The turn works on a customer's report: a thread it hands work to is that report's (`report-turn.ts`). */
+    reportTurn?: boolean;
     tool: string;
     args: Record<string, unknown>;
     output: { content: string; structured?: unknown; isError: boolean };
@@ -507,6 +571,7 @@ export async function followT3Call(
           threadRootId: call.dispatch.threadRootId ?? null,
           personId: call.personId,
           wakes: handsOver(call.dispatch),
+          ...(call.reportTurn ? { report: true } : {}),
           ...((await mergeAsked(services.db, call)) ? { merge: true } : {}),
         },
         opts,

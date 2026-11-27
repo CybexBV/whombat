@@ -385,6 +385,7 @@ export const CONNECTION_TOOL_HANDLERS: {
         connectionId: c.row.id,
         dispatch: ctx.dispatch,
         personId: person?.id ?? null,
+        reportTurn: c.reportTurn,
         tool: tool.name,
         args,
         output: out,

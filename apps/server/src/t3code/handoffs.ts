@@ -5,7 +5,7 @@
  */
 import { type DispatchContext, HANDOFFS_MAX, type Handoff, T3_HANDOFFS_MAX, topics } from '@whombat/core';
 import { and, desc, eq, gt, isNull, ne, or } from 'drizzle-orm';
-import { reportTurnWatch } from '../connections/report-turn';
+import { reportThreads } from '../connections/report-turn';
 import type { Db, Tx } from '../db/client';
 import { catalogConnections, t3Watches } from '../db/schema/index';
 import { iso } from '../lib/time';
@@ -57,8 +57,8 @@ export function handoffStateOf(row: { state: string; status: string | null }): '
 /**
  * `DispatchContext.t3Handoffs`: the T3 Code threads the agent handed work to from the thread a turn works in, newest
  * first, at most `T3_HANDOFFS_MAX`, so a follow-up finds its thread without listing all of T3 Code. Only on connections
- * that manage and can be reached; never a council's or a checklist's threads, which their own cards lead. Null when
- * there are none.
+ * that manage and can be reached; never a council's or a checklist's threads, which their own cards lead. A turn on a
+ * customer's report reads only that report's own threads (`reportThreads`). Null when there are none.
  */
 export async function t3HandoffsOf(
   db: Db | Tx,
@@ -78,14 +78,19 @@ export async function t3HandoffsOf(
     .where(
       and(
         eq(t3Watches.burrowId, row.burrowId),
-        eq(t3Watches.agentId, row.agentId),
-        eq(t3Watches.conversationId, row.conversationId),
-        row.threadRootId ? eq(t3Watches.threadRootId, row.threadRootId) : isNull(t3Watches.threadRootId),
-        isNull(t3Watches.councilId),
-        isNull(t3Watches.delegationTaskId),
+        reportTurn
+          ? reportThreads(row)
+          : and(
+              eq(t3Watches.agentId, row.agentId),
+              eq(t3Watches.conversationId, row.conversationId),
+              row.threadRootId
+                ? eq(t3Watches.threadRootId, row.threadRootId)
+                : isNull(t3Watches.threadRootId),
+              isNull(t3Watches.councilId),
+              isNull(t3Watches.delegationTaskId),
+            ),
         eq(catalogConnections.catalogId, 't3code'),
         eq(catalogConnections.status, 'active'),
-        reportTurn ? reportTurnWatch() : undefined,
         ne(catalogConnections.access, 'read'),
       ),
     )

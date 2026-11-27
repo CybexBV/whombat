@@ -5,14 +5,15 @@
  *
  * - list projects and AI programs, to find where to start;
  * - start a thread, always in a new worktree, never in the project folder itself or an existing worktree;
- * - wait for, read, message, answer or stop only the threads started from this report's thread;
+ * - wait for, read, message, answer or stop only the threads its own turns started from this report's thread, also
+ *   after a person's turn handed one of them more work (a follow-up the run's review must still read);
  * - find and read the reviews those threads hand to another model (their `subagent` children): a fix's review is how
  *   the run knows it may merge, so the report turn reads the reviewer's own words.
  *
  * Everything else (other threads, schedules, environments, projects, moving threads) is refused before anything is
  * signed, and isn't listed by `connection_tools`.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
 import { automationRunSteps, automationRuns, t3Watches } from '../db/schema/index';
 
@@ -64,17 +65,38 @@ export interface ReportTurnPlace {
   threadRootId: string | null;
 }
 
-/** Watches of work handed over without a person, as a report's turn hands over work. */
-export function reportTurnWatch() {
+/**
+ * The watches of the T3 Code threads that are this report's own: the ones its turns started from its Chat thread
+ * (`report_conversation_id`, `report_thread_root_id`, written when a report's turn hands a thread work). The mark
+ * stays when a person's turn later hands the thread more work, from here or anywhere: a follow-up the person asked for
+ * must not take the thread from the run that still has to read its review. A thread a person's turn started in the
+ * same Chat thread has no mark and stays theirs. A watch from before the mark counts while it is still as a report's
+ * turn left it: handed over here, for nobody and with no wake. Never a council's or a checklist's thread.
+ */
+export function reportThreads(place: Pick<ReportTurnPlace, 'agentId' | 'conversationId' | 'threadRootId'>) {
   return and(
-    isNull(t3Watches.personId),
-    eq(t3Watches.wakes, false),
+    eq(t3Watches.agentId, place.agentId),
     isNull(t3Watches.councilId),
     isNull(t3Watches.delegationTaskId),
+    or(
+      and(
+        eq(t3Watches.reportConversationId, place.conversationId),
+        place.threadRootId
+          ? eq(t3Watches.reportThreadRootId, place.threadRootId)
+          : isNull(t3Watches.reportThreadRootId),
+      ),
+      and(
+        isNull(t3Watches.reportConversationId),
+        isNull(t3Watches.personId),
+        eq(t3Watches.wakes, false),
+        eq(t3Watches.conversationId, place.conversationId),
+        place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
+      ),
+    ),
   );
 }
 
-/** Whether a T3 Code thread was started (or handed work) from this report turn's thread. */
+/** Whether a T3 Code thread is this report's own (`reportThreads`). */
 async function startedHere(db: Db | Tx, place: ReportTurnPlace, threadId: string): Promise<boolean> {
   const [row] = await db
     .select({ threadId: t3Watches.threadId })
@@ -83,30 +105,19 @@ async function startedHere(db: Db | Tx, place: ReportTurnPlace, threadId: string
       and(
         eq(t3Watches.connectionId, place.connectionId),
         eq(t3Watches.threadId, threadId),
-        eq(t3Watches.agentId, place.agentId),
-        reportTurnWatch(),
-        eq(t3Watches.conversationId, place.conversationId),
-        place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
+        reportThreads(place),
       ),
     )
     .limit(1);
   return !!row;
 }
 
-/** The T3 Code threads started (or handed work) from this report turn's thread. */
+/** This report's own T3 Code threads (`reportThreads`). */
 async function threadsStartedHere(db: Db | Tx, place: ReportTurnPlace): Promise<Set<string>> {
   const rows = await db
     .select({ threadId: t3Watches.threadId })
     .from(t3Watches)
-    .where(
-      and(
-        eq(t3Watches.connectionId, place.connectionId),
-        eq(t3Watches.agentId, place.agentId),
-        reportTurnWatch(),
-        eq(t3Watches.conversationId, place.conversationId),
-        place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
-      ),
-    );
+    .where(and(eq(t3Watches.connectionId, place.connectionId), reportThreads(place)));
   return new Set(rows.map((r) => r.threadId));
 }
 
