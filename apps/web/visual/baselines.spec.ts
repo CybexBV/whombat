@@ -1,6 +1,7 @@
 /**
  * Screens that have no mock, as screenshot baselines (`__screenshots__/baselines.spec.ts/`), light and dark:
- * - the sidebar's Servers and Connections tabs, and Settings → Connections (sidebar-tabs.md);
+ * - Servers and Connections as places: Servers' list alone below the split, Connections' list beside the page it opens
+ *   (servers-connections-places.md), and Settings → Connections;
  * - `/settings`, one per tab (docs/decisions/burrow-settings.md, settings-simplify.md SS-01): Profile (PROFILE: name,
  *   title, signing key fingerprint); Connections → GitHub (was Repositories) connected as @whombat through gh (the default working directory
  *   ~/Code, its four repos with nothing to pick, Whombat agent-repos.md AGR-12) and the same tab before GitHub is
@@ -153,15 +154,16 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`settings-connections-${theme}.png`);
   });
 
-  test(`Servers and Connections, the list beside a page (${theme})`, async ({ page }) => {
-    // Places in the menu, Chat's list beside the page it opens (servers-connections-places.md).
+  test(`Servers and Connections as places (${theme})`, async ({ page }) => {
+    // Places in the menu, Chat's list beside the page it opens (servers-connections-places.md); each opens on its first
+    // row, not one looked at in an earlier test.
     await page.addInitScript(() => {
-      localStorage.removeItem('whombat.place.servers');
-      localStorage.removeItem('whombat.place.connections');
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith('whombat.place.')) localStorage.removeItem(key);
     });
-    await openApp(page, { path: '/servers', theme });
+    // Below the split the list stands alone: fixture mode has no hosts service, so no server page could open beside it.
+    await openApp(page, { path: '/servers', theme, width: 1100 });
     await page.getByRole('navigation', { name: 'Servers' }).waitFor();
-    await page.waitForURL(/\/things\//);
     await settle(page);
     await expect(page).toHaveScreenshot(`place-servers-${theme}.png`);
     await openApp(page, { path: '/connected', theme });
