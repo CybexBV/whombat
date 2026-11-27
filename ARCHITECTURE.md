@@ -976,8 +976,15 @@ published automation details read their definition and publisher from one versio
   head, and Whombat's steps open the pull request (named by the assessment's `title`, carrying a marker that names the report and
   the driver's own line,
   with the screenshots as a table) and merge it once the checks the repository runs on every merge have passed on that
-  commit; `trackers/fixes.ts` then follows it until it is live where the customer is and tells the customer what the fix
-  did for them (the fix turn's “For the customer (fixed|partly fixed): …” line). A production connection may name
+  commit. A fix that doesn't get through goes round again by itself (`automations/again.ts`, for every run with a
+  `fix` agent step, a GitHub issue's too): where the run would end because the review asked for changes or couldn't be
+  confirmed, the fix step failed, the pull request's checks failed, it changed after its review or it conflicts with
+  the base branch, the engine puts the steps back from `fix`, tells the fix turn how the earlier try ended and to carry
+  on in the same T3 Code thread, and says so in the run's thread in one line. Ten tries at most, after the first only
+  while the fix branch moved on GitHub; a later try's approval needs a review begun in that try; a review turn that
+  failed is done again once per try without counting as one; what a step already said or sent isn't repeated. Only
+  then does the person hear (`trackers/unlanded.ts`). `trackers/fixes.ts` then follows the merged fix until it is live
+  where the customer is and tells the customer what the fix did for them (the fix turn's “For the customer (fixed|partly fixed): …” line). A production connection may name
   reporters whose bug fixes go straight to production (`releaseFor`, read by the server only): once development runs
   such a fix, `trackers/release.ts` starts one T3 Code thread in the repository's project that runs the repository's own
   release procedure for exactly that revision (waiting for another release under way; an override only where its release

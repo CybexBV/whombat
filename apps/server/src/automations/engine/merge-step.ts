@@ -7,12 +7,13 @@
 import type { JsonObject } from '@whombat/core';
 import { type MergeTarget, mergeHold, mergeKeyOf, mergeTarget } from '../../commands/prs';
 import { externalEffect } from '../../commit/scope';
-import type { Db } from '../../db/client';
+import type { Config } from '../../config';
 import { GitHubNotConnectedError } from '../../github/adapter';
 import { githubRefused } from '../../github/service';
 import { githubScope } from '../../managed/providers/github-adapter';
 import { loadPrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
+import { laterTry } from '../again';
 import { keyDecision, publisherCheck } from '../authority';
 import {
   actionsJobOf,
@@ -20,6 +21,7 @@ import {
   expectedChecks,
   MERGE_SUMMARIES,
   MERGE_WORDS,
+  type MergeCause,
   type MergeOutput,
   type MergeReadiness,
   type MergeStep,
@@ -39,7 +41,7 @@ import { awaitingYes, failure, type LeasedRun } from './step-ops';
  * keep waiting.
  */
 export async function observeMerge(
-  db: Db,
+  services: Services,
   run: AutomationRunRow,
   row: AutomationStepRow,
   step: MergeStep,
@@ -47,14 +49,21 @@ export async function observeMerge(
 ): Promise<StepOp | null> {
   const out = mergeOutputOf(row.output);
   if (!out.waitingSince)
-    return awaitingYes(db, row, step, now, (name) => {
+    return awaitingYes(services.db, row, step, now, (name) => {
       const error = MERGE_WORDS.declined(name, out.number ?? 0);
       // A no is what `otherwise` is for, as for a comment: skip it and go on, or fail the run.
       return step.otherwise === 'fail'
-        ? { op: 'settle', idx: row.idx, state: 'failed', error, from: ['waiting'] }
+        ? {
+            op: 'settle',
+            idx: row.idx,
+            state: 'failed',
+            error,
+            output: { cause: 'declined' },
+            from: ['waiting'],
+          }
         : { op: 'settle', idx: row.idx, state: 'skipped', error, from: ['waiting'] };
     });
-  const { ready } = await mergeState(db, run, row, step, out, now);
+  const { ready } = await mergeState(services, run, row, step, out, now);
   return mergeOp(row, out, ready, now);
 }
 
@@ -107,7 +116,7 @@ export async function noRerunOp(
     state: 'failed',
     error: MERGE_WORDS.checksFailed(n),
     summary: MERGE_SUMMARIES.failed(n),
-    output: { noRerun: why },
+    output: { noRerun: why, cause: 'checks_failed' },
     from: ['waiting'],
   };
 }
@@ -150,6 +159,7 @@ export async function rerunChecks(
       state: 'failed',
       error: MERGE_WORDS.checksFailed(n),
       summary: MERGE_SUMMARIES.failed(n),
+      output: { cause: 'checks_failed' },
       from: ['waiting'],
     });
   }
@@ -185,7 +195,7 @@ export async function mergePullRequest(
   const rooms = await stepRoomsCheck(db, run, row.idx, who.publisher);
   if (!rooms.ok) return void (await settle('blocked', rooms.reason));
   const now = services.clock();
-  const { target, ready } = await mergeState(db, run, row, step, out, now);
+  const { target, ready } = await mergeState(services, run, row, step, out, now);
   if (!target || ready.kind !== 'merge') {
     // Something changed since it last looked: back to waiting (a re-run is asked from there), or the outcome as when
     // waiting.
@@ -221,18 +231,20 @@ export async function mergePullRequest(
     { reviewed: ready.reviewed },
   );
   if (hold) {
-    const [summary, error] =
+    const [summary, error, cause] =
       hold === 'review'
-        ? [MERGE_SUMMARIES.noReview(n), MERGE_WORDS.needsReview(n)]
+        ? ([MERGE_SUMMARIES.noReview(n), MERGE_WORDS.needsReview(n), 'needs_review'] as const)
         : hold === 'not_open'
-          ? [MERGE_SUMMARIES.closed(n), MERGE_WORDS.closed(n)]
-          : [MERGE_SUMMARIES.failed(n), MERGE_WORDS.checksFailed(n)];
+          ? ([MERGE_SUMMARIES.closed(n), MERGE_WORDS.closed(n), 'closed'] as const)
+          : ([MERGE_SUMMARIES.failed(n), MERGE_WORDS.checksFailed(n), 'checks_failed'] as const);
+    const why: MergeCause = cause;
     await lease.commit({
       op: 'settle',
       idx: row.idx,
       state: 'failed',
       error,
       summary,
+      output: { cause: why },
       from: ['running'],
     });
     return;
@@ -249,7 +261,9 @@ export async function mergePullRequest(
       await record('origin', null);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      await lease.commit(failure(row, step, MERGE_WORDS.failed(n, reason).slice(0, 900)));
+      await lease.commit(
+        failure(row, step, MERGE_WORDS.failed(n, reason).slice(0, 900), { cause: 'merge_failed' }),
+      );
     }
     return;
   }
@@ -264,7 +278,12 @@ export async function mergePullRequest(
     mergedBy: automation?.name ?? 'an automation',
   });
   if (res.outcome === 'refused') {
-    await lease.commit(failure(row, step, MERGE_WORDS.refused(n, res.reason).slice(0, 900)));
+    // Only GitHub saying the pull request clashes with its base branch tells that apart from its other refusals (a
+    // branch rule, a review it requires): another try can merge the base branch in; anything else is for a person.
+    const cause: MergeCause = (await clashesWithBase(lease, target.repo.fullName, n))
+      ? 'conflict'
+      : 'refused';
+    await lease.commit(failure(row, step, MERGE_WORDS.refused(n, res.reason).slice(0, 900), { cause }));
     return;
   }
   if (res.outcome === 'unknown') {
@@ -283,29 +302,59 @@ export async function mergePullRequest(
   }
 }
 
+/** Whether GitHub says pull request `number` clashes with its base branch; false when it can't say. */
+async function clashesWithBase(lease: LeasedRun, repo: string, number: number): Promise<boolean> {
+  const { services, run } = lease;
+  const adapter = services.github.adapter;
+  if (!adapter) return false;
+  try {
+    const pr = await githubScope.run({ burrowId: run.burrowId }, () => adapter.getPullRequest(repo, number));
+    return pr.mergeableState === 'dirty';
+  } catch (err) {
+    services.log.warn(
+      { err: err instanceof Error ? err.name : 'error', runId: run.id, pr: number },
+      'automations: GitHub didn’t say why it refused the merge',
+    );
+    return false;
+  }
+}
+
+/**
+ * How long a later try's merge gives the mirror to show the pull request's new head before it counts as changed after
+ * its review: longer than the poller's slowest round, so a late mirror doesn't spend a try.
+ */
+export function mirrorGraceMs(
+  config: Pick<Config, 'WHOMBAT_GITHUB_POLL_IDLE_MS' | 'WHOMBAT_GITHUB_POLL_MS'>,
+) {
+  return Math.max(5 * 60_000, 2 * (config.WHOMBAT_GITHUB_POLL_IDLE_MS || config.WHOMBAT_GITHUB_POLL_MS));
+}
+
 /** The pull request a merge step merges, as the mirror has it now, and whether the step merges now (AR-46). */
 async function mergeState(
-  db: Db,
+  services: Services,
   run: AutomationRunRow,
   row: AutomationStepRow,
   step: MergeStep,
   out: MergeOutput,
   now: Date,
 ): Promise<{ target: MergeTarget | null; ready: MergeReadiness }> {
+  const db = services.db;
   const number = out.number ?? 0;
   const target = number ? await mergeTarget(db, run.burrowId, number, step.repo) : null;
+  const rows = target ? await loadStepRows(db, run.id) : [];
   const review = target
-    ? runReview(run.definition, await loadStepRows(db, run.id), row.idx, {
+    ? runReview(run.definition, rows, row.idx, {
         repo: target.repo.fullName,
         branch: target.row.branch,
       })
     : null;
+  const waitingSince = new Date(out.waitingSince ?? row.startedAt ?? now);
   const ready = mergeReadiness({
     number,
     repo: step.repo,
     target,
     review,
-    waitingSince: new Date(out.waitingSince ?? row.startedAt ?? now),
+    waitingSince,
     waitMinutes: step.waitMinutes,
     rerun: out.rerun ?? null,
     now,
@@ -313,6 +362,14 @@ async function mergeState(
     // A fix of a customer's report never merges without checks (TA-58).
     requireChecks: (run.scope as { kind?: unknown } | null)?.kind === 'tracker',
   });
+  // A later try pushed a new head the mirror may not show yet: it keeps waiting a while before that counts as a change.
+  if (
+    ready.kind === 'fail' &&
+    ready.cause === 'changed' &&
+    laterTry(rows) &&
+    now.getTime() < waitingSince.getTime() + mirrorGraceMs(services.config)
+  )
+    return { target, ready: { kind: 'wait' } };
   return { target, ready };
 }
 
@@ -347,6 +404,7 @@ function mergeOp(row: AutomationStepRow, out: MergeOutput, ready: MergeReadiness
         state: 'failed',
         error: ready.error,
         summary: ready.summary,
+        output: { cause: ready.cause },
         from: ['waiting', 'running'],
       };
     case 'merge':

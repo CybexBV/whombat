@@ -13,6 +13,7 @@ import { type automationRunSteps, automationRuns, pullRequests, repos } from '..
 import { postMessage } from '../../domain/messages';
 import { loadConversationRow } from '../../read/conversations';
 import { withTrackerLine } from '../../trackers/pr-line';
+import { laterTry } from '../again';
 import { keyDecision } from '../authority';
 import { outsidersRun } from '../runs';
 import type { AutomationRunRow } from '../store';
@@ -49,7 +50,7 @@ export async function pullRequestText(
 }
 
 export async function executeOpenPullRequest(
-  { ctx, run, idx, attempt, scope, publisher, base, step }: StepExecution<'open_pull_request'>,
+  { ctx, run, steps, idx, attempt, scope, publisher, base, step }: StepExecution<'open_pull_request'>,
   announcePr: PrAnnouncer,
 ): Promise<void> {
   const tx = ctx.tx;
@@ -59,8 +60,37 @@ export async function executeOpenPullRequest(
     .from(repos)
     .where(and(eq(repos.burrowId, run.burrowId), eq(repos.fullName, step.repo)));
   const base_ = step.base ?? repo?.defaultBranch ?? 'main';
+  const command = {
+    name: 'open_pr',
+    input: {
+      repo: step.repo,
+      branch,
+      base: base_,
+      title,
+      body,
+      conversationId: run.conversationId,
+    } as JsonObject,
+  };
   // Someone may have opened it already (a person, an older automation): that one is the pull request (AR-41).
   const already = await openPrFrom(tx, run.burrowId, step.repo, branch);
+  if (already && laterTry(steps)) {
+    // A later try's pull request is the earlier try's, now with new commits: they get the same check for a report's
+    // organization as a pull request about to open, in the engine's own pass (it reads them on GitHub) before the open
+    // one is used again (`automation.open_pr`).
+    await updateStep(
+      tx,
+      run.id,
+      idx,
+      {
+        ...base,
+        state: 'running',
+        inputSummary: `PR #${already.number} is open from ${branch}`,
+        output: { branch, title, command },
+      },
+      ctx.now,
+    );
+    return;
+  }
   if (already) {
     await useOpenPr(
       ctx,
@@ -111,17 +141,6 @@ export async function executeOpenPullRequest(
     if (!posted) return block(ctx, run, idx, 'That conversation is gone.');
     return;
   }
-  const command = {
-    name: 'open_pr',
-    input: {
-      repo: step.repo,
-      branch,
-      base: base_,
-      title,
-      body,
-      conversationId: run.conversationId,
-    } as JsonObject,
-  };
   if (decision.outcome === 'ask') {
     const approval = await requestStepApproval(ctx, run, step, attempt, scope, command, {
       title: `Open a pull request from ${branch}`,

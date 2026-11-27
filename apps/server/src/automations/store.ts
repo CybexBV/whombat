@@ -302,6 +302,9 @@ export async function stepsInFlight(
 /** What a step's turns that handed their wait over used, as billed (`HandedWait.tokens`). */
 export const HANDED_TOKENS_SUM = sql<number>`coalesce(sum((${automationRunSteps.output}->'handedWait'->>'tokens')::numeric), 0)`;
 export const HAS_HANDED_TOKENS = sql`jsonb_typeof(${automationRunSteps.output}->'handedWait'->'tokens') = 'number'`;
+/** What a step's attempts before its run went again used (`output.earlierTokens`, `again.ts`'s reset keeps it). */
+export const EARLIER_TOKENS_SUM = sql<number>`coalesce(sum((${automationRunSteps.output}->>'earlierTokens')::numeric), 0)`;
+export const HAS_EARLIER_TOKENS = sql`jsonb_typeof(${automationRunSteps.output}->'earlierTokens') = 'number'`;
 
 /** Tokens agents reported for a run's dispatches, as billed (PE-04; null: none reported usage). */
 export async function runTokens(db: Db, runId: string): Promise<number | null> {
@@ -310,7 +313,8 @@ export async function runTokens(db: Db, runId: string): Promise<number | null> {
 
 /**
  * Group before rounding cache reads, exactly as a single run's budget does. An absent group has unknown usage. A step's
- * turns that handed their wait over count too (`output.handedWait.tokens`, docs/decisions/outsiders-turns.md).
+ * turns that handed their wait over count too (`output.handedWait.tokens`, docs/decisions/outsiders-turns.md), and its
+ * attempts before the run went again (`output.earlierTokens`).
  */
 async function tokensForRuns(db: Db, ids: string[]): Promise<Map<string, number>> {
   // Each step with its current turn (one row a step), so a step's handed tokens count once.
@@ -319,17 +323,20 @@ async function tokensForRuns(db: Db, ids: string[]): Promise<Map<string, number>
       runId: automationRunSteps.runId,
       tokens: billedTokensSum(sql`${dispatches.usage}`),
       handed: HANDED_TOKENS_SUM,
+      earlier: EARLIER_TOKENS_SUM,
     })
     .from(automationRunSteps)
     .leftJoin(dispatches, eq(automationRunSteps.dispatchId, dispatches.id))
     .where(
       and(
         inArray(automationRunSteps.runId, ids),
-        sql`(${dispatches.usage} is not null or ${HAS_HANDED_TOKENS})`,
+        sql`(${dispatches.usage} is not null or ${HAS_HANDED_TOKENS} or ${HAS_EARLIER_TOKENS})`,
       ),
     )
     .groupBy(automationRunSteps.runId);
-  return new Map(rows.map((row) => [row.runId, Number(row.tokens) + Number(row.handed)]));
+  return new Map(
+    rows.map((row) => [row.runId, Number(row.tokens) + Number(row.handed) + Number(row.earlier)]),
+  );
 }
 
 /** A run with every step in full. */

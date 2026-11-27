@@ -18,9 +18,11 @@ import {
   recipeInstructions,
 } from '@whombat/core';
 import { and, eq, sql } from 'drizzle-orm';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { BurrowAccess } from '../auth/request';
+import { FIX_TRIES_MAX, NOT_REVIEWED_THIS_TRY, REVIEW_REDO_LINE } from '../automations/again';
 import { controlAutomationRun, createAutomation, runAutomationNow } from '../automations/commands';
+import { ORGANIZATION_IN_COMMITS } from '../automations/engine/external';
 import { MERGE_CHECKS_GRACE_MS } from '../automations/merge';
 import { sampleReport } from '../automations/routes';
 import { automationStep } from '../automations/steps';
@@ -151,8 +153,16 @@ afterAll(async () => {
   await t3?.close();
 });
 
+/** The most tries the engine makes at a fix that doesn't get through. */
+const tries = (n: number) => {
+  w.services.automations.options.fixTriesMax = n;
+};
+// These tests are about how a run ends: one try, unless a test says otherwise (a fix going round again has its own).
+beforeEach(() => tries(1));
+
 // A run a test left going holds one of the automation's two places: it is stopped (as a person stops it).
 afterEach(async () => {
+  tries(FIX_TRIES_MAX);
   for (const r of await w.runs(automationId))
     if (['queued', 'running', 'waiting', 'paused', 'needs_review'].includes(r.status))
       await w.ok(IDS.mara, controlAutomationRun, { number: r.number, action: 'cancel' });
@@ -730,6 +740,303 @@ describe('a report that can’t go on reaches the person, once (TA-61)', () => {
     await w.settle();
     expect((await w.run(runId)).status).toBe('cancelled');
     expect(await unlanded(runId)).toEqual([]);
+  });
+});
+
+describe('a T3 Code fix that doesn’t get through goes round again by itself', () => {
+  // The automation fixes at most 20 reports a day on its own: these start on the next day, so the reports above don't
+  // count (and the ones below share it with these).
+  beforeAll(() => w.advance(24 * 60 * 60_000));
+  beforeEach(() => tries(FIX_TRIES_MAX));
+
+  /** The automation's lines in the run's thread that say it goes again. */
+  const againLines = async (runId: string) =>
+    (await automationLines(runId)).map((m) => m.text).filter((t) => t.includes('again (try'));
+
+  it('the review asked for changes: the fix thread is asked again, then the approved head is opened and merged', async () => {
+    const { runId, fixThread, branch, reviewTitle } = await toFix('Exports lose their header');
+    const first = await fixed(runId, branch, 'Keep the header');
+    t3.delegate(fixThread, {
+      title: reviewTitle,
+      model: REVIEWER,
+      answer: `Changes needed — reviewed ${short(first)}. An empty export still drops its header.`,
+    });
+    let run = await relay(
+      runId,
+      `Changes needed — reviewed ${short(first)}\n\nAn empty export still drops its header.`,
+    );
+    // From the fix again: each later step a new attempt, the run going.
+    expect(run.status).toBe('waiting');
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    for (const later of ['review', 'pr', 'merge'])
+      expect(step(run, later)).toMatchObject({ state: 'pending', attempt: 1 });
+    const told = String(step(run, 'fix').output.instructions);
+    expect(told).toContain('try 2 of 10');
+    expect(told).toContain('An empty export still drops its header');
+    expect(told).toContain('t3_thread_send');
+    // The count and the head it went again at, and the review's attempt this try starts at (its one re-read of an
+    // unread reviewer is this try's).
+    expect(step(run, 'fix').output.again).toMatchObject({
+      tries: 2,
+      head: { sha: first },
+      cause: 'review_changes',
+      reviewAttempt: 1,
+    });
+    expect(await againLines(runId)).toEqual([
+      'The review asked for changes, so the fix is being worked on again (try 2 of 10).',
+    ]);
+    expect(await unlanded(runId)).toEqual([]);
+
+    // The thread fixes it on the same branch and has the new head reviewed; this time it approves.
+    w.advance(60_000);
+    const head = await fixed(runId, branch, 'Keep the header of an empty export');
+    expect(head).not.toBe(first);
+    t3.delegate(fixThread, {
+      title: reviewTitle,
+      model: REVIEWER,
+      answer: `Approve — reviewed ${short(head)}. The empty export keeps its header.`,
+      createdAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    run = await relay(runId, `Approve — reviewed ${short(head)}`);
+    expect(step(run, 'review')).toMatchObject({ state: 'succeeded', output: { verdict: 'approve', head } });
+    expect(step(run, 'pr')).toMatchObject({ state: 'succeeded', output: { opened: true } });
+    const [pr] = await prsOn(branch);
+    expect(pr?.headSha).toBe(head);
+    await pollGitHub();
+    await fake().simulateCheckRun({ repo: REPO, sha: head, name: 'ci', conclusion: 'success' });
+    await pollGitHub();
+    w.advance(MERGE_CHECKS_GRACE_MS + 60_000);
+    await w.settle();
+    run = await w.run(runId);
+    expect(run.status).toBe('succeeded');
+    expect(step(run, 'merge')).toMatchObject({ state: 'succeeded', output: { merged: true } });
+    // One line for the one time it went again, and nothing for the person.
+    expect(await againLines(runId)).toHaveLength(1);
+    expect(await unlanded(runId)).toEqual([]);
+  });
+
+  it('goes on while the branch moves, and ends when a try left it as it was, saying how many tries it had', async () => {
+    const { runId, fixThread, branch, reviewTitle } = await toFix('Device groups won’t save');
+    const changes = async (head: string, at: number) => {
+      t3.delegate(fixThread, {
+        title: reviewTitle,
+        model: REVIEWER,
+        answer: `Changes needed — reviewed ${short(head)}. Saving an empty group still fails.`,
+        createdAt: new Date(Date.now() + at).toISOString(),
+      });
+      return relay(runId, `Changes needed — reviewed ${short(head)}\n\nSaving an empty group still fails.`);
+    };
+    // Try 1: changes asked: try 2 always may.
+    let run = await changes(await fixed(runId, branch, 'Save groups'), 0);
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    // Try 2 pushed a new head: try 3 may.
+    w.advance(60_000);
+    run = await changes(await fixed(runId, branch, 'Save empty groups'), 60_000);
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 2 });
+    expect(String(step(run, 'fix').output.instructions)).toContain('try 3 of 10');
+    // Try 3 pushed nothing: it ends there.
+    const same = await headOf(branch);
+    await w.fakeAgentReply(step(run, 'fix').dispatchId as string, 'Nothing more to change; pushed nothing.');
+    await w.settle();
+    run = await changes(same, 120_000);
+    expect(run.status).toBe('succeeded');
+    expect(step(run, 'pr').state).toBe('skipped');
+    expect(step(run, 'fix').attempt).toBe(2);
+    expect(await againLines(runId)).toHaveLength(2);
+    const notes = await unlanded(runId);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.text).toContain('after 3 tries');
+  });
+
+  it('a failed review is done again on its own; a failed fix goes again from the fix', async () => {
+    // The review's turn broke: only the review again, the fix thread isn't asked, and it isn't a try at the fix.
+    const review = await toFix('Saving a label fails');
+    await fixed(review.runId, review.branch, 'Save labels');
+    let run = await w.run(review.runId);
+    const fixTurn = step(run, 'fix').dispatchId;
+    await w.services.db
+      .update(dispatches)
+      .set({ state: 'failed', error: 'The turn broke.', finishedAt: w.now() })
+      .where(eq(dispatches.id, step(run, 'review').dispatchId as string));
+    await w.settle();
+    run = await w.run(review.runId);
+    expect(run.status).toBe('waiting');
+    expect(step(run, 'fix')).toMatchObject({ state: 'succeeded', attempt: 0, dispatchId: fixTurn });
+    expect(step(run, 'fix').output.again).toMatchObject({ tries: 1, reviewRedo: 1 });
+    expect(step(run, 'review')).toMatchObject({ state: 'waiting', attempt: 1 });
+    expect((await automationLines(review.runId)).map((m) => m.text)).toContain(REVIEW_REDO_LINE);
+    expect(await againLines(review.runId)).toEqual([]);
+
+    // The fix's own turn broke: from the fix again, told how the earlier try ended.
+    const fix = await toFix('Saving a note fails');
+    await w.services.db
+      .update(dispatches)
+      .set({ state: 'failed', error: 'The thread stopped.', finishedAt: w.now() })
+      .where(eq(dispatches.id, fix.fixTurn));
+    await w.settle();
+    run = await w.run(fix.runId);
+    expect(run.status).toBe('waiting');
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    expect(step(run, 'fix').dispatchId).not.toBe(fix.fixTurn);
+    expect(String(step(run, 'fix').output.instructions)).toContain('the fix step failed');
+    expect(await againLines(fix.runId)).toEqual([
+      'The fix couldn’t be finished, so it’s being worked on again (try 2 of 10).',
+    ]);
+  });
+
+  /** The checks of `sha` fail, as GitHub reports them. */
+  const red = async (sha: string) => {
+    await pollGitHub();
+    await fake().simulateCheckRun({ repo: REPO, sha, name: 'ci', conclusion: 'failure' });
+    await pollGitHub();
+  };
+  /** A review of `sha` by another model, begun `after` ms from now on Whombat's clock. */
+  const review = (fixThread: string, reviewTitle: string, sha: string, after = 0) =>
+    t3.delegate(fixThread, {
+      title: reviewTitle,
+      model: REVIEWER,
+      answer: `Approve — reviewed ${short(sha)}. The new test fails on main and passes on the branch.`,
+      createdAt: new Date(w.now().getTime() + after).toISOString(),
+    });
+
+  it('a later try’s approval holds only for a review that began after it went again', async () => {
+    const { runId, fixThread, branch, reviewTitle } = await toFix('Exports drop their footer');
+    // Try 1: reviewed and approved, opened; its checks fail.
+    const first = await fixed(runId, branch, 'Keep the footer');
+    review(fixThread, reviewTitle, first);
+    let run = await relay(runId, `Approve — reviewed ${short(first)}`);
+    expect(step(run, 'pr')).toMatchObject({ state: 'succeeded', output: { opened: true } });
+    const [pr] = await prsOn(branch);
+    if (!pr) throw new Error('no pull request');
+    await red(first);
+    run = await w.run(runId);
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    expect(step(run, 'fix').output.again).toMatchObject({ tries: 2, cause: 'checks_failed' });
+
+    // Try 2 pushes a new head that nobody reviews, and the review step relays try 1's approval: no approval.
+    w.advance(60_000);
+    const second = await fixed(runId, branch, 'Keep the footer of an empty export');
+    run = await relay(runId, `Approve — reviewed ${short(first)}`);
+    // Nothing merged: the branch moved, so it goes round again, saying why.
+    const merges = () => fake().merges.filter((m) => m.repo === REPO && m.number === pr.number);
+    expect(merges()).toEqual([]);
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 2 });
+    expect(step(run, 'fix').output.again).toMatchObject({
+      tries: 3,
+      head: { sha: second },
+      cause: 'review_unconfirmed',
+      detail: NOT_REVIEWED_THIS_TRY,
+    });
+    const told = String(step(run, 'fix').output.instructions);
+    expect(told).toContain('couldn’t be confirmed for the branch as it is');
+    expect(told).toContain(NOT_REVIEWED_THIS_TRY);
+    expect(await againLines(runId)).toEqual([
+      'The pull request’s checks failed, so the fix is being worked on again (try 2 of 10).',
+      'The review couldn’t be confirmed, so the fix is being worked on again (try 3 of 10).',
+    ]);
+
+    // Try 3 has its own review: that approval holds, and the open pull request merges once its checks pass.
+    w.advance(60_000);
+    const third = await fixed(runId, branch, 'Keep the footer of every export');
+    review(fixThread, reviewTitle, third, 1000);
+    run = await relay(runId, `Approve — reviewed ${short(third)}`);
+    expect(step(run, 'review')).toMatchObject({
+      state: 'succeeded',
+      output: { verdict: 'approve', head: third },
+    });
+    expect(step(run, 'pr')).toMatchObject({
+      state: 'succeeded',
+      output: { prNumber: pr.number, alreadyOpen: true },
+    });
+    await pollGitHub();
+    await fake().simulateCheckRun({ repo: REPO, sha: third, name: 'ci', conclusion: 'success' });
+    await pollGitHub();
+    w.advance(MERGE_CHECKS_GRACE_MS + 60_000);
+    await w.settle();
+    run = await w.run(runId);
+    expect(run.status).toBe('succeeded');
+    expect(merges()).toHaveLength(1);
+  });
+
+  it('a later try’s reviewer that can’t be read is asked once more in that try too', async () => {
+    const { runId, fixThread, branch, reviewTitle } = await toFix('Imports skip the last row');
+    // Try 1: no review handed out: read again once, then no approval, which couldn't be confirmed: try 2.
+    const first = await fixed(runId, branch, 'Keep the last row');
+    let run = await relay(runId, `Approve — reviewed ${short(first)}`);
+    expect(step(run, 'review')).toMatchObject({ state: 'pending', attempt: 1 });
+    w.advance(31_000);
+    await w.settle();
+    run = await relay(runId, `Approve — reviewed ${short(first)}`);
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    expect(step(run, 'fix').output.again).toMatchObject({
+      tries: 2,
+      cause: 'review_unconfirmed',
+      reviewAttempt: 2,
+    });
+    expect(await againLines(runId)).toEqual([
+      'The review couldn’t be confirmed, so the fix is being worked on again (try 2 of 10).',
+    ]);
+
+    // Try 2: the reviewer still can't be read at first: this try's own read again.
+    w.advance(60_000);
+    const second = await fixed(runId, branch, 'Keep the last row of a short file');
+    run = await relay(runId, `Approve — reviewed ${short(second)}`);
+    expect(step(run, 'review')).toMatchObject({ state: 'pending', attempt: 3 });
+    expect(step(run, 'review').error).toContain('read again');
+    // The review shows up by the time the step asks again: it holds.
+    review(fixThread, reviewTitle, second, 1000);
+    w.advance(31_000);
+    await w.settle();
+    run = await relay(runId, `Approve — reviewed ${short(second)}`);
+    expect(step(run, 'review')).toMatchObject({
+      state: 'succeeded',
+      attempt: 3,
+      output: { verdict: 'approve', head: second },
+    });
+    expect(step(run, 'pr')).toMatchObject({ state: 'succeeded', output: { opened: true } });
+  });
+
+  it('a later try’s new commits are checked for the organization before its open pull request is used again', async () => {
+    const { runId, fixThread, branch, reviewTitle } = await toFix('Kiosk mode drops the logo');
+    const first = await fixed(runId, branch, 'Keep the logo');
+    review(fixThread, reviewTitle, first);
+    let run = await relay(runId, `Approve — reviewed ${short(first)}`);
+    expect(step(run, 'pr')).toMatchObject({ state: 'succeeded', output: { opened: true } });
+    const [pr] = await prsOn(branch);
+    if (!pr) throw new Error('no pull request');
+    await red(first);
+    expect(step(await w.run(runId), 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+
+    // Try 2's commit names the customer's organization: the open pull request isn't used, nothing merges.
+    w.advance(60_000);
+    const second = await fixed(
+      runId,
+      branch,
+      'Keep the logo in kiosk mode\n\nReported by Acme Fleet for their lobby devices.',
+    );
+    review(fixThread, reviewTitle, second, 1000);
+    run = await relay(runId, `Approve — reviewed ${short(second)}`);
+    expect(step(run, 'pr')).toMatchObject({
+      state: 'succeeded',
+      output: { opened: false, reason: ORGANIZATION_IN_COMMITS },
+    });
+    expect(fake().merges.filter((m) => m.repo === REPO && m.number === pr.number)).toEqual([]);
+    expect(['succeeded', 'failed']).toContain(run.status);
+    const notes = await unlanded(runId);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.text).toContain('organization');
+    expect(notes[0]?.text).not.toContain('Acme Fleet');
+  });
+
+  it('never for a run a person stopped', async () => {
+    const { runId } = await toFix('Saving a printer name fails');
+    const run = await w.run(runId);
+    await w.ok(IDS.mara, controlAutomationRun, { number: run.number, action: 'cancel' });
+    await w.settle();
+    const after = await w.run(runId);
+    expect(after.status).toBe('cancelled');
+    expect(step(after, 'fix').attempt).toBe(0);
+    expect(await againLines(runId)).toEqual([]);
   });
 });
 

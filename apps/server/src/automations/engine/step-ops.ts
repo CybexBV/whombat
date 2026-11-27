@@ -29,8 +29,16 @@ export interface LeasedRun {
   commit(op: StepOp): Promise<CommitResult<{ status: string }>>;
 }
 
-/** A failed attempt: retry after a backoff while retries are left, else the step fails. */
-export function failure(row: AutomationStepRow, step: AutomationStep, error: string): StepOp {
+/**
+ * A failed attempt: retry after a backoff while retries are left, else the step fails (with `output` added to its row's,
+ * such as why a merge failed).
+ */
+export function failure(
+  row: AutomationStepRow,
+  step: AutomationStep,
+  error: string,
+  output?: Record<string, unknown>,
+): StepOp {
   if (row.attempt < step.retries)
     return {
       op: 'settle',
@@ -40,7 +48,14 @@ export function failure(row: AutomationStepRow, step: AutomationStep, error: str
       error,
       from: ['running', 'waiting'],
     };
-  return { op: 'settle', idx: row.idx, state: 'failed', error, from: ['running', 'waiting'] };
+  return {
+    op: 'settle',
+    idx: row.idx,
+    state: 'failed',
+    error,
+    ...(output ? { output } : {}),
+    from: ['running', 'waiting'],
+  };
 }
 
 /** Who decided an approval, as a step's words name them. */
