@@ -255,6 +255,27 @@ describe('the notice after an update', () => {
     }
   });
 
+  it('an open page back before the box says how its updates stand asks again until it does', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261126.5'));
+      await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
+      // Back, but the box's manager hasn't said yet how its updates stand.
+      ops.status.mockResolvedValue({ ...status(null), update: null });
+      act(() => session.move('connecting'));
+      act(() => session.move('open'));
+      await vi.waitFor(() => expect(ops.status).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+      expect(notice()).toBeNull();
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a second page open at the same time says nothing for an update the first one told about', async () => {
     ops.status.mockResolvedValue(status('whombat-20261126.5'));
     const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
@@ -266,6 +287,21 @@ describe('the notice after an update', () => {
     act(() => session.move('open'));
     await view.statusRead('whombat-20261127.2');
     expect(notice()).toBeNull();
+  });
+
+  it('two pages that hear of the same update at the same moment: only one tells', async () => {
+    window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+    ops.status.mockResolvedValue(status('whombat-20261127.2'));
+    renderAt(
+      <>
+        <WhatsNewNotice onWhatsNew={false} />
+        <WhatsNewNotice onWhatsNew={false} />
+      </>,
+    );
+    await screen.findByTestId('whats-new-notice');
+    await act(async () => {});
+    expect(screen.getAllByTestId('whats-new-notice')).toHaveLength(1);
+    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
   });
 
   it('See what’s new opens the page and counts as seen', async () => {

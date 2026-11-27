@@ -80,6 +80,12 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(written).toEqual([]);
   });
 
+  it('asks for the status again each time the session opens after a drop, however fresh the last answer', () => {
+    const source = readFileSync(new URL('./WhatsNewNotice.tsx', import.meta.url), 'utf8');
+    expect(source).toMatch(/onSessionReopen\(session,[\s\S]*?invalidateQueries\(\{ queryKey \}\)/);
+    expect(source).toMatch(/whatsNewPollMs\(q\.state\.data, \{ justBack:/);
+  });
+
   it('is drawn in the strip every screen shows, whether or not the passkey nudge is there', () => {
     const source = readFileSync(new URL('./ApplianceRoot.tsx', import.meta.url), 'utf8');
     const line = source.split('\n').find((l) => l.includes('<WhatsNewNoticeView notice={whatsNew} />'));

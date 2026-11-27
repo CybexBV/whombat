@@ -4,12 +4,15 @@
  * first look only remembers, since there is nothing to compare with. The release is kept as seen as soon as the notice
  * shows (and when What's new is open), so it shows once; it stays on this page until See what’s new or Dismiss. An
  * open page asks for the status again when the box comes back after a drop, and every few seconds while an update is
- * being installed, which is how an update reaches it. Kept in this browser's storage, read afresh each time so two
- * pages don't both tell; where it can't be read the notice stays away rather than showing at every start.
+ * being installed (and for a short while after it is back, until it says how its updates stand), which is how an
+ * update reaches it. Kept in this browser's storage, which pages claim in turn so only one tells; where it can't be
+ * read the notice stays away rather than showing at every start.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
+  onSessionReopen,
+  WHATS_NEW_BACK_MS,
   WHATS_NEW_PATH,
   WHATS_NEW_TEXT,
   whatsNewNotice,
@@ -17,7 +20,7 @@ import {
   whatsNewSeenKey,
 } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppServices } from '../app/providers';
 import styles from '../app/shell/ShellLayout.module.css';
 import { cx } from '../components/cx';
@@ -41,10 +44,31 @@ function keepSeen(key: string, release: string) {
   }
 }
 
+/**
+ * Keeps `release` as seen and says whether this page did it: false when another page of this browser kept it first.
+ * Pages that hear of an update at the same moment ask in turn (the browser's lock, where it has one), so one tells.
+ */
+async function claimRelease(key: string, release: string): Promise<boolean> {
+  const take = () => {
+    if (readSeen(key) === release) return false;
+    keepSeen(key, release);
+    return true;
+  };
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  if (!locks) return take();
+  try {
+    return await locks.request(`${key}.lock`, take);
+  } catch {
+    return take();
+  }
+}
+
 export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   const { managed, session } = useAppServices();
   const queryClient = useQueryClient();
   const id = managed?.applianceId;
+  // When the box's session last opened again: for a short while after, a status without update facts is asked again.
+  const backAt = useRef(0);
   const status = useQuery({
     queryKey: APPLIANCE_STATUS_KEY,
     queryFn: () => sessionOps.applianceStatus(session),
@@ -52,16 +76,15 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
     staleTime: 5 * 60_000,
     retry: false,
     // While an update is being installed its last update changes when it is done: ask until then.
-    refetchInterval: (query) => whatsNewPollMs(query.state.data),
+    refetchInterval: (query) =>
+      whatsNewPollMs(query.state.data, { justBack: Date.now() - backAt.current < WHATS_NEW_BACK_MS }),
   });
   // The box comes back after a drop (an update restarts it): ask again, so an open page hears of the update.
   useEffect(() => {
     if (!id) return;
-    let wasOpen = session.state().status === 'open';
-    return session.onState((s) => {
-      const open = s.status === 'open';
-      if (open && !wasOpen) void queryClient.invalidateQueries({ queryKey: APPLIANCE_STATUS_KEY });
-      wasOpen = open;
+    return onSessionReopen(session, () => {
+      backAt.current = Date.now();
+      void queryClient.invalidateQueries({ queryKey: APPLIANCE_STATUS_KEY });
     });
   }, [id, session, queryClient]);
   // Kept per Whombat: without its id there is nowhere to keep it, so no notice.
@@ -75,8 +98,17 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   const release = notice?.release;
   useEffect(() => {
     if (!key || !release || action === 'none' || action === undefined) return;
-    keepSeen(key, release);
-    if (action === 'show' && !onWhatsNew) setShown({ key, release });
+    if (action !== 'show' || onWhatsNew) {
+      keepSeen(key, release);
+      return;
+    }
+    let live = true;
+    void claimRelease(key, release).then((mine) => {
+      if (live && mine) setShown({ key, release });
+    });
+    return () => {
+      live = false;
+    };
   }, [key, action, release, onWhatsNew]);
   // Reading What's new is what the notice asked for: it doesn't come back after.
   useEffect(() => {

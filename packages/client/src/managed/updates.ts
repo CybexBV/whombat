@@ -329,14 +329,44 @@ export function whatsNewNotice(
   return { action: 'show', release };
 }
 
+/** How long after the box's session opens again a status without update facts is asked for again. */
+export const WHATS_NEW_BACK_MS = 60_000;
+
 /**
  * How often the notice asks for the status again: every 5 s while an update is being installed (its last update
- * changes once it is done, after the box is back), as About does; never while it waits (for the owner's yes, a backup,
- * the maintenance window: that can take days) or is paused.
+ * changes once it is done, after the box is back), as About does, through its last checks even while updates are
+ * paused; and for a short while after the box is back (`justBack`) while it hasn't said how its updates stand yet.
+ * Never while an update waits (for the owner's yes, a backup, the maintenance window: that can take days).
  */
-export function whatsNewPollMs(status: Pick<ApplianceStatus, 'update'> | null | undefined): number | false {
-  const u = status?.update;
-  return u && MOVING.has(u.state) && !u.waiting && !u.paused ? 5_000 : false;
+export function whatsNewPollMs(
+  status: Pick<ApplianceStatus, 'update'> | null | undefined,
+  { justBack = false }: { justBack?: boolean } = {},
+): number | false {
+  if (!status) return false;
+  const u = status.update;
+  if (!u) return justBack ? 5_000 : false;
+  if (u.waiting) return false;
+  if (u.paused && u.state !== 'Activating' && u.state !== 'Verifying') return false;
+  return MOVING.has(u.state) ? 5_000 : false;
+}
+
+/** What `onSessionReopen` needs of the box's session. */
+interface SessionStates {
+  state(): { status: string };
+  onState(listener: (state: { status: string }) => void): () => void;
+}
+
+/**
+ * Runs `run` each time the box's session opens again after a drop (an update restarts the box), never for the session
+ * already open. Returns the way to stop.
+ */
+export function onSessionReopen(session: SessionStates, run: () => void): () => void {
+  let wasOpen = session.state().status === 'open';
+  return session.onState((s) => {
+    const open = s.status === 'open';
+    if (open && !wasOpen) run();
+    wasOpen = open;
+  });
 }
 
 /** Where a device keeps what it saw, one per Whombat (letters a phone's secure store takes). */

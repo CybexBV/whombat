@@ -2,12 +2,13 @@
  * The one-time “Whombat updated” notice in the strip under the status bar, under the passkey nudge when that shows
  * too: once per update of this Whombat, with See what’s new (the web app's page in the in-app browser) and Dismiss.
  * The release is kept as seen as soon as it shows; the notice stays until one of the two is tapped. It reads the status
- * the Settings list already asks for (same query), not a poll of its own.
+ * the Settings list already asks for (same query), again whenever the session opens after a drop and every few
+ * seconds while an update is being installed; no poll of its own otherwise.
  */
-import { useQuery } from '@tanstack/react-query';
-import { WHATS_NEW_TEXT, whatsNewPollMs } from '@whombat/client/managed';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { onSessionReopen, WHATS_NEW_BACK_MS, WHATS_NEW_TEXT, whatsNewPollMs } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { secureStore } from '../lib/storage';
 import { Text } from '../theme/Text';
@@ -35,12 +36,24 @@ export function useWhatsNewNotice({
   /** The session is open: asked before, a failed read would keep the notice away until Settings asks again. */
   open: boolean;
 }): WhatsNewNoticeState | null {
+  const queryClient = useQueryClient();
+  // When the session last opened again: for a short while after, a status without update facts is asked again.
+  const backAt = useRef(0);
   // While an update is being installed its last update changes when it is done: ask until then.
   const status = useQuery({
     ...applianceStatusQuery({ session, cacheScope }),
     enabled: open,
-    refetchInterval: (query) => whatsNewPollMs(query.state.data),
+    refetchInterval: (q) =>
+      whatsNewPollMs(q.state.data, { justBack: Date.now() - backAt.current < WHATS_NEW_BACK_MS }),
   }).data;
+  // The box comes back after a drop (an update restarts it): ask again at once, however fresh the last answer.
+  useEffect(() => {
+    const { queryKey } = applianceStatusQuery({ session, cacheScope });
+    return onSessionReopen(session, () => {
+      backAt.current = Date.now();
+      void queryClient.invalidateQueries({ queryKey });
+    });
+  }, [session, queryClient, cacheScope]);
   const [shown, setShown] = useState<{ whombat: string; release: string } | null>(null);
   useEffect(() => {
     if (!status) return;

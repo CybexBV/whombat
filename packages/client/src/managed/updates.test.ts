@@ -7,6 +7,7 @@ import {
   askFirstView,
   backupBlocksText,
   hasUpdateCheck,
+  onSessionReopen,
   sinceText,
   type UpdateStatus,
   updateCheckNotice,
@@ -462,6 +463,53 @@ describe('the one-time “Whombat updated” notice', () => {
       }),
     ).toBe(false);
     expect(whatsNewPollMs(null)).toBe(false);
+  });
+
+  it('keeps asking through the last checks of an update while updates are paused', () => {
+    const paused = (state: UpdateStatus['state']) => ({
+      update: { ...base, state, candidate: 'pve-20260929.1', paused: true },
+    });
+    expect(whatsNewPollMs(paused('Verifying'))).toBe(5_000);
+    expect(whatsNewPollMs(paused('Activating'))).toBe(5_000);
+    expect(whatsNewPollMs(paused('Downloading'))).toBe(false);
+  });
+
+  it('asks again for a short while after the box is back but hasn’t said how its updates stand', () => {
+    expect(whatsNewPollMs({ update: null }, { justBack: true })).toBe(5_000);
+    expect(whatsNewPollMs({ update: null }, { justBack: false })).toBe(false);
+    expect(whatsNewPollMs({ update: null })).toBe(false);
+    expect(whatsNewPollMs(updated('pve-20260928.6'), { justBack: true })).toBe(false);
+  });
+
+  it('runs something each time the box’s session opens again, not when it is open already', () => {
+    let status = 'open';
+    const listeners = new Set<(s: { status: string }) => void>();
+    const session = {
+      state: () => ({ status }),
+      onState: (cb: (s: { status: string }) => void) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+    };
+    const move = (next: string) => {
+      status = next;
+      for (const cb of [...listeners]) cb({ status });
+    };
+    let back = 0;
+    const stop = onSessionReopen(session, () => back++);
+    move('open');
+    expect(back).toBe(0);
+    move('connecting');
+    move('open');
+    expect(back).toBe(1);
+    move('connecting');
+    move('connecting');
+    move('open');
+    expect(back).toBe(2);
+    stop();
+    move('connecting');
+    move('open');
+    expect(back).toBe(2);
   });
 
   it('keeps one seen release per Whombat, in letters a secure store takes', () => {
