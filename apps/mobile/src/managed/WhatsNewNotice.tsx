@@ -16,7 +16,7 @@ import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { applianceStatusQuery } from './useApplianceStatus';
-import { WHATS_NEW_URL, watchStatusOnReopen, whatsNewWatcher } from './whatsNew';
+import { markWhatsNewTold, WHATS_NEW_URL, watchStatusOnReopen, whatsNewWatcher } from './whatsNew';
 
 export interface WhatsNewNoticeState {
   see: () => void;
@@ -71,6 +71,11 @@ export function useWhatsNewNotice({
     watcher.current?.see(status);
   }, [status]);
   const release = shown?.whombat === whombat ? shown.release : null;
+  // The strip draws it while the session is open (`stripNotices`): only then is it told, so one found while the
+  // connection is down still shows after the app is closed or another Whombat opened.
+  useEffect(() => {
+    if (open && release) void markWhatsNewTold(secureStore, whombat, release);
+  }, [open, release, whombat]);
   return useMemo(() => {
     if (!release) return null;
     const close = () => setShown(null);

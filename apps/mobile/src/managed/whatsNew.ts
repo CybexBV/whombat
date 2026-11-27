@@ -79,8 +79,11 @@ export function whatsNewToShow(
   });
 }
 
-/** Keeps that the notice for `release` showed, so it doesn't come back. */
-function markTold(store: KeyValueStore, whombat: string, release: string): Promise<void> {
+/**
+ * Keeps that the notice for `release` is on screen, so it doesn't come back. Called by the strip once it draws it, not
+ * when an answer finds it: found while the connection is down (the strip is hidden), it must still tell next time.
+ */
+export function markWhatsNewTold(store: KeyValueStore, whombat: string, release: string): Promise<void> {
   const key = whatsNewSeenKey(whombat);
   return inTurn(store, key, async () => {
     try {
@@ -93,9 +96,9 @@ function markTold(store: KeyValueStore, whombat: string, release: string): Promi
 }
 
 /**
- * Checks each status answer of one Whombat and calls `show` for the update to tell about, until stopped, then keeps it
- * as told. A later answer never cancels an earlier one's notice, and a watcher stopped first leaves it untold, so the
- * next check of that Whombat (also after a restart) tells.
+ * Checks each status answer of one Whombat and calls `show` for the update to tell about, until stopped; the strip
+ * keeps it as told once it is on screen (`markWhatsNewTold`). A later answer never cancels an earlier one's notice, and
+ * one never on screen stays untold, so the next check of that Whombat (also after a restart) tells.
  */
 export function whatsNewWatcher(
   store: KeyValueStore,
@@ -114,7 +117,6 @@ export function whatsNewWatcher(
           showed = release;
           show(release);
         }
-        void markTold(store, whombat, release);
       });
     },
     stop: () => {

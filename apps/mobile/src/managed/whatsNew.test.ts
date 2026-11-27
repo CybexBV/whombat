@@ -6,6 +6,7 @@ import type { ApplianceStatus } from '@whombat/client/session';
 import { describe, expect, it, vi } from 'vitest';
 import { type KeyValueStore, memoryStore } from '../lib/kv';
 import {
+  markWhatsNewTold,
   stripNotices,
   WHATS_NEW_ROW,
   WHATS_NEW_URL,
@@ -67,7 +68,8 @@ describe('the one-time “Whombat updated” notice', () => {
     const shown: string[] = [];
     whatsNewWatcher(store, WHOMBAT, (r) => shown.push(r)).see(status('pve-20260928.6'));
     await vi.waitFor(() => expect(shown).toEqual(['pve-20260928.6']));
-    // Kept as seen as soon as it shows: the app closed before Dismiss doesn't show it again.
+    // On screen (the strip marks it told): the app closed before Dismiss doesn't show it again.
+    await markWhatsNewTold(store, WHOMBAT, 'pve-20260928.6');
     await vi.waitFor(async () =>
       expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull(),
     );
@@ -314,7 +316,7 @@ describe('the one-time “Whombat updated” notice', () => {
     // Kept, but the app closed (or moved to another Whombat) before anything showed it.
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
     expect(seenIn(store)).toBe('pve-20260928.6');
-    // The next start: it still tells, and once shown it is told.
+    // The next start: it still tells, and once on screen it is told.
     const shown: string[] = [];
     const watcher = whatsNewWatcher(store, WHOMBAT, (r) => shown.push(r));
     watcher.see(status('pve-20260928.6'));
@@ -322,10 +324,26 @@ describe('the one-time “Whombat updated” notice', () => {
     watcher.see(status('pve-20260928.6'));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(shown).toEqual(['pve-20260928.6']);
+    await markWhatsNewTold(store, WHOMBAT, 'pve-20260928.6');
     const restarted: string[] = [];
     whatsNewWatcher(store, WHOMBAT, (r) => restarted.push(r)).see(status('pve-20260928.6'));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(restarted).toEqual([]);
+  });
+
+  it('an update found while the strip can’t show it (the connection dropped) stays untold until it is on screen', async () => {
+    const store = memoryStore({
+      [KEY]: JSON.stringify({ release: 'pve-20260927.1', at: installedAt('pve-20260927.1') }),
+    });
+    const found: string[] = [];
+    whatsNewWatcher(store, WHOMBAT, (r) => found.push(r)).see(status('pve-20260928.6'));
+    await vi.waitFor(() => expect(found).toEqual(['pve-20260928.6']));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Never on screen, then the app closed: the next start still tells.
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
+    // On screen at last: told, and never again.
+    await markWhatsNewTold(store, WHOMBAT, 'pve-20260928.6');
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
   });
 
   it('is drawn in the strip with the passkey nudge, never waiting for it', () => {
