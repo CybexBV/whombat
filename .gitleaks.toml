@@ -104,6 +104,10 @@ regexes = [
   '''png/<key>-bust-512\.png''',
 ]
 
+[[allowlists]]
+description = "i18n English source hashes (16-hex SHA-256 prefixes of UI strings, not secrets)"
+paths = ['''^scripts/i18n/source-hashes\.json$''']
+
 # >>> appliance/ and hosts/: written by scripts/ci/scanner_allowlists.py from the folders’ own lists
 [[allowlists]]
 description = "appliance/: The contracts' conformance vectors (vendored, the same files the Whombat repository allowlists) and the vendored contracts release tarballs that carry them: development keys derived from public seeds, dummy secrets"
