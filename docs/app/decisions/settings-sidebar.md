@@ -39,6 +39,8 @@ None of these screens is in the mocks (B-05); they keep Settings' page language.
 
 ## AP-672 The account menu has one Settings link
 
+**Superseded by account-menu.md ACM-01**: the menu's items and order.
+
 - The menu under your name: **Settings** (everyone; was “Burrow settings”, owners only), Start a new burrow (owners),
   a divider, Turn on/off notifications, Sign out. Notifications, Connected accounts, AI accounts and Vault are gone from
   it: Settings' tabs have them, the Vault is in the sidebar.

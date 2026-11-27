@@ -330,7 +330,8 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
 - `web-push-connect.md` — desktop push and the needs-you indicator (*in part*).
 - `sidebar.md`, `settings-sidebar.md`, `settings-simplify.md` — sidebar and Settings copy (*settings-simplify in part*).
 - `sidebar-tabs.md` — Servers and Connections as sidebar tabs, Overview, Settings → Connections.
-- `final-shell-web.md` — the web's nine places in one order, the phone bar and Places drawer, the grouped Search, Usage.
+- `final-shell-web.md` — the web's nine places in one order, the phone bar and Places drawer, the grouped Search, Usage
+  (*in part*).
 - `final-settings-vault-files-usage.md` — the final design's Settings home, Vault rows, Files home and Usage (the Spend report).
 - `settings-phone-link.md` — Settings' Phone app row, Devices' Add a phone / Add a computer, one fingerprint card, the Mobile
   app page by state and on a phone, Settings at a phone's width, the home's rows saying how things are, plainer words,
@@ -342,6 +343,8 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
 - `../app/decisions/phone-audit-1112.md` — the phone after the 2026-11-12 audit: failures in an alert, never a toast; the updater has no Stop.
 - `../app/decisions/weather-news-apps.md` — the weather and news widgets' forms and signs on every screen, and Place and
   News in This Whombat on the web and the phone.
+- `../app/decisions/account-menu.md` — the web's account menu (theme, Settings with ⌘, / Ctrl ,, the version and whether an
+  update is ready), six places in the sidebar, and browser notifications that come on by themselves.
 - `phone-shell-final.md` — the phone's final shell: the tabs with Search and Places above them, the Places sheet, Back
   first on pushed pages, the Search page, readable iPhone badges, Spend shown as Usage.
 

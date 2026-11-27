@@ -10,7 +10,8 @@ on `notifications.md`, `github.md`, `web-shell.md` and `canvas-onboarding.md`.
   `BurrowShell`, behind a `'serviceWorker' in navigator` guard, with no permission prompt. This just
   gets `sw.js`'s `notificationclick` deep-linking and future push delivery ready; it does not touch
   `Notification.permission` or `PushManager`, so nothing pops on page load.
-- **The opt-in lives in the account menu** (`UserFooter` in `Sidebar.tsx`), not a one-time inline
+- **Superseded by `docs/app/decisions/account-menu.md` ACM-06 and ACM-07** (notifications come on by themselves where
+  the browser allows them; the Chat asks once; Settings → Notifications has the switch). **The opt-in lives in the account menu** (`UserFooter` in `Sidebar.tsx`), not a one-time inline
   banner: it is the same menu that already holds "Sign out", matches WS's "quiet, in the same visual
   language" requirement, and does not compete for space with onboarding or the roster. A menu row
   reading "Turn on notifications" / "Turn off notifications" calls `Notification.requestPermission()`
@@ -20,7 +21,8 @@ on `notifications.md`, `github.md`, `web-shell.md` and `canvas-onboarding.md`.
   account, not a burrow) and there is no `devices.list` read endpoint to recover an id after a reload.
   A stale id (e.g. the account signs in on a second browser) fails `devices.remove` with `not_found`,
   which `useWebPush()` treats as already-off rather than surfacing an error.
-- **Status is derived from `PushManager.getSubscription()`, not from server state**, each time the menu
+- **Superseded in part by `docs/app/decisions/account-menu.md` ACM-06** (one state per Whombat, read once a page, with
+  the Whombat's own answer whether this browser is registered). **Status is derived from `PushManager.getSubscription()`, not from server state**, each time the menu
   opens/the hook mounts: the source of truth for "is *this browser* subscribed" is the browser's own
   subscription, not our device row (which could also represent a different browser on the same
   account). `packages/core` has no read endpoint for "is this device registered" and adding one is out
