@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentNowEntry } from './query/keys';
-import { agentNowFor, threadWork, workingLabel } from './working';
+import { agentNowFor, threadWork, workingFaceState, workingLabel } from './working';
 
 const at = Date.parse('2026-10-04T13:46:00.000Z');
 const entry: AgentNowEntry = {
@@ -26,6 +26,16 @@ describe('workingLabel (AP-734)', () => {
     expect(agentNowFor([entry], 'prn_banjo', 'msg_root', at + 4 * 60_000)).toBeNull();
     expect(agentNowFor([entry], 'prn_banjo', null, at)).toBeNull();
     expect(agentNowFor([entry], 'prn_neo', 'msg_root', at)).toBeNull();
+  });
+});
+
+describe('workingFaceState', () => {
+  it('thinks until the turn acts, works while it does, looks at the person while an action waits on them', () => {
+    expect(workingFaceState(null)).toBe('thinking');
+    expect(workingFaceState({ ...entry, title: ' ' })).toBe('thinking');
+    expect(workingFaceState(entry)).toBe('working');
+    expect(workingFaceState({ ...entry, status: 'done' })).toBe('working');
+    expect(workingFaceState({ ...entry, status: 'waiting' })).toBe('needs');
   });
 });
 

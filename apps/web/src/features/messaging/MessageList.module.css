@@ -40,6 +40,39 @@
   font-size: 14px;
 }
 
+/* The thinking line with the agent's face (docs/decisions/face-motion.md): it starts where the agent's next message
+   will, the face in the avatars' column, the dots and words beside it. 14px after a room's face, 12px after a task
+   chat's or a thread's, as their messages. */
+.typingRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.typingNear {
+  gap: 12px;
+}
+
+.typingWords {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--mut);
+  font-size: 14px;
+}
+
+/* A task chat's face: the head on a disc of its face's colour at 14%, as its messages draw it, not clipped. */
+.typingDisc {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
 /* What a screen reader hears instead of the ticking label (AP-734). */
 .srOnly {
   position: absolute;

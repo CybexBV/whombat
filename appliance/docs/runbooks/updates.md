@@ -605,6 +605,11 @@ unpushed is dropped by the next publish with a note. To give up a publish that d
 what the remote has (a publish stopped after `git add` leaves staged files) and drops a commit it couldn't push. A publish commits only the metadata it signed; a clients role the channel publisher signs during
 an upload waits for the next `gh-clients`.
 
+A push GitHub fails on its own side (`fatal error in commit_refs_rules`, or an answer of 500 and above) is made again
+by the same run, every 30 seconds for about a quarter of an hour, and so is the push of `gh-pause` and `gh-resume`.
+Its log says “GitHub failed the push on its own side”. A run that still stops there is finished the same way: run it
+again.
+
 When `gh-resign` passes over a role file that doesn't verify (a broken push, a wrong key), it signs over that role's last
 good version, which keeps serving; the workflow opens the issue “A role file did not verify” and ends red after Pages is
 deployed. Sign the role again (or remove the broken file) and push.

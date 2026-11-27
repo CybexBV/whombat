@@ -8,6 +8,8 @@ them once they have been tried on Beta.
 - Your agent’s face shows what it’s doing: it thinks, works, waits for you, is glad when a run is done and says sorry
   when one fails. It blinks, has a little move of its own, and you can tap it. Turn it off under Settings → Moving
   faces.
+- While your agent works on an answer, its face shows beside “is thinking” in the chat, on the web and the phone:
+  you see it think, get to work and look at you when it needs you.
 - On your Whombat’s screen the face listens, thinks and talks along with a spoken answer, and dozes while nobody’s
   there.
 - This page is in the app now: open What’s new under Settings → This Whombat → About. After an update, the app

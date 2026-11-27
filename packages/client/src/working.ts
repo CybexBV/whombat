@@ -39,6 +39,18 @@ export function workingLabel(name: string, now: AgentNowEntry | null, nowMs: num
     : `${name} · ${title}`;
 }
 
+/**
+ * The face on the thinking line: thinking until its turn reports an action, then at work, and looking at the person
+ * while an action waits on them (an approval). It changes with the turn's actions, not with each tool call's end, so a
+ * quick run of reads doesn't flicker between two faces.
+ */
+export function workingFaceState(
+  now: Pick<AgentNowEntry, 'title' | 'status'> | null,
+): 'thinking' | 'working' | 'needs' {
+  if (!now?.title.trim()) return 'thinking';
+  return now.status === 'waiting' ? 'needs' : 'working';
+}
+
 /** What a thread's reply row says about work in it (AP-735). */
 export interface ThreadWork {
   agentId: string;

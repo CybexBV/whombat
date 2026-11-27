@@ -161,6 +161,34 @@ describe('Stop on the thinking line (WX-10)', () => {
       ]),
     );
 
+  it('starts with the agent’s face, thinking, then at work once its turn acts', async () => {
+    const services = fixtureServices();
+    renderApp(ROOM, services);
+    await screen.findByRole('textbox', { name: 'Comment on PR #482' });
+    thinking(services);
+    const line = (await screen.findByText(`${ASSISTANT_NAME} is thinking`)).closest('[role="status"]');
+    const face = () => line?.querySelector('[data-live-face]');
+    expect(line?.hasAttribute('data-typing-face')).toBe(true);
+    expect(face()?.getAttribute('data-face-state')).toBe('thinking');
+    expect(face()?.getAttribute('aria-hidden')).toBe('true');
+    const now = Date.now();
+    act(() =>
+      services.queryClient.setQueryData(queryKeys.agentNow('cnv_pr482'), [
+        {
+          principalId: WHOMBAT_ID,
+          threadRootId: null,
+          dispatchId: 'dsp_agent',
+          title: 'Reading the conversation',
+          status: 'running',
+          seq: 1,
+          since: now,
+          at: now,
+        },
+      ]),
+    );
+    await waitFor(() => expect(face()?.getAttribute('data-face-state')).toBe('working'));
+  });
+
   it('stops the agent’s turn: the line goes and the toast says so', async () => {
     const user = userEvent.setup();
     const services = fixtureServices();

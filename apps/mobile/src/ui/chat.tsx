@@ -5,10 +5,14 @@
  * and a "{name} is thinking" row.
  */
 
+import { LIVE_BUST_MIN_SIZE } from '@whombat/avatars/motion';
 import {
   ANSWERING_T3_CODE,
+  agentFaceOf,
+  agentNowFor,
   autocorrectComposerMention,
   CARD_FRAME_WORDS,
+  isAutomationPrincipal,
   MOVED_CARD_WORDS,
   type ReportLine,
   type RunChips,
@@ -20,6 +24,7 @@ import {
   threadStageWord,
   type UploadItem,
   type WorkLine,
+  workingFaceState,
 } from '@whombat/client';
 import type { AgentNowEntry } from '@whombat/client/query';
 import type { DigestCard, DigestItem, MentionTarget, Principal, Receipt } from '@whombat/core';
@@ -38,6 +43,7 @@ import {
 import Reanimated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrincipalAvatar } from '../avatars/Avatars';
+import { LiveFace } from '../avatars/LiveFace';
 import { canSend } from '../data/attachments';
 import { useBurrowBase, useNowLabel } from '../data/BurrowProvider';
 import { composerMaxHeight, plusLabel } from '../data/chatInbox';
@@ -357,12 +363,15 @@ export function ThinkingBubble({
   name,
   label: shown,
   spoken,
+  face,
   onStop,
   stopping = false,
 }: {
   name: string;
   label?: string;
   spoken?: string;
+  /** Before the dots: the agent's live face, where its next message will start (docs/decisions/face-motion.md). */
+  face?: ReactNode;
   /** Stop the agent's turn (contracts 0.55, MX-09); no Stop without it. */
   onStop?: () => void;
   /** The stop is on its way: the button waits. */
@@ -389,11 +398,19 @@ export function ThinkingBubble({
       </Text>
     </View>
   );
-  if (!onStop) return words;
+  const line = face ? (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 }}>
+      {face}
+      {words}
+    </View>
+  ) : (
+    words
+  );
+  if (!onStop) return line;
   // Stop sits at the line's end (MX-09): a 44dp text button, after the words in the reading order.
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      {words}
+      {line}
       <Touchable
         onPress={onStop}
         disabled={stopping}
@@ -424,10 +441,12 @@ export function ThinkingBubble({
 /**
  * The thinking row with what the agent does (docs/decisions/card-settle.md AP-734): `Banjo · Editing Layout.astro ·
  * 1m 12s` from its latest action in this conversation and thread (`useAgentNow`), ticking each second while shown;
- * `Banjo is thinking` without a recent action.
+ * `Banjo is thinking` without a recent action. An agent's row starts with its live face, 40 dp, the smallest that blinks
+ * and eases between looks: thinking, then at work once its turn acts, looking at the person while an action waits.
  */
 export function WorkingBubble({
   principalId,
+  agent,
   name,
   threadRootId,
   agentNow,
@@ -436,6 +455,8 @@ export function WorkingBubble({
   stopping,
 }: {
   principalId: string;
+  /** Who is thinking: an agent shows its face. */
+  agent?: Principal | undefined;
   name: string;
   threadRootId: string | null;
   agentNow: readonly AgentNowEntry[];
@@ -448,11 +469,17 @@ export function WorkingBubble({
   // Ticks each second only while the agent reports actions here.
   const nowMs = useTicker(clock, thinkingLabels(name, agentNow, principalId, threadRootId, 0).ticks);
   const words = thinkingLabels(name, agentNow, principalId, threadRootId, nowMs);
+  const state = workingFaceState(agentNowFor(agentNow, principalId, threadRootId, nowMs));
+  const face =
+    agent?.kind === 'agent' && !isAutomationPrincipal(agent) ? (
+      <LiveFace face={agentFaceOf(agent)} size={LIVE_BUST_MIN_SIZE} state={state} />
+    ) : undefined;
   return (
     <ThinkingBubble
       name={name}
       label={words.label}
       spoken={words.spoken}
+      face={face}
       {...(onStop ? { onStop, stopping: stopping === true } : {})}
     />
   );

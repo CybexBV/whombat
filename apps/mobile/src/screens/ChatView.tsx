@@ -1732,6 +1732,7 @@ function ChatFooter({
         <WorkingBubble
           key={t.principalId}
           principalId={t.principalId}
+          agent={people.get(t.principalId)}
           name={people.name(t.principalId)}
           threadRootId={threadRootId}
           agentNow={agentNow}
