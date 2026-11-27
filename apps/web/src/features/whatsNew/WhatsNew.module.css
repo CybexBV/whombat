@@ -1,0 +1,6 @@
+/* What's new (`/whats-new`): not in the mocks; the legal pages' reading column inside the app. Tokens only. */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

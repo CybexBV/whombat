@@ -13,6 +13,9 @@ import {
   updatePollMs,
   updateReady,
   updateView,
+  WHATS_NEW_NO_UPDATE,
+  whatsNewNotice,
+  whatsNewSeenKey,
 } from './updates';
 
 const NOW = new Date('2026-09-29T12:00:00Z');
@@ -392,5 +395,53 @@ describe('Check for updates (check-for-updates.md)', () => {
     expect(updateCheckNotice('found', true)).toMatch(/your yes/);
     expect(updateCheckNotice('nothingNewer', undefined)).toMatch(/already on its way/);
     expect(updateCheckNotice('refused', undefined)).toMatch(/won’t install/);
+  });
+});
+
+describe('the one-time “Whombat updated” notice', () => {
+  const updated = (release: string, state: UpdateStatus['state'] = 'Healthy') => ({
+    update: {
+      ...base,
+      state,
+      current: release,
+      lastUpdate: { release, from: 'pve-20260927.1', at: NOW.toISOString() },
+    },
+  });
+
+  it('shows once the last update differs from the release this device saw', () => {
+    expect(whatsNewNotice(updated('pve-20260928.6'), 'pve-20260927.1')).toEqual({
+      action: 'show',
+      release: 'pve-20260928.6',
+    });
+  });
+
+  it('says nothing for the release already seen', () => {
+    expect(whatsNewNotice(updated('pve-20260928.6'), 'pve-20260928.6').action).toBe('none');
+  });
+
+  it('only remembers on the first look, with nothing to compare with', () => {
+    expect(whatsNewNotice(updated('pve-20260928.6'), null)).toEqual({
+      action: 'remember',
+      release: 'pve-20260928.6',
+    });
+    // No update yet: remembered as such, so the first update gets the notice.
+    expect(whatsNewNotice({ update: base }, null)).toEqual({
+      action: 'remember',
+      release: WHATS_NEW_NO_UPDATE,
+    });
+    expect(whatsNewNotice(updated('pve-20260928.6'), WHATS_NEW_NO_UPDATE).action).toBe('show');
+  });
+
+  it('says nothing without update facts or after an update that went wrong', () => {
+    expect(whatsNewNotice(null, null).action).toBe('none');
+    expect(whatsNewNotice({}, 'pve-20260927.1').action).toBe('none');
+    expect(whatsNewNotice({ update: base }, 'pve-20260927.1').action).toBe('none');
+    expect(whatsNewNotice(updated('pve-20260928.6', 'ForwardRepairRequired'), 'pve-20260927.1').action).toBe(
+      'none',
+    );
+  });
+
+  it('keeps one seen release per Whombat, in letters a secure store takes', () => {
+    expect(whatsNewSeenKey('wb-4hxx/7ydw:1')).toBe('whombat.whatsNew.seen.wb-4hxx_7ydw_1');
   });
 });

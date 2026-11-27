@@ -278,3 +278,59 @@ export function askFirstView(
 export function backupBlocksText(status: Pick<ApplianceStatus, 'backup'>): string | null {
   return status.backup.state === 'unprotected' ? UPDATE_TEXT.breakingWait : null;
 }
+
+/* What's new ---------------------------------------------------------------------------------------------- */
+
+/**
+ * The web app's “What’s new” page: `docs/changelog.md` in plain words, served by the app itself. On the hosted app it
+ * opens without signing in, so the phone opens it in the browser.
+ */
+export const WHATS_NEW_PATH = '/whats-new';
+
+export const WHATS_NEW_TEXT = {
+  link: 'What’s new',
+  linkMeta: 'What changed in Whombat lately, in plain words.',
+  open: 'Read',
+  notice: 'Whombat updated',
+  see: 'See what’s new',
+  dismiss: 'Dismiss',
+} as const;
+
+/**
+ * What a device remembers before this Whombat's first update: it has looked, and there was no update yet. The first
+ * update after it then gets the notice, as any later one does.
+ */
+export const WHATS_NEW_NO_UPDATE = 'none';
+
+/** The release the last update installed, null when there is none to tell about (none yet, or one that went wrong). */
+export function lastUpdatedRelease(
+  status: Pick<ApplianceStatus, 'update'> | null | undefined,
+): string | null {
+  const u = status?.update;
+  if (!u?.lastUpdate || u.state === 'ForwardRepairRequired') return null;
+  return u.lastUpdate.release;
+}
+
+/**
+ * The one-time “Whombat updated · See what’s new” notice, from the Whombat's status and what this device saw last
+ * (`seen`, null when it never looked): `show` once the last update differs from what was seen; `remember` (quietly
+ * keep `release` as seen) the first time a device looks, since it has nothing to compare with; else `none`. Showing
+ * the notice doesn't count as seeing it: Dismiss or See what’s new keeps the release, so a page closed in between shows
+ * it again.
+ */
+export function whatsNewNotice(
+  status: Pick<ApplianceStatus, 'update'> | null | undefined,
+  seen: string | null,
+): { action: 'show' | 'remember' | 'none'; release: string } {
+  const release = lastUpdatedRelease(status) ?? WHATS_NEW_NO_UPDATE;
+  // A status without update facts (an unmanaged box, or none read yet) says nothing either way.
+  if (!status?.update) return { action: 'none', release };
+  if (seen === null) return { action: 'remember', release };
+  if (release === WHATS_NEW_NO_UPDATE || release === seen) return { action: 'none', release };
+  return { action: 'show', release };
+}
+
+/** Where a device keeps what it saw, one per Whombat (letters a phone's secure store takes). */
+export function whatsNewSeenKey(whombat: string): string {
+  return `whombat.whatsNew.seen.${whombat.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+}

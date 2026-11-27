@@ -157,10 +157,13 @@ rec {
     keep = rel: base: within "patches" rel || !skipped base;
   };
 
-  # The web app the runtime serves: apps/web with the packages it can import.
+  # The web app the runtime serves: apps/web with the packages it can import, and the changelog its What's new page shows.
   web = copy {
     name = "whombat-web-source";
-    files = workspaceFiles ++ existing [ "tsconfig.base.json" ];
+    files = workspaceFiles ++ existing [
+      "tsconfig.base.json"
+      "docs/changelog.md"
+    ];
     trees = [
       "apps/web"
       "tools/visual"
