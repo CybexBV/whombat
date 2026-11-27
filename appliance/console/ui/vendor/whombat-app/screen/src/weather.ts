@@ -3,6 +3,7 @@
  * read as a few parts the screen draws as its own line icons — the sun or the moon, a cloud, what falls, how much, a
  * flash, fog. Pure, so the drawing and the tests agree. A symbol this table doesn't know is a plain cloud.
  */
+import { screenNumberText } from './words';
 
 export type WeatherSky = 'sun' | 'moon';
 export type WeatherFall = 'rain' | 'sleet' | 'snow';
@@ -48,4 +49,10 @@ export function weatherSign(symbol: string): WeatherSign {
     thunder: base.endsWith('andthunder'),
     fog: false,
   };
+}
+
+/** Keep the true minus sign in temperatures and the locale's decimal separator in all weather figures. */
+export function weatherAmountText(value: number, locale?: string | null): string {
+  const amount = screenNumberText(Math.abs(value), locale);
+  return value < 0 ? `−${amount}` : amount;
 }

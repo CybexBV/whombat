@@ -8,6 +8,7 @@ import type {
   ThingGalleryItem,
   ThingPageBar,
   ThingPageItem,
+  ThingPageKey,
   ThingPagePanel,
   ThingSeriesColor,
   ThingTone,
@@ -59,6 +60,10 @@ export function countLine(p: {
   /** “+9 this week”, “No change”. */
   note?: string;
   noteTone?: ThingTone;
+  /** Stable figure key for desk widgets so translating `title` never changes privacy or lead lookups. */
+  figureKey?: ThingPageKey;
+  /** True when a locked desk screen must leave this figure out. */
+  private?: boolean;
   actions?: ThingPageItem['actions'];
   url?: string;
 }): ThingPageItem {
@@ -74,7 +79,9 @@ export function countLine(p: {
       value: clip(p.value, 20),
       ...(p.note ? { note: clip(p.note, 40) } : {}),
       ...(p.noteTone ? { tone: p.noteTone } : {}),
+      ...(p.figureKey ? { key: p.figureKey } : {}),
     },
+    ...(p.private ? { private: true } : {}),
     ...(p.actions?.length ? { actions: p.actions } : {}),
     ...(p.url ? { url: p.url } : {}),
   };

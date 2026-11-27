@@ -15,6 +15,7 @@ import type { Config } from '../config';
 import type { Database } from '../db/client';
 import { burrows } from '../db/schema/index';
 import type { QuietWindowRow } from '../db/schema/quiet-windows';
+import { burrowLocale } from '../i18n/locale';
 import type { Logger } from '../services';
 import { NO_QUIET, type QuietBook, quietBook, thingQuiet } from '../things/quiet/store';
 import { activeWindow, keptQuiet as heldQuiet } from '../things/quiet/windows';
@@ -36,6 +37,7 @@ import {
 } from './client';
 import { HostsEventStream, type HostsSseEvent } from './events';
 import { type HubInfo, type HubReconnecting, holdCovers, reconnectingOf, toHubInfo } from './hub';
+import { localizeHubJson } from './localize';
 import { arr, hintGuests, obj, toHostFleet, toHostWatchLimits, ts } from './map';
 import { loadServerNames } from './names-store';
 import {
@@ -261,7 +263,13 @@ export class HostsService {
   /** A call on the service; a missing service is `HostsUnavailable('not_configured')`. */
   call<T>(req: HostsRequest): Promise<T> {
     if (!this.client) return Promise.reject(new HostsUnavailable('not_configured', HOSTS_TEXT.absent));
-    return this.client.json<T>(req);
+    // The hub writes English: its alerts, hints and notes are said again in the box's language from their codes.
+    return this.client.json<T>(req).then(async (value) => localizeHubJson(value, await this.locale()));
+  }
+
+  /** The box's locale, for what the hub's answers say (English when it can't be read). */
+  locale(): Promise<string> {
+    return burrowLocale({ db: this.deps.db });
   }
 
   /** A text answer (the agent installer, `GET /agent-install.sh`); a non-2xx status throws `HostsError`. */
@@ -577,7 +585,13 @@ export class HostsService {
       ...(window ? [window] : []),
     ]).catch(() => new Map<string, string>());
     const marked = { ...alert };
-    markAlertQuiet(marked, window, { now, names, untilWords: (until) => untilWords(until, now, zone) });
+    const locale = await this.locale();
+    markAlertQuiet(marked, window, {
+      now,
+      names,
+      untilWords: (until) => untilWords(until, now, zone, locale),
+      locale,
+    });
     return marked;
   }
 
@@ -618,12 +632,13 @@ export class HostsService {
       ...(window ? [window] : []),
     ]).catch(() => new Map<string, string>());
     const zone = burrow?.timeZone ?? 'UTC';
-    const words = (until: Date) => untilWords(until, now, zone);
+    const locale = await this.locale();
+    const words = (until: Date) => untilWords(until, now, zone, locale);
     const verdictAlerts = alerts.map((a) => ({ ...a }));
     for (const a of alerts)
-      markAlertQuiet(a, a.serverId === id ? window : null, { now, names, untilWords: words });
+      markAlertQuiet(a, a.serverId === id ? window : null, { now, names, untilWords: words, locale });
     const hints = marked.hints.map((m) =>
-      m.row ? { ...m.hint, quiet: quietOf(m.row, names, now, zone) } : m.hint,
+      m.row ? { ...m.hint, quiet: quietOf(m.row, names, now, zone, locale) } : m.hint,
     );
     const status = detail.server.status;
     const verdict = serverVerdict({
@@ -732,10 +747,16 @@ export class HostsService {
       ...hintRows.map((m) => ({ byId: m.row?.byId ?? null })),
       ...windows.values(),
     ]).catch(() => new Map<string, string>());
-    const words = (until: Date) => untilWords(until, now, zone);
+    const locale = await this.locale();
+    const words = (until: Date) => untilWords(until, now, zone, locale);
     for (const a of out.alerts)
-      markAlertQuiet(a, a.serverId ? windows.get(a.serverId) : null, { now, names, untilWords: words });
-    for (const m of hintRows) if (m.row) m.hint.quiet = quietOf(m.row, names, now, zone);
+      markAlertQuiet(a, a.serverId ? windows.get(a.serverId) : null, {
+        now,
+        names,
+        untilWords: words,
+        locale,
+      });
+    for (const m of hintRows) if (m.row) m.hint.quiet = quietOf(m.row, names, now, zone, locale);
   }
 
   /** A server's row changed in Whombat (its “Asks you first”): realtime sends it again (`hosts.server`). */

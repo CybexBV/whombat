@@ -6,6 +6,7 @@
  * The share itself waits in `data/shareInbox` (never in the route's params) and is forgotten when this screen goes —
  * with the copies Android made of its files (MX-07).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { composerMentionTargets, composerText } from '@whombat/client';
 import { useSendMessage } from '@whombat/client/react';
@@ -19,6 +20,7 @@ import { clearShare, currentShare, shareNote, shareSummary, subscribeShare } fro
 import { matchesShareTarget, type ShareTarget, shareTargetRoute, shareTargets } from '../data/shareTargets';
 import { useAgentWords, useTheAgentHere } from '../data/useAgent';
 import { useComposerUploads } from '../data/useComposerUploads';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -44,6 +46,8 @@ function TargetMark({ target, size }: { target: ShareTarget; size: number }) {
 }
 
 export function ShareScreen({ navigation }: Props) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug, mode, bootstrap } = useBurrow();
@@ -137,9 +141,9 @@ export function ShareScreen({ navigation }: Props) {
   if (!share)
     return (
       <Screen>
-        <BackBar label="Back" onPress={close} />
-        <LargeTitle title="Share to…" />
-        <QuietText>Nothing to share. Share from another app to send it here.</QuietText>
+        <BackBar label={tMobile('managed.back')} onPress={close} />
+        <LargeTitle title={tMobile('screens.share-to')} />
+        <QuietText>{tMobile('screens.nothing-to-share-share-from-another-app-to')}</QuietText>
       </Screen>
     );
 
@@ -151,8 +155,15 @@ export function ShareScreen({ navigation }: Props) {
       <Screen>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
           <LargeTitle
-            title="Share to…"
-            right={<Button label="Cancel" variant="quiet" onPress={close} style={{ minWidth: 72 }} />}
+            title={tMobile('screens.share-to')}
+            right={
+              <Button
+                label={tClient('reports.cancel')}
+                variant="quiet"
+                onPress={close}
+                style={{ minWidth: 72 }}
+              />
+            }
           />
           <Text size={12} mono color={theme.colors.mut} style={{ paddingHorizontal: 22 }}>
             {shareSummary(share)}
@@ -175,9 +186,9 @@ export function ShareScreen({ navigation }: Props) {
               <TextInput
                 value={q}
                 onChangeText={setQ}
-                placeholder="Find a conversation"
+                placeholder={tMobile('screens.find-a-conversation')}
                 placeholderTextColor={theme.colors.mut}
-                accessibilityLabel="Find a conversation"
+                accessibilityLabel={tMobile('screens.find-a-conversation')}
                 autoCorrect={false}
                 cursorColor={theme.colors.ink}
                 selectionColor={theme.colors.brand}
@@ -191,10 +202,12 @@ export function ShareScreen({ navigation }: Props) {
               />
             </View>
           </View>
-          <Section title="CONVERSATIONS">
+          <Section title={tMobile('screens.conversations')}>
             {shown.length === 0 ? (
               <QuietText>
-                {targets.length ? 'Nothing matches that.' : 'You’re not in any conversations yet.'}
+                {targets.length
+                  ? tMobile('screens.nothing-matches-that')
+                  : tMobile('screens.youre-not-in-any-conversations-yet')}
               </QuietText>
             ) : (
               shown.map((t) => (
@@ -219,10 +232,10 @@ export function ShareScreen({ navigation }: Props) {
   return (
     <Screen>
       <KeyboardAvoidingView style={{ flex: 1 }}>
-        <BackBar label="Conversations" onPress={() => setTarget(null)} />
+        <BackBar label={tMobile('screens.conversations-2')} onPress={() => setTarget(null)} />
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
-          <LargeTitle title="Share to…" />
-          <Section title="TO">
+          <LargeTitle title={tMobile('screens.share-to')} />
+          <Section title={tMobile('screens.to')}>
             <ListRow
               leading={<TargetMark target={target} size={44} />}
               title={target.title}

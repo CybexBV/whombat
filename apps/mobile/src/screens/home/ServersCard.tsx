@@ -11,9 +11,10 @@
  * under a note; a server waiting to be added is a dashed card after the others, with Review; without the hosts service
  * there is no section; a service that's down says so.
  */
+
 import {
-  OVERVIEW_WORDS,
   type OverviewSectionView,
+  overviewWords,
   readState,
   type StatusLevel,
   serverQuietWords,
@@ -43,6 +44,7 @@ import { isOwnId, parseThingRowPick, RENAME_COPY, thingRowMenu } from '../../dat
 import { OVERVIEW_TITLE } from '../../data/shell';
 import { useStatusOrder } from '../../data/useStatusOrder';
 import { type ThingRenaming, useThingRename } from '../../data/useThingRename';
+import { useI18n } from '../../i18n';
 import { useAppNavigation } from '../../navigation/hooks';
 import { isBeside, useBeside } from '../../navigation/panes';
 import { Text } from '../../theme/Text';
@@ -76,6 +78,9 @@ export function ServersCard({
   /** Changes on a pull to refresh: the cards sort worst first again (else they keep their order while live). */
   sortKey?: number;
 }) {
+  const { rawLocale } = useI18n();
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const theme = useTheme();
@@ -130,12 +135,12 @@ export function ServersCard({
       label={view.label}
       count={any ? view.count : null}
       summary={view.summary}
-      links={any ? <SectionLink label={OVERVIEW_WORDS.addServer} onPress={add} /> : null}
+      links={any ? <SectionLink label={overviewWordsHere.addServer} onPress={add} /> : null}
     >
       {fleetState === 'saved' ? (
         <ReadNote
-          title={OVERVIEW_WORDS.couldntRefresh(HOME_SERVERS_COPY.yours)}
-          body={OVERVIEW_WORDS.savedEach}
+          title={overviewWordsHere.couldntRefresh(HOME_SERVERS_COPY.yours)}
+          body={overviewWordsHere.savedEach}
           onRetry={() => void fleet.refetch()}
           error={fleet.error}
         />
@@ -245,6 +250,9 @@ function ServerCard({
   /** “Quiet until 23:00” while it is kept quiet. */
   quiet?: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const theme = useTheme();
   // Where the elbow ends: the middle of the name block, measured, as the mock's `bottom: 50%`.
   const [whoMiddle, setWhoMiddle] = useState(37);
@@ -297,7 +305,7 @@ function ServerCard({
                 </Text>
               )}
             </View>
-            {row.thisWhombat ? <Tag text={OVERVIEW_WORDS.thisWhombat} /> : null}
+            {row.thisWhombat ? <Tag text={overviewWordsHere.thisWhombat} /> : null}
             {row.pill ? (
               <LevelPill level={PILL_LEVEL[row.pill.tone] ?? row.level} word={row.pill.word} />
             ) : null}

@@ -23,6 +23,7 @@ import { api } from '@whombat/core/contracts';
 import { useState } from 'react';
 import { cx } from '../../../components/cx';
 import { useToast } from '../../../components/Toast';
+import { currentLocale } from '../../../i18n/provider';
 import wc from '../HostFleet.module.css';
 import { ConfirmDialog } from '../parts';
 
@@ -56,9 +57,10 @@ export function BulkBar({
           params: { burrow, serverId: item.server, guestId: item.guest.id },
           body: { action, ...(isDestructiveAction(action) ? { confirm: true } : {}) },
         });
-        if (r.status !== 'ok') failed.push({ name: label(item), message: commitOutcomeText(r) ?? '' });
+        if (r.status !== 'ok')
+          failed.push({ name: label(item), message: commitOutcomeText(r, currentLocale()) ?? '' });
       } catch (err) {
-        failed.push({ name: label(item), message: hostErrorInfo(err).message });
+        failed.push({ name: label(item), message: hostErrorInfo(err, currentLocale()).message });
       }
     });
     toast.show(bulkDoneText(kind, plan.run.length, failed), failed.length ? { duration: 12_000 } : undefined);

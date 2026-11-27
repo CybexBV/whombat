@@ -318,7 +318,7 @@ export function noticeOf(event: SupportEvent): RemoteHelpNotice | null {
         except: null,
         push: {
           what: `remote-help-visit:${event.visitId ?? event.seq}`,
-          notice: remoteHelpVisitNotice(text),
+          notice: remoteHelpVisitNotice(text, remoteHelpWho(event.who ?? '')),
         },
         text,
         unlessSaidWithinMs: REMOTE_HELP_VISIT_QUIET_MS,

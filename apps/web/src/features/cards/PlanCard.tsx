@@ -2,6 +2,7 @@ import { planFocus, planFrame } from '@whombat/client';
 import { type LinkRef, type Plan, type PlanStep, stepGoesAhead } from '@whombat/core/domain';
 import { formatDue, plural } from '@whombat/core/text';
 import { cx } from '../../components/cx';
+import { currentLocale } from '../../i18n/provider';
 import { cardStepDetail, countedSteps, GO_AHEAD, MARKER_LABEL, stepLinks } from '../plans/planModel';
 import { CardFrame, FrameButton, frameStyles as f } from './CardFrame';
 import { planCanvasHref } from './links';
@@ -75,7 +76,7 @@ export function PlanCard({
   ) : null;
   const facts = [
     { term: 'Steps', value: plural(countedSteps(p), 'step') },
-    p.due ? { term: 'Due', value: formatDue(p.due) } : null,
+    p.due ? { term: 'Due', value: formatDue(p.due, currentLocale()) } : null,
     ...p.steps.flatMap((s, i) => stepLinks(s).map((l) => ({ term: `Step ${i + 1}`, value: l.label }))),
   ].filter((x): x is { term: string; value: string } => x !== null);
   return (

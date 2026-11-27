@@ -6,6 +6,7 @@
  * guest's own screen is `@whombat/client/hosts/mobile` (AP-1485…). Pure; the screens are `screens/ServerScreen.tsx`
  * and `screens/GuestScreen.tsx` (Connections' Servers rows are `data/homeServers.ts`).
  */
+
 import {
   GUEST_STATE_WORDS,
   type GuestKindView,
@@ -24,28 +25,33 @@ import {
   type HostServerStatus,
   type ThingStatus,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
-export const SERVER_COPY = {
-  summary: 'Summary',
-  guests: 'Guests',
-  backups: 'Backups',
-  /** An Unraid server's (incus-unraid-mobile.md AP-1634). */
-  array: 'Array',
-  plugins: 'Plugins',
-  /** A Mac's (macos-servers.md MAC-34). */
-  screen: 'Screen',
-  /** A Mac's Find My, on a Whombat from before Find My was a connection (findmy-connection.md). */
-  findmy: 'Find My',
-  noGuests: 'Nothing runs on this server.',
-  guestsFailed: 'This list didn’t load.',
-  /** The fold at the foot of the Summary: versions, processor, address, helper, storage and pools. */
-  technical: 'Technical details',
-  failed: 'This server didn’t load.',
-  absent: 'Servers aren’t set up on this Whombat.',
-  ask: (name: string) => `Ask about ${name}`,
-  powerOff: 'Power control is off for this server.',
-  cancel: 'Cancel',
-} as const;
+export function serverCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    summary: t('servers.serverCopy.summary'),
+    guests: t('servers.serverCopy.guests'),
+    backups: t('servers.serverCopy.backups'),
+    /** An Unraid server's (incus-unraid-mobile.md AP-1634). */
+    array: t('servers.serverCopy.array'),
+    plugins: t('servers.serverCopy.plugins'),
+    /** A Mac's (macos-servers.md MAC-34). */
+    screen: t('servers.serverCopy.screen'),
+    /** A Mac's Find My, on a Whombat from before Find My was a connection (findmy-connection.md). */
+    findmy: t('servers.serverCopy.findmy'),
+    noGuests: t('servers.serverCopy.noGuests'),
+    guestsFailed: t('servers.serverCopy.guestsFailed'),
+    /** The fold at the foot of the Summary: versions, processor, address, helper, storage and pools. */
+    technical: t('servers.serverCopy.technical'),
+    failed: t('servers.serverCopy.failed'),
+    absent: t('servers.serverCopy.absent'),
+    ask: (name: string) => t('servers.serverCopy.ask', { name }),
+    powerOff: t('servers.serverCopy.powerOff'),
+    cancel: t('servers.serverCopy.cancel'),
+  } as const;
+}
+export const SERVER_COPY = serverCopy();
 
 const DASH = '—';
 

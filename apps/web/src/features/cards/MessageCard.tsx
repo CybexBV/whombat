@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  AGENT_FALLBACK_NAME,
   ApiError,
+  agentFallbackName,
   appPath,
   approvalLine,
   approveToastFor,
@@ -22,13 +22,13 @@ import {
   runControls,
   runDisplay,
   runShowsAsLine,
-  SCHEDULE_TEXT,
   scheduleLine,
-  TEAM_REPORT_WORDS,
+  scheduleText,
   taskCardView,
   taskLine,
   teamReportDraftOf,
   teamReportDraftPath,
+  teamReportWords,
   theAgentOf,
   thingWatchLine,
   turnFailedLine,
@@ -78,6 +78,7 @@ import { writeProblem } from '../../app/problem';
 import { useHereHref, useNavigateHref, useSearchUpdate } from '../../app/routing/navigation';
 import { Button } from '../../components/Button';
 import { useToast } from '../../components/Toast';
+import { useLocaleWords } from '../../i18n/words';
 import { markIfUnknown, useAskToCheck, useUnknownAnswer } from '../approvals/unknownAnswer';
 import { usePrHref } from '../branch/usePrHref';
 import { errorText, settle } from '../feedback/copy';
@@ -723,6 +724,7 @@ function ScheduleLine({
   common: LineCommon;
   opened: ReactNode;
 }) {
+  const SCHEDULE_TEXT = useLocaleWords(scheduleText);
   const cancel = useScheduleCancel(ctx.burrow, card, ctx.boot);
   const s = card.schedule;
   return (
@@ -760,6 +762,7 @@ function ScheduleLine({
  * its line's (AP-731).
  */
 function useScheduleCancel(burrow: string, card: ScheduleCardData, boot: CardBoot | undefined) {
+  const AGENT_FALLBACK_NAME = useLocaleWords(agentFallbackName);
   const toast = useToast();
   const remove = useScheduleAction(api.schedules.remove);
   const [problem, setProblem] = useState<string | null>(null);
@@ -1078,6 +1081,7 @@ function useApprovalActions(
   boot: CardBoot | undefined,
   principals: PrincipalLookup,
 ) {
+  const reportWords = useLocaleWords(teamReportWords);
   const toast = useToast();
   const updateSearch = useSearchUpdate();
   const now = useNow(30_000);
@@ -1159,7 +1163,7 @@ function useApprovalActions(
   const draftId = teamReportDraftOf(approval);
   const navigate = useNavigateHref();
   const edit = draftId
-    ? { label: TEAM_REPORT_WORDS.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
+    ? { label: reportWords.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
     : null;
 
   // “Tonight at 03:00” (ONE-10, AP-1280): in a chat with the agent, when the Whombat's quiet hours for changes start

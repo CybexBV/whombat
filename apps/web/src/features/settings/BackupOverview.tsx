@@ -15,7 +15,6 @@
 
 import { startedChatPath } from '@whombat/client';
 import {
-  BACKUP_OPTIONS_TEXT,
   type BackupHero,
   type BackupPageShown,
   type BackupRow,
@@ -63,6 +62,8 @@ import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { BACKUP_OPTIONS_TEXT } from '../../i18n/clientWords';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { backupErrorText } from './BackupDestination';
 import { BackupDetail } from './BackupDetail';
@@ -156,12 +157,17 @@ export function BackupOverview({
     justNow: justNowAt !== null && Date.now() - justNowAt < JUST_NOW_MS,
     notice,
     lastKnownAt,
+    locale: currentLocale(),
   });
   const groups = known
-    ? backupGroups(known, policy.data?.policy.keep ?? null, all ? {} : { limit: BACKUP_ROWS_SHOWN })
+    ? backupGroups(
+        known,
+        policy.data?.policy.keep ?? null,
+        all ? { locale: currentLocale() } : { limit: BACKUP_ROWS_SHOWN, locale: currentLocale() },
+      )
     : [];
   const total = known?.checkpoints.length ?? 0;
-  const earlier = earlierPlacesLine(notes.data?.earlierPlaces);
+  const earlier = earlierPlacesLine(notes.data?.earlierPlaces, currentLocale());
 
   // `backup.runNow` answers once the backup is made: the card says so then, not that it started.
   const runNow = async () => {
@@ -391,7 +397,7 @@ function AskFix({
   const navigateHref = useNavigateHref();
   const ask = async () => {
     onNote(null);
-    const result = await start.mutateAsync({ text: backupFixText(hero) }).catch(() => null);
+    const result = await start.mutateAsync({ text: backupFixText(hero, currentLocale()) }).catch(() => null);
     if (result?.status === 'ok') navigateHref(startedChatPath(result.data));
     else onNote(backupErrorText(null));
   };
@@ -447,6 +453,7 @@ export function PasskeyLine({ onArmed }: { onArmed: () => void }) {
 
 /** NEEDS YOU: the older backups on the box, when there are any; nothing otherwise. */
 function BackupNeedsYou({ placeName }: { placeName: string | null }) {
+  const { tag: uiLocale } = useWebI18n();
   const { session } = useAppServices();
   const list = useBackupCheckpoints(session);
   const local = list.data?.local ?? null;
@@ -488,7 +495,7 @@ function BackupNeedsYou({ placeName }: { placeName: string | null }) {
             <div className={styles.needsMain}>
               <span className={styles.needsTitle}>{L.title(local.count)}</span>
               <span className={styles.needsMeta}>
-                {L.meta(localRange(local), formatBytes(local.bytes), placeName)}
+                {L.meta(localRange(local), formatBytes(local.bytes, uiLocale), placeName)}
               </span>
               {error ? (
                 <span className={styles.needsError} role="alert">
@@ -524,7 +531,7 @@ function BackupNeedsYou({ placeName }: { placeName: string | null }) {
           <div className={tw.dialogHead}>
             <ModalTitle className={tw.dialogTitle}>{L.removeTitle}</ModalTitle>
             <ModalDescription className={tw.dialogLead}>
-              {L.removeLead(formatBytes(local?.bytes ?? 0))}
+              {L.removeLead(formatBytes(local?.bytes ?? 0, uiLocale))}
             </ModalDescription>
           </div>
           <div className={tw.dialogActions}>
@@ -565,7 +572,12 @@ function BackupDetails({
   const [note, setNote] = useState<string | null>(null);
   const id = useId();
   const D = T.details;
-  const lines = backupDetailLines({ status: status.data?.status ?? null, clearedBy, placeName });
+  const lines = backupDetailLines({
+    status: status.data?.status ?? null,
+    clearedBy,
+    placeName,
+    locale: currentLocale(),
+  });
   return (
     <section className={styles.detailsSection} data-backup-details="">
       <button

@@ -3,8 +3,8 @@
  * catalog entry's page, Google's, Microsoft's and Email's (`/connections?connection=…`) — or in Settings (the
  * Connections tab's list; GitHub and Website feedback under Advanced). A page's “back” goes home to where it is shown.
  */
-import { CHAT_WORDS } from '@whombat/client';
 import { createContext, useContext } from 'react';
+import { CHAT_WORDS } from '../../i18n/shared';
 
 export type ConnectionsHome = 'connections' | 'settings';
 

@@ -30,6 +30,9 @@ func TestSensorNearLimitHint(t *testing.T) {
 	if cpu.Kind != HintNearLimit || cpu.Entity != proto.SensorCPU || cpu.Detail != "94% of the 85 °C limit" || cpu.Link != "#temps" {
 		t.Errorf("cpu hint = %+v", cpu)
 	}
+	if cpu.Code != HintNearLimit || cpu.Params["sensor"] != proto.SensorCPU || cpu.Params["tempC"] != 80.0 || cpu.Params["limitC"] != 85.0 {
+		t.Errorf("cpu hint translation data = %q %v", cpu.Code, cpu.Params)
+	}
 	if hs[1].Detail != "73% of the 55 °C limit" || hs[2].Detail != "71% of the 85 °C limit" || hs[1].Entity != proto.SensorHDD {
 		t.Errorf("details = %q / %q", hs[1].Detail, hs[2].Detail)
 	}
@@ -117,6 +120,9 @@ func TestDiskSpaceAndWearHints(t *testing.T) {
 	}
 	if hs[3].Kind != HintDiskWear || hs[3].Entity != "nvme0n1" || hs[3].Detail != "372 of the 600 TB it’s built to write" || hs[3].Link != "#storage" {
 		t.Errorf("wear hint = %+v", hs[3])
+	}
+	if h := hs[3]; h.Code != "disk.wear.tbw" || h.Params["writtenTb"] != 372.0 || h.Params["ratedTbw"] != 600.0 {
+		t.Errorf("wear hint translation data = %q %v", h.Code, h.Params)
 	}
 	// The alert conditions of the same report do not overlap the hints.
 	for _, c := range HostConditions(r) {

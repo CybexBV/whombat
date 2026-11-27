@@ -8,6 +8,7 @@ import { useTheAgent } from '@whombat/client/react';
 import { Plus } from 'lucide-react';
 import { ButtonLink } from '../../components/Button';
 import { Icon } from '../../components/Icon';
+import { useWebI18n } from '../../i18n/provider';
 import styles from './EmptyConnections.module.css';
 
 export const EMPTY_CONNECTIONS_WORDS = {
@@ -20,13 +21,13 @@ export const EMPTY_CONNECTIONS_WORDS = {
 export function EmptyConnections({ burrow }: { burrow: string }) {
   const { words } = useTheAgent(burrow);
   const navigate = useNavigate();
-  const W = EMPTY_CONNECTIONS_WORDS;
+  const { t } = useWebI18n();
   return (
     <section className={styles.empty} aria-labelledby="conn-empty">
       <h2 id="conn-empty" className={styles.title}>
-        {W.title}
+        {t('overview.empty.title')}
       </h2>
-      <p className={styles.body}>{W.body(words.Name)}</p>
+      <p className={styles.body}>{t('overview.empty.body', { assistant: words.Name })}</p>
       <div>
         <ButtonLink
           variant="primary"
@@ -37,7 +38,7 @@ export function EmptyConnections({ burrow }: { burrow: string }) {
             void navigate({ to: '/settings', search: { tab: 'connections', connection: 'add' } });
           }}
         >
-          {W.add}
+          {t('sidebar.addConnection')}
         </ButtonLink>
       </div>
     </section>

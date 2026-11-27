@@ -7,7 +7,7 @@
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  BACKUP_LOOK_TEXT,
+  backupLookText,
   lookCategoryName,
   lookCategoryRows,
   lookDoneLine,
@@ -20,6 +20,7 @@ import { useBackupLook, useBackupLookItems, useBringBack } from '@whombat/client
 import type { BackupLookCategory, BackupLookItem } from '@whombat/protocol/session';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -35,9 +36,9 @@ import { useBackupSession } from './useBackups';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BackupBringBack'>;
 
-const T = BACKUP_LOOK_TEXT;
-
 export function BackupBringBackScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const T = backupLookText(rawLocale);
   const theme = useTheme();
   const bottomRoom = useBottomRoom();
   const session = useBackupSession();
@@ -55,8 +56,8 @@ export function BackupBringBackScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (finishedAt) setShown(true);
   }, [finishedAt]);
-  const done = shown && look?.bring && !bring.isPending ? lookDoneLine(look.bring) : null;
-  const problem = error ? backupErrorText(error) : lookProblemText(look);
+  const done = shown && look?.bring && !bring.isPending ? lookDoneLine(look.bring, rawLocale) : null;
+  const problem = error ? backupErrorText(error, rawLocale) : lookProblemText(look, rawLocale);
   const leave = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('WhombatBackups'));
   const bringNow = () => lookId && bring.mutate({ lookId, items: [...picked] });
 
@@ -75,7 +76,7 @@ export function BackupBringBackScreen({ route, navigation }: Props) {
             {T.title}
           </Text>
           <Text size={14.5} color={theme.colors.ink2}>
-            {backupTitle(createdAt)}
+            {backupTitle(createdAt, undefined, rawLocale)}
           </Text>
         </View>
 
@@ -137,7 +138,7 @@ export function BackupBringBackScreen({ route, navigation }: Props) {
               <Note text={T.empty} />
             ) : (
               <Card label={T.inIt.toUpperCase()}>
-                {lookCategoryRows(categories).map((c, i) => (
+                {lookCategoryRows(categories, rawLocale).map((c, i) => (
                   <LinkRow
                     key={c.id}
                     first={i === 0}
@@ -163,11 +164,11 @@ export function BackupBringBackScreen({ route, navigation }: Props) {
         ) : (
           <>
             <FormField
-              label={lookCategoryName(category)}
+              label={lookCategoryName(category, rawLocale)}
               value={query}
               onChangeText={setQuery}
-              placeholder={T.search(lookCategoryName(category))}
-              accessibilityLabel={T.search(lookCategoryName(category))}
+              placeholder={T.search(lookCategoryName(category, rawLocale))}
+              accessibilityLabel={T.search(lookCategoryName(category, rawLocale))}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
@@ -199,7 +200,7 @@ export function BackupBringBackScreen({ route, navigation }: Props) {
             />
           </>
         )}
-        <ErrorLine text={bring.error ? backupErrorText(bring.error) : null} />
+        <ErrorLine text={bring.error ? backupErrorText(bring.error, rawLocale) : null} />
       </ScrollView>
     </Screen>
   );
@@ -217,8 +218,10 @@ function PickRow({
   checked: boolean;
   onToggle: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupLookText(rawLocale);
   const theme = useTheme();
-  const meta = lookItemMeta(item);
+  const meta = lookItemMeta(item, undefined, rawLocale);
   return (
     <Touchable
       accessibilityRole="checkbox"

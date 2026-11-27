@@ -6,10 +6,11 @@
  * turns it back on (`useDelivery.ts`). In the settings sheet's Notifications group it is labelled ON THIS PHONE (SS-30),
  * next to Do not disturb.
  */
+import { useI18n } from '../i18n';
 import { Button } from '../ui/primitives';
 import { communityNotificationsView } from './community';
 import type { ManagedPush } from './context';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { notificationsView } from './pushView';
 import { Card, Row } from './ui';
 import { useDeliveryStatus } from './useDelivery';
@@ -28,6 +29,9 @@ export function NotificationsRow({
   label?: string;
   community?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const noPush =
     community &&
     push.state.status === 'unavailable' &&
@@ -36,7 +40,7 @@ export function NotificationsRow({
   const v = noPush ? communityNotificationsView() : notificationsView(push, Date.now(), delivery.status);
   const page = 'page' in v ? v.page : undefined;
   return (
-    <Card label={label ?? COPY.notifications.label}>
+    <Card label={label ?? managedCopyHere.notifications.label}>
       <Row
         first
         dot={v.dot}
@@ -44,17 +48,25 @@ export function NotificationsRow({
         meta={v.meta}
         action={
           v.action === 'settings' ? (
-            <Button label={COPY.notifications.openSettings} variant="secondary" onPress={push.openSettings} />
+            <Button
+              label={managedCopyHere.notifications.openSettings}
+              variant="secondary"
+              onPress={push.openSettings}
+            />
           ) : v.action === 'delivery' && page ? (
             <Button
-              label={COPY.notifications.openSettings}
+              label={managedCopyHere.notifications.openSettings}
               variant="secondary"
               onPress={() => delivery.open(page)}
             />
           ) : v.action === 'enable' ? (
-            <Button label={COPY.notifications.turnOn} variant="secondary" onPress={push.enable} />
+            <Button label={managedCopyHere.notifications.turnOn} variant="secondary" onPress={push.enable} />
           ) : v.action === 'alerts' ? (
-            <Button label={COPY.notifications.turnOnAlerts} variant="secondary" onPress={push.enable} />
+            <Button
+              label={managedCopyHere.notifications.turnOnAlerts}
+              variant="secondary"
+              onPress={push.enable}
+            />
           ) : null
         }
       />

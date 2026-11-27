@@ -19,6 +19,7 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import type { ConnectOutcome } from '../settings/ConnectionsTab';
 import styles from '../settings/SettingsScreen.module.css';
 import { AccountKeys } from './AccountKeys';
@@ -55,7 +56,7 @@ export function MicrosoftConnection({
   const connection = status.connections.find((item) => item.provider === 'microsoft');
   const busy =
     save.isPending || removeApp.isPending || start.isPending || check.isPending || disconnect.isPending;
-  const report = (e: unknown) => setProblem(problemText(e));
+  const report = (e: unknown) => setProblem(problemText(e, undefined, currentLocale()));
   useEffect(() => {
     if (seen.current || (!outcome?.connected && !outcome?.connectError)) return;
     seen.current = true;

@@ -88,6 +88,20 @@ func TestPVEGuestHints(t *testing.T) {
 		if h.Link == "" || h.Server != "pve" {
 			t.Errorf("hint without link or server: %+v", h)
 		}
+		if h.Code != h.Kind || len(h.Params) == 0 {
+			t.Errorf("hint without translation data: %+v", h)
+		}
+		if h.Kind == HintBackupOld {
+			if names, ok := h.Params["names"].([]string); !ok || strings.Join(names, ",") != "web,new" {
+				t.Errorf("backup names: %v", h.Params)
+			}
+			if states, ok := h.Params["backupStates"].([]string); !ok || strings.Join(states, ",") != "old,none" {
+				t.Errorf("backup states: %v", h.Params)
+			}
+			if ages, ok := h.Params["agesDays"].([]string); !ok || strings.Join(ages, ",") != "12," {
+				t.Errorf("backup ages: %v", h.Params)
+			}
+		}
 	}
 
 	// A failed backup alert covers the backup hint; a space alert the

@@ -2,8 +2,8 @@ import { useSetNotify } from '@whombat/client/react';
 import {
   type ConversationKind,
   defaultNotifyLevel,
-  NOTIFY_LEVEL_LABELS,
   type NotifyLevel,
+  notifyLevelLabels,
   notifyLevelOf,
 } from '@whombat/core';
 import { Bell, BellOff, BellRing, type LucideIcon } from 'lucide-react';
@@ -11,6 +11,7 @@ import { type ContextMenuItem, useRowMenu } from '../../app/shell/ContextMenu';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import headerStyles from '../messaging/ConversationHeader.module.css';
 
 export const NOTIFY_LEVELS: readonly NotifyLevel[] = ['all', 'mentions', 'none'];
@@ -26,6 +27,7 @@ const NOTIFY_ICONS: Record<NotifyLevel, LucideIcon> = { all: BellRing, mentions:
 
 /** “Notifications: Mentions”, the bell's name and tooltip. */
 export function notifyButtonLabel(level: NotifyLevel): string {
+  const NOTIFY_LEVEL_LABELS = notifyLevelLabels(currentLocale());
   return `Notifications: ${NOTIFY_LEVEL_LABELS[level]}`;
 }
 
@@ -35,6 +37,7 @@ export function notifyMenuItems(
   level: NotifyLevel,
   onChange: (notify: NotifyLevel | null) => void,
 ): ContextMenuItem[] {
+  const NOTIFY_LEVEL_LABELS = notifyLevelLabels(currentLocale());
   const fallback = defaultNotifyLevel(kind);
   return NOTIFY_LEVELS.map((l) => ({
     label: l === fallback ? `${NOTIFY_LEVEL_LABELS[l]} (default)` : NOTIFY_LEVEL_LABELS[l],

@@ -8,11 +8,11 @@
  * one row each with progress; New folder is a place on the phone until a file is in it (FS-03). Back (the bar or the
  * system's) goes up a folder before it leaves.
  */
+
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ApiError,
-  FILES_COPY,
   type FilesUpload,
   fileMessageLink,
   filesAtFolder,
@@ -49,9 +49,11 @@ import {
   removeConfirm,
   typedFolder,
 } from '../data/files';
+import { filesCopy } from '../data/filesCopy';
 import { fileMenu, type NativeMenuSpec } from '../data/nativeMenu';
 import { PAGES_COPY } from '../data/pageSets';
 import { useFilesSpace, useFilesUploads } from '../data/useFiles';
+import { useI18n, useMobileT } from '../i18n';
 import { useOpenLink } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -75,12 +77,16 @@ const WRITE_FAILED = 'That didn’t go through. Try again.';
 
 /** “Files › Drawings › 2024”: every step above the folder on screen opens it. */
 function Breadcrumbs({ folder, onOpen }: { folder: string; onOpen: (path: string) => void }) {
+  const { rawLocale } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
-  const crumbs = [{ name: FILES_COPY.title, path: '' }, ...folderCrumbs(folder)];
+  const crumbs = [{ name: filesCopyHere.title, path: '' }, ...folderCrumbs(folder)];
   return (
     <View
       accessibilityRole="list"
-      accessibilityLabel="Folders above"
+      accessibilityLabel={tMobile('screens.folders-above')}
       style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginLeft: -6 }}
     >
       {crumbs.slice(0, -1).map((c) => (
@@ -90,7 +96,7 @@ function Breadcrumbs({ folder, onOpen }: { folder: string; onOpen: (path: string
             feedback="wash"
             ringRadius={8}
             accessibilityRole="link"
-            accessibilityLabel={c.path ? `Folder ${c.name}` : FILES_COPY.top}
+            accessibilityLabel={c.path ? `Folder ${c.name}` : filesCopyHere.top}
             style={{ minHeight: 44, paddingHorizontal: 6, justifyContent: 'center' }}
           >
             <Text size={14} weight={500} color={theme.colors.brand} numberOfLines={1}>
@@ -116,6 +122,7 @@ function UploadRow({
   onRetry: () => void;
   onDismiss: () => void;
 }) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   const status = filesUploadStatusText(item);
   const failed = item.state === 'failed';
@@ -162,7 +169,9 @@ function UploadRow({
           </View>
         ) : null}
       </View>
-      {failed && canRetry ? <Button label="Try again" variant="secondary" onPress={onRetry} /> : null}
+      {failed && canRetry ? (
+        <Button label={tClient('settings.retry')} variant="secondary" onPress={onRetry} />
+      ) : null}
       {item.state === 'saved' ? null : (
         <Touchable
           onPress={onDismiss}
@@ -197,6 +206,7 @@ function FileRow({
   onOpen: () => void;
   onMore: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const ctx = useViewContext();
   const { people } = useBurrowBase();
@@ -226,8 +236,8 @@ function FileRow({
             isPageSet(entry.attachment)
               ? PAGES_COPY.openHint
               : opensInViewer(entry.attachment)
-                ? 'Opens the picture'
-                : 'Opens the share sheet'
+                ? tMobile('screens.opens-the-picture')
+                : tMobile('screens.opens-the-share-sheet')
           }
           style={{
             ...GROWS,
@@ -303,6 +313,10 @@ const MORE_FACE = {
 const MORE_BUTTON = { ...MORE_FACE, marginRight: 6 } as const;
 
 export function ConversationFilesScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
@@ -384,7 +398,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
     if (!access || sharing) return;
     setSharing(a.id);
     shareAttachment(a, access)
-      .catch(() => Alert.alert('Couldn’t open it', `${a.name} didn’t download. Try again.`))
+      .catch(() => Alert.alert(tMobile('screens.couldnt-open-it'), `${a.name} didn’t download. Try again.`))
       .finally(() => setSharing(null));
   };
   // Pictures and page sets open in their viewer here too; everything else goes to the share sheet.
@@ -422,7 +436,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
         return;
       case 'open_message': {
         const link = row?.link ? fileMessageLink(entry, row.link) : null;
-        if (link) openLink(link, FILES_COPY.title);
+        if (link) openLink(link, filesCopyHere.title);
         return;
       }
       case 'rename':
@@ -459,7 +473,10 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <BackBar label={up ? folderName(parentFolder(folder)) : 'Back'} onPress={up ?? goBack} />
+      <BackBar
+        label={up ? folderName(parentFolder(folder)) : tMobile('managed.back')}
+        onPress={up ?? goBack}
+      />
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
@@ -477,19 +494,19 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
         <FilesTitle
           kicker={kicker}
           mark={row ? <FilesConversationMark row={row} size={18} /> : null}
-          title={folder ? folderName(folder) : FILES_COPY.title}
+          title={folder ? folderName(folder) : filesCopyHere.title}
         >
           {folder ? <Breadcrumbs folder={folder} onOpen={setFolder} /> : null}
           {conversationId && list.data ? (
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
               <Button
-                label={FILES_COPY.upload}
+                label={filesCopyHere.upload}
                 onPress={() => void pickFiles().catch((error: unknown) => feedback.onError(error))}
                 style={{ flex: 1 }}
-                accessibilityHint={`Uploads files to ${folder ? folderName(folder) : FILES_COPY.title}`}
+                accessibilityHint={`Uploads files to ${folder ? folderName(folder) : filesCopyHere.title}`}
               />
               <Button
-                label={FILES_COPY.newFolder}
+                label={filesCopyHere.newFolder}
                 variant="secondary"
                 onPress={() => setNaming(true)}
                 style={{ flex: 1 }}
@@ -513,13 +530,13 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
         ) : null}
 
         {!on ? null : !conversationId || notFound ? (
-          <QuietText>{FILES_COPY.notHere}</QuietText>
+          <QuietText>{filesCopyHere.notHere}</QuietText>
         ) : list.error && !list.data ? (
-          <ErrorState text={FILES_COPY.loadError} onRetry={() => void list.refetch()} />
+          <ErrorState text={filesCopyHere.loadError} onRetry={() => void list.refetch()} />
         ) : !list.data ? (
-          <SkeletonRows count={5} avatarSize={44} label="Loading these files" />
+          <SkeletonRows count={5} avatarSize={44} label={tMobile('screens.loading-these-files')} />
         ) : empty ? (
-          <QuietText>{folder ? FILES_COPY.folderEmpty : FILES_COPY.spaceEmpty}</QuietText>
+          <QuietText>{folder ? filesCopyHere.folderEmpty : filesCopyHere.spaceEmpty}</QuietText>
         ) : (
           <FilesGroup>
             {view.folders.map((f) => (
@@ -538,23 +555,25 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
                 key={entry.attachment.id}
                 entry={entry}
                 busy={sharing === entry.attachment.id}
-                menu={fileMenu(entry.attachment.name, fileActions(entry))}
+                menu={fileMenu(entry.attachment.name, fileActions(entry, rawLocale))}
                 onPick={(id) => {
-                  const kind = fileActions(entry).find((a) => a.kind === id)?.kind;
+                  const kind = fileActions(entry, rawLocale).find((a) => a.kind === id)?.kind;
                   if (kind) act(kind, entry);
                 }}
                 onOpen={() => open(entry)}
                 onMore={() => setMenuFor(entry)}
               />
             ))}
-            {list.data.truncated ? <CardNote>Only the newest 10,000 files show here.</CardNote> : null}
+            {list.data.truncated ? (
+              <CardNote>{tMobile('screens.only-the-newest-10-000-files-show-here')}</CardNote>
+            ) : null}
           </FilesGroup>
         )}
       </ScrollView>
 
       <FileActionSheet
         entry={menuFor}
-        actions={menuFor ? fileActions(menuFor) : []}
+        actions={menuFor ? fileActions(menuFor, rawLocale) : []}
         onClose={() => setMenuFor(null)}
         onAction={act}
       />

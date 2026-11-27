@@ -8,7 +8,9 @@
  * Builtin entries (`transport: 'builtin'`, CX-02) keep their own pages and code (GitHub, Google, Microsoft 365, Website
  * feedback); they are here so the overview lists everything from one list.
  */
+
 import { z } from 'zod';
+import { coreTranslator, coreWords, isEnglishLocale } from '../i18n/catalog.js';
 import { ConnectionId, PrincipalId } from '../ids.js';
 import type { Tier } from '../keys/catalog.js';
 import { parseVaultUrl } from '../vault/network.js';
@@ -30,6 +32,7 @@ import {
   ConnectionTransport,
   catalogCheckFor,
   certificateField,
+  connectionAccessLines,
   type DiscoveryProbe,
   jsonPathValue,
   jsonPathValues,
@@ -102,8 +105,13 @@ export {
   ConnectionToolTier,
   ConnectionTransport,
   CookieName,
+  catalogCategoryLabels,
   catalogCheckFor,
   checkFailure,
+  connectionAccessLabels,
+  connectionAccessLines,
+  connectionToolMarks,
+  connectionToolTierLabels,
   DiscoveryProbe,
   defaultToolTier,
   FILES_TOOLS,
@@ -396,7 +404,14 @@ export function pasteValues(
 }
 
 /** What Look only or Manage means for this entry (CT-314). */
-export function accessText(entry: CatalogEntry, level: ConnectionAccessLevel): string {
+export function accessText(
+  entry: CatalogEntry,
+  level: ConnectionAccessLevel,
+  locale?: string | null,
+): string {
+  // An entry's own words are English; another language gets the level's general words in that language.
+  if (!isEnglishLocale(locale))
+    return connectionAccessLines(coreTranslator(locale).t('connection.theAgent'), locale)[level];
   return entry.access?.[level] ?? CONNECTION_ACCESS_DEFAULTS[level];
 }
 
@@ -413,13 +428,19 @@ export function foundServerUrl(host: string, port: number): string {
 }
 
 /** A found server's name: its system as its SSH banner says (“Debian server”), else “Server”. */
-export function foundServerName(version: string | null | undefined): string {
+export function foundServerName(version: string | null | undefined, locale?: string | null): string {
+  const tr = coreTranslator(locale);
   const system = version?.trim();
-  return system ? `${system} server` : 'Server';
+  return system ? tr.t('connection.foundServer', { system }) : tr.t('connection.foundServerBare');
+}
+
+/** A found server's tagline, in a locale. */
+export function foundServerTagline(locale?: string | null): string {
+  return coreTranslator(locale).t('connection.foundServerTagline');
 }
 
 /** A found server's few words (DF-08's tagline). */
-export const FOUND_SERVER_TAGLINE = 'A computer Whombat can look after';
+export const FOUND_SERVER_TAGLINE = foundServerTagline('en');
 
 /** A found service's address (CT-314): `https://192.168.1.10:8006`, the scheme's own port left out. */
 export function discoveredUrl(scheme: 'https' | 'http', host: string, port: number): string {
@@ -1224,29 +1245,35 @@ export function sessionIsStale(
   );
 }
 
+const SESSION_LOGIN_FAILURE_WORDS_KEYS = [
+  'refused',
+  'disabled',
+  'denied',
+  'two_step',
+  'locked',
+  'expired',
+] as const;
+
 /**
  * The person's words for a refused session sign-in (CT-706; NS-04), over `{name}` (the entry's name). The server uses
  * them on the connect form and when a connection needs its password again.
  */
-export const SESSION_LOGIN_FAILURE_WORDS: Record<SessionLoginFailureReason, string> = {
-  refused: '{name} refused the account name or password. Check them and try again.',
-  disabled: 'The account Whombat signs in as is switched off on {name}. Turn it on, then try again.',
-  denied:
-    '{name} doesn’t let the account Whombat signs in as use it. Check the account’s permissions, then try again.',
-  two_step:
-    '{name} asks for a two-step code for this account. Turn off two-step sign-in for the user Whombat signs in as.',
-  locked:
-    '{name} blocked Whombat after too many tries. Wait a while or unblock Whombat’s address in {name}, then try again.',
-  expired:
-    'The password of the account Whombat signs in as has expired. Set a new one in {name}, then enter it here.',
-};
+export function sessionLoginFailureWords(
+  locale?: string | null,
+): Readonly<Record<(typeof SESSION_LOGIN_FAILURE_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'sessionLogin.failure', SESSION_LOGIN_FAILURE_WORDS_KEYS);
+}
+
+export const SESSION_LOGIN_FAILURE_WORDS: Record<SessionLoginFailureReason, string> =
+  sessionLoginFailureWords('en');
 
 /** `SESSION_LOGIN_FAILURE_WORDS` for an entry (CT-706). */
 export function sessionLoginFailureText(
   entry: Pick<CatalogEntry, 'name'>,
   reason: SessionLoginFailureReason,
+  locale?: string | null,
 ): string {
-  return SESSION_LOGIN_FAILURE_WORDS[reason].replaceAll('{name}', entry.name);
+  return coreTranslator(locale).t(`sessionLogin.failure.${reason}`, { name: entry.name });
 }
 
 /**
@@ -1316,7 +1343,10 @@ export const SESSION_TWO_STEP_AGAIN_WORDS =
 export function sessionTwoStepAgainText(
   entry: Pick<CatalogEntry, 'name'>,
   auth: Extract<TokenAuth, { type: 'session' }>,
+  locale?: string | null,
 ): string {
+  if (!isEnglishLocale(locale))
+    return coreTranslator(locale).t('connection.twoStepAgain', { name: entry.name });
   return auth.twoStep?.again ?? SESSION_TWO_STEP_AGAIN_WORDS.replaceAll('{name}', entry.name);
 }
 

@@ -8,7 +8,6 @@
 import {
   DESK_BAR_ITEMS,
   DESK_PREVIEW_SCENARIOS,
-  DESK_WORDS,
   type DeskBarItem,
   type DeskClock,
   type DeskPreview,
@@ -21,14 +20,11 @@ import {
   fillDeskWords,
 } from '@whombat/client/desk';
 import { DeskWhombatName } from '@whombat/core';
-
-const S = DESK_WORDS.settings;
+import { deskWords } from '@whombat/core/domain';
 
 /** The page's four parts, in their order (DK-123). */
 export const DESK_SCREEN_PARTS = ['shows', 'lock', 'night', 'talk'] as const;
 export type DeskScreenPart = (typeof DESK_SCREEN_PARTS)[number];
-
-export const DESK_SCREEN_PART_LABELS: Record<DeskScreenPart, string> = S.parts;
 
 /**
  * The parts this screen has: none until it is paired (the switch and Pair the screen say it all), *What it shows* only
@@ -49,8 +45,9 @@ export function resolveDeskScreenPart(
 }
 
 /** The three words of a choice (DK-103), in their order. */
-export function deskLevelOptions(): { value: DeskShowLevel; label: string }[] {
-  return (['always', 'matters', 'off'] as const).map((value) => ({ value, label: S.levels[value] }));
+export function deskLevelOptions(locale?: string | null): { value: DeskShowLevel; label: string }[] {
+  const { levels } = deskWords(locale).settings;
+  return (['always', 'matters', 'off'] as const).map((value) => ({ value, label: levels[value] }));
 }
 
 /** One thing to choose for: its key, name and line, its mark (or first letter), and the choice. */
@@ -87,7 +84,12 @@ export interface DeskShowsView {
 }
 
 /** The assistant's own rows have no line of their own from the box: Settings' words say what they show. */
-function rowOf(o: DeskShowOption, show: DeskShow, assistant: string): DeskChoiceRow {
+function rowOf(
+  o: DeskShowOption,
+  show: DeskShow,
+  assistant: string,
+  S: ReturnType<typeof deskWords>['settings'],
+): DeskChoiceRow {
   const fill = (s: string) => fillDeskWords(s, { assistant });
   const own = o.key === 'work' ? S.work : o.key === 'coming' ? S.coming : o.key === 'box' ? S.box : null;
   return {
@@ -103,13 +105,15 @@ export function deskShowsView(
   options: readonly DeskShowOption[],
   show: DeskShow,
   assistant: string,
+  locale?: string | null,
 ): DeskShowsView {
+  const S = deskWords(locale).settings;
   const groupTitle = (g: DeskMiddleGroup['group']) => fillDeskWords(S.groups[g], { assistant });
   const middle = (['assistant', 'connection', 'widget'] as const)
     .map((group) => ({
       group,
       title: groupTitle(group),
-      rows: options.filter((o) => o.group === group).map((o) => rowOf(o, show, assistant)),
+      rows: options.filter((o) => o.group === group).map((o) => rowOf(o, show, assistant, S)),
     }))
     .filter((g) => g.rows.length > 0);
   const box = options.find((o) => o.group === 'box');
@@ -118,8 +122,8 @@ export function deskShowsView(
     middle,
     servers: options
       .filter((o) => o.group === 'server')
-      .map((o) => ({ ...rowOf(o, show, assistant), id: o.key.slice('server:'.length) })),
-    box: box ? rowOf(box, show, assistant) : null,
+      .map((o) => ({ ...rowOf(o, show, assistant, S), id: o.key.slice('server:'.length) })),
+    box: box ? rowOf(box, show, assistant, S) : null,
     clock: show.clock,
     welcomeBack: show.welcomeBack,
     doneToday: show.doneToday,
@@ -148,22 +152,31 @@ export function deskDragPlaces(dy: number, rowHeight: number): number {
 }
 
 /** The scenario chips (DK-123): Now · Something’s wrong · {assistant} at work. */
-export function deskScenarioOptions(assistant: string): { value: DeskPreviewScenario; label: string }[] {
+export function deskScenarioOptions(
+  assistant: string,
+  locale?: string | null,
+): { value: DeskPreviewScenario; label: string }[] {
+  const { scenarios } = deskWords(locale).settings;
   return DESK_PREVIEW_SCENARIOS.map((value) => ({
     value,
-    label: fillDeskWords(S.scenarios[value], { assistant }),
+    label: fillDeskWords(scenarios[value], { assistant }),
   }));
 }
 
 /** *Try “Something’s wrong” on the screen* (DK-124). */
-export function deskTryLabel(scenario: DeskPreviewScenario, assistant: string): string {
-  return fillDeskWords(S.tryOnScreen, { scenario: fillDeskWords(S.scenarios[scenario], { assistant }) });
+export function deskTryLabel(
+  scenario: DeskPreviewScenario,
+  assistant: string,
+  locale?: string | null,
+): string {
+  const { tryOnScreen, scenarios } = deskWords(locale).settings;
+  return fillDeskWords(tryOnScreen, { scenario: fillDeskWords(scenarios[scenario], { assistant }) });
 }
 
 /** What TalkBack reads for the preview, a picture to the eye: the name, the sentence, the hero's title. */
-export function deskPreviewSpoken(preview: DeskPreview): string {
+export function deskPreviewSpoken(preview: DeskPreview, locale?: string | null): string {
   const c = preview.calm;
-  return [S.preview, preview.name, c.headline.text, c.headline.more, c.hero?.title]
+  return [deskWords(locale).settings.preview, preview.name, c.headline.text, c.headline.more, c.hero?.title]
     .filter((s): s is string => Boolean(s))
     .join('. ');
 }

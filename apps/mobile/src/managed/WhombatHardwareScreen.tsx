@@ -5,8 +5,9 @@
  */
 
 import { type RouteProp, useRoute } from '@react-navigation/native';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
+import { thisWhombatText } from '@whombat/client/managed';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
@@ -17,6 +18,7 @@ import { useApplianceStatus } from './useApplianceStatus';
 import { useMachineHere } from './useMachine';
 
 export function WhombatHardwareScreen() {
+  const { rawLocale } = useI18n();
   const bottomRoom = useBottomRoom();
   const navigation = useAppNavigation();
   const machine = useMachineHere();
@@ -27,7 +29,7 @@ export function WhombatHardwareScreen() {
   return (
     <Screen>
       <BackBar
-        label={back ?? THIS_WHOMBAT_TEXT.parts.about}
+        label={back ?? thisWhombatText(rawLocale).parts.about}
         onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('WhombatAbout'))}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}>

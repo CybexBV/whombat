@@ -18,14 +18,14 @@ import {
   orderPasskeys,
   PAIRING_CODE,
   PASSKEY_COPY,
-  PASSKEY_SETUP_TEXT,
   pairingErrorKey,
   passkeyEnrolledDevices,
   passkeyErrorText,
   passkeyMeta,
   passkeyRemove,
+  passkeySetupText,
   platformName,
-  THIS_WHOMBAT_TEXT,
+  thisWhombatText,
 } from '@whombat/client/managed';
 import {
   type EndpointSummary,
@@ -36,6 +36,7 @@ import {
 import type { BackupBringBack } from '@whombat/protocol/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, type LayoutChangeEvent, ScrollView, Share, Switch, View } from 'react-native';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -48,7 +49,7 @@ import { useBackupPasskeyTap } from './backupPasskey';
 import { DeviceLinkCard } from './CommunityLinks';
 import { UI_ORIGINS } from './config';
 import { useManagedOrThrow } from './context';
-import { COPY, MANAGED_TEXT } from './copy';
+import { managedCopy, managedText } from './copy';
 import { NeedsNewerApp } from './NeedsNewerApp';
 import { PASSKEYS } from './passkeyEnv';
 import type { DevicesAt } from './thisWhombat';
@@ -91,6 +92,10 @@ function useScrollToSection(at: DevicesAt | undefined) {
 }
 
 export function DevicesScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const managedTextHere = managedText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const { session, community } = useManagedOrThrow();
   const place = useScrollToSection(route.params?.at);
@@ -130,7 +135,7 @@ export function DevicesScreen({ route, navigation }: Props) {
       const found = await sessionOps.pairLookup(session, code.trim());
       setAsking({ ...found, code: code.trim() });
     } catch (error) {
-      setNote(MANAGED_TEXT[pairingErrorKey(error)]);
+      setNote(managedTextHere[pairingErrorKey(error)]);
     } finally {
       setBusy(false);
     }
@@ -146,13 +151,13 @@ export function DevicesScreen({ route, navigation }: Props) {
         approve: yes,
         fingerprint: asking.fingerprint,
       });
-      setNote(yes ? MANAGED_TEXT.approved : MANAGED_TEXT.declined);
+      setNote(yes ? managedTextHere.approved : managedTextHere.declined);
       setCode('');
       setAsking(null);
       load();
     } catch (error) {
       const key = pairingErrorKey(error);
-      setNote(MANAGED_TEXT[key]);
+      setNote(managedTextHere[key]);
       // The code now belongs to another device (or is gone): start over with a fresh look-up.
       if (key !== 'failed' && key !== 'rateLimited') setAsking(null);
     } finally {
@@ -161,10 +166,10 @@ export function DevicesScreen({ route, navigation }: Props) {
   };
 
   const remove = (d: EndpointSummary) =>
-    Alert.alert(MANAGED_TEXT.remove, MANAGED_TEXT.removeConfirm, [
+    Alert.alert(managedTextHere.remove, managedTextHere.removeConfirm, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: MANAGED_TEXT.remove,
+        text: managedTextHere.remove,
         style: 'destructive',
         onPress: () =>
           void sessionOps
@@ -173,7 +178,7 @@ export function DevicesScreen({ route, navigation }: Props) {
       },
     ]);
 
-  const back = <BackBar label="Back" onPress={() => navigation.goBack()} />;
+  const back = <BackBar label={tMobile('managed.back')} onPress={() => navigation.goBack()} />;
   // Devices are a security view (AP-266): a device this app can't read would vanish from the list, so the list isn't
   // shown at all; the way out is a newer app, from the store.
   if (error instanceof NeedsNewerAppError)
@@ -187,7 +192,7 @@ export function DevicesScreen({ route, navigation }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={load} />
+        <ErrorState text={managedTextHere.loadError} onRetry={load} />
       </Screen>
     );
   if (!list)
@@ -210,20 +215,20 @@ export function DevicesScreen({ route, navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}
       >
-        <LargeTitle title={THIS_WHOMBAT_TEXT.parts.devices} />
+        <LargeTitle title={thisWhombatText(rawLocale).parts.devices} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }} onLayout={place.onContainer}>
           {mine ? (
-            <Card label={MANAGED_TEXT.devices}>
+            <Card label={managedTextHere.devices}>
               <Row
                 first
                 dot="ok"
-                title={`${mine.label} · ${MANAGED_TEXT.thisBrowser}`}
-                meta={MANAGED_TEXT.seen(ago(mine.lastSeenAt))}
+                title={`${mine.label} · ${managedTextHere.thisBrowser}`}
+                meta={managedTextHere.seen(ago(mine.lastSeenAt, rawLocale))}
               />
             </Card>
           ) : null}
           {others.length > 0 ? (
-            <Card label={MANAGED_TEXT.otherDevices}>
+            <Card label={managedTextHere.otherDevices}>
               {others.map((d, i) => (
                 <Row
                   key={d.endpointId}
@@ -232,17 +237,17 @@ export function DevicesScreen({ route, navigation }: Props) {
                   title={d.label}
                   meta={
                     d.revocation === 'pending'
-                      ? MANAGED_TEXT.removedPending
+                      ? managedTextHere.removedPending
                       : d.revocation === 'applied'
-                        ? MANAGED_TEXT.removedApplied
+                        ? managedTextHere.removedApplied
                         : byPasskey.has(d.endpointId)
-                          ? `${PASSKEY_COPY.newDeviceMeta} · ${MANAGED_TEXT.seen(ago(d.lastSeenAt))}`
-                          : MANAGED_TEXT.seen(ago(d.lastSeenAt))
+                          ? `${PASSKEY_COPY.newDeviceMeta} · ${managedTextHere.seen(ago(d.lastSeenAt, rawLocale))}`
+                          : managedTextHere.seen(ago(d.lastSeenAt, rawLocale))
                   }
                   action={
                     d.revocation === 'none' ? (
                       <Button
-                        label={MANAGED_TEXT.remove}
+                        label={managedTextHere.remove}
                         variant="secondary"
                         accessibilityHint={`Removes ${d.label}`}
                         onPress={() => remove(d)}
@@ -259,29 +264,29 @@ export function DevicesScreen({ route, navigation }: Props) {
               <PasskeysCard bringBack={status?.backup.bringBack ?? null} onChanged={reloadStatus} />
             </View>
           )}
-          <Card label={MANAGED_TEXT.add}>
+          <Card label={managedTextHere.add}>
             {/* A community box makes its own five-minute QR code (AP-5474); otherwise the hosted app's link. */}
             {community ? <DeviceLinkCard /> : <AddDeviceLink />}
             {asking ? (
               <View style={{ padding: 16, gap: 12 }}>
-                <Note text={MANAGED_TEXT.askedBy} />
+                <Note text={managedTextHere.askedBy} />
                 <Row
                   first
                   dot="warn"
                   title={`${asking.label} · ${platformName(asking.platform)}`}
-                  meta={MANAGED_TEXT.fingerprint(asking.fingerprint)}
+                  meta={managedTextHere.fingerprint(asking.fingerprint)}
                 />
-                <Note text={MANAGED_TEXT.checkFingerprint} />
+                <Note text={managedTextHere.checkFingerprint} />
                 <Note text={note} />
-                <Button label={MANAGED_TEXT.approve} busy={busy} onPress={() => void decide(true)} />
+                <Button label={managedTextHere.approve} busy={busy} onPress={() => void decide(true)} />
                 <Button
-                  label={MANAGED_TEXT.decline}
+                  label={managedTextHere.decline}
                   variant="secondary"
                   disabled={busy}
                   onPress={() => void decide(false)}
                 />
                 <Button
-                  label={MANAGED_TEXT.otherCode}
+                  label={managedTextHere.otherCode}
                   variant="quiet"
                   disabled={busy}
                   onPress={() => {
@@ -292,9 +297,9 @@ export function DevicesScreen({ route, navigation }: Props) {
               </View>
             ) : (
               <View style={{ padding: 16, gap: 12 }}>
-                <Note text={MANAGED_TEXT.addHelp} />
+                <Note text={managedTextHere.addHelp} />
                 <Field
-                  label={MANAGED_TEXT.code}
+                  label={managedTextHere.code}
                   value={code}
                   onChangeText={onCode}
                   mono
@@ -304,7 +309,7 @@ export function DevicesScreen({ route, navigation }: Props) {
                 />
                 <Note text={note} />
                 <Button
-                  label={MANAGED_TEXT.lookUp}
+                  label={managedTextHere.lookUp}
                   busy={busy}
                   disabled={!PAIRING_CODE.test(code.trim())}
                   onPress={() => void lookUp()}
@@ -313,15 +318,15 @@ export function DevicesScreen({ route, navigation }: Props) {
             )}
           </Card>
           {status && (status.revocationsPending > 0 || status.revocationsApplied > 0) ? (
-            <Card label={MANAGED_TEXT.revocations}>
+            <Card label={managedTextHere.revocations}>
               {status.revocationsPending > 0 ? (
-                <Row first dot="warn" title={MANAGED_TEXT.revocationsPending(status.revocationsPending)} />
+                <Row first dot="warn" title={managedTextHere.revocationsPending(status.revocationsPending)} />
               ) : null}
               {status.revocationsApplied > 0 ? (
                 <Row
                   first={status.revocationsPending === 0}
                   dot="ok"
-                  title={MANAGED_TEXT.revocationsApplied(status.revocationsApplied)}
+                  title={managedTextHere.revocationsApplied(status.revocationsApplied)}
                 />
               ) : null}
             </Card>
@@ -345,6 +350,7 @@ function PasskeysCard({
   /** The box's state changed here (a passkey became the backups' key): read it again. */
   onChanged: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { session, control, appliancePeerId, connection } = useManagedOrThrow();
   const theme = useTheme();
   const tap = useBackupPasskeyTap();
@@ -442,11 +448,12 @@ function PasskeysCard({
           <View style={{ flex: 1, gap: 3 }}>
             <Text size={15} weight={500} lh={1.35}>
               {tap?.loadError
-                ? PASSKEY_SETUP_TEXT.loadError
-                : (view?.title ?? (tap ? PASSKEY_SETUP_TEXT.loading : PASSKEY_SETUP_TEXT.empty))}
+                ? passkeySetupText(rawLocale).loadError
+                : (view?.title ??
+                  (tap ? passkeySetupText(rawLocale).loading : passkeySetupText(rawLocale).empty))}
             </Text>
             <Text size={13} lh={1.4} color={theme.colors.mut}>
-              {view?.meta ?? PASSKEY_SETUP_TEXT.intro}
+              {view?.meta ?? passkeySetupText(rawLocale).intro}
             </Text>
           </View>
         </View>
@@ -454,7 +461,7 @@ function PasskeysCard({
         <Note text={touching ? tap?.note : (note ?? tap?.note ?? null)} />
         {view?.phase !== 'ready' || tap?.loadError ? (
           <Button
-            label={tap?.label ?? PASSKEY_SETUP_TEXT.setup}
+            label={tap?.label ?? passkeySetupText(rawLocale).setup}
             variant="primary"
             busy={touching}
             disabled={!tap || !platform || !list || (!view && !tap.loadError)}
@@ -462,7 +469,7 @@ function PasskeysCard({
           />
         ) : null}
         <Button
-          label={PASSKEY_SETUP_TEXT.details}
+          label={passkeySetupText(rawLocale).details}
           variant="quiet"
           accessibilityState={{ expanded: details }}
           onPress={() => setDetails(!details)}
@@ -489,7 +496,7 @@ function PasskeysCard({
           {view?.phase === 'ready' && tap ? (
             <View style={{ padding: 16 }}>
               <Button
-                label={touching ? tap.label : PASSKEY_SETUP_TEXT.check}
+                label={touching ? tap.label : passkeySetupText(rawLocale).check}
                 variant="secondary"
                 busy={touching}
                 onPress={() => void add()}
@@ -538,10 +545,13 @@ function PasskeysCard({
  * in by itself — the code below still does.
  */
 function AddDeviceLink() {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const { applianceId, applianceName, appliancePeerId } = useManagedOrThrow();
   const theme = useTheme();
   const [shown, setShown] = useState(false);
-  const t = COPY.addLink;
+  const t = managedCopyHere.addLink;
   const link = addDeviceLink(UI_ORIGINS[0] ?? 'https://app.whombat.com', applianceId, appliancePeerId);
   return (
     <View style={{ padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.line }}>

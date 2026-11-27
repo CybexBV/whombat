@@ -8,6 +8,8 @@ import { useVoiceTyping, type VoiceTypingView } from '@whombat/client/voice/reac
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
+import { localizedVoiceError } from './copy';
 import { nativeRecorder, requestMicrophone } from './nativeRecorder';
 import { useVoiceApi } from './useVoiceApi';
 
@@ -40,6 +42,7 @@ export function useComposerVoice(source: VoiceSource | null, options: ComposerVo
     requestPermission: requestMicrophone,
     ...options,
   });
+  const { rawLocale } = useI18n();
   const { interrupt } = voice;
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -47,5 +50,5 @@ export function useComposerVoice(source: VoiceSource | null, options: ComposerVo
     });
     return () => sub.remove();
   }, [interrupt]);
-  return voice;
+  return { ...voice, error: voice.error ? localizedVoiceError(voice.error, rawLocale) : null };
 }

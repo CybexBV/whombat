@@ -3,12 +3,17 @@
  * something — a read under way for a moment over data a while old, or a failed read with data on screen.
  */
 
-export const READ_STATE_TEXT = {
-  updating: 'Updating…',
-  failed: 'Couldn’t update',
-  retry: 'Try again',
-  retryHint: 'Reads these messages again',
-} as const;
+import { mobileTranslator } from '../i18n/translate';
+export function readStateText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    updating: t('readLine.readStateText.updating'),
+    failed: t('readLine.readStateText.failed'),
+    retry: t('readLine.readStateText.retry'),
+    retryHint: t('readLine.readStateText.retryHint'),
+  } as const;
+}
+export const READ_STATE_TEXT = readStateText();
 
 /** A read under way shows “Updating…” only once it has taken this long: most answers come sooner. */
 export const UPDATING_AFTER_MS = 2_000;

@@ -76,6 +76,7 @@ func incusHints(r *proto.Report, now time.Time) []Hint {
 		}
 		detail += " · no scheduled snapshots, no backup in 30 days"
 		out = append(out, Hint{Kind: HintIncusNoSnapshots, Severity: HintInfo, Entity: proto.PlatformIncus, Link: LinkGuests,
+			Code: HintIncusNoSnapshots, Params: map[string]any{"count": n, "names": d, "days": int(IncusBackupMaxAge / (24 * time.Hour))},
 			Title: title, Detail: detail, Guests: ids})
 	}
 	if d := p.Incus; d != nil {
@@ -92,6 +93,8 @@ func incusHints(r *proto.Report, now time.Time) []Hint {
 				sev = HintWarning
 			}
 			out = append(out, Hint{Kind: HintIncusPoolFull, Severity: sev, Entity: "incus-pool:" + pool.Name, Link: LinkStorage,
+				Code: HintIncusPoolFull, Params: map[string]any{"name": pool.Name, "pct": pct,
+					"usedGB": float64(*pool.UsedBytes) / GB, "totalGB": float64(*pool.TotalBytes) / GB},
 				Title:  "Storage “" + pool.Name + "” " + FormatPct(pct) + " full",
 				Detail: FormatStorageGB(float64(*pool.UsedBytes)/GB) + " of " + FormatStorageGB(float64(*pool.TotalBytes)/GB) + " used"})
 		}
@@ -105,7 +108,8 @@ func incusHints(r *proto.Report, now time.Time) []Hint {
 		if n > 1 {
 			title = fmt.Sprintf("Incus has %d warnings", n)
 		}
-		out = append(out, Hint{Kind: HintIncusWarning, Severity: HintInfo, Entity: proto.PlatformIncus, Link: LinkSystem, Title: title, Detail: d})
+		out = append(out, Hint{Kind: HintIncusWarning, Severity: HintInfo, Entity: proto.PlatformIncus, Link: LinkSystem, Title: title, Detail: d,
+			Code: HintIncusWarning, Params: map[string]any{"count": n, "message": p.Warnings[0].Message}})
 	}
 	return out
 }

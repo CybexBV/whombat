@@ -6,7 +6,9 @@
  * typed but optional, so a hub that leaves them out still parses. Ids are the hub's: a server id (`pve-02`), a guest id
  * `<platform>:<id>` (`pve:101`, `docker:pihole`, `incus:web`), an alert id (`al_…`), a Proxmox UPID for tasks.
  */
+
 import { z } from 'zod';
+import { coreTranslator, coreTree, coreWords, type WordTree } from '../i18n/catalog.js';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
 import { JsonObject, Timestamp } from './common.js';
@@ -116,25 +118,32 @@ export const HOST_ASKS_FIRST_DEFAULT: HostAsksFirst = 'never';
  * and the choices answer it, so no choice contradicts the label. `server` is the server's name; `self` it runs this
  * Whombat.
  */
-export const HOST_ASKS_FIRST_WORDS = {
-  label: 'When Whombat wants to change something here',
-  /** The same question with the server's name, for screen readers and lists of servers. */
-  labelOn: (server: string) => `When Whombat wants to change something on ${server}`,
-  choices: { risky: 'Ask me first', never: 'Go ahead' } as Record<HostAsksFirst, string>,
-  hint: {
-    risky: 'Commands, restarts, updates, deleting and restoring wait for your yes.',
-    never: 'Whombat goes ahead on its own here. Everything it does shows under “Changes here”.',
-  } as Record<HostAsksFirst, string>,
-  selfNote: (server: string) =>
-    `It always asks before restarting, shutting down or updating ${server}, which runs this Whombat.`,
-  confirmTitle: (server: string) => `Let Whombat go ahead on ${server}?`,
-  confirmBody: (server: string) =>
-    `Whombat will run commands, install updates, restart guests and delete things on ${server} without asking you first. You can switch it back any time.`,
-  confirm: 'Go ahead',
-  /** The toast after a change: “The Titan: Whombat goes ahead without asking.” */
-  changed: (server: string, asks: HostAsksFirst) =>
-    asks === 'never' ? `${server}: Whombat goes ahead without asking.` : `${server}: Whombat asks you first.`,
-} as const;
+/** A server's “ask me first” switch and its confirmation, in a locale. */
+export function hostAsksFirstWords(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  return {
+    label: tr.t('host.asksFirst.label'),
+    /** The same question with the server's name, for screen readers and lists of servers. */
+    labelOn: (server: string) => tr.t('host.asksFirst.labelOn', { server }),
+    choices: {
+      risky: tr.t('host.asksFirst.choices.risky'),
+      never: tr.t('host.asksFirst.choices.never'),
+    } as Record<HostAsksFirst, string>,
+    hint: {
+      risky: tr.t('host.asksFirst.hint.risky'),
+      never: tr.t('host.asksFirst.hint.never'),
+    } as Record<HostAsksFirst, string>,
+    selfNote: (server: string) => tr.t('host.asksFirst.selfNote', { server }),
+    confirmTitle: (server: string) => tr.t('host.asksFirst.confirmTitle', { server }),
+    confirmBody: (server: string) => tr.t('host.asksFirst.confirmBody', { server }),
+    confirm: tr.t('host.asksFirst.confirm'),
+    /** The toast after a change: “The Titan: Whombat goes ahead without asking.” */
+    changed: (server: string, asks: HostAsksFirst) =>
+      tr.t(asks === 'never' ? 'host.asksFirst.changedNever' : 'host.asksFirst.changedRisky', { server }),
+  };
+}
+
+export const HOST_ASKS_FIRST_WORDS = hostAsksFirstWords('en');
 
 /**
  * Whether the Servers catalog's sensitive rules apply to a call on a server (SA-03, SA-06): always on `risky`; on
@@ -1633,18 +1642,30 @@ export const HOST_CONTROL_LEVEL_SWITCHES: Readonly<Record<HostControlLevel, Requ
   full: { console: true, power: true, hostShell: true, hostPower: true, manage: true, diagnose: true },
 };
 
-/** Each level's title and the line under the control (SI-06), on the web and the phone. */
-export const HOST_CONTROL_LEVEL_WORDS: Readonly<Record<HostControlLevel, { title: string; line: string }>> = {
-  watch: { title: 'Watch only', line: 'Whombat sees how it’s doing and runs read-only checks.' },
+const HOST_CONTROL_LEVEL_WORDS_SHAPE = {
+  watch: {
+    title: 0,
+    line: 0,
+  },
   operate: {
-    title: 'Restart and consoles',
-    line: 'Also opens consoles and starts, stops or restarts its VMs and containers.',
+    title: 0,
+    line: 0,
   },
   full: {
-    title: 'Full control',
-    line: 'Also changes and creates VMs and containers, opens a shell on the server and restarts it.',
+    title: 0,
+    line: 0,
   },
-};
+} as const;
+
+/** Each level's title and the line under the control, on the web and the phone. */
+export function hostControlLevelWords(
+  locale?: string | null,
+): WordTree<typeof HOST_CONTROL_LEVEL_WORDS_SHAPE> {
+  return coreTree(locale, 'host.control', HOST_CONTROL_LEVEL_WORDS_SHAPE);
+}
+
+export const HOST_CONTROL_LEVEL_WORDS: Readonly<Record<HostControlLevel, { title: string; line: string }>> =
+  hostControlLevelWords('en');
 
 /**
  * `hosts.createEnrollment`'s body (0.85, CT-374), optional: an empty POST stays valid and means `full`. Whombat
@@ -2005,21 +2026,27 @@ export const HostRepoint = z.object({
 });
 export type HostRepoint = z.infer<typeof HostRepoint>;
 
-/** The words of pointing servers here (BF-15, BF-16): the buttons and a server's state. */
-export const HOST_REPOINT_WORDS = {
-  pointThemHere: 'Point them here',
-  pointItHere: 'Point it here',
-  leaveThem: 'Leave them',
+const HOST_REPOINT_WORDS_SHAPE = {
+  pointThemHere: 0,
+  pointItHere: 0,
+  leaveThem: 0,
   states: {
-    waiting: 'Waiting',
-    pointing: 'Pointing it here…',
-    pointed: 'Pointed here',
-    no_key: 'Needs a password',
-    failed: 'Didn’t work',
-  } satisfies Record<HostRepointServerState, string>,
+    waiting: 0,
+    pointing: 0,
+    pointed: 0,
+    no_key: 0,
+    failed: 0,
+  } satisfies Record<HostRepointServerState, 0>,
   /** Under a `no_key` server: what Add a server, filled in, does. */
-  noKey: 'Your Vault has no key for it. Sign in once with its password to point it here.',
+  noKey: 0,
 } as const;
+
+/** The words of pointing servers here: the buttons and a server's state. */
+export function hostRepointWords(locale?: string | null): WordTree<typeof HOST_REPOINT_WORDS_SHAPE> {
+  return coreTree(locale, 'host.repoint', HOST_REPOINT_WORDS_SHAPE);
+}
+
+export const HOST_REPOINT_WORDS = hostRepointWords('en');
 
 /* Actions, consoles, inspect ---------------------------------------------------------------------- */
 
@@ -3044,15 +3071,23 @@ export function selfGuestAllows(
   return change.asNew === true && HOST_SELF_GUEST_ALLOWED.asNewOnly.includes(change.op);
 }
 
-/** The words for the hosts service's codes that came with Incus and unRAID (0.83, CT-367); platform-neutral. */
-export const HOST_ERROR_WORDS = {
+const HOST_ERROR_WORDS_KEYS = [
   /** 409: a change to the guest this Whombat runs in (IU-02). */
-  self_guest: 'That’s this Whombat itself.',
+  'self_guest',
   /** 409: a profile, volume or image something still uses. */
-  in_use: 'It’s still in use, so it can’t be removed.',
+  'in_use',
   /** 403: something Whombat doesn’t change (a restricted key, unRAID’s own OS plugin). */
-  not_allowed: 'Whombat doesn’t change that; use the platform’s own screens for it.',
-} as const;
+  'not_allowed',
+] as const;
+
+/** The words for the hosts service's codes that came with Incus and unRAID; platform-neutral. */
+export function hostErrorWords(
+  locale?: string | null,
+): Readonly<Record<(typeof HOST_ERROR_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'host.error', HOST_ERROR_WORDS_KEYS);
+}
+
+export const HOST_ERROR_WORDS = hostErrorWords('en');
 
 /** The badge of the guest this Whombat runs in (IU-02). */
 export const HOST_SELF_GUEST_LABEL = 'This Whombat';
@@ -3192,11 +3227,13 @@ export const HostsStatus = z.object({
 });
 export type HostsStatus = z.infer<typeof HostsStatus>;
 
+const HOST_STATUS_LABELS_KEYS = ['ok', 'warn', 'bad', 'offline', 'pending'] as const;
+
 /** A server's page words (mock 2). */
-export const HOST_STATUS_LABELS: Record<HostServerStatus, string> = {
-  ok: 'Running fine',
-  warn: 'Needs a look',
-  bad: 'Problem',
-  offline: 'Offline',
-  pending: 'Waiting for its first report',
-};
+export function hostStatusLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof HOST_STATUS_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'host.status', HOST_STATUS_LABELS_KEYS);
+}
+
+export const HOST_STATUS_LABELS: Record<HostServerStatus, string> = hostStatusLabels('en');

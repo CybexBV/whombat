@@ -16,6 +16,7 @@ import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import type { LinkMailAuditPayload, LinkMailSummary } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
 import { applianceState } from '../../db/schema/index';
+import { configuredBoxLocale } from '../../i18n/locale';
 import type { Services } from '../../services';
 import { appendApplianceEvent } from '../audit';
 import { ManagerCallError, type ManagerPort } from '../ports';
@@ -27,6 +28,23 @@ const STATE_ID = 1;
 /** What a box has before its owner chose anything: told when it goes offline, notifications by its own means. */
 export const LINK_MAIL_DEFAULTS: LinkMailSummary = { offline: true, notifications: false };
 
+/**
+ * After control refused the language, the box asks with it again only after this long (or when Link moves or the owner
+ * changes the language): an older control takes the choices without it meanwhile, and nothing is asked twice each sweep.
+ */
+export const LOCALE_RETRY_MS = 6 * 3_600_000;
+
+/**
+ * Whether a refusal may be control not knowing `locale` yet: the manager's strict check (400) or control's own refusal
+ * passed on by the manager (502 `control_refused`). Never a manager that can't reach control (503, unreachable).
+ */
+export function refusesLocale(err: unknown): boolean {
+  return (
+    err instanceof ManagerCallError &&
+    (err.status === 400 || (err.status === 502 && err.code === 'control_refused'))
+  );
+}
+
 /** Clips a fixed line to what the contract takes (one line, at most `max` code points). */
 function line(text: string, max: number): string {
   const one = text.replace(/\s+/g, ' ').trim();
@@ -36,8 +54,13 @@ function line(text: string, max: number): string {
 
 export class LinkEmail {
   #choices: LinkMailSummary = LINK_MAIL_DEFAULTS;
-  /** The choices control last took (`offline/notifications`), or null: told again at the next chance. */
+  /**
+   * The choices control last took (`offline/notifications/locale`, the locale empty when it took them without one), or
+   * null: told again at the next chance.
+   */
   #told: string | null = null;
+  /** When control last refused the language (ms), or null: until `LOCALE_RETRY_MS` later the choices go without it. */
+  #localeRefusedAt: number | null = null;
   #telling: Promise<void> | null = null;
   #refKey: Uint8Array;
 
@@ -106,7 +129,23 @@ export class LinkEmail {
   /** Link moved: control may not have the choices (a box it didn't know, Link on again), so they are told again. */
   linkMoved(): void {
     this.#told = null;
+    this.#localeRefusedAt = null;
     void this.tell();
+  }
+
+  /** Owner's language changed: sync the new locale to control for offline and waiting emails. */
+  localeChanged(): void {
+    this.#told = null;
+    this.#localeRefusedAt = null;
+    void this.tell();
+  }
+
+  /** Whether control refused the language a short while ago, so it isn't asked with it again yet. */
+  private localeRefusedNow(): boolean {
+    return (
+      this.#localeRefusedAt !== null &&
+      this.services.clock().getTime() - this.#localeRefusedAt < LOCALE_RETRY_MS
+    );
   }
 
   /**
@@ -124,13 +163,28 @@ export class LinkEmail {
     const send = this.manager.linkMailSet?.bind(this.manager);
     if (!send || !this.link.known()) return;
     const choices = this.#choices;
-    const key = `${choices.offline}/${choices.notifications}`;
-    if (this.#told === key) return;
+    const configured = await configuredBoxLocale(this.services).catch(() => null);
+    // While control refuses the language, the choices go without it, and that is all there is to tell.
+    const locale = configured && !this.localeRefusedNow() ? configured : null;
+    const keyOf = (sent: string | null) => `${choices.offline}/${choices.notifications}/${sent ?? ''}`;
+    if (this.#told === keyOf(locale)) return;
+    const plain = { offline: choices.offline, notifications: choices.notifications };
     try {
-      await send({ offline: choices.offline, notifications: choices.notifications });
+      await send({ ...plain, ...(locale ? { locale } : {}) });
       // The owner may have changed them meanwhile: only what was sent counts as told.
-      this.#told = key;
+      this.#told = keyOf(locale);
+      if (locale) this.#localeRefusedAt = null;
     } catch (err) {
+      if (locale && refusesLocale(err)) {
+        try {
+          await send(plain);
+          // Told without the language: a later sweep asks with it once `LOCALE_RETRY_MS` has passed.
+          this.#told = keyOf(null);
+          this.#localeRefusedAt = this.services.clock().getTime();
+          this.services.log.info('link: Whombat Link took the email choices without the language');
+          return;
+        } catch {}
+      }
       this.services.log.info(
         { status: err instanceof ManagerCallError ? err.status : undefined, err: String(err).slice(0, 200) },
         'link: the email choices weren’t told to Whombat Link yet',
@@ -172,12 +226,14 @@ export class LinkEmail {
   ): Promise<boolean> {
     if (!this.sendsWaiting() || count < 1) return false;
     if ((await this.person().catch(() => null)) !== accountId) return false;
+    const locale = await this.mailLocale();
     return this.send({
       kind: 'waiting',
       ref: this.ref(`waiting:${accountId}:${this.services.clock().toISOString()}`),
       count: Math.min(count, 999),
       cadence,
       ...(/^\/[A-Za-z0-9/_.~%?&=-]{0,199}$/.test(path) ? { path } : {}),
+      ...(locale ? { locale } : {}),
     });
   }
 
@@ -193,13 +249,21 @@ export class LinkEmail {
     if (!this.sendsNotices()) return false;
     if (this.services.maintenance.quarantined && !options.evenInQuarantine) return false;
     const path = notice.path.startsWith('/') && notice.path.length <= 200 ? notice.path : undefined;
+    const locale = await this.mailLocale();
     return this.send({
       kind: 'notice',
       ref: this.ref(`notice:${what}:${this.services.clock().toISOString()}`),
       title: line(notice.title, 80),
       body: line(notice.body, 240),
       ...(path ? { path } : {}),
+      ...(locale ? { locale } : {}),
     });
+  }
+
+  /** The language an email asks for: the owner's, unless control refused it a short while ago. */
+  private async mailLocale(): Promise<string | null> {
+    if (this.localeRefusedNow()) return null;
+    return configuredBoxLocale(this.services).catch(() => null);
   }
 
   private async send(mail: Parameters<NonNullable<ManagerPort['mailSend']>>[0]): Promise<boolean> {
@@ -210,6 +274,16 @@ export class LinkEmail {
       this.services.log.info({ kind: mail.kind }, 'link: an email went to Whombat Link');
       return true;
     } catch (err) {
+      if ('locale' in mail && mail.locale && refusesLocale(err)) {
+        const { locale: _l, ...withoutLocale } = mail;
+        try {
+          await send(withoutLocale as Parameters<NonNullable<ManagerPort['mailSend']>>[0]);
+          // Control took it without the language: the next emails and the choices go without it for a while.
+          this.#localeRefusedAt = this.services.clock().getTime();
+          this.services.log.info({ kind: mail.kind }, 'link: an email went to Whombat Link');
+          return true;
+        } catch {}
+      }
       // Control's refusal says the choice it has is off: tell it again at the next chance.
       if (err instanceof ManagerCallError && err.status === 502) this.#told = null;
       this.services.log.warn(

@@ -6,33 +6,32 @@
  * `@whombat/client/managed`'s, the same as the web's.
  */
 import {
-  ACCOUNTS_TEXT,
-  BACKUP_SETUP_TEXT,
+  accountsText,
   type BackupForm,
   type BackupKind,
   backupErrorText,
+  backupSetupText,
   destinationInput,
   emptyBackupForm,
-  MANAGED_TEXT,
+  managedText,
 } from '@whombat/client/managed';
 import { type ApplianceSession, type BackupDestinationResult, sessionOps } from '@whombat/client/session';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Share, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { Touchable } from '../ui/Touchable';
 import { ErrorLine, Field, Note } from './ui';
 
-const T = BACKUP_SETUP_TEXT;
-
 export { backupErrorText };
 
 /** What you are told after saving: whether old backups are safe from this box, and the host key to compare. */
-export function savedNotes(result: BackupDestinationResult): string[] {
+export function savedNotes(result: BackupDestinationResult, locale?: string | null): string[] {
   return [
-    ACCOUNTS_TEXT.appendOnly[result.appendOnly] ?? null,
-    result.hostKeyFingerprint ? T.hostKeyPinned(result.hostKeyFingerprint) : null,
+    accountsText(locale).appendOnly[result.appendOnly] ?? null,
+    result.hostKeyFingerprint ? backupSetupText(locale).hostKeyPinned(result.hostKeyFingerprint) : null,
   ].filter((n): n is string => n !== null);
 }
 
@@ -47,6 +46,8 @@ export function BackupDestinationForm({
   onSaved: (result: BackupDestinationResult) => void;
   extraActions?: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupSetupText(rawLocale);
   const [form, setForm] = useState<BackupForm>(() => emptyBackupForm(kinds[0] ?? 'rest'));
   const [invalid, setInvalid] = useState<{ field: keyof BackupForm; error: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function BackupDestinationForm({
   };
 
   const save = async () => {
-    const check = destinationInput({ ...form, kind });
+    const check = destinationInput({ ...form, kind }, rawLocale);
     if (!check.ok) {
       setInvalid({ field: check.field, error: check.error });
       return;
@@ -72,7 +73,7 @@ export function BackupDestinationForm({
       setForm(emptyBackupForm(kind));
       onSaved(result);
     } catch (err) {
-      setError(backupErrorText(err));
+      setError(backupErrorText(err, rawLocale));
     } finally {
       setBusy(false);
     }
@@ -164,6 +165,8 @@ function KindPicker({
   kind: BackupKind;
   onPick: (k: BackupKind) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupSetupText(rawLocale);
   const theme = useTheme();
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={T.kindLegend} style={{ gap: 8 }}>
@@ -216,6 +219,8 @@ function KindPicker({
 
 /** This Whombat's SFTP key (`backup.sshPublicKey`), to add to the server; shared through the share sheet. */
 function SshKey({ session }: { session: ApplianceSession }) {
+  const { rawLocale } = useI18n();
+  const T = backupSetupText(rawLocale);
   const theme = useTheme();
   const [key, setKey] = useState<{ publicKey: string; fingerprint: string } | 'failed' | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -250,7 +255,11 @@ function SshKey({ session }: { session: ApplianceSession }) {
       ) : key === 'failed' ? (
         <>
           <Note text={T.sftpKeyFailed} />
-          <Button label={MANAGED_TEXT.retry} variant="secondary" onPress={() => setAttempt((n) => n + 1)} />
+          <Button
+            label={managedText(rawLocale).retry}
+            variant="secondary"
+            onPress={() => setAttempt((n) => n + 1)}
+          />
         </>
       ) : (
         <>

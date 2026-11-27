@@ -1,4 +1,5 @@
 import { ChevronRight } from 'lucide-react';
+import { useWebI18n } from '../../i18n/provider';
 import { cx } from '../cx';
 import { Icon } from '../Icon';
 import styles from './MoreDetail.module.css';
@@ -8,11 +9,12 @@ import styles from './MoreDetail.module.css';
  * helps. Nothing when there is no detail.
  */
 export function MoreDetail({ detail, className }: { detail: string | null | undefined; className?: string }) {
+  const { t } = useWebI18n();
   if (!detail) return null;
   return (
     <details className={cx(styles.more, className)}>
       <summary>
-        More detail
+        {t('common.moreDetail')}
         <Icon icon={ChevronRight} size={13} />
       </summary>
       <p className={styles.said}>{detail}</p>

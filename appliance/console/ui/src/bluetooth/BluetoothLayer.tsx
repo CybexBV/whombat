@@ -4,8 +4,10 @@
  * (CG-104): it holds whether the sheet is open and draws it over the whole stage, so the scenes only place a chip.
  * Without a Bluetooth summary (no desk socket, an older runtime, no adapter) nothing of it shows.
  */
+
 import { createContext, type ReactNode, useCallback, useContext, useState } from 'react';
 import deskStyles from '../desk/desk.module.css';
+import { useT } from '../i18n/react';
 import type { BluetoothSummary } from '../lib/bluetooth';
 import { chipView } from '../lib/bluetoothCopy';
 import type { Client } from '../lib/client';
@@ -55,9 +57,11 @@ export function BluetoothLayer({
 
 /** The Bluetooth chip: the mark, and what is connected; the mark struck through when it can't be used. */
 export function BluetoothChip({ after }: { after?: ReactNode }) {
+  const t = useT();
+
   const { summary, open } = useContext(Context);
   if (!summary) return null;
-  const v = chipView(summary);
+  const v = chipView(summary, t);
   return (
     <>
       <button

@@ -7,6 +7,7 @@
  * removed, revoked or departed box's status.
  */
 import type { HomeWidgetStatus } from '@whombat/client';
+import { clientTranslator } from '@whombat/client/i18n';
 
 /** Whether a widget snapshot belongs to a cloud-signed-in box or a direct community box. */
 export type StatusWidgetSource = 'cloud' | 'community';
@@ -23,6 +24,18 @@ export interface StatusWidgetPayload extends HomeWidgetStatus {
   applianceId: string;
   /** Account/connection kind, so cloud sign-out or expiry clears cloud snapshots without wiping community boxes. */
   source?: StatusWidgetSource;
+  labels?: StatusWidgetLabels;
+}
+
+interface StatusWidgetLabels {
+  asOfTemplate: string;
+  asOfYesterdayTemplate: string;
+}
+
+/** Date templates for the widget to fill when it draws, including after midnight. */
+export function statusWidgetLabels(locale?: string): StatusWidgetLabels {
+  const { raw } = clientTranslator(locale);
+  return { asOfTemplate: raw('home.widget.asOf'), asOfYesterdayTemplate: raw('home.widget.asOfYesterday') };
 }
 
 /** Minimal native store surface needed by `createStatusWidgetQueue`. */

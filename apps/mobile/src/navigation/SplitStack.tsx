@@ -16,6 +16,7 @@
  * the whole width (`ListToggleContext`), beside Chat always and beside the other tabs while something is open there;
  * the side bar stays.
  */
+
 import {
   CommonActions,
   createNavigatorFactory,
@@ -46,6 +47,7 @@ import { listHiding, parseFullWidthTabs, withFullWidth, writeFullWidthTabs } fro
 import { listPlaceOfScreen } from '../data/places';
 import { dividerAt, listWidthFor, parseShare, type ScreenShape, shareOf } from '../data/screenShape';
 import { HOME_TAB, type Tab } from '../data/shell';
+import { useMobileT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/kv';
 import { secureStore } from '../lib/storage';
 import { useTheme } from '../theme/theme';
@@ -522,6 +524,7 @@ function Divider({
   color: string;
   grip: string;
 }) {
+  const { t: tMobile } = useMobileT();
   const contentWidth = shape.content.right - shape.content.left;
   const percent = Math.round((at / contentWidth) * 100);
   const step = (by: number) => {
@@ -534,7 +537,7 @@ function Divider({
       pointerEvents="box-none"
       accessible
       accessibilityRole="adjustable"
-      accessibilityLabel="Page widths"
+      accessibilityLabel={tMobile('navigation.page-widths')}
       accessibilityValue={{ text: `Left page ${percent}%`, min: 0, max: 100, now: percent }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(e) =>

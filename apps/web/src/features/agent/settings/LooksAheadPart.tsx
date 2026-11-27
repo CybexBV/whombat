@@ -22,7 +22,7 @@ import {
   useTheAgent,
   useUpdateLooksAhead,
 } from '@whombat/client/react';
-import { AHEAD_KIND_WORDS, AHEAD_RULE_MAX, AHEAD_RULES_MAX, type LooksAheadUpdate } from '@whombat/core';
+import { AHEAD_RULE_MAX, AHEAD_RULES_MAX, aheadKindWords, type LooksAheadUpdate } from '@whombat/core';
 import { useId, useState } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
 import { Button } from '../../../components/Button';
@@ -31,11 +31,15 @@ import { SkeletonRows } from '../../../components/ListState';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { useToast } from '../../../components/Toast';
 import { Toggle } from '../../../components/Toggle';
+import { useWebI18n } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { useBurrowViewer } from '../../runs/useBurrowViewer';
 import styles from '../../settings/SettingsScreen.module.css';
 import own from './LooksAhead.module.css';
 
 export function LooksAheadPart({ burrow }: { burrow: string }) {
+  const AHEAD_KIND_WORDS = useLocaleWords(aheadKindWords);
+  const { tag: uiLocale } = useWebI18n();
   const ids = useId();
   const toast = useToast();
   const protocol = useSessionProtocol();
@@ -65,18 +69,18 @@ export function LooksAheadPart({ burrow }: { burrow: string }) {
         if (result.status === 'ok') {
           toast.show(said);
           onDone?.();
-        } else toast.show(commitOutcomeText(result) ?? T.notSaved);
+        } else toast.show(commitOutcomeText(result, uiLocale) ?? T.notSaved);
       },
-      (error) => toast.show(hostErrorInfo(error).message || T.notSaved),
+      (error) => toast.show(hostErrorInfo(error, uiLocale).message || T.notSaved),
     );
   };
   const runCheckNow = () => {
     checkNow.mutateAsync().then(
       (result) => {
         if (result.status === 'ok') toast.show(result.data.started ? T.checkStarted : T.nothingDue);
-        else toast.show(commitOutcomeText(result) ?? T.notSaved);
+        else toast.show(commitOutcomeText(result, uiLocale) ?? T.notSaved);
       },
-      (error) => toast.show(hostErrorInfo(error).message || T.notSaved),
+      (error) => toast.show(hostErrorInfo(error, uiLocale).message || T.notSaved),
     );
   };
   const week = T.week(view.week.checked, view.week.told);

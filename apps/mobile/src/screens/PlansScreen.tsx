@@ -6,6 +6,7 @@
  * the rows, the back button names the conversation). Plans come and go over `plan.updated` (the shared client), and
  * on pull.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { usePlans } from '@whombat/client/react';
 import { useMemo, useState } from 'react';
@@ -20,6 +21,7 @@ import {
   planListRows,
 } from '../data/planList';
 import { OVERVIEW_TITLE } from '../data/shell';
+import { useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -32,6 +34,7 @@ import { PlanMarkerView, stateColor } from './PlanScreen';
 type Props = NativeStackScreenProps<RootStackParamList, 'Plans'>;
 
 export function PlansScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
@@ -66,7 +69,7 @@ export function PlansScreen({ route, navigation }: Props) {
           />
         }
       >
-        <LargeTitle title="Plans" />
+        <LargeTitle title={tMobile('screens.plans')} />
         <View
           style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 6, paddingBottom: 14 }}
           accessibilityRole="tablist"
@@ -81,9 +84,9 @@ export function PlansScreen({ route, navigation }: Props) {
           ))}
         </View>
         {query.error && !query.data ? (
-          <ErrorState text="Plans didn’t load." onRetry={() => void query.refetch()} />
+          <ErrorState text={tMobile('screens.plans-didnt-load')} onRetry={() => void query.refetch()} />
         ) : !query.data ? (
-          <SkeletonRows count={4} lines={2} label="Loading plans" />
+          <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-plans')} />
         ) : rows.length === 0 ? (
           <QuietText>{(conversationId ? PLANS_HERE_EMPTY_TEXT : PLANS_EMPTY_TEXT)[filter]}</QuietText>
         ) : (

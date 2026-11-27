@@ -5,12 +5,14 @@
  * `SUBSCRIPTION_TERMS_VERSION` names; `/legal/privacy` renders `privacy-policy.md` (AP-165) and `/legal/terms`
  * renders `terms-of-service.md` (AP-166). Nobody ticks those two, so no contract constant names their versions.
  * Public: no sign-in needed. Not in the mocks: a reading column in the design
- * system's type and colors.
+ * system's type and colors. The texts are English and English governs; a Dutch reader sees a plain note saying so
+ * above them (docs/decisions/i18n.md), and the versions don't change.
  */
 
 import { WhombatLogo } from '@whombat/brand/react';
 import type { Inline } from '@whombat/core';
 import { type ReactNode, useMemo } from 'react';
+import { useWebI18n } from '../i18n/provider';
 import terms from './appliance-terms.md?raw';
 import styles from './LegalPage.module.css';
 import { type LegalBlock, parseLegal } from './legal';
@@ -109,7 +111,9 @@ export function LegalBlocks({ text }: { text: string }) {
   return <>{blocks.map(block)}</>;
 }
 
-export function LegalPage({ text }: { text: string }) {
+export function LegalPage({ text, governing = true }: { text: string; governing?: boolean }) {
+  const { t, language } = useWebI18n();
+  const english = language !== 'en';
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -118,7 +122,14 @@ export function LegalPage({ text }: { text: string }) {
         </a>
       </header>
       <main className={styles.column}>
-        <LegalBlocks text={text} />
+        {english && (
+          <p className={styles.languageNote} role="note">
+            {governing ? t('legal.englishGoverns') : t('legal.englishOnly')}
+          </p>
+        )}
+        <div lang={english ? 'en' : undefined}>
+          <LegalBlocks text={text} />
+        </div>
       </main>
       <footer className={styles.seller}>
         {SELLER_LINE} · <a href={`mailto:${SELLER_EMAIL}`}>{SELLER_EMAIL}</a>

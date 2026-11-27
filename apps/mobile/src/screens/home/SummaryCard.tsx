@@ -10,9 +10,10 @@ import {
   type FigureFace,
   type HomeThingRow,
   homeGreeting,
-  NEEDS_YOU_WORDS,
+  needsYouWords,
   OVERVIEW_WORDS,
   type OverviewHeadline,
+  overviewWords,
   ownFace,
   showId,
   viewFace,
@@ -26,6 +27,7 @@ import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { ARRANGED_PHONE_WORDS } from '../../data/overviewArranged';
 import type { PhoneGlyph } from '../../data/thingLook';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ThingIcon } from '../../ui/assistant';
@@ -73,6 +75,8 @@ export function SummaryCard({
   arranging: boolean;
   onGear: (index: number) => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { me, timeZone } = useBurrowBase();
   const now = useNow();
@@ -80,8 +84,8 @@ export function SummaryCard({
   const fine = headline.kind === 'status' && headline.status.tone === 'ok';
   const seconds = (now.getTime() - Date.parse(overview.generatedAt)) / 1000;
   const greet = [
-    homeGreeting(me.shortName ?? me.name, now, timeZone),
-    `${formatWeekday(now, timeZone)} ${formatDate(now, timeZone)}`,
+    homeGreeting(me.shortName ?? me.name, now, timeZone, rawLocale),
+    `${formatWeekday(now, timeZone, rawLocale)} ${formatDate(now, timeZone, undefined, rawLocale)}`,
     ARRANGED_PHONE_WORDS.readAgo(seconds),
   ].join(' · ');
   return (
@@ -180,6 +184,10 @@ function Broken({
   item: NeedsYouItem | null;
   onOthers: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const needsYouWordsHere = needsYouWords(rawLocale);
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const theme = useTheme();
   const words = useAgentWords();
   const press = useNeedsYouPress();
@@ -208,14 +216,14 @@ function Broken({
       ) : null}
       {headline.busy ? (
         <Text size={14} weight={500} color={theme.colors.mut} style={{ marginTop: 6 }}>
-          {headline.busy === 'looking' ? NEEDS_YOU_WORDS.looking(words) : NEEDS_YOU_WORDS.fixing(words)}
+          {headline.busy === 'looking' ? needsYouWordsHere.looking(words) : needsYouWordsHere.fixing(words)}
         </Text>
       ) : item ? (
         <Button
-          label={OVERVIEW_WORDS.lookIntoIt}
+          label={overviewWordsHere.lookIntoIt}
           onPress={look}
           busy={busy}
-          accessibilityLabel={`${OVERVIEW_WORDS.lookIntoIt}: ${headline.title}`}
+          accessibilityLabel={`${overviewWordsHere.lookIntoIt}: ${headline.title}`}
           style={{ marginTop: 10 }}
         />
       ) : null}
@@ -225,7 +233,7 @@ function Broken({
           feedback="fade"
           ringRadius={8}
           accessibilityRole="link"
-          accessibilityLabel={OVERVIEW_WORDS.others(headline.others)}
+          accessibilityLabel={overviewWordsHere.others(headline.others)}
           style={{
             alignSelf: 'flex-start',
             minHeight: 44,
@@ -235,7 +243,7 @@ function Broken({
           }}
         >
           <Text size={14} color={theme.colors.ink2}>
-            {OVERVIEW_WORDS.others(headline.others)}
+            {overviewWordsHere.others(headline.others)}
           </Text>
           <ChevronRight size={14} color={theme.colors.mut} strokeWidth={1.8} />
         </Touchable>

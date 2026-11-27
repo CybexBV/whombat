@@ -804,6 +804,8 @@ export function accessInventory(s: AccessSnapshot, week: AccessWeek | null): Inv
       title: 'Doors',
       icon: 'door',
       value: thousands(s.doors.length),
+      figureKey: 'f-doors',
+      private: true,
       ...(held ? { detail: `${held} kept unlocked` } : {}),
       ...(!s.doors.length
         ? {}
@@ -840,6 +842,8 @@ export function accessInventory(s: AccessSnapshot, week: AccessWeek | null): Inv
         icon: 'door',
         value: `${thousands(granted)}${s.moreOpenings ? '+' : ''}`,
         note: refused ? `${refused} refused` : 'None refused',
+        figureKey: 'f-openings-today',
+        private: true,
         ...(refused ? { noteTone: 'warn' as const } : {}),
       }),
     );
@@ -851,6 +855,8 @@ export function accessInventory(s: AccessSnapshot, week: AccessWeek | null): Inv
         title: 'People',
         icon: 'key',
         value: thousands(week.users.active),
+        figureKey: 'f-people',
+        private: true,
         ...(week.users.added ? { note: `+${week.users.added} this week`, noteTone: 'ok' as const } : {}),
       }),
     );

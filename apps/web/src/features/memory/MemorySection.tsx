@@ -20,6 +20,7 @@ import { Input } from '../../components/Input';
 import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import { DangerFold } from '../settings/DangerFold';
 import settings from '../settings/SettingsScreen.module.css';
@@ -30,8 +31,9 @@ type MemoryWords = ReturnType<typeof memoryCopy>;
 
 /** The section's words, the agent by its name (“What Neo remembers”), and that name. */
 export function useMemoryWords(burrow: string): { copy: MemoryWords; agentName: string } {
+  const { tag: uiLocale } = useWebI18n();
   const { words } = useTheAgent(burrow);
-  return { copy: memoryCopy(words.Name), agentName: words.Name };
+  return { copy: memoryCopy(words.Name, uiLocale), agentName: words.Name };
 }
 
 /**

@@ -32,12 +32,13 @@
  * A service's settings (Whombat service-settings.md SST-01…SST-10): its settings tab's groups (`thing/Settings.tsx`), a
  * press toast with Put it back when the change can be put back, and its verdict under the name in place of the badge.
  */
+
 import { useIsFocused } from '@react-navigation/native';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import {
   headFacts,
   holdView,
-  OVERVIEW_WORDS,
+  overviewWords,
   pageHeadVerdict,
   type ThingHeadPreview,
   thingButtonKey,
@@ -68,7 +69,7 @@ import { DEFAULT_RANGE, rangeOptions } from '../data/dashboard';
 import {
   factsWithoutUptime,
   holdLineShown,
-  MONITORING_COPY,
+  monitoringCopy,
   parseMonitoringPick,
   thingMoreMenu,
   withoutHoldLines,
@@ -88,14 +89,15 @@ import {
   runsOnTarget,
   shownPanels,
   shownTab,
-  THING_PAGE_COPY,
   type ThingSettingsOpens,
+  thingPageCopy,
   thingPageInterval,
   thingSettingsOpens,
   thingSubject,
 } from '../data/thingPage';
 import { showToast, toasts } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { openHref, useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -157,6 +159,12 @@ export function ThingPageScreen({
   tab: string | undefined;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
@@ -236,7 +244,7 @@ export function ThingPageScreen({
   const [pulling, setPulling] = useState(false);
   const scroller = useRef<ScrollView>(null);
   const tabsAt = useRef(0);
-  const name = page?.name ?? early?.name ?? title ?? THING_PAGE_COPY.back;
+  const name = page?.name ?? early?.name ?? title ?? thingPageCopyHere.back;
   const parsed = parseThingId(thingId);
 
   // Its settings are the Connection screen, with What Whombat watches for this thing (a device's is its own, AP-4865);
@@ -352,7 +360,7 @@ export function ThingPageScreen({
               feedback="wash"
               ringRadius={22}
               accessibilityRole="button"
-              accessibilityLabel={THING_PAGE_COPY.more(page.name)}
+              accessibilityLabel={thingPageCopyHere.more(page.name)}
               style={{
                 width: 44,
                 height: 44,
@@ -396,12 +404,12 @@ export function ThingPageScreen({
             {query.error ? (
               <>
                 {notFound ? (
-                  <ErrorState text={THING_PAGE_COPY.notFound} />
+                  <ErrorState text={thingPageCopyHere.notFound} />
                 ) : (
                   // Nothing saved to show yet: no figures, controls or status that could look current.
                   <ReadNote
-                    title={OVERVIEW_WORDS.couldntRead(name)}
-                    body={OVERVIEW_WORDS.noSaved}
+                    title={overviewWordsHere.couldntRead(name)}
+                    body={overviewWordsHere.noSaved}
                     onRetry={() => void query.refetch()}
                     error={query.error}
                   />
@@ -410,14 +418,14 @@ export function ThingPageScreen({
                     doesn't serve pages answers 404 too (AP-1962). */}
                 {fallbackSettings ? (
                   <Button
-                    label={THING_PAGE_COPY.openSettings}
+                    label={thingPageCopyHere.openSettings}
                     variant="secondary"
                     onPress={fallbackSettings}
                   />
                 ) : null}
               </>
             ) : (
-              <CardSkeletons label={THING_PAGE_COPY.loading} count={2} />
+              <CardSkeletons label={thingPageCopyHere.loading} count={2} />
             )}
           </>
         ) : (
@@ -449,8 +457,8 @@ export function ThingPageScreen({
             {query.error ? (
               // A failed refresh keeps the saved page, Needs a look and its problems with it; its controls may have changed.
               <ReadNote
-                title={OVERVIEW_WORDS.couldntRefresh(page.name)}
-                body={OVERVIEW_WORDS.keepPage}
+                title={overviewWordsHere.couldntRefresh(page.name)}
+                body={overviewWordsHere.keepPage}
                 onRetry={() => void query.refetch()}
                 error={query.error}
               />
@@ -465,7 +473,7 @@ export function ThingPageScreen({
                 value={shown}
                 onChange={setTab}
                 onSettings={() => openSettings?.()}
-                label={THING_PAGE_COPY.tabs(page.name)}
+                label={thingPageCopyHere.tabs(page.name)}
                 inset={INSET}
               />
             </View>
@@ -477,7 +485,11 @@ export function ThingPageScreen({
               <>
                 <FindMyPart serverId={about} />
                 {shown === tabs[0]?.key && subject && !service ? (
-                  <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
+                  <BigButton
+                    label={thingPageCopyHere.ask(page.name)}
+                    variant="secondary"
+                    onPress={askAbout}
+                  />
                 ) : null}
               </>
             ) : shown === ONEPASSWORD_TAB &&
@@ -516,7 +528,11 @@ export function ThingPageScreen({
                 {/* The last 30 days: outages and problems with when, how long and why. */}
                 {shown === tabs[0]?.key ? <WhatHappenedCard thing={page.id} /> : null}
                 {shown === tabs[0]?.key && subject && !service ? (
-                  <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
+                  <BigButton
+                    label={thingPageCopyHere.ask(page.name)}
+                    variant="secondary"
+                    onPress={askAbout}
+                  />
                 ) : null}
               </>
             )}
@@ -536,7 +552,7 @@ export function ThingPageScreen({
           onClose={() => setMenu(false)}
           title={page.name}
           buttons={[
-            { id: 'close', label: THING_PAGE_COPY.close, variant: 'quiet', onPress: () => setMenu(false) },
+            { id: 'close', label: thingPageCopyHere.close, variant: 'quiet', onPress: () => setMenu(false) },
           ]}
         >
           <View style={{ marginTop: 16, gap: 10 }}>
@@ -552,7 +568,7 @@ export function ThingPageScreen({
             />
             {canKeepQuiet ? (
               <Button
-                label={MONITORING_COPY.keepQuiet}
+                label={monitoringCopyHere.keepQuiet}
                 variant="secondary"
                 onPress={() => {
                   setMenu(false);
@@ -673,6 +689,9 @@ function ServiceHead({
   /** The hold under the state: kept quiet, which says the state itself, or quiet with its server. */
   hold?: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   const agent = useAgentWords();
   const navigation = useAppNavigation();
@@ -712,10 +731,10 @@ function ServiceHead({
         ) : null}
         {open ? (
           <HeadWideButton
-            label={THING_PAGE_COPY.openWord}
+            label={thingPageCopyHere.openWord}
             spoken={open.label}
             icon={ExternalLink}
-            hint={THING_PAGE_COPY.open(open.label)}
+            hint={thingPageCopyHere.open(open.label)}
             onPress={() => void Linking.openURL(open.url).catch(() => {})}
             grow={!wide}
           />
@@ -767,14 +786,14 @@ function ServiceHead({
               feedback="fade"
               ringRadius={8}
               accessibilityRole="link"
-              accessibilityLabel={`${THING_PAGE_COPY.runsOn} ${runsOn.name}`}
-              accessibilityHint={THING_PAGE_COPY.runsOnHint}
+              accessibilityLabel={`${thingPageCopyHere.runsOn} ${runsOn.name}`}
+              accessibilityHint={thingPageCopyHere.runsOnHint}
               // 36 tall with slop to 44, so the wrapped lines sit close.
               hitSlop={hitSlopFor(36)}
               style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}
             >
               <Text size={13.5} color={theme.colors.mut}>
-                {`${THING_PAGE_COPY.runsOn} `}
+                {`${thingPageCopyHere.runsOn} `}
               </Text>
               <Text
                 size={13.5}
@@ -814,7 +833,7 @@ function ServiceHead({
             }}
           >
             <Text size={13.5} weight={500} color={theme.colors.brand}>
-              {THING_PAGE_COPY.moreDetail}
+              {thingPageCopyHere.moreDetail}
             </Text>
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               {detailOpen ? (
@@ -859,14 +878,17 @@ function ServiceHead({
 
 /** The address in mono; a press copies it (“Address copied.”), as the web's. */
 function CopyAddress({ address }: { address: string }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <Touchable
-      onPress={() => void copyToClipboard(address, THING_PAGE_COPY.addressCopied)}
+      onPress={() => void copyToClipboard(address, thingPageCopyHere.addressCopied)}
       feedback="fade"
       ringRadius={8}
       accessibilityRole="button"
-      accessibilityLabel={THING_PAGE_COPY.copyAddress(address)}
+      accessibilityLabel={thingPageCopyHere.copyAddress(address)}
       hitSlop={hitSlopFor(36)}
       style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 }}
     >
@@ -955,6 +977,9 @@ function Actions({
   /** “Open Plex” among them; a service's head has its own. */
   withOpen?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const actions = page.actions;
   const own = page.buttons ?? [];
   const open = withOpen ? page.open : undefined;
@@ -993,7 +1018,7 @@ function Actions({
             label={open.label}
             variant="secondary"
             onPress={() => void Linking.openURL(open.url).catch(() => {})}
-            accessibilityHint={THING_PAGE_COPY.open(open.label)}
+            accessibilityHint={thingPageCopyHere.open(open.label)}
             // Beside the page's own buttons each takes its words' width and the row shares what is left.
             style={{ flexGrow: 1, flexBasis: own.length ? 'auto' : '45%' }}
           />
@@ -1027,6 +1052,9 @@ function ConfirmSheet({
   action: ThingPageAction;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const { slug } = useBurrowBase();
   const act = useThingAction(slug, thingId);
   const [error, setError] = useState<string | null>(null);
@@ -1036,7 +1064,7 @@ function ConfirmSheet({
       (result) => {
         if (result.status !== 'ok') {
           const text = outcomeText(result);
-          return setError(text ? `${text.title}. ${text.body}` : THING_PAGE_COPY.failed);
+          return setError(text ? `${text.title}. ${text.body}` : thingPageCopyHere.failed);
         }
         onClose();
         showNotice(result.data.message);
@@ -1081,6 +1109,9 @@ function QuestionSheet({
   onClose: () => void;
   note: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   return (
     <OneSheet
       visible
@@ -1092,7 +1123,7 @@ function QuestionSheet({
       busy={busy ? 'yes' : null}
       buttons={[
         { id: 'yes', label: button, variant: 'primary', onPress: onYes },
-        { id: 'cancel', label: THING_PAGE_COPY.cancel, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: thingPageCopyHere.cancel, variant: 'quiet', onPress: onClose },
       ]}
       note={note}
     />
@@ -1101,6 +1132,9 @@ function QuestionSheet({
 
 /** A page's ⋯ when Keep quiet… is all it holds (44pt): iOS's own menu on iPhone, a sheet elsewhere. */
 function KeepQuietMore({ name, onKeepQuiet }: { name: string; onKeepQuiet: () => void }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const spec = thingMoreMenu();
@@ -1120,7 +1154,7 @@ function KeepQuietMore({ name, onKeepQuiet }: { name: string; onKeepQuiet: () =>
   const face = <Ellipsis size={18} color={theme.colors.ink} strokeWidth={1.8} />;
   if (hasNativeMenu)
     return (
-      <NativeMenu spec={spec} onPick={onPick} trigger="tap" label={MONITORING_COPY.more(name)} style={box}>
+      <NativeMenu spec={spec} onPick={onPick} trigger="tap" label={monitoringCopyHere.more(name)} style={box}>
         <View style={box}>{face}</View>
       </NativeMenu>
     );
@@ -1131,7 +1165,7 @@ function KeepQuietMore({ name, onKeepQuiet }: { name: string; onKeepQuiet: () =>
         feedback="wash"
         ringRadius={22}
         accessibilityRole="button"
-        accessibilityLabel={MONITORING_COPY.more(name)}
+        accessibilityLabel={monitoringCopyHere.more(name)}
         style={box}
       >
         {face}
@@ -1139,7 +1173,7 @@ function KeepQuietMore({ name, onKeepQuiet }: { name: string; onKeepQuiet: () =>
       <MenuSheet
         spec={open ? spec : null}
         visible={open}
-        label={MONITORING_COPY.more(name)}
+        label={monitoringCopyHere.more(name)}
         onClose={() => setOpen(false)}
         onPick={onPick}
       />

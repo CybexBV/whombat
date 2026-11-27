@@ -14,12 +14,11 @@ import {
   LIMIT_WORDS,
   noticeGroups,
   noticeLink,
-  OVERVIEW_WORDS,
   quietLineText,
-  THING_ACCESS_TIER_WORDS,
+  thingAccessTierWords,
   thingItemLink,
 } from '@whombat/client';
-import { HOST_RANGE_WORDS } from '@whombat/client/hosts';
+import { hostRangeWords } from '@whombat/client/hosts';
 import {
   type QuietActions,
   type ThingButtons,
@@ -48,6 +47,8 @@ import type { ContextMenuItem } from '../../../app/shell/ContextMenu';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
+import { useLocaleWords, useOverviewWords } from '../../../i18n/words';
 import { DoneList } from '../../home/DoneList';
 import { WidgetCard } from '../../home/WidgetCard';
 import { AppLink, Card, Dot } from '../parts';
@@ -142,6 +143,7 @@ const NO_CHARTS: Readonly<Record<string, ChartPanel[]>> = {};
 
 /** “the last 24 hours”. */
 export function rangeWords(range: HostSeriesRange): string {
+  const HOST_RANGE_WORDS = hostRangeWords(currentLocale());
   return HOST_RANGE_WORDS[range].replace(/^L/, 'the l');
 }
 
@@ -350,6 +352,7 @@ function KpisPanel({
   ctx: DashboardContext;
   charts: Readonly<Record<string, ChartPanel[]>>;
 }) {
+  const OVERVIEW_WORDS = useOverviewWords();
   const over = rangeWords(ctx.range);
   const [search, set] = useThingSearch();
   const uid = useId();
@@ -979,6 +982,7 @@ const ITEM_ICON_TONES: Record<NonNullable<ThingPageItem['tone']>, string | undef
 };
 
 function ListPanel({ panel, ctx }: { panel: PanelOf<'list'>; ctx: DashboardContext }) {
+  const { tag: uiLocale } = useWebI18n();
   if (!panel.items.length && !panel.empty) return null;
   if (panel.look === 'counts') return <CountsPanel panel={panel} ctx={ctx} />;
   return (
@@ -987,7 +991,7 @@ function ListPanel({ panel, ctx }: { panel: PanelOf<'list'>; ctx: DashboardConte
         <ul className={styles.lines}>
           {panel.items.map((item) => {
             const tone = item.tone ?? 'info';
-            const end = item.right ?? (item.at ? itemWhen(item.at, ctx.now, ctx.timeZone) : null);
+            const end = item.right ?? (item.at ? itemWhen(item.at, ctx.now, ctx.timeZone, uiLocale) : null);
             // The service's own page for the line (CT-1013): its title opens it in a new tab.
             const link = thingItemLink({ url: item.url });
             return (
@@ -1200,6 +1204,7 @@ function TextPanel({ panel, ctx }: { panel: PanelOf<'text'>; ctx: DashboardConte
 /* What Whombat may do */
 
 function AccessPanel({ panel, ctx }: { panel: PanelOf<'access'>; ctx: DashboardContext }) {
+  const THING_ACCESS_TIER_WORDS = useLocaleWords(thingAccessTierWords);
   const { words } = useTheAgent(ctx.burrow);
   if (!panel.items.length && !panel.lookOnly) return null;
   const change = ctx.thing.settings && ctx.thing.canManage;
@@ -1266,6 +1271,7 @@ function ChangesPanel({ panel, ctx }: { panel: PanelOf<'changes'>; ctx: Dashboar
 /* Show more here */
 
 function WidgetsPanel({ panel, ctx }: { panel: PanelOf<'widgets'>; ctx: DashboardContext }) {
+  const { tag: uiLocale } = useWebI18n();
   const { words } = useTheAgent(ctx.burrow);
   const { data } = useWidgets({ params: { burrow: ctx.burrow }, query: { thing: ctx.thing.id } });
   const widgets = data?.widgets ?? [];
@@ -1282,7 +1288,7 @@ function WidgetsPanel({ panel, ctx }: { panel: PanelOf<'widgets'>; ctx: Dashboar
             key={s}
             type="button"
             className={styles.chip}
-            onClick={() => ctx.onAsk(keepHereQuestion(s, ctx.thing.name))}
+            onClick={() => ctx.onAsk(keepHereQuestion(s, ctx.thing.name, uiLocale))}
           >
             {s}
           </button>

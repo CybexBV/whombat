@@ -21,6 +21,7 @@
  * A page set (page-sets.md) is a card of its own: the picture of its first page, its title, “Pages · 30 MB” and Open,
  * which opens its pages in the viewer (`pageSetViewer.tsx`); its Download and Save to Files sit over the picture.
  */
+
 import {
   inFilesLabel,
   SVG_PREVIEW_MAX_BYTES,
@@ -60,6 +61,7 @@ import type { FileAccess } from '../data/fileAccess';
 import { PAGES_COPY, pageSetMeta } from '../data/pageSets';
 import { supportsAvif } from '../data/richPreview';
 import type { MessageFileActions } from '../data/useFiles';
+import { useMobileT } from '../i18n';
 import { expoFileApi } from '../managed/expoFiles';
 import { resourceToCacheFile } from '../managed/files';
 import { Text } from '../theme/Text';
@@ -128,6 +130,7 @@ export function AttachmentImage({
   accessibilityLabel?: string;
   thumbnail?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [uri, setUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -161,7 +164,7 @@ export function AttachmentImage({
       >
         {failed ? (
           <Text size={11} mono color={theme.colors.mut}>
-            Couldn’t load it
+            {tMobile('ui.couldnt-load-it')}
           </Text>
         ) : (
           <ActivityIndicator color={theme.colors.mut} />
@@ -340,6 +343,7 @@ export function UploadChips({
   /** Whether a failed chip offers Retry (not for a file that can never go up as it is). */
   canRetry: (localId: string) => boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const window = useWindowDimensions();
   if (!items.length) return null;
@@ -348,7 +352,7 @@ export function UploadChips({
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
-      accessibilityLabel="Attachments"
+      accessibilityLabel={tMobile('ui.attachments')}
     >
       {items.map((item) => {
         const failed = item.state === 'failed';
@@ -398,7 +402,7 @@ export function UploadChips({
                 }}
               >
                 <Text size={12.5} weight={600} color={theme.colors.brand}>
-                  Retry
+                  {tMobile('ui.retry')}
                 </Text>
               </Touchable>
             ) : null}
@@ -566,6 +570,7 @@ function FileRow({
   access: FileAccess;
   files: MessageFileActions | null;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
   const Icon = attachment.kind === 'file' ? FileIcon : FileText;
@@ -597,7 +602,7 @@ function FileRow({
         feedback="wash"
         ringRadius={14}
         accessibilityLabel={`${attachment.name}, ${attachmentMeta(attachment)}`}
-        accessibilityHint="Downloads the file and opens the share sheet"
+        accessibilityHint={tMobile('ui.downloads-the-file-and-opens-the-share-sheet')}
         style={{
           flex: 1,
           flexDirection: 'row',
@@ -615,7 +620,7 @@ function FileRow({
             {attachment.name}
           </Text>
           <Text size={11} mono color={state === 'failed' ? theme.colors.bad : theme.colors.mut}>
-            {state === 'failed' ? 'Couldn’t open it. Tap to try again.' : attachmentMeta(attachment)}
+            {state === 'failed' ? tMobile('ui.couldnt-open-it-tap-to-try-again') : attachmentMeta(attachment)}
           </Text>
         </View>
       </Touchable>
@@ -806,6 +811,7 @@ export function ImageViewer({
   onClose: () => void;
   files?: MessageFileActions | null;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const window = useWindowDimensions();
   const [sharing, setSharing] = useState(false);
@@ -832,7 +838,7 @@ export function ImageViewer({
             >
               <Touchable
                 onPress={onClose}
-                accessibilityLabel="Close"
+                accessibilityLabel={tMobile('ui.close')}
                 feedback="wash"
                 ringRadius={22}
                 style={{
@@ -934,6 +940,7 @@ export function MessageAttachmentsView({
   /** Save to Files for this conversation's messages (AP-840); null: Download only. */
   files?: MessageFileActions | null;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const window = useWindowDimensions();
   const [open, setOpen] = useState<Attachment | null>(null);
@@ -979,7 +986,7 @@ export function MessageAttachmentsView({
             <Touchable
               onPress={() => setOpen(a)}
               accessibilityLabel={`Image ${a.name}`}
-              accessibilityHint="Opens the image"
+              accessibilityHint={tMobile('ui.opens-the-image')}
               feedback="fade"
               ringRadius={16}
               style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: theme.colors.sf2 }}
@@ -999,7 +1006,7 @@ export function MessageAttachmentsView({
             <Touchable
               onPress={() => setOpen(a)}
               accessibilityLabel={`Image ${a.name}`}
-              accessibilityHint="Opens the image"
+              accessibilityHint={tMobile('ui.opens-the-image')}
               feedback="fade"
               ringRadius={16}
               style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: theme.colors.sf2 }}

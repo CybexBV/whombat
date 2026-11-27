@@ -3,7 +3,9 @@
  * on every Whombat and from the first frame. Overview is the `Dashboard` route in code and Chat the `ChatRoom` route.
  * Pure.
  */
+
 import { CHAT_WORDS } from '@whombat/client';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * What the Overview tab and its page are called (sidebar-tabs.md; the web's sidebar row): the bar's word, the page's
@@ -26,10 +28,14 @@ export const HOME_TAB = 'ChatRoom' satisfies Tab;
 export const INBOX_TAB = 'NeedsYou' satisfies Tab;
 
 /** What the bar calls each tab (CN-07, AP-2550). */
-export const TAB_WORDS: Record<Tab, string> = {
-  ChatRoom: 'Chat',
-  NeedsYou: 'Inbox',
-  Dashboard: OVERVIEW_TITLE,
-  Automations: 'Automations',
-  Settings: 'Settings',
-};
+export function tabWords(locale?: string): Record<Tab, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    ChatRoom: t('places.chat'),
+    NeedsYou: t('places.inbox'),
+    Dashboard: t('places.overview'),
+    Automations: t('places.automations'),
+    Settings: t('places.settings'),
+  };
+}
+export const TAB_WORDS = tabWords();

@@ -4,7 +4,7 @@
  * the bad tone), Rename with the name in a field, Move with the space's folders as a list and a path field for a new
  * one, and New folder with a name field. Every refusal is the Whombat's sentence, under the field.
  */
-import { FILES_COPY } from '@whombat/client';
+
 import type { FileEntry } from '@whombat/core';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -15,6 +15,8 @@ import {
   type MoveChoice,
   renameProblem,
 } from '../data/files';
+import { filesCopy } from '../data/filesCopy';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField, FormMessage } from '../ui/formField';
@@ -53,9 +55,10 @@ export function FileActionSheet({
   onClose: () => void;
   onAction: (kind: FileActionKind) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
-    <Sheet visible={entry !== null} onClose={onClose} label="File actions">
+    <Sheet visible={entry !== null} onClose={onClose} label={tMobile('screens.file-actions')}>
       <Text
         size={13.5}
         lh={1.4}
@@ -110,6 +113,10 @@ export function RenameFileSheet({
   onSave: (name: string) => void;
   onClose: () => void;
 }) {
+  const { rawLocale, tClient } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const [draft, setDraft] = useState('');
   useEffect(() => {
     if (entry) setDraft(entry.attachment.name);
@@ -120,13 +127,13 @@ export function RenameFileSheet({
     <Sheet
       visible={entry !== null}
       onClose={onClose}
-      title={FILES_COPY.rename.toUpperCase()}
-      label={FILES_COPY.rename}
-      closeLabel="Cancel"
+      title={filesCopyHere.rename.toUpperCase()}
+      label={filesCopyHere.rename}
+      closeLabel={tClient('reports.cancel')}
     >
       <View style={{ paddingHorizontal: 18, gap: 10 }}>
         <FormField
-          label="Name"
+          label={tMobile('screens.name')}
           value={draft}
           onChangeText={setDraft}
           error={problem}
@@ -138,9 +145,14 @@ export function RenameFileSheet({
         />
         <FormMessage text={error} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
           <Button
-            label="Save"
+            label={tClient('reports.cancel')}
+            variant="secondary"
+            onPress={onClose}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label={tClient('limit.save')}
             busy={busy}
             disabled={!canRename(draft, original)}
             onPress={() => onSave(draft.trim())}
@@ -174,6 +186,10 @@ export function MoveFileSheet({
   onMove: (folder: string) => void;
   onClose: () => void;
 }) {
+  const { rawLocale, tClient } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [typed, setTyped] = useState('');
   useEffect(() => {
@@ -185,13 +201,13 @@ export function MoveFileSheet({
     <Sheet
       visible={entry !== null}
       onClose={onClose}
-      title={FILES_COPY.move.replace('…', '').toUpperCase()}
-      label={FILES_COPY.move}
-      closeLabel="Cancel"
+      title={filesCopyHere.move.replace('…', '').toUpperCase()}
+      label={filesCopyHere.move}
+      closeLabel={tClient('reports.cancel')}
       maxHeight="90%"
     >
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 4 }}>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Folders">
+        <View accessibilityRole="radiogroup" accessibilityLabel={tMobile('screens.folders')}>
           {choices.map((c) => (
             <Touchable
               key={c.path || '(top)'}
@@ -222,12 +238,12 @@ export function MoveFileSheet({
         </View>
         <View style={{ paddingHorizontal: 18, paddingTop: 14, gap: 10 }}>
           <FormField
-            label="Or a new folder"
+            label={tMobile('screens.or-a-new-folder')}
             value={typed}
             onChangeText={setTyped}
             error={problem}
-            hint={problem ? null : 'A path, like Drawings/2024.'}
-            placeholder="Drawings/2024"
+            hint={problem ? null : tMobile('screens.a-path-like-drawings-2024')}
+            placeholder={tMobile('screens.drawings-2024')}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="done"
@@ -235,9 +251,14 @@ export function MoveFileSheet({
           />
           <FormMessage text={error} />
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
             <Button
-              label="Move"
+              label={tClient('reports.cancel')}
+              variant="secondary"
+              onPress={onClose}
+              style={{ flex: 1 }}
+            />
+            <Button
+              label={tMobile('screens.move')}
               busy={busy}
               disabled={!result || 'problem' in result}
               onPress={() => result && 'folder' in result && onMove(result.folder)}
@@ -263,6 +284,10 @@ export function NewFolderSheet({
   onCreate: (folder: string) => void;
   onClose: () => void;
 }) {
+  const { rawLocale, tClient } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const [name, setName] = useState('');
   const [tried, setTried] = useState(false);
   useEffect(() => {
@@ -281,13 +306,13 @@ export function NewFolderSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
-      title={FILES_COPY.newFolder.toUpperCase()}
-      label={FILES_COPY.newFolder}
-      closeLabel="Cancel"
+      title={filesCopyHere.newFolder.toUpperCase()}
+      label={filesCopyHere.newFolder}
+      closeLabel={tClient('reports.cancel')}
     >
       <View style={{ paddingHorizontal: 18, gap: 10 }}>
         <FormField
-          label="Folder name"
+          label={tMobile('screens.folder-name')}
           value={name}
           onChangeText={setName}
           error={problem}
@@ -296,8 +321,18 @@ export function NewFolderSheet({
           onSubmitEditing={create}
         />
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
-          <Button label="Create" disabled={!name.trim()} onPress={create} style={{ flex: 1 }} />
+          <Button
+            label={tClient('reports.cancel')}
+            variant="secondary"
+            onPress={onClose}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label={tMobile('screens.create')}
+            disabled={!name.trim()}
+            onPress={create}
+            style={{ flex: 1 }}
+          />
         </View>
       </View>
     </Sheet>

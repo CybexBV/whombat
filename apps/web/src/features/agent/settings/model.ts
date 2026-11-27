@@ -4,7 +4,8 @@
  */
 
 import type { ModelRuntimeDraft } from '@whombat/client';
-import { MODEL_EFFORT_COPY } from '@whombat/core/text';
+import { modelEffortCopy } from '@whombat/core/text';
+import { currentLocale } from '../../../i18n/provider';
 
 /** JSON with sorted object keys, so two drafts compare by value whatever order their keys were set in. */
 function stable(value: unknown): unknown {
@@ -39,6 +40,7 @@ export function modelSavedText(
   before: Pick<ModelRuntimeDraft, 'provider'>,
   after: Pick<ModelRuntimeDraft, 'provider' | 'model' | 'backgroundModel' | 'effort'>,
 ): string {
+  const MODEL_EFFORT_COPY = modelEffortCopy(currentLocale());
   const moved = before.provider !== after.provider;
   // A custom AI model has no effort: “model” alone.
   const local = after.provider === 'local';

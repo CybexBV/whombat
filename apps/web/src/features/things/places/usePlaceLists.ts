@@ -18,6 +18,7 @@ import { addServerHref, isHostsUnavailable } from '@whombat/client/hosts';
 import { useHomeOverview, useTheAgent } from '@whombat/client/react';
 import { useMemo } from 'react';
 import { ADD_CONNECTION_HREF } from '../../../app/shell/assistantSidebarModel';
+import { useWebI18n } from '../../../i18n/provider';
 import { useOverviewFleet } from '../../home/OverviewServers';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
 
@@ -65,26 +66,28 @@ export function usePlaceLists(burrow: string): PlaceLists {
   const hostsSettled =
     (!!hosts.status.data || !!hosts.status.error) &&
     (!hosts.present || !!hosts.fleet.data || !!hosts.fleet.error);
+  const { tag: locale } = useWebI18n();
   return useMemo(() => {
     const things = data?.things ?? [];
-    const rows = thingRows(things);
+    const rows = thingRows(things, undefined, locale);
     const serverIds = new Set(things.filter((t) => t.kind === 'server').map((t) => t.id));
     const serverRows = rows.filter((r) => serverIds.has(r.id));
     const connectionRows = rows.filter((r) => !serverIds.has(r.id));
     const sections = data
-      ? homeSections(data, { now, timeZone, servers: hosts.present, canAddConnection: canAdd })
+      ? homeSections(data, { now, timeZone, servers: hosts.present, canAddConnection: canAdd, locale })
       : [];
     const tileRows = homeSection(sections, 'things')?.rows ?? [];
-    const tiles = data ? overviewTiles(tileRows, things, now, timeZone, agentName) : null;
+    const tiles = data ? overviewTiles(tileRows, things, now, timeZone, agentName, locale) : null;
     return {
       servers: serverPlaceRows(
         hosts.servers,
         serverRows,
         now,
         timeZone,
-        serverQuietWords(things, now, timeZone),
+        serverQuietWords(things, now, timeZone, locale),
+        locale,
       ),
-      connections: connectionPlaceRows(connectionRows, tiles),
+      connections: connectionPlaceRows(connectionRows, tiles, locale),
       known: !!data,
       settled: { servers: (!!data || homeFailed) && hostsSettled, connections: !!data || homeFailed },
       failed: homeFailed,
@@ -98,6 +101,7 @@ export function usePlaceLists(burrow: string): PlaceLists {
       addConnection: canAdd ? ADD_CONNECTION_HREF : null,
     };
   }, [
+    locale,
     data,
     homeFailed,
     refetchHome,

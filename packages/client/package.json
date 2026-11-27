@@ -7,6 +7,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./i18n/react": "./src/i18n/react.tsx",
     "./query": "./src/query/index.ts",
     "./react": "./src/react/index.ts",
     "./web": "./src/web/index.ts",

@@ -21,13 +21,14 @@ import {
 } from '@whombat/client';
 import { useBootstrap, useSessionProtocol, useSetAgentModel } from '@whombat/client/react';
 import { type AgentEffort, PROVIDER_LABELS } from '@whombat/core/domain';
-import { MODEL_EFFORT_COPY } from '@whombat/core/text';
+import { modelEffortCopy } from '@whombat/core/text';
 import { BACKGROUND_MODEL_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useEffect, useId, useState } from 'react';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
 import { ToggleRow } from '../../../components/Toggle';
+import { useLocaleWords } from '../../../i18n/words';
 import { useAgentSetupStatus } from '../AiProviderPanel';
 import { AnotherModel } from '../AnotherModel';
 import { CredentialSection } from '../CredentialSection';
@@ -60,6 +61,7 @@ function runtimeRefusalOf(err: unknown): string | null {
  * Local, which needs no sign-in). Save sends the whole model runtime in one `agent.update`.
  */
 export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
+  const MODEL_EFFORT_COPY = useLocaleWords(modelEffortCopy);
   const { agent } = profile;
   const { data: setup } = useAgentSetupStatus(burrow);
   const { data: bootstrap } = useBootstrap({ params: { burrow } });

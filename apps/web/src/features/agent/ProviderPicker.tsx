@@ -8,9 +8,11 @@ import {
   localModelName,
   PROVIDER_LABELS,
 } from '@whombat/core/domain';
-import { AI_PROVIDER_SETTINGS, CHAT_PROVIDER_LABELS, providerStateLabel } from '@whombat/core/text';
+import { AI_PROVIDER_SETTINGS, chatProviderLabels, providerStateLabel } from '@whombat/core/text';
 import { cx } from '../../components/cx';
 import { SegmentedControl } from '../../components/SegmentedControl';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { engineProblemText } from './AiProviderPanel';
 import styles from './ProviderPicker.module.css';
 
@@ -60,7 +62,7 @@ export function providerHint(
     return status.runner.connected
       ? 'Not checked yet.'
       : `Part of Whombat is restarting, so ${PROVIDER_LABELS[value]} can’t be checked right now.`;
-  const label = providerStateLabel(setup);
+  const label = providerStateLabel(setup, currentLocale());
   if (setup.state === 'ready') return `${label} on this machine.`;
   return setupAt
     ? `${label}: set it up in ${setupAt}.`
@@ -82,6 +84,7 @@ export function ProviderPicker({
   setupAt = AI_PROVIDER_SETTINGS,
   className,
 }: ProviderPickerProps) {
+  const CHAT_PROVIDER_LABELS = useLocaleWords(chatProviderLabels);
   const ready = (p: LiveProvider) => status.providers.some((s) => s.provider === p && s.state === 'ready');
   const options: { value: AgentProvider; label: string; disabled: boolean }[] = [
     ...LIVE_PROVIDERS.map((p) => ({

@@ -11,6 +11,7 @@ import {
   slugify,
   topics,
 } from '@whombat/core';
+import { resolveLanguage, type SupportedLanguage } from '@whombat/core/i18n';
 import { and, desc, eq, gt, inArray, like, or } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ApplyContext } from '../commit/types';
@@ -20,11 +21,12 @@ import { enqueueDispatches } from '../domain/dispatch';
 import { postMessage } from '../domain/messages';
 import { ensurePersonalDm } from '../domain/personal-dm';
 import { indexCanvas } from '../domain/search-index';
+import { accountLocale } from '../i18n/locale';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { iso } from '../lib/time';
 import { loadConversationRow } from '../read/conversations';
 import { loadAgentRow, loadPrincipalRow } from '../read/principals';
-import { docReadableBy, SEARCH_ANSWER_REUSE_MS, sameSearchWords } from '../read/search';
+import { docReadableBy, inSearchLanguage, SEARCH_ANSWER_REUSE_MS, sameSearchWords } from '../read/search';
 
 /* Search ----------------------------------------------------------------------------------------- */
 
@@ -37,6 +39,16 @@ async function answererOf(ctx: ApplyContext) {
   return agent ?? undefined;
 }
 
+/** The language the asker reads in; English when it can't be told (no account, a read that failed). */
+async function askerLanguage(ctx: ApplyContext, accountId: string | null): Promise<SupportedLanguage> {
+  if (!accountId) return 'en';
+  try {
+    return resolveLanguage(await accountLocale(ctx.services, accountId));
+  } catch {
+    return 'en';
+  }
+}
+
 export const askSearch = defineCommand({
   name: 'ask_search',
   // AI search asks the agent (LC-10); plain search stays open.
@@ -47,6 +59,10 @@ export const askSearch = defineCommand({
     // The same words (case and spacing aside) asked again by the same person: the answer on its way or given within
     // the reuse window is the answer, and nobody is woken again (review-features.md RF-08). A failed one, one asked
     // while the agent couldn't answer and an older one are asked again.
+    // Answers are kept by the language they were asked in: after a switch the same words are asked again in the new
+    // language, while an earlier answer (on its way or given) stays readable by its id.
+    const asker = await loadPrincipalRow(tx, ctx.actor.id);
+    const language = await askerLanguage(ctx, asker?.accountId ?? null);
     const [recent] = await tx
       .select({ id: searchAnswers.id })
       .from(searchAnswers)
@@ -55,6 +71,7 @@ export const askSearch = defineCommand({
           eq(searchAnswers.burrowId, ctx.burrow.id),
           eq(searchAnswers.askedById, ctx.actor.id),
           sameSearchWords(searchAnswers.query, input.q),
+          inSearchLanguage(language),
           inArray(searchAnswers.status, ['pending', 'ready']),
           gt(searchAnswers.createdAt, new Date(ctx.now.getTime() - SEARCH_ANSWER_REUSE_MS)),
         ),
@@ -70,6 +87,7 @@ export const askSearch = defineCommand({
       query: input.q,
       agentId: researcher?.id ?? ctx.actor.id,
       askedById: ctx.actor.id,
+      language,
       status: researcher ? 'pending' : 'none',
       createdAt: ctx.now,
     });
@@ -82,9 +100,8 @@ export const askSearch = defineCommand({
       payload: { answerId: id, query: input.q },
     });
     if (researcher) {
-      const person = await loadPrincipalRow(tx, ctx.actor.id);
-      if (!person) throw notFound('Person');
-      const conversationId = await ensurePersonalDm(ctx, researcher, person);
+      if (!asker) throw notFound('Person');
+      const conversationId = await ensurePersonalDm(ctx, researcher, asker);
       const services = ctx.services;
       const burrowId = ctx.burrow.id;
       const causedById = ctx.actor.id;

@@ -22,6 +22,7 @@ import {
   zonedInstant,
 } from '@whombat/core';
 import { daysAgo, formatClock, formatDate, formatShortWeekday, toDate, zonedParts } from '@whombat/core/text';
+import { clientTranslator } from '../i18n/catalog';
 import { localAt, untilText } from './time';
 
 /* Keep quiet… --------------------------------------------------------------------------------------------- */
@@ -107,9 +108,14 @@ export function pickerValue(at: Date | number | string, timeZone: string): strin
   return `${p.year}-${two(p.month)}-${two(p.day)}T${two(p.hour)}:${two(p.minute)}`;
 }
 
-/** “14:32”, “tomorrow 09:00”, “Fri 09:00”, “3 Dec”: when a quiet ends, after “until”. */
-export function quietEndWords(until: string, now: Date | number, timeZone: string): string {
-  return untilText(until, now, timeZone).replace(/^until /, '');
+/** “14:32”, “tomorrow 09:00”, “Fri 09:00”, “3 Dec”: when a quiet ends, after “until” / “tot”. */
+export function quietEndWords(
+  until: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  return untilText(until, now, timeZone, locale).replace(/^(until|tot) /, '');
 }
 
 export interface KeepQuietOption {
@@ -264,9 +270,12 @@ export function thingStateWords(
   thing: Pick<ThingSummary, 'causedBy' | 'quietUntil' | 'line'>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): string | null {
   if (thing.quietUntil && Date.parse(thing.quietUntil) > toDate(now).getTime())
-    return `Quiet until ${quietEndWords(thing.quietUntil, now, timeZone)}`;
+    return clientTranslator(locale).t('overview.quietUntil', {
+      until: quietEndWords(thing.quietUntil, now, timeZone, locale),
+    });
   if (thing.causedBy) return thing.causedBy.words;
   return thing.line ?? null;
 }

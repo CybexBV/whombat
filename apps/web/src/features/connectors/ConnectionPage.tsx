@@ -52,15 +52,15 @@ import {
   ALWAYS_ASKS_LABEL,
   type CatalogCheckResult,
   type CatalogEntry,
-  CONNECTION_ACCESS_LABELS,
-  CONNECTION_TOOL_TIER_LABELS,
   CONNECTION_TOOL_TIERS,
   type ConnectionAccessLevel,
   type ConnectionToolTier,
   type ConnectionToolView,
   type ConnectionView,
   catalogSignIn,
+  connectionAccessLabels,
   connectionHost,
+  connectionToolTierLabels,
   NEW_TOOL_LABEL,
   scopeListWords,
 } from '@whombat/core/domain';
@@ -76,6 +76,8 @@ import { SegmentedControl } from '../../components/SegmentedControl';
 import { type DotTone, StatusDot } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import styles from '../settings/SettingsScreen.module.css';
 import k from './Catalog.module.css';
 import { CatalogHeader } from './CatalogHeader';
@@ -603,6 +605,7 @@ function AccessBlock({
   conn: ConnectionView;
   onSignInAgain: () => void;
 }) {
+  const CONNECTION_ACCESS_LABELS = useLocaleWords(connectionAccessLabels);
   const ids = useId();
   const toast = useToast();
   const update = useConnectionWrite(api.connections.update, burrow);
@@ -1237,7 +1240,7 @@ export function removedNotice(data: { notice?: string | null }): string | null {
 const TIER_OPTIONS = (tool: ConnectionToolView) =>
   CONNECTION_TOOL_TIERS.map((value: ConnectionToolTier) => ({
     value,
-    label: CONNECTION_TOOL_TIER_LABELS[value],
+    label: connectionToolTierLabels(currentLocale())[value],
     disabled: !tierSelectable(tool, value),
   }));
 

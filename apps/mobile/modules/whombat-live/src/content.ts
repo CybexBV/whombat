@@ -8,12 +8,17 @@ import {
   type Approval,
   approvalLiveActivity,
   approvalLiveActivityAudience,
+  approvalView,
+  formatRunLabel,
+  formatTestsPassing,
   type LiveActivityState,
   type Run,
   runLiveActivity,
   runLiveActivityAudience,
 } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
 import { fixedColors, statusColors, themeColors } from '@whombat/tokens';
+import { mobileTranslator } from '../../../src/i18n/translate';
 
 /** Accent colors by tone for the native side (Android notification color, progress segments). */
 export interface LiveColors {
@@ -100,20 +105,59 @@ export interface LiveViewer {
 }
 
 /** A run's live activity when the viewer asked for it, or follows its conversation and an agent asked. */
-export function runLiveFor(run: Run, viewer: LiveViewer): LiveActivityState | null {
+export function runLiveFor(run: Run, viewer: LiveViewer, locale?: string): LiveActivityState | null {
   const audience = runLiveActivityAudience({
     askedById: run.askedById,
     askedByAgent: viewer.kindOf(run.askedById) === 'agent',
     conversationPeople: viewer.inConversation(run.conversationId) ? [viewer.id] : [],
   });
-  return audience.includes(viewer.id) ? runLiveActivity(run, viewer.nameOf(run.agentId)) : null;
+  if (!audience.includes(viewer.id)) return null;
+  const agent = viewer.nameOf(run.agentId);
+  const live = runLiveActivity(run, agent);
+  if (!locale) return live;
+  const tr = mobileTranslator(locale);
+  const currentStep = live.activity.kind === 'run' ? live.activity.currentStep : null;
+  const step =
+    currentStep && (run.status === 'live' || run.status === 'paused')
+      ? tr.t(`live.step.${run.status}`, { step: currentStep })
+      : tr.t(`live.run.${run.status}`);
+  return {
+    ...live,
+    display: {
+      ...live.display,
+      label: formatRunLabel(run.status, locale),
+      text: [agent, step, run.tests && formatTestsPassing(run.tests, locale)].filter(Boolean).join(' · '),
+    },
+  };
 }
 
 /** An approval's live activity when the viewer is one of the people who can say yes. */
-export function approvalLiveFor(approval: Approval, viewer: LiveViewer): LiveActivityState | null {
-  return approvalLiveActivityAudience(approval).includes(viewer.id)
-    ? approvalLiveActivity(approval, viewer.nameOf(approval.requesterId))
-    : null;
+export function approvalLiveFor(
+  approval: Approval,
+  viewer: LiveViewer,
+  locale?: string,
+): LiveActivityState | null {
+  if (!approvalLiveActivityAudience(approval).includes(viewer.id)) return null;
+  const requester = viewer.nameOf(approval.requesterId);
+  const live = approvalLiveActivity(approval, requester);
+  if (!locale) return live;
+  const tr = mobileTranslator(locale);
+  const label = approvalView(approval, {
+    names: () => undefined,
+    now: approval.createdAt,
+    timeZone: 'UTC',
+    locale,
+  }).label;
+  const total = approval.conditions.length;
+  const number = new Intl.NumberFormat(formatLocaleOf(locale));
+  const text = total
+    ? tr.t('live.approval.conditions', {
+        requester,
+        met: number.format(approval.conditions.filter((condition) => condition.met).length),
+        total: number.format(total),
+      })
+    : requester;
+  return { ...live, display: { ...live.display, label, text } };
 }
 
 /**

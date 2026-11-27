@@ -13,6 +13,7 @@
  * - Done recently: `AgentUpdateFollow` hears the hub's `agent.update` `updated` and has it signed once, by the person who
  *   pressed Update now (remembered for a while) or else by Whombat.
  */
+
 import {
   HOST_AGENT_UPDATE_REASON_CODES,
   HOST_AGENT_UPDATE_STATES,
@@ -22,7 +23,9 @@ import {
   type HostAgentUpdateReasonCode,
   type HostHint,
 } from '@whombat/core';
+import { isEnglish, type ServerMessageKey, tServer } from '../i18n/catalog';
 import type { HostsError } from './client';
+import { rememberEnglish } from './localize';
 
 type J = Record<string, unknown>;
 const obj = (v: unknown): J => (v && typeof v === 'object' && !Array.isArray(v) ? (v as J) : {});
@@ -121,8 +124,49 @@ export const AGENT_UPDATE_TEXT = {
     `Whombat’s helper on ${server} needs one more install, and Whombat can’t run commands there. Run its install command on it once; the System tab has it.`,
 } as const;
 
+/** `AGENT_UPDATE_TEXT` in a locale (English: the same words). */
+export function agentUpdateText(locale?: string | null): typeof AGENT_UPDATE_TEXT {
+  if (isEnglish(locale)) return AGENT_UPDATE_TEXT;
+  const t = (key: ServerMessageKey, server?: string) => tServer(locale, key, server ? { server } : undefined);
+  return {
+    updated: (server: string) => t('hosts.agent.updated', server),
+    asked: (server: string) => t('hosts.agent.asked', server),
+    installing: (server: string) => t('hosts.agent.installing', server),
+    settingOn: t('hosts.agent.settingOn'),
+    settingOff: t('hosts.agent.settingOff'),
+    failedTitle: t('hosts.agent.failedTitle'),
+    failedWayOut: t('hosts.agent.failedWayOut'),
+    installTitle: t('hosts.agent.installTitle'),
+    installWayOutButton: t('hosts.agent.installWayOutButton'),
+    installWayOutCommand: t('hosts.agent.installWayOutCommand'),
+    updateRunning: t('hosts.agent.updateRunning'),
+    needsInstall: (server: string) => t('hosts.agent.needsInstall', server),
+  } as unknown as typeof AGENT_UPDATE_TEXT;
+}
+
 /** Why the helper can't be updated now, in words, by the hub's reason code (Update now's “nothing to update”). */
-export function notUpdatableText(server: string, code: HostAgentUpdateReasonCode | undefined): string {
+export function notUpdatableText(
+  server: string,
+  code: HostAgentUpdateReasonCode | undefined,
+  locale?: string | null,
+): string {
+  if (!isEnglish(locale)) {
+    const key: ServerMessageKey =
+      code === 'up_to_date'
+        ? 'hosts.agent.upToDate'
+        : code === 'not_connected'
+          ? 'hosts.agent.notConnected'
+          : code === 'turned_off'
+            ? 'hosts.agent.turnedOff'
+            : code === 'no_build'
+              ? 'hosts.agent.noBuild'
+              : code === 'newer_running'
+                ? 'hosts.agent.newerRunning'
+                : code === 'no_key' || code === 'other_key'
+                  ? 'hosts.agent.needsInstall'
+                  : 'hosts.agent.cantNow';
+    return tServer(locale, key, { server });
+  }
   switch (code) {
     case 'up_to_date':
       return `Whombat’s helper on ${server} is already up to date.`;
@@ -150,16 +194,18 @@ export function agentUpdateRefusalText(
   err: HostsError,
   server: string,
   code?: HostAgentUpdateReasonCode,
+  locale?: string | null,
 ): string | null {
+  const T = agentUpdateText(locale);
   switch (err.code) {
     case 'update_running':
-      return AGENT_UPDATE_TEXT.updateRunning;
+      return T.updateRunning;
     case 'needs_install':
-      return AGENT_UPDATE_TEXT.needsInstall(server);
+      return T.needsInstall(server);
     case 'no_build':
-      return notUpdatableText(server, 'no_build');
+      return notUpdatableText(server, 'no_build', locale);
     case 'nothing_to_update':
-      return notUpdatableText(server, code);
+      return notUpdatableText(server, code, locale);
     default:
       return null;
   }
@@ -194,7 +240,22 @@ function updatesItself(u: HostAgentUpdate): boolean {
 }
 
 /** Whombat's Worth a look about one server's agent (AU-08), as a hint of the server: none, a failure or an install. */
-export function agentUpdateHint(serverId: string, u: HostAgentUpdate): HostHint | null {
+export function agentUpdateHint(
+  serverId: string,
+  u: HostAgentUpdate,
+  locale?: string | null,
+): HostHint | null {
+  const hint = agentUpdateHintIn(serverId, u, locale);
+  // What Ignore compares stays English (the hint's words may be another language's).
+  if (hint && !isEnglish(locale)) {
+    const en = agentUpdateHintIn(serverId, u, null);
+    if (en) rememberEnglish(hint, { _en: { title: en.title, detail: en.detail } });
+  }
+  return hint;
+}
+
+function agentUpdateHintIn(serverId: string, u: HostAgentUpdate, locale?: string | null): HostHint | null {
+  const AGENT_UPDATE_TEXT = agentUpdateText(locale);
   if (updateFailed(u))
     return {
       serverId,
@@ -227,9 +288,10 @@ export function withAgentUpdateHints(
   hints: readonly HostHint[],
   serverId: string,
   update: HostAgentUpdate | null | undefined,
+  locale?: string | null,
 ): HostHint[] {
   if (!update) return [...hints];
-  const own = agentUpdateHint(serverId, update);
+  const own = agentUpdateHint(serverId, update, locale);
   const drop = own !== null || updatesItself(update);
   const kept = hints.filter(
     (h) =>

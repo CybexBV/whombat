@@ -108,6 +108,7 @@ import {
   UsageWindow,
 } from '../domain/usage.js';
 import { WEB_SEARCH_KEY_MAX, WebSearchProvider } from '../domain/web-search.js';
+import { LocaleTag } from '../i18n/schema.js';
 import {
   AccountId,
   AgentScheduleId,
@@ -942,6 +943,8 @@ export const DispatchContext = z.object({
   dispatch: Dispatch,
   /** The provider sign-in this turn uses (OP-09); null when it runs on the AI gateway or the local model only. */
   credential: DispatchCredential.nullable().optional(),
+  /** The person's preferred language tag (e.g. `nl-NL`, `en-GB`), omitted when default. */
+  locale: LocaleTag.optional(),
   burrow: z.object({ id: z.string(), slug: z.string(), name: z.string(), timeZone: z.string() }),
   agent: AgentPersona,
   conversation: z.object({

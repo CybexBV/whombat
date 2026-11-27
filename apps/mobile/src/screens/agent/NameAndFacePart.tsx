@@ -5,6 +5,7 @@
  * with a line on how the picked one talks (AP-5501). Both go through `agent.update`; the server checks the name again
  * and its refusal shows under the field. Targets are 44dp or more.
  */
+
 import { ApiError, agentFaceLabel, agentFaceOf } from '@whombat/client';
 import { useSetAgentModel } from '@whombat/client/react';
 import { AGENT_NAME_MAX, type AgentFace } from '@whombat/core';
@@ -23,6 +24,7 @@ import {
 } from '../../data/agentName';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { useAgentWords } from '../../data/useAgent';
+import { useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { textMetrics } from '../../theme/type';
@@ -37,6 +39,7 @@ import { type PartProps, PartScroll } from './parts';
 const FACE_WASH = 0.14;
 
 export function NameAndFacePart({ profile, refetch }: PartProps) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const words = useAgentWords();
@@ -167,7 +170,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
                   setDraft(v);
                   setProblem(null);
                 }}
-                accessibilityLabel="Name"
+                accessibilityLabel={tMobile('screens.name')}
                 accessibilityHint={problem ?? words.nameHint}
                 maxLength={AGENT_NAME_MAX}
                 autoCapitalize="words"

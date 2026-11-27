@@ -18,11 +18,8 @@ import {
   catalogGroupOf,
   catalogName,
   catalogServers,
-  DESK_SCREEN_WORDS,
-  DESK_SCREENS_TEXT,
   DESK_SIZES,
   DESK_TURNS,
-  DESK_WORDS,
   type DeskApi,
   type DeskPageShow,
   type DeskScreenDetail,
@@ -31,6 +28,7 @@ import {
   type DeskWidget,
   deskErrorText,
   deskLayoutWidgets,
+  deskScreensText,
   draftProblem,
   fillDeskWords,
   gridText,
@@ -51,11 +49,13 @@ import {
   useDeskScreenViews,
   useDeskWidgets,
 } from '@whombat/client/desk/react';
+import { deskScreenWords, deskWords } from '@whombat/core/domain';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { TOAST_COPY, toasts } from '../../data/toast';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n, useMobileT } from '../../i18n';
 import { Field } from '../../managed/ui';
 import { useDeskApi } from '../../managed/useDesk';
 import { useAppNavigation } from '../../navigation/hooks';
@@ -112,16 +112,12 @@ import { TileGrid } from './TileGrid';
 import { didntFitLine, type KnownWidget, PHONE_SCREENS_TEXT, type TileLabel, tileLabel } from './tiles';
 import { WidgetSheet, type WidgetSheetActions } from './WidgetSheet';
 
-const E = DESK_SCREENS_TEXT.editor;
 const M = PHONE_SCREENS_TEXT;
-/** A refusal in words: the screens' own, else the desk's (the box's choices before its screen is paired: `not_paired`). */
-const failed = (error: unknown) =>
-  Alert.alert('That didn’t go through', screensErrorText(error, deskErrorText(error)));
-
 export function SettingsScreenLayout() {
+  const { rawLocale } = useI18n();
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsScreenLayout'>>();
   const navigation = useAppNavigation();
-  const { screen: id, back = DESK_SCREENS_TEXT.back } = route.params;
+  const { screen: id, back = deskScreensText(rawLocale).back } = route.params;
   const api = useDeskApi();
   const detail = useDeskScreen(api, id);
   if (api && detail.data) return <Editor api={api} screen={detail.data} back={back} />;
@@ -129,7 +125,10 @@ export function SettingsScreenLayout() {
     <Screen>
       <BackBar label={back} onPress={() => navigation.goBack()} />
       {detail.error ? (
-        <ErrorState text={screensErrorText(detail.error)} onRetry={() => void detail.refetch()} />
+        <ErrorState
+          text={screensErrorText(detail.error, undefined, rawLocale)}
+          onRetry={() => void detail.refetch()}
+        />
       ) : (
         <Loading />
       )}
@@ -138,6 +137,15 @@ export function SettingsScreenLayout() {
 }
 
 function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail; back: string }) {
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
+  const E = deskScreensText(rawLocale).editor;
+  const screenWords = deskScreenWords(rawLocale);
+  const failed = (error: unknown) =>
+    Alert.alert(
+      t('managed.that-didnt-go-through'),
+      screensErrorText(error, deskErrorText(error, rawLocale), rawLocale),
+    );
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const navigation = useAppNavigation();
@@ -214,9 +222,10 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
         views?.find((v) => v.id === w.id),
         named,
         assistant,
+        rawLocale,
       );
     },
-    [views, known, catalog, assistant, accountItem],
+    [views, known, catalog, assistant, accountItem, rawLocale],
   );
   const servers = useMemo(() => catalogServers(catalog), [catalog]);
 
@@ -236,7 +245,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
   const show = useMemo(() => applyDeskShowPatch(screen.show, draft.show ?? {}), [screen.show, draft.show]);
   const lines = screenLines(
     { ...screen, layout: draft.layout, pages: draft.layout.pages.length },
-    { box: desk?.display ?? null },
+    { locale: rawLocale, box: desk?.display ?? null },
   );
 
   // Leaving with changes asks first (the web's “Leave without saving?”).
@@ -252,7 +261,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
           { text: E.leave, style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
         ]);
       }),
-    [navigation],
+    [navigation, E.leaveTitle, E.leaveLine, E.stay, E.leave],
   );
 
   useEffect(() => {
@@ -279,7 +288,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
       setSheetNote(null);
       // Two widgets that changed places say so (DK-167).
       if (r.swapped && picked) say(swappedText(picked, r.swapped), true);
-    } else say(refusalText(r.why, r.size, r.grow));
+    } else say(refusalText(r.why, r.size, r.grow, rawLocale));
   };
   const undo = () => {
     const back = draftUndo(draft);
@@ -296,7 +305,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
   /** Adds a widget, chosen, and opens its sheet once *Add a widget* is down (DK-163). */
   const add = (widget: NewWidget, name: string, remember?: KnownWidget) => {
     const r = draftAdd(draft, widget, viewOf, remember?.view);
-    if (!r.ok) return say(refusalText(r.why));
+    if (!r.ok) return say(refusalText(r.why, undefined, undefined, rawLocale));
     if (remember) setKnown((k) => ({ ...k, [r.id]: remember }));
     setDraft(r.draft);
     openSheet(null);
@@ -349,14 +358,15 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
     : null;
   const tidy = () => {
     const r = draftTidy(draft, viewOf);
-    if (!r.ok) return toasts.show(refusalText(r.why));
+    if (!r.ok) return toasts.show(refusalText(r.why, undefined, undefined, rawLocale));
     if (r.moved === 0) return toasts.show(E.alreadyTidy);
     setDraft(r.draft);
     undoable(E.tidied);
   };
 
   const save = () => {
-    if (draftProblem(draft.layout, viewOf)) return Alert.alert(E.save, DESK_WORDS.errors.bad_layout);
+    if (draftProblem(draft.layout, viewOf))
+      return Alert.alert(E.save, deskWords(rawLocale).errors.bad_layout);
     setSaving(true);
     actions
       .update({ screen: screen.id, layout: draft.layout, ...(draft.show ? { show: draft.show } : {}) })
@@ -384,7 +394,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
     const next = draftSize(draft, size);
     setDraft(next);
     const p = draftPage(next, viewOf);
-    const grid = gridText(p.grid.cols, p.grid.rows);
+    const grid = gridText(p.grid.cols, p.grid.rows, rawLocale);
     toasts.show(
       p.rearranged
         ? p.left.length > 0
@@ -442,7 +452,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8, alignItems: 'center', paddingVertical: 7, paddingHorizontal: 2 }}
             accessibilityRole="tablist"
-            accessibilityLabel={DESK_SCREENS_TEXT.page.layout}
+            accessibilityLabel={deskScreensText(rawLocale).page.layout}
           >
             {draft.layout.pages.map((p, i) => (
               <PageChip
@@ -473,7 +483,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
             >
               <Text size={13.5} lh={1.45} color={theme.colors.ink2}>
                 <Text size={13.5} lh={1.45} weight={600}>
-                  {fillDeskWords(E.rearranged, { grid: gridText(page.grid.cols, page.grid.rows) })}
+                  {fillDeskWords(E.rearranged, { grid: gridText(page.grid.cols, page.grid.rows, rawLocale) })}
                 </Text>
                 {fillDeskWords(E.rearrangedRest, { from: page.from.replace('x', ' × ') })}
               </Text>
@@ -540,7 +550,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
                 {E.size}
               </Text>
               <Segmented<DeskSize>
-                options={DESK_SIZES.map((value) => ({ value, label: DESK_SCREEN_WORDS.sizes[value] }))}
+                options={DESK_SIZES.map((value) => ({ value, label: screenWords.sizes[value] }))}
                 value={draft.layout.size}
                 onChange={sizeNote}
                 label={E.size}
@@ -552,7 +562,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
                 {E.turn}
               </Text>
               <Segmented<DeskTurn>
-                options={DESK_TURNS.map((value) => ({ value, label: DESK_SCREEN_WORDS.turns[value] }))}
+                options={DESK_TURNS.map((value) => ({ value, label: screenWords.turns[value] }))}
                 value={draft.layout.turn}
                 onChange={turnNote}
                 label={E.turn}
@@ -604,7 +614,9 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
           if (!next) return E.times.noDays;
           setDraft(next);
           setTiming(false);
-          undoable(pageShowSaid(pageName, show ? (next.layout.pages[draft.page]?.show ?? show) : null));
+          undoable(
+            pageShowSaid(pageName, show ? (next.layout.pages[draft.page]?.show ?? show) : null, rawLocale),
+          );
           return null;
         }}
       />
@@ -625,6 +637,8 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
 
 /** *+ Page* beside the page chips, in their shape (a button, not a tab; 44dp with the chips' slop). */
 function AddPageChip({ onPress }: { onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   return (
     <Touchable
@@ -688,6 +702,8 @@ function PageCard({
   onMove: (by: -1 | 1) => void;
   onDelete: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const [typed, setTyped] = useState(name);
   useEffect(() => setTyped(name), [name]);
@@ -719,11 +735,13 @@ function PageCard({
           label={E.showAt}
           variant="secondary"
           onPress={onTimes}
-          accessibilityHint={show ? fillDeskWords(E.times.label, { when: pageWhenText(show) }) : undefined}
+          accessibilityHint={
+            show ? fillDeskWords(E.times.label, { when: pageWhenText(show, rawLocale) }) : undefined
+          }
         />
         {show ? (
           <Text size={13} lh={1.4} color={theme.colors.mut} style={{ marginTop: -4 }}>
-            {fillDeskWords(E.times.label, { when: pageWhenText(show) })}
+            {fillDeskWords(E.times.label, { when: pageWhenText(show, rawLocale) })}
           </Text>
         ) : null}
         <Button

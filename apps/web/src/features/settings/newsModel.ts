@@ -5,21 +5,22 @@
  */
 import { countryName } from '@whombat/client';
 import {
-  NEWS_KIND_WORDS,
   NEWS_SOURCES_MAX,
   NEWS_SOURCES_MAX_BEFORE_MORE,
-  NEWS_TOPIC_WORDS,
   NEWS_WORDS,
   type NewsBrowseSite,
   type NewsBrowseView,
   type NewsChosenSource,
   type NewsSuggestion,
   type NewsTopic,
+  newsKindWords,
   newsOpmlUrls,
   newsSourceKind,
   newsSuggestion,
+  newsTopicWords,
   type Place,
 } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 const N = NEWS_WORDS;
 
@@ -114,10 +115,13 @@ function scopeLine(input: {
   ours: boolean;
   place: Place | null;
 }): string {
-  if (input.scope === 'country') return `${countryName(input.country)} · ${N.national.toLowerCase()}`;
+  if (input.scope === 'country')
+    return `${countryName(input.country, undefined, currentLocale())} · ${N.national.toLowerCase()}`;
   const where =
     input.where ??
-    (input.ours && input.place?.regionName ? input.place.regionName : countryName(input.country));
+    (input.ours && input.place?.regionName
+      ? input.place.regionName
+      : countryName(input.country, undefined, currentLocale()));
   return `${where} · ${N.regional.toLowerCase()}`;
 }
 
@@ -129,6 +133,7 @@ export function chosenLine(
   source: NewsChosenSource,
   ctx: { place: Place | null; browse?: NewsBrowseView | undefined },
 ): string {
+  const NEWS_KIND_WORDS = newsKindWords(currentLocale());
   if (source.own) return `${NEWS_KIND_WORDS[newsSourceKind(source)]} · ${N.addedByYou}`;
   const site = ctx.browse?.country ? ctx.browse.sites.find((s) => s.id === source.id) : undefined;
   if (site && ctx.browse?.country)
@@ -158,7 +163,7 @@ export function chosenLine(
 
 /** A topic other than all the news, by its name (“Tech”); nothing for the news itself. */
 const topicWord = (topic: NewsTopic | undefined) =>
-  topic && topic !== 'news' ? NEWS_TOPIC_WORDS[topic] : null;
+  topic && topic !== 'news' ? newsTopicWords(currentLocale())[topic] : null;
 
 /** A site in Find more: whom it is for, its topic and its language (“National · Dutch”, “Noord-Brabant · Dutch”). */
 export function browseLine(site: NewsBrowseSite, place: Place | null): string {
@@ -190,6 +195,7 @@ export const NEWS_CHIPS = [
 export type NewsChip = (typeof NEWS_CHIPS)[number];
 
 export function chipWords(chip: NewsChip): string {
+  const NEWS_TOPIC_WORDS = newsTopicWords(currentLocale());
   if (chip === 'all') return N.allTopics;
   if (chip === 'near') return N.nearYou;
   if (chip === 'national') return N.national;

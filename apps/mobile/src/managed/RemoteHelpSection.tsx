@@ -11,12 +11,11 @@
  * older runtime, or a box without a support key, says it isn't available yet. The flow, the states and the words are
  * the shared client's (`useRemoteHelp`, `remoteHelpCard`, `remoteHelpVisitGroups`).
  */
+
 import { useIsFocused } from '@react-navigation/native';
 import {
   REMOTE_HELP_DEFAULT_CHOICE,
   REMOTE_HELP_FOLD,
-  REMOTE_HELP_TEXT,
-  REMOTE_HELP_WORDS,
   type RemoteHelpApi,
   type RemoteHelpCard,
   type RemoteHelpChoice,
@@ -25,12 +24,15 @@ import {
   type RemoteHelpVisitGroup,
   remoteHelpCard,
   remoteHelpChoice,
+  remoteHelpText,
   remoteHelpVisitGroups,
+  remoteHelpWords,
 } from '@whombat/client/managed';
 import { type RemoteHelpModel, useRemoteHelp } from '@whombat/client/react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Alert, type LayoutChangeEvent, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -40,7 +42,7 @@ import { RadioCards } from '../ui/radioCards';
 import { Segmented } from '../ui/Segmented';
 import { Sheet } from '../ui/sheet';
 import { Touchable } from '../ui/Touchable';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import {
   downloadTranscript,
   helpCodeSpoken,
@@ -55,9 +57,6 @@ import { Card, IconTile, LinkRow, Row } from './ui';
 import { useForeground } from './useHostStatus';
 import type { RemoteHelpHere } from './useRemoteHelpHere';
 
-const W = REMOTE_HELP_WORDS;
-const T = REMOTE_HELP_TEXT;
-
 type OffCard = Extract<RemoteHelpCard, { kind: 'off' }>;
 type OnCard = Extract<RemoteHelpCard, { kind: 'on' }>;
 
@@ -66,6 +65,7 @@ const STEPS_SHOWN = REMOTE_HELP_FOLD.steps;
 
 /** The card's state, asked only while the screen is in front and the app in the foreground. */
 function useRemoteHelpHereCard(here: RemoteHelpHere) {
+  const { rawLocale } = useI18n();
   // Asked (and every 10 s while it's on) only while this screen is in front and the app in the foreground, as the
   // phone's other live parts are (AP-4471); back in front, it reads again.
   const focused = useIsFocused();
@@ -73,6 +73,7 @@ function useRemoteHelpHereCard(here: RemoteHelpHere) {
   const model = useRemoteHelp(here.api, focused && foreground);
   const { timeZone } = useBurrowBase();
   const card = remoteHelpCard({
+    locale: rawLocale,
     state: model.state,
     hasPasskey: model.hasPasskey,
     now: new Date(),
@@ -83,6 +84,8 @@ function useRemoteHelpHereCard(here: RemoteHelpHere) {
 
 /** The card's top when it can't show the controls: not available here, couldn't load, or loading. */
 function NotReady({ card, model }: { card: RemoteHelpCard; model: RemoteHelpModel }) {
+  const { rawLocale } = useI18n();
+  const T = remoteHelpText(rawLocale);
   const theme = useTheme();
   if (card.kind === 'unavailable')
     return (
@@ -124,6 +127,9 @@ export function RemoteHelpSummary({
   onOpen: () => void;
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = remoteHelpText(rawLocale);
+  const W = remoteHelpWords(rawLocale);
   const { model, card } = useRemoteHelpHereCard(here);
   if (!here.shown) return null;
   const visits = model.visits?.length ?? 0;
@@ -173,6 +179,8 @@ export function RemoteHelpSection({
   titled?: boolean;
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const W = remoteHelpWords(rawLocale);
   const { model, card, timeZone } = useRemoteHelpHereCard(here);
   if (!here.shown) return null;
   return (
@@ -254,10 +262,11 @@ function Problem({ text }: { text: string | null }) {
 
 /** Off (AP-4472): the intro, how much, for how long, the button and the passkey hint. */
 function OffPart({ card, model, here }: { card: OffCard; model: RemoteHelpModel; here: RemoteHelpHere }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [picked, setPicked] = useState<RemoteHelpChoice>(REMOTE_HELP_DEFAULT_CHOICE);
   const choice = remoteHelpChoice(picked, model.state);
-  const confirm = useMemo(() => remoteHelpConfirm(Alert.alert as ShowAlert), []);
+  const confirm = useMemo(() => remoteHelpConfirm(Alert.alert as ShowAlert, rawLocale), [rawLocale]);
   const busy = model.busy !== null;
   const levels = useMemo(
     () => card.levels.map((l) => ({ value: l.value, title: l.label, line: l.text })),
@@ -311,6 +320,8 @@ function OffPart({ card, model, here }: { card: OffCard; model: RemoteHelpModel;
 
 /** On (AP-4474): the state line with Stop on the warm wash, the help code, who is connected. */
 function OnPart({ card, model }: { card: OnCard; model: RemoteHelpModel }) {
+  const { rawLocale } = useI18n();
+  const T = remoteHelpText(rawLocale);
   const theme = useTheme();
   return (
     <>
@@ -397,14 +408,20 @@ function VisitsCard({
   api: RemoteHelpApi | null;
   timeZone: string;
 }) {
+  const { rawLocale } = useI18n();
+  const W = remoteHelpWords(rawLocale);
+  const T = remoteHelpText(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState<{ visitId: string; transcript: RemoteHelpTranscript } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [all, setAll] = useState(false);
   const groups = useMemo(
-    () => (model.visits ? remoteHelpVisitGroups(model.visits, { now: new Date(), timeZone }) : null),
-    [model.visits, timeZone],
+    () =>
+      model.visits
+        ? remoteHelpVisitGroups(model.visits, { locale: rawLocale, now: new Date(), timeZone })
+        : null,
+    [model.visits, timeZone, rawLocale],
   );
   const show = async (visitId: string) => {
     if (!api || loading) return;
@@ -466,6 +483,9 @@ function Visit({
   loading: boolean;
   onShow: (visitId: string) => Promise<void>;
 }) {
+  const { rawLocale } = useI18n();
+  const T = remoteHelpText(rawLocale);
+  const W = remoteHelpWords(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   // “Earlier steps aren’t shown.” isn't a step: only real ones count toward Show all.
@@ -622,6 +642,11 @@ function TranscriptSheet({
   open: { visitId: string; transcript: RemoteHelpTranscript } | null;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = remoteHelpText(rawLocale);
+  const W = remoteHelpWords(rawLocale);
+  const managedCopyHere = managedCopy(rawLocale);
+
   const theme = useTheme();
   const window = useWindowDimensions();
   const [busy, setBusy] = useState(false);
@@ -665,13 +690,13 @@ function TranscriptSheet({
         </ScrollView>
         {shown?.cut ? (
           <Text size={13} lh={1.45} color={theme.colors.mut}>
-            {COPY.remoteHelp.cut}
+            {managedCopyHere.remoteHelp.cut}
           </Text>
         ) : null}
         <Problem text={note} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            label={COPY.remoteHelp.share}
+            label={managedCopyHere.remoteHelp.share}
             variant="secondary"
             disabled={busy}
             onPress={() => void act((visitId, bytes) => shareTranscript(transcriptFiles, visitId, bytes))}

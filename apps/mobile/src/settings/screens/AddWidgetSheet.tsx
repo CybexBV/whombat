@@ -12,9 +12,9 @@ import {
   type CatalogEntry,
   type CatalogRows,
   catalogRows,
-  DESK_SCREENS_TEXT,
   type DeskCatalog,
   type DeskWidget,
+  deskScreensText,
   fillDeskWords,
   gridText,
   isAccountGroup,
@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Check, CircleUser, type LucideIcon, Plus, Search } from '../../ui/icons';
@@ -31,8 +32,6 @@ import { Touchable } from '../../ui/Touchable';
 import { accountShows } from './catalog';
 import type { TileLabel } from './tiles';
 import { ACCOUNT_ICONS, VIEW_ICONS, WidgetLogo } from './WidgetLogo';
-
-const E = DESK_SCREENS_TEXT.editor;
 
 /**
  * A row's icon where it has no brand mark: an account's a person's (one found by a search, what it shows), else what it
@@ -70,6 +69,8 @@ export function AddWidgetSheet({
   onAdd: (row: CatalogEntry) => void;
   onAddBack: (w: DeskWidget) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const assistant = useAgentWords().name;
   const [query, setQuery] = useState('');
@@ -138,7 +139,7 @@ export function AddWidgetSheet({
                   mark={l.mark}
                   name={l.name}
                   line={l.of ?? ''}
-                  size={gridText(w.w, w.h)}
+                  size={gridText(w.w, w.h, rawLocale)}
                   here={false}
                   onPress={() => onAddBack(w)}
                 />
@@ -157,7 +158,7 @@ export function AddWidgetSheet({
                 icon={rowIcon(row)}
                 name={row.name}
                 line={row.line}
-                size={gridText(row.size.w, row.size.h)}
+                size={gridText(row.size.w, row.size.h, rawLocale)}
                 here={row.here}
                 onPress={() => onAdd(row)}
               />
@@ -231,6 +232,8 @@ function OwnTiles({ section, onAdd }: { section: CatalogRows; onAdd: (row: Catal
 }
 
 function OwnTile({ row, onPress }: { row: CatalogEntry; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const label = fillDeskWords(E.addOne, { name: row.name });
   return (
@@ -294,6 +297,8 @@ function ItemRow({
   here: boolean;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const spoken = [fillDeskWords(E.addOne, { name }), size, here ? E.onThisPage : null]
     .filter(Boolean)

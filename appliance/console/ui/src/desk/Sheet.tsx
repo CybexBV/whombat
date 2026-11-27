@@ -5,7 +5,9 @@
  * for the PIN again (the approve pad beside the card); on a runtime from before 0.108, asks Whombat keeps for the phone
  * have no buttons here. The header names who asks.
  */
+
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/react';
 import type { Client } from '../lib/client';
 import { countdown, minutesLeft } from '../lib/console';
 import type { DecideAnswer, Decision } from '../lib/decide';
@@ -18,7 +20,7 @@ import type {
   DeskPaired,
   LookQuietHow,
 } from '../lib/desk';
-import { ago, DESK, DESK_WORDS, fill, wrongPinText } from '../lib/deskCopy';
+import { ago, deskCopy, deskWordsCopy, fill, wrongPinText } from '../lib/deskCopy';
 import { askShown } from '../lib/deskScene';
 import { lookActions, lookDetail, lookStage, quietDone, researchSays, researchTitle } from '../lib/needsYou';
 import {
@@ -35,6 +37,9 @@ import { Face } from './parts';
 
 /** The dimmed glance behind a sheet and the amber edge; a tap on it closes the sheet. */
 export function Scrim({ onClose, glow }: { onClose: () => void; glow: boolean }) {
+  const t = useT();
+  const DESK = deskCopy(t);
+
   return (
     <>
       <button
@@ -86,6 +91,10 @@ export interface AskCardProps {
 }
 
 export function AskCard(p: AskCardProps) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const { assistant, now, busy } = p;
   // What may show now: locked, never the ask's words or its buttons, whatever the page still holds (CG-50).
   const { ask, actions, talk } = askShown(p.ask, { unlocked: !p.locked, gone: p.gone, voice: p.voice });
@@ -281,7 +290,7 @@ export function AskCard(p: AskCardProps) {
           <b className={styles.whoName}>{fill(DESK_WORDS.asks, { assistant: from })}</b>
           <br />
           <span className={styles.whoMeta}>
-            {ago(ask.at, now, true)}
+            {ago(ask.at, now, true, t)}
             {ask.where && ` · ${ask.where}`}
           </span>
         </div>
@@ -358,6 +367,10 @@ export function LookCard({
   onOpen,
   onClose,
 }: LookCardProps) {
+  const t = useT();
+  const DESK = deskCopy(t);
+  const DESK_WORDS = deskWordsCopy(t);
+
   const { fix, quiet: mayQuiet, step: stepLabel, ask } = lookActions(look);
   const quiet = mayQuiet && onQuiet !== undefined;
   const step = onStep ? stepLabel : null;
@@ -465,7 +478,7 @@ export function LookCard({
     <section
       className={`${styles.card} ${styles.askCard}`}
       data-locked={pending !== null || undefined}
-      aria-label={researchTitle(look)}
+      aria-label={researchTitle(look, t)}
     >
       <div className={styles.who}>
         <Face face={assistant.face} size={44} />
@@ -475,14 +488,14 @@ export function LookCard({
           <span className={styles.whoMeta}>{DESK_WORDS.looks.kinds[look.kind]}</span>
         </div>
       </div>
-      <h2 className={styles.askHeading}>{researchTitle(look)}</h2>
+      <h2 className={styles.askHeading}>{researchTitle(look, t)}</h2>
       {stage ? (
         <p className={styles.askDetail} data-research={stage}>
           {(stage === 'looking' || stage === 'fixing') && (
             <span className={styles.spinner} aria-hidden="true" />
           )}
           {stage === 'fixed' && <Icon name="check" className={styles.fixedIcon} />}
-          {researchSays(look, stage, lookDetail(look))}
+          {researchSays(look, stage, lookDetail(look), t)}
         </p>
       ) : (
         <p className={styles.askDetail}>{lookDetail(look) ?? DESK_WORDS.looks.noReason}</p>
@@ -490,7 +503,7 @@ export function LookCard({
       {done ? (
         <p className={styles.quietDone} role="status">
           <Icon name="check" />
-          {quietDone(done)}
+          {quietDone(done, t)}
         </p>
       ) : (
         (gone || note) && <p className={styles.sheetNote}>{gone ? DESK_WORDS.looks.fine : note}</p>
@@ -531,6 +544,10 @@ export function PinPad({
   initialDigits = '',
   reason = null,
 }: PinPadProps) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const [digits, setDigits] = useState(initialDigits);
   const [last, setLast] = useState<UnlockAnswer | null>(null);
   const [busy, setBusy] = useState(false);
@@ -694,7 +711,7 @@ export function PinPad({
     ? DESK_WORDS.phoneSaidNo
     : last?.result === 'failed'
       ? DESK_WORDS.talkFailed
-      : padMessage(lock, last, now);
+      : padMessage(lock, last, now, t);
   const locked = waitUntil !== null || busy;
   return (
     <section className={`${styles.card} ${styles.pin}`} aria-label={unlockAs}>
@@ -727,6 +744,9 @@ function Keypad(p: {
   onPress: (key: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <>
       <div className={styles.dots} key={p.shake} data-shake={p.shake > 0 || undefined} aria-hidden="true">
@@ -792,9 +812,13 @@ export function ApprovePad({
   onPin,
   onResult,
   onCancel,
-  title = DESK_WORDS.approveWithPin,
+  title,
   initialDigits = '',
 }: ApprovePadProps) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const [digits, setDigits] = useState(initialDigits);
   const [last, setLast] = useState<DecideAnswer | null>(null);
   const [shake, setShake] = useState(0);
@@ -848,12 +872,16 @@ export function ApprovePad({
     : last?.result === 'wrong'
       ? last.triesLeft === null
         ? DESK.wrongPin
-        : wrongPinText(last.triesLeft)
+        : wrongPinText(last.triesLeft, t)
       : last?.result === 'failed'
         ? DESK_WORDS.talkFailed
         : null;
   return (
-    <section className={`${styles.card} ${styles.pin}`} data-approve aria-label={title}>
+    <section
+      className={`${styles.card} ${styles.pin}`}
+      data-approve
+      aria-label={title ?? DESK_WORDS.approveWithPin}
+    >
       <span className={styles.phoneIcon}>
         <Icon name="lock" />
       </span>

@@ -5,6 +5,7 @@
  * start it or not — neither platform restores over a guest here) or Remove it (asked). The same sheet serves a
  * server's Backups segment.
  */
+
 import { formatRelativeDay } from '@whombat/client/hosts';
 import {
   incusBackupRows,
@@ -18,6 +19,7 @@ import type { HostBackupVolume, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n, useMobileT } from '../../i18n';
 import { BigButton, OneCard, OneRow } from '../../ui/assistant';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
@@ -46,6 +48,7 @@ export function IncusBackups({
   canChange: boolean;
   onBackUp: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const q = useHostManageRead(
     {
       params: { burrow: slug, serverId },
@@ -61,13 +64,15 @@ export function IncusBackups({
       : incusBackupRows(items, now, timeZone);
   return (
     <>
-      {canChange ? <BigButton label="Back up now" variant="secondary" onPress={onBackUp} /> : null}
+      {canChange ? (
+        <BigButton label={tMobile('screens.back-up-now')} variant="secondary" onPress={onBackUp} />
+      ) : null}
       {q.isPending ? (
-        <SkeletonRows count={3} lines={2} label="Loading the backups" />
+        <SkeletonRows count={3} lines={2} label={tMobile('screens.loading-the-backups')} />
       ) : q.isError ? (
-        <ErrorState text="The backups didn’t load." onRetry={() => void q.refetch()} />
+        <ErrorState text={tMobile('screens.the-backups-didnt-load')} onRetry={() => void q.refetch()} />
       ) : (
-        <OneCard label="Backups">
+        <OneCard label={tMobile('screens.backups')}>
           {rows.length ? (
             rows.map((r) => (
               <OneRow
@@ -115,6 +120,9 @@ export function IncusBackupSheet({
   backup: HostBackupVolume;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const { slug, clock, timeZone } = useBurrowBase();
   const [step, setStep] = useState<'choose' | 'restore' | 'remove'>('choose');
   const [name, setName] = useState(restoredName(guestName));
@@ -126,7 +134,7 @@ export function IncusBackupSheet({
     { retry: false },
   );
   const when = b.created
-    ? formatRelativeDay(Date.parse(b.created), clock().getTime(), timeZone)
+    ? formatRelativeDay(Date.parse(b.created), clock().getTime(), timeZone, rawLocale)
     : 'this backup';
   const word = platform === 'libvirt' ? 'VM' : 'instance';
   const done = (o: Awaited<ReturnType<typeof send>>) => {
@@ -230,7 +238,7 @@ export function IncusBackupSheet({
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <SwitchLine label="Start it afterwards" value={start} onChange={setStart} />
+        <SwitchLine label={tMobile('screens.start-it-afterwards')} value={start} onChange={setStart} />
       </View>
     </OneSheet>
   );

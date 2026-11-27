@@ -20,6 +20,7 @@ import { ErrorNote, SkeletonRows } from '../../components/ListState';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import {
   ATTEMPT_STATE_LABELS,
   CONFIDENCE_LABELS,
@@ -147,6 +148,7 @@ function ReportBody({
   report: FeedbackReport;
   can: Can;
 }) {
+  const { t } = useWebI18n();
   const toast = useToast();
   const qc = useQueryClient();
   const ids = useId();
@@ -235,8 +237,9 @@ function ReportBody({
 
       {removed ? (
         <p className={styles.muted}>
-          Content removed {formatDate(r.contentRemovedAt ?? r.updatedAt, timeZone, { now })}. The reference,
-          its states and the signed history stay.
+          {t('reports.contentRemoved', {
+            date: formatDate(r.contentRemovedAt ?? r.updatedAt, timeZone, { now }, currentLocale()),
+          })}
         </p>
       ) : (
         <>
@@ -326,7 +329,7 @@ function ReportBody({
                   <li key={f.id}>
                     <span className={styles.mono}>{f.name}</span>{' '}
                     <span className={styles.muted}>
-                      {formatBytes(f.size)}
+                      {formatBytes(f.size, currentLocale())}
                       {f.width && f.height ? ` · ${f.width} × ${f.height}` : ''}
                     </span>
                   </li>
@@ -358,7 +361,7 @@ function ReportBody({
             {r.attempts.map((t) => (
               <li key={t.id}>
                 #{t.attempt} · {ATTEMPT_STATE_LABELS[t.state]} · {agent.name} ·{' '}
-                {formatRecent(t.startedAt, now, timeZone)}
+                {formatRecent(t.startedAt, now, timeZone, currentLocale())}
                 {t.finishedAt ? ` – ${formatClock(t.finishedAt, timeZone)}` : ''}
                 {t.requestedById ? ` · retried by ${name(t.requestedById)}` : ''}
                 {t.error && <span className={styles.error}> — {t.error}</span>}

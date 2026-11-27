@@ -5,10 +5,12 @@
  * — each with one line on how that part is
  * doing, a tone when something there isn't fine, and the tab's dot. Pure: the screen and the bar read the facts.
  */
-import { SETTINGS_GROUP_TEXT } from '@whombat/client';
+
+import { settingsGroupText } from '@whombat/client';
 import { UPDATE_STATE_WORDS } from '@whombat/client/managed';
-import { type AgentProvider, DESK_WORDS, NEWS_WORDS, PROVIDER_LABELS } from '@whombat/core';
+import { type AgentProvider, deskWords, newsWords, PROVIDER_LABELS } from '@whombat/core';
 import type { AppMode } from '../data/config';
+import { mobileTranslator } from '../i18n/translate';
 import type { AiProviderCardView } from './ai';
 
 /** A row of the list: the assistant, Connections, This Whombat, News and weather, the box's screen and Advanced. */
@@ -29,27 +31,33 @@ export interface SettingsRowView {
   opens?: 'about';
 }
 
-export const SETTINGS_TEXT = {
-  title: SETTINGS_GROUP_TEXT.title,
-  theme: 'Theme',
-  rows: {
-    connections: SETTINGS_GROUP_TEXT.groups('').connections,
-    appliance: 'This Whombat',
-    news: NEWS_WORDS.page,
-    screen: DESK_WORDS.settings.tab,
-    advanced: 'Advanced',
-  } satisfies Record<Exclude<SettingsRowKey, 'agent'>, string>,
-  /** Advanced's line: the expert pages it holds, folded away from the rest. */
-  advancedLine: 'Model, keys, skills, usage and more',
-  /** The tab's TalkBack words while its dot shows (AP-2624). */
-  needsYou: 'something needs you',
-  updateReady: 'a newer app is ready',
-  demo: 'Demo world on this phone',
-  /** The row's name where the Whombat has screens of widgets (AP-6000). */
-  screens: 'Screens',
-  /** News and weather's line. */
-  newsLine: NEWS_WORDS.homeLine,
-} as const;
+export function settingsText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  const groups = settingsGroupText(locale);
+  const news = newsWords(locale);
+  return {
+    title: groups.title,
+    theme: t('list.settingsText.theme'),
+    rows: {
+      connections: groups.groups('').connections,
+      appliance: t('list.settingsText.rows.appliance'),
+      news: news.page,
+      screen: deskWords(locale).settings.tab,
+      advanced: groups.groups('').advanced,
+    } satisfies Record<Exclude<SettingsRowKey, 'agent'>, string>,
+    /** Advanced's line: the expert pages it holds, folded away from the rest. */
+    advancedLine: t('list.settingsText.advancedLine'),
+    /** The tab's TalkBack words while its dot shows (AP-2624). */
+    needsYou: t('list.settingsText.needsYou'),
+    updateReady: t('list.settingsText.updateReady'),
+    demo: t('list.settingsText.demo'),
+    /** The row's name where the Whombat has screens of widgets (AP-6000). */
+    screens: t('list.settingsText.screens'),
+    /** News and weather's line. */
+    newsLine: news.homeLine,
+  } as const;
+}
+export const SETTINGS_TEXT = settingsText();
 
 /** The rows' order: the groups as the web has them, News and weather after This Whombat. */
 const ROW_ORDER: readonly SettingsRowKey[] = [
@@ -114,7 +122,8 @@ export function assistantLine(f: Pick<SettingsFacts, 'agent' | 'ai'>): Appliance
 }
 
 /** The list's rows, in order; the box's screen only where it has one. */
-export function settingsRows(f: SettingsFacts): SettingsRowView[] {
+export function settingsRows(f: SettingsFacts, locale?: string): SettingsRowView[] {
+  const copy = settingsText(locale);
   const line = (key: SettingsRowKey): ApplianceLine | null => {
     switch (key) {
       case 'agent':
@@ -124,17 +133,17 @@ export function settingsRows(f: SettingsFacts): SettingsRowView[] {
       case 'appliance':
         return f.appliance ?? null;
       case 'news':
-        return { value: SETTINGS_TEXT.newsLine, tone: null };
+        return { value: copy.newsLine, tone: null };
       case 'screen':
         return f.screen ?? null;
       case 'advanced':
-        return { value: SETTINGS_TEXT.advancedLine, tone: null };
+        return { value: copy.advancedLine, tone: null };
     }
   };
   const title = (key: SettingsRowKey): string => {
-    if (key === 'agent') return SETTINGS_GROUP_TEXT.groups(f.agent?.name ?? '').agent;
-    if (key === 'screen' && f.screens) return SETTINGS_TEXT.screens;
-    return SETTINGS_TEXT.rows[key];
+    if (key === 'agent') return settingsGroupText(locale).groups(f.agent?.name ?? '').agent;
+    if (key === 'screen' && f.screens) return copy.screens;
+    return copy.rows[key];
   };
   const shown = (key: SettingsRowKey) => (key === 'screen' ? !!f.screen : key === 'news' ? !!f.news : true);
   return ROW_ORDER.filter(shown).map((key) => {

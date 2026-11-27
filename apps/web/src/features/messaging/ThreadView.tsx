@@ -3,7 +3,6 @@ import {
   attachmentsBesideCard,
   earlierCardLine,
   earlierCardText,
-  INBOX_WORDS,
   isJobResult,
   JOB_RESULT_WORDS,
   MOVED_CARD_WORDS,
@@ -27,6 +26,8 @@ import { Fragment, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, 
 import { IconButton } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { currentLocale } from '../../i18n/provider';
+import { INBOX_WORDS } from '../../i18n/shared';
 import { CardStillContext } from '../cards/cardLook';
 import { RanOnDivider, RanOnMark, RanOnNotes, ranOnTitle } from '../chats/runtime/RanOn';
 import { Composer, type ComposerAttachment, type ComposerPrompts } from './Composer';
@@ -731,7 +732,7 @@ export function ThreadView({
               const line =
                 i === 0 && repliesLine && replies > 0 ? (
                   <div key="replies-line" className={styles.repliesLine} data-replies-line="">
-                    {formatReplies(replies)}
+                    {formatReplies(replies, currentLocale())}
                   </div>
                 ) : null;
               const change = switches.get(m.id);
@@ -841,7 +842,9 @@ function RoomThreadHead({
       {replies > 0 || stageWord ? (
         <span className={styles.count}>
           <span aria-hidden="true">
-            {[replies > 0 ? formatReplies(replies) : null, stageWord].filter(Boolean).join(' · ')}
+            {[replies > 0 ? formatReplies(replies, currentLocale()) : null, stageWord]
+              .filter(Boolean)
+              .join(' · ')}
           </span>
           {stageWord && <span className={styles.srOnly}>{stageWord}</span>}
         </span>

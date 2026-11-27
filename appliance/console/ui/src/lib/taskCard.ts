@@ -4,8 +4,10 @@
  * (`@whombat/core` domain/task-card.ts `formatTaskDuration`, `taskResultLine`, `taskCardElapsedMs`), as `deskCopy`
  * copies the words; `taskCard.test.ts` runs core's own cases on them and finds them in the vendored source. Pure.
  */
+
+import { english, type Translate } from '../i18n/translate';
 import type { DeskSessionTask } from './desk';
-import { DESK_WORDS } from './deskCopy';
+import { deskWordsCopy } from './deskCopy';
 
 /** How long the task ran, or has run so far (`now`, ms), in ms; never negative (core's `taskCardElapsedMs`). */
 export function taskElapsedMs(task: Pick<DeskSessionTask, 'startedAt' | 'endedAt'>, now: number): number {
@@ -49,7 +51,9 @@ export interface TaskRowView {
   result: string | null;
 }
 
-export function taskRow(task: DeskSessionTask, now: number): TaskRowView {
+export function taskRow(task: DeskSessionTask, now: number, t: Translate = english): TaskRowView {
+  const DESK_WORDS = deskWordsCopy(t);
+
   const lost = task.state === 'lost';
   return {
     title: task.title,

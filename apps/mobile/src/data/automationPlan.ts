@@ -6,6 +6,7 @@
  * for word — and the one line it folds into once decided. The rows are core's (`planSections`, written from the
  * definition by the runtime), so the phone only draws them. Pure.
  */
+
 import type { SettledLine } from '@whombat/client';
 import {
   AUTOMATION_PLAN_STATE_LABELS,
@@ -18,47 +19,63 @@ import {
   formatClock,
   formatRecent,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
-export const AUTOMATION_PLAN_TEXT = {
-  newKicker: 'NEW AUTOMATION',
-  changeKicker: 'CHANGE',
-  whatChanges: 'WHAT CHANGES',
-  thinking: 'How I thought about it',
-  asked: (agent: string) => `What ${agent} is asked`,
-  accept: { new: 'Turn it on', change: 'Use this version' },
-  decline: { new: 'Not now', change: 'Keep the old one' },
-  tryIt: 'Try it',
-  tryOn: (n: number) => `Try it on #${n}`,
-  tryNow: 'Try it now',
-  replyHint: 'or reply to change it',
-  acceptHint: {
-    new: (name: string) => `Turns on “${name}” as this card shows it`,
-    change: (name: string) => `Turns on this version of “${name}”`,
-  },
-  tryHint: 'Runs it once as a test, before anything is on',
-  declineHint: {
-    new: 'Sets this plan aside; nothing is turned on',
-    change: 'Sets this change aside; the current version stays as it is',
-  },
-  /** The toasts once a decision went through (the card folds into its line by itself). */
-  turnedOn: {
-    new: (name: string) => `“${name}” is on.`,
-    change: (name: string) => `The new “${name}” is on.`,
-  },
-  setAside: {
-    new: (name: string) => `“${name}” wasn’t turned on.`,
-    change: (name: string) => `“${name}” stays as it was.`,
-  },
-  trying: (name: string, sample: number | null) =>
-    sample === null ? `Trying “${name}” now.` : `Trying “${name}” on #${sample}.`,
-  /** Settled lines. */
-  turnedOnBy: (who: string, name: string) => `${who} turned on “${name}”`,
-  notNow: (name: string) => `Not now: “${name}”`,
-  replaced: 'Replaced by a newer plan',
-  deleted: (name: string) => `“${name}” was deleted`,
-  /** TalkBack's word for each sign of WHAT CHANGES. */
-  changeWords: { added: 'Adds', removed: 'Removes', changed: 'Changes' },
-} as const;
+export function automationPlanText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    newKicker: t('automationPlan.automationPlanText.newKicker'),
+    changeKicker: t('automationPlan.automationPlanText.changeKicker'),
+    whatChanges: t('automationPlan.automationPlanText.whatChanges'),
+    thinking: t('automationPlan.automationPlanText.thinking'),
+    asked: (agent: string) => t('automationPlan.automationPlanText.asked', { agent }),
+    accept: {
+      new: t('automationPlan.automationPlanText.accept.new'),
+      change: t('automationPlan.automationPlanText.accept.change'),
+    },
+    decline: {
+      new: t('automationPlan.automationPlanText.decline.new'),
+      change: t('automationPlan.automationPlanText.decline.change'),
+    },
+    tryIt: t('automationPlan.automationPlanText.tryIt'),
+    tryOn: (n: number) => t('automationPlan.automationPlanText.tryOn', { n }),
+    tryNow: t('automationPlan.automationPlanText.tryNow'),
+    replyHint: t('automationPlan.automationPlanText.replyHint'),
+    acceptHint: {
+      new: (name: string) => t('automationPlan.automationPlanText.acceptHint.new', { name }),
+      change: (name: string) => t('automationPlan.automationPlanText.acceptHint.change', { name }),
+    },
+    tryHint: t('automationPlan.automationPlanText.tryHint'),
+    declineHint: {
+      new: t('automationPlan.automationPlanText.declineHint.new'),
+      change: t('automationPlan.automationPlanText.declineHint.change'),
+    },
+    /** The toasts once a decision went through (the card folds into its line by itself). */
+    turnedOn: {
+      new: (name: string) => t('automationPlan.automationPlanText.turnedOn.new', { name }),
+      change: (name: string) => t('automationPlan.automationPlanText.turnedOn.change', { name }),
+    },
+    setAside: {
+      new: (name: string) => t('automationPlan.automationPlanText.setAside.new', { name }),
+      change: (name: string) => t('automationPlan.automationPlanText.setAside.change', { name }),
+    },
+    trying: (name: string, sample: number | null) =>
+      sample === null ? `Trying “${name}” now.` : `Trying “${name}” on #${sample}.`,
+    /** Settled lines. */
+    turnedOnBy: (who: string, name: string) =>
+      t('automationPlan.automationPlanText.turnedOnBy', { who, name }),
+    notNow: (name: string) => t('automationPlan.automationPlanText.notNow', { name }),
+    replaced: t('automationPlan.automationPlanText.replaced'),
+    deleted: (name: string) => t('automationPlan.automationPlanText.deleted', { name }),
+    /** TalkBack's word for each sign of WHAT CHANGES. */
+    changeWords: {
+      added: t('automationPlan.automationPlanText.changeWords.added'),
+      removed: t('automationPlan.automationPlanText.changeWords.removed'),
+      changed: t('automationPlan.automationPlanText.changeWords.changed'),
+    },
+  } as const;
+}
+export const AUTOMATION_PLAN_TEXT = automationPlanText();
 
 /** `+` added, `−` (U+2212) removed, `~` changed, as a diff reads. */
 const CHANGE_SIGNS: Record<AutomationPlanChange['change'], '+' | '−' | '~'> = {

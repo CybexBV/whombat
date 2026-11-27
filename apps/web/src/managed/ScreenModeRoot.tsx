@@ -5,7 +5,6 @@
  * keeps per Whombat in this browser (that it's in screen mode, and its screen once added).
  */
 import { displayEnrolApi, screenApi } from '@whombat/client/desk';
-import { COPY } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
@@ -15,6 +14,7 @@ import {
   ScreenModePage,
   type ScreenRecord,
 } from '../features/screens/screenMode/ScreenMode';
+import { COPY } from '../i18n/managed';
 import {
   deleteEndpointKey,
   type EndpointKey,

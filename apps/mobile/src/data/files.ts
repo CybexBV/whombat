@@ -13,7 +13,6 @@ import {
   FILES_COPY,
   type FilesConversationRow,
   type FilesPlace,
-  fileOriginText,
   filesConversationId,
   filesConversationRows,
   filesSizeLine,
@@ -34,6 +33,10 @@ import {
   formatRecent,
   normalizeFilesFolder,
 } from '@whombat/core';
+import { formatLocaleBytes, resolveDisplayLanguage } from '@whombat/core/i18n';
+import { formatClock, formatDate } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
+import { filesCopy } from './filesCopy';
 import type { ViewContext } from './people';
 
 /* The entry point ------------------------------------------------------------------------------- */
@@ -86,11 +89,25 @@ export interface FilesListRow {
 /** `/files` on the phone: each conversation with files, newest first (the order `filesConversationRows` gives). */
 export function filesListRow(
   row: FilesConversationRow,
-  ctx: Pick<ViewContext, 'now' | 'timeZone'>,
+  ctx: Pick<ViewContext, 'now' | 'timeZone' | 'locale'>,
 ): FilesListRow {
   const title = filesRowTitle(row);
-  const meta = filesSpaceLine(row, ctx.timeZone);
-  const time = row.lastAddedAt ? formatRecent(row.lastAddedAt, ctx.now, ctx.timeZone) : '';
+  const { t } = mobileTranslator(ctx.locale);
+  const meta =
+    resolveDisplayLanguage(ctx.locale) === 'en'
+      ? filesSpaceLine(row, ctx.timeZone)
+      : [
+          t('files.count', { count: row.count }),
+          formatLocaleBytes(row.bytes, ctx.locale),
+          row.lastAddedAt &&
+            t('files.lastAdded', {
+              date: formatDate(row.lastAddedAt, ctx.timeZone, { year: 'never' }, ctx.locale),
+              time: formatClock(row.lastAddedAt, ctx.timeZone),
+            }),
+        ]
+          .filter(Boolean)
+          .join(' · ');
+  const time = row.lastAddedAt ? formatRecent(row.lastAddedAt, ctx.now, ctx.timeZone, ctx.locale) : '';
   const kind = row.kind === 'branch' ? 'branch room' : null;
   return {
     row,
@@ -119,12 +136,16 @@ export interface FileRowView {
 
 export function fileRowView(
   entry: FileEntry,
-  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>,
+  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone' | 'locale'>,
 ): FileRowView {
-  const size = formatFileSize(entry.attachment.size);
-  const time = formatRecent(entry.addedAt, ctx.now, ctx.timeZone);
+  const size =
+    resolveDisplayLanguage(ctx.locale) === 'en'
+      ? formatFileSize(entry.attachment.size)
+      : formatLocaleBytes(entry.attachment.size, ctx.locale);
+  const time = formatRecent(entry.addedAt, ctx.now, ctx.timeZone, ctx.locale);
   const uploader = ctx.people.name(entry.uploadedById);
-  const origin = fileOriginText(entry);
+  const copy = filesCopy(ctx.locale);
+  const origin = entry.messageId ? copy.inMessage : copy.savedToFiles;
   return {
     entry,
     name: entry.attachment.name,
@@ -158,41 +179,43 @@ export interface FileAction {
  * Move to folder… and Remove from Files, Remove last in the bad tone. Every file is yours (contracts 3.0 dropped
  * `canRename`, `canMove` and `canRemove`; one-person-android.md AP-5770).
  */
-export function fileActions(entry: Pick<FileEntry, 'messageId'>): FileAction[] {
+export function fileActions(entry: Pick<FileEntry, 'messageId'>, locale?: string): FileAction[] {
+  const copy = filesCopy(locale);
+  const { t } = mobileTranslator(locale);
   const actions: FileAction[] = [
     {
       kind: 'download',
-      label: FILES_COPY.download,
+      label: copy.download,
       destructive: false,
-      accessibilityHint: 'Downloads the file and opens the share sheet',
+      accessibilityHint: t('files.downloadHint'),
     },
   ];
   if (entry.messageId)
     actions.push({
       kind: 'open_message',
-      label: FILES_COPY.openMessage,
+      label: copy.openMessage,
       destructive: false,
-      accessibilityHint: 'Opens the message it was sent with',
+      accessibilityHint: t('files.openHint'),
     });
   if (entry.messageId === null)
     actions.push({
       kind: 'rename',
-      label: FILES_COPY.rename,
+      label: copy.rename,
       destructive: false,
-      accessibilityHint: 'Changes the file’s name',
+      accessibilityHint: t('files.renameHint'),
     });
   actions.push(
     {
       kind: 'move',
-      label: FILES_COPY.move,
+      label: copy.move,
       destructive: false,
-      accessibilityHint: 'Puts it in another folder',
+      accessibilityHint: t('files.moveHint'),
     },
     {
       kind: 'remove',
-      label: FILES_COPY.remove,
+      label: copy.remove,
       destructive: true,
-      accessibilityHint: 'Asks first',
+      accessibilityHint: t('files.removeHint'),
     },
   );
   return actions;

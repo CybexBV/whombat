@@ -4,12 +4,14 @@
  * react-native-svg's `SvgXml` after `svgForNative` (nothing in it runs or fetches). Remote (`http(s)`) images load on
  * a self-hosted Whombat only; on a managed one they are a link with their description and host, as on the web.
  */
+
 import { svgForNative, svgFromDataUri, svgIntrinsicSize } from '@whombat/client';
 import { svgImageDocument } from '@whombat/core';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Image, Linking, Text as RNText, useWindowDimensions, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { imageBox } from '../data/attachments';
+import { useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -65,6 +67,7 @@ function SvgPicture({ xml, label, maxWidth }: { xml: string; label: string; maxW
 }
 
 function RasterPicture({ src, alt, maxWidth }: { src: string; alt: string; maxWidth: number }) {
+  const { t: tMobile } = useMobileT();
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -86,7 +89,7 @@ function RasterPicture({ src, alt, maxWidth }: { src: string; alt: string; maxWi
         source={{ uri: src }}
         style={{ width: box.width, height: box.height }}
         resizeMode="contain"
-        accessibilityLabel={alt || 'Image'}
+        accessibilityLabel={alt || tMobile('ui.image')}
         onError={() => setFailed(true)}
       />
     </Frame>
@@ -95,6 +98,7 @@ function RasterPicture({ src, alt, maxWidth }: { src: string; alt: string; maxWi
 
 /** A remote image that isn't loaded here: its description and host, opening it in the browser. */
 function ImageLink({ src, alt }: { src: string; alt: string }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const remote = /^https?:\/\//i.test(src);
   if (!remote) return alt ? <Text size={15.5}>{alt}</Text> : null;
@@ -120,7 +124,7 @@ function ImageLink({ src, alt }: { src: string; alt: string }) {
       }}
     >
       <Text size={14} weight={500} numberOfLines={1} style={{ flexShrink: 1 }}>
-        {alt || 'Image'}
+        {alt || tMobile('ui.image')}
       </Text>
       <Text size={11} mono color={theme.colors.mut}>
         {host}
@@ -131,10 +135,11 @@ function ImageLink({ src, alt }: { src: string; alt: string }) {
 
 /** `![alt](src)` as its own row in the bubble. */
 export function MessageImage({ src, alt }: { src: string; alt: string }) {
+  const { t: tMobile } = useMobileT();
   const managed = useManaged();
   const maxWidth = useMaxWidth();
   const svg = svgFromDataUri(src);
-  if (svg) return <SvgPicture xml={svg} label={alt || 'Image'} maxWidth={maxWidth} />;
+  if (svg) return <SvgPicture xml={svg} label={alt || tMobile('ui.image')} maxWidth={maxWidth} />;
   if (/^https?:\/\//i.test(src) && managed) return <ImageLink src={src} alt={alt} />;
   return <RasterPicture src={src} alt={alt} maxWidth={maxWidth} />;
 }
@@ -144,6 +149,7 @@ export function MessageImage({ src, alt }: { src: string; alt: string }) {
  * `null` when it isn't a drawing (the caller shows the code block).
  */
 export function SvgDrawing({ text, codeBlock }: { text: string; codeBlock: ReactNode }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const maxWidth = useMaxWidth();
   const [code, setCode] = useState(false);
@@ -151,18 +157,18 @@ export function SvgDrawing({ text, codeBlock }: { text: string; codeBlock: React
   if (!doc) return <>{codeBlock}</>;
   return (
     <View style={{ gap: 4, alignItems: 'flex-start' }}>
-      <SvgPicture xml={doc} label="Drawing" maxWidth={maxWidth} />
+      <SvgPicture xml={doc} label={tMobile('ui.drawing')} maxWidth={maxWidth} />
       <Touchable
         onPress={() => setCode((c) => !c)}
         feedback="wash"
         ringRadius={8}
         accessibilityRole="button"
         accessibilityState={{ expanded: code }}
-        accessibilityLabel={code ? 'Hide code' : 'View code'}
+        accessibilityLabel={code ? tMobile('ui.hide-code') : tMobile('ui.view-code')}
         style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
       >
         <RNText style={[textMetrics({ size: 12, family: 'mono' }), { color: theme.colors.mut }]}>
-          {code ? 'Hide code' : 'View code'}
+          {code ? tMobile('ui.hide-code') : tMobile('ui.view-code')}
         </RNText>
       </Touchable>
       {code ? <View style={{ alignSelf: 'stretch' }}>{codeBlock}</View> : null}

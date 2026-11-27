@@ -16,6 +16,7 @@ import { ScrollView, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { branchRoomMeta } from '../data/lists';
 import { conversationLoadError } from '../data/messages';
+import { useI18n, useMobileT } from '../i18n';
 import { branchRoomFor, type RootStackParamList } from '../navigation/routes';
 import { useTheme } from '../theme/theme';
 import { ChatHeader, Screen } from '../ui/headers';
@@ -68,6 +69,7 @@ function useTarget(params: Props['route']['params']) {
 }
 
 export function ConversationScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrow();
   const theme = useTheme();
   const params = route.params;
@@ -91,7 +93,7 @@ export function ConversationScreen({ route, navigation }: Props) {
           <QuietText style={{ paddingTop: 8, paddingBottom: 18 }}>
             {`More than one repository has a PR #${target.byPr.prNumber}. Which one?`}
           </QuietText>
-          <Section title="BRANCH ROOMS">
+          <Section title={tMobile('screens.branch-rooms')}>
             {target.choices.map((r) => (
               <ListRow
                 key={r.id}
@@ -135,7 +137,12 @@ export function ConversationScreen({ route, navigation }: Props) {
               : {})}
           />
         ) : (
-          <SkeletonRows count={6} avatarSize={32} lines={1} label="Loading the conversation" />
+          <SkeletonRows
+            count={6}
+            avatarSize={32}
+            lines={1}
+            label={tMobile('screens.loading-the-conversation')}
+          />
         )}
       </Screen>
     );
@@ -158,13 +165,15 @@ function Conversation({
   /** The message a link opens it at (MX-03). */
   anchor: string | null;
 }) {
+  const { rawLocale } = useI18n();
+
   const c = detail.conversation;
   const title = c.title;
   const subtitle = detail.pr
     ? `${detail.pr.repoFullName ? `${detail.pr.repoFullName} · ` : ''}PR #${detail.pr.number} · ${PR_STATUS_LABELS[prStatus(detail.pr)]}`
     : c.topic || null;
   const placeholder = c.prNumber
-    ? composerPlaceholder({ kind: 'branch', prNumber: c.prNumber })
+    ? composerPlaceholder({ kind: 'branch', prNumber: c.prNumber }, rawLocale)
     : 'Write a message…';
 
   return (

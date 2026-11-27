@@ -14,6 +14,7 @@
  * Live on the `hosts` topic; long work says when it starts and when it ends (PX-05, IU-07). Hardware, devices,
  * profiles, firewall, HA and moving stay on the web.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { machineVerdict, type PowerActionView, powerActions, type Verdict } from '@whombat/client/hosts';
 import {
@@ -52,6 +53,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import { canPower, verdictDot } from '../data/servers';
 import { useWebUrl } from '../data/useWebUrl';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -115,6 +117,8 @@ const MORE_OPS = {
 const RENAME_WAIT_MS = 30_000;
 
 export function GuestScreen({ route, navigation }: Props) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const { serverId, guestId, title } = route.params;
   const theme = useTheme();
@@ -176,9 +180,9 @@ export function GuestScreen({ route, navigation }: Props) {
             {title ?? guestId}
           </Text>
           {q.isError && !renamedAt ? (
-            <ErrorState text="This guest didn’t load." onRetry={() => void q.refetch()} />
+            <ErrorState text={tMobile('screens.this-guest-didnt-load')} onRetry={() => void q.refetch()} />
           ) : (
-            <SkeletonRows count={4} lines={2} label="Loading the guest" />
+            <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-guest')} />
           )}
         </View>
       </Screen>
@@ -281,7 +285,7 @@ export function GuestScreen({ route, navigation }: Props) {
             ))}
             {more.length ? (
               <Button
-                label="More"
+                label={tClient('usage.more')}
                 variant="secondary"
                 onPress={() => setOpen({ kind: 'more' })}
                 style={{ flexGrow: 1, flexBasis: '30%' }}
@@ -384,9 +388,12 @@ export function GuestScreen({ route, navigation }: Props) {
               />
             )
           ) : cfgQ.isError ? (
-            <ErrorState text="Its settings didn’t load." onRetry={() => void cfgQ.refetch()} />
+            <ErrorState
+              text={tMobile('screens.its-settings-didnt-load')}
+              onRetry={() => void cfgQ.refetch()}
+            />
           ) : (
-            <SkeletonRows count={5} lines={2} label="Loading its settings" />
+            <SkeletonRows count={5} lines={2} label={tMobile('screens.loading-its-settings')} />
           )
         ) : shown === 'snapshots' ? (
           <GuestSnapshots

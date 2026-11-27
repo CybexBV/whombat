@@ -5,7 +5,6 @@
  */
 import {
   APPLIANCE_TERMS_VERSION,
-  COPY,
   type ControlApi,
   ControlError,
   createAccountPasskey,
@@ -21,6 +20,7 @@ import { useEffect, useState } from 'react';
 import { AuthLayout } from '../app/auth/AuthLayout';
 import { Button } from '../components/Button';
 import { SectionLabel } from '../components/SectionLabel';
+import { COPY } from '../i18n/managed';
 import { browserLabel } from './keys';
 import styles from './managed.module.css';
 import { ErrorLine, TermsCheck } from './screens';

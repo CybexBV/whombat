@@ -99,6 +99,8 @@ func TestReach(t *testing.T) {
 			`{"link":{"state":"grace","graceEndsOn":"25 November"}}`, "", nil},
 		"grace next year": {apiFile(apiClaimed, `{"link":{"state":"grace","graceEndsAt":"2027-01-03T10:00:00Z"}}`),
 			`{"link":{"state":"grace","graceEndsOn":"3 January 2027"}}`, "", nil},
+		"grace with locale": {apiFile(apiClaimed+`,"locale":"nl-NL"`, `{"link":{"state":"grace","graceEndsAt":"2026-11-25T10:00:00Z"}}`),
+			`{"link":{"state":"grace","graceEndsOn":"25 November","graceEndsAt":"2026-11-25"}}`, "", nil},
 		"grace without a date":    {apiFile(apiClaimed, `{"link":{"state":"grace"}}`), "", "", nil},
 		"ended":                   {apiFile(apiClaimed, `{"link":{"state":"ended"}}`), `{"link":{"state":"ended"}}`, "", nil},
 		"on and off show nothing": {apiFile(apiClaimed, `{"link":{"state":"on","code":"ABCD-EFGH","url":"https://app.whombat.com/link"}}`), "", "", nil},

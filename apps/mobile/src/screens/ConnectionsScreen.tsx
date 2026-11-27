@@ -9,17 +9,19 @@
  * its screen; an account its page on a box at session minor 7, else its own screen (phone-connect.md PC-02, AP-2902).
  * Opened from Settings' Connections row (`connections.catalog`, CX-75). The Vault screen's language: mono kicker, 25/700 title, intro, grouped lists.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import {
-  CONNECTIONS_TEXT,
   type ConnectedRow,
   connectionsOverview,
+  connectionsText,
   type NeedsYouRow,
 } from '../data/connections';
 import { useConnections } from '../data/useConnections';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
-import { SETTINGS_TEXT } from '../settings/list';
+import { settingsText } from '../settings/list';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ConnectionLogo } from '../ui/ConnectionLogo';
@@ -31,6 +33,10 @@ import { useBottomRoom } from '../ui/screenBottom';
 type Props = NativeStackScreenProps<RootStackParamList, 'Connections'>;
 
 export function ConnectionsScreen({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const connectionsTextHere = connectionsText(rawLocale);
+  const settingsTextHere = settingsText(rawLocale);
+
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { list, rows, refetch } = useConnections();
@@ -48,23 +54,23 @@ export function ConnectionsScreen({ navigation }: Props) {
         navigation.navigate('Connection', {
           connectionId: r.id,
           title: r.title,
-          back: CONNECTIONS_TEXT.title,
+          back: connectionsTextHere.title,
         });
     if (opens?.screen === 'Thing')
       return () =>
         navigation.navigate('Thing', {
           thingId: opens.thingId,
           title: r.title,
-          back: CONNECTIONS_TEXT.title,
+          back: connectionsTextHere.title,
         });
     return opens?.screen === 'ConnectAccount'
-      ? () => navigation.navigate('ConnectAccount', { page: opens.page, back: CONNECTIONS_TEXT.title })
+      ? () => navigation.navigate('ConnectAccount', { page: opens.page, back: connectionsTextHere.title })
       : undefined;
   };
 
   return (
     <Screen>
-      <BackBar label={SETTINGS_TEXT.title} onPress={goBack} />
+      <BackBar label={settingsTextHere.title} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
@@ -80,29 +86,29 @@ export function ConnectionsScreen({ navigation }: Props) {
       >
         <View style={{ paddingHorizontal: 22, paddingBottom: 14, gap: 4 }}>
           <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-            {CONNECTIONS_TEXT.kicker}
+            {connectionsTextHere.kicker}
           </Text>
           <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
-            {CONNECTIONS_TEXT.title}
+            {connectionsTextHere.title}
           </Text>
           <Text size={14} color={theme.colors.ink2}>
-            {CONNECTIONS_TEXT.intro}
+            {connectionsTextHere.intro}
           </Text>
           <Button
-            label={CONNECTIONS_TEXT.add}
+            label={connectionsTextHere.add}
             onPress={() => navigation.navigate('AddConnection')}
             style={{ marginTop: 10 }}
           />
         </View>
 
         {list.error && !list.data ? (
-          <ErrorState text={CONNECTIONS_TEXT.loadFailed} onRetry={() => void list.refetch()} />
+          <ErrorState text={connectionsTextHere.loadFailed} onRetry={() => void list.refetch()} />
         ) : !list.data ? (
-          <SkeletonRows count={3} avatarSize={40} lines={2} label={CONNECTIONS_TEXT.loading} />
+          <SkeletonRows count={3} avatarSize={40} lines={2} label={connectionsTextHere.loading} />
         ) : (
           <>
             {needsYou.length > 0 ? (
-              <Section title={CONNECTIONS_TEXT.needsYou}>
+              <Section title={connectionsTextHere.needsYou}>
                 {needsYou.map((r) => (
                   <NeedsYouListRow key={r.key} row={r} onPress={press(r)} />
                 ))}
@@ -123,8 +129,8 @@ export function ConnectionsScreen({ navigation }: Props) {
               </Section>
             ) : null}
             {empty ? (
-              <Section title={CONNECTIONS_TEXT.connected}>
-                <CardNote>{CONNECTIONS_TEXT.nothingConnected}</CardNote>
+              <Section title={connectionsTextHere.connected}>
+                <CardNote>{connectionsTextHere.nothingConnected}</CardNote>
               </Section>
             ) : null}
           </>

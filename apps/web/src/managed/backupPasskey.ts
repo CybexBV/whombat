@@ -4,6 +4,7 @@ import { type BackupPasskeyTap, useOnePasskeySetup } from '@whombat/client/manag
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect } from 'react';
 import { useAppServices } from '../app/providers';
+import { currentLocale } from '../i18n/provider';
 import { browserLabel } from './keys';
 import { PASSKEYS } from './passkeyEnv';
 
@@ -22,6 +23,7 @@ export function useBackupPasskeyTap(): BackupPasskeyTap | null {
           whombats: managed.whombats,
         }
       : null,
+    currentLocale(),
   );
 }
 

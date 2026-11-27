@@ -4,12 +4,13 @@
  */
 import { ApiError, problemText } from '@whombat/client';
 import type { TurnFailureCode } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 /** What a retry that didn't happen says (the server's words when it gave some). */
 export function retryFailureText(
   result: { status: 'blocked'; message: string } | { status: 'pending_approval' } | Error,
 ): string {
-  if (result instanceof ApiError) return problemText(result);
+  if (result instanceof ApiError) return problemText(result, undefined, currentLocale());
   if (result instanceof Error) return 'Couldn’t reach Whombat. Nothing changed, try again.';
   if (result.status === 'blocked') return result.message;
   return 'That needs a person to approve it first.';

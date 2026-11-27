@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getExistingSubscription, isPushSupported } from './webPush';
+import {
+  getExistingSubscription,
+  isPushSupported,
+  resetServiceWorkerLanguageForTests,
+  serviceWorkerUrl,
+  setServiceWorkerLanguage,
+} from './webPush';
 
 /** A minimal fake `PushSubscription` — jsdom implements neither Service Worker nor Push. */
 function fakeSubscription(overrides: Partial<{ endpoint: string; p256dh: string; auth: string }> = {}) {
@@ -50,5 +56,42 @@ describe('registerServiceWorker / getExistingSubscription', () => {
     vi.stubGlobal('navigator', { ...navigator, serviceWorker: { getRegistration } });
     vi.stubGlobal('PushManager', class {});
     expect(await getExistingSubscription()).toBe(sub);
+  });
+});
+
+describe('the service worker’s language', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetServiceWorkerLanguageForTests();
+  });
+
+  function fakeWorker() {
+    const postMessage = vi.fn();
+    const register = vi.fn(async () => ({}));
+    const getRegistration = vi.fn(async () => ({ active: { postMessage } }));
+    vi.stubGlobal('navigator', { ...navigator, serviceWorker: { getRegistration, register } });
+    vi.stubGlobal('PushManager', class {});
+    return { postMessage, register };
+  }
+
+  it('tells a worker left in another language about the first English page', async () => {
+    const w = fakeWorker();
+    await setServiceWorkerLanguage('en');
+    expect(w.postMessage).toHaveBeenCalledWith({ type: 'locale', lang: 'en' });
+    expect(w.register).toHaveBeenCalledWith('/sw.js');
+  });
+
+  it('tells it once per change, with the language in its address', async () => {
+    const w = fakeWorker();
+    await setServiceWorkerLanguage('nl-NL');
+    await setServiceWorkerLanguage('nl');
+    expect(w.postMessage).toHaveBeenCalledTimes(1);
+    expect(w.register).toHaveBeenCalledWith('/sw.js?lang=nl');
+    expect(serviceWorkerUrl()).toBe('/sw.js?lang=nl');
+  });
+
+  it('gives an unknown language the English address', () => {
+    expect(serviceWorkerUrl('fr')).toBe('/sw.js');
+    expect(serviceWorkerUrl(null)).toBe('/sw.js');
   });
 });

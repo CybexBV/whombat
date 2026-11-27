@@ -430,6 +430,39 @@ describe('a slots page’s figures', () => {
       ['f-fast', '40 %', undefined],
     ]);
   });
+
+  it('keep a gallery’s people private: a row someone is at, and a count of rows people are at', () => {
+    const gallery = (id: string, people: boolean): ThingPagePanel => ({
+      kind: 'gallery',
+      id,
+      place: 'main',
+      span: 2,
+      title: id === 'now' ? 'Now playing' : 'Downloads',
+      shape: 'poster',
+      look: 'rows',
+      items: [
+        {
+          id: `${id}-1`,
+          title: 'Dune',
+          progress: 0.4,
+          note: '38:12 of 55:00',
+          ...(people ? { person: { name: 'Anna', note: 'iPad' } } : {}),
+        },
+        { id: `${id}-2`, title: 'Arrival', progress: 0.1 },
+      ],
+    });
+    const figures = slotFigures(
+      [gallery('now', true), gallery('queue', false), gallery('limits', true)],
+      ['limits'],
+    );
+    const privacy = Object.fromEntries(figures.map((f) => [f.key, !!f.private]));
+    expect(privacy).toEqual({
+      now: true,
+      queue: false,
+      'limits-1': true,
+      'limits-2': false,
+    });
+  });
 });
 
 describe('limits as meters of blocks', () => {

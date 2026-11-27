@@ -5,11 +5,12 @@
  * self-hosted and managed Whombats, docs/decisions/subscriptions.md).
  */
 
-import { ACCOUNTS_TEXT, BACKUP_KINDS } from '@whombat/client/managed';
+import { BACKUP_KINDS } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
 import { useState } from 'react';
 import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
+import { ACCOUNTS_TEXT } from '../../i18n/clientWords';
 import { BackupDestinationForm, backupErrorText, savedNotes } from './BackupDestination';
 import styles from './SettingsScreen.module.css';
 

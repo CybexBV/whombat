@@ -4,10 +4,12 @@
  * locked, no words and no answers, only the unlock; an ask only the phone may approve says so; a risky one asks for the
  * PIN first. The pop-up adds its own *Not now* (put away on this screen).
  */
+
 import type { AskButton, AskView } from '@whombat/screen/react';
+import { english, type Translate } from '../i18n/translate';
 import type { Decision } from './decide';
 import type { ChoiceScope, DeskAsk } from './desk';
-import { DESK, DESK_WORDS, fill } from './deskCopy';
+import { deskCopy, deskWordsCopy, fill } from './deskCopy';
 import { askShown } from './deskScene';
 
 export interface AskViewCtx {
@@ -30,7 +32,10 @@ export interface AskViewCtx {
 }
 
 /** The pop-up's view of `ask`; null when the page doesn't have it (the pop-up then offers its card). */
-export function askViewOf(ask: DeskAsk | undefined, c: AskViewCtx): AskView | null {
+export function askViewOf(ask: DeskAsk | undefined, c: AskViewCtx, t: Translate = english): AskView | null {
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   if (!ask) return null;
   const { ask: shown, actions, talk } = askShown(ask, { unlocked: c.unlocked, gone: false, voice: c.voice });
   const n = ask.number;

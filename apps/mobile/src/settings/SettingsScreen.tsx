@@ -10,14 +10,15 @@
  * while it loads or can't be read a card in Often used says so and every row keeps working. VERSION under it, then
  * Sign out and Switch Whombat (none in the demo). Pulling the page down reads it again and asks for a newer app.
  */
+
 import { useIsFocused } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   agentFaceOf,
   agentGroupParts,
   hasLooksAhead,
-  SETTINGS_HOME_TEXT,
   settingsHomeRows,
+  settingsHomeText,
 } from '@whombat/client';
 import { useSessionProtocol } from '@whombat/client/react';
 import { useEffect, useState } from 'react';
@@ -26,12 +27,13 @@ import { PersonAvatar, WhombatAvatar } from '../avatars/Avatars';
 import { useBurrow } from '../data/BurrowProvider';
 import { useTheAgentHere } from '../data/useAgent';
 import { usePrompts } from '../data/usePrompts';
+import { useI18n } from '../i18n';
 import { useManaged } from '../managed/context';
-import { COPY as MANAGED_COPY } from '../managed/copy';
+import { managedCopy } from '../managed/copy';
 import { useUpdateCheck } from '../managed/useAppUpdate';
 import { type AppNavigation, useAppNavigation } from '../navigation/hooks';
 import { useBeside } from '../navigation/panes';
-import { THEME_PREFERENCES, type ThemePreference } from '../theme/preference';
+import { type ThemePreference, themePreferences } from '../theme/preference';
 import { Text } from '../theme/Text';
 import { useTheme, useThemeContext } from '../theme/theme';
 import { Screen } from '../ui/headers';
@@ -57,7 +59,7 @@ import { TabTop } from '../ui/topRow';
 import { useSetTheme } from './accountTheme';
 import { FaceMotionRow } from './FaceMotionRow';
 import { youLine, youPartsHere } from './groups';
-import { SETTINGS_TEXT, type SettingsRowKey, type SettingsRowView } from './list';
+import { type SettingsRowKey, type SettingsRowView, settingsText } from './list';
 import { UpdateCard } from './UpdateCard';
 import { useApplianceLine, useSettingsRows } from './useSettingsFacts';
 import { VersionCard } from './VersionCard';
@@ -108,6 +110,11 @@ function openRow(navigation: AppNavigation, row: SettingsRowView, managed: boole
 }
 
 export function SettingsScreen() {
+  const { rawLocale, tClient } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
+  const settingsHomeTextHere = settingsHomeText(rawLocale);
+
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { bootstrap, mode } = useBurrow();
@@ -119,13 +126,13 @@ export function SettingsScreen() {
   const agentName = agent?.name ?? '';
   const prompts = usePrompts();
   const parts = youPartsHere({ mode, prompts: prompts.shown });
-  const you = youLine(parts);
+  const you = youLine(parts, rawLocale);
   const notifications = parts.includes('notifications');
   const applianceLine = useApplianceLine();
   // The home's names and, where a row has no news of its own, what it holds.
   const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(useSessionProtocol()) });
   const home = Object.fromEntries(
-    settingsHomeRows(agentName, parts, agentParts).map((r) => [r.key, r]),
+    settingsHomeRows(agentName, parts, agentParts, rawLocale).map((r) => [r.key, r]),
   ) as Record<string, { title: string; line: string }>;
   const homeRows = { you: home.you?.title ?? 'You' };
   const homeLine = (key: SettingsRowKey) => home[key === 'screen' ? 'screens' : key]?.line ?? null;
@@ -151,7 +158,7 @@ export function SettingsScreen() {
 
   return (
     <Screen>
-      <TabTop title={SETTINGS_HOME_TEXT.title} />
+      <TabTop title={settingsHomeTextHere.title} />
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
@@ -174,18 +181,18 @@ export function SettingsScreen() {
         }
       >
         <Text size={15} lh={1.5} color={theme.colors.ink2} style={{ paddingTop: 8 }}>
-          {SETTINGS_HOME_TEXT.subtitle(agentName)}
+          {settingsHomeTextHere.subtitle(agentName)}
         </Text>
         <UpdateCard />
 
-        <PlaceSection title={SETTINGS_HOME_TEXT.oftenUsed}>
+        <PlaceSection title={settingsHomeTextHere.oftenUsed}>
           <PlaceCard>
             {notifications ? (
               <PlaceRow
                 first
                 icon={Bell}
-                title={SETTINGS_HOME_TEXT.notifications.title}
-                line={SETTINGS_HOME_TEXT.notifications.line}
+                title={settingsHomeTextHere.notifications.title}
+                line={settingsHomeTextHere.notifications.line}
                 selected={beside?.name === 'SettingsNotifications'}
                 onPress={() => navigation.navigate('SettingsNotifications')}
               />
@@ -198,17 +205,17 @@ export function SettingsScreen() {
             <PlaceState
               kind="failed"
               icon={SettingsIcon}
-              title={SETTINGS_HOME_TEXT.failedTitle}
-              line={SETTINGS_HOME_TEXT.failedLine}
-              retryLabel={SETTINGS_HOME_TEXT.retry}
+              title={settingsHomeTextHere.failedTitle}
+              line={settingsHomeTextHere.failedLine}
+              retryLabel={settingsHomeTextHere.retry}
               onRetry={() => void qc.invalidateQueries({ queryKey: ['settings'] })}
             />
           ) : managed && applianceLine === undefined ? (
-            <PlaceState kind="loading" icon={SettingsIcon} title={SETTINGS_HOME_TEXT.loading} />
+            <PlaceState kind="loading" icon={SettingsIcon} title={settingsHomeTextHere.loading} />
           ) : null}
         </PlaceSection>
 
-        <PlaceSection title={SETTINGS_HOME_TEXT.allSettings}>
+        <PlaceSection title={settingsHomeTextHere.allSettings}>
           <PlaceCard>
             <PlaceRow
               first
@@ -224,7 +231,7 @@ export function SettingsScreen() {
                 key={row.key}
                 icon={row.key === 'agent' ? undefined : ICONS[row.key]}
                 mark={row.key === 'agent' ? <WhombatAvatar face={agentFaceOf(agent)} size={28} /> : undefined}
-                title={row.key === 'screen' ? SETTINGS_HOME_TEXT.screensTitle : row.title}
+                title={row.key === 'screen' ? settingsHomeTextHere.screensTitle : row.title}
                 line={row.value ?? homeLine(row.key)}
                 bad={row.tone === 'bad'}
                 warn={row.tone === 'warn'}
@@ -242,11 +249,16 @@ export function SettingsScreen() {
             world has nothing to sign out of or switch. */}
         {managed ? (
           <>
-            <Button label="Sign out" variant="secondary" size="lg" onPress={() => managed.signOut()} />
+            <Button
+              label={tClient('managed.appliances.signOut')}
+              variant="secondary"
+              size="lg"
+              onPress={() => managed.signOut()}
+            />
             {/* A community box has no organization's list to switch through (AP-5470). */}
             {managed.community ? null : (
               <Button
-                label={MANAGED_COPY.whombat.switch}
+                label={managedCopyHere.whombat.switch}
                 variant="quiet"
                 onPress={() => setSwitching(true)}
               />
@@ -269,13 +281,20 @@ export function SettingsScreen() {
 
 /** Each theme's icon, as the web's menu has them: the sun, the moon, and the phone that Auto follows. */
 const THEME_ICONS: Record<ThemePreference, LucideIcon> = { light: Sun, dark: Moon, system: Smartphone };
-const THEME_OPTIONS = THEME_PREFERENCES.map((o) => ({ ...o, icon: THEME_ICONS[o.value] }));
 
 /**
  * The theme in the list (AP-2622): Light · Dark · Auto, as on the web, one tap, saved to the account. The word stays
  * whole; the switch takes the rest.
  */
 function ThemeRow({ first }: { first: boolean }) {
+  const { displayLanguage, rawLocale } = useI18n();
+  const settingsTextHere = settingsText(rawLocale);
+  const options = themePreferences(rawLocale).map((option) => ({
+    ...option,
+    icon: THEME_ICONS[option.value],
+  }));
+  const wideLabels = displayLanguage !== 'en';
+
   const theme = useTheme();
   const { preference } = useThemeContext();
   const setTheme = useSetTheme();
@@ -297,15 +316,18 @@ function ThemeRow({ first }: { first: boolean }) {
         <Contrast size={20} color={theme.colors.ink2} />
       </View>
       <Text size={16} weight={600} style={{ flexShrink: 0 }}>
-        {SETTINGS_TEXT.theme}
+        {settingsTextHere.theme}
       </Text>
-      <View style={{ flex: 1, minWidth: 180, alignItems: 'flex-end' }}>
-        <View style={{ width: '100%', maxWidth: 216 }}>
+      <View
+        style={{ flex: 1, minWidth: 180, flexBasis: wideLabels ? 270 : undefined, alignItems: 'flex-end' }}
+      >
+        <View style={{ width: '100%', maxWidth: wideLabels ? 270 : 216 }}>
           <Segmented
-            options={THEME_OPTIONS}
+            options={options}
             value={preference}
             onChange={setTheme}
-            label={SETTINGS_TEXT.theme}
+            label={settingsTextHere.theme}
+            fit={wideLabels}
           />
         </View>
       </View>

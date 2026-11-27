@@ -6,6 +6,7 @@
  * same as iOS's own context menu (`modules/whombat-menu`, ios-message-menu.md). The emoji sheet searches core's list
  * (`searchEmoji`) and shows the recent ones first, then every group; the recent list stays on the phone.
  */
+
 import type { Emoji } from '@whombat/core';
 import { type ComponentType, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, TextInput, View } from 'react-native';
@@ -19,6 +20,7 @@ import {
   parseRecentEmoji,
   recentAfter,
 } from '../data/reactions';
+import { useMobileT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/kv';
 import { secureStore } from '../lib/storage';
 import { Text } from '../theme/Text';
@@ -89,9 +91,10 @@ export function MessageMenuSheet({
   actions: readonly MessageAction[];
   onAction: (action: MessageAction) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} label="Message actions">
+    <Sheet visible={visible} onClose={onClose} label={tMobile('ui.message-actions')}>
       {preview ? (
         <Text
           size={13.5}
@@ -116,7 +119,7 @@ export function MessageMenuSheet({
       ) : null}
       {quick ? (
         <View
-          accessibilityLabel="Quick reactions"
+          accessibilityLabel={tMobile('ui.quick-reactions')}
           style={{
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -150,7 +153,7 @@ export function MessageMenuSheet({
             onPress={onMoreReactions}
             feedback="wash"
             ringRadius={22}
-            accessibilityLabel="More reactions"
+            accessibilityLabel={tMobile('ui.more-reactions')}
             style={{
               width: 44,
               height: 44,
@@ -267,6 +270,7 @@ export function EmojiSheet({
   onPick: (char: string) => void;
   recent: readonly string[];
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [query, setQuery] = useState('');
   const sections = useMemo(() => emojiSections(query, recent), [query, recent]);
@@ -308,7 +312,7 @@ export function EmojiSheet({
     [theme, pick],
   );
   return (
-    <Sheet visible={visible} onClose={onClose} label="Reactions" maxHeight="80%">
+    <Sheet visible={visible} onClose={onClose} label={tMobile('ui.reactions')} maxHeight="80%">
       <View
         style={{
           flexDirection: 'row',
@@ -328,9 +332,9 @@ export function EmojiSheet({
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search emoji"
+          placeholder={tMobile('ui.search-emoji')}
           placeholderTextColor={theme.colors.mut}
-          accessibilityLabel="Search emoji"
+          accessibilityLabel={tMobile('ui.search-emoji')}
           autoCorrect={false}
           autoCapitalize="none"
           cursorColor={theme.colors.ink}
@@ -356,7 +360,7 @@ export function EmojiSheet({
         windowSize={7}
         ListEmptyComponent={
           <Text size={14.5} color={theme.colors.mut} style={{ padding: 12, textAlign: 'center' }}>
-            No emoji match that.
+            {tMobile('ui.no-emoji-match-that')}
           </Text>
         }
       />

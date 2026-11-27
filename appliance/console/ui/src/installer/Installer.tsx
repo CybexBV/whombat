@@ -1,14 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type InstallerLocale, isDutch } from '../i18n/locale';
+import { useT } from '../i18n/react';
+import { english, type Translate } from '../i18n/translate';
 import { type Check, INSTALL_STEPS, type InstallerState } from '../lib/api';
 import type { Client } from '../lib/client';
 import {
-  CHECK_LABEL,
+  checkLabelCopy,
   checkNote,
-  DISK_REASON,
   diskHolds,
-  STEP_LABEL,
-  STEP_SAY,
-  INSTALLER as T,
+  diskReasonCopy,
+  installerCopy,
+  stepLabelCopy,
+  stepSayCopy,
 } from '../lib/copy';
 import {
   checksFolded,
@@ -40,18 +43,24 @@ interface Props {
   state: InstallerState;
   client: Client;
   refresh: () => void;
+  onLocale: (locale: InstallerLocale) => void;
   /** Demo fixtures only: start on this wizard step. */
   initial?: Partial<Wizard>;
   /** Demo fixtures only: the Wi-Fi step's own state at the start. */
   wifi?: SheetInitial;
 }
 
-export function Installer({ state, client, refresh, initial, wifi }: Props) {
+export function Installer({ state, client, refresh, initial, wifi, onLocale }: Props) {
+  const t = useT();
+
   const [wizard, setWizard] = useState<Wizard>(() => ({ ...START, ...initial }));
   const screen = installerScreen(state, wizard);
   const go = (step: WizardStep) => setWizard((w) => ({ ...w, step }));
   // The release and the environment; no platform: the same ISO installs a VM and a dedicated machine (CG-30).
-  const meta = [state.release ?? 'development build', state.environment === 'dev' ? 'dev' : null]
+  const meta = [
+    state.release ?? t('installer.installer.developmentBuild'),
+    state.environment === 'dev' ? 'dev' : null,
+  ]
     .filter(Boolean)
     .join(' · ');
   const common = { state, meta, client, refresh };
@@ -59,13 +68,15 @@ export function Installer({ state, client, refresh, initial, wifi }: Props) {
   // Each screen remounts (`key`), so the primary action's autoFocus lands on it.
   switch (screen) {
     case 'welcome':
-      return <Welcome key={screen} {...common} onNext={() => go(nextStep(state, 'welcome'))} />;
+      return (
+        <Welcome key={screen} meta={meta} onLocale={onLocale} onNext={() => go(nextStep(state, 'welcome'))} />
+      );
     case 'reach':
       return (
         <ReachStep
           key={screen}
           {...common}
-          kicker={kickerFor(state, 'reach')}
+          kicker={kickerFor(state, 'reach', t)}
           wizard={wizard}
           onChange={(c) => setWizard((w) => ({ ...w, ...c }))}
           onBack={() => go(prevStep(state, 'reach'))}
@@ -86,7 +97,7 @@ export function Installer({ state, client, refresh, initial, wifi }: Props) {
         <WifiStep
           key={screen}
           {...common}
-          kicker={kickerFor(state, 'wifi')}
+          kicker={kickerFor(state, 'wifi', t)}
           initial={wifi}
           onBack={() => go(prevStep(state, 'wifi'))}
           onNext={() => go(nextStep(state, 'wifi'))}
@@ -140,12 +151,25 @@ interface Common {
   refresh: () => void;
 }
 
-function kickerFor(s: InstallerState, step: WizardStep): string {
+function kickerFor(s: InstallerState, step: WizardStep, t: Translate = english): string {
+  const T = installerCopy(t);
+
   const n = stepOf(s, step);
   return n ? T.step(n.n, n.of) : T.kicker;
 }
 
-function Welcome({ meta, onNext }: Common & { onNext: () => void }) {
+function Welcome({
+  meta,
+  onNext,
+  onLocale,
+}: {
+  meta: string;
+  onNext: () => void;
+  onLocale: (locale: InstallerLocale) => void;
+}) {
+  const t = useT();
+  const T = installerCopy(t);
+
   return (
     <Frame
       kicker={T.kicker}
@@ -160,14 +184,38 @@ function Welcome({ meta, onNext }: Common & { onNext: () => void }) {
       }
     >
       <p className={styles.note}>{T.welcomeNext}</p>
+      <LanguageChoice onLocale={onLocale} />
     </Frame>
   );
 }
 
+function LanguageChoice({ onLocale }: { onLocale: (locale: InstallerLocale) => void }) {
+  const t = useT();
+  const dutch = isDutch(t.locale);
+  return (
+    <fieldset className={styles.languages}>
+      <legend className="visually-hidden">{t('installer.language')}</legend>
+      <Button kind="secondary" lang="en" aria-pressed={!dutch} onClick={() => onLocale('en-GB')}>
+        English
+      </Button>
+      <Button kind="secondary" lang="nl" aria-pressed={dutch} onClick={() => onLocale('nl-NL')}>
+        Nederlands
+      </Button>
+    </fieldset>
+  );
+}
+
 function StatusIcon({ status }: { status: 'running' | 'ok' | 'warn' | 'fail' }) {
-  if (status === 'running') return <span className={styles.spinner} aria-label="Checking" role="img" />;
+  const t = useT();
+
+  if (status === 'running')
+    return <span className={styles.spinner} aria-label={t('installer.installer.checking')} role="img" />;
   const glyph = { ok: '✓', warn: '!', fail: '✕' }[status];
-  const label = { ok: 'OK', warn: 'Warning', fail: 'Problem' }[status];
+  const label = {
+    ok: 'OK',
+    warn: t('installer.installer.warn.warning'),
+    fail: t('installer.installer.fail.problem'),
+  }[status];
   return (
     <span className={`${styles.icon} ${styles[status]}`} role="img" aria-label={label}>
       {glyph}
@@ -183,6 +231,9 @@ function Checks({
   onBack,
   onNext,
 }: Common & { onBack: () => void; onNext: () => void }) {
+  const t = useT();
+  const T = installerCopy(t);
+
   const verdict = checksVerdict(state);
   const next = useRef<HTMLButtonElement>(null);
   const again = useRef<HTMLButtonElement>(null);
@@ -200,7 +251,7 @@ function Checks({
   };
   return (
     <Frame
-      kicker={kickerFor(state, 'checks')}
+      kicker={kickerFor(state, 'checks', t)}
       title={T.checksTitle}
       sub={T.checksSub}
       guide={{ say: T.checksSay[verdict] }}
@@ -256,15 +307,22 @@ function CheckRows({
   state: InstallerState;
   live?: boolean;
 }) {
+  const t = useT();
+  const CHECK_LABEL = checkLabelCopy(t);
+
   return (
     <ul className={styles.checks} aria-live={live ? 'polite' : undefined}>
       {checks.map((c) => {
-        const note = checkNote(c.id, c.status, c.value, state.preflight.disks);
+        const note = checkNote(c.id, c.status, c.value, state.preflight.disks, t);
         return (
           <li key={c.id} className={styles.check}>
             <StatusIcon status={c.status} />
             <span className={styles.checkLabel}>{CHECK_LABEL[c.id]}</span>
-            <span className={styles.checkValue}>{c.value}</span>
+            <span className={styles.checkValue}>
+              {c.id === 'cpu' && c.count !== undefined
+                ? t('installer.check.cores', { count: c.count })
+                : c.value}
+            </span>
             {note && <span className={`${styles.checkNote} ${styles[c.status]}`}>{note}</span>}
           </li>
         );
@@ -286,11 +344,15 @@ function DiskStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const t = useT();
+  const T = installerCopy(t);
+  const DISK_REASON = diskReasonCopy(t);
+
   const disk = chosenDisk(state, picked);
   const none = eligibleDisks(state).length === 0;
   return (
     <Frame
-      kicker={kickerFor(state, 'disk')}
+      kicker={kickerFor(state, 'disk', t)}
       title={T.diskTitle}
       sub={T.diskSub}
       guide={{ say: T.diskSay }}
@@ -333,7 +395,7 @@ function DiskStep({
                   }}
                 />
                 {/* Size and model as a person knows the disk; its device name quiet at the end. */}
-                <span className={styles.diskSize}>{formatSize(d.sizeBytes)}</span>
+                <span className={styles.diskSize}>{formatSize(d.sizeBytes, t.locale)}</span>
                 <span className={styles.diskModel}>{d.model}</span>
                 <span className={styles.diskName}>{d.name}</span>
                 {!d.eligible && d.reason && (
@@ -359,6 +421,9 @@ function Erase({
   onBack,
   onStarted,
 }: Common & { wizard: Wizard; picked: string | null; onBack: () => void; onStarted: () => void }) {
+  const t = useT();
+  const T = installerCopy(t);
+
   const disk = chosenDisk(state, picked);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -387,13 +452,13 @@ function Erase({
   ) : (
     ''
   );
-  const size = disk ? formatSize(disk.sizeBytes) : '';
+  const size = disk ? formatSize(disk.sizeBytes, t.locale) : '';
   // An empty disk loses nothing: the button confirms (Enter on it). One that holds something: its name typed.
   const empty = disk?.empty === true;
-  const holds = disk ? diskHolds(disk) : null;
+  const holds = disk ? diskHolds(disk, t) : null;
   return (
     <Frame
-      kicker={kickerFor(state, 'erase')}
+      kicker={kickerFor(state, 'erase', t)}
       title={T.eraseTitle}
       sub={!disk ? T.diskNone : fill(empty ? T.eraseEmptySub : T.eraseSub, size, model)}
       guide={{ say: T.eraseSay }}
@@ -466,6 +531,9 @@ function Log({ lines, label }: { lines: string[]; label: string }) {
 }
 
 function Steps({ state }: { state: InstallerState }) {
+  const t = useT();
+  const STEP_LABEL = stepLabelCopy(t);
+
   const states = stepStates(state);
   return (
     <ol className={styles.steps}>
@@ -486,6 +554,10 @@ function Steps({ state }: { state: InstallerState }) {
 }
 
 function Installing({ state, meta }: Common) {
+  const t = useT();
+  const T = installerCopy(t);
+  const STEP_SAY = stepSayCopy(t);
+
   const [details, setDetails] = useState(false);
   const { percent, step } = state.install;
   return (
@@ -520,6 +592,9 @@ function Installing({ state, meta }: Common) {
 }
 
 function Done({ state, meta, client }: Common) {
+  const t = useT();
+  const T = installerCopy(t);
+
   const [restarting, setRestarting] = useState(false);
   const restart = async () => {
     setRestarting(true);
@@ -546,6 +621,10 @@ function Done({ state, meta, client }: Common) {
 }
 
 function Failed({ state, meta, client, refresh, onRetry }: Common & { onRetry: () => void }) {
+  const t = useT();
+  const STEP_LABEL = stepLabelCopy(t);
+  const T = installerCopy(t);
+
   const step = state.install.step ? STEP_LABEL[state.install.step] : null;
   const retry = async () => {
     await client.post('/api/preflight').catch(() => null);

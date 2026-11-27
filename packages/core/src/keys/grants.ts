@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import type { Grant, GrantInput } from '../domain/grant.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import {
   agentMaxTier,
   canonicalKey,
@@ -184,13 +185,28 @@ export function keyRiskRow(row: KeyTierRow): KeyRiskRow {
 }
 
 /** A row's label (“Merge into main”, “Money”): what Keys shows, never the key's label. */
-export function keyTierRowLabel(row: KeyTierRow): string {
-  return keyRiskRow(row).label;
+export function keyTierRowLabel(row: KeyTierRow, locale?: string | null): string {
+  return keyRiskRowIn(row, locale).label;
+}
+
+/** A row's entry in `KEY_RISK_ROWS`, its words in a locale. */
+export function keyRiskRowIn(row: KeyTierRow, locale?: string | null): KeyRiskRow {
+  const base = keyRiskRow(row);
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en') return base;
+  return { ...base, label: tr.t(`key.risk.${row}.label`), description: tr.t(`key.risk.${row}.description`) };
+}
+
+/** `KEY_RISK_ROWS` with their words in a locale. */
+export function keyRiskRows(locale?: string | null): readonly KeyRiskRow[] {
+  return KEY_RISK_ROWS.map((r) => keyRiskRowIn(r.row, locale));
 }
 
 /** “Always allow Dusty to merge into main” (RA-06): the risk-row card's second choice. */
-export function alwaysAllowLabel(agentName: string, row: KeyTierRow): string {
-  return `Always allow ${agentName} to ${keyRiskRow(row).verb}`;
+export function alwaysAllowLabel(agentName: string, row: KeyTierRow, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en') return `Always allow ${agentName} to ${keyRiskRow(row).verb}`;
+  return tr.t(`key.risk.${row}.always`, { agent: agentName });
 }
 
 /**
@@ -206,8 +222,24 @@ export const KEY_TIER_LABELS: Readonly<Record<Tier, string>> = {
   can: 'Go ahead',
 };
 
+/** `KEY_TIER_LABELS` in a locale. */
+export function keyTierLabels(locale?: string | null): Readonly<Record<Tier, string>> {
+  const tr = coreTranslator(locale);
+  return { cannot: tr.t('key.tier.cannot'), ask: tr.t('key.tier.ask'), can: tr.t('key.tier.can') };
+}
+
+/** One tier's label (“Ask me first”, “Eerst vragen”). */
+export function tierLabel(tier: Tier, locale?: string | null): string {
+  return keyTierLabels(locale)[tier];
+}
+
 /** The Deploy row's hint while the Whombat has no deploy workflow (MDS-05). */
 export const DEPLOY_NO_WORKFLOW_HINT = 'No deploy workflow is set up on this Whombat yet.';
+
+/** `DEPLOY_NO_WORKFLOW_HINT` in a locale. */
+export function deployNoWorkflowHint(locale?: string | null): string {
+  return coreTranslator(locale).t('key.deployNoWorkflow');
+}
 
 /** The three-state row a key belongs to (`merge.main` → `merge`, `billing.write` → `refunds.issue`), or null. */
 export function keyTierRowOf(keyId: KeyId): KeyTierRow | null {

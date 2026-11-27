@@ -6,47 +6,55 @@
  */
 
 import type { MarkLike } from '@whombat/brand';
-import { agentKeysText, SETTINGS_GROUP_TEXT, THING_STATUS_LABELS, type ThreadRow } from '@whombat/client';
+import { agentKeysText, settingsGroupText, type ThreadRow, thingStatusLabels } from '@whombat/client';
+import { clientTranslator } from '@whombat/client/i18n';
 import type { ThingSummary } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { AdvancedRowView } from '../settings/groups';
-import { SETTINGS_TEXT } from '../settings/list';
-import { PLACE_WORDS, PLACES, type PlaceId, placeLine, placesThings, type ServerFacts } from './places';
+import { settingsText } from '../settings/list';
+import { PLACES, type PlaceId, placeLine, placesThings, placeWords, type ServerFacts } from './places';
 import type { PhoneGlyph } from './thingLook';
 
 export type SearchGroup = 'chats' | 'things' | 'settings' | 'places';
 
 export const SEARCH_GROUPS: readonly SearchGroup[] = ['chats', 'things', 'settings', 'places'];
 
-export const SEARCH_COPY = {
-  title: 'Search',
-  intro: 'Chats, things, settings and places.',
-  field: 'Search everything',
-  clear: 'Clear search',
-  groups: { chats: 'Chats', things: 'Things', settings: 'Settings', places: 'Places' } satisfies Record<
-    SearchGroup,
-    string
-  >,
-  count: (n: number) => (n === 0 ? 'No results' : `${n} ${n === 1 ? 'result' : 'results'}`),
-  searching: 'Searching…',
-  looking: (q: string) => `Looking for “${q}”…`,
-  emptyTitle: 'What are you looking for?',
-  emptyBody: 'Find a chat, a server, a connection or a setting by its name.',
-  suggestions: 'Try a search',
-  noneTitle: (q: string) => `No results for “${q}”`,
-  noneBody: 'Try a shorter name or a different word.',
-  failedStatus: 'Search didn’t finish.',
-  failedTitle: 'Couldn’t search',
-  failedBody: 'Try again to look through your chats, things, settings and places.',
-  retry: 'Try again',
-  waiting: 'Waiting for you',
-  working: (assistant: string) => `${assistant} is working`,
-  noReplies: 'No replies yet',
-  inFeedback: 'In Feedback',
-  notifications: 'Notifications',
-  notificationsLine: 'When this device alerts you',
-  theme: 'Theme',
-  themeLine: 'Light and dark on this device',
-} as const;
+export function searchCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    title: t('search.searchCopy.title'),
+    intro: t('search.searchCopy.intro'),
+    field: t('search.searchCopy.field'),
+    clear: t('search.searchCopy.clear'),
+    groups: {
+      chats: t('search.searchCopy.groups.chats'),
+      things: t('search.searchCopy.groups.things'),
+      settings: t('search.searchCopy.groups.settings'),
+      places: t('search.searchCopy.groups.places'),
+    } satisfies Record<SearchGroup, string>,
+    count: (count: number) => (count === 0 ? t('search.noResults') : t('search.results', { count })),
+    searching: t('search.searchCopy.searching'),
+    looking: (q: string) => t('search.searchCopy.looking', { q }),
+    emptyTitle: t('search.searchCopy.emptyTitle'),
+    emptyBody: t('search.searchCopy.emptyBody'),
+    suggestions: t('search.searchCopy.suggestions'),
+    noneTitle: (q: string) => t('search.searchCopy.noneTitle', { q }),
+    noneBody: t('search.searchCopy.noneBody'),
+    failedStatus: t('search.searchCopy.failedStatus'),
+    failedTitle: t('search.searchCopy.failedTitle'),
+    failedBody: t('search.searchCopy.failedBody'),
+    retry: t('search.searchCopy.retry'),
+    waiting: t('search.searchCopy.waiting'),
+    working: (assistant: string) => t('search.searchCopy.working', { assistant }),
+    noReplies: t('search.searchCopy.noReplies'),
+    inFeedback: t('search.searchCopy.inFeedback'),
+    notifications: t('search.searchCopy.notifications'),
+    notificationsLine: t('search.searchCopy.notificationsLine'),
+    theme: t('search.searchCopy.theme'),
+    themeLine: t('search.searchCopy.themeLine'),
+  } as const;
+}
+export const SEARCH_COPY = searchCopy();
 
 /** Where a setting goes. `tab`: the Settings tab itself (the theme is a switch on it). */
 export type SettingTarget =
@@ -101,13 +109,15 @@ export interface SearchEntry {
 export function chatLine(
   row: Pick<ThreadRow, 'waiting' | 'working' | 'replies' | 'room'>,
   assistant: string,
+  locale?: string,
 ): string {
+  const copy = searchCopy(locale);
   const line = row.waiting
-    ? SEARCH_COPY.waiting
+    ? copy.waiting
     : row.working
-      ? SEARCH_COPY.working(assistant)
-      : (row.replies ?? SEARCH_COPY.noReplies);
-  return row.room === 'feedback' ? `${SEARCH_COPY.inFeedback} · ${line}` : line;
+      ? copy.working(assistant)
+      : (row.replies ?? copy.noReplies);
+  return row.room === 'feedback' ? `${copy.inFeedback} · ${line}` : line;
 }
 
 /** Everything Search looks through, in the groups' order; a thread once even when two rooms' lists both hold it. */
@@ -118,7 +128,10 @@ export function searchEntries(input: {
   assistant: string;
   /** What the hosts service says of the servers: their logos, systems and how they are. */
   servers?: readonly ServerFacts[];
+  locale?: string;
 }): SearchEntry[] {
+  const labels = placeWords(input.locale);
+  const statusLabels = thingStatusLabels(input.locale);
   const out: SearchEntry[] = [];
   const seen = new Set<string>();
   for (const t of input.threads) {
@@ -128,21 +141,21 @@ export function searchEntries(input: {
       key: `chat:${t.rootId}`,
       group: 'chats',
       title: t.text || '…',
-      line: chatLine(t, input.assistant),
+      line: chatLine(t, input.assistant, input.locale),
       terms: t.subject?.name ?? '',
       open: { kind: 'thread', rootId: t.rootId },
     });
   }
   const byId = new Map((input.things ?? []).map((t) => [t.id, t]));
   const facts = new Map((input.servers ?? []).map((s) => [s.thingId, s]));
-  const { servers, connections } = placesThings(input.things, input.servers);
+  const { servers, connections } = placesThings(input.things, input.servers, input.locale);
   for (const row of [...servers, ...connections]) {
     const thing = byId.get(row.id);
     const server = facts.get(row.id);
     // A server as Overview says it (“Proxmox VE 9.0 · Running warm”), a connection by how it is and its own line.
     const line = server
       ? [server.osLine.split(' · ')[0], server.status]
-      : [row.reason ?? THING_STATUS_LABELS[row.status], thing?.line];
+      : [row.reason ?? statusLabels[row.status], thing?.line];
     out.push({
       key: `thing:${row.id}`,
       group: 'things',
@@ -172,8 +185,8 @@ export function searchEntries(input: {
     out.push({
       key: `place:${place}`,
       group: 'places',
-      title: PLACE_WORDS[place],
-      line: placeLine(place, input.assistant),
+      title: labels[place],
+      line: placeLine(place, input.assistant, input.locale),
       terms: '',
       open: { kind: 'place', place },
     });
@@ -193,7 +206,12 @@ export interface SearchResultGroup {
 }
 
 /** The entries every word of the query is in, in their groups, each group in the entries' order. */
-export function searchMatches(entries: readonly SearchEntry[], query: string): SearchResultGroup[] {
+export function searchMatches(
+  entries: readonly SearchEntry[],
+  query: string,
+  locale?: string,
+): SearchResultGroup[] {
+  const copy = searchCopy(locale);
   const words = queryWords(query);
   if (words.length === 0) return [];
   const hits = entries.filter((e) => {
@@ -202,7 +220,7 @@ export function searchMatches(entries: readonly SearchEntry[], query: string): S
   });
   return SEARCH_GROUPS.flatMap((group) => {
     const rows = hits.filter((e) => e.group === group);
-    return rows.length ? [{ group, title: SEARCH_COPY.groups[group], rows }] : [];
+    return rows.length ? [{ group, title: copy.groups[group], rows }] : [];
   });
 }
 
@@ -223,21 +241,23 @@ export function searchView(input: {
   entries: readonly SearchEntry[];
   loading: boolean;
   failed: boolean;
+  locale?: string;
 }): SearchView {
   const query = input.query.trim();
   if (!queryWords(query).length) return { kind: 'empty' };
   if (input.failed) return { kind: 'failed' };
   if (input.loading) return { kind: 'loading', query };
-  const groups = searchMatches(input.entries, query);
+  const groups = searchMatches(input.entries, query, input.locale);
   const count = groups.reduce((n, g) => n + g.rows.length, 0);
   return count ? { kind: 'results', count, groups } : { kind: 'none', query };
 }
 
 /** The suggestions under the empty page: real names that find something, a thing first, then a setting and a place. */
-export function searchSuggestions(entries: readonly SearchEntry[]): string[] {
+export function searchSuggestions(entries: readonly SearchEntry[], locale?: string): string[] {
+  const copy = searchCopy(locale);
   const thing = entries.find((e) => e.group === 'things')?.title;
-  return [thing, SEARCH_COPY.notifications, SEARCH_COPY.theme, PLACE_WORDS.files]
-    .filter((s): s is string => !!s && searchMatches(entries, s).length > 0)
+  return [thing, copy.notifications, copy.theme, placeWords(locale).files]
+    .filter((s): s is string => !!s && searchMatches(entries, s, locale).length > 0)
     .slice(0, 3);
 }
 
@@ -255,8 +275,12 @@ export function searchSettings(input: {
   /** The Whombat answers the place and the news: News and weather is a page. */
   news?: boolean;
   advanced: readonly AdvancedRowView[];
+  locale?: string;
 }): SearchSetting[] {
-  const groups = SETTINGS_GROUP_TEXT.groups(input.assistant);
+  const groups = settingsGroupText(input.locale).groups(input.assistant);
+  const { t } = clientTranslator(input.locale);
+  const copy = searchCopy(input.locale);
+  const settings = settingsText(input.locale);
   const rows: SearchSetting[] = [
     {
       key: 'you',
@@ -270,8 +294,8 @@ export function searchSettings(input: {
       ? [
           {
             key: 'notifications',
-            title: SEARCH_COPY.notifications,
-            line: SEARCH_COPY.notificationsLine,
+            title: copy.notifications,
+            line: copy.notificationsLine,
             terms: 'alerts push quiet hours',
             icon: 'bell',
             target: { kind: 'page', name: 'SettingsNotifications' },
@@ -280,12 +304,24 @@ export function searchSettings(input: {
       : []),
     {
       key: 'theme',
-      title: SEARCH_COPY.theme,
-      line: SEARCH_COPY.themeLine,
+      title: copy.theme,
+      line: copy.themeLine,
       terms: 'appearance light dark',
       icon: 'theme',
       target: { kind: 'tab' },
     },
+    ...(input.managed
+      ? [
+          {
+            key: 'language',
+            title: t('settings.language.title'),
+            line: t('settings.language.line'),
+            terms: 'English Nederlands',
+            icon: 'you',
+            target: { kind: 'page', name: 'SettingsProfile' },
+          } satisfies SearchSetting,
+        ]
+      : []),
     {
       key: 'assistant',
       title: groups.agent,
@@ -297,22 +333,22 @@ export function searchSettings(input: {
     {
       // The keys and the commands always allowed: a page under What it may do.
       key: 'keys',
-      title: agentKeysText(input.assistant).title,
-      line: agentKeysText(input.assistant).line,
+      title: agentKeysText(input.assistant, input.locale).title,
+      line: agentKeysText(input.assistant, input.locale).line,
       terms: groups.agent,
       icon: 'part',
       target: { kind: 'page', name: 'SettingsAdvancedPart', params: { part: 'keys' } },
     },
     {
       key: 'connections',
-      title: SETTINGS_TEXT.rows.connections,
+      title: settings.rows.connections,
       line: 'What is connected and how',
       icon: 'connections',
       target: { kind: 'page', name: 'Connections' },
     },
     {
       key: 'appliance',
-      title: SETTINGS_TEXT.rows.appliance,
+      title: settings.rows.appliance,
       line: 'Backups, updates and this box',
       terms: 'whombat backup update',
       icon: 'box',
@@ -322,8 +358,8 @@ export function searchSettings(input: {
       ? [
           {
             key: 'news',
-            title: SETTINGS_TEXT.rows.news,
-            line: SETTINGS_TEXT.newsLine,
+            title: settings.rows.news,
+            line: settings.newsLine,
             terms: 'weather place headlines feeds sources',
             icon: 'news',
             target: { kind: 'page', name: 'SettingsNews' },
@@ -344,8 +380,8 @@ export function searchSettings(input: {
       : []),
     {
       key: 'advanced',
-      title: SETTINGS_TEXT.rows.advanced,
-      line: SETTINGS_TEXT.advancedLine,
+      title: settings.rows.advanced,
+      line: settings.advancedLine,
       icon: 'advanced',
       target: { kind: 'page', name: 'SettingsAdvanced' },
     },
@@ -356,7 +392,7 @@ export function searchSettings(input: {
       key: `advanced:${row.key}`,
       title: row.title,
       line: row.line,
-      terms: SETTINGS_TEXT.rows.advanced,
+      terms: settings.rows.advanced,
       icon: 'part',
       target: {
         kind: 'page',

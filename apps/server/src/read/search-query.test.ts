@@ -3,7 +3,7 @@
  * words as written, English stopwords left out of the natural question's words, web-search syntax kept in each half.
  */
 import { describe, expect, it } from 'vitest';
-import { combinedTsQuery } from './search';
+import { combinedTsQuery, withoutStopwords } from './search';
 
 describe('combinedTsQuery', () => {
   it('matches a natural question by English stems or the words as written, any of them', () => {
@@ -29,8 +29,41 @@ describe('combinedTsQuery', () => {
     expect(combinedTsQuery('"the who"', '', "'the' <-> 'who'", ['the', 'who'])).toBe("'the' <-> 'who'");
   });
 
+  it('keeps stopword exclusions from the simple half when English drops them', () => {
+    expect(combinedTsQuery('backup -was', "'backup'", "'backup' & !'was'", ['was'])).toBe(
+      "'backup' & !'was'",
+    );
+  });
+
   it('is nothing when nothing is left to search for', () => {
     expect(combinedTsQuery('the', '', "'the'", ['the'])).toBeNull();
     expect(combinedTsQuery('', '', '', [])).toBeNull();
+  });
+});
+
+describe('withoutStopwords', () => {
+  const dutch = ['de', 'het', 'andere', 'van', 'of'];
+
+  it('leaves out the stopwords, whatever their case or punctuation', () => {
+    expect(withoutStopwords('De andere facturen van Jansen', dutch)).toBe('facturen Jansen');
+    expect(withoutStopwords('andere, factuur?', dutch)).toBe('factuur?');
+  });
+
+  it('keeps quoted phrases whole and every word with a minus before it', () => {
+    expect(withoutStopwords('"de andere klant" -het factuur', dutch)).toBe('"de andere klant" -het factuur');
+    expect(withoutStopwords('-Jansen de factuur', dutch)).toBe('-Jansen factuur');
+  });
+
+  it('keeps a left-out stopword left out, so neither half brings it back', () => {
+    expect(withoutStopwords('backup -andere', dutch)).toBe('backup -andere');
+    expect(withoutStopwords('backup -Andere, de factuur', dutch)).toBe('backup -Andere, factuur');
+    // A minus alone is not a word to leave out.
+    expect(withoutStopwords('backup - andere', dutch)).toBe('backup');
+  });
+
+  it('keeps or between words and drops an or left alone', () => {
+    expect(withoutStopwords('factuur or offerte', dutch)).toBe('factuur or offerte');
+    expect(withoutStopwords('de or factuur', dutch)).toBe('factuur');
+    expect(withoutStopwords('factuur or andere', dutch)).toBe('factuur');
   });
 });

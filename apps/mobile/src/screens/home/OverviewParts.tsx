@@ -4,8 +4,10 @@
  * note a page shows when its first read fails or a refresh fails (the saved readings stay under it); page-shaped placeholders while it loads (shared by
  * Overview, a server's page and a connection's page); and Overview's jump chips under its title.
  */
-import { type ConnectionsTab, OVERVIEW_WORDS, type OverviewSectionView } from '@whombat/client';
+
+import { type ConnectionsTab, type OverviewSectionView, overviewWords } from '@whombat/client';
 import { View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { MoreFold } from '../../ui/fold';
@@ -30,6 +32,9 @@ export function ReadNote({
   onRetry: () => void;
   error?: unknown;
 }) {
+  const { rawLocale } = useI18n();
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const theme = useTheme();
   return (
     <View
@@ -52,12 +57,12 @@ export function ReadNote({
         {body}
       </Text>
       <Button
-        label={OVERVIEW_WORDS.tryAgain}
+        label={overviewWordsHere.tryAgain}
         onPress={onRetry}
         style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 16 }}
       />
       {error ? (
-        <MoreFold label={OVERVIEW_WORDS.moreDetail}>
+        <MoreFold label={overviewWordsHere.moreDetail}>
           <Text size={13} lh={1.45} color={theme.colors.mut}>
             {errorText(error)}
           </Text>
@@ -128,11 +133,14 @@ export function JumpChips({
   chips: readonly OverviewSectionView[];
   onJump: (key: ConnectionsTab) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const theme = useTheme();
   if (!chips.length) return null;
   return (
     <View
-      accessibilityLabel={OVERVIEW_WORDS.onThisPage}
+      accessibilityLabel={overviewWordsHere.onThisPage}
       style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}
     >
       {chips.map((c) => (

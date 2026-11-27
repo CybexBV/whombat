@@ -12,16 +12,17 @@
  * An entry kept in step with 1Password says how it stands there under its name (Whombat onepassword-sync.md).
  * Outcomes: an alert only when something didn't go through.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { VAULT_MCP_MOVE_TEXT, VAULT_TOTP_TEXT, vaultEntrySourceLine, vaultProblemOf } from '@whombat/client';
 import { useVaultEntry, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import {
-  VAULT_COPY,
   VAULT_KEYS_COPY,
   VAULT_SSH_COPY,
   VAULT_TOTP_INPUT_MAX,
   type VaultAgentAccess,
+  vaultCopy,
   vaultTotpProblem,
 } from '@whombat/core/vault';
 import { useEffect, useMemo, useState } from 'react';
@@ -29,15 +30,16 @@ import { AccessibilityInfo, Alert, RefreshControl, ScrollView, Switch, View } fr
 import { PrincipalAvatar } from '../avatars/Avatars';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import {
-  VAULT_ENV_TEXT,
-  VAULT_REMOVE_COPY,
   VAULT_SSH_ON_WEB,
   type VaultAgentAccessRow,
   vaultAccessChange,
   vaultEntryScreen,
   vaultEnvNameCheck,
+  vaultEnvText,
+  vaultRemoveCopy,
 } from '../data/vault';
-import { VAULT_FORM_TEXT } from '../data/vaultForm';
+import { vaultFormText } from '../data/vaultForm';
+import { useI18n, useMobileT } from '../i18n';
 import { connectionsScreenUrl } from '../navigation/connectionLinks';
 import { openAppUrl } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
@@ -58,6 +60,13 @@ import { ReplaceSecretSheet, type ReplaceTarget } from './ReplaceSecretSheet';
 type Props = NativeStackScreenProps<RootStackParamList, 'VaultEntry'>;
 
 export function VaultEntryScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const vaultCopyHere = vaultCopy(rawLocale);
+
+  const vaultRemoveCopyHere = vaultRemoveCopy(rawLocale);
+  const vaultFormTextHere = vaultFormText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -84,7 +93,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
       const text = outcomeText(await run());
       if (text) Alert.alert(text.title, text.body);
     } catch (error) {
-      Alert.alert('That didn’t go through', errorText(error));
+      Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(error));
     }
   };
   const runCheck = () =>
@@ -98,7 +107,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
     void act(() => setTool.mutateAsync({ params: { burrow: slug, entryId, tool }, body: { enabled } }));
   // Only an old `secret` entry is removed here (AP-4157): asked first, then back to where it was opened from.
   const askRemove = (name: string) =>
-    Alert.alert(VAULT_REMOVE_COPY.confirm(name), VAULT_REMOVE_COPY.confirmBody, [
+    Alert.alert(vaultRemoveCopyHere.confirm(name), vaultRemoveCopyHere.confirmBody, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
@@ -107,7 +116,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
           void act(async () => {
             const result = await remove.mutateAsync({ params: { burrow: slug, entryId } });
             if (result.status === 'ok') {
-              showNotice(VAULT_REMOVE_COPY.removed(name));
+              showNotice(vaultRemoveCopyHere.removed(name));
               goBack();
             }
             return result;
@@ -151,7 +160,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
       >
         <View style={{ paddingHorizontal: 22, paddingBottom: 14, gap: 4 }}>
           <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-            VAULT
+            {tMobile('screens.vault')}
           </Text>
           <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
             {model?.name ?? title}
@@ -180,11 +189,14 @@ export function VaultEntryScreen({ route, navigation }: Props) {
         {!model ? (
           notFound ? (
             // Another person's entry is a plain 404, exactly like one that was removed (VT-01).
-            <ErrorState text="This entry isn’t in your Vault." />
+            <ErrorState text={tMobile('screens.this-entry-isnt-in-your-vault')} />
           ) : query.error ? (
-            <ErrorState text="This entry didn’t load." onRetry={() => void query.refetch()} />
+            <ErrorState
+              text={tMobile('screens.this-entry-didnt-load')}
+              onRetry={() => void query.refetch()}
+            />
           ) : (
-            <SkeletonRows count={4} lines={2} label="Loading the entry" />
+            <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-entry')} />
           )
         ) : (
           <>
@@ -210,7 +222,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
             ) : null}
 
             {model.connection ? (
-              <Section title={VAULT_COPY.connection}>
+              <Section title={vaultCopyHere.connection}>
                 <ListRow
                   title={model.connection.address}
                   titleMono
@@ -239,7 +251,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
                 {model.connection.canCheck ? (
                   <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
                     <Button
-                      label={VAULT_COPY.checkAgain}
+                      label={vaultCopyHere.checkAgain}
                       variant="secondary"
                       busy={check.isPending}
                       onPress={runCheck}
@@ -301,7 +313,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
                 <CardNote>{model.unused}</CardNote>
                 <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
                   <Button
-                    label={VAULT_REMOVE_COPY.action}
+                    label={vaultRemoveCopyHere.action}
                     variant="secondary"
                     busy={remove.isPending}
                     accessibilityHint={`Removes ${model.name} from your Vault`}
@@ -310,15 +322,15 @@ export function VaultEntryScreen({ route, navigation }: Props) {
                 </View>
               </Section>
             ) : (
-              <Section title={VAULT_COPY.secret}>
+              <Section title={vaultCopyHere.secret}>
                 {query.data?.entry.auth?.type === 'none' ? (
-                  <ListRow title={model.secretLine} body={VAULT_FORM_TEXT.signsInWithNothing} />
+                  <ListRow title={model.secretLine} body={vaultFormTextHere.signsInWithNothing} />
                 ) : (
                   <>
                     <ListRow title={model.secretLine} />
                     <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
                       <Button
-                        label={VAULT_COPY.replace}
+                        label={vaultCopyHere.replace}
                         variant="secondary"
                         accessibilityHint={`Replaces the secret of ${model.name}`}
                         onPress={() => {
@@ -367,13 +379,13 @@ export function VaultEntryScreen({ route, navigation }: Props) {
             ) : null}
 
             {model.tools.length > 0 ? (
-              <Section title={VAULT_COPY.tools}>
+              <Section title={vaultCopyHere.tools}>
                 {model.tools.map((t) => (
                   <ListRow
                     key={t.name}
                     title={t.name}
                     titleMono
-                    trailing={t.isNew ? <StatusPill text={VAULT_COPY.newBadge} tone="warn" /> : null}
+                    trailing={t.isNew ? <StatusPill text={vaultCopyHere.newBadge} tone="warn" /> : null}
                     body={t.description}
                     accessibilityLabel={t.accessibilityLabel}
                     control={
@@ -396,7 +408,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
             {model.access ? <AccessRow access={model.access} entryId={entryId} act={act} /> : null}
 
             {model.recentUse.length > 0 ? (
-              <Section title={VAULT_COPY.recentUse}>
+              <Section title={vaultCopyHere.recentUse}>
                 {model.recentUse.map((u) => (
                   <ListRow
                     key={u.id}
@@ -431,6 +443,9 @@ function AccessRow({
   entryId: string;
   act: (run: () => Promise<Parameters<typeof outcomeText>[0]>) => Promise<void>;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultEnvTextHere = vaultEnvText(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const giveKey = useVaultWrite(api.vault.giveKey, slug);
@@ -512,10 +527,10 @@ function AccessRow({
               </Text>
             </View>
             <Button
-              label={VAULT_ENV_TEXT.change}
+              label={vaultEnvTextHere.change}
               variant="secondary"
               onPress={() => setNaming(true)}
-              accessibilityHint={VAULT_ENV_TEXT.changeHint}
+              accessibilityHint={vaultEnvTextHere.changeHint}
               style={{ paddingHorizontal: 18 }}
             />
           </View>
@@ -553,6 +568,10 @@ function EnvNameSheet({
   current: string;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultEnvTextHere = vaultEnvText(rawLocale);
+  const vaultFormTextHere = vaultFormText(rawLocale);
+
   const { slug } = useBurrowBase();
   const setEnv = useVaultWrite(api.vault.setKeyEnvName, slug);
   const [text, setText] = useState(current);
@@ -576,14 +595,14 @@ function EnvNameSheet({
         params: { burrow: slug, entryId },
         body: { envName: checked.name },
       });
-      if (result.status !== 'ok') return setProblem(VAULT_FORM_TEXT.failed);
+      if (result.status !== 'ok') return setProblem(vaultFormTextHere.failed);
       close();
     } catch (error) {
       setProblem(errorText(error));
     }
   };
   return (
-    <Sheet visible={visible} onClose={close} title={VAULT_KEYS_COPY.envName} label={VAULT_ENV_TEXT.change}>
+    <Sheet visible={visible} onClose={close} title={VAULT_KEYS_COPY.envName} label={vaultEnvTextHere.change}>
       <View style={{ paddingHorizontal: 22, gap: 12 }}>
         <FormField
           label={VAULT_KEYS_COPY.envName}
@@ -600,9 +619,9 @@ function EnvNameSheet({
           autoFocus
         />
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Button label={VAULT_FORM_TEXT.cancel} variant="secondary" onPress={close} style={{ flex: 1 }} />
+          <Button label={vaultFormTextHere.cancel} variant="secondary" onPress={close} style={{ flex: 1 }} />
           <Button
-            label={VAULT_ENV_TEXT.save}
+            label={vaultEnvTextHere.save}
             busy={setEnv.isPending}
             disabled={!text.trim()}
             onPress={() => void save()}
@@ -631,6 +650,9 @@ function TotpSheet({
   onClose: () => void;
   onSave: (totp: string) => Promise<boolean>;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultFormTextHere = vaultFormText(rawLocale);
+
   const theme = useTheme();
   const [value, setValue] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
@@ -652,7 +674,7 @@ function TotpSheet({
     } catch (error) {
       const p = vaultProblemOf(error);
       setProblem(p.fields.totp ?? null);
-      setMessage(p.message ?? (p.fields.totp ? null : VAULT_FORM_TEXT.failed));
+      setMessage(p.message ?? (p.fields.totp ? null : vaultFormTextHere.failed));
     }
   };
   return (
@@ -683,14 +705,14 @@ function TotpSheet({
         <FormMessage text={message} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            label={VAULT_FORM_TEXT.cancel}
+            label={vaultFormTextHere.cancel}
             variant="secondary"
             disabled={busy}
             onPress={close}
             style={{ flex: 1 }}
           />
           <Button
-            label={VAULT_FORM_TEXT.save}
+            label={vaultFormTextHere.save}
             busy={busy}
             disabled={!value.trim()}
             onPress={() => void save()}

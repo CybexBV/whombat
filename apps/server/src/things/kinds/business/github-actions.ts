@@ -1153,6 +1153,7 @@ export function actionsCounts(input: ActionsInput) {
       id: 'today',
       icon: 'clock',
       title: 'Runs today',
+      figureKey: 'f-runs-today',
       value: today.value,
       note: today.sub,
       ...(today.failed ? { noteTone: 'warn' as const } : {}),

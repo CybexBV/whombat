@@ -4,10 +4,11 @@
  */
 import { ApiError, type CommitResult } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
+import { currentLocale } from '../../i18n/provider';
 
 /** A refusal in the server's words where it has some, else `fallback`. */
 export function refusalText(err: unknown, fallback: string): string {
-  const licence = licenceRefusalText(err);
+  const licence = licenceRefusalText(err, currentLocale());
   if (licence) return licence;
   if (err instanceof ApiError) {
     if (err.status === 404 || err.status === 501) return 'That isn’t available on this Whombat yet.';

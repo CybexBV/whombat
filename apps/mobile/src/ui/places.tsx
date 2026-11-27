@@ -6,6 +6,7 @@
  * saying so. It scrolls at large text rather than shrinking a row. Choosing a place closes the sheet and, once it is
  * down, opens the place; closing it puts a screen reader back on the button that opened it.
  */
+
 import { StackActions } from '@react-navigation/native';
 import { placeSpoken, type StatusLevel } from '@whombat/client';
 import { useHostsFleet, useHostsStatus } from '@whombat/client/hosts/react';
@@ -14,16 +15,17 @@ import { Platform, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { serverFacts } from '../data/homeServers';
 import {
-  PLACE_WORDS,
-  PLACES_COPY,
   type PlaceId,
   placeLabel,
   placeRoute,
+  placesCopy,
+  placeWords,
   type ServerFacts,
   sheetPlaces,
 } from '../data/places';
 import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from '../data/shell';
 import { usePlaceLists } from '../data/usePlaceLists';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { useLastTab, usePaneRole } from '../navigation/panes';
 import { LIST_PAGES } from '../navigation/splitRouter';
@@ -97,6 +99,8 @@ export function PlacesButton({
   here: string;
   iconOnly?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const copy = placesCopy(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<View>(null);
@@ -113,7 +117,7 @@ export function PlacesButton({
         feedback="wash"
         ringRadius={iconOnly ? SHELL_TARGET / 2 : 10}
         accessibilityRole="button"
-        accessibilityLabel={PLACES_COPY.open}
+        accessibilityLabel={copy.open}
         accessibilityState={{ expanded: open }}
         style={{
           minHeight: SHELL_TARGET,
@@ -129,7 +133,7 @@ export function PlacesButton({
         <Menu size={iconOnly ? 22 : 20} color={theme.colors.ink2} strokeWidth={1.75} />
         {iconOnly ? null : (
           <Text size={15} color={theme.colors.ink2}>
-            {PLACES_COPY.open}
+            {copy.open}
           </Text>
         )}
       </Touchable>
@@ -160,6 +164,8 @@ function PlacesSheet({
   onClose: () => void;
   onChosen: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const copy = placesCopy(rawLocale);
   const theme = useTheme();
   const navigation = useAppNavigation();
   const badges = useBadges();
@@ -213,7 +219,7 @@ function PlacesSheet({
     },
   };
   return (
-    <Sheet visible={visible} onClose={onClose} onDismissed={go} label={PLACES_COPY.title} maxHeight="92%">
+    <Sheet visible={visible} onClose={onClose} onDismissed={go} label={copy.title} maxHeight="92%">
       <View
         style={{
           flexDirection: 'row',
@@ -225,14 +231,14 @@ function PlacesSheet({
         }}
       >
         <Text size={20} weight={700} accessibilityRole="header">
-          {PLACES_COPY.title}
+          {copy.title}
         </Text>
         <Touchable
           onPress={onClose}
           feedback="wash"
           ringRadius={SHELL_TARGET / 2}
           accessibilityRole="button"
-          accessibilityLabel={PLACES_COPY.close}
+          accessibilityLabel={copy.close}
           style={{
             width: SHELL_TARGET,
             height: SHELL_TARGET,
@@ -265,6 +271,8 @@ function SheetRows({
   onOpen: (place: PlaceId) => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const words = placeWords(rawLocale);
   const lists = usePlaceLists();
   return (
     <>
@@ -278,8 +286,12 @@ function SheetRows({
         return (
           <PlaceRow
             key={place}
-            label={list ? placeSpoken(list, tone) : placeLabel(place, count, badge?.tone === 'bad')}
-            title={PLACE_WORDS[place]}
+            label={
+              list
+                ? placeSpoken(list, tone, rawLocale)
+                : placeLabel(place, count, badge?.tone === 'bad', rawLocale)
+            }
+            title={words[place]}
             selected={place === current}
             leading={<Icon size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
             count={count}

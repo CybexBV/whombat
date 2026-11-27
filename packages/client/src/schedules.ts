@@ -10,9 +10,11 @@ import {
   formatClock,
   formatDate,
   formatWeekday,
-  SCHEDULE_END_LABELS,
-  SCHEDULE_STATUS_LABELS,
+  toDate,
+  zonedParts,
 } from '@whombat/core';
+import { formatLocaleOf, resolveLanguage } from '@whombat/core/i18n';
+import { clientTranslator } from './i18n/catalog';
 
 /** What a change says. Removing is core's `cancelled`. */
 export const SCHEDULE_TEXT = {
@@ -24,17 +26,60 @@ export const SCHEDULE_TEXT = {
   gone: 'This schedule isn’t there any more.',
 } as const;
 
+export function scheduleText(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    paused: tr.t('schedules.paused'),
+    resumed: tr.t('schedules.resumed'),
+    failed: tr.t('schedules.failed'),
+    loadFailed: tr.t('schedules.loadFailed'),
+    gone: tr.t('schedules.gone'),
+  };
+}
+
 /** “Active”, “Paused”, “Ended · Ran its 90 days”. */
-export function scheduleStatusText(schedule: Pick<AgentScheduleView, 'status' | 'endedReason'>): string {
-  const label = SCHEDULE_STATUS_LABELS[schedule.status];
+export function scheduleStatusText(
+  schedule: Pick<AgentScheduleView, 'status' | 'endedReason'>,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
+  const label = tr.t(`schedules.status.${schedule.status}`);
   return schedule.status === 'ended' && schedule.endedReason
-    ? `${label} · ${SCHEDULE_END_LABELS[schedule.endedReason]}`
+    ? `${label} · ${tr.t(`schedules.end.${schedule.endedReason}`)}`
     : label;
 }
 
 /** “Thu 24 Sep at 08:30” (the year only when it isn't `now`'s): when it runs next, as `describeScheduleWhen` says it. */
-export function scheduleTimeText(at: string, timeZone: string, now: DateInput): string {
-  return `${formatWeekday(at, timeZone).slice(0, 3)} ${formatDate(at, timeZone, { now })} at ${formatClock(at, timeZone)}`;
+export function scheduleTimeText(
+  at: string,
+  timeZone: string,
+  now: DateInput,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
+  const clock = formatClock(at, timeZone);
+  if (resolveLanguage(locale) === 'en' && !locale) {
+    return tr.t('schedules.timeAt', {
+      weekday: formatWeekday(at, timeZone).slice(0, 3),
+      date: formatDate(at, timeZone, { now }),
+      clock,
+    });
+  }
+  const d = toDate(at);
+  const fmtLocale = formatLocaleOf(locale);
+  const weekday = new Intl.DateTimeFormat(fmtLocale, { weekday: 'short', timeZone })
+    .format(d)
+    .replace(/\.$/, '');
+  const sameYear = zonedParts(d, timeZone).year === zonedParts(now, timeZone).year;
+  const date = new Intl.DateTimeFormat(fmtLocale, {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone,
+  })
+    .format(d)
+    .replace(/\.$/, '');
+  return tr.t('schedules.timeAt', { weekday, date, clock });
 }
 
 /** The confirm's title and text, from core's one sentence: “Remove this schedule?” · “Neo won’t run it again.” */

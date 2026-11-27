@@ -17,13 +17,13 @@
  * doesn't answer leaves the sources empty (the registry logs it). Only the burrow that sees servers gets any (ONE-DH02).
  */
 import {
-  HOST_STATUS_LABELS,
   type HostAlert,
   type HostFleet,
   type HostHint,
   type HostServer,
   hostHintCheck,
   hostOsMark,
+  hostStatusLabels,
   type NeedsYouItem,
   type NeedsYouWatch,
   type ThingSummary,
@@ -42,12 +42,15 @@ import {
   registerWatchSource,
   type SourceCtx,
   type SourceReads,
+  sourceLocale,
 } from '../home/registry';
+import { type ServerMessageKey, tServer } from '../i18n/catalog';
 import type { Services } from '../services';
 import { addTaken } from '../things/causes';
 import { type AddressChange, addressChangeOf, addressNeedsYou, agentAddresses } from './address';
 import { HOSTS_API } from './client';
 import { toHubInfo } from './hub';
+import { englishOf } from './localize';
 import { arr, obj, str, toHostPendingEnrollment, ts } from './map';
 import {
   alertLine,
@@ -86,25 +89,37 @@ function reasonWords(note: string): string {
  * is what the fleet's row came to (QN-23): an offline server whose “offline” alert is quiet or switched off shows no
  * dot, its line still saying it is offline.
  */
-export function serverThing(s: HostServer): ThingSummary {
+export function serverThing(s: HostServer, locale?: string | null): ThingSummary {
   const verdict = verdictOf(s);
   const status = verdict && !verdict.dot && s.status === 'offline' ? 'ok' : STATUS[s.status];
   const running = s.guests.reduce((n, g) => n + g.running, 0);
   const total = s.guests.reduce((n, g) => n + g.total, 0);
   const facts: ThingSummary['facts'] = [
-    { label: 'CPU', value: pct(s.cpuPct), unit: '%' },
-    { label: 'Memory', value: pct(s.memory.usedPct), unit: '%' },
+    { label: tServer(locale, 'hosts.fact.cpu'), value: pct(s.cpuPct), unit: '%' },
+    { label: tServer(locale, 'hosts.fact.memory'), value: pct(s.memory.usedPct), unit: '%' },
   ];
   if (s.temperature?.maxC !== null && s.temperature?.maxC !== undefined)
-    facts.push({ label: 'Hottest', value: `${Math.round(s.temperature.maxC)}`, unit: '°C' });
-  if (total > 0) facts.push({ label: 'Guests', value: `${running}`, note: `of ${total} running` });
+    facts.push({
+      label: tServer(locale, 'hosts.fact.hottest'),
+      value: `${Math.round(s.temperature.maxC)}`,
+      unit: '°C',
+    });
+  if (total > 0)
+    facts.push({
+      label: tServer(locale, 'hosts.fact.guests'),
+      value: `${running}`,
+      note: tServer(locale, 'hosts.fact.guestsRunning', { total }),
+    });
   return {
     id: thingId('server', s.id),
     kind: 'server',
     name: s.name,
     icon: hostOsMark(s) ?? 'server',
     status,
-    line: (s.statusNote?.trim() ? reasonWords(s.statusNote) : HOST_STATUS_LABELS[s.status]).slice(0, 160),
+    line: (s.statusNote?.trim() ? reasonWords(s.statusNote) : hostStatusLabels(locale)[s.status]).slice(
+      0,
+      160,
+    ),
     // Why it isn't fine (sidebar.md SB-03): the service's own note (“Filling up”), else the line behind it.
     ...(status !== 'ok' && s.statusNote?.trim() ? { reason: reasonWords(s.statusNote).slice(0, 160) } : {}),
     facts,
@@ -133,9 +148,9 @@ export function serverLineWatch(
 }
 
 /** “Look into it” and “Remind me tomorrow” for an alert that needs someone. */
-export function alertNeedsYou(a: HostAlert): NeedsYouItem {
+export function alertNeedsYou(a: HostAlert, locale?: string | null): NeedsYouItem {
   const server = a.serverId;
-  const line = alertLine(a);
+  const line = alertLine(a, locale);
   const nature = line.nature;
   const watch = serverLineWatch(server, line, a.rule);
   return {
@@ -144,12 +159,25 @@ export function alertNeedsYou(a: HostAlert): NeedsYouItem {
     kind: 'alert',
     severity: a.severity === 'critical' ? 'bad' : 'warn',
     ...(nature !== 'fyi' ? { nature } : {}),
-    title: (server ? `${a.title} on ${serverLabel(server)}` : a.title).slice(0, 200),
+    title: (server
+      ? tServer(locale, 'home.hosts.onServer', { title: a.title, server: serverLabel(server) })
+      : a.title
+    ).slice(0, 200),
     body: a.detail.slice(0, 600),
     at: a.openedAt,
     actions: [
-      { id: 'investigate', label: 'Look into it', style: 'primary', kind: 'investigate' },
-      { id: 'snooze', label: 'Remind me tomorrow', style: 'secondary', kind: 'snooze' },
+      {
+        id: 'investigate',
+        label: tServer(locale, 'home.action.lookIntoIt'),
+        style: 'primary',
+        kind: 'investigate',
+      },
+      {
+        id: 'snooze',
+        label: tServer(locale, 'home.action.remindTomorrow'),
+        style: 'secondary',
+        kind: 'snooze',
+      },
     ],
     ...(server ? { subject: { kind: 'server' as const, id: server, name: serverLabel(server) } } : {}),
     ...(watch ? { watch } : {}),
@@ -161,11 +189,11 @@ export function alertNeedsYou(a: HostAlert): NeedsYouItem {
  * by maintenance or held back while its parent is offline, it was put aside too (`acknowledged`). Its server kept quiet
  * snoozes it until the window ends.
  */
-export function alertWatch(a: HostAlert, now: Date): WatchItem {
+export function alertWatch(a: HostAlert, now: Date, locale?: string | null): WatchItem {
   const held = a.quiet?.held === 'window' ? (a.quiet.until ?? null) : null;
   const until = held ?? a.acknowledged?.until ?? null;
   const snoozed = until !== null && Date.parse(until) > now.getTime();
-  const line = alertLine(a);
+  const line = alertLine(a, locale);
   const nature = line.nature;
   const watch = serverLineWatch(a.serverId, line, a.rule);
   return {
@@ -212,60 +240,57 @@ const SECTION_TAB: Readonly<Record<string, string>> = {
 };
 
 /** Proxmox's guest hints (hosts/docs/MANAGE.md §3): the guest tab that fixes it and the way out in words. */
-const GUEST_HINTS: Readonly<Record<string, { gtab?: string; one: string; many: string }>> = {
+type GuestHint = { gtab?: string; one: ServerMessageKey; many: ServerMessageKey };
+
+const GUEST_HINTS: Readonly<Record<string, GuestHint>> = {
   'guest.no_backup_job': {
     gtab: 'backups',
-    one: 'Add it to a backup plan.',
-    many: 'Add them to a backup plan.',
+    one: 'hosts.wayOut.backupPlanOne',
+    many: 'hosts.wayOut.backupPlanMany',
   },
-  'guest.backup_old': { gtab: 'backups', one: 'Back it up now.', many: 'Back them up now.' },
-  'guest.pending_changes': { one: 'Restart it to apply them.', many: 'Restart them to apply the changes.' },
+  'guest.backup_old': { gtab: 'backups', one: 'hosts.wayOut.backUpOne', many: 'hosts.wayOut.backUpMany' },
+  'guest.pending_changes': { one: 'hosts.wayOut.restartOne', many: 'hosts.wayOut.restartMany' },
   'guest.snapshot_old': {
     gtab: 'snapshots',
-    one: 'See its snapshots.',
-    many: 'See their snapshots.',
+    one: 'hosts.wayOut.snapshotsOne',
+    many: 'hosts.wayOut.snapshotsMany',
   },
-  'guest.agent_down': {
-    one: 'Check that Proxmox’s helper runs inside it.',
-    many: 'Check that Proxmox’s helper runs inside them.',
-  },
+  'guest.agent_down': { one: 'hosts.wayOut.agentOne', many: 'hosts.wayOut.agentMany' },
   // QEMU/KVM (IU-13): a running VM without a backup or a snapshot in 30 days.
-  'libvirt.no_backup': { gtab: 'backups', one: 'Back it up now.', many: 'Back them up now.' },
+  'libvirt.no_backup': { gtab: 'backups', one: 'hosts.wayOut.backUpOne', many: 'hosts.wayOut.backUpMany' },
   // Incus (IU-08): no snapshot schedule and no backup in 30 days.
   'incus.no_snapshots': {
     gtab: 'snapshots',
-    one: 'Set up automatic restore points for it.',
-    many: 'Set up automatic restore points for them.',
+    one: 'hosts.wayOut.restorePointsOne',
+    many: 'hosts.wayOut.restorePointsMany',
   },
 };
 
 /** Docker on Unraid with a template (IU-08): the way out of an update is Update. */
-const UNRAID_DOCKER_UPDATE: { gtab?: string; one: string; many: string } = {
-  one: 'Update it.',
-  many: 'Update them.',
-};
+const UNRAID_DOCKER_UPDATE: GuestHint = { one: 'hosts.wayOut.updateOne', many: 'hosts.wayOut.updateMany' };
 
 /**
  * Host hints (Incus's and Unraid's, IU-08; waiting updates, SWU-13): the tab that fixes it and the way out in words,
  * which may follow the count in the title (“1 update waiting” is “it”).
  */
-const HOST_HINTS: Readonly<Record<string, { tab: string; wayOut: string | ((title: string) => string) }>> = {
+const HOST_HINTS: Readonly<
+  Record<string, { tab: string; wayOut: ServerMessageKey | ((title: string) => ServerMessageKey) }>
+> = {
   'system.updates': {
     tab: 'system',
-    wayOut: (title) =>
-      /^1\b/.test(title) ? 'Install it on the System tab.' : 'Install them on the System tab.',
+    wayOut: (title) => (/^1\b/.test(title) ? 'hosts.wayOut.installOne' : 'hosts.wayOut.installMany'),
   },
-  'incus.pool_full': { tab: 'storage', wayOut: 'Free up space or add more.' },
-  'libvirt.pool_full': { tab: 'storage', wayOut: 'Free up space or add more.' },
-  'incus.warning': { tab: 'system', wayOut: 'See it on the System tab.' },
-  'unraid.array_stopped': { tab: 'array', wayOut: 'Start the array.' },
-  'unraid.parity_errors': { tab: 'array', wayOut: 'Run the parity check again.' },
-  'unraid.parity_old': { tab: 'array', wayOut: 'Run a parity check.' },
-  'unraid.disk_errors': { tab: 'array', wayOut: 'See the disk on the Array tab.' },
-  'unraid.pool_full': { tab: 'array', wayOut: 'Free up space on it.' },
-  'unraid.plugin_updates': { tab: 'plugins', wayOut: 'Update them under Plugins.' },
-  'unraid.notification': { tab: 'summary', wayOut: 'Clear it in Unraid once it’s handled.' },
-  'unraid.os_update': { tab: 'plugins', wayOut: 'Update it in Unraid.' },
+  'incus.pool_full': { tab: 'storage', wayOut: 'hosts.wayOut.freeOrAdd' },
+  'libvirt.pool_full': { tab: 'storage', wayOut: 'hosts.wayOut.freeOrAdd' },
+  'incus.warning': { tab: 'system', wayOut: 'hosts.wayOut.seeSystem' },
+  'unraid.array_stopped': { tab: 'array', wayOut: 'hosts.wayOut.startArray' },
+  'unraid.parity_errors': { tab: 'array', wayOut: 'hosts.wayOut.parityAgain' },
+  'unraid.parity_old': { tab: 'array', wayOut: 'hosts.wayOut.parity' },
+  'unraid.disk_errors': { tab: 'array', wayOut: 'hosts.wayOut.seeDisk' },
+  'unraid.pool_full': { tab: 'array', wayOut: 'hosts.wayOut.freeOnIt' },
+  'unraid.plugin_updates': { tab: 'plugins', wayOut: 'hosts.wayOut.plugins' },
+  'unraid.notification': { tab: 'summary', wayOut: 'hosts.wayOut.clearNotification' },
+  'unraid.os_update': { tab: 'plugins', wayOut: 'hosts.wayOut.updateInUnraid' },
 };
 
 /** Whether a hint names guests Watch links to (on this kind of server). */
@@ -277,8 +302,10 @@ export function hintLink(
   h: Pick<HostHint, 'serverId' | 'kind' | 'detail' | 'section'> & { title?: string },
   guests: readonly { id: string; name: string }[],
   serverKind?: string,
+  locale?: string | null,
 ): { href: string; wayOut: string | null } {
   const server = thingHref('server', h.serverId);
+  const say = (key: ServerMessageKey) => tServer(locale, key);
   const guestHint =
     GUEST_HINTS[h.kind] ??
     (h.kind === 'docker.update_available' && serverKind === 'unraid' ? UNRAID_DOCKER_UPDATE : undefined);
@@ -293,19 +320,26 @@ export function hintLink(
         const id = encodeURIComponent((hits[0] as { id: string }).id);
         return {
           href: `${server}?guest=${id}${guestHint.gtab ? `&gtab=${guestHint.gtab}` : ''}`,
-          wayOut: guestHint.one,
+          wayOut: say(guestHint.one),
         };
       }
     }
-    return { href: `${server}?tab=guests`, wayOut: names?.length === 1 ? guestHint.one : guestHint.many };
+    return {
+      href: `${server}?tab=guests`,
+      wayOut: say(names?.length === 1 ? guestHint.one : guestHint.many),
+    };
   }
   if (h.kind === 'storage.overcommit')
-    return { href: `${server}?tab=storage`, wayOut: 'Check it before it fills up.' };
+    return { href: `${server}?tab=storage`, wayOut: say('hosts.wayOut.beforeFull') };
   const hostHint = HOST_HINTS[h.kind];
   if (hostHint)
     return {
       href: `${server}?tab=${hostHint.tab}`,
-      wayOut: typeof hostHint.wayOut === 'string' ? hostHint.wayOut : hostHint.wayOut(h.title ?? ''),
+      wayOut: say(
+        typeof hostHint.wayOut === 'string'
+          ? hostHint.wayOut
+          : hostHint.wayOut(englishOf(h)?.title ?? h.title ?? ''),
+      ),
     };
   // A degraded array on Unraid is fixed on its Array tab (§2.4).
   if (serverKind === 'unraid' && h.section === 'storage')
@@ -320,9 +354,10 @@ export function hintWatch(
   at: string,
   guests: readonly { id: string; name: string }[],
   serverKind?: string,
+  locale?: string | null,
 ): WatchItem {
-  const { href, wayOut } = hintLink(h, guests, serverKind);
-  const line = hintLine(h);
+  const { href, wayOut } = hintLink(h, guests, serverKind, locale);
+  const line = hintLine(h, undefined, locale);
   const nature = line.nature;
   const watch = serverLineWatch(h.serverId, line);
   // What only the person decides but the assistant can do once asked (a backup job, a restart).
@@ -335,7 +370,7 @@ export function hintWatch(
     ref: { kind: 'hint', id: hintRefId(h) },
     source: 'server',
     severity: h.severity === 'warning' ? 'warn' : 'info',
-    title: h.title.slice(0, 200) || 'Worth a look',
+    title: h.title.slice(0, 200) || tServer(locale, 'home.hosts.worthALook'),
     body: body.slice(0, 600),
     at,
     serverId: h.serverId,
@@ -409,6 +444,7 @@ async function connectionCheckAlerts(ctx: SourceCtx, alerts: readonly HostAlert[
 export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
   const services = await homeServices(ctx);
   if (!services) return [];
+  const locale = await sourceLocale(ctx);
   const hosts = hostsFor(services);
   const fleet = await hosts.fleetRaw();
   // What asks for attention and isn't a heads-up (QN-21, QN-22): an ignored or snoozed alert isn't here.
@@ -422,14 +458,14 @@ export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
     .filter((a) => a.state === 'open' && a.attention && a.severity === 'critical')
     .filter((a) => alertLine(a).nature !== 'fyi')
     .filter((a) => !(a.rule === HEARTBEAT_RULE && a.serverId && held.has(a.serverId)))
-    .map(alertNeedsYou);
+    .map((a) => alertNeedsYou(a, locale));
   // A server that is down names what it takes with it.
   await addTaken(ctx.db, ctx.burrowId, items, shaped.alerts, ctx.now).catch(() => undefined);
   const manages = await managesServers(ctx);
   // Servers that haven't found a new address (BF-16): the person points them here.
   if (manages) {
     const change = await hostsAddressChange(services, ctx.now).catch(() => null);
-    if (change) items.push(addressNeedsYou(change));
+    if (change) items.push(addressNeedsYou(change, locale));
   }
   if (Number(fleet.pending_enrollments ?? 0) > 0 && manages) {
     const pending = await hosts
@@ -440,17 +476,24 @@ export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
       })
       .catch(() => []);
     for (const e of arr(pending).map(toHostPendingEnrollment).slice(0, 10)) {
-      const name = e.hostname ?? 'A server';
+      const name = e.hostname ?? tServer(locale, 'home.hosts.aServer');
+      const asked = e.address ? `${tServer(locale, 'home.hosts.askedFrom', { address: e.address })} ` : '';
       items.push({
         id: `hosts.enrollment:${e.id}`,
         ref: { kind: 'enrollment', id: e.id },
         kind: 'enrollment',
         severity: 'info',
-        title: `${name} wants to be added`.slice(0, 200),
-        body: `${e.address ? `It asked from ${e.address}. ` : ''}Let it in to start watching it, or turn it away.`,
+        title: tServer(locale, 'home.hosts.wantsToBeAdded', { name }).slice(0, 200),
+        body: `${asked}${tServer(locale, 'home.hosts.letItIn')}`,
         at: e.requestedAt ?? ts(fleet.as_of) ?? ctx.now.toISOString(),
         actions: [
-          { id: 'open', label: 'Review', style: 'primary', kind: 'open', href: '/things/servers?add=1' },
+          {
+            id: 'open',
+            label: tServer(locale, 'home.action.review'),
+            style: 'primary',
+            kind: 'open',
+            href: '/things/servers?add=1',
+          },
         ],
       });
     }
@@ -461,21 +504,23 @@ export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
 export async function hostsThings(ctx: SourceCtx): Promise<ThingSummary[]> {
   const services = await homeServices(ctx);
   if (!services) return [];
+  const locale = await sourceLocale(ctx);
   const fleet = await fleetFor(hostsFor(services), ctx.burrowId, ctx.reads);
-  return fleet.servers.map(serverThing);
+  return fleet.servers.map((s) => serverThing(s, locale));
 }
 
 export async function hostsWatch(ctx: SourceCtx): Promise<WatchItem[]> {
   const services = await homeServices(ctx);
   if (!services) return [];
   const hosts = hostsFor(services);
+  const locale = await sourceLocale(ctx);
   // The fleet with what is quiet (QN-22): alerts marked, hints with Whombat's own about the agents (AU-08), hints of a
   // check nobody watches left out. Heads-ups come marked: only the Needs you list shows them, folded (NYL-03).
   const [raw, fleet] = await Promise.all([hosts.fleetRaw(), fleetFor(hosts, ctx.burrowId, ctx.reads)]);
   const at = ts(raw.as_of) ?? ctx.now.toISOString();
   const alerts = (await connectionCheckAlerts(ctx, fleet.alerts))
     .filter((a) => a.state === 'open')
-    .map((a) => alertWatch(a, ctx.now));
+    .map((a) => alertWatch(a, ctx.now, locale));
   const hints = fleet.hints;
   const kinds = new Map(
     arr(raw.servers).map((c) => [String(obj(c).id), String(obj(c).detail_view ?? 'standard')] as const),
@@ -504,7 +549,7 @@ export async function hostsWatch(ctx: SourceCtx): Promise<WatchItem[]> {
   );
   return [
     ...alerts,
-    ...hints.map((h) => hintWatch(h, at, guests.get(h.serverId) ?? [], kinds.get(h.serverId))),
+    ...hints.map((h) => hintWatch(h, at, guests.get(h.serverId) ?? [], kinds.get(h.serverId), locale)),
   ];
 }
 

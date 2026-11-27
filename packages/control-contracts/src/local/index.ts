@@ -39,6 +39,7 @@
  * stripped), requests strict.
  */
 
+import { LocaleTag } from '@whombat/core/i18n';
 import { LinkCode, LinkPageUrl, LinkState } from '@whombat/protocol';
 import { ClaimLetters, ClaimLookup, ScreenSignInLetters } from '@whombat/protocol/claim';
 import { LicencePlan, LicenceReason, LicenceState, LicenceToken } from '@whombat/protocol/licence';
@@ -989,6 +990,8 @@ export const ConsoleState = z.object({
   alert: ConsoleAlert.optional(),
   /** How the box is reached: Link's code and state, Tailscale's sign-in (4.4), in any state. */
   reach: ConsoleReach.optional(),
+  /** The owner's BCP-47 locale (`en-GB`, `nl-NL`) for console screens and date formatting. */
+  locale: LocaleTag.optional(),
 });
 export type ConsoleState = z.infer<typeof ConsoleState>;
 

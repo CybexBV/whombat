@@ -5,12 +5,14 @@
  * browser. Editing stays on the web: “Open on the web” goes there, as it does where the Whombat can't give the text
  * yet. Pull to refresh reads it again.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { queryHook } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { CANVAS_TEXT, canvasMeta, canvasProblem, canvasReadingMarkdown } from '../data/canvas';
+import { useMobileT } from '../i18n';
 import { APP_ORIGINS } from '../navigation/hooks';
 import { type RootStackParamList, webUrlForLink } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -26,6 +28,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Canvas'>;
 const useCanvasContent = queryHook(api.canvases.content);
 
 export function CanvasScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -52,7 +55,7 @@ export function CanvasScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <BackBar label="Back" onPress={goBack} />
+      <BackBar label={tMobile('managed.back')} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 28 + bottomRoom }}
@@ -91,7 +94,7 @@ export function CanvasScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         ) : !data ? (
-          <SkeletonRows count={6} lines={2} label="Loading the canvas" />
+          <SkeletonRows count={6} lines={2} label={tMobile('screens.loading-the-canvas')} />
         ) : (
           <View style={{ paddingHorizontal: 22, gap: 18 }}>
             {data.markdown.trim() ? (

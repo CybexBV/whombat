@@ -1,6 +1,6 @@
-import { CHAT_WORDS, SETTLE_WORDS } from '@whombat/client';
 import { type ComponentType, lazy } from 'react';
 import { SidePane } from '../../components/SidePane';
+import { CHAT_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { useNavigateHref, useSearchUpdate } from '../routing/navigation';
 import type { ModalState, PaneState } from './shellState';
 import type { ThreadOrigin } from './threadOrigin';

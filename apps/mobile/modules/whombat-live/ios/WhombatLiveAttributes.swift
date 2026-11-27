@@ -30,6 +30,7 @@ public struct WhombatLiveAttributes: ActivityAttributes {
     public var ongoing: Bool
     /// `approve`, `details`, `open_run`
     public var actions: [String]
+    public var locale: String?
   }
 
   /// `run:<id>` / `approval:<id>` (`liveActivityRef`).
@@ -48,8 +49,46 @@ public struct WhombatLiveAttributes: ActivityAttributes {
 }
 
 public extension WhombatLiveAttributes.ContentState {
+  func actionLabel(_ action: String, fallbackLocale: String? = nil) -> String {
+    let language = LiveWidgetLocale.languageCode(locale ?? fallbackLocale ?? LiveWidgetLocale.shared)
+    let words = ActivityActionWords.byLanguage[language] ?? ActivityActionWords.english
+    switch action {
+    case "approve": return words.review
+    case "details": return words.details
+    default: return words.openRun
+    }
+  }
+
   /// The app screen for this activity (`whombat://runs/1907`, `whombat://approvals/12`).
   var url: URL? {
     URL(string: kind == "run" ? "whombat://runs/\(number)" : "whombat://approvals/\(number)")
+  }
+}
+
+private struct ActivityActionWords {
+  let review: String
+  let details: String
+  let openRun: String
+
+  static let english = Self(review: "Review", details: "Details", openRun: "Open run")
+  static let byLanguage: [String: Self] = [
+    "en": english,
+    "nl": Self(review: "Bekijken", details: "Details", openRun: "Open uitvoering"),
+  ]
+}
+
+enum LiveWidgetLocale {
+  static let key = "com.whombat.live.locale"
+
+  static var shared: String? {
+    let group = (Bundle.main.object(forInfoDictionaryKey: "WhombatStatusWidgetAppGroup") as? String)
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .flatMap { $0.isEmpty ? nil : $0 } ?? "group.com.whombat.mobile"
+    return UserDefaults(suiteName: group)?.string(forKey: key)
+      ?? Locale.preferredLanguages.first
+  }
+
+  static func languageCode(_ tag: String?) -> String {
+    Locale(identifier: tag ?? "en-GB").language.languageCode?.identifier ?? "en"
   }
 }

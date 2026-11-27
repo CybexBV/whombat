@@ -2,6 +2,7 @@ package com.whombat.live
 
 import android.content.Context
 import org.json.JSONObject
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -20,12 +21,15 @@ data class StatusWidgetSnapshot(
   val tone: String,
   val timeZone: String,
   val updatedAt: Long,
+  val locale: String? = null,
+  val asOfTemplate: String? = null,
+  val asOfYesterdayTemplate: String? = null,
 ) {
   /**
    * Formats `updatedAt` at draw time in the box's time zone: “as of 14:05” today, “as of yesterday 23:50”
    * on the next calendar day, or “as of 21 Nov” (with the year when it differs) on any other day.
    */
-  fun asOfForNow(nowMs: Long = System.currentTimeMillis()): String {
+  fun asOfForNow(context: Context, nowMs: Long = System.currentTimeMillis()): String {
     val zone = resolveZone(timeZone)
     val atCal = Calendar.getInstance(zone).apply { timeInMillis = updatedAt }
     val nowCal = Calendar.getInstance(zone).apply { timeInMillis = nowMs }
@@ -41,14 +45,19 @@ data class StatusWidgetSnapshot(
       atCal.get(Calendar.HOUR_OF_DAY),
       atCal.get(Calendar.MINUTE),
     )
-    if (diff == 0L) return "as of $clock"
-    if (diff == 1L) return "as of yesterday $clock"
-    val month = SHORT_MONTHS.getOrElse(atMonth) { "" }
-    return if (atYear == nowYear) {
-      "as of $atDay $month"
+    val words = LiveLocale.localized(context, locale)
+    if (diff == 0L) return asOfTemplate?.replace("{when}", clock)
+      ?: words.getString(R.string.whombat_widget_as_of, clock)
+    if (diff == 1L) return asOfYesterdayTemplate?.replace("{clock}", clock)
+      ?: words.getString(R.string.whombat_widget_as_of_yesterday, clock)
+    val language = LiveLocale.locale(context, locale)
+    val month = if (language.language == "nl") {
+      SimpleDateFormat("MMM", language).apply { timeZone = zone }.format(atCal.time).trimEnd('.')
     } else {
-      "as of $atDay $month $atYear"
+      SHORT_MONTHS.getOrElse(atMonth) { "" }
     }
+    val date = if (atYear == nowYear) "$atDay $month" else "$atDay $month $atYear"
+    return asOfTemplate?.replace("{when}", date) ?: words.getString(R.string.whombat_widget_as_of, date)
   }
 
   /**
@@ -127,6 +136,7 @@ data class StatusWidgetSnapshot(
       val status = obj.optString("status").trim()
       val updatedAt = obj.optLong("updatedAt", 0L)
       if (boxName.isEmpty() || status.isEmpty() || updatedAt <= 0L) return null
+      val labels = obj.optJSONObject("labels")
       return StatusWidgetSnapshot(
         applianceId = obj.optString("applianceId").trim(),
         source = obj.optString("source").trim(),
@@ -135,6 +145,9 @@ data class StatusWidgetSnapshot(
         tone = obj.optString("tone", "ok"),
         timeZone = obj.optString("timeZone").trim(),
         updatedAt = updatedAt,
+        locale = obj.optString("locale").ifBlank { null },
+        asOfTemplate = labels?.optString("asOfTemplate")?.takeIf { it.contains("{when}") },
+        asOfYesterdayTemplate = labels?.optString("asOfYesterdayTemplate")?.takeIf { it.contains("{clock}") },
       )
     }
   }

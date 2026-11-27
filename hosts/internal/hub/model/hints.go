@@ -2,7 +2,9 @@ package model
 
 import (
 	"fmt"
+	"maps"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +38,7 @@ func pveHints(r *proto.Report, open []rules.Alert, now time.Time) []rules.Hint {
 		return nil
 	}
 	var noJob, old, snaps, pending, agent []string
+	var oldNames, backupStates, backupAges, snapNames, snapAges, pendingNames, changeCounts []string
 	var lastJob *proto.PVEBackupJob
 	if pve.Backups != nil {
 		lastJob = pve.Backups.LastJob
@@ -52,39 +55,58 @@ func pveHints(r *proto.Report, open []rules.Alert, now time.Time) []rules.Hint {
 		}
 		if g.BackupJob != nil && *g.BackupJob && !backupFailed {
 			lb := g.LastBackup
+			var state, age, detail string
 			switch {
 			case lb != nil && lb.Result == "error":
-				old = append(old, name+" (failed)")
+				state, detail = "failed", "failed"
 			case lb != nil && now.Sub(lb.At) > BackupOldAge:
-				old = append(old, name+" ("+daysAgo(now.Sub(lb.At))+")")
+				d := now.Sub(lb.At)
+				state, age, detail = "old", strconv.Itoa(wholeDays(d)), daysAgo(d)
 			case lb == nil && lastJob != nil && g.StartedAt != nil && g.StartedAt.Before(lastJob.At):
 				// The guest ran before the last job did, so the job could
 				// have backed it up.
-				old = append(old, name+" (none)")
+				state, detail = "none", "none"
+			}
+			if state != "" {
+				old = append(old, name+" ("+detail+")")
+				oldNames = append(oldNames, name)
+				backupStates = append(backupStates, state)
+				backupAges = append(backupAges, age)
 			}
 		}
 		if g.OldestSnapshot != nil && now.Sub(*g.OldestSnapshot) > SnapshotOldAge {
-			snaps = append(snaps, name+" ("+daysAgo(now.Sub(*g.OldestSnapshot))+")")
+			d := now.Sub(*g.OldestSnapshot)
+			snaps = append(snaps, name+" ("+daysAgo(d)+")")
+			snapNames = append(snapNames, name)
+			snapAges = append(snapAges, strconv.Itoa(wholeDays(d)))
 		}
 		if g.PendingChanges > 0 {
 			pending = append(pending, name+" ("+plural(g.PendingChanges, "change", "changes")+")")
+			pendingNames = append(pendingNames, name)
+			changeCounts = append(changeCounts, strconv.Itoa(g.PendingChanges))
 		}
 		if g.Kind == "vm" && g.GuestAgent == "not_running" && (g.State == proto.StateRunning || g.State == proto.StateUnhealthy) {
 			agent = append(agent, name)
 		}
 	}
 	var out []rules.Hint
-	add := func(kind, severity string, guests []string, title string) {
-		if len(guests) > 0 {
+	shown := func(values []string) []string { return values[:min(len(values), rules.UnhealthyNames)] }
+	add := func(kind, severity, title string, details, names []string, extra map[string]any) {
+		if len(names) > 0 {
+			params := map[string]any{"count": len(names), "names": shown(names)}
+			maps.Copy(params, extra)
 			out = append(out, rules.Hint{Kind: kind, Severity: severity, Entity: proto.PlatformPVE, Link: rules.LinkGuests,
-				Title: title, Detail: nameList(guests)})
+				Title: title, Detail: nameList(details), Code: kind, Params: params})
 		}
 	}
-	add(HintBackupOld, rules.HintWarning, old, plural(len(old), "machine needs", "machines need")+" a backup")
-	add(HintNoBackupJob, rules.HintInfo, noJob, plural(len(noJob), "machine isn’t", "machines aren’t")+" in a backup plan")
-	add(HintAgentDown, rules.HintInfo, agent, plural(len(agent), "machine doesn’t", "machines don’t")+" report what’s inside")
-	add(HintPendingChanges, rules.HintInfo, pending, plural(len(pending), "machine needs", "machines need")+" a restart to apply changes")
-	add(HintSnapshotOld, rules.HintInfo, snaps, plural(len(snaps), "machine has", "machines have")+" snapshots older than 30 days")
+	add(HintBackupOld, rules.HintWarning, plural(len(old), "machine needs", "machines need")+" a backup", old, oldNames,
+		map[string]any{"backupStates": shown(backupStates), "agesDays": shown(backupAges)})
+	add(HintNoBackupJob, rules.HintInfo, plural(len(noJob), "machine isn’t", "machines aren’t")+" in a backup plan", noJob, noJob, nil)
+	add(HintAgentDown, rules.HintInfo, plural(len(agent), "machine doesn’t", "machines don’t")+" report what’s inside", agent, agent, nil)
+	add(HintPendingChanges, rules.HintInfo, plural(len(pending), "machine needs", "machines need")+" a restart to apply changes", pending, pendingNames,
+		map[string]any{"changeCounts": shown(changeCounts)})
+	add(HintSnapshotOld, rules.HintInfo, plural(len(snaps), "machine has", "machines have")+" snapshots older than 30 days", snaps, snapNames,
+		map[string]any{"agesDays": shown(snapAges), "days": int(SnapshotOldAge / (24 * time.Hour))})
 
 	// Thin storages that promise more than they have (the volumes fill as
 	// guests write); the space alert covers the storage once it is full.
@@ -94,6 +116,8 @@ func pveHints(r *proto.Report, open []rules.Alert, now time.Time) []rules.Hint {
 			continue
 		}
 		out = append(out, rules.Hint{Kind: HintStorageOvercommit, Severity: rules.HintInfo, Entity: entity, Link: rules.LinkStorage,
+			Code: HintStorageOvercommit, Params: map[string]any{"name": s.ID, "provisionedGB": float64(s.ProvisionedBytes) / rules.GB,
+				"totalGB": float64(s.TotalBytes) / rules.GB, "pct": float64(s.ProvisionedBytes) / float64(s.TotalBytes) * 100},
 			Title: "Storage “" + s.ID + "” has promised more space than it has",
 			Detail: fmt.Sprintf("Its machines may grow to %s; it holds %s (%s)", rules.FormatStorageGB(float64(s.ProvisionedBytes)/rules.GB),
 				rules.FormatStorageGB(float64(s.TotalBytes)/rules.GB), rules.FormatPct(float64(s.ProvisionedBytes)/float64(s.TotalBytes)*100))})
@@ -134,5 +158,7 @@ func plural(n int, one, many string) string {
 
 // daysAgo is an age in whole days ("12 days").
 func daysAgo(d time.Duration) string {
-	return plural(int(math.Floor(d.Hours()/24)), "day", "days")
+	return plural(wholeDays(d), "day", "days")
 }
+
+func wholeDays(d time.Duration) int { return int(math.Floor(d.Hours() / 24)) }

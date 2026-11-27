@@ -5,20 +5,28 @@
  * failed.** I’m looking into it.” Pure; web and phone share it.
  */
 import type { DoneTodayItem, HomeChat, HomeOverview, NeedsYouItem, ThingSummary } from '@whombat/core';
-import { daysAgo, formatClock, formatDate, zonedParts } from '@whombat/core/text';
+import { formatLocaleOf, resolveLanguage } from '@whombat/core/i18n';
+import { daysAgo, formatClock, formatDate, toDate, zonedParts } from '@whombat/core/text';
+import { clientTranslator } from '../i18n/catalog';
 
 /** By the local hour: morning from 05:00, afternoon from 12:00, evening from 18:00 (and through the night). */
-export function greetingFor(now: Date | number, timeZone: string): string {
+export function greetingFor(now: Date | number, timeZone: string, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   const { hour } = zonedParts(now, timeZone);
-  if (hour >= 5 && hour < 12) return 'Good morning';
-  if (hour >= 12 && hour < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (hour >= 5 && hour < 12) return tr.t('home.greeting.morning');
+  if (hour >= 12 && hour < 18) return tr.t('home.greeting.afternoon');
+  return tr.t('home.greeting.evening');
 }
 
 /** `Good afternoon, John`: the person's first name, or the greeting alone. */
-export function homeGreeting(name: string | null | undefined, now: Date | number, timeZone: string): string {
+export function homeGreeting(
+  name: string | null | undefined,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
   const first = name?.trim().split(/\s+/)[0];
-  const greeting = greetingFor(now, timeZone);
+  const greeting = greetingFor(now, timeZone, locale);
   return first ? `${greeting}, ${first}` : greeting;
 }
 
@@ -32,11 +40,16 @@ export interface StatusPart {
  * What Whombat is doing, as it would say it: a title that starts with a verb in -ing (“Adding your Daikin heat pump”)
  * becomes “I’m adding your Daikin heat pump”; any other “I’m working on Night-time heating”.
  */
-export function workingPhrase(title: string): string {
+export function workingPhrase(title: string, locale?: string | null): string {
   const t = title.trim();
   const first = t.split(/\s+/)[0] ?? '';
-  if (/^[A-Z][a-z]+ing$/.test(first)) return `I’m ${first.toLowerCase()}${t.slice(first.length)}`;
-  return `I’m working on ${t}`;
+  if (resolveLanguage(locale) === 'en' && !locale && /^[A-Z][a-z]+ing$/.test(first)) {
+    return `I’m ${first.toLowerCase()}${t.slice(first.length)}`;
+  }
+  if (resolveLanguage(locale) === 'en' && /^[A-Z][a-z]+ing$/.test(first)) {
+    return `I’m ${first.toLowerCase()}${t.slice(first.length)}`;
+  }
+  return clientTranslator(locale).t('home.workingOn', { title: t });
 }
 
 /** How the status sentence's dot reads: all good, something needs the person or is watched, something is wrong. */
@@ -61,22 +74,20 @@ export type StatusInput = Pick<HomeOverview, 'summary'> & {
   doneToday?: readonly Pick<DoneTodayItem, 'at' | 'fixed'>[] | undefined;
 };
 
-const ALL_GOOD_WORD = 'All good';
-
-function needsYouPhrase(count: number): string {
-  return `${count} ${count === 1 ? 'thing needs' : 'things need'} you`;
+function needsYouPhrase(count: number, locale?: string | null): string {
+  return clientTranslator(locale).tp('home.needsYouCount', count);
 }
 
-function offlinePhrase(count: number): string {
-  return `${count} ${count === 1 ? 'thing is' : 'things are'} offline`;
+function offlinePhrase(count: number, locale?: string | null): string {
+  return clientTranslator(locale).tp('home.offlineCount', count);
 }
 
-function notWorkingPhrase(count: number): string {
-  return `${count} ${count === 1 ? 'thing isn’t' : 'things aren’t'} working`;
+function notWorkingPhrase(count: number, locale?: string | null): string {
+  return clientTranslator(locale).tp('home.notWorkingCount', count);
 }
 
-function keepingAnEyePhrase(count: number): string {
-  return `keeping an eye on ${count} ${count === 1 ? 'thing' : 'things'}`;
+function keepingAnEyePhrase(count: number, locale?: string | null): string {
+  return clientTranslator(locale).tp('home.keepingAnEye', count);
 }
 
 interface StatusClassification {
@@ -105,23 +116,18 @@ function classifyStatus(overview: StatusInput): StatusClassification {
 }
 
 /**
- * The first screen's answer to “Is everything OK, and do you need me?” (status-line.md), true to the worst state:
- *
- * - something serious, named: the worst problem in Needs you (“The disk array on blackbox has failed.”, the assistant's
- *   own words once it found out), with what the assistant does about it (“I’m looking into it.”) and how many other
- *   things need the person; else what is offline (“pve-01 is offline.”) or broken (“Something’s wrong with blackbox.”);
- * - else what needs the person: “**2 things need you**, and I’m adding your heat pump.”;
- * - else what the assistant keeps an eye on (open problems nobody has to decide yet);
- * - else “All good.”, with what it fixed (“I fixed 1 thing overnight.”) and what it is doing, or “Nothing needs you.”
- *
- * A thing that only runs warm or a heads-up never makes it say something is wrong; nothing open ever reads “All good”.
- * `timeZone` tells a night's fix (before 07:00) from the day's.
+ * The first screen's answer to “Is everything OK, and do you need me?” (status-line.md), true to the worst state.
  */
-export function homeStatus(overview: StatusInput, options: { timeZone?: string } = {}): HomeStatus {
+export function homeStatus(
+  overview: StatusInput,
+  options: { timeZone?: string; locale?: string | null } = {},
+): HomeStatus {
+  const locale = options.locale;
+  const tr = clientTranslator(locale);
   const { needsYou, problems, serious, offline, broken, tone } = classifyStatus(overview);
   // The default chat's title is the assistant's own name: “I’m working on Neo” says nothing.
   const title = overview.chats?.find((c) => c.state === 'working' && !c.default)?.title;
-  const doing = title ? workingPhrase(title) : null;
+  const doing = title ? workingPhrase(title, locale) : null;
   if (serious) {
     const research = serious.research;
     // Once it found out, its words say what is wrong better than the alert's (look-research.md LR-09).
@@ -130,46 +136,62 @@ export function homeStatus(overview: StatusInput, options: { timeZone?: string }
         ? research.title
         : serious.title;
     const parts: StatusPart[] = [{ text: sentence(words), strong: true }];
-    if (research?.state === 'looking') parts.push({ text: ' I’m looking into it.' });
-    if (research?.state === 'fixing') parts.push({ text: ' I’m fixing it.' });
-    parts.push(...needYou(needsYou - 1, 'other'));
+    if (research?.state === 'looking') parts.push({ text: tr.t('home.lookingIntoIt') });
+    if (research?.state === 'fixing') parts.push({ text: tr.t('home.fixingIt') });
+    parts.push(...needYou(needsYou - 1, 'other', locale));
     return { parts, tone, ...(serious.id ? { itemId: serious.id } : {}) };
   }
   if (offline.length || broken.length) {
     const text = offline.length
       ? offline.length === 1
-        ? `${offline[0]?.name} is offline.`
-        : `${offlinePhrase(offline.length)}.`
+        ? tr.t('home.oneOffline', { name: offline[0]?.name ?? '' })
+        : `${offlinePhrase(offline.length, locale)}.`
       : broken.length === 1
-        ? `Something’s wrong with ${broken[0]?.name}.`
-        : `Something’s wrong with ${broken.length} things.`;
-    return { parts: [{ text, strong: true }, ...needYou(needsYou)], tone };
+        ? tr.t('home.oneBroken', { name: broken[0]?.name ?? '' })
+        : tr.t('home.manyBroken', { count: broken.length });
+    return { parts: [{ text, strong: true }, ...needYou(needsYou, undefined, locale)], tone };
   }
   if (needsYou > 0) {
-    const count = needsYouPhrase(needsYou);
+    const count = needsYouPhrase(needsYou, locale);
     return {
-      parts: [{ text: count, strong: true }, { text: doing ? `, and ${lowerFirst(doing)}.` : '.' }],
+      parts: [
+        { text: count, strong: true },
+        { text: doing ? tr.t('home.andDoing', { doing: lowerFirst(doing) }) : '.' },
+      ],
       tone,
     };
   }
   if (problems > 0) {
-    const watched = `I’m ${keepingAnEyePhrase(problems)}.`;
-    return { parts: [{ text: `Nothing needs you. ${watched}` }], tone };
+    const watched = tr.t('home.imKeepingAnEye', { phrase: keepingAnEyePhrase(problems, locale) });
+    return { parts: [{ text: `${tr.t('home.nothingNeedsYou')} ${watched}` }], tone };
   }
   const fixes = (overview.doneToday ?? []).filter((d) => d.fixed);
   const said = [
     fixes.length
-      ? `I fixed ${fixes.length} ${fixes.length === 1 ? 'thing' : 'things'} ${overnight(fixes, options.timeZone) ? 'overnight' : 'today'}.`
+      ? tr.tp(overnight(fixes, options.timeZone) ? 'home.fixedOvernight' : 'home.fixedToday', fixes.length)
       : null,
     doing ? `${doing}.` : null,
   ].filter(Boolean);
   return {
-    parts: [{ text: `${ALL_GOOD_WORD}. ${said.length ? said.join(' ') : 'Nothing needs you.'}` }],
+    parts: [
+      {
+        text: `${tr.t('home.allGood')}. ${said.length ? said.join(' ') : tr.t('home.nothingNeedsYou')}`,
+      },
+    ],
     tone,
   };
 }
 
 /** Default words the home-screen widget shows before the app has saved a status, or after sign-out. */
+export function widgetEmptyCopy(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    boxName: 'Whombat',
+    status: tr.t('home.widget.open'),
+    asOf: tr.t('home.widget.tap'),
+  };
+}
+
 export const WIDGET_EMPTY_COPY = {
   boxName: 'Whombat',
   status: 'Open Whombat',
@@ -191,6 +213,8 @@ export interface HomeWidgetStatus {
   timeZone: string;
   /** Epoch ms of when the app last had this status (formatted on draw, never stored as a label). */
   updatedAt: number;
+  /** Optional BCP-47 locale tag carried for native widget date formatting. */
+  locale?: string;
 }
 
 export interface WidgetStatusOptions {
@@ -202,6 +226,8 @@ export interface WidgetStatusOptions {
   at?: Date | string | number | null;
   /** Fallback clock when `at` and `overview.generatedAt` are missing or invalid. */
   now?: Date | number;
+  /** Optional active locale tag. */
+  locale?: string | null;
 }
 
 function resolveWidgetDate(input: Date | string | number | null | undefined, fallback: Date): Date {
@@ -218,17 +244,19 @@ export function homeWidgetStatus(
   overview: StatusInput & { generatedAt?: string },
   options: WidgetStatusOptions,
 ): HomeWidgetStatus {
+  const locale = options.locale;
+  const tr = clientTranslator(locale);
   const { needsYou, problems, offline, broken, tone } = classifyStatus(overview);
   let status: string;
   if (tone === 'bad') {
-    if (needsYou > 0) status = needsYouPhrase(needsYou);
-    else if (offline.length > 0) status = offlinePhrase(offline.length);
-    else status = notWorkingPhrase(Math.max(1, broken.length));
+    if (needsYou > 0) status = needsYouPhrase(needsYou, locale);
+    else if (offline.length > 0) status = offlinePhrase(offline.length, locale);
+    else status = notWorkingPhrase(Math.max(1, broken.length), locale);
   } else if (tone === 'warn') {
-    if (needsYou > 0) status = needsYouPhrase(needsYou);
-    else status = capitalizeFirst(keepingAnEyePhrase(problems));
+    if (needsYou > 0) status = needsYouPhrase(needsYou, locale);
+    else status = capitalizeFirst(keepingAnEyePhrase(problems, locale));
   } else {
-    status = ALL_GOOD_WORD;
+    status = tr.t('home.allGood');
   }
   const nowDate = resolveWidgetDate(options.now, new Date());
   const atDate = resolveWidgetDate(options.at ?? overview.generatedAt, nowDate);
@@ -239,6 +267,7 @@ export function homeWidgetStatus(
     tone,
     timeZone: options.timeZone,
     updatedAt: atDate.getTime(),
+    ...(locale ? { locale: formatLocaleOf(locale) } : {}),
   };
 }
 
@@ -247,20 +276,39 @@ export function homeWidgetStatus(
  * next calendar day, or “as of 21 Nov” (with the year when it differs) on any other day.
  */
 export function widgetAsOfLabel(
-  widget: Pick<HomeWidgetStatus, 'updatedAt' | 'timeZone'>,
+  widget: Pick<HomeWidgetStatus, 'updatedAt' | 'timeZone' | 'locale'>,
   now: Date | number,
+  locale?: string | null,
 ): string {
+  const loc = locale ?? widget.locale;
+  const tr = clientTranslator(loc);
   const diff = daysAgo(widget.updatedAt, now, widget.timeZone);
-  if (diff === 0) return `as of ${formatClock(widget.updatedAt, widget.timeZone)}`;
-  if (diff === 1) return `as of yesterday ${formatClock(widget.updatedAt, widget.timeZone)}`;
-  return `as of ${formatDate(widget.updatedAt, widget.timeZone, { now })}`;
+  if (diff === 0) return tr.t('home.widget.asOf', { when: formatClock(widget.updatedAt, widget.timeZone) });
+  if (diff === 1)
+    return tr.t('home.widget.asOfYesterday', { clock: formatClock(widget.updatedAt, widget.timeZone) });
+  const dateStr = loc
+    ? new Intl.DateTimeFormat(formatLocaleOf(loc), {
+        day: 'numeric',
+        month: 'short',
+        ...(zonedParts(widget.updatedAt, widget.timeZone).year === zonedParts(now, widget.timeZone).year
+          ? {}
+          : { year: 'numeric' }),
+        timeZone: widget.timeZone,
+      })
+        .format(toDate(widget.updatedAt))
+        .replace(/\.$/, '')
+    : formatDate(widget.updatedAt, widget.timeZone, { now });
+  return tr.t('home.widget.asOf', { when: dateStr });
 }
 
 /**
  * The status sentence's pieces (Connections' title, the phone's Connections): `homeStatus` without its tone. Open Watch
  * items (`summary.problems`) only say “keeping an eye on” when nothing else does.
  */
-export function homeStatusLine(overview: StatusInput, options: { timeZone?: string } = {}): StatusPart[] {
+export function homeStatusLine(
+  overview: StatusInput,
+  options: { timeZone?: string; locale?: string | null } = {},
+): StatusPart[] {
   return homeStatus(overview, options).parts;
 }
 
@@ -268,12 +316,11 @@ export function homeStatusLine(overview: StatusInput, options: { timeZone?: stri
  * “ **2 things need you**.” after what is wrong, or “ 2 other things need you.” after the problem it names (which is
  * the sentence's one strong part then); nothing when none do.
  */
-function needYou(count: number, other?: 'other'): StatusPart[] {
+function needYou(count: number, other?: 'other', locale?: string | null): StatusPart[] {
   if (count <= 0) return [];
-  const what = [String(count), other, count === 1 ? 'thing needs' : 'things need'].filter(Boolean).join(' ');
-  return other
-    ? [{ text: ` ${what} you.` }]
-    : [{ text: ' ' }, { text: `${what} you`, strong: true }, { text: '.' }];
+  const tr = clientTranslator(locale);
+  if (other) return [{ text: ` ${tr.tp('home.otherNeedsYouCount', count)}.` }];
+  return [{ text: ' ' }, { text: tr.tp('home.needsYouCount', count), strong: true }, { text: '.' }];
 }
 
 /** Whether every fix of the day was made in the night, before 07:00 (Done today holds only the person's day). */
@@ -326,7 +373,7 @@ export function overviewHeadline(
       id?: string;
     })[];
   },
-  options: { timeZone?: string } = {},
+  options: { timeZone?: string; locale?: string | null } = {},
 ): OverviewHeadline {
   const status = homeStatus(overview, options);
   const item = status.itemId ? overview.needsYou?.find((i) => i.id === status.itemId) : undefined;

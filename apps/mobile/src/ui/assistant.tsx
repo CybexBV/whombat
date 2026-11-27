@@ -4,12 +4,14 @@
  * status dots (a dashed ring while a device is learned), a thing's glyph, the tone badge (“Needs you · pve-02”) and the
  * sheet's big buttons (52dp, radius 12). Colours only from the theme.
  */
+
 import type { MarkLike } from '@whombat/brand';
-import { THING_STATUS_LABELS } from '@whombat/client';
+import { thingStatusLabels } from '@whombat/client';
 import type { HomeSeverity, ThingStatus } from '@whombat/core';
 import { createContext, type ReactNode, useContext } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import type { PhoneGlyph } from '../data/thingLook';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BrandMark } from './BrandMark';
@@ -121,11 +123,14 @@ export function Dot({
 
 /** A thing's status dot with its words for TalkBack (“Needs a look”). */
 export function ThingDot({ status, spoken = false }: { status: ThingStatus; spoken?: boolean }) {
+  const { rawLocale } = useI18n();
+  const thingStatusLabelsHere = thingStatusLabels(rawLocale);
+
   return (
     <Dot
       tone={status}
       learning={status === 'learning'}
-      {...(spoken ? { label: THING_STATUS_LABELS[status] } : {})}
+      {...(spoken ? { label: thingStatusLabelsHere[status] } : {})}
     />
   );
 }

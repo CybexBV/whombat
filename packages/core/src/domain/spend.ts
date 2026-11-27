@@ -6,6 +6,8 @@
  * (`billedTokens`): a prompt-cache read counts a tenth.
  */
 import { z } from 'zod';
+import { isEnglishLocale, tCore } from '../i18n/catalog.js';
+import { formatLocaleCurrency, formatLocaleNumber } from '../i18n/format.js';
 import { PlanId } from '../ids.js';
 import { type DateInput, dayKey, toDate } from '../text/time.js';
 import { Count, IsoDate, Timestamp } from './common.js';
@@ -292,21 +294,37 @@ export function formatTokenCount(n: number): string {
   return `${trim1(v / 1_000_000_000)}B`;
 }
 
-/** “about $3.40”, “about $1,204.00”, “under $0.01”; null when no turn reported a cost. */
-export function formatCost(usd: number | null): string | null {
+/** A locale tag, or null: a formatter passed straight to `Array.map` receives an index there, which means English. */
+const tagOf = (locale: unknown): string | null => (typeof locale === 'string' ? locale : null);
+
+/** “about $3.40”, “about $1,204.00”, “under $0.01”; null when no turn reported a cost. In a locale when one is given. */
+export function formatCost(usd: number | null, locale?: string | null): string | null {
   if (usd === null || !Number.isFinite(usd)) return null;
-  if (usd < 0.01) return 'under $0.01';
+  const tag = tagOf(locale);
+  const english = isEnglishLocale(tag);
+  if (usd < 0.01)
+    return tCore(tag, 'spend.under', { amount: english ? '$0.01' : formatLocaleCurrency(1, 'USD', tag) });
   const cents = Math.round(usd * 100);
+  if (!english) return tCore(tag, 'spend.about', { amount: formatLocaleCurrency(cents, 'USD', tag) });
   const dollars = Math.floor(cents / 100)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `about $${dollars}.${String(cents % 100).padStart(2, '0')}`;
+  return tCore(tag, 'spend.about', { amount: `$${dollars}.${String(cents % 100).padStart(2, '0')}` });
+}
+
+/** The decimal mark of a locale (“.”, “,”). */
+function decimalMark(locale: string | null): string {
+  return formatLocaleNumber(1.5, locale, { minimumFractionDigits: 1 }).replace(/\d/g, '') || '.';
 }
 
 /** “1.2M tokens · about $3.40”, or “1.2M tokens” without a reported cost. */
-export function spendSummary(totals: SpendTotals): string {
-  const tokens = `${formatTokenCount(spendTokens(totals))} tokens`;
-  const cost = formatCost(totals.costUsd);
+export function spendSummary(totals: SpendTotals, locale?: string | null): string {
+  const tag = tagOf(locale);
+  const count = formatTokenCount(spendTokens(totals));
+  // Other languages write the decimal of “1.2M” their own way (“1,2M”).
+  const said = isEnglishLocale(tag) ? count : count.replace('.', decimalMark(tag));
+  const tokens = tCore(tag, 'spend.tokens', { tokens: said });
+  const cost = formatCost(totals.costUsd, tag);
   return cost ? `${tokens} · ${cost}` : tokens;
 }
 
@@ -314,6 +332,9 @@ export function spendSummary(totals: SpendTotals): string {
  * The agent page's line (SP-02): “This week: 1.2M tokens · about $3.40”, “This week: 1.2M tokens” when no turn
  * reported a cost, “This week: no turns” when it did nothing.
  */
-export function spendLine(week: SpendTotals): string {
-  return week.turns === 0 ? 'This week: no turns' : `This week: ${spendSummary(week)}`;
+export function spendLine(week: SpendTotals, locale?: string | null): string {
+  const tag = tagOf(locale);
+  return week.turns === 0
+    ? tCore(tag, 'spend.weekNone')
+    : tCore(tag, 'spend.week', { summary: spendSummary(week, tag) });
 }

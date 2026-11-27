@@ -1,14 +1,19 @@
-import { THEME_CHOICES, THEME_WORDS, type ThemeChoice } from '@whombat/client';
+import { THEME_CHOICES, type ThemeChoice, themeWords } from '@whombat/client';
 import type { ThemeName } from '@whombat/tokens';
+import { mobileTranslator } from '../i18n/translate';
 import { type KeyValueStore, STORAGE_KEYS } from '../lib/kv';
 
 /** What is stored and saved to the account: `system` is Auto, which follows the phone. */
 export type ThemePreference = ThemeChoice;
 
 /** The choices in the web's words and order: Light · Dark · Auto. */
-export const THEME_PREFERENCES: readonly { value: ThemePreference; label: string }[] = THEME_CHOICES.map(
-  (value) => ({ value, label: THEME_WORDS.choices[value] }),
-);
+export function themePreferences(locale?: string | null) {
+  const { choices } = themeWords(locale);
+  return THEME_CHOICES.map((value) => ({
+    value,
+    label: value === 'system' ? mobileTranslator(locale).t('settings.theme.auto') : choices[value],
+  }));
+}
 
 export function toThemePreference(value: string | null | undefined): ThemePreference {
   return value === 'light' || value === 'dark' ? value : 'system';

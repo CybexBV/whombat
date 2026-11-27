@@ -18,15 +18,12 @@
  */
 import {
   agentWords,
-  appPlaceWords,
   type ChatRooms,
   type ChatRow,
   chatRows,
-  PLACE_WORDS,
-  PLACES_WORDS,
   placeSpoken,
   placeTone,
-  SETTLE_WORDS,
+  placeWords,
   type ThingPlace,
   type ThingRow,
   theAgentOf,
@@ -41,8 +38,10 @@ import {
   type Person,
   type ThingSummary,
 } from '@whombat/core';
-import { VAULT_COPY } from '@whombat/core/vault';
+import { vaultCopy } from '@whombat/core/vault';
 import { clearChatWords } from '../../features/chats/clearWords';
+import { currentLocale, webTranslator } from '../../i18n/provider';
+import { appPlaceWords, PLACES_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { INBOX_PATH, type ShellLocation } from './location';
 
 export type AssistantNavId =
@@ -166,7 +165,7 @@ export function buildAssistantSidebarModel(
     inbox.ariaLabel = PLACES_WORDS.inboxWaiting(input.needsYou, !!input.needsYouBroken);
   }
   const { me } = bootstrap;
-  const rows = thingRows(input.things ?? [], location.kind === 'thing' ? location.id : null);
+  const rows = thingRows(input.things ?? [], location.kind === 'thing' ? location.id : null, currentLocale());
   const serverIds = new Set((input.things ?? []).filter((t) => t.kind === 'server').map((t) => t.id));
   const servers = serversSection(
     input,
@@ -178,10 +177,10 @@ export function buildAssistantSidebarModel(
     const here =
       (location.kind === 'place' && location.place === place) ||
       (location.kind === 'thing' && held.some((r) => r.id === location.id));
-    const r = row(place, PLACE_WORDS[place].title, PLACE_HREFS[place], here);
+    const r = row(place, placeWords(currentLocale())[place].title, PLACE_HREFS[place], here);
     r.mark = placeTone(held);
     r.pageOpen = location.kind === 'thing' && here;
-    r.ariaLabel = placeSpoken(place, r.mark);
+    r.ariaLabel = placeSpoken(place, r.mark, currentLocale());
     return r;
   };
   const nav: AssistantNavRow[] = [
@@ -202,7 +201,7 @@ export function buildAssistantSidebarModel(
   return {
     burrowName: bootstrap.burrow.name,
     burrowSlug: bootstrap.burrow.slug,
-    ask: rooms ? null : agentWords(agent).ask,
+    ask: rooms ? null : agentWords(agent, currentLocale()).ask,
     nav,
     roomPaths: rooms ? ['/chat', ...(rooms.feedback ? ['/feedback'] : [])] : [],
     feedback: !!rooms?.feedback,
@@ -279,7 +278,10 @@ export interface NavMenuEntry {
 export function navMenu(
   row: Pick<AssistantNavRow, 'id' | 'href'>,
   model: Pick<AssistantSidebarModel, 'servers'> & Partial<Pick<AssistantSidebarModel, 'feedback'>>,
+  locale?: string | null,
 ): NavMenuEntry[] {
+  const { t } = webTranslator(locale);
+  const VAULT_COPY = vaultCopy(locale);
   switch (row.id) {
     case 'chat':
       return [
@@ -318,23 +320,23 @@ export function navMenu(
     case 'home':
       return [
         ...(model.servers?.addHref
-          ? [{ id: 'add-server' as const, label: 'Add a server', href: model.servers.addHref }]
+          ? [{ id: 'add-server' as const, label: t('sidebar.addServer'), href: model.servers.addHref }]
           : []),
         {
           id: 'add-connection',
-          label: 'Add a connection',
+          label: t('sidebar.addConnection'),
           href: ADD_CONNECTION_HREF,
         },
       ];
     // Servers adds a server, Connections a connection.
     case 'servers':
       return model.servers?.addHref
-        ? [{ id: 'add-server', label: PLACE_WORDS.servers.add, href: model.servers.addHref }]
+        ? [{ id: 'add-server', label: t('sidebar.addServer'), href: model.servers.addHref }]
         : [];
     case 'connections':
-      return [{ id: 'add-connection', label: PLACE_WORDS.connections.add, href: ADD_CONNECTION_HREF }];
+      return [{ id: 'add-connection', label: t('sidebar.addConnection'), href: ADD_CONNECTION_HREF }];
     case 'automations':
-      return [{ id: 'new-automation', label: 'New automation', href: '/automations?new=1' }];
+      return [{ id: 'new-automation', label: t('sidebar.newAutomation'), href: '/automations?new=1' }];
     case 'vault':
       return [{ id: 'add-to-vault', label: VAULT_COPY.add, href: '/vault?add=1' }];
     default:

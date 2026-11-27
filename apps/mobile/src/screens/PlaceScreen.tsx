@@ -13,11 +13,13 @@
 import { StackActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  PLACE_WORDS as LIST_WORDS,
+  clientTranslator,
+  placeWords as listWords,
   type PlaceRowTone,
   type PlaceSummaryPart,
   placeOpening,
   placeSummaryParts,
+  serversDown,
   type ThingPlace,
   thingRenameTarget,
 } from '@whombat/client';
@@ -25,12 +27,12 @@ import type { NativeTheme as Theme } from '@whombat/tokens';
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { HOME_SERVERS_COPY } from '../data/homeServers';
 import { listPlaceOfScreen, type PhonePlaceRow } from '../data/places';
 import { parseThingRowPick, RENAME_COPY, thingRowMenu } from '../data/rename';
-import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from '../data/shell';
+import { OVERVIEW_TITLE, type Tab, tabWords } from '../data/shell';
 import { useLastInPlace, usePlaceLists } from '../data/usePlaceLists';
 import { type ThingRenaming, useThingRename } from '../data/useThingRename';
+import { useI18n } from '../i18n';
 import { openHref } from '../navigation/hooks';
 import { isBeside, useBeside, useLastTab, usePaneRole } from '../navigation/panes';
 import type { RootStackParamList } from '../navigation/routes';
@@ -59,7 +61,8 @@ export function PlaceScreen({ navigation, route }: Props) {
   const bottomRoom = useBottomRoom();
   const { slug } = useBurrowBase();
   const place: ThingPlace = listPlaceOfScreen(route.name) ?? 'servers';
-  const words = LIST_WORDS[place];
+  const { rawLocale } = useI18n();
+  const words = listWords(rawLocale)[place];
   const lists = usePlaceLists();
   const rows = lists[place];
   const loading = lists.loading[place];
@@ -127,7 +130,7 @@ export function PlaceScreen({ navigation, route }: Props) {
     open(row);
   }, [role, beside, last, loading, rows]);
 
-  const summary = placeSummaryParts(place, rows);
+  const summary = placeSummaryParts(place, rows, rawLocale);
   const empty = !rows.length && !loading;
   return (
     <Screen>
@@ -135,7 +138,7 @@ export function PlaceScreen({ navigation, route }: Props) {
         // As the list, back goes to the tabs: it names the tab they show, not the screen this was opened from.
         label={
           role === 'list'
-            ? (TAB_WORDS[lastTab as Tab] ?? OVERVIEW_TITLE)
+            ? (tabWords(rawLocale)[lastTab as Tab] ?? OVERVIEW_TITLE)
             : (route.params?.back ?? OVERVIEW_TITLE)
         }
         onPress={goBack}
@@ -216,7 +219,7 @@ export function PlaceScreen({ navigation, route }: Props) {
           ) : empty ? (
             <Text size={14} color={theme.colors.mut} style={{ paddingHorizontal: 10, paddingVertical: 16 }}>
               {place === 'servers' && lists.hostsDown
-                ? HOME_SERVERS_COPY.down
+                ? serversDown(rawLocale)
                 : lists.failed
                   ? words.failed
                   : words.empty}
@@ -298,6 +301,7 @@ function PlaceListRow({
   renaming: ReactNode;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
   const frame = {
     minHeight: SHELL_TARGET,
     flexDirection: 'row' as const,
@@ -367,7 +371,15 @@ function PlaceListRow({
       accessibilityLabel={
         name === row.name
           ? row.label
-          : [name, row.line, row.figure ? `processor ${row.figure}` : null].filter(Boolean).join(', ')
+          : [
+              name,
+              row.line,
+              row.figure
+                ? clientTranslator(rawLocale).t('thingPlace.line.processor', { figure: row.figure })
+                : null,
+            ]
+              .filter(Boolean)
+              .join(', ')
       }
       accessibilityState={{ selected }}
       // Screen readers can't hold: Rename is the row's own action too.

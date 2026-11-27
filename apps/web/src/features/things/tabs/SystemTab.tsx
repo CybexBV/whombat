@@ -10,7 +10,6 @@
  */
 import {
   AGENT_UPDATE_POLL_MS,
-  AGENT_UPDATE_WORDS,
   type AgentUpdatesView,
   agentSwitchesLine,
   agentUpdateNeed,
@@ -56,11 +55,11 @@ import { api } from '@whombat/core/contracts';
 import {
   HOST_ASKS_FIRST,
   HOST_ASKS_FIRST_DEFAULT,
-  HOST_ASKS_FIRST_WORDS,
   type HostAsksFirst,
   type HostInspectResult,
   type HostRemoteToggles,
   type HostServerDetail,
+  hostAsksFirstWords,
 } from '@whombat/core/domain';
 import { ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -71,6 +70,8 @@ import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { Toggle } from '../../../components/Toggle';
+import { currentLocale, useWebI18n, type WebMessageKey } from '../../../i18n/provider';
+import { useAgentUpdateWords, useLocaleWords } from '../../../i18n/words';
 import { TechnicalDetails } from '../dashboard/Verdict';
 import wc from '../HostFleet.module.css';
 import { IncusSystem } from '../incus/IncusSystem';
@@ -523,6 +524,7 @@ function Cluster({ detail }: { detail: HostServerDetail }) {
 
 /** Proxmox's failed and running tasks of the last 48 hours, replication and Ceph (Rackoon's ProxmoxActivity). */
 function ProxmoxActivity({ detail, now }: { detail: HostServerDetail; now: number }) {
+  const { tag: uiLocale } = useWebI18n();
   const tasks = pveActivity(detail, now);
   const replication = detail.health?.pveReplication ?? [];
   const ceph = detail.health?.ceph ?? null;
@@ -533,7 +535,7 @@ function ProxmoxActivity({ detail, now }: { detail: HostServerDetail; now: numbe
     ),
   );
   const nameOf = (id: string | null | undefined) => (id ? (guests.get(id) ?? id.replace(/^pve:/, '')) : null);
-  const ago = (iso: string | null | undefined) => (iso ? formatAgoIso(iso, now) : '');
+  const ago = (iso: string | null | undefined) => (iso ? formatAgoIso(iso, now, uiLocale) : '');
   // Nothing failed, ran or copies: no card (less-is-more.md AP-1752).
   if (!tasks.length && !replication.length && !ceph) return null;
   return (
@@ -622,13 +624,13 @@ function ProxmoxActivity({ detail, now }: { detail: HostServerDetail; now: numbe
   );
 }
 
-const SWITCHES: { key: keyof HostRemoteToggles; label: string; hint: string }[] = [
-  { key: 'console', label: 'Consoles', hint: 'Open guests’ screens and shells in the browser.' },
-  { key: 'power', label: 'Guests’ power', hint: 'Start, stop and restart guests.' },
-  { key: 'manage', label: 'Changes to guests', hint: 'Settings, disks, snapshots, backups, firewall.' },
-  { key: 'hostShell', label: 'Shell on the server', hint: 'A root shell on the server itself.' },
-  { key: 'hostPower', label: 'Server’s power', hint: 'Restart or shut down the server.' },
-  { key: 'diagnose', label: 'Read-only checks', hint: 'Look inside: processes, ports, services.' },
+const SWITCH_WORDS: { key: keyof HostRemoteToggles; label: WebMessageKey; hint: WebMessageKey }[] = [
+  { key: 'console', label: 'servers.switch.console', hint: 'servers.switch.consoleHint' },
+  { key: 'power', label: 'servers.switch.power', hint: 'servers.switch.powerHint' },
+  { key: 'manage', label: 'servers.switch.manage', hint: 'servers.switch.manageHint' },
+  { key: 'hostShell', label: 'servers.switch.hostShell', hint: 'servers.switch.hostShellHint' },
+  { key: 'hostPower', label: 'servers.switch.hostPower', hint: 'servers.switch.hostPowerHint' },
+  { key: 'diagnose', label: 'servers.switch.diagnose', hint: 'servers.switch.diagnoseHint' },
 ];
 
 function AgentCard({
@@ -659,11 +661,13 @@ function AgentCard({
   // Folded or open by hand; `null` follows the line (open when something needs the person).
   const [shut, setShut] = useState<boolean | null>(null);
   const navigate = useNavigateHref();
+  const { t } = useWebI18n();
+  const switches = SWITCH_WORDS.map((sw) => ({ key: sw.key, label: t(sw.label), hint: t(sw.hint) }));
   const a = detail.server.agent;
   const s = settings.data;
   const host = detail.server.id;
   const install = s?.agent?.install;
-  const blocked = s ? SWITCHES.filter((sw) => s.agentPolicy[sw.key] === false) : [];
+  const blocked = s ? switches.filter((sw) => s.agentPolicy[sw.key] === false) : [];
   const need = agentUpdateNeed({
     agentVersion: s?.agent?.version ?? a.version,
     serviceVersion: status.data?.version,
@@ -687,7 +691,7 @@ function AgentCard({
   // The switches fold behind one line; they open by themselves when the server blocks one (AP-1767).
   const line = s
     ? agentSwitchesLine(
-        SWITCHES.map((sw) => ({
+        switches.map((sw) => ({
           label: sw.label,
           on: s.remoteControl[sw.key] === true && s.agentPolicy[sw.key] !== false,
           blocked: s.agentPolicy[sw.key] === false,
@@ -695,30 +699,35 @@ function AgentCard({
         host,
       )
     : null;
+  // Every switch on and none blocked on the server: the line's calm green, read from the switches, not their words.
+  const allAllowed =
+    !!s && switches.every((sw) => s.remoteControl[sw.key] === true && s.agentPolicy[sw.key] !== false);
   const open = shut === null ? line?.attention === true : !shut;
   const removeRow = (
     <div className={styles.row}>
       <div className={styles.rowMain}>
-        <small>Removing forgets this server and its history; its helper is no longer accepted.</small>
+        <small>{t('servers.agent.removeHint')}</small>
       </div>
       <Button size="sm" onClick={() => setRemoving(true)}>
-        Remove {serverId}
+        {t('servers.agent.remove', { name: serverId })}
       </Button>
     </div>
   );
   return (
-    <Card title="Whombat’s helper">
+    <Card title={t('servers.agent.title')}>
       <div className={styles.rows}>
         <div className={styles.row}>
           <div className={styles.rowMain}>
-            <b>Connection</b>
+            <b>{t('servers.agent.connection')}</b>
             <small>
               <StateCell
                 tone={a.connected === false ? 'bad' : 'ok'}
                 text={
                   a.connected === false
-                    ? 'Isn’t checking in'
-                    : `Checking in${a.lastSyncSAgo != null ? `, last ${formatAgo(a.lastSyncSAgo)}` : ''}`
+                    ? t('servers.agent.notCheckingIn')
+                    : a.lastSyncSAgo != null
+                      ? t('servers.agent.checkingInLast', { ago: formatAgo(a.lastSyncSAgo, currentLocale()) })
+                      : t('servers.agent.checkingIn')
                 }
               />
             </small>
@@ -744,27 +753,24 @@ function AgentCard({
           <details className={styles.fold} open={open} onToggle={(e) => setShut(!e.currentTarget.open)}>
             <summary>
               <span className={styles.rowMain}>
-                <b>What Whombat may do here</b>
+                <b>{t('servers.agent.mayDo')}</b>
                 <small>
-                  <StateCell
-                    tone={line.attention ? 'warn' : line.text.startsWith('All') ? 'ok' : 'mut'}
-                    text={line.text}
-                  />
+                  <StateCell tone={line.attention ? 'warn' : allAllowed ? 'ok' : 'mut'} text={line.text} />
                 </small>
               </span>
               <span className={styles.foldMore}>
-                {open ? 'Hide' : 'Details'}
+                {open ? t('servers.agent.hide') : t('servers.agent.details')}
                 <Icon icon={ChevronRight} size={14} />
               </span>
             </summary>
-            {SWITCHES.map((sw) => {
+            {switches.map((sw) => {
               const agentOff = s.agentPolicy[sw.key] === false;
               const on = s.remoteControl[sw.key] === true;
               return (
                 <div key={sw.key} className={styles.row}>
                   <div className={styles.rowMain}>
                     <b id={`sw-${sw.key}`}>{sw.label}</b>
-                    <small>{agentOff ? `Switched off on ${host} itself.` : sw.hint}</small>
+                    <small>{agentOff ? t('servers.agent.offOnServer', { host }) : sw.hint}</small>
                     {agentOff ? <AllowCommand host={host} command={allowCommand(sw.key, install)} /> : null}
                   </div>
                   <Toggle
@@ -778,7 +784,7 @@ function AgentCard({
                             params: { burrow, serverId },
                             body: { remoteControl: { [sw.key]: v } },
                           }),
-                        `${sw.label}: ${v ? 'on' : 'off'}.`,
+                        t(v ? 'servers.agent.switchOn' : 'servers.agent.switchOff', { label: sw.label }),
                       )
                     }
                   />
@@ -793,9 +799,9 @@ function AgentCard({
       </div>
       <ConfirmDialog
         open={removing}
-        title={`Remove ${serverId}?`}
-        body="Whombat forgets the server and its history. The server itself keeps running; remove Whombat’s helper there."
-        confirm="Remove"
+        title={t('servers.agent.removeAsk', { name: serverId })}
+        body={t('servers.agent.removeBody')}
+        confirm={t('servers.agent.removeConfirm')}
         serious
         busy={busy}
         error={error}
@@ -807,7 +813,7 @@ function AgentCard({
           void (async () => {
             const out = await run(
               () => remove.mutateAsync({ params: { burrow, serverId } }),
-              `Removed ${serverId}.`,
+              t('servers.agent.removed', { name: serverId }),
               {
                 inline: true,
               },
@@ -841,6 +847,7 @@ function AsksFirstRow({
   value: HostAsksFirst;
   self: boolean;
 }) {
+  const HOST_ASKS_FIRST_WORDS = useLocaleWords(hostAsksFirstWords);
   const W = HOST_ASKS_FIRST_WORDS;
   const update = useHostsChange(api.hosts.updateServer);
   const { run, busy } = useChangeRunner();
@@ -1006,6 +1013,7 @@ function AgentUpdatesRow({
   install?: string | null;
   view: AgentUpdatesView;
 }) {
+  const AGENT_UPDATE_WORDS = useAgentUpdateWords();
   const W = AGENT_UPDATE_WORDS;
   const update = useHostsChange(api.hosts.updateAgent);
   const { run, busy } = useChangeRunner();

@@ -2,12 +2,14 @@
  * Settings → You → Shared links on the phone (Whombat docs/decisions/share-links.md): every link, newest first, with how
  * long it works and how often it was opened; Share, Copy and Stop sharing on the ones that work, and Stop all links.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SHARE_TEXT, shareLinkLine } from '@whombat/client';
 import { shareErrorText, useShares, useStopAllShares, useStopShare } from '@whombat/client/react';
 import type { SharedLink } from '@whombat/core';
 import { Alert, ScrollView, Share, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useMobileT } from '../i18n';
 import { Card, Note, Row } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { copyToClipboard } from '../ui/clipboard';
@@ -18,12 +20,13 @@ import { useBottomRoom } from '../ui/screenBottom';
 type Props = NativeStackScreenProps<RootStackParamList, 'SharedLinks'>;
 
 export function SharedLinksScreen({ navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const { slug, timeZone } = useBurrowBase();
   const bottomRoom = useBottomRoom();
   const list = useShares({ params: { burrow: slug } });
   const stop = useStopShare(slug);
   const stopAll = useStopAllShares(slug);
-  const back = <BackBar label="Back" onPress={() => navigation.goBack()} />;
+  const back = <BackBar label={tMobile('managed.back')} onPress={() => navigation.goBack()} />;
   const failed = (e: unknown) => Alert.alert(shareErrorText(e, SHARE_TEXT.failed));
   if (list.isError)
     return (
@@ -72,7 +75,7 @@ export function SharedLinksScreen({ navigation }: Props) {
                   action={
                     l.state === 'live' ? (
                       <Button
-                        label="Manage"
+                        label={tMobile('settings.manage')}
                         variant="secondary"
                         accessibilityLabel={`Manage the link to ${l.title}`}
                         onPress={() => menu(l)}
@@ -89,14 +92,18 @@ export function SharedLinksScreen({ navigation }: Props) {
               variant="secondary"
               disabled={stopAll.isPending}
               onPress={() =>
-                Alert.alert(`Stop all ${live.length} links?`, 'Nobody can open them any more.', [
-                  { text: SHARE_TEXT.cancel, style: 'cancel' },
-                  {
-                    text: SHARE_TEXT.stopAll,
-                    style: 'destructive',
-                    onPress: () => stopAll.mutate(undefined, { onError: failed }),
-                  },
-                ])
+                Alert.alert(
+                  `Stop all ${live.length} links?`,
+                  tMobile('settings.nobody-can-open-them-any-more'),
+                  [
+                    { text: SHARE_TEXT.cancel, style: 'cancel' },
+                    {
+                      text: SHARE_TEXT.stopAll,
+                      style: 'destructive',
+                      onPress: () => stopAll.mutate(undefined, { onError: failed }),
+                    },
+                  ],
+                )
               }
             />
           ) : null}

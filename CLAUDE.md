@@ -64,6 +64,10 @@ Read before changing anything:
   in that service (a failed request it retries, a failed download, a busy moment), what someone did on purpose
   (paused, switched off), advice about settings, warm or slow parts. When in doubt, off. Fewer than half of all checks
   start on (`docs/decisions/watch-defaults.md`).
+- **Keep English and Dutch catalogs in step.** When you add or change user-facing copy, update both `EN` and `NL` in
+  the owning package's `src/i18n/` catalog (following the informal-“je” Dutch glossary in `docs/decisions/i18n.md`) in
+  the same commit and refresh `scripts/i18n/source-hashes.json` via `pnpm exec tsx scripts/i18n/check.ts --update-hashes`.
+  Never parse translated prose for privacy, deduplication, or protocol decisions.
 
 ## Documentation
 

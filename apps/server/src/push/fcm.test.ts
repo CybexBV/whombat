@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import type { PushPayload } from '@whombat/core';
 import { describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../config';
+import { genericPushText } from '../domain/push-preview';
 import { silentLogger } from '../services';
 import { buildFcmMessage, parseServiceAccount, sendFcm } from './fcm';
 import type { PushDevice } from './types';
@@ -32,6 +33,43 @@ describe('buildFcmMessage', () => {
     expect(message.message.data.path).toBe('/burrow-hq/c/billing-v2');
     expect(JSON.parse(message.message.data.payload)).toEqual(payload);
     expect(message.message.android.priority).toBe('high');
+  });
+
+  it('says when previews are off, in the data and in the payload', () => {
+    const message = buildFcmMessage({ ...payload, preview: false }, 'device-token');
+    expect(message.message.data).toMatchObject({ preview: 'false' });
+    expect(JSON.parse(message.message.data.payload).preview).toBe(false);
+    expect(buildFcmMessage(payload, 'device-token').message.data).not.toHaveProperty('preview');
+  });
+
+  it('never sends the words it was handed when previews are off, in the data or the payload copy', () => {
+    const built = buildFcmMessage(
+      {
+        ...payload,
+        kind: 'agent_update',
+        title: 'Front door',
+        body: 'Alice unlocked the front door',
+        approval: { number: 3, state: 'pending', label: 'Front door' },
+        preview: false,
+      },
+      'device-token',
+    );
+    const sent = JSON.stringify(built);
+    expect(sent).not.toContain('Front door');
+    expect(sent).not.toContain('Alice');
+    expect(built.message.data.title).toBe('Whombat');
+    expect(built.message.data.body).toBe(genericPushText('agent_update', 'en'));
+    expect(JSON.parse(built.message.data.payload)).toMatchObject({ preview: false, kind: 'agent_update' });
+  });
+
+  it('keeps a generic line in the person’s language when previews are off', () => {
+    const dutch = genericPushText('mention', 'nl-NL');
+    const built = buildFcmMessage(
+      { ...payload, title: 'Whombat', body: dutch, preview: false },
+      'device-token',
+    );
+    expect(built.message.data.body).toBe(dutch);
+    expect(JSON.parse(built.message.data.payload).body).toBe(dutch);
   });
 
   it('sets a collapse key per live activity so rapid updates of one run coalesce', () => {

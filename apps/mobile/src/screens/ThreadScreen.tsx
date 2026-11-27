@@ -14,6 +14,7 @@
  * folded under the header, and at the thread's end the job's parts (the receipt, a question's options, the plan, the
  * changes, the checks, the field that steers it). An ended job keeps its receipt while the Whombat still lists it.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CHAT_WORDS, jobPartsAfter, roomOfConversation, rootTitle } from '@whombat/client';
 import { useChatRooms, useChatThreads, useHandoffs, useThread, useTyping } from '@whombat/client/react';
@@ -27,6 +28,7 @@ import { threadQuery } from '../data/threadPages';
 import { SETTLE_COPY, settledWhen, settleOffer } from '../data/threadSettle';
 import { useThreadPlaceholder } from '../data/useThreadOpening';
 import { useSettleThread } from '../data/useThreadSettle';
+import { useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -47,6 +49,7 @@ import { ChatView } from './ChatView';
 type Props = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
 export function ThreadScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const { messageId } = route.params;
@@ -122,7 +125,7 @@ export function ThreadScreen({ route, navigation }: Props) {
             {...(failure.retry ? { onRetry: () => void query.refetch() } : {})}
           />
         ) : (
-          <SkeletonRows count={4} avatarSize={24} lines={1} label="Loading the thread" />
+          <SkeletonRows count={4} avatarSize={24} lines={1} label={tMobile('screens.loading-the-thread')} />
         )}
       </Screen>
     );
@@ -157,7 +160,7 @@ export function ThreadScreen({ route, navigation }: Props) {
         conversationId={query.data.conversationId}
         threadRootId={messageId}
         authors
-        placeholder={room ? CHAT_WORDS.reply : 'Reply in thread'}
+        placeholder={room ? CHAT_WORDS.reply : tMobile('screens.reply-in-thread')}
         backLabel="Thread"
         ownRoom={!!room}
         chatRoom={room}

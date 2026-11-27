@@ -27,8 +27,8 @@ import (
 // latency_ms, so uptime is the average of up.
 
 const (
-	RuleCheckDown = "check.down"
-	RuleCheckCert = "check.cert_expiring"
+	RuleCheckDown = rules.HubRuleCheckDown
+	RuleCheckCert = rules.HubRuleCheckCert
 )
 
 // checkState is a check's latest result and how long its state holds.
@@ -39,9 +39,16 @@ type checkState struct {
 	Fails     int               `json:"fails"` // consecutive failures
 	AddressAt [2]time.Time      `json:"address_at,omitzero"`
 	// Heartbeat checks.
-	LastPing *time.Time `json:"last_ping,omitempty"` // last successful ping
-	Started  *time.Time `json:"started,omitempty"`   // the job said it started
-	since    time.Time
+	LastPing         *time.Time        `json:"last_ping,omitempty"` // last successful ping
+	Started          *time.Time        `json:"started,omitempty"`   // the job said it started
+	HeartbeatFailure *heartbeatFailure `json:"heartbeat_failure,omitempty"`
+	since            time.Time
+}
+
+type heartbeatFailure struct {
+	Kind        string `json:"kind"`
+	ExitCode    int    `json:"exit_code,omitempty"`
+	HeldSeconds int64  `json:"held_seconds,omitempty"`
 }
 
 func (st *checkState) resultTime() time.Time {
@@ -244,8 +251,9 @@ func cleanCheckResult(r proto.CheckResult, id string) proto.CheckResult {
 }
 
 type checkObservation struct {
-	result    proto.CheckResult
-	addressAt [2]time.Time
+	result           proto.CheckResult
+	addressAt        [2]time.Time
+	heartbeatFailure *heartbeatFailure
 }
 
 func (h *Hub) recordCheck(ctx context.Context, c store.Check, observation checkObservation, mutate func(*checkState)) {
@@ -301,6 +309,7 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, observation checkO
 	}
 	// Keep the agent's timestamp to recognize repeats, even if its clock offset changes.
 	st.Result, st.HubAt = r, at
+	st.HeartbeatFailure = observation.heartbeatFailure
 	if r.OK {
 		st.Fails = 0
 	} else {
@@ -340,8 +349,9 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, observation checkO
 func (h *Hub) heartbeatChecks(ctx context.Context) {
 	now := h.now()
 	type due struct {
-		c   store.Check
-		msg string
+		c       store.Check
+		msg     string
+		failure heartbeatFailure
 	}
 	var list []due
 	h.checks.mu.RLock()
@@ -351,8 +361,12 @@ func (h *Hub) heartbeatChecks(ctx context.Context) {
 		}
 		st := h.checks.stateFor(c)
 		last, msg := c.ProbeChangedAt, "No ping since the check-in was set up"
+		failure := heartbeatFailure{Kind: "heartbeat_never"}
 		if st != nil && st.LastPing != nil {
-			last, msg = *st.LastPing, "No ping for "+rules.FormatDuration(now.Sub(*st.LastPing))
+			last = *st.LastPing
+			elapsed := now.Sub(last)
+			msg = "No ping for " + rules.FormatDuration(elapsed)
+			failure = heartbeatFailure{Kind: "heartbeat_elapsed", HeldSeconds: int64(elapsed / time.Second)}
 		}
 		if now.Sub(last) <= time.Duration(c.IntervalS+c.GraceS)*time.Second {
 			continue
@@ -360,11 +374,13 @@ func (h *Hub) heartbeatChecks(ctx context.Context) {
 		if st != nil && !st.Result.At.IsZero() && !st.Result.OK && now.Sub(st.Result.At) < time.Minute {
 			continue
 		}
-		list = append(list, due{c, msg})
+		list = append(list, due{c, msg, failure})
 	}
 	h.checks.mu.RUnlock()
 	for _, d := range list {
-		h.recordCheck(ctx, d.c, checkObservation{result: proto.CheckResult{ID: d.c.ID, At: now, Error: d.msg}}, nil)
+		h.recordCheck(ctx, d.c, checkObservation{
+			result: proto.CheckResult{ID: d.c.ID, At: now, Error: d.msg}, heartbeatFailure: &d.failure,
+		}, nil)
 	}
 }
 
@@ -424,10 +440,26 @@ func (h *Hub) evaluateCheckAlerts(ctx context.Context) {
 			if detail == "" {
 				detail = "The check failed"
 			}
+			code, params := RuleCheckDown, map[string]any{"name": name}
+			switch f := st.HeartbeatFailure; {
+			case f == nil:
+				params["error"] = r.Error
+			case f.Kind == "heartbeat_never" || f.Kind == "heartbeat_failed":
+				code += "." + f.Kind
+			case f.Kind == "heartbeat_elapsed":
+				code += "." + f.Kind
+				params["heldSeconds"] = f.HeldSeconds
+			case f.Kind == "heartbeat_exit":
+				code += "." + f.Kind
+				params["exitCode"] = f.ExitCode
+			default:
+				params["error"] = r.Error
+			}
 			conds = append(conds, rules.Condition{Rule: RuleCheckDown, Entity: ent, Severity: rules.SevCritical, Since: since,
 				StatusNote: "check down", Link: "/settings/checks",
 				Render: func(time.Duration) rules.Text {
-					return rules.Text{Title: name + " is down", Detail: detail, BannerTitle: name + " is down", BannerDetail: detail + "."}
+					return rules.Text{Title: name + " is down", Detail: detail, BannerTitle: name + " is down", BannerDetail: detail + ".",
+						Code: code, Params: params}
 				}})
 		}
 		warn := c.Options.CertWarnDays
@@ -443,7 +475,8 @@ func (h *Hub) evaluateCheckAlerts(ctx context.Context) {
 					StatusNote: "certificate", Link: "/settings/checks",
 					Render: func(time.Duration) rules.Text {
 						t := fmt.Sprintf("Certificate of %s expires in %d days", name, days)
-						return rules.Text{Title: t, Detail: "Valid until " + exp, BannerTitle: t, BannerDetail: "Valid until " + exp + "."}
+						return rules.Text{Title: t, Detail: "Valid until " + exp, BannerTitle: t, BannerDetail: "Valid until " + exp + ".",
+							Code: RuleCheckCert, Params: map[string]any{"name": name, "days": days, "expiresAt": r.CertNotAfter.Unix()}}
 					}})
 			}
 		}
@@ -486,6 +519,7 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 	}
 	now := h.now()
 	ok, msg := true, ""
+	var failure *heartbeatFailure
 	switch what {
 	case "", "success", "0":
 	case "start":
@@ -500,6 +534,7 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 		return
 	case "fail":
 		ok, msg = false, "The job reported a failure"
+		failure = &heartbeatFailure{Kind: "heartbeat_failed"}
 	default:
 		code, err := strconv.Atoi(what)
 		if err != nil || code < 0 || code > 255 {
@@ -507,6 +542,7 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ok, msg = false, fmt.Sprintf("The job exited with code %d", code)
+		failure = &heartbeatFailure{Kind: "heartbeat_exit", ExitCode: code}
 	}
 	res := proto.CheckResult{ID: c.ID, At: now, OK: ok, Error: msg}
 	h.checks.mu.RLock()
@@ -519,7 +555,7 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 		d := float64(now.Sub(*started).Milliseconds())
 		res.LatencyMs = &d // the job's run time
 	}
-	h.recordCheck(r.Context(), c, checkObservation{result: res}, func(st *checkState) {
+	h.recordCheck(r.Context(), c, checkObservation{result: res, heartbeatFailure: failure}, func(st *checkState) {
 		if ok {
 			st.LastPing = &now
 		}

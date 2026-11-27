@@ -27,6 +27,7 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { useToast } from '../../../components/Toast';
 import { Toggle } from '../../../components/Toggle';
+import { useWebI18n } from '../../../i18n/provider';
 import { useAssistantPreferences, useSaveAssistantPreferences } from '../../settings/assistantPreferences';
 import styles from '../../settings/SettingsScreen.module.css';
 import { LiveAgentFace } from '../LiveAgentFace';
@@ -55,10 +56,11 @@ export function agentNameProblem(name: string): string | null {
  * Profile's and Notes', AP-5220). You change the name and the character.
  */
 export function ProfileTab({ burrow, profile }: SettingsTabProps) {
+  const { tag: uiLocale } = useWebI18n();
   const ids = useId();
   const toast = useToast();
   const { agent } = profile;
-  const words = agentWords(agent.name);
+  const words = agentWords(agent.name, uiLocale);
   const update = useSetAgentModel(burrow);
   const [name, setName] = useState(agent.name);
   const [error, setError] = useState<string | null>(null);

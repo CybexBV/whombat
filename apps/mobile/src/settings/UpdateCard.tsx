@@ -6,29 +6,34 @@
  * the download: the progress, allowing installs, “Install”, or why it didn't work. Nothing while this build is the
  * newest. The same row sits under “This app” in the VERSION card (AP-2972).
  */
+
 import type { AndroidDownload } from '@whombat/client/managed';
 import { Linking } from 'react-native';
+import { useI18n } from '../i18n';
 import { installView } from '../managed/appInstall';
 import { useManaged } from '../managed/context';
-import { COPY } from '../managed/copy';
+import { managedCopy } from '../managed/copy';
 import { Card, Row } from '../managed/ui';
 import { useAppInstall } from '../managed/useAppInstall';
 import { useAppUpdate } from '../managed/useAppUpdate';
 import { Button } from '../ui/primitives';
 
 export function UpdateRow({ update, first = false }: { update: AndroidDownload; first?: boolean }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const install = useAppInstall();
-  const view = install ? installView(install.state, update, COPY.update.install) : null;
+  const view = install ? installView(install.state, update, managedCopyHere.update.install) : null;
   return (
     <Row
       first={first}
       dot="ok"
-      dotLabel={COPY.update.available}
-      title={COPY.update.available}
-      meta={view?.meta ?? COPY.update.availableMeta(update.version, update.size)}
+      dotLabel={managedCopyHere.update.available}
+      title={managedCopyHere.update.available}
+      meta={view?.meta ?? managedCopyHere.update.availableMeta(update.version, update.size)}
       action={
         <Button
-          label={view?.label ?? COPY.update.install}
+          label={view?.label ?? managedCopyHere.update.install}
           variant="secondary"
           busy={view?.busy}
           onPress={() =>

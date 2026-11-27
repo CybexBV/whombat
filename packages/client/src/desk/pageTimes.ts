@@ -6,9 +6,12 @@
 import { WEEKDAY_KEYS } from '@whombat/core/domain';
 import { daysText } from '../notifications';
 import { type DeskLayout, type DeskPage, type DeskPageShow, fillDeskWords } from './contract';
-import { DESK_SCREENS_TEXT } from './screens';
+import { DESK_SCREENS_TEXT, deskScreensText } from './screens';
 
-const T = DESK_SCREENS_TEXT.editor.times;
+/** The page-times words in a locale (English when none is given). */
+function timesWords(locale?: string | null) {
+  return (locale === undefined || locale === null ? DESK_SCREENS_TEXT : deskScreensText(locale)).editor.times;
+}
 
 /** A window a page starts with when someone chooses set times: mornings, every day. */
 export const PAGE_TIMES_DEFAULT: DeskPageShow = { from: '07:00', to: '09:00' };
@@ -34,18 +37,21 @@ export function setPageShow(layout: DeskLayout, index: number, show: DeskPageSho
 }
 
 /** A page tab's hours: “07:00–09:00”; a whole day says its days (“Weekends”) or “All day”. */
-export function pageHoursText(show: DeskPageShow): string {
+export function pageHoursText(show: DeskPageShow, locale?: string | null): string {
   if (show.from !== show.to) return `${show.from}–${show.to}`;
-  return show.days && show.days.length < 7 ? daysText(show.days) : T.allDay;
+  return show.days && show.days.length < 7 ? daysText(show.days, locale) : timesWords(locale).allDay;
 }
 
 /** When a page shows, in full: “Weekdays, 07:00–09:00”, “Every day, 22:00–06:00”, “Weekends”. */
-export function pageWhenText(show: DeskPageShow): string {
-  const days = daysText(show.days ?? WEEKDAY_KEYS);
+export function pageWhenText(show: DeskPageShow, locale?: string | null): string {
+  const days = daysText(show.days ?? WEEKDAY_KEYS, locale);
   return show.from === show.to ? days : `${days}, ${show.from}–${show.to}`;
 }
 
 /** What saying the change says: “Morning shows Weekdays, 07:00–09:00.”, “Morning shows all the time again.” */
-export function pageShowSaid(name: string, show: DeskPageShow | null): string {
-  return show ? fillDeskWords(T.set, { name, when: pageWhenText(show) }) : fillDeskWords(T.cleared, { name });
+export function pageShowSaid(name: string, show: DeskPageShow | null, locale?: string | null): string {
+  const T = timesWords(locale);
+  return show
+    ? fillDeskWords(T.set, { name, when: pageWhenText(show, locale) })
+    : fillDeskWords(T.cleared, { name });
 }

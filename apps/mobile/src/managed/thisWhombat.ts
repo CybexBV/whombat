@@ -9,7 +9,7 @@
 import { AGENT_FALLBACK_NAME } from '@whombat/client';
 import {
   type PasskeySetupView,
-  THIS_WHOMBAT_TEXT,
+  thisWhombatText,
   type WhombatAction,
   type WhombatOverview,
   type WhombatOverviewInput,
@@ -78,6 +78,7 @@ export interface OverviewFacts {
   /** This app's version, for a Whombat without an update row. */
   app: string | null;
   timeZone?: string;
+  locale?: string;
   /** The agent's name, for AT A GLANCE's lines (AP-4905, AP-4998); “your agent” where it isn't known. */
   agent?: string;
 }
@@ -91,6 +92,7 @@ export function overviewInput(f: OverviewFacts): WhombatOverviewInput {
     access: null,
     versions: f.app ? { app: f.app, runtime: f.status.appliance.runtimeVersion ?? null } : null,
     ...(f.timeZone ? { timeZone: f.timeZone } : {}),
+    ...(f.locale ? { locale: f.locale } : {}),
     agent: f.agent ?? AGENT_FALLBACK_NAME,
   };
 }
@@ -105,7 +107,8 @@ export interface NeedsRow {
   step: WhombatStep;
 }
 
-export function needsRows(overview: WhombatOverview): NeedsRow[] {
+export function needsRows(overview: WhombatOverview, locale?: string | null): NeedsRow[] {
+  const { actions } = thisWhombatText(locale);
   return overview.needsYou.flatMap((item) =>
     item.action
       ? [
@@ -114,7 +117,7 @@ export function needsRows(overview: WhombatOverview): NeedsRow[] {
             dot: item.dot,
             title: item.title,
             meta: item.meta ?? null,
-            button: item.actionLabel ?? THIS_WHOMBAT_TEXT.actions[item.action],
+            button: item.actionLabel ?? actions[item.action],
             step: actionStep(item.action),
           },
         ]
@@ -138,7 +141,8 @@ export interface GlanceRow {
  * a row named after each part nothing above links to (Backups while both its rows need you, Devices while the
  * devices can't be read).
  */
-export function glanceRows(overview: WhombatOverview): GlanceRow[] {
+export function glanceRows(overview: WhombatOverview, locale?: string | null): GlanceRow[] {
+  const { parts } = thisWhombatText(locale);
   const rows: GlanceRow[] = [];
   for (const item of overview.glance) {
     if (!isPhonePart(item.part)) continue;
@@ -154,7 +158,7 @@ export function glanceRows(overview: WhombatOverview): GlanceRow[] {
   }
   for (const part of PHONE_PARTS)
     if (!rows.some((r) => r.part === part)) {
-      const title = THIS_WHOMBAT_TEXT.parts[part];
+      const title = parts[part];
       rows.push({
         key: `part:${part}`,
         part,
@@ -174,6 +178,6 @@ export function glanceLabel(title: string, meta: string | null | undefined): str
 }
 
 /** What a diagnostics scope holds, in the app's plain words (AP-1249); the contract's list only for a newer scope. */
-export function diagnosticScopeLine(scope: string, contract: string): string {
-  return THIS_WHOMBAT_TEXT.diagnostics.scopes[scope] ?? contract;
+export function diagnosticScopeLine(scope: string, contract: string, locale?: string | null): string {
+  return thisWhombatText(locale).diagnostics.scopes[scope] ?? contract;
 }

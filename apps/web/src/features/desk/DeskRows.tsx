@@ -19,7 +19,6 @@
  */
 import {
   DESK_PIN_MAX,
-  DESK_TEXT,
   type DeskApi,
   type DeskCameraWakeView,
   type DeskLockAgainView,
@@ -51,6 +50,8 @@ import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { DESK_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { LettersInput } from '../../managed/LettersInput';
 import styles from '../settings/SettingsScreen.module.css';
 import tw from '../settings/ThisWhombat.module.css';
@@ -64,7 +65,7 @@ function useSave(api: DeskApi) {
   const actions = useDeskActions(api);
   const toast = useToast();
   return (patch: DeskUpdateInput) =>
-    void actions.update(patch).catch((error) => toast.show(deskErrorText(error)));
+    void actions.update(patch).catch((error) => toast.show(deskErrorText(error, currentLocale())));
 }
 
 /**
@@ -90,7 +91,7 @@ export function SwitchRow({
   const toast = useToast();
   const change = (on: boolean) => {
     if (!on && paired) return onAskOff();
-    void actions.setScreen(on).catch((error) => toast.show(deskErrorText(error)));
+    void actions.setScreen(on).catch((error) => toast.show(deskErrorText(error, currentLocale())));
   };
   return (
     <div className={cx(styles.row, d.switchRow)} data-row="desk-switch">
@@ -329,7 +330,7 @@ export function VoiceRow({ api, view, assistant }: { api: DeskApi; view: DeskVoi
                   onChange={() =>
                     void actions
                       .update({ speechVoice: o.value })
-                      .catch((error) => toast.show(deskErrorText(error)))
+                      .catch((error) => toast.show(deskErrorText(error, currentLocale())))
                   }
                 />
                 <span className={d.voiceText}>
@@ -394,7 +395,7 @@ export function ChoiceSwitchRow({
         checked={view.on}
         aria-describedby={`${ids}-meta`}
         onCheckedChange={(on) =>
-          void actions.update(patch(on)).catch((error) => toast.show(deskErrorText(error)))
+          void actions.update(patch(on)).catch((error) => toast.show(deskErrorText(error, currentLocale())))
         }
       />
     </div>
@@ -424,7 +425,9 @@ export function LockAgainRow({ api, view }: { api: DeskApi; view: DeskLockAgainV
         options={view.options}
         value={view.value}
         onChange={(choice) =>
-          void actions.update(deskLockAgainPatch(choice)).catch((error) => toast.show(deskErrorText(error)))
+          void actions
+            .update(deskLockAgainPatch(choice))
+            .catch((error) => toast.show(deskErrorText(error, currentLocale())))
         }
       />
     </div>
@@ -534,7 +537,7 @@ export function PairDialog({ open, onClose, api }: { open: boolean; onClose: () 
       setExpiresAt(r.expiresAt);
       setLetters('');
     } catch (error) {
-      setNote(deskErrorText(error));
+      setNote(deskErrorText(error, currentLocale()));
     } finally {
       setBusy(false);
     }
@@ -557,7 +560,7 @@ export function PairDialog({ open, onClose, api }: { open: boolean; onClose: () 
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const p = deskPairProblem({ letters, pin, pinAgain });
+    const p = deskPairProblem({ letters, pin, pinAgain }, currentLocale());
     setProblem(p);
     setNote(null);
     if (p) return;
@@ -569,9 +572,11 @@ export function PairDialog({ open, onClose, api }: { open: boolean; onClose: () 
     } catch (error) {
       // Wrong or stale letters are the letters field's problem, a PIN Whombat won't take the PIN's (it used no
       // letters up, so they stay); anything else is the dialog's note.
-      if (deskPinRefused(error)) return setProblem({ field: 'pin', text: deskErrorText(error) });
-      if (deskLettersRefused(error)) setProblem({ field: 'letters', text: deskErrorText(error) });
-      else setNote(deskErrorText(error));
+      if (deskPinRefused(error))
+        return setProblem({ field: 'pin', text: deskErrorText(error, currentLocale()) });
+      if (deskLettersRefused(error))
+        setProblem({ field: 'letters', text: deskErrorText(error, currentLocale()) });
+      else setNote(deskErrorText(error, currentLocale()));
       setLetters('');
       if (deskNeedsNewLetters(error)) {
         // Five wrong tries drew new letters on the screen; ones that ran out need asking for.
@@ -687,7 +692,7 @@ export function PinDialog({
   }, [open]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const p = deskPinProblem(pin, pinAgain);
+    const p = deskPinProblem(pin, pinAgain, currentLocale());
     setProblem(p);
     setNote(null);
     if (p) return;
@@ -697,8 +702,8 @@ export function PinDialog({
       toast.show(P.done);
       onClose();
     } catch (error) {
-      if (deskPinRefused(error)) setProblem({ field: 'pin', text: deskErrorText(error) });
-      else setNote(deskErrorText(error));
+      if (deskPinRefused(error)) setProblem({ field: 'pin', text: deskErrorText(error, currentLocale()) });
+      else setNote(deskErrorText(error, currentLocale()));
     } finally {
       setBusy(false);
     }
@@ -774,7 +779,7 @@ export function OffDialog({
       toast.show(T.offDialog.done);
       onClose();
     } catch (error) {
-      setNote(deskErrorText(error));
+      setNote(deskErrorText(error, currentLocale()));
     } finally {
       setBusy(false);
     }

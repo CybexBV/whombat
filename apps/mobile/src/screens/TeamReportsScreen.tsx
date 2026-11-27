@@ -5,6 +5,7 @@
  * one is possible (else why not, in a line). A list the Whombat kept while the team couldn't be reached says it may be
  * out of date. Pulling the page down reads it again.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   TEAM_REPORT_WORDS,
@@ -19,6 +20,7 @@ import type { TeamReportRow } from '@whombat/core';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
+import { useMobileT } from '../i18n';
 import { Card, Note } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -33,6 +35,7 @@ import { KindTile } from './teamReportParts';
 type Props = NativeStackScreenProps<RootStackParamList, 'TeamReports'>;
 
 export function TeamReportsScreen({ navigation, route }: Props) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const bottomRoom = useBottomRoom();
@@ -41,7 +44,7 @@ export function TeamReportsScreen({ navigation, route }: Props) {
   const [pulling, setPulling] = useState(false);
   const back = (
     <BackBar
-      label={route.params?.back ?? 'Back'}
+      label={route.params?.back ?? tMobile('managed.back')}
       onPress={() =>
         navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs', { screen: 'Settings' })
       }

@@ -12,6 +12,7 @@ import { useApiMutation } from '@whombat/client/react';
 import { api, canStopTurn, type Principal, shortNameOf, TURN_STOP_RUN_REFUSAL } from '@whombat/core';
 import { useState } from 'react';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 
 /** What a stop that went through says. */
 export function stoppedToast(name: string): string {
@@ -20,13 +21,13 @@ export function stoppedToast(name: string): string {
 
 /** What a stop that didn't happen says: the server's words when it gave some. */
 export function stopFailureText(error: unknown, name: string): string {
-  const licence = licenceRefusalText(error);
+  const licence = licenceRefusalText(error, currentLocale());
   if (licence) return licence;
   if (error instanceof ApiError) {
     if (error.status === 409) return error.message || TURN_STOP_RUN_REFUSAL;
     if (error.status === 403) return `You can’t stop ${name} here.`;
     if (error.status === 404 || error.status === 501) return 'That isn’t available here yet.';
-    return problemText(error);
+    return problemText(error, undefined, currentLocale());
   }
   return 'Couldn’t reach Whombat. Nothing changed, try again.';
 }

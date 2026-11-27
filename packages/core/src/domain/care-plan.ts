@@ -4,7 +4,9 @@
  * per server and per machine. The defaults are the dialogs' own. And the one change window every schedule uses: the
  * “Quiet hours for changes” of a Whombat, 03:00–05:00 in its time zone unless the person moved them. Pure.
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { plural } from '../text/format.js';
 import type { HostGuest, HostServerPlatform } from './hosts.js';
 import { LOOK_FIX_STEP_MAX, LOOK_PLAN_STEP_MAX, LOOK_PLAN_STEPS_MAX } from './look-research.js';
@@ -25,15 +27,16 @@ export type ChangeWindow = z.infer<typeof ChangeWindow>;
 /** A Whombat's quiet hours until the person moves them. */
 export const CHANGE_WINDOW_DEFAULT: ChangeWindow = { start: '03:00', end: '05:00' };
 
+const CHANGE_WINDOW_WORDS_KEYS = ['title', 'about', 'from', 'to', 'saved', 'failed'] as const;
+
 /** The setting's words: its name and what it is for. */
-export const CHANGE_WINDOW_WORDS = {
-  title: 'Quiet hours for changes',
-  about: 'When {assistant} installs updates and restarts things, and when “Tonight” runs.',
-  from: 'From',
-  to: 'To',
-  saved: 'Saved. Changes happen between {start} and {end}.',
-  failed: 'That didn’t save. Try again in a moment.',
-} as const;
+export function changeWindowWords(
+  locale?: string | null,
+): Readonly<Record<(typeof CHANGE_WINDOW_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'changeWindow', CHANGE_WINDOW_WORDS_KEYS);
+}
+
+export const CHANGE_WINDOW_WORDS = changeWindowWords('en');
 
 /** Minutes since midnight of an `HH:MM`. */
 export function clockMinutes(time: string): number {
@@ -339,15 +342,23 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   }));
 }
 
-/** The plan card's words for a care plan: how the assistant will look after the server, then how it does. */
-export const CARE_PLAN_WORDS = {
+const CARE_PLAN_WORDS_KEYS = [
   /** The assistant's first line in the server's thread, as it works out the plan. */
-  opening: '{name} is ready. I’m working out how to look after it.',
-  head: 'Here’s how I’ll look after {name}:',
-  headDone: 'Here’s how I’m looking after {name}:',
+  'opening',
+  'head',
+  'headDone',
   /** The push for a care plan waiting for the person's yes. */
-  push: 'Here’s how I’d look after {name}: {steps}, ready for your OK.',
-} as const;
+  'push',
+] as const;
+
+/** The plan card's words for a care plan: how the assistant will look after the server, then how it does. */
+export function carePlanWords(
+  locale?: string | null,
+): Readonly<Record<(typeof CARE_PLAN_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'carePlan', CARE_PLAN_WORDS_KEYS);
+}
+
+export const CARE_PLAN_WORDS = carePlanWords('en');
 
 /** The care plan's push: “Here’s how I’d look after pve-01: 3 steps, ready for your OK.” */
 export function carePushText(name: string, steps: number): string {

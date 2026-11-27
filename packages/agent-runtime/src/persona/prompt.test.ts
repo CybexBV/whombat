@@ -118,6 +118,26 @@ describe('the preface', () => {
     expect(prompt.indexOf('homeassistant')).toBeLessThan(prompt.indexOf('What’s on my calendar tomorrow?'));
   });
 
+  it('injects Dutch language and voice cues per turn, keeping outsider turns neutral', () => {
+    const nlPrompt = turnPrompt({ ...personal, locale: 'nl-NL' });
+    expect(nlPrompt).toContain('informal Dutch');
+    expect(nlPrompt).toContain('NO_REPLY');
+    expect(nlPrompt).toContain('helder en vriendelijk Nederlands');
+    const outsideNl = turnPrompt({ ...personal, locale: 'nl-NL', outside: true, onBehalfOf: null });
+    expect(outsideNl).not.toContain('informal Dutch');
+  });
+
+  it('keeps machine values as tools define them, but writes what a tool shows the person in Dutch', () => {
+    const nlPrompt = turnPrompt({ ...personal, locale: 'nl-NL' });
+    expect(nlPrompt).toContain('MORE:');
+    expect(nlPrompt).toContain('action names');
+    expect(nlPrompt).toContain('card text');
+    expect(nlPrompt).not.toContain('tool arguments in English');
+    const enPrompt = turnPrompt({ ...personal, locale: 'en-GB' });
+    expect(enPrompt).toContain('plain English');
+    expect(enPrompt).not.toContain('informal Dutch');
+  });
+
   it('says where commands run, what they reach and gh’s repositories only when the turn has them', () => {
     const plain = turnPrompt(mention);
     expect(plain).not.toContain('Your commands run');

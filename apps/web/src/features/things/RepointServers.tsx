@@ -9,13 +9,14 @@
  */
 import { REPOINT_TEXT, type RepointRow } from '@whombat/client/hosts';
 import { useRepointServers } from '@whombat/client/hosts/react';
-import { HOST_REPOINT_WORDS } from '@whombat/core/domain';
+import { hostRepointWords } from '@whombat/core/domain';
 import { Check as CheckIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
+import { useLocaleWords } from '../../i18n/words';
 import s from './AddServer.module.css';
 import styles from './Things.module.css';
 
@@ -45,6 +46,7 @@ function Repoint({
   onClose: () => void;
   onAddServer: (address: string) => void;
 }) {
+  const HOST_REPOINT_WORDS = useLocaleWords(hostRepointWords);
   const repoint = useRepointServers(burrow);
   const { view } = repoint;
   return (
@@ -94,6 +96,7 @@ function Repoint({
 
 /** A server: its mark (✓ pointed, a spinner while pointing, a ring before, ✗ where it didn't work), name and state. */
 function ServerRow({ row, onAddServer }: { row: RepointRow; onAddServer: (address: string) => void }) {
+  const HOST_REPOINT_WORDS = useLocaleWords(hostRepointWords);
   let mark: ReactNode;
   if (row.state === 'pointed')
     mark = (

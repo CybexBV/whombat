@@ -3,11 +3,13 @@
  * Cancel. The message keeps its old text until the server answers (an edit isn't shown as done before it is); Save is
  * held while nothing changed, the text is empty (a message with files may lose its text) or too long.
  */
+
 import { autocorrectComposerMention, composerText } from '@whombat/client';
 import type { MentionTarget } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { canSaveEdit, editProblem } from '../data/messageActions';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
@@ -39,6 +41,8 @@ export function EditMessageSheet({
   /** Who `@Name` means: `@banjo ` is corrected to `@Banjo ` as it is typed, and saved so (AP-607). */
   mentionTargets?: readonly MentionTarget[];
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [draft, setDraft] = useState('');
   const field = useRef<TextInput>(null);
@@ -54,9 +58,9 @@ export function EditMessageSheet({
     <Sheet
       visible={target !== null}
       onClose={onClose}
-      title="EDIT MESSAGE"
-      label="Edit message"
-      closeLabel="Cancel"
+      title={tMobile('screens.edit-message')}
+      label={tMobile('screens.edit-message-2')}
+      closeLabel={tClient('reports.cancel')}
     >
       <View style={{ paddingHorizontal: 18, gap: 10 }}>
         <TextInput
@@ -69,8 +73,8 @@ export function EditMessageSheet({
           }}
           autoFocus
           multiline
-          accessibilityLabel="Message text"
-          placeholder="Message"
+          accessibilityLabel={tMobile('screens.message-text')}
+          placeholder={tClient('automations.source.message')}
           placeholderTextColor={theme.colors.mut}
           selectionColor={theme.colors.brand}
           cursorColor={theme.colors.ink}
@@ -95,9 +99,14 @@ export function EditMessageSheet({
           </Text>
         ) : null}
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
           <Button
-            label="Save"
+            label={tClient('reports.cancel')}
+            variant="secondary"
+            onPress={onClose}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label={tClient('limit.save')}
             busy={busy}
             disabled={!ready}
             onPress={() => onSave(composerText(draft.trim(), mentionTargets))}

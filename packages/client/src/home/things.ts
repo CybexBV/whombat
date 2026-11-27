@@ -5,6 +5,7 @@
  */
 import { isBrandMark, type MarkLike } from '@whombat/brand';
 import type { ThingStatus, ThingSummary } from '@whombat/core';
+import { clientTranslator } from '../i18n/catalog';
 import { type StatusLevel, statusMarkLabel, thingStatusView } from './statusLevel';
 
 /** The glyphs the clients draw for a thing (`ThingSummary.icon` or its catalog entry). */
@@ -65,14 +66,19 @@ export function thingMark(thing: Pick<ThingSummary, 'icon' | 'catalogId' | 'logo
 }
 
 /** A status dot's words, for screen readers and its tooltip. */
-export const THING_STATUS_LABELS: Record<ThingStatus, string> = {
-  ok: 'Running fine',
-  warn: 'Needs a look',
-  bad: 'Problem',
-  learning: 'Learning',
-  offline: 'Offline',
-  unknown: 'Not checked yet',
-};
+export function thingStatusLabels(locale?: string | null): Record<ThingStatus, string> {
+  const tr = clientTranslator(locale);
+  return {
+    ok: tr.t('thing.status.ok'),
+    warn: tr.t('thing.status.warn'),
+    bad: tr.t('thing.status.bad'),
+    learning: tr.t('thing.status.learning'),
+    offline: tr.t('thing.status.offline'),
+    unknown: tr.t('thing.status.unknown'),
+  };
+}
+
+export const THING_STATUS_LABELS: Record<ThingStatus, string> = thingStatusLabels();
 
 export interface ThingRow {
   id: string;
@@ -143,13 +149,18 @@ export function nameAndNote(name: string): { main: string; note: string | null }
 }
 
 /** The sidebar's rows, in the server's order (servers first as it sends them); parts of a server are left out. */
-export function thingRows(things: readonly ThingSummary[], selectedId?: string | null): ThingRow[] {
+export function thingRows(
+  things: readonly ThingSummary[],
+  selectedId?: string | null,
+  locale?: string | null,
+): ThingRow[] {
+  const labels = locale ? thingStatusLabels(locale) : THING_STATUS_LABELS;
   return listedThings(things).map((t) => {
-    const status = THING_STATUS_LABELS[t.status];
+    const status = labels[t.status];
     const reason = t.status !== 'ok' && t.reason ? t.reason : null;
     const dot = DOTTED.has(t.status);
     const parts = t.kind === 'server' ? { main: t.name, note: null } : nameAndNote(t.name);
-    const view = thingStatusView(t);
+    const view = thingStatusView(t, locale);
     return {
       id: t.id,
       name: t.name,
@@ -171,17 +182,13 @@ export function thingRows(things: readonly ThingSummary[], selectedId?: string |
   });
 }
 
-/**
- * A tile's title by catalog entry: what the connection is for (“Network”); else its name. Home Assistant's tile is
- * titled by its name: it shows how Home Assistant runs, not the house (connection-pages.md CP-16).
- */
-const TILE_TITLES: Record<string, string> = {
-  unifi: 'Network',
-};
-
 /** A tile's or Home row's title: what the connection is for (“Network”), else its name. */
-export function thingTileTitle(thing: Pick<ThingSummary, 'catalogId' | 'name'>): string {
-  return (thing.catalogId && TILE_TITLES[thing.catalogId]) || thing.name;
+export function thingTileTitle(
+  thing: Pick<ThingSummary, 'catalogId' | 'name'>,
+  locale?: string | null,
+): string {
+  if (thing.catalogId === 'unifi') return clientTranslator(locale).t('thing.tile.network');
+  return thing.name;
 }
 
 export interface ThingTile {
@@ -198,11 +205,11 @@ export interface ThingTile {
  * Home's tiles: every connection or device with live facts, in the server's order. Servers have their own card, a
  * thing without facts (a mailbox, a device being learned) only its sidebar row, and a part of a server (CP-10) neither.
  */
-export function thingTiles(things: readonly ThingSummary[]): ThingTile[] {
+export function thingTiles(things: readonly ThingSummary[], locale?: string | null): ThingTile[] {
   return listedThings(things)
     .filter((t) => t.kind !== 'server' && t.facts.length > 0)
     .map((t) => {
-      const title = thingTileTitle(t);
+      const title = thingTileTitle(t, locale);
       const meta = [title === t.name ? null : t.name, t.line ?? null].filter(Boolean).join(' · ');
       return {
         id: t.id,

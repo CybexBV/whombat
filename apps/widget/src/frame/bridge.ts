@@ -14,6 +14,18 @@ import {
   SITE_KEY,
   type Theme,
 } from '../shared/protocol';
+import {
+  browserLanguage,
+  type LanguagePreferences,
+  supportedVisitorLanguage,
+} from '../shared/visitor-language';
+
+export function frameLanguage(
+  win: Pick<FrameWindowLike, 'location'> & { navigator: LanguagePreferences },
+): string {
+  const query = new URLSearchParams(win.location.search);
+  return supportedVisitorLanguage(query.get('lang')) ?? browserLanguage(win.navigator);
+}
 
 export interface FrameParams {
   site: string;

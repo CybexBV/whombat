@@ -14,7 +14,6 @@ import { agentFaceOf } from '@whombat/client';
 import {
   DESK_BAR_ITEMS,
   DESK_TRY_S,
-  DESK_WORDS,
   type DeskApi,
   type DeskBarItem,
   type DeskClock,
@@ -24,14 +23,16 @@ import {
   type DeskShowLevel,
   type DeskShowOption,
   type DeskShowPatch,
-  deskErrorText,
   fillDeskWords,
 } from '@whombat/client/desk';
 import { type DeskActions, useDeskPreview } from '@whombat/client/desk/react';
+import { deskWords } from '@whombat/core/domain';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, PanResponder, Switch, View } from 'react-native';
+import { PanResponder, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useAgentWords, useTheAgentHere } from '../data/useAgent';
+import { useI18n } from '../i18n';
+import { useDeskFailure } from '../managed/DeskSection';
 import { Card } from '../managed/ui';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -63,16 +64,12 @@ import {
   deskTryLabel,
 } from './deskScreen';
 
-const S = DESK_WORDS.settings;
-const LEVELS = deskLevelOptions();
 const BAR_ICONS: Record<DeskBarItem, LucideIcon> = {
   network: Wifi,
   internet: Globe,
   battery: BatteryMedium,
   updates: RefreshCw,
 };
-
-const failed = (error: unknown) => Alert.alert('That didn’t go through', deskErrorText(error));
 
 export function DeskShowsPart({
   api,
@@ -88,6 +85,7 @@ export function DeskShowsPart({
   /** A server is being dragged: the page holds its scrolling still meanwhile. */
   onDragging: (dragging: boolean) => void;
 }) {
+  const failed = useDeskFailure();
   const assistant = useAgentWords().name;
   const show = screen.settings.show;
   const save = (patch: DeskShowPatch) => void actions.update({ show: patch }).catch(failed);
@@ -118,6 +116,8 @@ function Hint({ text }: { text: string }) {
  * screen of widgets it is the box's own screen's (the top bar isn't part of the layout, DK-134).
  */
 export function DeskBarCard({ show, onPatch }: { show: DeskShow; onPatch: (patch: DeskShowPatch) => void }) {
+  const { rawLocale } = useI18n();
+  const S = deskWords(rawLocale).settings;
   const theme = useTheme();
   const rows = DESK_BAR_ITEMS.map((item) => ({ item, ...S.barItems[item], level: show.bar[item] }));
   return (
@@ -162,8 +162,8 @@ export function DeskMiddleCard({
   options,
   show,
   onPatch,
-  label = S.middle,
-  hint = S.middleHint,
+  label,
+  hint,
 }: {
   options: readonly DeskShowOption[];
   show: DeskShow;
@@ -171,12 +171,17 @@ export function DeskMiddleCard({
   label?: string;
   hint?: string;
 }) {
+  const { rawLocale } = useI18n();
+  const S = deskWords(rawLocale).settings;
   const assistant = useAgentWords().name;
-  const view = useMemo(() => deskShowsView(options, show, assistant), [options, show, assistant]);
+  const view = useMemo(
+    () => deskShowsView(options, show, assistant, rawLocale),
+    [options, show, assistant, rawLocale],
+  );
   return (
-    <Card label={label.toUpperCase()}>
+    <Card label={(label ?? S.middle).toUpperCase()}>
       <Part first>
-        <Hint text={hint} />
+        <Hint text={hint ?? S.middleHint} />
       </Part>
       {view.middle.map((g) => (
         <View key={g.group}>
@@ -206,8 +211,8 @@ export function DeskServersCard({
   show,
   onPatch,
   onDragging,
-  label = S.servers,
-  hint = S.serversHint,
+  label,
+  hint,
 }: {
   options: readonly DeskShowOption[];
   show: DeskShow;
@@ -217,8 +222,13 @@ export function DeskServersCard({
   label?: string;
   hint?: string;
 }) {
+  const { rawLocale } = useI18n();
+  const S = deskWords(rawLocale).settings;
   const assistant = useAgentWords().name;
-  const view = useMemo(() => deskShowsView(options, show, assistant), [options, show, assistant]);
+  const view = useMemo(
+    () => deskShowsView(options, show, assistant, rawLocale),
+    [options, show, assistant, rawLocale],
+  );
   if (view.servers.length === 0 && !view.box) return null;
   const ids = view.servers.map((s) => s.id);
   const move = (id: string, by: number) => {
@@ -227,9 +237,9 @@ export function DeskServersCard({
   };
   const level = (key: string) => (l: DeskShowLevel) => onPatch({ items: { [key]: l } });
   return (
-    <Card label={label.toUpperCase()}>
+    <Card label={(label ?? S.servers).toUpperCase()}>
       <Part first>
-        <Hint text={hint} />
+        <Hint text={hint ?? S.serversHint} />
       </Part>
       <ServerList
         servers={view.servers}
@@ -263,6 +273,8 @@ export function DeskAroundCard({
   onPatch: (patch: DeskShowPatch) => void;
   clock?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const S = deskWords(rawLocale).settings;
   const assistant = useAgentWords().name;
   return (
     <Card label={S.around.toUpperCase()}>
@@ -309,6 +321,9 @@ export function DeskAroundCard({
  * back.
  */
 function PreviewCard({ api, screen, assistant }: { api: DeskApi; screen: DeskScreen; assistant: string }) {
+  const { rawLocale } = useI18n();
+  const S = deskWords(rawLocale).settings;
+  const failed = useDeskFailure();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const face = agentFaceOf(useTheAgentHere());
@@ -334,7 +349,7 @@ function PreviewCard({ api, screen, assistant }: { api: DeskApi; screen: DeskScr
           {S.preview.toUpperCase()}
         </Text>
         <Segmented
-          options={deskScenarioOptions(assistant)}
+          options={deskScenarioOptions(assistant, rawLocale)}
           value={scenario}
           onChange={setScenario}
           label={S.preview}
@@ -373,7 +388,7 @@ function PreviewCard({ api, screen, assistant }: { api: DeskApi; screen: DeskScr
           </Text>
         ) : (
           <Button
-            label={deskTryLabel(scenario, assistant)}
+            label={deskTryLabel(scenario, assistant, rawLocale)}
             variant="secondary"
             onPress={() => void tryIt()}
           />
@@ -466,6 +481,7 @@ function ChoiceRow({
   lead?: ReactNode;
   end?: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   return (
     <Part>
@@ -475,7 +491,7 @@ function ChoiceRow({
         <Names name={name} line={line} />
         {end}
       </View>
-      <Segmented options={LEVELS} value={level} onChange={onLevel} label={name} fit />
+      <Segmented options={deskLevelOptions(rawLocale)} value={level} onChange={onLevel} label={name} fit />
     </Part>
   );
 }
@@ -531,6 +547,8 @@ function ServerList({
   onLevel: (key: string, level: DeskShowLevel) => void;
   onDragging: (dragging: boolean) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const S = deskWords(rawLocale).settings;
   const theme = useTheme();
   const [drag, setDrag] = useState<{ id: string; dy: number } | null>(null);
   const heights = useRef(new Map<string, number>());

@@ -21,6 +21,7 @@ import { useMemo } from 'react';
 import { useNavigateHref } from '../../app/routing/navigation';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import { ApprovalDetails } from './ApprovalDetails';
 import styles from './ApprovalModal.module.css';
@@ -38,7 +39,7 @@ export interface ApprovalModalProps {
 
 /** What to say when a decision did not go through. */
 export function decisionFailedToast(result: CommitResult<ApprovalResponse> | Error): string {
-  if (result instanceof Error) return problemText(result, 'Couldn’t save that. Try again.');
+  if (result instanceof Error) return problemText(result, 'Couldn’t save that. Try again.', currentLocale());
   if (result.status === 'blocked') return result.message;
   return 'That didn’t go through. Try again.';
 }

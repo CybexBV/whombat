@@ -19,7 +19,7 @@ import {
   chatRuntimeScope,
 } from '@whombat/client';
 import type { ChatProvider, ChatRuntime, ChatRuntimeView } from '@whombat/core';
-import { CHAT_RUNTIME_COPY } from '@whombat/core/text';
+import { chatRuntimeCopy } from '@whombat/core/text';
 import { CircleDashed } from 'lucide-react';
 import {
   type KeyboardEvent,
@@ -35,6 +35,7 @@ import { createPortal } from 'react-dom';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Toggle } from '../../../components/Toggle';
+import { useLocaleWords } from '../../../i18n/words';
 import { AnotherModel } from '../../agent/AnotherModel';
 import styles from './ChatRuntime.module.css';
 
@@ -93,6 +94,7 @@ export function ChatRuntimeButton({
   onMakeDefault,
   setUpHref = { to: '/settings', search: { tab: 'ai' } },
 }: ChatRuntimeButtonProps) {
+  const CHAT_RUNTIME_COPY = useLocaleWords(chatRuntimeCopy);
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const describedId = useId();
@@ -184,6 +186,7 @@ function ChatRuntimePopover({
   setUpHref,
   onClose,
 }: PopoverProps) {
+  const CHAT_RUNTIME_COPY = useLocaleWords(chatRuntimeCopy);
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; bottom: number; maxHeight: number } | null>(null);
   const [allModels, setAllModels] = useState(false);

@@ -14,6 +14,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { DONE_COPY } from '../data/done';
 import { OVERVIEW_TITLE } from '../data/shell';
 import { useAgentWords } from '../data/useAgent';
+import { useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -29,6 +30,7 @@ const PAGE = 20;
 type Props = NativeStackScreenProps<RootStackParamList, 'Done'>;
 
 export function DoneScreen({ navigation, route }: Props) {
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -67,7 +69,7 @@ export function DoneScreen({ navigation, route }: Props) {
         </View>
         <View style={{ paddingHorizontal: 18 }}>
           {first.isPending ? (
-            <SkeletonRows count={6} lines={2} label="Loading what I did" />
+            <SkeletonRows count={6} lines={2} label={tMobile('screens.loading-what-i-did')} />
           ) : !first.data ? (
             <ErrorState text={DONE_COPY.failed} onRetry={() => void first.refetch()} />
           ) : !first.data.changes.length ? (
@@ -114,9 +116,11 @@ function OlderPage({
   onUndo: (change: ChangeEntry) => void;
   onMore: (cursor: string) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const list = useChanges({ params: { burrow: slug }, query: { limit: PAGE, before } }, { retry: false });
-  if (list.isPending) return <SkeletonRows count={2} lines={2} label="Loading older changes" />;
+  if (list.isPending)
+    return <SkeletonRows count={2} lines={2} label={tMobile('screens.loading-older-changes')} />;
   if (!list.data) return null;
   return (
     <DonePage

@@ -12,10 +12,11 @@ import type { MarkLike } from '@whombat/brand';
 import type { HostServer } from '@whombat/core/domain';
 import { serverHref } from '../hosts/model';
 import { type OverviewServerRow, overviewServerRows } from '../hosts/overview';
+import { clientTranslator } from '../i18n/catalog';
 import type { OverviewTile } from './overview';
 import type { StatusLevel } from './statusLevel';
 import { STATUS_LEVEL_RANK, statusSummary } from './statusLevel';
-import { nameAndNote, THING_STATUS_LABELS, type ThingGlyph, type ThingRow } from './things';
+import { nameAndNote, type ThingGlyph, type ThingRow, thingStatusLabels } from './things';
 
 /** The two places. */
 export type ThingPlace = 'servers' | 'connections';
@@ -47,37 +48,48 @@ export interface PlaceRow {
   label: string;
 }
 
-export const PLACE_WORDS: Record<
-  ThingPlace,
-  {
-    title: string;
-    add: string;
-    empty: string;
-    failed: string;
-    noun: (n: number) => string;
-    back: string;
-  }
-> = {
-  servers: {
-    title: 'Servers',
-    add: 'Add a server',
-    empty: 'No servers yet.',
-    failed: 'Couldn’t load your servers. Try again in a moment.',
-    noun: (n) => `${n} ${n === 1 ? 'server' : 'servers'}`,
-    back: 'Servers',
-  },
-  connections: {
-    title: 'Connections',
-    add: 'Add a connection',
-    empty: 'Nothing connected yet.',
-    failed: 'Couldn’t load your connections. Try again in a moment.',
-    noun: (n) => `${n} connected`,
-    back: 'Connections',
-  },
-};
+export interface PlaceWords {
+  title: string;
+  add: string;
+  empty: string;
+  failed: string;
+  noun: (n: number) => string;
+  back: string;
+}
+
+/** Each place's own words in a locale (English when none is given). */
+export function placeWords(locale?: string | null): Record<ThingPlace, PlaceWords> {
+  const tr = clientTranslator(locale);
+  const servers = tr.t('thingPlace.servers.title');
+  const connections = tr.t('thingPlace.connections.title');
+  return {
+    servers: {
+      title: servers,
+      add: tr.t('thingPlace.servers.add'),
+      empty: tr.t('thingPlace.servers.empty'),
+      failed: tr.t('thingPlace.servers.failed'),
+      noun: (n) => tr.tp('thingPlace.servers.noun', n),
+      back: servers,
+    },
+    connections: {
+      title: connections,
+      add: tr.t('thingPlace.connections.add'),
+      empty: tr.t('thingPlace.connections.empty'),
+      failed: tr.t('thingPlace.connections.failed'),
+      noun: (n) => tr.t('thingPlace.connections.noun', { count: n }),
+      back: connections,
+    },
+  };
+}
+
+export const PLACE_WORDS: Record<ThingPlace, PlaceWords> = placeWords();
 
 /** Servers when the hosts service can't be reached and nothing is listed. */
-export const SERVERS_DOWN = 'Servers aren’t reachable right now.';
+export function serversDown(locale?: string | null): string {
+  return clientTranslator(locale).t('thingPlace.serversDown');
+}
+
+export const SERVERS_DOWN = serversDown();
 
 /** The thing id a server of the hosts fleet has in Home's things (`server:pve-02`). */
 function serverThingId(serverId: string): string {
@@ -88,15 +100,20 @@ function serverLine(
   row: OverviewServerRow,
   level: StatusLevel,
   parentName: string | null,
+  locale: string | null | undefined,
 ): { line: string; tone: PlaceRowTone } {
+  const tr = clientTranslator(locale);
   if (row.pill) {
     // The tone follows the level, so an offline server is as red as a broken one and one kept quiet stays grey.
     const tone = level === 'notWorking' ? 'bad' : level === 'needsLook' ? 'warn' : 'mut';
     return { line: row.pill.word, tone };
   }
-  const word = row.cpu.word ?? 'Running fine';
-  if (parentName) return { line: `${word} · on ${parentName}`, tone: 'plain' };
-  const running = row.running.nothing || !row.running.count ? null : `${row.running.count} running`;
+  const word = row.cpu.word ?? tr.t('thing.status.ok');
+  if (parentName) return { line: tr.t('thingPlace.line.on', { word, parent: parentName }), tone: 'plain' };
+  const running =
+    row.running.nothing || !row.running.count
+      ? null
+      : tr.t('hosts.overview.running', { count: row.running.count });
   return { line: running ? `${word} · ${running}` : word, tone: 'plain' };
 }
 
@@ -113,10 +130,13 @@ export function serverPlaceRows(
   timeZone: string,
   /** The servers the person keeps quiet for now (`serverQuietWords`' ids): Home's level for them, not the fleet's. */
   quiet: ReadonlySet<string> | ReadonlyMap<string, unknown> = new Set(),
+  locale?: string | null,
 ): PlaceRow[] {
   const things = new Map(serverThings.map((t) => [t.id, t]));
-  if (!fleet?.length) return sortRows(serverThings.map(thingPlaceRow));
-  const rows = overviewServerRows(fleet, now, timeZone);
+  const fromThing = (t: ThingRow) => thingPlaceRow(t, locale);
+  if (!fleet?.length) return sortRows(serverThings.map(fromThing));
+  const tr = clientTranslator(locale);
+  const rows = overviewServerRows(fleet, now, timeZone, locale);
   const names = new Map(fleet.map((s) => [s.id, s.name]));
   const fromFleet = rows.map((r): PlaceRow => {
     const id = serverThingId(r.id);
@@ -124,7 +144,7 @@ export function serverPlaceRows(
     const parentName = r.parentId ? (names.get(r.parentId) ?? null) : null;
     // The fleet's level is the live one; Home's only for a server the person keeps quiet, which the fleet doesn't know.
     const level = thing && quiet.has(id) ? thing.level : r.level;
-    const said = serverLine(r, level, parentName);
+    const said = serverLine(r, level, parentName, locale);
     const line = r.pill && thing?.reason ? upFirst(thing.reason) : said.line;
     const figure = r.cpu.value;
     return {
@@ -140,16 +160,18 @@ export function serverPlaceRows(
       tone: said.tone,
       figure,
       child: r.child,
-      label: [thing?.name ?? r.name, line, figure ? `processor ${figure}` : null].filter(Boolean).join(', '),
+      label: [thing?.name ?? r.name, line, figure ? tr.t('thingPlace.line.processor', { figure }) : null]
+        .filter(Boolean)
+        .join(', '),
     };
   });
   // A server Home knows that the fleet doesn't (not reporting to the hosts service) is still one of the servers.
   const seen = new Set(fromFleet.map((r) => r.id));
-  return [...fromFleet, ...sortRows(serverThings.filter((t) => !seen.has(t.id)).map(thingPlaceRow))];
+  return [...fromFleet, ...sortRows(serverThings.filter((t) => !seen.has(t.id)).map(fromThing))];
 }
 
 /** A server or connection row from Home's things alone (no fleet, no tile): its reason or its status in words. */
-function thingPlaceRow(t: ThingRow): PlaceRow {
+function thingPlaceRow(t: ThingRow, locale: string | null | undefined): PlaceRow {
   const tone: PlaceRowTone =
     t.level === 'notWorking'
       ? 'bad'
@@ -161,8 +183,8 @@ function thingPlaceRow(t: ThingRow): PlaceRow {
   const line = t.reason
     ? upFirst(t.reason)
     : t.level === 'connected'
-      ? 'Connected'
-      : THING_STATUS_LABELS[t.status];
+      ? clientTranslator(locale).t('statusLevel.connected')
+      : thingStatusLabels(locale)[t.status];
   return {
     id: t.id,
     name: t.name,
@@ -187,8 +209,10 @@ function thingPlaceRow(t: ThingRow): PlaceRow {
 export function connectionPlaceRows(
   rows: readonly ThingRow[],
   tiles: readonly OverviewTile[] | null | undefined,
+  locale?: string | null,
 ): PlaceRow[] {
-  if (!tiles?.length) return sortRows(rows.map(thingPlaceRow));
+  const fromThing = (t: ThingRow) => thingPlaceRow(t, locale);
+  if (!tiles?.length) return sortRows(rows.map(fromThing));
   const byId = new Map(rows.map((r) => [r.id, r]));
   const fromTiles = tiles.map((tile): PlaceRow => {
     const t = byId.get(tile.row.id);
@@ -208,7 +232,7 @@ export function connectionPlaceRows(
     };
   });
   const seen = new Set(fromTiles.map((r) => r.id));
-  return [...fromTiles, ...sortRows(rows.filter((r) => !seen.has(r.id)).map(thingPlaceRow))];
+  return [...fromTiles, ...sortRows(rows.filter((r) => !seen.has(r.id)).map(fromThing))];
 }
 
 function sortRows(rows: PlaceRow[]): PlaceRow[] {
@@ -236,22 +260,31 @@ const SUMMARY_TONES: Partial<Record<StatusLevel, PlaceSummaryPart['tone']>> = {
 export function placeSummaryParts(
   place: ThingPlace,
   rows: readonly Pick<PlaceRow, 'level'>[],
+  locale?: string | null,
 ): PlaceSummaryPart[] {
   if (!rows.length) return [];
   // Learning isn't a problem: the mock's line counts only what isn't working and what needs a look.
   const levels: StatusLevel[] = ['notWorking', 'needsLook'];
   return [
-    { text: PLACE_WORDS[place].noun(rows.length), tone: null },
+    { text: placeWords(locale)[place].noun(rows.length), tone: null },
     ...levels.flatMap((level) => {
-      const text = statusSummary(rows.filter((r) => r.level === level).map((r) => r.level));
+      const text = statusSummary(
+        rows.filter((r) => r.level === level).map((r) => r.level),
+        0,
+        locale,
+      );
       return text ? [{ text, tone: SUMMARY_TONES[level] ?? null }] : [];
     }),
   ];
 }
 
 /** The place's line as one string (its spoken form): “5 servers · 1 not working · 1 needs a look”. */
-export function placeSummary(place: ThingPlace, rows: readonly Pick<PlaceRow, 'level'>[]): string {
-  return placeSummaryParts(place, rows)
+export function placeSummary(
+  place: ThingPlace,
+  rows: readonly Pick<PlaceRow, 'level'>[],
+  locale?: string | null,
+): string {
+  return placeSummaryParts(place, rows, locale)
     .map((p) => p.text)
     .join(' · ');
 }
@@ -269,10 +302,11 @@ export function placeRowsTone(rows: readonly Pick<PlaceRow, 'level'>[]): 'bad' |
 }
 
 /** The menu item's name with its mark said: “Servers, something isn’t working”. */
-export function placeSpoken(place: ThingPlace, tone: 'bad' | 'warn' | null): string {
-  const title = PLACE_WORDS[place].title;
+export function placeSpoken(place: ThingPlace, tone: 'bad' | 'warn' | null, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  const title = placeWords(locale)[place].title;
   if (!tone) return title;
-  return `${title}, ${tone === 'bad' ? 'something isn’t working' : 'something needs a look'}`;
+  return tr.t(tone === 'bad' ? 'thingPlace.spoken.bad' : 'thingPlace.spoken.warn', { title });
 }
 
 /**

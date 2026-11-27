@@ -123,9 +123,9 @@ export const PEOPLE_SETTINGS = {
   'guides.act': NONE,
 
   'me.get': read('you.profile', 'Read your name, title and settings'),
-  'me.getPreferences': read('you.profile', 'Read your theme and time zone'),
+  'me.getPreferences': read('you.profile', 'Read your theme, language and time zone'),
   'me.setAvatar': change('you.profile', 'Set or remove your photo'),
-  'me.updatePreferences': change('you.profile', 'Change your theme or time zone'),
+  'me.updatePreferences': change('you.profile', 'Change your theme, language or time zone'),
   'me.updateProfile': change('you.profile', 'Change your name and title'),
 
   // Looks ahead (looks-ahead.md): what the assistant checks ahead is the person's to switch, as they ask.

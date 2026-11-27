@@ -13,6 +13,7 @@
  *   says so in a toast with Undo.
  * The words, times and rules are the shared ones (`@whombat/client`'s monitoring parts); this only draws them.
  */
+
 import {
   HISTORY_WORDS,
   type HistoryRow,
@@ -31,7 +32,8 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { daysEdges, firstPick, MONITORING_COPY, pickDays, pickedValue } from '../../data/monitoring';
+import { daysEdges, firstPick, monitoringCopy, pickDays, pickedValue } from '../../data/monitoring';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, MonoLabel, OneCard } from '../../ui/assistant';
@@ -72,6 +74,9 @@ function KeepQuietBody({
   actions: KeepQuietActions;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const { timeZone } = useBurrowBase();
   const now = useNow();
   // The choices as they were when the sheet opened: the minute ticking doesn't move a choice under the finger.
@@ -143,8 +148,8 @@ function KeepQuietBody({
               ))}
             </DaysRow>
             <ClockField
-              label={MONITORING_COPY.time}
-              spoken={`${KEEP_QUIET_WORDS.pickLabel} ${MONITORING_COPY.time.toLowerCase()}`}
+              label={monitoringCopyHere.time}
+              spoken={`${KEEP_QUIET_WORDS.pickLabel} ${monitoringCopyHere.time.toLowerCase()}`}
               value={pick.clock}
               onChange={(clock) => {
                 setPick((p) => ({ ...p, clock }));
@@ -173,6 +178,9 @@ const DAYS_FADE = 32;
 
 /** Pick a time's days, scrolling sideways before the clock, faded at a side with more days past it. */
 function DaysRow({ children }: { children: ReactNode }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const theme = useTheme();
   const size = useRef({ view: 0, content: 0, x: 0 });
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -184,7 +192,7 @@ function DaysRow({ children }: { children: ReactNode }) {
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
       <ScrollView
-        accessibilityLabel={MONITORING_COPY.day}
+        accessibilityLabel={monitoringCopyHere.day}
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -250,6 +258,9 @@ export function KeptQuietLine({
   busy: boolean;
   onEnd: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <View
@@ -289,12 +300,12 @@ export function KeptQuietLine({
           feedback="fade"
           ringRadius={10}
           accessibilityRole="button"
-          accessibilityLabel={MONITORING_COPY.endNow}
-          accessibilityHint={MONITORING_COPY.endNowHint}
+          accessibilityLabel={monitoringCopyHere.endNow}
+          accessibilityHint={monitoringCopyHere.endNowHint}
           style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
         >
           <Text size={14} weight={600} color={theme.colors.brand} style={{ opacity: busy ? 0.5 : 1 }}>
-            {MONITORING_COPY.endNow}
+            {monitoringCopyHere.endNow}
           </Text>
         </Touchable>
       ) : null}
@@ -306,6 +317,9 @@ const ROW = { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', 
 
 /** The way to what a thing is down because of: “Open pve-02 ›” in `brand`, as “Runs on” is drawn. */
 export function CauseLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <Touchable
@@ -314,7 +328,7 @@ export function CauseLink({ label, onPress }: { label: string; onPress: () => vo
       ringRadius={8}
       accessibilityRole="link"
       accessibilityLabel={label}
-      accessibilityHint={MONITORING_COPY.openCauseHint}
+      accessibilityHint={monitoringCopyHere.openCauseHint}
       hitSlop={hitSlopFor(36)}
       style={{ alignSelf: 'flex-start', minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4 }}
     >
@@ -335,6 +349,9 @@ const HISTORY_FIRST = 5;
 
 /** The last 30 days of a thing or server (`things.history`); nothing on a Whombat that doesn't keep it. */
 export function WhatHappenedCard({ thing }: { thing: string }) {
+  const { rawLocale, tClient } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
@@ -352,12 +369,12 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
     <OneCard label={HISTORY_WORDS.title} meta={view?.uptime ?? null}>
       {history.isPending ? (
         <View style={{ paddingHorizontal: 14, paddingBottom: 12 }}>
-          <SkeletonRows count={2} lines={2} label={MONITORING_COPY.historyLoading} />
+          <SkeletonRows count={2} lines={2} label={monitoringCopyHere.historyLoading} />
         </View>
       ) : !view ? (
         <>
           <CardQuiet text={HISTORY_WORDS.failed} />
-          <FoldRow label="Try again" onPress={() => void history.refetch()} />
+          <FoldRow label={tClient('settings.retry')} onPress={() => void history.refetch()} />
         </>
       ) : (
         <>

@@ -19,6 +19,7 @@ import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { Toggle } from '../../components/Toggle';
+import { currentLocale } from '../../i18n/provider';
 import styles from './Automations.module.css';
 import { nextRunWords } from './automationModel';
 import { automationPaths } from './hooks';
@@ -122,7 +123,9 @@ export function scheduleRowWords(schedule: AgentScheduleView, timeZone: string, 
       schedule.status === 'active' ? 'On' : schedule.status === 'paused' ? 'Paused' : 'Ended after 90 days',
     next:
       schedule.status === 'active' && schedule.nextAt ? nextRunWords(schedule.nextAt, now, timeZone) : null,
-    last: schedule.lastRunAt ? `Last ran ${formatRecent(schedule.lastRunAt, now, timeZone)}` : null,
+    last: schedule.lastRunAt
+      ? `Last ran ${formatRecent(schedule.lastRunAt, now, timeZone, currentLocale())}`
+      : null,
   };
 }
 

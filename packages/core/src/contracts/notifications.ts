@@ -199,5 +199,7 @@ export const PushPayload = z.object({
   approval: z.object({ number: z.number().int(), state: z.string(), label: z.string() }).optional(),
   /** Present on `run_progress` / `approval_updated` pushes: the live activity's full content state. */
   liveActivity: LiveActivityPush.optional(),
+  /** False when the recipient turned off notification previews; renderers must show localized generic copy. */
+  preview: z.boolean().optional(),
 });
 export type PushPayload = z.infer<typeof PushPayload>;

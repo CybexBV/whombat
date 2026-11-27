@@ -14,7 +14,6 @@ import {
   withBurrow,
 } from '@whombat/client';
 import {
-  COPY,
   fingerprintOf,
   finishGoogleConnection,
   type GoneReason,
@@ -48,6 +47,8 @@ import { Button } from '../components/Button';
 import { clearSvgCache } from '../features/messaging/attachmentSource';
 import { clearDrafts } from '../features/messaging/ConversationRoom';
 import { resetUploads } from '../features/messaging/useUploads';
+import { COPY } from '../i18n/managed';
+import { useWebI18n } from '../i18n/provider';
 import type { ManagedEnvironment } from './connect';
 import type { EndpointKey } from './keys';
 import styles from './managed.module.css';
@@ -320,8 +321,13 @@ export function ApplianceApp({
  * with Reload. Counts the answers on screen now; gone when they read fine again.
  */
 export function LeftOutStrip() {
+  const { tag: uiLocale } = useWebI18n();
   const now = useSyncExternalStore(leftOut.subscribe, leftOut.get, leftOut.get);
-  const text = now.needsNewer ? PART_NEEDS_NEWER_APP : now.items > 0 ? itemsNeedNewerApp(now.items) : null;
+  const text = now.needsNewer
+    ? PART_NEEDS_NEWER_APP
+    : now.items > 0
+      ? itemsNeedNewerApp(now.items, uiLocale)
+      : null;
   if (!text) return null;
   return (
     <div className={`${styles.banner} ${styles.bannerWarn}`} role="status" data-testid="left-out-strip">

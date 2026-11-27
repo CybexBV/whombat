@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import type { ErrorCode } from '../contracts/errors.js';
+import { tCore } from '../i18n/catalog.js';
 
 export const BACKUP_FILE_ERROR_CODES = [
   /** The password is shorter than `BACKUP_PASSWORD_MIN` characters (or longer than the maximum). */
@@ -116,18 +117,18 @@ export function backupFileErrorOf(details: unknown): BackupFileErrorCode | null 
   return parsed.success ? parsed.data : null;
 }
 
-/** The sentence for a code. */
-export function backupFileErrorText(code: BackupFileErrorCode): string {
-  return BACKUP_FILE_ERROR_TEXT[code];
+/** The sentence for a code, in a locale (English when none is given). */
+export function backupFileErrorText(code: BackupFileErrorCode, locale?: string | null): string {
+  return tCore(locale, `backupFile.error.${code}`);
 }
 
 /** A job's or an answer's error as views carry it. */
 export const BackupFileProblem = z.object({ code: BackupFileErrorCode, message: z.string().max(500) });
 export type BackupFileProblem = z.infer<typeof BackupFileProblem>;
 
-/** `{code, message}` for a code. */
-export function backupFileProblem(code: BackupFileErrorCode): BackupFileProblem {
-  return { code, message: BACKUP_FILE_ERROR_TEXT[code] };
+/** `{code, message}` for a code, the message in a locale (English when none is given). */
+export function backupFileProblem(code: BackupFileErrorCode, locale?: string | null): BackupFileProblem {
+  return { code, message: backupFileErrorText(code, locale) };
 }
 
 /**

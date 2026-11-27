@@ -15,13 +15,14 @@ import {
   formatHelpCode,
   REMOTE_HELP_DURATIONS,
   REMOTE_HELP_LEVELS,
-  REMOTE_HELP_WORDS,
   type RemoteHelpDuration,
   type RemoteHelpLevel,
   remoteHelpRefusalText,
   remoteHelpStateLine,
   remoteHelpStepText,
+  remoteHelpWords,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { daysAgo, formatClock, formatDate } from '@whombat/core/text';
 import {
   passkeyRemoteHelpChallengeBase64url,
@@ -31,6 +32,8 @@ import {
   remoteHelpTranscriptName,
 } from '@whombat/protocol/session';
 import { NeedsNewerAppError } from '../http/errors';
+import { clientTree } from '../i18n/catalog';
+import { REMOTE_HELP_CLIENT_WORDS } from '../i18n/messages/remoteHelp';
 import { OperationError, type RemoteHelpConfirmBegin, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import {
@@ -51,10 +54,9 @@ export {
   type RemoteHelpLevel,
   remoteHelpConfirmText,
   remoteHelpStateLine,
+  remoteHelpWords,
 } from '@whombat/core/domain';
 export type { RemoteHelpState, RemoteHelpStep, RemoteHelpVisit } from '@whombat/protocol/session';
-
-const W = REMOTE_HELP_WORDS;
 
 /** What the owner picks: how much, for how long. */
 export interface RemoteHelpChoice {
@@ -68,37 +70,21 @@ export const REMOTE_HELP_DEFAULT_CHOICE: RemoteHelpChoice = { level: 'look', dur
 /** How often the card asks again while remote help is on or someone is connected (RH-07: steps come as they happen). */
 export const REMOTE_HELP_POLL_MS = 10_000;
 
-/** The app's own words around the brief's (AP-4446): only where §4 says nothing. */
-export const REMOTE_HELP_TEXT = {
-  /** The owner has a passkey, and this device can't use passkeys at all. */
-  passkeyHere: 'This device can’t use your passkey. Turn remote help on from a device that can.',
-  /** A visit with more steps than are shown (`truncated`): the oldest are left out. */
-  earlier: 'Earlier steps aren’t shown.',
-  /** A transcript that didn't load. */
-  transcriptFailed: 'Couldn’t load the command line. Try again.',
-  /** The card's state or list didn't load. */
-  loadError: 'Couldn’t load remote help. Try again.',
-  retry: 'Try again',
-  failed: 'That didn’t work. Try again.',
-  /** The transcript modal's other button. */
-  close: 'Close',
-  /** Accessible names. */
-  onLabel: 'Remote help is on',
-  connectedLabel: 'Connected',
-  /** About's short card: remote help's state while it's off, and the way to its page. */
-  offTitle: 'Off',
-  offLine: 'Nobody can get in. Turn it on when Whombat support asks.',
-  open: 'Open remote help',
-  /** What support did, grouped by visit (`remoteHelpVisitGroups`). */
-  visitCount: (n: number) => (n === 1 ? '1 visit' : `${n} visits`),
-  stepCount: (n: number) => (n === 1 ? '1 step' : `${n} steps`),
-  today: (clock: string) => `Today ${clock}`,
-  yesterday: (clock: string) => `Yesterday ${clock}`,
-  now: 'Now',
-  allSteps: (n: number) => `Show all ${n} steps`,
-  fewerSteps: 'Show fewer',
-  earlierVisits: (n: number) => (n === 1 ? 'Show 1 earlier visit' : `Show ${n} earlier visits`),
-} as const;
+/** The app's own words around the brief's, only where the brief says nothing; in a locale (English when none). */
+export function remoteHelpText(locale?: string | null) {
+  const { ran: _ran, ...w } = clientTree(locale, REMOTE_HELP_CLIENT_WORDS);
+  return {
+    ...w,
+    visitCount: (n: number) => w.visitCount(n),
+    stepCount: (n: number) => w.stepCount(n),
+    today: (clock: string) => interpolate(w.today, { clock }),
+    yesterday: (clock: string) => interpolate(w.yesterday, { clock }),
+    allSteps: (n: number) => interpolate(w.allSteps, { n }),
+    earlierVisits: (n: number) => w.earlierVisits(n),
+  };
+}
+
+export const REMOTE_HELP_TEXT = remoteHelpText('en');
 
 /** The viewer's time zone unless one is given (core's helpers say UTC without one). */
 function zone(timeZone?: string): string {
@@ -277,19 +263,21 @@ export async function turnOnRemoteHelp(
 }
 
 /** A failure of the card's actions in words; null for a dismissed prompt (said nowhere). */
-export function remoteHelpErrorText(error: unknown): string | null {
+export function remoteHelpErrorText(error: unknown, locale?: string | null): string | null {
   if (error instanceof PasskeyCancelled) return null;
+  const W = remoteHelpWords(locale);
+  const T = remoteHelpText(locale);
   if (error instanceof RemoteHelpError)
-    return error.code === 'passkey_here' ? REMOTE_HELP_TEXT.passkeyHere : W.refusals.passkey_failed;
+    return error.code === 'passkey_here' ? T.passkeyHere : W.refusals.passkey_failed;
   if (error instanceof PasskeyError) return W.refusals.passkey_failed;
   if (error instanceof OperationError) {
     const reason = operationReason(error);
     // An owner with a passkey who sent none: the same words as one that didn't verify.
     if (reason === 'passkey_required') return W.refusals.passkey_failed;
-    return remoteHelpRefusalText(reason) ?? REMOTE_HELP_TEXT.failed;
+    return remoteHelpRefusalText(reason, locale) ?? T.failed;
   }
-  if (error instanceof NeedsNewerAppError) return REMOTE_HELP_TEXT.loadError;
-  return REMOTE_HELP_TEXT.failed;
+  if (error instanceof NeedsNewerAppError) return T.loadError;
+  return T.failed;
 }
 
 /* What the card shows -------------------------------------------------------------------------------------------- */
@@ -301,6 +289,7 @@ export interface RemoteHelpCardInput {
   hasPasskey: boolean | null;
   now: Date;
   timeZone?: string;
+  locale?: string | null;
 }
 
 export interface RemoteHelpOption<T extends string> {
@@ -351,6 +340,7 @@ export function remoteHelpChoice(
 export function remoteHelpCard(input: RemoteHelpCardInput): RemoteHelpCard {
   const s = input.state;
   if (!s) return { kind: 'loading' };
+  const W = remoteHelpWords(input.locale);
   const g = s.grant;
   if (g)
     return {
@@ -360,6 +350,7 @@ export function remoteHelpCard(input: RemoteHelpCardInput): RemoteHelpCard {
         until: g.until,
         now: input.now,
         timeZone: zone(input.timeZone),
+        locale: input.locale,
       }),
       level: g.level,
       stop: W.stop,
@@ -411,10 +402,10 @@ export interface RemoteHelpStepRow {
 }
 
 /** A step's time: the clock today, the date and the clock before. */
-export function remoteHelpStepTime(at: string, now: Date, timeZone?: string): string {
+export function remoteHelpStepTime(at: string, now: Date, timeZone?: string, locale?: string | null): string {
   const tz = zone(timeZone);
   const clock = formatClock(at, tz);
-  return daysAgo(at, now, tz) <= 0 ? clock : `${formatDate(at, tz, { now })} ${clock}`;
+  return daysAgo(at, now, tz) <= 0 ? clock : `${formatDate(at, tz, { now }, locale)} ${clock}`;
 }
 
 function stepRow(
@@ -423,14 +414,17 @@ function stepRow(
   i: number,
   now: Date,
   timeZone: string | undefined,
+  locale: string | null | undefined,
 ): RemoteHelpStepRow {
   const exec = step.kind === 'exec' && step.line;
   return {
     key: `${visit.id}:${i}`,
-    time: remoteHelpStepTime(step.at, now, timeZone),
+    time: remoteHelpStepTime(step.at, now, timeZone, locale),
     at: step.at,
-    // “Ran {line}”: the words before the line, the line in code style.
-    text: exec ? (W.steps.exec.split('{line}')[0] ?? '').trim() : remoteHelpStepText(step, visit.who),
+    // “Ran”, then the line in code style.
+    text: exec
+      ? clientTree(locale, REMOTE_HELP_CLIENT_WORDS).ran
+      : remoteHelpStepText(step, visit.who, locale),
     code: exec ? (step.line as string) : null,
     transcript: null,
     muted: false,
@@ -444,11 +438,14 @@ function stepRow(
  */
 export function remoteHelpVisitRows(
   visits: readonly RemoteHelpVisit[],
-  options: { now: Date; timeZone?: string },
+  options: { now: Date; timeZone?: string; locale?: string | null },
 ): RemoteHelpStepRow[] {
   const rows: RemoteHelpStepRow[] = [];
+  const earlier = remoteHelpText(options.locale).earlier;
   for (const visit of visits) {
-    const own = visit.steps.map((step, i) => stepRow(visit, step, i, options.now, options.timeZone));
+    const own = visit.steps.map((step, i) =>
+      stepRow(visit, step, i, options.now, options.timeZone, options.locale),
+    );
     if (visit.transcriptBytes > 0 && own.length > 0) {
       const at = visit.steps.findIndex((s) => s.kind === 'shell' || s.kind === 'exec');
       const row = own[at >= 0 ? at : 0] as RemoteHelpStepRow;
@@ -459,7 +456,7 @@ export function remoteHelpVisitRows(
         key: `${visit.id}:earlier`,
         time: '',
         at: visit.startedAt,
-        text: REMOTE_HELP_TEXT.earlier,
+        text: earlier,
         code: null,
         transcript: null,
         muted: true,
@@ -493,13 +490,19 @@ export interface RemoteHelpVisitGroup {
   transcript: string | null;
 }
 
-function visitWhen(at: string, now: Date, timeZone: string | undefined): string {
+function visitWhen(
+  at: string,
+  now: Date,
+  timeZone: string | undefined,
+  T: ReturnType<typeof remoteHelpText>,
+  locale: string | null | undefined,
+): string {
   const tz = zone(timeZone);
   const clock = formatClock(at, tz);
   const days = daysAgo(at, now, tz);
-  if (days <= 0) return REMOTE_HELP_TEXT.today(clock);
-  if (days === 1) return REMOTE_HELP_TEXT.yesterday(clock);
-  return `${formatDate(at, tz, { now })} ${clock}`;
+  if (days <= 0) return T.today(clock);
+  if (days === 1) return T.yesterday(clock);
+  return `${formatDate(at, tz, { now }, locale)} ${clock}`;
 }
 
 /**
@@ -509,13 +512,16 @@ function visitWhen(at: string, now: Date, timeZone: string | undefined): string 
  */
 export function remoteHelpVisitGroups(
   visits: readonly RemoteHelpVisit[],
-  options: { now: Date; timeZone?: string },
+  options: { now: Date; timeZone?: string; locale?: string | null },
 ): RemoteHelpVisitGroup[] {
   const tz = zone(options.timeZone);
+  const T = remoteHelpText(options.locale);
+  const W = remoteHelpWords(options.locale);
+  const earlier = T.earlier;
   return visits.map((visit) => {
     // The visit's header says the day, so a step says only its clock.
     const steps = visit.steps.map((step, i) => ({
-      ...stepRow(visit, step, i, options.now, options.timeZone),
+      ...stepRow(visit, step, i, options.now, options.timeZone, options.locale),
       time: formatClock(step.at, tz),
     }));
     if (visit.truncated)
@@ -523,7 +529,7 @@ export function remoteHelpVisitGroups(
         key: `${visit.id}:earlier`,
         time: '',
         at: visit.startedAt,
-        text: REMOTE_HELP_TEXT.earlier,
+        text: earlier,
         code: null,
         transcript: null,
         muted: true,
@@ -533,8 +539,8 @@ export function remoteHelpVisitGroups(
       visitId: visit.id,
       who: visit.who,
       level: visit.level,
-      line: [W.levels[visit.level].label, REMOTE_HELP_TEXT.stepCount(visit.steps.length)].join(' · '),
-      when: visitWhen(visit.startedAt, options.now, options.timeZone),
+      line: [W.levels[visit.level].label, T.stepCount(visit.steps.length)].join(' · '),
+      when: visitWhen(visit.startedAt, options.now, options.timeZone, T, options.locale),
       ongoing: visit.endedAt === null,
       steps,
       stepCount: visit.steps.length,

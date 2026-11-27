@@ -78,13 +78,16 @@ import {
   FEEDBACK_OUTCOME_LABELS,
   findMyWatchCardLines,
   formatAdditions,
+  formatAgo,
   formatClock,
   formatCommitsFooter,
+  formatDate,
   formatDayDivider,
   formatDeletions,
   formatDue,
   formatPlanLabel,
   formatRecent,
+  formatReplies,
   formatResearchLabel,
   formatResearchMeta,
   formatReviewLabel,
@@ -114,6 +117,7 @@ import {
   type Tone,
   thingWatchCardLines,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { type PlanCardView, planCardView, planDisplay, planSettledLine } from './automationPlan';
 import { type RanOnView, ranOnView } from './chatRuntime';
 import { type CouncilItem, councilItem } from './council';
@@ -189,7 +193,7 @@ const STEP_MARK: Record<Plan['steps'][number]['state'], CardMark> = {
 };
 
 /** A plan card's head: its focus step called out, every step under Show more (Details: what it counts). */
-export function planHead(plan: Plan, assistant: string, timeZone: string): CardHeadModel {
+export function planHead(plan: Plan, assistant: string, timeZone: string, locale?: string): CardHeadModel {
   const frame = planFrame(plan, assistant);
   const focus = planFocus(plan);
   const { done, total } = planProgress(plan);
@@ -205,14 +209,14 @@ export function planHead(plan: Plan, assistant: string, timeZone: string): CardH
       note: s.note,
     })),
     facts: [
-      `${formatPlanLabel(plan.steps.length)} · ${done} of ${total} done`,
+      `${formatPlanLabel(plan.steps.length, locale)} · ${done} of ${total} done`,
       ...(plan.due ? [formatDue(plan.due)] : []),
     ],
   };
 }
 
 /** A run card's head: the run's number, branch, tests and changes under Details. */
-export function runHead(run: Run, timeZone: string): CardHeadModel {
+export function runHead(run: Run, timeZone: string, locale?: string): CardHeadModel {
   const frame = runFrame(run);
   return {
     ...frame,
@@ -220,7 +224,7 @@ export function runHead(run: Run, timeZone: string): CardHeadModel {
     callout: null,
     steps: [],
     facts: [
-      `${CARD_FRAME_WORDS.run(run.number)} · ${formatRunLabel(run.status)}`,
+      `${CARD_FRAME_WORDS.run(run.number)} · ${formatRunLabel(run.status, locale)}`,
       ...(run.branch ? [`${CARD_FRAME_WORDS.branch}: ${run.branch}`] : []),
       ...(run.tests ? [formatTestsPassing(run.tests)] : []),
     ],
@@ -589,11 +593,16 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
       const { done, total } = planProgress(card.plan);
       return {
         ...base,
-        label: formatPlanLabel(card.plan.steps.length),
+        label: formatPlanLabel(card.plan.steps.length, ctx.locale),
         title: card.plan.title,
         detail: `${done} of ${total} done`,
         planId: card.plan.id,
-        head: planHead(card.plan, agentWords(ctx.people.agent?.name).name, ctx.timeZone),
+        head: planHead(
+          card.plan,
+          agentWords(ctx.people.agent?.name, ctx.locale).name,
+          ctx.timeZone,
+          ctx.locale,
+        ),
       };
     }
     case 'research':
@@ -659,8 +668,8 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
               retry: controls.retry,
               agentName,
             },
-        head: runLine ? null : runHead(r, ctx.timeZone),
-        label: formatRunLabel(r.status),
+        head: runLine ? null : runHead(r, ctx.timeZone, ctx.locale),
+        label: formatRunLabel(r.status, ctx.locale),
         title: r.title,
         detail: attention ? `${RUN_ATTENTION_LABEL} · ${attention}` : runNowText(r),
         tone: attention ? 'warn' : live ? 'ok' : null,
@@ -915,7 +924,7 @@ export function chatItems(
   const unreadId = firstUnreadId(messages, options.readUpTo, me, options.moreAbove === true);
   const unreadAt = unreadId ? messages.findIndex((m) => m.id === unreadId) : -1;
   let unreadShown = false;
-  const labels = timeLabels(ctx.now, ctx.timeZone);
+  const labels = timeLabels(ctx.now, ctx.timeZone, ctx.locale);
   // In a thread, the dividers before replies that ran on something else than the one before (CR-07).
   const shownRanOn = options.ranOn ?? null;
   const switches = shownRanOn?.switches ? ranOnSwitches(messages) : null;
@@ -948,7 +957,7 @@ export function chatItems(
     const continues = options.authors && !showAuthor;
     previous = m;
     const thread = options.threads !== false && m.threadRootId === null && m.replyCount > 0;
-    const replies = thread ? plural(m.replyCount, 'reply', 'replies') : null;
+    const replies = thread ? formatReplies(m.replyCount, ctx.locale) : null;
     const replyHeads = thread
       ? m.threadParticipantIds
           .slice(0, 3)
@@ -1112,7 +1121,7 @@ function kept(key: string, make: () => string): string {
  * `dayKey`, `formatRecent` and `formatDayDivider` at `now`, with the same results, kept by
  * message moment.
  */
-export function timeLabels(now: Date, timeZone: string) {
+export function timeLabels(now: Date, timeZone: string, locale?: string) {
   const at = now.getTime();
   const day = (moment: string) => kept(`d|${timeZone}|${moment}`, () => dayKey(moment, timeZone));
   const today = day(now.toISOString());
@@ -1120,8 +1129,10 @@ export function timeLabels(now: Date, timeZone: string) {
     dayKey: day,
     recent(moment: string): string {
       const age = at - Date.parse(moment);
-      if (age >= 0 && age < 60_000) return formatRecent(moment, now, timeZone);
-      return kept(`r|${timeZone}|${today}|${moment}`, () => formatRecent(moment, now, timeZone));
+      if (age >= 0 && age < 60_000) return formatRecent(moment, now, timeZone, locale);
+      return kept(`r|${locale ?? ''}|${timeZone}|${today}|${moment}`, () =>
+        formatRecent(moment, now, timeZone, locale),
+      );
     },
     /**
      * The label once the moment's first minute is over: `recent`, except that a moment under a minute old reads as it
@@ -1131,10 +1142,12 @@ export function timeLabels(now: Date, timeZone: string) {
       const sent = Date.parse(moment);
       const age = at - sent;
       if (age < 0 || age >= JUST_NOW_MS) return this.recent(moment);
-      return formatRecent(moment, new Date(sent + JUST_NOW_MS), timeZone);
+      return formatRecent(moment, new Date(sent + JUST_NOW_MS), timeZone, locale);
     },
     divider: (moment: string) =>
-      kept(`v|${timeZone}|${today}|${moment}`, () => formatDayDivider(moment, now, timeZone)),
+      kept(`v|${locale ?? ''}|${timeZone}|${today}|${moment}`, () =>
+        formatDayDivider(moment, now, timeZone, locale),
+      ),
   };
 }
 
@@ -1153,9 +1166,15 @@ const WEEK_MS = 7 * 24 * 60 * 60_000;
  * What a message's author line says at `now`: `just now` in its first minute, else its kept `settled` label. A row
  * follows the clock only while `sentFollowsClock`.
  */
-export function sentLabel(sentAt: string, settled: string, now: Date, timeZone: string): string {
+export function sentLabel(
+  sentAt: string,
+  settled: string,
+  now: Date,
+  timeZone: string,
+  locale?: string,
+): string {
   const age = now.getTime() - Date.parse(sentAt);
-  return age >= 0 && age < JUST_NOW_MS ? formatRecent(sentAt, now, timeZone) : settled;
+  return age >= 0 && age < JUST_NOW_MS ? formatRecent(sentAt, now, timeZone, locale) : settled;
 }
 
 /** Whether a message's author line can still change: within its first minute (or sent “later” than the clock). */
@@ -1167,9 +1186,16 @@ export function sentFollowsClock(sentAt: string, now: Date): boolean {
  * `Last reply 12 min ago` at `now` (AP-944): no `Intl` within a week; from a week on it is a date, kept like the other
  * labels.
  */
-export function lastReplyText(moment: string, now: Date, timeZone: string): string {
-  if (lastReplyFollowsClock(moment, now)) return lastReplyLabel(moment, now, timeZone);
-  return kept(`l|${timeZone}|${now.getUTCFullYear()}|${moment}`, () => lastReplyLabel(moment, now, timeZone));
+export function lastReplyText(moment: string, now: Date, timeZone: string, locale?: string): string {
+  const recent = lastReplyFollowsClock(moment, now);
+  const label = () => {
+    if (!locale) return lastReplyLabel(moment, now, timeZone);
+    const { t } = mobileTranslator(locale);
+    return recent
+      ? t('chat.lastReply', { when: formatAgo(moment, now, timeZone, locale) })
+      : t('chat.lastReplyOn', { date: formatDate(moment, timeZone, { now }, locale) });
+  };
+  return recent ? label() : kept(`l|${locale ?? ''}|${timeZone}|${now.getUTCFullYear()}|${moment}`, label);
 }
 
 /** Whether `Last reply …` still changes with the clock: within a week (`12 min ago`, `3 days ago`). */

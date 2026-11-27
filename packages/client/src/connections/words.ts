@@ -2,7 +2,8 @@
  * Who uses a connection (less-is-more.md AP-1802; one-agent.md AP-4904): the agent by its name (“Dusty calls it
  * homeassistant”, “WHAT DUSTY MAY DO”), “your agent” until its name is known. Each line is one sentence (AP-1751). Pure.
  */
-import { AGENT_FALLBACK_NAME } from '../agentName';
+import { agentFallbackName } from '../agentName';
+import { clientTranslator } from '../i18n/catalog';
 
 export interface ConnectionWords {
   /** The agent's name. */
@@ -40,30 +41,26 @@ export interface ConnectionWords {
 
 export function connectionWords(
   agent: string | null | undefined,
-  options: { feedbackChat?: boolean } = {},
+  options: { feedbackChat?: boolean; locale?: string | null } = {},
 ): ConnectionWords {
-  const look = (lookOnly: boolean) =>
-    lookOnly ? ' It’s set to Look only, so everything that changes things stays off.' : '';
-  const a = agent?.trim() || AGENT_FALLBACK_NAME;
+  const tr = clientTranslator(options.locale);
+  const look = (lookOnly: boolean) => (lookOnly ? tr.t('connections.toolsLookOnly') : '');
+  const a = agent?.trim() || agentFallbackName(options.locale);
   const A = a.charAt(0).toUpperCase() + a.slice(1);
   return {
     agent: a,
-    intro: `Services ${a} can use for you.`,
-    addHint: `${A} uses it as soon as it’s connected.`,
-    github: `Repositories, branches and pull requests for ${a}.`,
-    feedback: options.feedbackChat
-      ? `A feedback button on your website; reports come to your chat with ${a}.`
-      : null,
-    callsLine: (tools, handle) => `${tools} · ${a} calls it ${handle}`,
-    callsIt: `${A.toUpperCase()} CALLS IT`,
-    mayDo: `WHAT ${A.toUpperCase()} MAY DO`,
-    mayDoQuestion: `What may ${a} do?`,
-    access: (text) => text.replace(/^Agents /, `${A} `),
-    toolsHint: (label, lookOnly) =>
-      `What ${a} may do with ${label}: Allowed runs at once, Asks waits for you, Off never runs.${look(lookOnly)}`,
-    toolTiers: (tool) => `${tool}: what ${a} may do`,
-    nameHelp: `How it’s listed here and how ${a} sees it. You can change it later.`,
-    limitNote: (service) =>
-      `${service} can’t limit Whombat’s key itself, so Whombat keeps ${a} to the level you choose.`,
+    intro: tr.t('connections.intro', { agent: a }),
+    addHint: tr.t('connections.addHint', { Agent: A }),
+    github: tr.t('connections.github', { agent: a }),
+    feedback: options.feedbackChat ? tr.t('connections.feedback', { agent: a }) : null,
+    callsLine: (tools, handle) => tr.t('connections.callsLine', { tools, agent: a, handle }),
+    callsIt: tr.t('connections.callsIt', { AGENT: A.toUpperCase() }),
+    mayDo: tr.t('connections.mayDo', { AGENT: A.toUpperCase() }),
+    mayDoQuestion: tr.t('connections.mayDoQuestion', { agent: a }),
+    access: (text) => text.replace(/^(Agents|Assistenten) /, `${A} `),
+    toolsHint: (label, lookOnly) => tr.t('connections.toolsHint', { agent: a, label, look: look(lookOnly) }),
+    toolTiers: (tool) => tr.t('connections.toolTiers', { tool, agent: a }),
+    nameHelp: tr.t('connections.nameHelp', { agent: a }),
+    limitNote: (service) => tr.t('connections.limitNote', { service, agent: a }),
   };
 }

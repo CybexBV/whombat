@@ -1,7 +1,9 @@
 import type { AvatarFace } from '@whombat/avatars';
 import { WhombatLogo } from '@whombat/brand/react';
 import type { ReactNode } from 'react';
-import { GUIDE_LABEL } from '../lib/copy';
+import { useT } from '../i18n/react';
+import { guideLabelCopy } from '../lib/copy';
+
 import { Bubble } from '../ui/Bubble';
 import { Burrow } from '../ui/Wombat';
 import styles from './installer.module.css';
@@ -31,6 +33,9 @@ export interface FrameProps {
  * a mono kicker, a large title and a sub), with Hazel in a burrow instead of a small tip avatar (CG-35).
  */
 export function Frame({ kicker, title, sub, guide, meta, children, actions }: FrameProps) {
+  const t = useT();
+  const GUIDE_LABEL = guideLabelCopy(t);
+
   return (
     <div className={styles.page}>
       <aside className={styles.aside}>

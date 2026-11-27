@@ -28,6 +28,7 @@ import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
 import { GuestKindIcon } from '../GuestName';
 import { Card, Empty, ErrorLine, StateCell } from '../parts';
 import styles from '../Things.module.css';
@@ -147,7 +148,7 @@ export function BackupJobsCard({
                     {!job.enabled ? (
                       <StateCell tone="mut" text="Paused" />
                     ) : job.nextRun ? (
-                      formatRelativeDay(Date.parse(job.nextRun), now, timeZone)
+                      formatRelativeDay(Date.parse(job.nextRun), now, timeZone, currentLocale())
                     ) : (
                       DASH
                     )}

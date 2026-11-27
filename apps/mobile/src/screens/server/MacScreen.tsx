@@ -5,6 +5,7 @@
  * the Mac's password Whombat signs in with (Set, Check, Forget) in a sheet that never keeps it; Whombat Helper with its
  * Accessibility and “Open the setting on the Mac”. The words are the web's (`macScreenView`, `macStepText`).
  */
+
 import {
   hostErrorInfo,
   MAC_WORDS,
@@ -18,6 +19,7 @@ import { HOST_SCREEN_LIMITS, type HostScreenBody, type HostServerDetail } from '
 import { type ReactNode, useState } from 'react';
 import { ActivityIndicator, Image, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
@@ -71,6 +73,9 @@ export function MacScreenPart({
   detail: HostServerDetail;
   now: number;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   // The person may change their own servers; the server's switches decide the rest.
@@ -99,7 +104,7 @@ export function MacScreenPart({
   const shot = look.data;
   const picture = shot?.ok && shot.imageB64 ? shot : null;
   const lookProblem = look.error
-    ? hostErrorInfo(look.error).message
+    ? hostErrorInfo(look.error, rawLocale).message
     : shot && !shot.ok
       ? macStepText({ op: 'look' }, shot, serverName).text
       : null;
@@ -131,7 +136,7 @@ export function MacScreenPart({
             ) : (
               <View
                 accessible
-                accessibilityLabel="Taking a picture of the screen"
+                accessibilityLabel={tMobile('screens.taking-a-picture-of-the-screen')}
                 style={{
                   width: '100%',
                   aspectRatio: 16 / 9,
@@ -175,11 +180,11 @@ export function MacScreenPart({
       </OneCard>
 
       <OneCard label={MAC_WORDS.passwordTitle}>
-        <Lines lines={[{ ...view.account, title: 'Screen sign-in' }]} first />
+        <Lines lines={[{ ...view.account, title: tMobile('screens.screen-sign-in') }]} first />
         {view.password.can ? (
           <Buttons>
             <Button
-              label={view.hasAccount ? 'Change it' : MAC_WORDS.setPassword}
+              label={view.hasAccount ? tMobile('screens.change-it') : MAC_WORDS.setPassword}
               variant={view.account.tone === 'ok' ? 'secondary' : 'primary'}
               disabled={busy !== null}
               onPress={() => setAsking('password')}
@@ -307,6 +312,7 @@ function PasswordForm({
   onSave: (user: string, password: string) => Promise<string | null>;
   onClose: () => void;
 }) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   const [user, setUser] = useState(initialUser);
   const [password, setPassword] = useState('');
@@ -355,7 +361,13 @@ function PasswordForm({
       />
       <FormMessage text={problem} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button label="Cancel" variant="secondary" disabled={busy} onPress={onClose} style={{ flex: 1 }} />
+        <Button
+          label={tClient('reports.cancel')}
+          variant="secondary"
+          disabled={busy}
+          onPress={onClose}
+          style={{ flex: 1 }}
+        />
         <Button label={MAC_WORDS.save} busy={busy} onPress={() => void save()} style={{ flex: 1 }} />
       </View>
     </View>

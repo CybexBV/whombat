@@ -13,6 +13,7 @@
  * - Every change is a signed appliance event (`mail.set`, `mail.removed`) naming the server and the sender, never the
  *   login.
  */
+
 import { isIP } from 'node:net';
 import {
   MAIL_TEST_MESSAGE,
@@ -27,6 +28,8 @@ import nodemailer from 'nodemailer';
 import { externalEffect } from '../commit/scope';
 import { MailError, mailErrorOf, mailFailureText } from '../connectors/imap/errors';
 import { applianceState, type BoxMailSettings } from '../db/schema/index';
+import { isEnglish, tServer } from '../i18n/catalog';
+import { burrowLocale } from '../i18n/locale';
 import { ApiError } from '../lib/errors';
 import { appendApplianceEvent } from '../managed/audit';
 import type { Services } from '../services';
@@ -72,10 +75,11 @@ export function mailTestOutcome(
   err: unknown,
   host: string,
   port: number,
+  locale?: string | null,
 ): { state: MailTestState; detail: string } {
   const code = (err as { code?: unknown } | null)?.code;
   if (code === 'EENVELOPE')
-    return { state: 'refused', detail: `${host} refused the sender or the recipient.` };
+    return { state: 'refused', detail: tServer(locale, 'mail.test.refused', { host }) };
   const failure = err instanceof MailError ? err : mailErrorOf(err, 'smtp', host, port);
   const state: MailTestState =
     failure.reason === 'refused'
@@ -326,16 +330,19 @@ export class BoxMail {
   private async send(server: Server, to: string): Promise<MailTest> {
     const at = () => this.services.clock().toISOString();
     const transport = this.transport(server, { connectMs: 10_000, socketMs: TEST_TIMEOUT_MS });
+    // The test mail goes to the owner, in their language.
+    const locale = await burrowLocale(this.services);
+    const english = isEnglish(locale);
     try {
       await transport.sendMail({
         from: fromHeader(server),
         to,
-        subject: MAIL_TEST_MESSAGE.subject,
-        text: `${MAIL_TEST_MESSAGE.text}\n`,
+        subject: english ? MAIL_TEST_MESSAGE.subject : tServer(locale, 'mail.test.subject'),
+        text: `${english ? MAIL_TEST_MESSAGE.text : tServer(locale, 'mail.test.text')}\n`,
       });
       return { state: 'sent', at: at(), to, detail: null };
     } catch (err) {
-      const { state, detail } = mailTestOutcome(err, server.host, server.port);
+      const { state, detail } = mailTestOutcome(err, server.host, server.port, locale);
       return { state, at: at(), to, detail };
     } finally {
       (transport as { close?: () => void }).close?.();

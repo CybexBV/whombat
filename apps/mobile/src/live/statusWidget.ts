@@ -11,6 +11,7 @@ import {
   type StatusWidgetPayload,
   type StatusWidgetSource,
   shouldClearStatusWidget,
+  statusWidgetLabels,
 } from '../../modules/whombat-live/src/statusWidget';
 import { COMMUNITY_ORG } from '../managed/community';
 
@@ -24,6 +25,7 @@ export interface StatusWidgetInput {
   /** Whether the open box is a cloud-managed or direct community box; defaults to `'cloud'`. */
   source?: StatusWidgetSource;
   timeZone: string;
+  locale?: string;
   now?: Date | number;
 }
 
@@ -38,9 +40,15 @@ export function statusWidgetPayload(input: StatusWidgetInput): StatusWidgetPaylo
   const widget = homeWidgetStatus(input.overview, {
     boxName,
     timeZone: input.timeZone,
+    ...(input.locale !== undefined ? { locale: input.locale } : {}),
     ...(input.now !== undefined ? { now: input.now } : {}),
   });
-  return { ...widget, applianceId: input.applianceId, source: input.source ?? 'cloud' };
+  return {
+    ...widget,
+    applianceId: input.applianceId,
+    source: input.source ?? 'cloud',
+    ...(input.locale && { labels: statusWidgetLabels(input.locale) }),
+  };
 }
 
 export interface StatusWidgetTarget {

@@ -5,12 +5,14 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { updatePreferences } from '../commands/account';
+import { deliverAnswer } from '../commands/agent-tools';
 import { askSearch } from '../commands/content';
 import { loadBurrowRow } from '../commit/pipeline';
 import { dispatches, searchAnswers } from '../db/schema/index';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
-import { loadPrincipalRow } from './principals';
+import { loadPrincipalRow, personAccountId } from './principals';
 import { SEARCH_ANSWER_REUSE_MS, search } from './search';
 
 const t = useTestServer({ seed: true });
@@ -69,5 +71,68 @@ describe('asking the same words again', () => {
       new Date(),
     );
     expect(found.answer?.id).toBe(asked);
+  });
+});
+
+describe('switching language', () => {
+  async function onRecord(q: string, locale: string) {
+    const viewer = await loadPrincipalRow(t.services.db, IDS.mara);
+    const burrow = await loadBurrowRow(t.services.db, t.burrowId);
+    if (!viewer || !burrow) throw new Error('no viewer');
+    const found = await search(
+      t.services.db,
+      viewer,
+      burrow,
+      { q, type: 'all', limit: 5, locale },
+      new Date(),
+    );
+    return found.answer?.id ?? null;
+  }
+
+  async function withLocale<T>(locale: string, run: () => Promise<T>): Promise<T> {
+    const accountId = await personAccountId(t.services.db);
+    if (!accountId) throw new Error('no account');
+    await updatePreferences(t.services, accountId, { locale });
+    try {
+      return await run();
+    } finally {
+      await updatePreferences(t.services, accountId, { locale: null });
+    }
+  }
+
+  it('keeps an answer on its way: it still finishes, and the new language asks again', async () => {
+    const english = await ask(IDS.mara, 'Backup window tonight');
+    const dutch = await withLocale('nl-NL', async () => {
+      const again = await ask(IDS.mara, 'Backup window tonight');
+      expect(await onRecord('Backup window tonight', 'nl-NL')).toBe(again);
+      return again;
+    });
+    expect(dutch).not.toBe(english);
+    // The English answer was kept, and its turn can still deliver it.
+    const delivered = await t.commit(IDS.dusty, deliverAnswer, {
+      answerId: english,
+      text: 'Tonight at two [1].',
+      citations: [{ n: 1, resultId: 'hist_thread-credit-note' }],
+      actions: [],
+    });
+    expect(delivered.status).toBe('ok');
+    const [row] = await t.services.db.select().from(searchAnswers).where(eq(searchAnswers.id, english));
+    expect(row?.status).toBe('ready');
+    expect(row?.language).toBe('en');
+  });
+
+  it('keeps a given answer for its own language and doesn’t show it in the other', async () => {
+    const english = await ask(IDS.mara, 'Who owns the VPN');
+    await t.services.db
+      .update(searchAnswers)
+      .set({ status: 'ready', text: 'Sam.' })
+      .where(eq(searchAnswers.id, english));
+    await withLocale('nl-NL', async () => {
+      expect(await onRecord('Who owns the VPN', 'nl-NL')).toBeNull();
+      expect(await ask(IDS.mara, 'who owns the vpn')).not.toBe(english);
+    });
+    // Back in English, the English answer is the answer again and nobody is asked twice.
+    expect(await onRecord('Who owns the VPN', 'en-GB')).toBe(english);
+    expect(await ask(IDS.mara, 'Who owns the VPN')).toBe(english);
   });
 });

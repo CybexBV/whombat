@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Whombat uses the camera to take a photo you attach to a message, and to scan QR codes: the one on your Whombat’s page, the sign-in code on your computer and your Whombat’s claim card.",
+    "NSMicrophoneUsageDescription": "Whombat uses the microphone for voice typing: what you say goes to your Whombat, which turns it into text.",
+    "NSLocalNetworkUsageDescription": "Whombat connects straight to your Whombat when you’re on the same network, which is quicker than going over the internet.",
+    "NSPhotoLibraryUsageDescription": "Whombat opens your photos only when you attach one to a message.",
+    "NSPhotoLibraryAddUsageDescription": "Whombat saves a picture to your photos only when you choose Save Image."
+  }
+}

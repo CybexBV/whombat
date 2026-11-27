@@ -26,18 +26,20 @@
  */
 
 import type { BackupServiceStatus } from '@whombat/control-contracts/local';
-import { BACKUP_PLACE_TEXT, type BackupPlace, bestBackupPlace, type NeedsYouItem } from '@whombat/core';
+import { type BackupPlace, bestBackupPlace, type NeedsYouItem } from '@whombat/core';
 import { BACKUP_RESTORE_INTERRUPTED, type BackupRestoreState } from '@whombat/protocol/session';
 import { and, eq, gt, isNotNull } from 'drizzle-orm';
 import { loadBoxBackupNotes } from '../backup-places/notes';
 import { placesNow } from '../backup-places/places';
 import { applianceEvents } from '../db/schema/index';
+import { isEnglish, type ServerMessageKey, tServer } from '../i18n/catalog';
+import { localizePhrase } from '../i18n/phrases';
 import { backupFailingSince, boxBackupOf, boxBackupStatus } from '../managed/box-backup';
 import { readRestoreState } from '../managed/restore-state';
 import { loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
 import { checkStartsOn, registerChecks } from '../things/quiet/defaults';
-import { registerNeedsYouSource, type SourceCtx } from './registry';
+import { registerNeedsYouSource, type SourceCtx, sourceLocale } from './registry';
 
 export const BACKUP_REF = { kind: 'backup', id: 'this-whombat' } as const;
 /** This Whombat's backups, where other places are set up by hand. */
@@ -58,46 +60,54 @@ registerChecks(BOX_BACKUP_CHECKS);
 /** What the proposal names: a backup place, or a USB disk when there is none. */
 export type ProposedPlace = Pick<BackupPlace, 'id' | 'name' | 'state' | 'address'> | null;
 
-const ONLY_HERE = 'Right now everything on it is only here: your chats, settings and connections.';
-const OWN_DISK =
-  'A broken disk or a reinstall would take them with it. Backups made so far stay where they are.';
-
 /** “the Synology at 192.168.1.40”: a NAS the scan found, as the proposal says it. */
-function foundSaid(place: NonNullable<ProposedPlace>): string {
-  return `the ${place.name}${place.address ? ` at ${place.address}` : ''}`;
+function foundSaid(place: NonNullable<ProposedPlace>, locale?: string | null): string {
+  return place.address
+    ? tServer(locale, 'home.backup.foundAt', { name: place.name, address: place.address })
+    : tServer(locale, 'home.backup.found', { name: place.name });
 }
 
 /** The words of the proposal (pure). `ownDisk`: backups go only to this Whombat's own disk now. */
 export function backupProposal(
   place: ProposedPlace,
   ownDisk = false,
+  locale?: string | null,
 ): { title: string; body: string; yes: string } {
+  const t = (key: ServerMessageKey, vars?: Record<string, string>) => tServer(locale, key, vars);
+  const intro = t(ownDisk ? 'home.backup.ownDisk' : 'home.backup.onlyHere');
+  const title = (where: string) =>
+    ownDisk ? t('home.backup.ownDiskTitle', { place: where }) : t('home.backup.toTitle', { place: where });
   if (place && place.state !== 'connect_first') {
     const name = place.name;
     return {
-      title: ownDisk ? BACKUP_PLACE_TEXT.ownDisk(name) : `Back up this Whombat to ${name}?`,
-      body: `${ownDisk ? OWN_DISK : ONLY_HERE} Say yes and I’ll set it up on ${name}, start the first backup right away and tell you when it’s done.`,
-      yes: `Yes, back up this Whombat to ${name}.`,
+      title: title(name),
+      body: t('home.backup.setUpOn', { intro, place: name }),
+      yes: t('home.backup.yesTo', { place: name }),
     };
   }
   if (place) {
-    const said = foundSaid(place);
+    const said = foundSaid(place, locale);
     return {
-      title: ownDisk ? BACKUP_PLACE_TEXT.ownDisk(said) : `Back up this Whombat to ${said}?`,
-      body: `${ownDisk ? OWN_DISK : ONLY_HERE} Say yes and I’ll set it up there; I may need you to connect it first.`,
-      yes: `Yes, back up this Whombat to ${said}.`,
+      title: title(said),
+      body: t('home.backup.setUpThere', { intro }),
+      yes: t('home.backup.yesTo', { place: said }),
     };
   }
   return {
-    title: ownDisk ? BACKUP_PLACE_TEXT.ownDisk('a USB disk') : 'Back up this Whombat to a USB disk?',
-    body: `${ownDisk ? OWN_DISK : ONLY_HERE} Name a USB disk WHOMBAT-BACKUP, plug it into your Whombat and say yes.`,
-    yes: 'Yes, back up this Whombat to the disk named WHOMBAT-BACKUP I plugged in.',
+    title: title(t('home.backup.usbDisk')),
+    body: t('home.backup.usbBody', { intro }),
+    yes: t('home.backup.yesUsb'),
   };
 }
 
 /** The one item (pure): the proposal, Yes, do it, See other places (Ignore is the list's own). */
-export function backupProposalItem(place: ProposedPlace, at: string, ownDisk = false): NeedsYouItem {
-  const words = backupProposal(place, ownDisk);
+export function backupProposalItem(
+  place: ProposedPlace,
+  at: string,
+  ownDisk = false,
+  locale?: string | null,
+): NeedsYouItem {
+  const words = backupProposal(place, ownDisk, locale);
   return {
     id: `${BACKUP_REF.kind}:${BACKUP_REF.id}`,
     ref: { ...BACKUP_REF },
@@ -107,8 +117,20 @@ export function backupProposalItem(place: ProposedPlace, at: string, ownDisk = f
     body: words.body,
     at,
     actions: [
-      { id: 'yes', label: 'Yes, do it', style: 'primary', kind: 'ask', text: words.yes.slice(0, 500) },
-      { id: 'places', label: 'See other places', style: 'secondary', kind: 'open', href: BACKUPS_HREF },
+      {
+        id: 'yes',
+        label: tServer(locale, 'home.action.yesDoIt'),
+        style: 'primary',
+        kind: 'ask',
+        text: words.yes.slice(0, 500),
+      },
+      {
+        id: 'places',
+        label: tServer(locale, 'home.action.seeOtherPlaces'),
+        style: 'secondary',
+        kind: 'open',
+        href: BACKUPS_HREF,
+      },
     ],
     href: BACKUPS_HREF,
   };
@@ -119,14 +141,26 @@ export function backupProposalItem(place: ProposedPlace, at: string, ownDisk = f
 /** How long backups fail before the Inbox says so: the service tries again after 15 minutes. */
 export const FAILING_FOR_MS = 45 * 60_000;
 
-export const LATE_TEXT = {
-  failingTitle: 'This Whombat’s backups aren’t working',
-  failingBody: (reason: string | null) =>
-    `${reason ? `${reason.replace(/[.\s]+$/, '')}.` : 'The last backups didn’t finish.'} The backups made before are still there.`,
-  lateTitle: 'This Whombat hasn’t backed up for a while',
-  lateBody: 'No backup has finished for longer than it should. The backups made before are still there.',
-  see: 'See backups',
-} as const;
+/** The failing-or-late item's words in a locale. */
+export function lateText(locale?: string | null) {
+  return {
+    failingTitle: tServer(locale, 'home.backup.failingTitle'),
+    failingBody: (reason: string | null) => {
+      // The backup service says why in English: another language says it only when the phrasebook knows it.
+      const said = reason && !isEnglish(locale) ? localizePhrase(reason, locale) : reason;
+      const why =
+        said && (isEnglish(locale) || said !== reason)
+          ? `${said.replace(/[.\s]+$/, '')}.`
+          : tServer(locale, 'home.backup.failingNone');
+      return `${why} ${tServer(locale, 'home.backup.madeBefore')}`;
+    },
+    lateTitle: tServer(locale, 'home.backup.lateTitle'),
+    lateBody: tServer(locale, 'home.backup.lateBody'),
+    see: tServer(locale, 'home.action.seeBackups'),
+  };
+}
+
+export const LATE_TEXT = lateText(null);
 
 /**
  * The failing-or-late item (pure): `failing` once the service has said so for `FAILING_FOR_MS` (`failingSince`, when it
@@ -137,8 +171,10 @@ export function lateBackupItem(
   status: Pick<BackupServiceStatus, 'state' | 'destination' | 'lastSuccess' | 'lastFailure' | 'updatedAt'>,
   failingSince: number | null,
   now: Date,
+  locale?: string | null,
 ): NeedsYouItem | null {
   if (!status.destination.configured || status.destination.kind === 'local') return null;
+  const words = lateText(locale);
   const failing =
     status.state === 'failing' && failingSince !== null && now.getTime() - failingSince >= FAILING_FOR_MS;
   const late = status.state === 'stale';
@@ -151,13 +187,13 @@ export function lateBackupItem(
     severity: failing ? 'bad' : 'warn',
     nature: 'you',
     fixable: true,
-    title: failing ? LATE_TEXT.failingTitle : LATE_TEXT.lateTitle,
-    body: (failing
-      ? LATE_TEXT.failingBody(status.lastFailure?.reason?.trim() || null)
-      : LATE_TEXT.lateBody
-    ).slice(0, 600),
+    title: failing ? words.failingTitle : words.lateTitle,
+    body: (failing ? words.failingBody(status.lastFailure?.reason?.trim() || null) : words.lateBody).slice(
+      0,
+      600,
+    ),
     at: new Date(status.lastFailure?.at ?? status.updatedAt).toISOString(),
-    actions: [{ id: 'backups', label: LATE_TEXT.see, style: 'secondary', kind: 'open', href: BACKUPS_HREF }],
+    actions: [{ id: 'backups', label: words.see, style: 'secondary', kind: 'open', href: BACKUPS_HREF }],
     href: BACKUPS_HREF,
   };
 }
@@ -187,12 +223,13 @@ export async function boxBackupNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]>
   if (services.maintenance.quarantined) return boxRestoreNeedsYou(ctx);
   const status = await boxBackupStatus(services);
   if (!status) return [];
+  const locale = await sourceLocale(ctx);
   const person = await loadPrincipalRow(ctx.db, ctx.personId);
   if (person?.kind !== 'person') return [];
   const nothing = !status.destination.configured && status.state === 'unprotected';
   const ownDisk = status.destination.configured && status.destination.kind === 'local';
   if (!nothing && !ownDisk && checkStartsOn('box.backup_late')) {
-    const late = lateBackupItem(status, backupFailingSince(services), ctx.now);
+    const late = lateBackupItem(status, backupFailingSince(services), ctx.now, locale);
     if (late) return [late];
   }
   const stopped = await restoreStoppedNeedsYou(ctx);
@@ -202,7 +239,7 @@ export async function boxBackupNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]>
     if ((await loadBoxBackupNotes(ctx.db)).consent?.state === 'waiting') return [];
     const now = await placesNow(services).catch(() => null);
     const place = bestBackupPlace(now?.places ?? []);
-    return [backupProposalItem(place, new Date(status.updatedAt).toISOString(), ownDisk)];
+    return [backupProposalItem(place, new Date(status.updatedAt).toISOString(), ownDisk, locale)];
   }
   if (status.state === 'failing' || status.state === 'stale') return [];
   const password = await changePasswordNeedsYou(ctx);
@@ -218,25 +255,34 @@ export async function boxBackupNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]>
 export const BACKUP_PASSWORD_CHECK = 'box.backup_password';
 registerChecks([{ check: BACKUP_PASSWORD_CHECK, startsOn: true }]);
 
-export const CHANGE_PASSWORD_TEXT = {
-  title: (place: string | null) =>
-    `Change the backup password on ${place ?? 'the place your backups are on'}`,
-  /** A place set up by hand: setting it up by hand again gives it a new password. */
-  byHand: (place: string | null) =>
-    `Your old Whombat still has the password, so it could keep adding backups there. In Backups, set ${place ?? 'it'} up by hand again: that gives it a new one.`,
-  /** A destination typed in (a REST server, a disk, a bucket): changed there, then typed in Backups. */
-  typed: (place: string | null) =>
-    `Your old Whombat still has the password, so it could keep adding backups there. Change it on ${place ?? 'that place'}, then give Whombat the new one in Backups.`,
-  open: 'Open Backups',
-} as const;
+/** The password item's words in a locale. */
+export function changePasswordText(locale?: string | null) {
+  const t = (key: ServerMessageKey, vars?: Record<string, string>) => tServer(locale, key, vars);
+  return {
+    title: (place: string | null) =>
+      t('home.password.title', { place: place ?? t('home.password.placeUnknown') }),
+    /** A place set up by hand: setting it up by hand again gives it a new password. */
+    byHand: (place: string | null) =>
+      t('home.password.byHand', { place: place ?? t('home.password.byHandIt') }),
+    /** A destination typed in (a REST server, a disk, a bucket): changed there, then typed in Backups. */
+    typed: (place: string | null) =>
+      t('home.password.typed', { place: place ?? t('home.password.typedPlace') }),
+    open: t('home.action.openBackups'),
+  };
+}
+
+export const CHANGE_PASSWORD_TEXT = changePasswordText(null);
 
 /** The item (pure): a lost or stolen Whombat's backups are on a place only the person can give a new password. */
-export function changePasswordItem(note: {
-  since: string;
-  place: string | null;
-  byHand: boolean;
-}): NeedsYouItem {
-  const T = CHANGE_PASSWORD_TEXT;
+export function changePasswordItem(
+  note: {
+    since: string;
+    place: string | null;
+    byHand: boolean;
+  },
+  locale?: string | null,
+): NeedsYouItem {
+  const T = changePasswordText(locale);
   return {
     id: `backup:password:${note.since}`.slice(0, 200),
     ref: { kind: 'backup', id: `password:${note.since}`.slice(0, 200) },
@@ -267,18 +313,27 @@ async function changePasswordNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
       ),
     )
     .limit(1);
-  return set ? [] : [changePasswordItem(note)];
+  return set ? [] : [changePasswordItem(note, await sourceLocale(ctx))];
 }
 
-export const RESTORE_WAITING_TEXT = {
-  title: 'Finish bringing your Whombat back',
-  body: 'One question is left: is the old Whombat gone, or was it lost or stolen? Until you answer, nothing runs on its own.',
-  finish: 'Finish',
-} as const;
+/** The waiting restore's words in a locale. */
+export function restoreWaitingText(locale?: string | null) {
+  return {
+    title: tServer(locale, 'home.restore.waitingTitle'),
+    body: tServer(locale, 'home.restore.waitingBody'),
+    finish: tServer(locale, 'home.action.finish'),
+  };
+}
+
+export const RESTORE_WAITING_TEXT = restoreWaitingText(null);
 
 /** The restore's item (pure): while it waits for the person's answer. */
-export function restoreWaitingItem(state: Pick<BackupRestoreState, 'phase' | 'since'>): NeedsYouItem | null {
+export function restoreWaitingItem(
+  state: Pick<BackupRestoreState, 'phase' | 'since'>,
+  locale?: string | null,
+): NeedsYouItem | null {
   if (state.phase !== 'checking') return null;
+  const words = restoreWaitingText(locale);
   const since = state.since ?? 'now';
   return {
     id: `backup:restore:${since}`.slice(0, 200),
@@ -286,13 +341,13 @@ export function restoreWaitingItem(state: Pick<BackupRestoreState, 'phase' | 'si
     kind: 'backup',
     severity: 'warn',
     nature: 'you',
-    title: RESTORE_WAITING_TEXT.title,
-    body: RESTORE_WAITING_TEXT.body,
+    title: words.title,
+    body: words.body,
     at: new Date(state.since ?? Date.now()).toISOString(),
     actions: [
       {
         id: 'finish',
-        label: RESTORE_WAITING_TEXT.finish,
+        label: words.finish,
         style: 'primary',
         kind: 'open',
         href: FINISH_RESTORE_HREF,
@@ -311,15 +366,20 @@ export async function boxRestoreNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]
   const person = await loadPrincipalRow(ctx.db, ctx.personId);
   if (person?.kind !== 'person') return [];
   const state = await readRestoreState(box.port);
-  const item = state ? restoreWaitingItem(state) : null;
+  const item = state ? restoreWaitingItem(state, await sourceLocale(ctx)) : null;
   return item ? [item] : [];
 }
 
-export const RESTORE_STOPPED_TEXT = {
-  title: 'Bringing your Whombat back stopped',
-  body: 'It restarted before it finished, so it was put back as it was. Your backups are fine. Try again when you like.',
-  again: 'Try again',
-} as const;
+/** The stopped restore's words in a locale. */
+export function restoreStoppedText(locale?: string | null) {
+  return {
+    title: tServer(locale, 'home.restore.stoppedTitle'),
+    body: tServer(locale, 'home.restore.stoppedBody'),
+    again: tServer(locale, 'home.action.tryAgain'),
+  };
+}
+
+export const RESTORE_STOPPED_TEXT = restoreStoppedText(null);
 
 /** Where the app brings a Whombat back again (the Backups page, which opens the bring back). */
 export const RESTORE_AGAIN_HREF = '/settings?tab=appliance&section=backups&restore=again';
@@ -334,8 +394,10 @@ export const RESTORE_STOPPED_FOR_MS = 24 * 60 * 60_000;
 export function restoreStoppedItem(
   state: Pick<BackupRestoreState, 'phase' | 'since' | 'reason' | 'error'>,
   now: Date,
+  locale?: string | null,
 ): NeedsYouItem | null {
   if (state.phase !== 'failed' || state.reason !== BACKUP_RESTORE_INTERRUPTED) return null;
+  const words = restoreStoppedText(locale);
   const at = state.since ? Date.parse(state.since) : Number.NaN;
   if (!Number.isFinite(at) || now.getTime() - at > RESTORE_STOPPED_FOR_MS) return null;
   return {
@@ -344,13 +406,13 @@ export function restoreStoppedItem(
     kind: 'backup',
     severity: 'warn',
     nature: 'you',
-    title: RESTORE_STOPPED_TEXT.title,
-    body: (state.error?.trim() || RESTORE_STOPPED_TEXT.body).slice(0, 600),
+    title: words.title,
+    body: ((isEnglish(locale) ? state.error?.trim() : null) || words.body).slice(0, 600),
     at: new Date(at).toISOString(),
     actions: [
       {
         id: 'again',
-        label: RESTORE_STOPPED_TEXT.again,
+        label: words.again,
         style: 'primary',
         kind: 'open',
         href: RESTORE_AGAIN_HREF,
@@ -375,7 +437,7 @@ export async function restoreStoppedNeedsYou(ctx: SourceCtx): Promise<NeedsYouIt
     seen = { at: now, state: await readRestoreState(box.port) };
     restoreSeen.set(services, seen);
   }
-  const item = seen.state ? restoreStoppedItem(seen.state, ctx.now) : null;
+  const item = seen.state ? restoreStoppedItem(seen.state, ctx.now, await sourceLocale(ctx)) : null;
   return item ? [item] : [];
 }
 

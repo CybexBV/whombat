@@ -3,257 +3,364 @@
  * a browser said for a phone, and what only the phone does (scanning the claim card, saving the kit through the share
  * sheet, notifications). Curly quotes and the middle dot as in the mocks.
  */
-import { COPY as SHARED, MANAGED_TEXT as SHARED_STATUS } from '@whombat/client/managed';
+
+import { clientTranslator } from '@whombat/client/i18n';
+import { claimStepKicker, COPY as SHARED, managedText as sharedStatus } from '@whombat/client/managed';
 import { VERSION_REFUSAL_COPY } from '@whombat/protocol/session';
+import { mobileTranslator } from '../i18n/translate';
 
-export const COPY = {
-  ...SHARED,
-  signIn: {
-    ...SHARED.signIn,
-    sent: (email: string) => `We sent a sign-in link to ${email}. Open it on this phone.`,
-    openHint: 'The link opens this app. If it opens a browser instead, sign in there or open it here again.',
-    /** QR first (AP-530): the computer shows the code, the phone scans it. */
-    scanTitle: 'Sign in with your computer',
-    scanSub:
-      'On your computer, open Whombat and choose Mobile app in the sidebar. Then scan the code it shows.',
-    scan: 'Scan the QR code',
-    scanTip:
-      'One scan signs you in and asks your Whombat to let this phone in. You confirm it on your computer.',
-    withEmail: 'Sign in with email instead',
-    withScan: 'Scan the QR code instead',
-    emailTitle: 'Sign in with email',
-  },
-  /** Signing in by the computer's QR code (CT-190, AP-530…AP-539). */
-  phone: {
-    kicker: 'SIGN IN',
-    scanTitle: 'Point the camera at the code on your computer',
-    scanWrong: 'That isn’t a Whombat sign-in code. On your computer, open Whombat and choose Mobile app.',
-    scanDenied: 'Whombat can’t use the camera. Allow it in Settings, or sign in with email instead.',
-    scanDeniedSignedIn: 'Whombat can’t use the camera. Allow it in Settings, or pair with a code instead.',
-    scanClose: 'Close the camera',
-    workingTitle: 'Signing you in…',
-    askingTitle: 'Letting this phone in…',
-    workingSub: 'This takes a few seconds. Keep Whombat open on your computer.',
-    confirmTitle: 'Confirm on your computer',
-    confirmSub:
-      'Your computer asks whether to let this phone in. Check that it shows the same fingerprint, then confirm.',
-    stages: {
-      signingIn: 'Signing you in',
-      asking: 'Asking your Whombat to let this phone in',
-      confirm: 'Confirm on your computer',
+export function managedCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  const { t: shared } = clientTranslator(locale);
+  return {
+    ...SHARED,
+    appliances: {
+      ...SHARED.appliances,
+      kicker: shared('managed.appliances.kicker'),
+      title: shared('managed.appliances.title'),
+      sub: shared('managed.appliances.sub'),
+      none: shared('managed.appliances.none'),
+      claim: shared('managed.appliances.claim'),
+      open: shared('managed.appliances.open'),
+      online: shared('managed.appliances.online'),
+      neverSeen: shared('managed.appliances.neverSeen'),
+      signOut: shared('managed.appliances.signOut'),
+      retired: shared('managed.appliances.retired'),
+      forget: shared('managed.appliances.forget'),
+      rename: shared('managed.appliances.rename'),
+      save: shared('managed.appliances.save'),
+      saving: shared('managed.appliances.saving'),
+      cancel: shared('managed.appliances.cancel'),
+      yourWhombat: shared('managed.appliances.yourWhombat'),
+      offline: (ago: string) => shared('managed.appliances.offline', { ago }),
     },
-    stageState: { done: 'done', active: 'in progress', todo: 'to do', failed: 'didn’t work' },
-    thisPhone: 'THIS PHONE',
-    fingerprint: 'FINGERPRINT',
-    same: 'Check that your computer shows the same.',
-    waiting: 'Waiting for your computer…',
-    cancel: 'Cancel',
-    scanAgain: 'Scan again',
-    tryAgain: 'Try again',
-    backToSignIn: 'Back to sign in',
-    backToList: 'Back to your Whombats',
-    withEmail: 'Sign in with email instead',
-    pairScan: 'Scan the QR code from your computer',
-    pairScanHint:
-      'On your computer, open Whombat and choose Mobile app. Scanning its code lets this phone in.',
-    pairOr: 'OR SHOW A CODE',
-    codeMismatchTitle: 'This code doesn’t match your Whombat',
-    codeMismatch:
-      'The code names a different identity for this Whombat than the one Whombat’s servers gave, so nothing was sent to it. Someone could be trying to intercept your connection. Show a new code on a computer that’s already set up.',
-    errors: {
-      expired: {
-        title: 'This code has expired',
-        text: 'Show a new one on your computer and scan again.',
-      },
-      over: {
-        title: 'This code has expired',
-        text: 'That took too long. Show a new code on your computer and scan again.',
-      },
-      tooMany: {
-        title: 'Too many tries',
-        text: 'Too many sign-in attempts for now. Wait a few minutes, then scan a new code.',
-      },
-      unreachable: {
-        title: 'Couldn’t reach Whombat',
-        text: 'Check your connection and try again.',
-      },
-      notInOrg: {
-        title: 'This Whombat isn’t in your organization',
-        text: 'You’re signed in, but the Whombat your computer has open isn’t in your organization, so this phone can’t join it.',
-      },
-      retired: {
-        title: 'This Whombat was retired',
-        text: 'You’re signed in, but the Whombat your computer has open was retired, so this phone can’t join it.',
-      },
-      whombatUnreachable: {
-        title: 'Couldn’t reach your Whombat',
-        text: 'You’re signed in, but your Whombat didn’t answer. Check that it’s on and connected, then try again.',
-      },
-      denied: {
-        title: 'This phone wasn’t let in',
-        text: 'Your computer declined this phone. If that was a mistake, show a new code there and scan again.',
-      },
-      pairExpired: {
-        title: 'Nobody confirmed in time',
-        text: 'Your computer didn’t confirm this phone in time. Show a new code there and scan again.',
-      },
-      failed: { title: 'That didn’t work', text: 'Something went wrong while signing in. Try again.' },
+    lookAround: {
+      ...SHARED.lookAround,
+      open: shared('managed.lookAround.open'),
+      notice: shared('managed.lookAround.notice'),
+      leave: shared('managed.lookAround.leave'),
+      loading: shared('managed.lookAround.loading'),
+      failed: shared('managed.lookAround.failed'),
+      retry: shared('managed.lookAround.retry'),
     },
-  },
-  claim: {
-    ...SHARED.claim,
-    cardSub: 'Scan the QR code on the claim card from the box, or type what’s on it.',
-    scan: 'Scan the QR code',
-    scanTitle: 'Point the camera at the card’s QR code',
-    scanClose: 'Close the camera',
-    scanDenied: 'Whombat can’t use the camera. Allow it in Settings, or type the card instead.',
-    scanWrong: 'That QR code isn’t a Whombat claim card.',
-    typeIt: 'Type the card instead',
-    scanned: 'Card scanned. Check the fields, then claim it.',
-  },
-  kit: {
-    ...SHARED.kit,
-    download: 'Save the kit',
-    saveHint: 'Save it to Files or a drive, or print it. Then come back here.',
-  },
-  pair: {
-    ...SHARED.pair,
-    sub: 'This phone isn’t trusted by this Whombat yet. Approve it from a device that already is.',
-  },
-  connection: {
-    ...SHARED.connection,
-    clientTooOldTitle: 'This app needs an update',
-    /** A box of another protocol major (HE-52): the contracts' words. */
-    clientTooOld: VERSION_REFUSAL_COPY.client,
-    applianceTooOld: VERSION_REFUSAL_COPY.appliance,
-    unsupported: 'This phone can’t keep a device key safely.',
-    belowFloor:
-      'For your security, your Whombat no longer lets this version of the app in. Update the app, then open it again.',
-  },
-  /**
-   * Until the app is in the Play Store, Android downloads and installs the published APK itself (AP-813); the iPhone
-   * and a phone without one published get the hosted UI's Mobile app page (AP-537).
-   */
-  update: {
-    label: 'Update the app',
-    phoneTooOld: 'Update the app to the newest version.',
-    /** After “1 item needs a newer version of the app.” while no newer app is out (AP-701). */
-    soon: 'The update will be here soon.',
-    /** A newer build is out though nothing needs it (SS-71): a calm row, not a warning. */
-    available: 'Update available',
-    /** “0.37.0 · 58 MB · Download and install it over this app.” */
-    availableMeta: (version: string, size: number) =>
-      `${version} · ${Math.max(1, Math.round(size / 1_000_000))} MB · Download and install it over this app.`,
-    /** The row's button: downloads the APK. */
-    install: 'Update',
-    /** The pop-up when a newer build is out, once per version (update-check.md). */
-    newTitle: 'A new version of Whombat',
-    /** “Version 3.155.0 (37 MB) is ready. It takes a minute, and you stay signed in.” */
-    newLead: (version: string, size: number) =>
-      `Version ${version} (${Math.max(1, Math.round(size / 1_000_000))} MB) is ready. It takes a minute, and you stay signed in.`,
-    later: 'Later',
-    /** The app updates itself (AP-813): the button while the APK downloads into the app. */
-    downloading: (percent: number) => `Downloading ${percent}%`,
-    /** “0.44.0 · 34 of 96 MB” */
-    downloadingMeta: (version: string, received: number, total: number) =>
-      `${version} · ${Math.round(received / 1_000_000)} of ${Math.max(1, Math.round(total / 1_000_000))} MB`,
-    /** Android asks once whether Whombat may install apps (“Install unknown apps”). */
-    allow: 'Allow installs',
-    /** Where Android sent the person to allow installs: the setting, the app's page instead, or nowhere. */
-    allowWhere: {
-      setting: 'Allow Whombat to install apps in Android’s settings, then come back here.',
-      details:
-        'Android opened Whombat’s app info instead. Allow it to install unknown apps there, then come back here.',
-      none: 'Android couldn’t open its settings. In Settings, find Whombat under Apps, allow it to install unknown apps, then come back here.',
+    signIn: {
+      ...SHARED.signIn,
+      kicker: shared('managed.signIn.kicker'),
+      title: shared('managed.signIn.title'),
+      sub: shared('managed.signIn.sub'),
+      tip: shared('managed.signIn.tip'),
+      email: shared('managed.signIn.email'),
+      send: shared('managed.signIn.send'),
+      sentTitle: shared('managed.signIn.sentTitle'),
+      inviteOnlySub: shared('managed.signIn.inviteOnlySub'),
+      waitlistSub: shared('managed.signIn.waitlistSub'),
+      joinWaitlist: shared('managed.signIn.joinWaitlist'),
+      again: shared('managed.signIn.again'),
+      verifying: shared('managed.signIn.verifying'),
+      linkSub: shared('managed.signIn.linkSub'),
+      useLink: shared('managed.signIn.useLink'),
+      newLink: shared('managed.signIn.newLink'),
+      badLink: shared('managed.signIn.badLink'),
+      unreachable: shared('managed.signIn.unreachable'),
+      badEmail: shared('managed.signIn.badEmail'),
+      tooMany: shared('managed.signIn.tooMany'),
+      failed: shared('managed.signIn.failed'),
+      sentGated: (email: string) => shared('managed.signIn.sentGated', { email }),
+      sent: (email: string) => t('copy.copy.signIn.sent', { email }),
+      openHint: t('copy.copy.signIn.openHint'),
+      /** QR first (AP-530): the computer shows the code, the phone scans it. */
+      scanTitle: t('copy.copy.signIn.scanTitle'),
+      scanSub: t('copy.copy.signIn.scanSub'),
+      scan: t('copy.copy.signIn.scan'),
+      scanTip: t('copy.copy.signIn.scanTip'),
+      withEmail: t('copy.copy.signIn.withEmail'),
+      withScan: t('copy.copy.signIn.withScan'),
+      emailTitle: t('copy.copy.signIn.emailTitle'),
     },
-    /** Downloaded; Android's installer opens on it. */
-    ready: 'Install',
-    readyMeta: (version: string) => `${version} · Downloaded. Android asks before it installs.`,
-    retry: 'Try again',
-    failed: {
-      network: 'The download didn’t finish. Check the connection and try again.',
-      verify: 'The download didn’t check out, so nothing was installed. Try again.',
-      signature: 'This update isn’t signed like this app, so Android can’t install it over it.',
-      failed: 'Android’s installer didn’t open. Try again.',
+    /** Signing in by the computer's QR code (CT-190, AP-530…AP-539). */
+    phone: {
+      kicker: 'SIGN IN',
+      scanTitle: t('copy.copy.phone.scanTitle'),
+      scanWrong: t('copy.copy.phone.scanWrong'),
+      scanDenied: t('copy.copy.phone.scanDenied'),
+      scanDeniedSignedIn: t('copy.copy.phone.scanDeniedSignedIn'),
+      scanClose: t('copy.copy.phone.scanClose'),
+      workingTitle: t('copy.copy.phone.workingTitle'),
+      askingTitle: t('copy.copy.phone.askingTitle'),
+      workingSub: t('copy.copy.phone.workingSub'),
+      confirmTitle: t('copy.copy.phone.confirmTitle'),
+      confirmSub: t('copy.copy.phone.confirmSub'),
+      stages: {
+        signingIn: t('copy.copy.phone.stages.signingIn'),
+        asking: t('copy.copy.phone.stages.asking'),
+        confirm: t('copy.copy.phone.stages.confirm'),
+      },
+      stageState: {
+        done: t('copy.copy.phone.stageState.done'),
+        active: t('copy.copy.phone.stageState.active'),
+        todo: t('copy.copy.phone.stageState.todo'),
+        failed: t('copy.copy.phone.stageState.failed'),
+      },
+      thisPhone: t('copy.copy.phone.thisPhone'),
+      fingerprint: t('copy.copy.phone.fingerprint'),
+      same: t('copy.copy.phone.same'),
+      waiting: t('copy.copy.phone.waiting'),
+      cancel: t('copy.copy.phone.cancel'),
+      scanAgain: t('copy.copy.phone.scanAgain'),
+      tryAgain: t('copy.copy.phone.tryAgain'),
+      backToSignIn: t('copy.copy.phone.backToSignIn'),
+      backToList: t('copy.copy.phone.backToList'),
+      withEmail: t('copy.copy.phone.withEmail'),
+      pairScan: t('copy.copy.phone.pairScan'),
+      pairScanHint: t('copy.copy.phone.pairScanHint'),
+      pairOr: t('copy.copy.phone.pairOr'),
+      codeMismatchTitle: t('copy.copy.phone.codeMismatchTitle'),
+      codeMismatch: t('copy.copy.phone.codeMismatch'),
+      errors: {
+        expired: {
+          title: t('copy.copy.phone.errors.expired.title'),
+          text: t('copy.copy.phone.errors.expired.text'),
+        },
+        over: {
+          title: t('copy.copy.phone.errors.over.title'),
+          text: t('copy.copy.phone.errors.over.text'),
+        },
+        tooMany: {
+          title: t('copy.copy.phone.errors.tooMany.title'),
+          text: t('copy.copy.phone.errors.tooMany.text'),
+        },
+        unreachable: {
+          title: t('copy.copy.phone.errors.unreachable.title'),
+          text: t('copy.copy.phone.errors.unreachable.text'),
+        },
+        notInOrg: {
+          title: t('copy.copy.phone.errors.notInOrg.title'),
+          text: t('copy.copy.phone.errors.notInOrg.text'),
+        },
+        retired: {
+          title: t('copy.copy.phone.errors.retired.title'),
+          text: t('copy.copy.phone.errors.retired.text'),
+        },
+        whombatUnreachable: {
+          title: t('copy.copy.phone.errors.whombatUnreachable.title'),
+          text: t('copy.copy.phone.errors.whombatUnreachable.text'),
+        },
+        denied: {
+          title: t('copy.copy.phone.errors.denied.title'),
+          text: t('copy.copy.phone.errors.denied.text'),
+        },
+        pairExpired: {
+          title: t('copy.copy.phone.errors.pairExpired.title'),
+          text: t('copy.copy.phone.errors.pairExpired.text'),
+        },
+        failed: {
+          title: t('copy.copy.phone.errors.failed.title'),
+          text: t('copy.copy.phone.errors.failed.text'),
+        },
+      },
     },
-  },
-  notifications: {
-    label: 'NOTIFICATIONS',
-    /** Under the settings sheet's Notifications group (SS-30): push on this phone. */
-    onThisPhone: 'ON THIS PHONE',
-    on: 'On',
-    onMeta: 'You get a short note when something needs you. What happened stays on your Whombat.',
-    /** An iPhone allowed quietly (provisional): on, without a sound or a banner. */
-    quietOn: 'On, quietly',
-    quietMeta: 'They wait in Notification Center, without a sound or a banner.',
-    turnOnAlerts: 'Turn on alerts',
-    /** Push on this phone, not turned on yet. */
-    off: 'Off',
-    offMeta: 'Turn them on to hear when something needs you.',
-    turnOn: 'Turn on',
-    denied: 'Not allowed',
-    deniedMeta: 'Notifications are off for Whombat in this phone’s settings.',
-    openSettings: 'Open settings',
-    unavailable: 'Not available',
-    unavailableMeta: 'This build of the app can’t receive notifications.',
-    registering: 'Setting up…',
-    failed: 'Couldn’t set up',
-    failedMeta: 'Whombat’s service didn’t answer. It tries again the next time you open the app.',
-    lastReceived: (ago: string) => `Last one ${ago}`,
-    /** Android lets some through and holds others back (pushView.ts). */
-    partly: 'Partly on',
-    channelsOff: (names: string) => `${names} notifications are off in this phone’s settings.`,
-    heldBack: 'Held back',
-    restrictedMeta: 'Battery use for Whombat is restricted, so notifications can’t arrive while it’s closed.',
-    runsOff: (name: string) => `“${name}” notifications are off, so runs don’t show while they work.`,
-    liveUpdatesOff: 'Live Updates are off for Whombat, so runs show as ordinary notifications.',
-    batteryMeta: 'This phone may hold Whombat’s notifications back to save battery.',
-    opening: 'Opening what needs you…',
-  },
-  /** The parts' names are the shared `THIS_WHOMBAT_TEXT.parts` (this-whombat-sections-android.md AP-1252). */
-  whombat: {
-    title: 'This Whombat',
-    switch: 'Switch Whombat',
-    signOut: 'Sign out',
-  },
-  /**
-   * The BACKUP FILE section on This Whombat → Backups and the phone's own words on its screen (backup-file-android.md
-   * AP-1211…; AP-1246); the panels' words are the contracts' (`BACKUP_COPY`) and the client's (`BACKUP_FILE_TEXT`).
-   */
-  backupFile: {
-    title: 'Backup file',
-    meta: 'Download a file of what you choose, or restore from one.',
-    open: 'Open',
-    openHint: 'Opens Backup file',
-    /** A Backup file screen restored on a Whombat without `backup.file`. */
-    /** The picked file's provider didn't say how big it is (it can't be staged). */
-    noSize: 'Whombat can’t tell how big that file is. Save it on this phone first, then choose it again.',
-    /** “Save as” (or the folder) couldn't make the file. */
-    saveFailed: 'The file couldn’t be saved there. Try again, or choose another place.',
-    /** Under a download or an upload while it runs: leaving the screen stops it. */
-    stay: 'Stay on this screen until it’s done.',
-    leave: {
-      downloadTitle: 'Stop the download?',
-      downloadText: 'The file isn’t saved yet.',
-      uploadTitle: 'Stop the upload?',
-      uploadText: 'Choose the same file later to go on from where it stopped.',
-      stay: 'Keep going',
-      stop: 'Stop',
+    claim: {
+      ...SHARED.claim,
+      title: shared('managed.claim.title'),
+      looking: shared('managed.claim.looking'),
+      letters: shared('managed.claim.letters'),
+      nameLabel: shared('managed.claim.nameLabel'),
+      claim: shared('managed.claim.claim'),
+      connecting: shared('managed.claim.connecting'),
+      claiming: shared('managed.claim.claiming'),
+      kicker: claimStepKicker('claim', locale),
+      tip: t('claim.tip'),
+      noneTitle: t('claim.noneTitle'),
+      noneSub: t('claim.noneSub'),
+      lookAgain: t('claim.lookAgain'),
+      foundTitle: t('claim.foundTitle'),
+      foundSub: t('claim.foundSub'),
+      lettersHint: t('claim.lettersHint'),
+      severalSub: t('claim.severalSub'),
+      pick: t('claim.pick'),
+      notThisOne: t('claim.notThisOne'),
+      noneOfThese: t('claim.noneOfThese'),
+      withCard: t('claim.withCard'),
+      withCode: t('claim.withCode'),
+      cardTitle: t('claim.cardTitle'),
+      cardTip: t('claim.cardTip'),
+      device: t('claim.device'),
+      secret: t('claim.secret'),
+      paste: t('claim.paste'),
+      malformed: t('claim.malformed'),
+      termsAgree: t('claim.termsAgree'),
+      termsLabel: t('claim.termsLabel'),
+      severalTitle: (n: number) => t('claim.severalTitle', { n }),
+      pickLabel: (model: string, device: string) => t('claim.pickLabel', { model, device }),
+      cardSub: t('copy.copy.claim.cardSub'),
+      scan: t('copy.copy.claim.scan'),
+      scanTitle: t('copy.copy.claim.scanTitle'),
+      scanClose: t('copy.copy.claim.scanClose'),
+      scanDenied: t('copy.copy.claim.scanDenied'),
+      scanWrong: t('copy.copy.claim.scanWrong'),
+      typeIt: t('copy.copy.claim.typeIt'),
+      scanned: t('copy.copy.claim.scanned'),
     },
-  },
-  /**
-   * The phone's own words in REMOTE HELP on About (app remote-help.md AP-4476, AP-4477); the rest are the contracts'
-   * (`REMOTE_HELP_WORDS`) and the client's (`REMOTE_HELP_TEXT`).
-   */
-  remoteHelp: {
-    /** The command line's sheet shows the start of a long record; Share and Download give all of it. */
-    cut: 'Only the start shows here. Share or download it to read all of it.',
-    share: 'Share',
-  },
-} as const;
+    kit: {
+      ...SHARED.kit,
+      download: t('copy.copy.kit.download'),
+      saveHint: t('copy.copy.kit.saveHint'),
+    },
+    pair: {
+      ...SHARED.pair,
+      sub: t('copy.copy.pair.sub'),
+    },
+    connection: {
+      ...SHARED.connection,
+      reconnecting: shared('managed.connection.reconnecting'),
+      offline: shared('managed.connection.offline'),
+      applianceOffline: shared('managed.connection.applianceOffline'),
+      unlisted: shared('managed.connection.unlisted'),
+      busy: shared('managed.connection.busy'),
+      maintenance: shared('managed.connection.maintenance'),
+      retry: shared('managed.connection.retry'),
+      reload: shared('managed.connection.reload'),
+      applianceTooOldTitle: shared('managed.connection.applianceTooOldTitle'),
+      revokedTitle: shared('managed.connection.revokedTitle'),
+      signedOutTitle: shared('managed.connection.signedOutTitle'),
+      back: shared('managed.connection.back'),
+      signIn: shared('managed.connection.signIn'),
+      clientTooOldTitle: t('copy.copy.connection.clientTooOldTitle'),
+      /** A box of another protocol major (HE-52): the contracts' words. */
+      clientTooOld: VERSION_REFUSAL_COPY.client,
+      applianceTooOld: VERSION_REFUSAL_COPY.appliance,
+      unsupported: t('copy.copy.connection.unsupported'),
+      belowFloor: t('copy.copy.connection.belowFloor'),
+    },
+    /**
+     * Until the app is in the Play Store, Android downloads and installs the published APK itself (AP-813); the iPhone
+     * and a phone without one published get the hosted UI's Mobile app page (AP-537).
+     */
+    update: {
+      label: t('copy.copy.update.label'),
+      phoneTooOld: t('copy.copy.update.phoneTooOld'),
+      /** After “1 item needs a newer version of the app.” while no newer app is out (AP-701). */
+      soon: t('copy.copy.update.soon'),
+      /** A newer build is out though nothing needs it (SS-71): a calm row, not a warning. */
+      available: t('copy.copy.update.available'),
+      /** “0.37.0 · 58 MB · Download and install it over this app.” */
+      availableMeta: (version: string, size: number) =>
+        `${version} · ${Math.max(1, Math.round(size / 1_000_000))} MB · Download and install it over this app.`,
+      /** The row's button: downloads the APK. */
+      install: t('copy.copy.update.install'),
+      /** The pop-up when a newer build is out, once per version (update-check.md). */
+      newTitle: t('copy.copy.update.newTitle'),
+      /** “Version 3.155.0 (37 MB) is ready. It takes a minute, and you stay signed in.” */
+      newLead: (version: string, size: number) =>
+        `Version ${version} (${Math.max(1, Math.round(size / 1_000_000))} MB) is ready. It takes a minute, and you stay signed in.`,
+      later: t('copy.copy.update.later'),
+      /** The app updates itself (AP-813): the button while the APK downloads into the app. */
+      downloading: (percent: number) => t('copy.copy.update.downloading', { percent }),
+      /** “0.44.0 · 34 of 96 MB” */
+      downloadingMeta: (version: string, received: number, total: number) =>
+        `${version} · ${Math.round(received / 1_000_000)} of ${Math.max(1, Math.round(total / 1_000_000))} MB`,
+      /** Android asks once whether Whombat may install apps (“Install unknown apps”). */
+      allow: t('copy.copy.update.allow'),
+      /** Where Android sent the person to allow installs: the setting, the app's page instead, or nowhere. */
+      allowWhere: {
+        setting: t('copy.copy.update.allowWhere.setting'),
+        details: t('copy.copy.update.allowWhere.details'),
+        none: t('copy.copy.update.allowWhere.none'),
+      },
+      /** Downloaded; Android's installer opens on it. */
+      ready: t('copy.copy.update.ready'),
+      readyMeta: (version: string) => t('copy.copy.update.readyMeta', { version }),
+      retry: t('copy.copy.update.retry'),
+      failed: {
+        network: t('copy.copy.update.failed.network'),
+        verify: t('copy.copy.update.failed.verify'),
+        signature: t('copy.copy.update.failed.signature'),
+        failed: t('copy.copy.update.failed.failed'),
+      },
+    },
+    notifications: {
+      label: t('copy.copy.notifications.label'),
+      /** Under the settings sheet's Notifications group (SS-30): push on this phone. */
+      onThisPhone: t('copy.copy.notifications.onThisPhone'),
+      on: t('copy.copy.notifications.on'),
+      onMeta: t('copy.copy.notifications.onMeta'),
+      /** An iPhone allowed quietly (provisional): on, without a sound or a banner. */
+      quietOn: t('copy.copy.notifications.quietOn'),
+      quietMeta: t('copy.copy.notifications.quietMeta'),
+      turnOnAlerts: t('copy.copy.notifications.turnOnAlerts'),
+      /** Push on this phone, not turned on yet. */
+      off: t('copy.copy.notifications.off'),
+      offMeta: t('copy.copy.notifications.offMeta'),
+      turnOn: t('copy.copy.notifications.turnOn'),
+      denied: t('copy.copy.notifications.denied'),
+      deniedMeta: t('copy.copy.notifications.deniedMeta'),
+      openSettings: t('copy.copy.notifications.openSettings'),
+      unavailable: t('copy.copy.notifications.unavailable'),
+      unavailableMeta: t('copy.copy.notifications.unavailableMeta'),
+      registering: t('copy.copy.notifications.registering'),
+      failed: t('copy.copy.notifications.failed'),
+      failedMeta: t('copy.copy.notifications.failedMeta'),
+      lastReceived: (ago: string) => t('copy.copy.notifications.lastReceived', { ago }),
+      /** Android lets some through and holds others back (pushView.ts). */
+      partly: t('copy.copy.notifications.partly'),
+      channelsOff: (names: string) => t('copy.copy.notifications.channelsOff', { names }),
+      heldBack: t('copy.copy.notifications.heldBack'),
+      restrictedMeta: t('copy.copy.notifications.restrictedMeta'),
+      runsOff: (name: string) => t('copy.copy.notifications.runsOff', { name }),
+      liveUpdatesOff: t('copy.copy.notifications.liveUpdatesOff'),
+      batteryMeta: t('copy.copy.notifications.batteryMeta'),
+      opening: t('copy.copy.notifications.opening'),
+    },
+    /** The parts' names are the shared `THIS_WHOMBAT_TEXT.parts` (this-whombat-sections-android.md AP-1252). */
+    whombat: {
+      title: t('copy.copy.whombat.title'),
+      switch: t('copy.copy.whombat.switch'),
+      signOut: t('copy.copy.whombat.signOut'),
+    },
+    /**
+     * The BACKUP FILE section on This Whombat → Backups and the phone's own words on its screen (backup-file-android.md
+     * AP-1211…; AP-1246); the panels' words are the contracts' (`BACKUP_COPY`) and the client's (`BACKUP_FILE_TEXT`).
+     */
+    backupFile: {
+      title: t('copy.copy.backupFile.title'),
+      meta: t('copy.copy.backupFile.meta'),
+      open: t('copy.copy.backupFile.open'),
+      openHint: t('copy.copy.backupFile.openHint'),
+      /** A Backup file screen restored on a Whombat without `backup.file`. */
+      /** The picked file's provider didn't say how big it is (it can't be staged). */
+      noSize: t('copy.copy.backupFile.noSize'),
+      /** “Save as” (or the folder) couldn't make the file. */
+      saveFailed: t('copy.copy.backupFile.saveFailed'),
+      /** Under a download or an upload while it runs: leaving the screen stops it. */
+      stay: t('copy.copy.backupFile.stay'),
+      leave: {
+        downloadTitle: t('copy.copy.backupFile.leave.downloadTitle'),
+        downloadText: t('copy.copy.backupFile.leave.downloadText'),
+        uploadTitle: t('copy.copy.backupFile.leave.uploadTitle'),
+        uploadText: t('copy.copy.backupFile.leave.uploadText'),
+        stay: t('copy.copy.backupFile.leave.stay'),
+        stop: t('copy.copy.backupFile.leave.stop'),
+      },
+    },
+    /**
+     * The phone's own words in REMOTE HELP on About (app remote-help.md AP-4476, AP-4477); the rest are the contracts'
+     * (`REMOTE_HELP_WORDS`) and the client's (`REMOTE_HELP_TEXT`).
+     */
+    remoteHelp: {
+      /** The command line's sheet shows the start of a long record; Share and Download give all of it. */
+      cut: t('copy.copy.remoteHelp.cut'),
+      share: t('copy.copy.remoteHelp.share'),
+    },
+  } as const;
+}
+export const COPY = managedCopy();
 
-export const MANAGED_TEXT = {
-  ...SHARED_STATUS,
-  thisBrowser: 'This phone',
-  addHelp: 'On the new device, choose “Let this device in”, then type the code it shows.',
-} as const;
+export function managedText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    ...sharedStatus(locale),
+    thisBrowser: t('copy.managedText.thisBrowser'),
+    addHelp: t('copy.managedText.addHelp'),
+  } as const;
+}
+export const MANAGED_TEXT = managedText();

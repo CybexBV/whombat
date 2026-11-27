@@ -13,9 +13,24 @@ import { createPortal } from 'react-dom';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SectionLabel } from '../../../components/SectionLabel';
+import { useWebI18n, type WebMessageKey } from '../../../i18n/provider';
 import styles from './EmojiPicker.module.css';
 import { type EmojiCell, emojiLabel, emojiSections, type GridKey, groupIcon, moveInGrid } from './emojiModel';
 import { readRecentEmoji } from './recentEmoji';
+
+/** The section and group names in the page's language, by section id. */
+const SECTION_KEYS: Record<string, WebMessageKey> = {
+  results: 'emoji.section.results',
+  recent: 'emoji.section.recent',
+  smileys: 'emoji.section.smileys',
+  people: 'emoji.section.people',
+  nature: 'emoji.section.nature',
+  food: 'emoji.section.food',
+  activities: 'emoji.section.activities',
+  travel: 'emoji.section.travel',
+  objects: 'emoji.section.objects',
+  symbols: 'emoji.section.symbols',
+};
 
 /** Where the picker opens from: the button's box (it opens under it, or above when there's no room). */
 export interface EmojiAnchor {
@@ -47,6 +62,11 @@ const GRID_KEYS = new Set<string>(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowD
  * focus.
  */
 export function EmojiPicker({ anchor, label, mine = [], onPick, onClose }: EmojiPickerProps) {
+  const { t } = useWebI18n();
+  const sectionName = (id: string, fallback: string) => {
+    const key = SECTION_KEYS[id];
+    return key ? t(key) : fallback;
+  };
   const ref = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -188,8 +208,8 @@ export function EmojiPicker({ anchor, label, mine = [], onPick, onClose }: Emoji
           ref={searchRef}
           className={styles.searchInput}
           value={query}
-          placeholder="Search emoji"
-          aria-label="Search emoji"
+          placeholder={t('emoji.search')}
+          aria-label={t('emoji.search')}
           aria-describedby={`${ids}-hint`}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onSearchKeyDown}
@@ -198,11 +218,11 @@ export function EmojiPicker({ anchor, label, mine = [], onPick, onClose }: Emoji
         />
       </label>
       <span id={`${ids}-hint`} className={styles.srOnly}>
-        Down arrow moves into the emoji. Enter picks the first result.
+        {t('emoji.searchHint')}
       </span>
       {!searching && (
         // biome-ignore lint/a11y/useSemanticElements: a set of buttons, not form fields
-        <div className={styles.quick} role="group" aria-label="Quick reactions">
+        <div className={styles.quick} role="group" aria-label={t('emoji.quick')}>
           {QUICK_REACTIONS.map((char) => {
             const e = emojiByChar(char);
             return (
@@ -224,14 +244,14 @@ export function EmojiPicker({ anchor, label, mine = [], onPick, onClose }: Emoji
       )}
       {!searching && (
         // biome-ignore lint/a11y/useSemanticElements: a set of buttons, not form fields
-        <div className={styles.groups} role="group" aria-label="Emoji groups">
+        <div className={styles.groups} role="group" aria-label={t('emoji.groups')}>
           {EMOJI_GROUPS.map((group) => (
             <button
               key={group}
               type="button"
               className={cx(styles.groupButton, visibleGroup === group && styles.groupCurrent)}
-              aria-label={EMOJI_GROUP_LABELS[group]}
-              title={EMOJI_GROUP_LABELS[group]}
+              aria-label={sectionName(group, EMOJI_GROUP_LABELS[group])}
+              title={sectionName(group, EMOJI_GROUP_LABELS[group])}
               onClick={() => jumpTo(group)}
             >
               <span aria-hidden="true">{groupIcon(group)}</span>
@@ -246,7 +266,7 @@ export function EmojiPicker({ anchor, label, mine = [], onPick, onClose }: Emoji
         onKeyDown={onGridKeyDown}
         onScroll={onScroll}
       >
-        {sections.length === 0 && <p className={styles.empty}>No emoji match “{query.trim()}”.</p>}
+        {sections.length === 0 && <p className={styles.empty}>{t('emoji.none', { q: query.trim() })}</p>}
         {sections.map((section, s) => (
           <section
             key={section.id}
@@ -254,10 +274,10 @@ export function EmojiPicker({ anchor, label, mine = [], onPick, onClose }: Emoji
               if (el) sectionRefs.current.set(section.id, el);
               else sectionRefs.current.delete(section.id);
             }}
-            aria-label={section.label}
+            aria-label={sectionName(section.id, section.label)}
           >
             <SectionLabel as="h3" className={styles.sectionLabel}>
-              {section.label}
+              {sectionName(section.id, section.label)}
             </SectionLabel>
             <div className={styles.grid}>
               {section.emoji.map((e, i) => {

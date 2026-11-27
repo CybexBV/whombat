@@ -1287,6 +1287,8 @@ export function hetznerInventory(input: HetznerInput): InventoryPanel | null {
         icon: 'money',
         value: euros(s.servers.reduce((sum, x) => sum + (x.monthlyEur ?? 0), 0)),
         note: 'servers, before traffic',
+        figureKey: 'f-cost-a-month',
+        private: true,
       }),
     );
   return inventory({

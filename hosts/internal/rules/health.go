@@ -127,7 +127,7 @@ func plural(n int64, one, many string) string {
 }
 
 // cond is a shorthand for a condition with fixed texts.
-func cond(rule, entity, sev, link, note, title, detail, advice string, forD time.Duration) Condition {
+func cond(rule, entity, sev, link, note, title, detail, advice string, forD time.Duration, params map[string]any) Condition {
 	bd := detail
 	if advice != "" {
 		if bd != "" {
@@ -139,7 +139,7 @@ func cond(rule, entity, sev, link, note, title, detail, advice string, forD time
 	}
 	return Condition{Rule: rule, Entity: entity, Severity: sev, For: forD, ClearAfter: ClearAfter, Link: link, StatusNote: note,
 		Render: func(time.Duration) Text {
-			return Text{Title: title, Detail: detail, BannerTitle: title, BannerDetail: bd}
+			return Text{Title: title, Detail: detail, BannerTitle: title, BannerDetail: bd, Code: rule, Params: params}
 		}}
 }
 
@@ -150,11 +150,27 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 	// Disks: SMART failing (critical) and error counters (warning).
 	for _, d := range r.Disks {
 		if why := SmartFailure(d); why != "" {
+			params := map[string]any{"device": d.Device, "smartFailed": d.SmartPassed != nil && !*d.SmartPassed}
+			if d.CriticalWarning != nil && *d.CriticalWarning != 0 {
+				params["criticalWarning"] = int64(*d.CriticalWarning)
+			} else if d.SparePct != nil && d.SpareThreshold != nil && *d.SpareThreshold > 0 && *d.SparePct < *d.SpareThreshold {
+				setFinite(params, "sparePct", *d.SparePct)
+				setFinite(params, "spareThreshold", *d.SpareThreshold)
+			}
 			out = append(out, cond(RuleSMARTFailing, d.Device, SevCritical, LinkStorage, "disk failing",
-				"Disk "+d.Device+" is failing", why, "Back up its data and replace the disk.", 0))
+				"Disk "+d.Device+" is failing", why, "Back up its data and replace the disk.", 0, params))
 		} else if why := SmartErrors(d); why != "" {
+			params := map[string]any{"device": d.Device}
+			for key, count := range map[string]*uint64{"pending": d.Pending, "uncorrectable": d.Uncorrectable, "mediaErrors": d.MediaErrors} {
+				if count != nil && *count > 0 {
+					params[key] = int64(*count)
+				}
+			}
+			if t := d.SelfTest; t != nil && t.Result == "failed" {
+				params["selfTestType"] = t.Type
+			}
 			out = append(out, cond(RuleSMARTErrors, d.Device, SevWarning, LinkStorage, "disk errors",
-				"Disk "+d.Device+" is reporting errors", why, "Keep its backups current and plan to replace it.", 0))
+				"Disk "+d.Device+" is reporting errors", why, "Keep its backups current and plan to replace it.", 0, params))
 		}
 	}
 
@@ -172,7 +188,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 				d = strings.Join(p.Faulted, ", ") + " is offline; the data is at risk until it’s back"
 			}
 			out = append(out, cond(RulePoolDegraded, ent, SevCritical, LinkStorage, "missing a disk",
-				title, d, "Replace or reconnect the missing disk.", 0))
+				title, d, "Replace or reconnect the missing disk.", 0,
+				map[string]any{"name": p.Name, "health": h, "faulted": append([]string{}, p.Faulted...)}))
 		case p.ReadErrors+p.WriteErrors+p.CksumErrors > 0 || p.ScrubErrors > 0:
 			var parts []string
 			if n := p.ReadErrors + p.WriteErrors + p.CksumErrors; n > 0 {
@@ -182,7 +199,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 				parts = append(parts, plural(int64(p.ScrubErrors), "error", "errors")+" found by the last data check")
 			}
 			out = append(out, cond(RulePoolErrors, ent, SevWarning, LinkStorage, "damaged data",
-				"Storage “"+p.Name+"” found damaged data", strings.Join(parts, " · "), "Have its disks checked.", 0))
+				"Storage “"+p.Name+"” found damaged data", strings.Join(parts, " · "), "Have its disks checked.", 0,
+				map[string]any{"name": p.Name, "ioErrors": int64(p.ReadErrors + p.WriteErrors + p.CksumErrors), "scrubErrors": int64(p.ScrubErrors)}))
 		}
 	}
 
@@ -194,11 +212,13 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 			continue
 		}
 		d := fmt.Sprintf("%d of %d disks working", a.Active, a.Devices)
+		params := map[string]any{"name": a.Name, "active": a.Active, "total": a.Devices, "failed": append([]string{}, a.Failed...)}
 		if len(a.Failed) > 0 {
 			d += " · " + strings.Join(a.Failed, ", ") + " failed"
 		}
 		if a.SyncPct != nil && (st == "recovering" || st == "resyncing") {
 			d += fmt.Sprintf(" · rebuilding, %s%% done", pct0(*a.SyncPct))
+			setFinite(params, "syncPct", *a.SyncPct)
 		}
 		state := st
 		if state == "" || (st != "failed" && st != "inactive") {
@@ -212,17 +232,19 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 		if state != "degraded" {
 			title = a.Name + "’s disks have stopped working"
 		}
+		params["state"] = state
 		out = append(out, cond(RuleRAIDDegraded, "raid:"+a.Name, SevCritical, link, "disk stopped",
-			title, d, "Replace the failed disk.", 0))
+			title, d, "Replace the failed disk.", 0, params))
 	}
 
 	// Filesystems: read-only remounts and inodes.
 	for _, f := range r.Filesystems {
 		ent := "fs:" + f.Mount
+		volume := map[string]any{"entity": ent, "volume": f.Mount}
 		if f.ReadOnly {
 			out = append(out, cond(RuleReadOnlyFS, ent, SevCritical, LinkStorage, "can’t write",
 				PlainVolume(ent, f.Mount)+" can’t be written to", "It switched to read-only, usually because the disk has problems",
-				"Have the disk checked.", 0))
+				"Have the disk checked.", 0, volume))
 		}
 		if f.InodesTotal > 0 {
 			p := float64(f.InodesUsed) / float64(f.InodesTotal) * 100
@@ -232,7 +254,9 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 				out = append(out, cond(RuleInodesHigh, ent, SevWarning, LinkStorage, "too many files",
 					fmt.Sprintf("%s can’t take many more files", PlainVolume(ent, f.Mount)),
 					withLimitWords(detail, p, threshold, "%", custom),
-					"Remove small files you don’t need (caches, old mail, sessions).", SpaceFor))
+					"Remove small files you don’t need (caches, old mail, sessions).", SpaceFor,
+					map[string]any{"entity": ent, "volume": f.Mount, "pct": p, "used": int64(f.InodesUsed),
+						"total": int64(f.InodesTotal), "limitPct": threshold, "customLimit": custom}))
 			}
 		}
 	}
@@ -242,7 +266,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 		if c := pve.Cluster; c != nil && !c.Quorate {
 			out = append(out, cond(RuleQuorumLost, "cluster:"+c.Name, SevCritical, LinkVirtualization, "servers apart",
 				"The servers of "+c.Name+" can’t reach each other", fmt.Sprintf("Only %d of %d are connected", c.VotesHave, c.VotesExpected),
-				"Machines can’t be started or changed until they’re back together.", 0))
+				"Machines can’t be started or changed until they’re back together.", 0,
+				map[string]any{"name": c.Name, "connected": c.VotesHave, "total": c.VotesExpected}))
 		}
 		if b := pve.Backups; b != nil && b.LastJob != nil && b.LastJob.Result == "error" {
 			j := b.LastJob
@@ -251,7 +276,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 				Link: LinkVirtualization, StatusNote: "backup failed",
 				Render: func(time.Duration) Text {
 					return Text{Title: "Last backup failed", Detail: d, BannerTitle: "The last backup failed",
-						BannerDetail: d + ". Proxmox’s backup log says why."}
+						BannerDetail: d + ". Proxmox’s backup log says why.", Code: RuleBackupFailed,
+						Params: map[string]any{"backedUp": j.GuestsOK, "total": j.GuestsTotal}}
 				}})
 		}
 		for _, x := range pve.Replication {
@@ -263,7 +289,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 				d = plural(int64(x.FailCount), "failed run", "failed runs")
 			}
 			out = append(out, cond(RuleReplication, "repl:"+x.ID, SevWarning, LinkVirtualization, "copies failing",
-				"Copies to "+x.Target+" are failing", x.ID+": "+d, "", 0))
+				"Copies to "+x.Target+" are failing", x.ID+": "+d, "", 0,
+				map[string]any{"id": x.ID, "target": x.Target, "error": x.Error, "count": x.FailCount}))
 		}
 		if c := pve.Ceph; c != nil && c.Status != "" && c.Status != "HEALTH_OK" {
 			sev := SevWarning
@@ -279,18 +306,21 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 				title = "Shared storage (Ceph) has a problem"
 			}
 			out = append(out, cond(RuleCeph, "ceph", sev, LinkVirtualization, "shared storage",
-				title, d, "", 5*time.Minute))
+				title, d, "", 5*time.Minute,
+				map[string]any{"status": c.Status, "summary": append([]string{}, c.Summary...)}))
 		}
 	}
 
 	// Time sync.
 	if s := r.System; s != nil && s.TimeSynced != nil && !*s.TimeSynced {
 		title := "The clock is off"
+		params := map[string]any{"source": orDefault(s.TimeSource, "NTP")}
 		if s.TimeOffsetMs != nil {
 			title += " by " + formatOffset(*s.TimeOffsetMs)
+			setFinite(params, "offsetMs", *s.TimeOffsetMs)
 		}
 		out = append(out, cond(RuleTimeUnsynced, "host", SevWarning, LinkSystem, "clock",
-			title, "It isn’t setting its time from a time server", "Check that it can reach a time server ("+orDefault(s.TimeSource, "NTP")+").", TimeUnsyncedFor))
+			title, "It isn’t setting its time from a time server", "Check that it can reach a time server ("+orDefault(s.TimeSource, "NTP")+").", TimeUnsyncedFor, params))
 	}
 
 	// UPS on battery.
@@ -299,17 +329,20 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 			continue
 		}
 		d := "The power is out (" + u.Name + ")"
+		params := map[string]any{"name": u.Name, "status": u.Status}
 		if u.ChargePct != nil {
 			d += " · " + pct0(*u.ChargePct) + "% left"
+			setFinite(params, "chargePct", *u.ChargePct)
 		}
 		if u.RuntimeS != nil {
 			d += " · about " + FormatDuration(time.Duration(*u.RuntimeS)*time.Second)
+			params["runtimeSeconds"] = *u.RuntimeS
 		}
 		sev, title, forD := SevWarning, "Running on battery", UPSOnBatteryFor
 		if u.Status == "low_battery" {
 			sev, title, forD = SevCritical, "The battery is almost empty", 0
 		}
-		c := cond(RuleUPSOnBattery, "ups:"+u.Name, sev, LinkSystem, "on battery", title, d, "", forD)
+		c := cond(RuleUPSOnBattery, "ups:"+u.Name, sev, LinkSystem, "on battery", title, d, "", forD, params)
 		c.ClearAfter = time.Minute
 		out = append(out, c)
 	}
@@ -322,7 +355,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 		switch {
 		case len(n.Addresses) > 0 && !n.Carrier:
 			out = append(out, cond(RuleLinkDown, "net:"+n.Name, SevWarning, LinkSystem, "cable unplugged",
-				"Network cable on "+n.Name+" is unplugged", "Nothing is connected to it, though it has the address "+n.Addresses[0], "Check the cable and the switch port.", LinkDownFor))
+				"Network cable on "+n.Name+" is unplugged", "Nothing is connected to it, though it has the address "+n.Addresses[0], "Check the cable and the switch port.", LinkDownFor,
+				map[string]any{"name": n.Name, "address": n.Addresses[0]}))
 		case n.Kind == "bond":
 			var down []string
 			for _, m := range n.Members {
@@ -334,7 +368,8 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 			}
 			if len(down) > 0 {
 				out = append(out, cond(RuleLinkDown, "net:"+n.Name, SevWarning, LinkSystem, "cable unplugged",
-					"One of "+n.Name+"’s network cables is unplugged", strings.Join(down, ", ")+" has nothing connected", "Check the cable and the switch port.", LinkDownFor))
+					"One of "+n.Name+"’s network cables is unplugged", strings.Join(down, ", ")+" has nothing connected", "Check the cable and the switch port.", LinkDownFor,
+					map[string]any{"name": n.Name, "members": down}))
 			}
 		}
 	}
@@ -342,9 +377,12 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 	// Fans below their minimum speed.
 	for _, f := range r.Fans {
 		if f.MinRPM > 0 && f.RPM < f.MinRPM {
+			params := map[string]any{"label": f.Label}
+			setFinite(params, "rpm", f.RPM)
+			setFinite(params, "minRpm", f.MinRPM)
 			out = append(out, cond(RuleFanFailed, "fan:"+f.Source, SevWarning, LinkTemps, "fan",
 				"A fan is turning too slowly", fmt.Sprintf("%s at %s rpm; it should be at least %s rpm", f.Label, Thousands(int64(f.RPM)), Thousands(int64(f.MinRPM))),
-				"Check the fan.", FanFailedFor))
+				"Check the fan.", FanFailedFor, params))
 		}
 	}
 	return out
@@ -476,7 +514,8 @@ func (m *Memo) Conditions(now time.Time) []Condition {
 			StatusNote: "out of memory",
 			Render: func(time.Duration) Text {
 				return Text{Title: "The server ran out of memory", Detail: d, BannerTitle: "The server ran out of memory",
-					BannerDetail: d + ", the last " + FormatRelative(now.Sub(last)) + ". Give it more memory, or let its machines use less."}
+					BannerDetail: d + ", the last " + FormatRelative(now.Sub(last)) + ". Give it more memory, or let its machines use less.",
+					Code:         RuleOOM, Params: map[string]any{"count": int64(n), "agoSeconds": int64(now.Sub(last) / time.Second)}}
 			}})
 	}
 	keys := make([]string, 0, len(m.restAt))
@@ -495,7 +534,8 @@ func (m *Memo) Conditions(now time.Time) []Condition {
 			StatusNote: "restart loop",
 			Render: func(time.Duration) Text {
 				return Text{Title: name + " keeps restarting", Detail: d, BannerTitle: name + " keeps restarting",
-					BannerDetail: d + ". Its logs say why."}
+					BannerDetail: d + ". Its logs say why.", Code: RuleRestartLoop,
+					Params: map[string]any{"name": name, "count": len(ts), "windowSeconds": int64(RestartWindow / time.Second)}}
 			}})
 	}
 	return out
@@ -518,6 +558,7 @@ func oomLimitHints(r *proto.Report, now time.Time) []Hint {
 		n         int
 		last      time.Time
 		what      []string // "python3", or "python3 in backup.service"
+		processes []string // empty process names use the translated fallback
 	}
 	names := map[string]string{}
 	for _, g := range r.AllGuests() {
@@ -546,6 +587,7 @@ func oomLimitHints(r *proto.Report, now time.Time) []Hint {
 		}
 		if !slices.Contains(g.what, what) {
 			g.what = append(g.what, what)
+			g.processes = append(g.processes, k.Process)
 		}
 	}
 	sort.SliceStable(guests, func(i, j int) bool { return guests[i].name < guests[j].name })
@@ -556,6 +598,7 @@ func oomLimitHints(r *proto.Report, now time.Time) []Hint {
 			title = fmt.Sprintf("%s ran out of its memory %d times", g.name, g.n)
 		}
 		out = append(out, Hint{Kind: HintMemoryLimit, Severity: HintInfo, Entity: g.gid, Link: LinkGuests, Guests: []string{g.gid},
+			Code: HintMemoryLimit, Params: map[string]any{"name": g.name, "count": g.n, "names": g.processes, "agoSeconds": int64(now.Sub(g.last) / time.Second)},
 			Title: title, Detail: stoppedText(g.what, g.n, now.Sub(g.last)) + ". The server itself has memory to spare."})
 	}
 	// Kills outside machines are a service's or a login session's own limit
@@ -686,8 +729,11 @@ func FullSoonCondition(entity, label string, days float64) (Condition, bool) {
 		StatusNote: "filling up",
 		Render: func(time.Duration) Text {
 			name := PlainVolume(entity, label)
+			params := map[string]any{"entity": entity, "volume": label}
+			setFinite(params, "days", days)
 			return Text{Title: name + " full " + when, Detail: "At the rate it filled last week",
-				BannerTitle: name + " will be full " + when, BannerDetail: "At the rate it filled last week. Free up space or add more."}
+				BannerTitle: name + " will be full " + when, BannerDetail: "At the rate it filled last week. Free up space or add more.",
+				Code: RuleDiskFullSoon, Params: params}
 		}}, true
 }
 
@@ -721,6 +767,7 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 				d += ", …"
 			}
 			out = append(out, Hint{Kind: HintFailedUnits, Severity: HintWarning, Entity: "host", Link: LinkSystem,
+				Code: HintFailedUnits, Params: map[string]any{"count": s.FailedCount, "names": names},
 				Title: plural(int64(s.FailedCount), "service failed", "services failed"), Detail: d})
 		}
 		if s.UpdatesPending != nil && *s.UpdatesPending > 0 {
@@ -729,19 +776,26 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 			// package manager's name means nothing to most people: only the
 			// security updates are worth saying.
 			d := ""
+			securityCount := 0
 			if s.SecurityUpdates != nil && *s.SecurityUpdates > 0 {
 				d = plural(int64(*s.SecurityUpdates), "security update", "security updates")
+				securityCount = *s.SecurityUpdates
 			}
 			out = append(out, Hint{Kind: HintUpdates, Severity: HintInfo, Entity: "host", Link: LinkSystem,
+				Code: HintUpdates, Params: map[string]any{"count": *s.UpdatesPending, "securityCount": securityCount},
 				Title: plural(int64(*s.UpdatesPending), "update waiting", "updates waiting"), Detail: d})
 		}
 		if s.RebootRequired {
 			out = append(out, Hint{Kind: HintReboot, Severity: HintInfo, Entity: "host", Link: LinkSystem,
+				Code:  HintReboot,
 				Title: "Restart needed", Detail: "To finish installing updates"})
 		}
 	}
 	if r.CPU.StealPct >= StealHintPct-eps {
+		params := map[string]any{}
+		setFinite(params, "pct", r.CPU.StealPct)
 		out = append(out, Hint{Kind: HintSteal, Severity: HintInfo, Entity: "host",
+			Code: HintSteal, Params: params,
 			Title: "This server is slowed down by its host", Detail: "The computer it runs on gives it " + pct0(r.CPU.StealPct) + "% less processing time than it asks for"})
 	}
 	for _, d := range r.Disks {
@@ -749,14 +803,18 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 			continue
 		}
 		var parts []string
+		params := map[string]any{"device": d.Device}
 		if d.Reallocated != nil && *d.Reallocated > 0 {
 			parts = append(parts, plural(int64(*d.Reallocated), "worn spot", "worn spots")+" replaced")
+			params["reallocated"] = int64(*d.Reallocated)
 		}
 		if d.CRCErrors != nil && *d.CRCErrors > 0 {
 			parts = append(parts, plural(int64(*d.CRCErrors), "cable error", "cable errors"))
+			params["crcErrors"] = int64(*d.CRCErrors)
 		}
 		if len(parts) > 0 {
 			out = append(out, Hint{Kind: HintDiskCounters, Severity: HintInfo, Entity: d.Device, Link: LinkStorage,
+				Code: HintDiskCounters, Params: params,
 				Title: "Disk " + d.Device + " has had a few errors", Detail: strings.Join(parts, " · ")})
 		}
 	}
@@ -767,9 +825,11 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 		switch {
 		case p.ScrubState == "none":
 			out = append(out, Hint{Kind: HintScrubStale, Severity: HintInfo, Entity: "pool:" + p.Name, Link: LinkStorage,
+				Code: HintScrubStale + ".never", Params: map[string]any{"name": p.Name},
 				Title: "Storage “" + p.Name + "” has never been checked for damage", Detail: "A monthly data check finds hidden damage early"})
 		case p.ScrubState == "finished" && !p.ScrubEnd.IsZero() && time.Since(p.ScrubEnd) > time.Duration(ScrubStaleDays*24)*time.Hour:
 			out = append(out, Hint{Kind: HintScrubStale, Severity: HintInfo, Entity: "pool:" + p.Name, Link: LinkStorage,
+				Code: HintScrubStale, Params: map[string]any{"name": p.Name, "checkedAt": p.ScrubEnd.Unix()},
 				Title: "Storage “" + p.Name + "” hasn’t been checked for damage lately", Detail: "Last checked " + p.ScrubEnd.UTC().Format("2 Jan 2006")})
 		}
 	}
@@ -777,19 +837,23 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 		st := strings.ToLower(a.State)
 		if (st == "resyncing" || st == "checking" || st == "recovering") && !alerted(open, "raid:"+a.Name, RuleRAIDDegraded) {
 			title := a.Name + "’s disks are syncing"
+			params := map[string]any{"name": a.Name, "state": st}
 			if st == "checking" {
 				title = a.Name + "’s disks are being checked"
 			}
 			if a.SyncPct != nil {
 				title += " (" + pct0(*a.SyncPct) + "%)"
+				setFinite(params, "pct", *a.SyncPct)
 			}
 			out = append(out, Hint{Kind: HintArraySync, Severity: HintInfo, Entity: "raid:" + a.Name, Link: LinkStorage,
+				Code: HintArraySync, Params: params,
 				Title: title, Detail: "It’s slower until it’s done"})
 		}
 	}
 	if pve := r.PVE; pve != nil && pve.Backups != nil && pve.Backups.LastJob != nil && pve.Backups.LastJob.Result == "warning" {
 		j := pve.Backups.LastJob
 		out = append(out, Hint{Kind: HintBackupWarning, Severity: HintInfo, Entity: "vzdump", Link: LinkVirtualization,
+			Code: HintBackupWarning, Params: map[string]any{"backedUp": j.GuestsOK, "total": j.GuestsTotal, "count": j.Warnings},
 			Title: "The last backup had a problem", Detail: fmt.Sprintf("%d of %d machines backed up · %s", j.GuestsOK, j.GuestsTotal, plural(int64(j.Warnings), "warning", "warnings"))})
 	}
 	for _, pl := range []struct {
@@ -809,6 +873,7 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 			entity = "libvirt"
 		}
 		out = append(out, Hint{Kind: HintPlatformWarning, Severity: HintInfo, Entity: entity, Link: LinkGuests,
+			Code: HintPlatformWarning, Params: map[string]any{"platform": entity, "count": len(pl.p.Warnings), "message": w.Message},
 			Title: pl.name + " has " + plural(int64(len(pl.p.Warnings)), "warning", "warnings"), Detail: d})
 	}
 	if r.Docker != nil && r.Unraid == nil { // unRAID: docker.update_available (unraid.go)
@@ -820,6 +885,7 @@ func healthHints(r *proto.Report, open []Alert) []Hint {
 		}
 		if len(names) > 0 {
 			out = append(out, Hint{Kind: HintImageUpdates, Severity: HintInfo, Entity: "docker", Link: LinkGuests,
+				Code: HintImageUpdates, Params: map[string]any{"count": len(names), "names": firstN(names, 2)},
 				Title: plural(int64(len(names)), "app has an update", "apps have updates"), Detail: someNames(names, 2)})
 		}
 	}
@@ -838,7 +904,10 @@ func ForecastHints(r *proto.Report, forecast map[string]float64, open []Alert) [
 		if !ok || days >= FullWatchDays || alerted(open, v.Entity, RuleDiskFullSoon, RuleSpaceHigh) {
 			continue
 		}
+		params := map[string]any{"entity": v.Entity, "volume": v.Label}
+		setFinite(params, "days", days)
 		out = append(out, Hint{Kind: HintFullForecast, Severity: HintInfo, Entity: v.Entity, Link: LinkStorage,
+			Code: HintFullForecast, Params: params,
 			Title: PlainVolume(v.Entity, v.Label) + " full " + FormatDays(days), Detail: "At the rate it filled last week"})
 	}
 	return out

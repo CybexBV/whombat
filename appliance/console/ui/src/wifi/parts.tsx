@@ -3,9 +3,11 @@
  * sheet's list, password and keyboard”): the list of networks, the password and name fields with the keyboard under
  * them, the security choice, an outcome.
  */
+
 import { type ReactNode, type RefObject, useId, useRef, useState } from 'react';
+import { useT } from '../i18n/react';
 import { joinable, sortNetworks, type WifiNetwork } from '../lib/network';
-import { rowLabel, rowMeta, WIFI } from '../lib/wifiCopy';
+import { rowLabel, rowMeta, wifiCopy } from '../lib/wifiCopy';
 import { Bars, Icon } from './icons';
 import { Keyboard } from './Keyboard';
 import styles from './wifi.module.css';
@@ -26,6 +28,9 @@ export interface NetworkListProps {
 }
 
 export function NetworkList(p: NetworkListProps) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
   const rows = sortNetworks(p.networks);
   return (
     // The list scrolls: rows below its end are not outside the screen (the shots' check).
@@ -69,7 +74,10 @@ function NetworkRow({
   onPick: ((n: WifiNetwork) => void) | null;
   onForget?: (n: WifiNetwork) => void;
 }) {
-  const meta = rowMeta(n);
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
+  const meta = rowMeta(n, t);
   const can = joinable(n.security) && !n.connected;
   const body = (
     <>
@@ -89,7 +97,12 @@ function NetworkRow({
   return (
     <li className={styles.row} data-off={(!joinable(n.security) && !n.connected) || undefined}>
       {onPick && can ? (
-        <button type="button" className={styles.rowMain} aria-label={rowLabel(n)} onClick={() => onPick(n)}>
+        <button
+          type="button"
+          className={styles.rowMain}
+          aria-label={rowLabel(n, t)}
+          onClick={() => onPick(n)}
+        >
           {body}
         </button>
       ) : (
@@ -121,6 +134,9 @@ export interface TextFieldProps {
 
 /** One text field (a real input: a real keyboard types into it) with Show/Hide for a password. */
 export function TextField(p: TextFieldProps) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
   const [shown, setShown] = useState(p.initiallyShown ?? false);
   const id = useId();
   return (
@@ -194,6 +210,9 @@ export function SecurityChoice({
   value: 'psk' | 'open';
   onChange: (v: 'psk' | 'open') => void;
 }) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
   return (
     <div className={styles.field}>
       <span className={styles.fieldLabel} id="wifi-security">

@@ -26,6 +26,7 @@ import {
   type LimitView,
   lineLimit,
   OVERVIEW_WORDS,
+  overviewWords,
   readingsMoment,
   readingTime,
   serverStatusLevel,
@@ -83,11 +84,12 @@ import { QUIET_COPY, quietNote, WATCH_FIRST } from '../data/quiet';
 import { isOwnId, parseThingRowPick, RENAME_COPY } from '../data/rename';
 import { serverAsksRow } from '../data/serverAsks';
 import { type ServerTab, serverLinkTarget, serverPhoneTabs, serverTabFor } from '../data/serverSummary';
-import { SERVER_COPY, serverGuestList, type serverThingStatus, verdictDot } from '../data/servers';
-import { type LinkRun, partsOf, shownPanels, THING_PAGE_COPY } from '../data/thingPage';
+import { serverCopy, serverGuestList, type serverThingStatus, verdictDot } from '../data/servers';
+import { type LinkRun, partsOf, shownPanels, thingPageCopy } from '../data/thingPage';
 import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
 import { useThingRename } from '../data/useThingRename';
+import { useI18n, useMobileT } from '../i18n';
 import { openHref, useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -137,6 +139,13 @@ export function ServerScreen({
   back: string;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const serverCopyHere = serverCopy(rawLocale);
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
+  const overviewWordsHere = overviewWords(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, currentBootstrap, timeZone } = useBurrowBase();
@@ -407,23 +416,23 @@ export function ServerScreen({
           />
         ) : null}
         {absent ? (
-          <QuietText>{SERVER_COPY.absent}</QuietText>
+          <QuietText>{serverCopyHere.absent}</QuietText>
         ) : failed ? (
           <ReadNote
-            title={OVERVIEW_WORDS.couldntRead(shown)}
-            body={OVERVIEW_WORDS.noSaved}
+            title={overviewWordsHere.couldntRead(shown)}
+            body={overviewWordsHere.noSaved}
             onRetry={dash.refetch}
             error={dash.error}
           />
         ) : !d && !row ? (
-          <CardSkeletons label={OVERVIEW_WORDS.loading(shown)} count={2} tiles={4} />
+          <CardSkeletons label={overviewWordsHere.loading(shown)} count={2} tiles={4} />
         ) : (
           <>
             {d && dash.error ? (
               // A failed refresh keeps the saved readings, with the time they were taken.
               <ReadNote
                 title={savedTitle(serverReportAt(d), timeZone)}
-                body={OVERVIEW_WORDS.keepLast}
+                body={overviewWordsHere.keepLast}
                 onRetry={dash.refetch}
                 error={dash.error}
               />
@@ -440,7 +449,7 @@ export function ServerScreen({
                 tabs={tabs.map((t) => ({
                   key: t,
                   // What runs on it: its Machines, or a Docker host's and Unraid's Apps.
-                  label: t === 'guests' && d ? guestsWord(serverDashboardKind(d)) : SERVER_COPY[t],
+                  label: t === 'guests' && d ? guestsWord(serverDashboardKind(d)) : serverCopyHere[t],
                 }))}
                 bleed={INSET}
               />
@@ -518,7 +527,7 @@ export function ServerScreen({
                   />
                 ) : null}
                 {dash.loading ? (
-                  <CardSkeletons label={OVERVIEW_WORDS.loading(shown)} count={2} tiles={4} />
+                  <CardSkeletons label={overviewWordsHere.loading(shown)} count={2} tiles={4} />
                 ) : (
                   <SummaryPanels
                     panels={panels}
@@ -595,7 +604,7 @@ export function ServerScreen({
                   </OneCard>
                 ) : null}
                 {parts.length ? (
-                  <OneCard label={THING_PAGE_COPY.alsoConnected}>
+                  <OneCard label={thingPageCopyHere.alsoConnected}>
                     {parts.map((t) => (
                       <OneRow
                         key={t.id}
@@ -603,8 +612,8 @@ export function ServerScreen({
                         title={t.name}
                         trailing={<ThingDot status={t.status} />}
                         chevron
-                        label={`${THING_PAGE_COPY.alsoConnected}: ${t.name}`}
-                        hint="Opens its page"
+                        label={`${thingPageCopyHere.alsoConnected}: ${t.name}`}
+                        hint={tMobile('screens.opens-its-page')}
                         onPress={() =>
                           navigation.navigate('Thing', { thingId: t.id, title: t.name, back: shown })
                         }
@@ -612,19 +621,19 @@ export function ServerScreen({
                     ))}
                   </OneCard>
                 ) : null}
-                <BigButton label={SERVER_COPY.ask(shown)} variant="secondary" onPress={askAbout} />
+                <BigButton label={serverCopyHere.ask(shown)} variant="secondary" onPress={askAbout} />
               </>
             ) : guests.isPending ? (
-              <SkeletonRows count={6} lines={2} label="Loading the guests" />
+              <SkeletonRows count={6} lines={2} label={tMobile('screens.loading-the-guests')} />
             ) : !guests.data ? (
-              <ErrorState text={SERVER_COPY.guestsFailed} onRetry={() => void guests.refetch()} />
+              <ErrorState text={serverCopyHere.guestsFailed} onRetry={() => void guests.refetch()} />
             ) : rows.length === 0 && !list.temporary ? (
-              <QuietText>{SERVER_COPY.noGuests}</QuietText>
+              <QuietText>{serverCopyHere.noGuests}</QuietText>
             ) : (
               <>
                 {unraid && unraidChange && unraid.docker.enabled ? (
                   <Button
-                    label="Check containers for updates"
+                    label={tMobile('screens.check-containers-for-updates')}
                     variant="secondary"
                     busy={unraidOp.busy}
                     onPress={() => void unraidOp.run('containers.check')}
@@ -656,7 +665,7 @@ export function ServerScreen({
                       }
                       chevron
                       label={g.label}
-                      hint="Opens its page"
+                      hint={tMobile('screens.opens-its-page')}
                       onPress={() => openGuest(g)}
                     />
                   ))}
@@ -781,12 +790,14 @@ function ServerHead({
   week: string | null;
   fallback: { status: Parameters<typeof serverThingStatus>[0]; words: string } | null;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const status = head?.status ?? fallback?.status ?? null;
   const badge = head?.badge ?? fallback?.words ?? null;
-  const read = useNowLabel((now) => readingTime(readAt, now, timeZone).text);
-  const readExact = useNowLabel((now) => readingTime(readAt, now, timeZone).exact);
+  const read = useNowLabel((now) => readingTime(readAt, now, timeZone, rawLocale).text);
+  const readExact = useNowLabel((now) => readingTime(readAt, now, timeZone, rawLocale).exact);
   return (
     <View style={{ gap: 8 }}>
       <View

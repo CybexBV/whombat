@@ -3,7 +3,7 @@
  * (`paperCopyText`), printed through the share sheet (a print page a browser or printer app prints, as the kit's,
  * AP-6857) or saved as a file there; then the Whombat is told (`confirmPaperCopy`). The temporary file goes afterwards.
  */
-import { BACKUP_OPTIONS_TEXT, confirmPaperCopy, kitQrPayload, paperCopyText } from '@whombat/client/managed';
+import { backupOptionsText, confirmPaperCopy, kitQrPayload, paperCopyText } from '@whombat/client/managed';
 import { type ApplianceSession, sessionOps } from '@whombat/client/session';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -16,8 +16,9 @@ export async function sharePaperCopy(input: {
   name: string;
   peerId: string;
   device: string;
+  locale?: string;
 }): Promise<void> {
-  const P = BACKUP_OPTIONS_TEXT.paper;
+  const P = backupOptionsText(input.locale).paper;
   const material = await sessionOps.backupRecoveryMaterial(input.session);
   const text = paperCopyText({ applianceName: input.name, appliancePeerId: input.peerId, material });
   const print = input.way === 'print';
@@ -25,7 +26,15 @@ export async function sharePaperCopy(input: {
   if (file.exists) file.delete();
   file.create();
   file.write(
-    print ? kitPrintHtml({ name: input.name, kitText: text, qrPayload: kitQrPayload(text), words: P }) : text,
+    print
+      ? kitPrintHtml({
+          name: input.name,
+          kitText: text,
+          qrPayload: kitQrPayload(text),
+          words: P,
+          locale: input.locale,
+        })
+      : text,
   );
   try {
     await Sharing.shareAsync(file.uri, {

@@ -5,7 +5,9 @@
  * reason, or ask the customer — and the customer hears it through the tracker. The card's words are here, so the web
  * and the phone say the same.
  */
+
 import { z } from 'zod';
+import { coreTranslator } from '../i18n/catalog.js';
 import { FeatureRequestId, PrincipalId } from '../ids.js';
 import {
   AssessmentImportance,
@@ -127,26 +129,31 @@ export function featureValueText(value: number | null): string {
 }
 
 /** The card's own words (TA-45): the buttons, the two forms and the line under them. */
-export const FEATURE_REQUEST_WORDS = {
-  label: 'Feature request',
-  value: 'Value',
-  approve: 'Approve',
-  build: 'Approve and build',
-  decline: 'Decline',
-  ask: 'Ask the customer',
-  cancel: 'Cancel',
-  ifApproved: 'If you approve, they read',
-  ifDeclined: 'If you decline, they read',
-  declineLabel: 'Why not?',
-  declineHint: (agent: string) => `${agent} tells the customer in their own language.`,
-  declineSend: 'Decline',
-  askLabel: 'What do you want to ask?',
-  askHint: (agent: string) =>
-    `${agent} asks the customer in their own language. Their answer comes back here.`,
-  askSend: 'Ask',
-  /** Under the buttons: asking the agent is a reply in the thread. */
-  askAgent: (agent: string) => `Reply in this thread to ask ${agent} about it.`,
-} as const;
+/** The feature request card's words, in a locale. */
+export function featureRequestWords(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  return {
+    label: tr.t('featureRequest.label'),
+    value: tr.t('featureRequest.value'),
+    approve: tr.t('featureRequest.approve'),
+    build: tr.t('featureRequest.build'),
+    decline: tr.t('featureRequest.decline'),
+    ask: tr.t('featureRequest.ask'),
+    cancel: tr.t('featureRequest.cancel'),
+    ifApproved: tr.t('featureRequest.ifApproved'),
+    ifDeclined: tr.t('featureRequest.ifDeclined'),
+    declineLabel: tr.t('featureRequest.declineLabel'),
+    declineHint: (agent: string) => tr.t('featureRequest.declineHint', { agent }),
+    declineSend: tr.t('featureRequest.declineSend'),
+    askLabel: tr.t('featureRequest.askLabel'),
+    askHint: (agent: string) => tr.t('featureRequest.askHint', { agent }),
+    askSend: tr.t('featureRequest.askSend'),
+    /** Under the buttons: asking the agent is a reply in the thread. */
+    askAgent: (agent: string) => tr.t('featureRequest.askAgent', { agent }),
+  };
+}
+
+export const FEATURE_REQUEST_WORDS = featureRequestWords('en');
 
 /** “From HollowMere College · Acme Desk dev #21”. */
 export function featureRequestFrom(

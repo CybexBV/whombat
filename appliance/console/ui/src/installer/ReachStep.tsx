@@ -5,10 +5,13 @@
  * so they try what the chosen way needs; Continue sends the choice with the checks (`POST /api/preflight`). Mouse and
  * keyboard: the arrow keys move between the two, Enter continues.
  */
+
 import { type KeyboardEvent, useId, useState } from 'react';
+import { useT } from '../i18n/react';
 import type { InstallerState } from '../lib/api';
 import type { Client } from '../lib/client';
-import { INSTALLER as T } from '../lib/copy';
+import { installerCopy } from '../lib/copy';
+
 import {
   loginServerValid,
   preflightRequest,
@@ -41,6 +44,9 @@ export function ReachStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const t = useT();
+  const T = installerCopy(t);
+
   const id = useId();
   // The address's problem shows once the person leaves the field or tries to continue, not while they type.
   const [touched, setTouched] = useState(false);

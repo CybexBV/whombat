@@ -4,6 +4,8 @@
  * claim refusals that have an action, and the invite code a `/signup#code=` link carries. Pure: the web renders it,
  * the phone only uses the words of claim refusals (billing lives on the web, AP-130).
  */
+import { formatLocaleCurrency } from '@whombat/core/i18n';
+import { clientTranslator } from '../i18n/catalog';
 import {
   type BillingView,
   ControlError,
@@ -19,13 +21,9 @@ const B = COPY.billing;
 
 /* Prices and plans ------------------------------------------------------------------------------------------ */
 
-/** “€49”, “€149”, “€1,490”, “€49.50”: whole euros without cents (BL-02 prices are whole). */
-export function formatEuro(cents: number): string {
-  const whole = cents % 100 === 0;
-  return `€${new Intl.NumberFormat('en-GB', {
-    minimumFractionDigits: whole ? 0 : 2,
-    maximumFractionDigits: whole ? 0 : 2,
-  }).format(cents / 100)}`;
+/** “€49”, “€149”, “€1,490”, “€49.50” (or Dutch “€1.490”, “€49,50”): whole euros without cents. */
+export function formatEuro(cents: number, locale?: string | null): string {
+  return formatLocaleCurrency(cents, 'EUR', locale, { trimWhole: true });
 }
 
 export interface PlanCardText {
@@ -33,22 +31,38 @@ export interface PlanCardText {
   /** “€49 per Whombat a month” */
   price: string;
   /**
-   * “Unlimited connectors” (no agent count: a Whombat has one agent, one-agent.md OA-02, AP-4906; no people count: a
-   * Whombat is one person's, Whombat one-person.md OP-11)
+   * “Unlimited connectors”
    */
   extras: string;
 }
 
 /** A plan card (the Billing page's “Whombat · €49 per Whombat a month”, “Unlimited connectors”). */
-export function planCardText(plan: Pick<SignupPlan, 'name' | 'amountCents' | 'limits'>): PlanCardText {
+export function planCardText(
+  plan: Pick<SignupPlan, 'name' | 'amountCents' | 'limits'>,
+  locale?: string | null,
+): PlanCardText {
+  const tr = clientTranslator(locale);
   const { connectors } = plan.limits;
-  const extras = connectors === null ? B.unlimitedConnectors : B.connectors(connectors);
-  return { name: plan.name, price: B.perWhombat(formatEuro(plan.amountCents)), extras };
+  const extras =
+    connectors === null
+      ? tr.t('managed.billing.unlimitedConnectors')
+      : tr.t('managed.billing.connectors', { n: connectors });
+  return {
+    name: plan.name,
+    price: tr.t('managed.billing.perWhombat', { price: formatEuro(plan.amountCents, locale) }),
+    extras,
+  };
 }
 
 /** “Total €98 a month” for `whombats` of the plan (excluding VAT, which the fine print says). */
-export function planTotalText(plan: Pick<SignupPlan, 'amountCents'>, whombats: number): string {
-  return B.total(formatEuro(plan.amountCents * whombats));
+export function planTotalText(
+  plan: Pick<SignupPlan, 'amountCents'>,
+  whombats: number,
+  locale?: string | null,
+): string {
+  return clientTranslator(locale).t('managed.billing.total', {
+    price: formatEuro(plan.amountCents * whombats, locale),
+  });
 }
 
 /** The Whombats stepper's range at checkout and later (BL-15, BL-18). */

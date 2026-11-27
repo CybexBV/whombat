@@ -5,6 +5,7 @@
  * name; a full copy), Delete (type the name; its disks go too), Restart to apply, and Add to a backup job. Each says
  * in plain words what happens; what runs as a task says when it starts and when it ends (`useServerChange`).
  */
+
 import { isDestructiveAction, type PowerActionView, storagesFor } from '@whombat/client/hosts';
 import {
   addToJobParams,
@@ -24,6 +25,7 @@ import type { HostBackupJob, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useMobileT } from '../../i18n';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
@@ -145,6 +147,7 @@ function useChoices(serverId: string) {
 
 /** Back up now: on which storage, and how (while it runs, paused, stopped). */
 export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { choices, loading } = useChoices(serverId);
   const stores = backupStorages(storagesFor(choices, 'backup'));
   const [storage, setStorage] = useState('');
@@ -158,7 +161,7 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Back up ${guest.name} now`}
-      body="The backup runs on the server; you can leave this screen."
+      body={tMobile('screens.the-backup-runs-on-the-server-you-can')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -181,13 +184,13 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
       <View style={{ gap: 16, marginTop: 16 }}>
         {stores.ids.length ? (
           <Choices
-            label="Save it on"
+            label={tMobile('screens.save-it-on')}
             options={stores.ids.map((id) => ({ value: id, label: id }))}
             value={target}
             onChange={setStorage}
           />
         ) : null}
-        <Choices label="How" options={BACKUP_MODES} value={mode} onChange={setMode} />
+        <Choices label={tMobile('screens.how')} options={BACKUP_MODES} value={mode} onChange={setMode} />
       </View>
     </OneSheet>
   );
@@ -195,6 +198,7 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Take a snapshot: a name, a note, and for a running VM whether what's in memory comes too. */
 export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { clock } = useBurrowBase();
   const [name, setName] = useState(() => defaultSnapshotName(clock().getTime()));
   const [note, setNote] = useState('');
@@ -209,7 +213,7 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Take a snapshot of ${guest.name}`}
-      body="You can go back to it later. It takes a few seconds."
+      body={tMobile('screens.you-can-go-back-to-it-later-it')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -231,7 +235,7 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
     >
       <View style={{ gap: 14, marginTop: 16 }}>
         <FormField
-          label="Name"
+          label={tMobile('screens.name')}
           value={name}
           onChangeText={setName}
           error={name.trim() ? bad : null}
@@ -239,10 +243,15 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <FormField label="Note" value={note} onChangeText={setNote} hint="Optional." />
+        <FormField
+          label={tMobile('screens.note')}
+          value={note}
+          onChangeText={setNote}
+          hint={tMobile('screens.optional')}
+        />
         {vmOn ? (
           <SwitchLine
-            label="Include what’s in memory (it resumes exactly where it was)"
+            label={tMobile('screens.include-whats-in-memory-it-resumes-exactly-where')}
             value={memory}
             onChange={setMemory}
           />
@@ -254,6 +263,7 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Clone: a full copy with its own disks, under a new name and id; it starts switched off. */
 export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { choices } = useChoices(serverId);
   const [name, setName] = useState(`${guest.name}-copy`);
   const [id, setId] = useState('');
@@ -266,7 +276,7 @@ export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Clone ${guest.name}`}
-      body="A full copy with its own disks. The copy starts switched off."
+      body={tMobile('screens.a-full-copy-with-its-own-disks-the')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -288,7 +298,7 @@ export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
     >
       <View style={{ gap: 14, marginTop: 16 }}>
         <FormField
-          label="Name"
+          label={tMobile('screens.name')}
           value={name}
           onChangeText={setName}
           error={nameError}
@@ -316,6 +326,7 @@ export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
  * stay. Incus: its snapshots and backups go with it (they live with the instance).
  */
 export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase & { onDeleted: () => void }) {
+  const { t: tMobile } = useMobileT();
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
@@ -367,7 +378,11 @@ export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase &
     >
       <View style={{ marginTop: 16, gap: 8 }}>
         {libvirt ? (
-          <SwitchLine label="Delete its disks and NVRAM too" value={purge} onChange={setPurge} />
+          <SwitchLine
+            label={tMobile('screens.delete-its-disks-and-nvram-too')}
+            value={purge}
+            onChange={setPurge}
+          />
         ) : null}
         <FormField
           label={`Type ${guest.name} to confirm`}
@@ -385,6 +400,7 @@ export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase &
 
 /** Restart to apply what waits for a restart (asked, as every restart is). */
 export function RestartSheet({ serverId, serverName, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { send, busy } = useGuestAction(serverId, guest);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -394,7 +410,7 @@ export function RestartSheet({ serverId, serverName, guest, onClose }: SheetBase
       badge={`${guest.name} · ${serverName}`}
       tone="warn"
       title={`Restart ${guest.name} now?`}
-      body="It’s down for a moment while it restarts, then runs with the new settings."
+      body={tMobile('screens.its-down-for-a-moment-while-it-restarts')}
       busy={busy}
       buttons={[
         {
@@ -413,6 +429,7 @@ export function RestartSheet({ serverId, serverName, guest, onClose }: SheetBase
 
 /** Add to a backup job (PX-03, PX-07): the server's jobs; picking one adds the guest to it (its digest sent along). */
 export function AddToJobSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { slug, clock, timeZone } = useBurrowBase();
   const q = useHostManageRead(
     { params: { burrow: slug, serverId }, query: { op: 'backupjob.list', platform: 'pve' } },
@@ -449,20 +466,20 @@ export function AddToJobSheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Add ${guest.name} to a backup plan`}
-      body="It’s backed up with the others at the job’s next run."
+      body={tMobile('screens.its-backed-up-with-the-others-at-the')}
       busy={null}
       buttons={[{ id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose }]}
       note={error}
     >
       <View style={{ marginTop: 16 }}>
         {q.isPending ? (
-          <QuietText>Looking…</QuietText>
+          <QuietText>{tMobile('screens.looking')}</QuietText>
         ) : !rows.length ? (
           <OneCard>
             <CardQuiet>
               {jobs.length
-                ? 'Every job already backs it up.'
-                : 'This server has no backup plans yet. Ask your assistant to make one, or make one in Whombat on a computer.'}
+                ? tMobile('screens.every-job-already-backs-it-up')
+                : tMobile('screens.this-server-has-no-backup-plans-yet-ask')}
             </CardQuiet>
           </OneCard>
         ) : (

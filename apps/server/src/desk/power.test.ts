@@ -54,6 +54,11 @@ describe('the battery as a UPS (DK-10)', () => {
     expect(powerAlertText('out', battery(90, null))).toContain('running on its battery');
     expect(powerAlertText('low', battery(15))).toMatch(/15\s%/u);
     expect(powerAlertText('back', mains)).toContain('power is back');
-    expect([40, 60, 80, 200].map(formatPowerLeft)).toEqual(['40 min', '1 h', '1 h 20 min', '3 h 20 min']);
+    expect([40, 60, 80, 200].map((m) => formatPowerLeft(m))).toEqual([
+      '40 min',
+      '1 h',
+      '1 h 20 min',
+      '3 h 20 min',
+    ]);
   });
 });

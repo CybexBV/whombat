@@ -29,13 +29,14 @@ import {
 } from '@whombat/client';
 import { useClearLocalModel, useSetLocalModel, useTestLocalModel } from '@whombat/client/react';
 import type { LocalModelCheck, LocalModelView } from '@whombat/core/domain';
-import { LOCAL_MODEL_COPY } from '@whombat/core/text';
+import { localModelCopy } from '@whombat/core/text';
 import { type FormEvent, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
+import { useLocaleWords } from '../../i18n/words';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import styles from './ai.module.css';
 import local from './LocalModelSection.module.css';
@@ -57,6 +58,7 @@ function refusalOf(
 }
 
 export function LocalModelSection({ burrow, view }: { burrow: string; view: LocalModelView | null }) {
+  const LOCAL_MODEL_COPY = useLocaleWords(localModelCopy);
   const id = useId();
   const [editing, setEditing] = useState(false);
   const [mismatch, setMismatch] = useState<string | null>(null);
@@ -125,6 +127,7 @@ function SavedRow({
   notice?: string | null;
   onChange: () => void;
 }) {
+  const LOCAL_MODEL_COPY = useLocaleWords(localModelCopy);
   const toast = useToast();
   const test = useTestLocalModel(burrow);
   const clear = useClearLocalModel(burrow);
@@ -232,6 +235,7 @@ function LocalModelForm({
   onDone: () => void;
   onCancel: (() => void) | null;
 }) {
+  const LOCAL_MODEL_COPY = useLocaleWords(localModelCopy);
   const ids = useId();
   const toast = useToast();
   const set = useSetLocalModel(burrow);

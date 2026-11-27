@@ -21,6 +21,7 @@ import { useAppServices } from '../app/providers';
 import styles from '../app/shell/ShellLayout.module.css';
 import { Button, ButtonLink } from '../components/Button';
 import { StatusDot } from '../components/StatusDot';
+import { useWebI18n } from '../i18n/provider';
 
 const REACH_POLL_MS = 10 * 60_000;
 
@@ -31,6 +32,7 @@ export function LinkBanner() {
 }
 
 function LinkLine({ session }: { session: ApplianceSession }) {
+  const { tag: uiLocale } = useWebI18n();
   const [reach, setReach] = useState<ReachGetOutput | null>(null);
   const [tailscale, setTailscale] = useState<HostTailscaleOutput | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +64,7 @@ function LinkLine({ session }: { session: ApplianceSession }) {
   }, [t.pollMs, tailscale, api]);
 
   const followed = tailscale?.tailscale ?? null;
-  const banner = linkBannerView(reach && (followed ? { ...reach, tailscale: followed } : reach));
+  const banner = linkBannerView(reach && (followed ? { ...reach, tailscale: followed } : reach), uiLocale);
   if (!banner) return null;
   const turnOn = async () => {
     setBusy(true);

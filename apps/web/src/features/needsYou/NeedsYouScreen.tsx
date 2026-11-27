@@ -3,7 +3,6 @@ import { useRouterState } from '@tanstack/react-router';
 import {
   agentFaceOf,
   askText,
-  NEEDS_YOU_WORDS,
   NeedsNewerAppError,
   type NeedsYouApprovalCard,
   type NeedsYouButton,
@@ -18,9 +17,9 @@ import {
   needsYouMore,
   needsYouSettledText,
   startedChatPath,
-  TEAM_REPORT_WORDS,
   teamReportDraftOfHref,
   teamReportDraftPath,
+  teamReportWords,
   threadToOpen,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
@@ -65,6 +64,8 @@ import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { SkeletonRows } from '../../components/ListState';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
+import { useNeedsYouWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { AskCard } from '../approvals/AskCard';
 import { useAskToCheck, useUnknownAnswer } from '../approvals/unknownAnswer';
@@ -103,14 +104,16 @@ const GLYPHS: Record<NeedsYouGlyph, LucideIcon> = {
  * through `home.changed`.
  */
 export function NeedsYouScreen({ burrow }: NeedsYouScreenProps) {
+  const { tag: uiLocale } = useWebI18n();
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
   const { timeZone } = useBurrowContext(burrow);
   const now = useNow(60_000);
   const { data, error, refetch, isRefetchError } = useHomeOverview({ params: { burrow } });
   const navigateHref = useNavigateHref();
   const { agent, words } = useTheAgent(burrow);
   const view = useMemo(
-    () => (data ? needsYouListView(data, { now, timeZone, assistant: words.name }) : null),
-    [data, now, timeZone, words.name],
+    () => (data ? needsYouListView(data, { now, timeZone, assistant: words.name, locale: uiLocale }) : null),
+    [data, now, timeZone, words.name, uiLocale],
   );
   const focus = useRouterState({
     select: (s) => {
@@ -244,6 +247,7 @@ function SettledBar({
   busy: string | null;
   onPress: (row: NeedsYouListRow, button: NeedsYouButton) => void;
 }) {
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
   const holdsFocus = group.rows.some((r) => r.id === focus);
   const [open, setOpen] = useState(holdsFocus);
   useEffect(() => {
@@ -402,6 +406,8 @@ function Row({
   onPress: (button: NeedsYouButton) => void;
   onReply?: (text: string) => Promise<boolean>;
 }) {
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
+  const { t, tag: uiLocale } = useWebI18n();
   const ref = useRef<HTMLElement>(null);
   const passkey = useBackupPasskeyTap();
   const hasPasskey = row.buttons.some((b) => isPasskeyButton(row.item.href, b));
@@ -414,11 +420,12 @@ function Row({
   // What isn't working has the one loud cue, its tile; everything else is calm.
   const bad = !fixed && row.group === 'you' && row.tone === 'bad';
   const shown = row.buttons.filter((b) => !b.more);
-  const more = needsYouMore(row);
+  const more = needsYouMore(row, uiLocale);
   const headId = `need-${row.id}`;
   const meta = [row.meta, row.state].filter(Boolean).join(' · ');
   // An approval is the one approval card, its facts and exact later time before its answers (approval-card.md).
-  const card = row.group === 'you' ? needsYouApprovalCard(row, { timeZone, assistant: name }) : null;
+  const card =
+    row.group === 'you' ? needsYouApprovalCard(row, { timeZone, assistant: name, locale: uiLocale }) : null;
   if (card)
     return (
       <ApprovalRow
@@ -494,7 +501,7 @@ function Row({
           ))}
           {more.length ? (
             <MenuButton
-              label={`${NEEDS_YOU_WORDS.more} for ${row.title}`}
+              label={t('needsYou.moreFor', { more: NEEDS_YOU_WORDS.more, title: row.title })}
               className={cx(styles.btn, styles.more)}
               disabled={busy}
               items={more.map((b) => ({ label: b.label, onSelect: () => onPress(b) }))}
@@ -591,7 +598,9 @@ function ApprovalRow({
   busy: boolean;
   onPress: (button: NeedsYouButton) => void;
 }) {
-  const more = needsYouMore(row);
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
+  const { t, tag: uiLocale } = useWebI18n();
+  const more = needsYouMore(row, uiLocale);
   const number = row.item.approvalNumber;
   const mayHaveGoneThrough = useUnknownAnswer(burrow, number);
   const check = useAskToCheck(burrow, row.title);
@@ -631,7 +640,11 @@ function ApprovalRow({
         className={styles.approvalCard}
         edit={
           draftId
-            ? { label: TEAM_REPORT_WORDS.edit, href: teamReportDraftPath(draftId), onNavigate: navigate }
+            ? {
+                label: teamReportWords(uiLocale).edit,
+                href: teamReportDraftPath(draftId),
+                onNavigate: navigate,
+              }
             : undefined
         }
         details={
@@ -651,7 +664,7 @@ function ApprovalRow({
       {more.length ? (
         <div className={styles.approvalMore} data-row-actions="">
           <MenuButton
-            label={`${NEEDS_YOU_WORDS.more} for ${row.title}`}
+            label={t('needsYou.moreFor', { more: NEEDS_YOU_WORDS.more, title: row.title })}
             className={cx(styles.btn, styles.more)}
             disabled={busy}
             items={more.map((b) => ({ label: b.label, onSelect: () => onPress(b) }))}
@@ -680,6 +693,7 @@ function ReadProblem({
   onRetry: () => void;
   onAsk: () => void;
 }) {
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
   const detail = error instanceof Error ? error.message : null;
   return (
     <section className={cx(home.card, styles.readState)} role="status">
@@ -708,7 +722,6 @@ function isPasskeyButton(href: string | null | undefined, button: NeedsYouButton
   return !!target && isBackupPasskeyHref(target);
 }
 
-const SOMETHING_WENT_WRONG = NEEDS_YOU_WORDS.failed;
 /** A refusal's words stay up long enough to read. */
 const FAILED_TOAST_MS = 6000;
 /** Settle's Undo stays a little longer than other toasts: the row has just gone, the person may want it back. */
@@ -739,6 +752,8 @@ function focusAfter(id: string): () => void {
  * Bring it back.
  */
 function useListActions(burrow: string, timeZone: string, words: { name: string; Name: string }) {
+  const { tag: uiLocale } = useWebI18n();
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
   const qc = useQueryClient();
   const toast = useToast();
   const navigateHref = useNavigateHref();
@@ -763,7 +778,7 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
     if (open) navigateHref(open);
     else if (outcome === 'ok') toast.show(NEEDS_YOU_WORDS.handling(words));
     else if (outcome === 'ask' && asked) void ask(asked.text, asked.subject ?? null);
-    else toast.show(SOMETHING_WENT_WRONG);
+    else toast.show(NEEDS_YOU_WORDS.failed);
   });
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -771,7 +786,7 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
   const ask = async (text: string, subject: NeedsYouListRow['item']['subject'] | null) => {
     const result = await start.mutateAsync({ text, subject, reuseThread: true });
     if (result.status === 'ok') navigateHref(startedChatPath(result.data));
-    else toast.show(SOMETHING_WENT_WRONG);
+    else toast.show(NEEDS_YOU_WORDS.failed);
   };
 
   /** Reply directly to a Looks ahead finding from the Inbox: promotes to Chat and wakes the assistant. */
@@ -785,10 +800,12 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
         navigateHref(startedChatPath(result.data));
         return true;
       }
-      toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+      toast.show(commitOutcomeText(result, uiLocale) ?? NEEDS_YOU_WORDS.failed, {
+        duration: FAILED_TOAST_MS,
+      });
       return false;
     } catch {
-      toast.show(SOMETHING_WENT_WRONG);
+      toast.show(NEEDS_YOU_WORDS.failed);
       return false;
     } finally {
       setBusy(null);
@@ -801,7 +818,7 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
       void backupPasskey();
       return;
     }
-    const intent = needsYouListIntent(item, button, Date.now(), timeZone);
+    const intent = needsYouListIntent(item, button, Date.now(), timeZone, uiLocale);
     if (!intent) return;
     // What hands work over waits on its row until its thread opens (backup-places.md BPL-15).
     const toThread = needsYouButtonGoes(button) === 'thread';
@@ -846,7 +863,10 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
             ...(intent.text ? { text: intent.text } : {}),
           });
           if (result.status === 'ok') navigateHref(startedChatPath(result.data));
-          else toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+          else
+            toast.show(commitOutcomeText(result, uiLocale) ?? NEEDS_YOU_WORDS.failed, {
+              duration: FAILED_TOAST_MS,
+            });
           return;
         }
         case 'aheadFeedback': {
@@ -855,7 +875,9 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
           moveFocus();
           const result = await pending;
           if (result.status !== 'ok') {
-            toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+            toast.show(commitOutcomeText(result, uiLocale) ?? NEEDS_YOU_WORDS.failed, {
+              duration: FAILED_TOAST_MS,
+            });
             return;
           }
           if (intent.verdict === 'not_useful') {
@@ -869,8 +891,8 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
                 label: NEEDS_YOU_WORDS.undo,
                 onAction: () =>
                   void updateLooksAhead.mutateAsync({ kind: intent.kind, on: true }).then(
-                    (r) => r.status !== 'ok' && toast.show(SOMETHING_WENT_WRONG),
-                    () => toast.show(SOMETHING_WENT_WRONG),
+                    (r) => r.status !== 'ok' && toast.show(NEEDS_YOU_WORDS.failed),
+                    () => toast.show(NEEDS_YOU_WORDS.failed),
                   ),
               },
             });
@@ -884,17 +906,19 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
           moveFocus();
           const result = await settled;
           if (result.status !== 'ok') {
-            toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+            toast.show(commitOutcomeText(result, uiLocale) ?? NEEDS_YOU_WORDS.failed, {
+              duration: FAILED_TOAST_MS,
+            });
             return;
           }
-          toast.show(needsYouSettledText(ref), {
+          toast.show(needsYouSettledText(ref, uiLocale), {
             duration: SETTLE_TOAST_MS,
             action: {
               label: NEEDS_YOU_WORDS.undo,
               onAction: () =>
                 void settling.mutateAsync({ ref, ignored: false }).then(
-                  (r) => r.status !== 'ok' && toast.show(SOMETHING_WENT_WRONG),
-                  () => toast.show(SOMETHING_WENT_WRONG),
+                  (r) => r.status !== 'ok' && toast.show(NEEDS_YOU_WORDS.failed),
+                  () => toast.show(NEEDS_YOU_WORDS.failed),
                 ),
             },
           });
@@ -904,7 +928,9 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
           const { watch } = intent;
           const result = await stopWatching.mutateAsync({ ref: item.ref, watch, watched: false });
           if (result.status !== 'ok') {
-            toast.show(commitOutcomeText(result) ?? SOMETHING_WENT_WRONG, { duration: FAILED_TOAST_MS });
+            toast.show(commitOutcomeText(result, uiLocale) ?? NEEDS_YOU_WORDS.failed, {
+              duration: FAILED_TOAST_MS,
+            });
             return;
           }
           toast.show(NEEDS_YOU_WORDS.stopped(watch.name), {
@@ -914,9 +940,10 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
                 void stopWatching
                   .mutateAsync({ ref: item.ref, watch, watched: true })
                   .then((r) => {
-                    if (r.status !== 'ok') toast.show(commitOutcomeText(r) ?? SOMETHING_WENT_WRONG);
+                    if (r.status !== 'ok')
+                      toast.show(commitOutcomeText(r, uiLocale) ?? NEEDS_YOU_WORDS.failed);
                   })
-                  .catch((error: unknown) => toast.show(hostErrorInfo(error).message)),
+                  .catch((error: unknown) => toast.show(hostErrorInfo(error, uiLocale).message)),
             },
           });
           return;
@@ -928,25 +955,25 @@ function useListActions(burrow: string, timeZone: string, words: { name: string;
           // A Whombat without it (or an item that just went): the question in the thing's own thread instead.
           const result = await discuss.mutateAsync({ ref: intent.ref }).catch(() => null);
           if (result?.status === 'ok') navigateHref(startedChatPath(result.data));
-          else await ask(askText(item), item.subject ?? null);
+          else await ask(askText(item, uiLocale), item.subject ?? null);
           return;
         }
         case 'back': {
           const result = await back.mutateAsync({ ref: intent.ref });
-          toast.show(result.status === 'ok' ? NEEDS_YOU_WORDS.backDone : SOMETHING_WENT_WRONG);
+          toast.show(result.status === 'ok' ? NEEDS_YOU_WORDS.backDone : NEEDS_YOU_WORDS.failed);
           void qc.invalidateQueries({ queryKey: queryKeys.scope('home.overview') });
           return;
         }
       }
     };
     run()
-      .catch(() => toast.show(SOMETHING_WENT_WRONG))
+      .catch(() => toast.show(NEEDS_YOU_WORDS.failed))
       .finally(() => setBusy(null));
   };
 
   /** *Ask {assistant}* when the list couldn't be read: a question in a new thread, nothing else sent. */
   const askAboutRead = () =>
-    void ask(NEEDS_YOU_WORDS.readFailedAsk, null).catch(() => toast.show(SOMETHING_WENT_WRONG));
+    void ask(NEEDS_YOU_WORDS.readFailedAsk, null).catch(() => toast.show(NEEDS_YOU_WORDS.failed));
 
   return { press, replyAhead, askAboutRead, busy: busy ?? actions.busy };
 }

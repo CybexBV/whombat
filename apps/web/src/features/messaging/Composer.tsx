@@ -24,6 +24,7 @@ import {
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n, type WebTranslator } from '../../i18n/provider';
 import { PromptPicker } from '../prompts/PromptPicker';
 import { PROMPT_WEB_WORDS, type SlashOption, slashOptions } from '../prompts/promptsModel';
 import type { PromptProjectsState } from '../prompts/usePrompts';
@@ -115,19 +116,20 @@ export interface ComposerProps {
   voiceKey?: string;
 }
 
+/** The English of two notes the composer shows in the page's language, for the tests that look for them. */
 export const UPLOADS_UNAVAILABLE = 'File uploads aren’t available yet';
 export const WAIT_FOR_UPLOADS = 'Wait for the upload to finish';
 
 /** What screen readers hear about the chips: counts, not every percent. */
-function uploadsSummary(items: readonly ComposerAttachment[]): string {
+function uploadsSummary(items: readonly ComposerAttachment[], { t, tp }: WebTranslator): string {
   if (!items.length) return '';
   const count = (state: ComposerAttachment['state']) => items.filter((a) => a.state === state).length;
   const parts = [
-    count('uploading') && `${count('uploading')} uploading`,
-    count('ready') && `${count('ready')} ready to send`,
-    count('failed') && `${count('failed')} failed`,
+    count('uploading') && t('chat.composer.uploadingCount', { n: count('uploading') }),
+    count('ready') && t('chat.composer.readyCount', { n: count('ready') }),
+    count('failed') && t('chat.composer.failedCount', { n: count('failed') }),
   ].filter(Boolean);
-  return `${items.length === 1 ? '1 file' : `${items.length} files`}: ${parts.join(', ')}`;
+  return `${tp('chat.composer.files', items.length)}: ${parts.join(', ')}`;
 }
 
 type Popover = { kind: 'command'; options: SlashOption[] } | null;
@@ -195,6 +197,8 @@ function ComposerView({
   const [, setCaret] = useState(0);
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const words = useWebI18n();
+  const { t } = words;
   const ids = useId();
   const listId = `${ids}-list`;
   // `@neo ` becomes `@Neo ` as it is typed (AP-607).
@@ -441,15 +445,17 @@ function ComposerView({
       <div className={cx(styles.popover, reply && styles.popoverReply, styles.popoverWide)}>
         {optionCount === 0 ? (
           <>
-            {promptList.length === 0 && <span className={styles.popoverLabel}>SKILLS</span>}
+            {promptList.length === 0 && (
+              <span className={styles.popoverLabel}>{t('chat.composer.skillsLabel')}</span>
+            )}
             <p className={styles.empty}>
-              {promptList.length === 0 ? 'No skill by that name.' : PROMPT_WEB_WORDS.nothing}
+              {promptList.length === 0 ? t('chat.composer.noSkill') : PROMPT_WEB_WORDS.nothing}
             </p>
           </>
         ) : promptOptions.length === 0 ? (
           <>
-            <span className={styles.popoverLabel}>SKILLS</span>
-            <div className={styles.options} role="listbox" id={listId} aria-label="Skills">
+            <span className={styles.popoverLabel}>{t('chat.composer.skillsLabel')}</span>
+            <div className={styles.options} role="listbox" id={listId} aria-label={t('chat.composer.skills')}>
               {skillOptions.map((o, i) => optionRow(o, i))}
             </div>
           </>
@@ -475,7 +481,7 @@ function ComposerView({
                 className={cx(styles.options, styles.groupAfter)}
               >
                 <span id={`${listId}-skills`} className={styles.popoverLabel}>
-                  SKILLS
+                  {t('chat.composer.skillsLabel')}
                 </span>
                 {skillOptions.map((o, i) => optionRow(o, promptOptions.length + i))}
               </div>
@@ -487,7 +493,10 @@ function ComposerView({
   );
 
   const attachmentsEl = attachments.length > 0 && (
-    <ul className={cx(styles.attachments, reply && styles.replyAttachments)} aria-label="Attachments">
+    <ul
+      className={cx(styles.attachments, reply && styles.replyAttachments)}
+      aria-label={t('chat.composer.attachments')}
+    >
       {attachments.map((a) => {
         const pct = Math.round(a.progress * 100);
         return (
@@ -502,7 +511,7 @@ function ComposerView({
               <span
                 className={styles.progress}
                 role="progressbar"
-                aria-label={`Uploading ${a.name}`}
+                aria-label={t('chat.composer.uploading', { name: a.name })}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={pct}
@@ -514,18 +523,23 @@ function ComposerView({
               <button
                 type="button"
                 className={styles.retryAttachment}
-                aria-label={`Retry ${a.name}`}
+                aria-label={t('chat.composer.retryFile', { name: a.name })}
                 onClick={() => onRetryAttachment(a.localId)}
               >
-                Retry
+                {t('chat.composer.retry')}
               </button>
             )}
             {onRemoveAttachment && (
               <button
                 type="button"
                 className={styles.removeAttachment}
-                aria-label={`${a.state === 'uploading' ? 'Cancel' : 'Remove'} ${a.name}`}
-                title={a.state === 'uploading' ? 'Cancel' : 'Remove'}
+                aria-label={t(
+                  a.state === 'uploading' ? 'chat.composer.cancelFile' : 'chat.composer.removeFile',
+                  {
+                    name: a.name,
+                  },
+                )}
+                title={a.state === 'uploading' ? t('common.cancel') : t('chat.composer.remove')}
                 onClick={() => onRemoveAttachment(a.localId)}
               >
                 ×
@@ -587,7 +601,7 @@ function ComposerView({
   );
   const fileNote = !onPickFiles && (
     <span id={fileNoteId} className={styles.srOnly}>
-      {UPLOADS_UNAVAILABLE}
+      {t('chat.composer.uploadsUnavailable')}
     </span>
   );
   const fileTool = one ? (
@@ -597,15 +611,15 @@ function ComposerView({
         className={cx(styles.fileButton, !onPickFiles && styles.toolDisabled)}
         aria-disabled={!onPickFiles}
         aria-describedby={onPickFiles ? undefined : fileNoteId}
-        aria-label="Attach a file"
-        title={onPickFiles ? 'Attach a file' : UPLOADS_UNAVAILABLE}
+        aria-label={t('chat.composer.attach')}
+        title={onPickFiles ? t('chat.composer.attach') : t('chat.composer.uploadsUnavailable')}
         data-composer-attach=""
         onClick={() => {
           if (onPickFiles) fileRef.current?.click();
         }}
       >
         <Icon icon={Paperclip} size={16} />
-        <span>File</span>
+        <span>{t('chat.composer.file')}</span>
       </button>
       {fileNote}
       {fileInput}
@@ -617,12 +631,12 @@ function ComposerView({
         className={cx(styles.tool, !onPickFiles && styles.toolDisabled)}
         aria-disabled={!onPickFiles}
         aria-describedby={onPickFiles ? undefined : fileNoteId}
-        title={onPickFiles ? 'Attach a file' : UPLOADS_UNAVAILABLE}
+        title={onPickFiles ? t('chat.composer.attach') : t('chat.composer.uploadsUnavailable')}
         onClick={() => {
           if (onPickFiles) fileRef.current?.click();
         }}
       >
-        + file
+        {t('chat.composer.fileChip')}
       </button>
       {fileNote}
       {fileInput}
@@ -631,7 +645,7 @@ function ComposerView({
 
   const summaryEl = (
     <span className={styles.srOnly} aria-live="polite" data-testid="upload-summary">
-      {uploadsSummary(attachments)}
+      {uploadsSummary(attachments, words)}
     </span>
   );
 
@@ -666,9 +680,15 @@ function ComposerView({
                   type="button"
                   className={cx(styles.send, ready && !held && styles.sendReady)}
                   onClick={submit}
-                  aria-label="Send"
+                  aria-label={t('chat.composer.send')}
                   aria-disabled={held || undefined}
-                  title={uploading ? WAIT_FOR_UPLOADS : tooLong ? TOO_LONG_NOTE : 'Send'}
+                  title={
+                    uploading
+                      ? t('chat.composer.waitForUploads')
+                      : tooLong
+                        ? TOO_LONG_NOTE
+                        : t('chat.composer.send')
+                  }
                   data-ready={(ready && !held) || undefined}
                 >
                   <Icon icon={ArrowUp} size={18} />
@@ -706,7 +726,7 @@ function ComposerView({
                 )
               }
             >
-              / command
+              {t('chat.composer.commandChip')}
             </button>
           )}
           {fileTool}
@@ -721,9 +741,9 @@ function ComposerView({
             padY={7}
             onClick={submit}
             aria-disabled={uploading || tooLong || undefined}
-            title={uploading ? WAIT_FOR_UPLOADS : tooLong ? TOO_LONG_NOTE : undefined}
+            title={uploading ? t('chat.composer.waitForUploads') : tooLong ? TOO_LONG_NOTE : undefined}
           >
-            Send
+            {t('chat.composer.send')}
           </Button>
         </div>
       </div>

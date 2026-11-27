@@ -33,8 +33,9 @@ export function threadWorkView(
   typing: readonly Pick<TypingEntry, 'principalId' | 'threadRootId'>[],
   people: People,
   handoffs: readonly Handoff[] = [],
+  locale?: string | null,
 ): ThreadWorkView | null {
-  const work = threadWork(rootId, runs, typing, handoffs);
+  const work = threadWork(rootId, runs, typing, handoffs, locale);
   if (!work) return null;
   return {
     agent: people.get(work.agentId),
@@ -66,12 +67,13 @@ export function thinkingLabels(
   principalId: string,
   threadRootId: string | null,
   nowMs: number,
+  locale?: string | null,
 ): { label: string; spoken: string; ticks: boolean } {
   const ticks = agentNow.some((e) => e.principalId === principalId && e.threadRootId === threadRootId);
   const entry = agentNowFor(agentNow, principalId, threadRootId, nowMs);
   return {
-    label: workingLabel(name, entry, nowMs),
-    spoken: workingLabel(name, entry, entry?.since ?? nowMs),
+    label: workingLabel(name, entry, nowMs, locale),
+    spoken: workingLabel(name, entry, entry?.since ?? nowMs, locale),
     ticks,
   };
 }

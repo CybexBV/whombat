@@ -8,7 +8,8 @@
  * (`@whombat/core` domain/remote-help.ts, contracts 0.120.0), copied with the same keys because the page can't import
  * the contracts; `remoteHelp.test.ts` checks each word against the vendored source (`vendor/whombat-contracts/remote-help.ts`).
  */
-import { clockText } from './deskCopy';
+import { english, localized, type Translate } from '../i18n/translate';
+import { clockText, formatDeskDate } from './deskCopy';
 
 export const REMOTE_HELP_LEVELS = ['look', 'fix'] as const;
 export type RemoteHelpLevel = (typeof REMOTE_HELP_LEVELS)[number];
@@ -21,33 +22,45 @@ export interface RemoteHelp {
 }
 
 /** The contracts' words (copied). */
-export const REMOTE_HELP_DESK_WORDS = {
-  on: 'Remote help is on · until {time}',
-  onForever: 'Remote help is on · forever',
-  connected: '{who} is connected',
-  stop: 'Stop',
-} as const;
+export const remoteHelpDeskWordsCopy = localized(
+  (t) =>
+    ({
+      on: t('remoteHelp.status.on'),
+      onForever: t('remoteHelp.status.onForever'),
+      connected: t('remoteHelp.status.connected'),
+      stop: t('remoteHelp.status.stop'),
+    }) as const,
+);
+export const REMOTE_HELP_DESK_WORDS = remoteHelpDeskWordsCopy();
 
 /** The contracts' title and level words (`REMOTE_HELP_WORDS.title`, `.levels`; copied). */
-export const REMOTE_HELP_TITLE = 'Remote help';
-export const REMOTE_HELP_LEVEL_WORDS = {
-  look: {
-    label: 'Look',
-    hint: 'Read its logs, status, hardware and network. They can’t change anything or see your chats, files or Vault.',
-  },
-  fix: {
-    label: 'Look and fix',
-    hint: 'Also restart parts, change settings and run commands. This lets them see everything on this Whombat.',
-  },
-} as const satisfies Record<RemoteHelpLevel, { label: string; hint: string }>;
+const remoteHelpTitleCopy = localized((t) => t('desk.calm.sheet.remoteHelp'));
+export const REMOTE_HELP_TITLE = remoteHelpTitleCopy();
+const remoteHelpLevelWordsCopy = localized(
+  (t) =>
+    ({
+      look: {
+        label: t('desk.calm.look'),
+        hint: t('remoteHelp.level.look.hint'),
+      },
+      fix: {
+        label: t('remoteHelp.level.fix.label'),
+        hint: t('remoteHelp.level.fix.hint'),
+      },
+    }) as const satisfies Record<RemoteHelpLevel, { label: string; hint: string }>,
+);
+export const REMOTE_HELP_LEVEL_WORDS = remoteHelpLevelWordsCopy();
 
 /** The page's own: the chip's word (CG-295), the sheet's title and Close, Stop's label for a screen reader. */
-export const REMOTE_HELP_PAGE_WORDS = {
-  chip: 'Remote',
-  title: REMOTE_HELP_TITLE,
-  close: 'Close',
-  stopLabel: 'Stop remote help',
-} as const;
+export const remoteHelpPageWordsCopy = localized(
+  (t) =>
+    ({
+      chip: t('remoteHelp.chip'),
+      title: remoteHelpTitleCopy(t),
+      close: t('bluetooth.close'),
+      stopLabel: t('remoteHelp.stopLabel'),
+    }) as const,
+);
 
 /** A name as the page may draw it: one line, at most 40 characters (the server cleaned it already). */
 function who(v: unknown): string | null {
@@ -116,35 +129,64 @@ function day(ms: number, timeZone: string) {
  * When a grant ends, on the person's clock (`remoteHelpUntilText`): today the time (“14:00”), “tomorrow 14:00”, else
  * “Thu 23 Oct, 14:00” (with the year when it isn't this one).
  */
-export function untilText(untilMs: number, nowMs: number, timeZone: string): string {
+export function untilText(untilMs: number, nowMs: number, timeZone: string, t: Translate = english): string {
   const clock = clockText(untilMs, timeZone);
   const u = day(untilMs, timeZone);
   const n = day(nowMs, timeZone);
   const days = u.number - n.number;
   if (days <= 0) return clock;
-  if (days === 1) return `tomorrow ${clock}`;
+  if (days === 1) return t('remoteHelp.tomorrow', { clock });
+  if (t.locale !== 'en-GB' && t.locale !== 'pseudo') {
+    const date = formatDeskDate(
+      timeZone,
+      {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        ...(u.year !== n.year ? { year: 'numeric' } : {}),
+      },
+      t.locale,
+    ).format(untilMs);
+    return `${date}, ${clock}`;
+  }
   return `${u.weekday} ${u.text}${u.year !== n.year ? ` ${u.year}` : ''}, ${clock}`;
 }
 
 /** The line (`remoteHelpDeskLine`): “Remote help is on · until 14:00”, “… · until tomorrow 14:00”, “… · forever”. */
-export function remoteHelpLine(h: RemoteHelp, nowMs: number, timeZone: string): string {
+export function remoteHelpLine(
+  h: RemoteHelp,
+  nowMs: number,
+  timeZone: string,
+  t: Translate = english,
+): string {
+  const REMOTE_HELP_DESK_WORDS = remoteHelpDeskWordsCopy(t);
+
   const until = h.until === null ? Number.NaN : Date.parse(h.until);
   return Number.isFinite(until)
-    ? fill(REMOTE_HELP_DESK_WORDS.on, { time: untilText(until, nowMs, timeZone) })
+    ? fill(REMOTE_HELP_DESK_WORDS.on, { time: untilText(until, nowMs, timeZone, t) })
     : REMOTE_HELP_DESK_WORDS.onForever;
 }
 
 /** “Support is connected”, or null while nobody is. */
-export function remoteHelpConnected(h: RemoteHelp): string | null {
+export function remoteHelpConnected(h: RemoteHelp, t: Translate = english): string | null {
+  const REMOTE_HELP_DESK_WORDS = remoteHelpDeskWordsCopy(t);
+
   return h.connected === null ? null : fill(REMOTE_HELP_DESK_WORDS.connected, { who: h.connected });
 }
 
 /** The level and what it lets support do: “Look and fix”, “Also restart parts, …”. */
-export function remoteHelpLevel(h: RemoteHelp): { label: string; hint: string } {
+export function remoteHelpLevel(h: RemoteHelp, t: Translate = english): { label: string; hint: string } {
+  const REMOTE_HELP_LEVEL_WORDS = remoteHelpLevelWordsCopy(t);
+
   return REMOTE_HELP_LEVEL_WORDS[h.level];
 }
 
 /** The chip's accessible name: the line, and who is connected (“Remote help is on · forever. Claude from …”). */
-export function remoteHelpChipLabel(h: RemoteHelp, nowMs: number, timeZone: string): string {
-  return [remoteHelpLine(h, nowMs, timeZone), remoteHelpConnected(h)].filter(Boolean).join('. ');
+export function remoteHelpChipLabel(
+  h: RemoteHelp,
+  nowMs: number,
+  timeZone: string,
+  t: Translate = english,
+): string {
+  return [remoteHelpLine(h, nowMs, timeZone, t), remoteHelpConnected(h, t)].filter(Boolean).join('. ');
 }

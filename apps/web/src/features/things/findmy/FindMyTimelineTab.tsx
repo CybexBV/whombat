@@ -70,6 +70,7 @@ import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
 import { Toggle } from '../../../components/Toggle';
+import { currentLocale } from '../../../i18n/provider';
 import { useNow } from '../../messaging/useRoom';
 import { Card, ConfirmDialog, Empty, ErrorLine, Skeleton } from '../parts';
 import styles from '../Things.module.css';
@@ -587,7 +588,11 @@ function DayMap({
   const lines = findMyTimelineLines(segments, marks);
   const here = findMyNowMark(segments, marks);
   const quiet =
-    !spots || map.noSpots ? W.noSpots(who.first) : map.error ? hostErrorInfo(map.error).message : W.drawing;
+    !spots || map.noSpots
+      ? W.noSpots(who.first)
+      : map.error
+        ? hostErrorInfo(map.error, currentLocale()).message
+        : W.drawing;
   return (
     <div ref={ref} className={t.map} aria-busy={map.drawing || undefined}>
       {shown && spots ? (

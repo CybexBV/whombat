@@ -4,13 +4,7 @@
  * what it left out, what a new Whombat sets up again), “Check this backup now” (`backup.check`; the result lands on the
  * backup) and, below it, “Bring things back from this backup”.
  */
-import {
-  BACKUP_LOOK_TEXT,
-  BACKUP_OPTIONS_TEXT,
-  type BackupRow,
-  backupContents,
-  relativeDay,
-} from '@whombat/client/managed';
+import { type BackupRow, backupContents, relativeDay } from '@whombat/client/managed';
 import { useCheckBackup } from '@whombat/client/react';
 import { formatBytes } from '@whombat/core/text';
 import type { BackupCheckpoint } from '@whombat/protocol/session';
@@ -21,6 +15,8 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { BACKUP_LOOK_TEXT, BACKUP_OPTIONS_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { backupErrorText } from './BackupDestination';
 import styles from './BackupOverview.module.css';
 import { BringBack } from './BringBack';
@@ -57,20 +53,24 @@ export function BackupDetail({
           <div className={tw.dialogHead}>
             <ModalTitle className={styles.detailTitle}>{backupWhen(cp.createdAt)}</ModalTitle>
             <p className={tw.dialogLead}>
-              {D.meta(row.label, cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded), placeName)}
+              {D.meta(
+                row.label,
+                cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded, currentLocale()),
+                placeName,
+              )}
             </p>
           </div>
           {cp.check ? (
             <span className={styles.badge} data-tone={cp.check.ok ? 'ok' : 'bad'}>
               {cp.check.ok
-                ? `✓ ${D.checked(relativeDay(cp.check.at))}`
-                : D.checkFailed(relativeDay(cp.check.at))}
+                ? `✓ ${D.checked(relativeDay(cp.check.at, undefined, currentLocale()))}`
+                : D.checkFailed(relativeDay(cp.check.at, undefined, currentLocale()))}
             </span>
           ) : null}
           <div className={styles.field}>
             <SectionLabel as="h3">{D.inIt}</SectionLabel>
             <ul className={styles.inIt}>
-              {backupContents(cp).map((item) => (
+              {backupContents(cp, currentLocale()).map((item) => (
                 <li
                   key={item.key}
                   className={styles.inItRow}

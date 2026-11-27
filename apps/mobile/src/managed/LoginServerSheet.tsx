@@ -5,9 +5,11 @@
  * the sheet says that before Save; plain `http://` is said to be fine on your own network. Checked with the
  * shared `readLoginServer`; its words are `TAILSCALE_TEXT`'s. Every target 44dp.
  */
+
 import { readLoginServer, TAILSCALE_TEXT, tailscaleErrorText } from '@whombat/client';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
@@ -29,6 +31,7 @@ export function LoginServerSheet({
   /** Turns Tailscale on at `server` (null: Tailscale's own); rejects with what went wrong. */
   onSave: (server: string | null) => Promise<void>;
 }) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   const [text, setText] = useState(current ?? '');
   const [problem, setProblem] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export function LoginServerSheet({
     }
   };
   return (
-    <Sheet visible={visible} onClose={onClose} label={T.changeTitle} closeLabel="Cancel">
+    <Sheet visible={visible} onClose={onClose} label={T.changeTitle} closeLabel={tClient('reports.cancel')}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 8, gap: 14 }}
@@ -87,7 +90,12 @@ export function LoginServerSheet({
         <ErrorLine text={problem} />
         {read.ok && read.value !== current ? <Note text={T.moves} /> : null}
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
+          <Button
+            label={tClient('reports.cancel')}
+            variant="secondary"
+            onPress={onClose}
+            style={{ flex: 1 }}
+          />
           <Button label={T.save} busy={busy} onPress={() => void save()} style={{ flex: 1 }} />
         </View>
       </ScrollView>

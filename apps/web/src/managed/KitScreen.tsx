@@ -5,18 +5,42 @@
  * as a file. The print is a layout of its own that only paper shows (`@media print`), so `window.print()` prints the
  * kit and nothing else of the page.
  */
-import { BACKUP_OPTIONS_TEXT, kitQrPayload } from '@whombat/client/managed';
+import { kitQrPayload } from '@whombat/client/managed';
 import { File, Printer, UserKey } from 'lucide-react';
-import { useId } from 'react';
+import { useId, useMemo } from 'react';
 import { AuthLayout } from '../app/auth/AuthLayout';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
 import { Tag } from '../components/Tag';
+import { useWebI18n, type WebTranslator, webTranslator } from '../i18n/provider';
 import styles from './bringBack.module.css';
 import m from './managed.module.css';
 
-const K = BACKUP_OPTIONS_TEXT.kit;
+/** The recovery kit's words in the page's language. */
+function kitWords(t: WebTranslator['t']) {
+  return {
+    title: t('kit.title'),
+    lead: (name: string) => t('kit.lead', { name }),
+    passkey: t('kit.passkey'),
+    passkeyMeta: t('kit.passkeyMeta'),
+    print: t('kit.print'),
+    printMeta: t('kit.printMeta'),
+    file: t('kit.file'),
+    fileMeta: t('kit.fileMeta'),
+    usePasskey: t('kit.usePasskey'),
+    noPasskey: (name: string) => t('kit.noPasskey', { name }),
+    saved: t('kit.saved'),
+    kicker: t('kit.kicker'),
+    tip: t('kit.tip'),
+    save: t('kit.save'),
+    saving: t('kit.saving'),
+    printAgain: t('kit.printAgain'),
+    downloadAgain: t('kit.downloadAgain'),
+    done: t('kit.done'),
+    recommended: t('kit.recommended'),
+  };
+}
 
 export interface KitChoices {
   passkey: boolean;
@@ -68,6 +92,8 @@ export function KeepWayBack({
   onDone: () => void;
 }) {
   const ids = useId();
+  const { t } = useWebI18n();
+  const K = useMemo(() => kitWords(t), [t]);
   const row = (
     key: keyof KitChoices,
     icon: typeof File,
@@ -84,7 +110,7 @@ export function KeepWayBack({
           {title}
           {recommended ? (
             <Tag tone="ok" className={styles.recommended}>
-              {BACKUP_OPTIONS_TEXT.dialog.recommended}
+              {K.recommended}
             </Tag>
           ) : null}
         </span>
@@ -152,36 +178,52 @@ export function KeepWayBack({
   );
 }
 
-/** The printed sheet's words: the recovery kit's, or the paper copy's (`BACKUP_OPTIONS_TEXT.paper`). */
-export interface PrintWords {
-  printTitle: (name: string) => string;
-  printLead: string;
-  printScan: string;
-}
+/** Which printed sheet: the recovery kit's, or the backups' paper copy. */
+export type PrintKind = 'kit' | 'paper';
 
-/** The printed kit or paper copy: only paper shows it (`@media print`). */
+const PRINT_KEYS = {
+  kit: { title: 'kit.printTitle', lead: 'kit.printLead', scan: 'kit.printScan' },
+  paper: { title: 'paper.printTitle', lead: 'paper.printLead', scan: 'paper.printScan' },
+} as const;
+
+/**
+ * The printed kit or paper copy: only paper shows it (`@media print`). In another language than English the sheet
+ * also carries its English title, so whoever helps with a restore later can read what it is; the kit's own text stays
+ * as it is, so it scans and checks the same in every language.
+ */
 export function KitPrintSheet({
   name,
   kitText,
-  words = K,
+  kind = 'kit',
 }: {
   name: string;
   kitText: string;
-  words?: PrintWords;
+  kind?: PrintKind;
 }) {
+  const { t, language } = useWebI18n();
+  const keys = PRINT_KEYS[kind];
+  const english = language === 'en' ? null : webTranslator('en-GB').t(keys.title, { name });
   const qr = kitQrPayload(kitText);
+  const scan = t(keys.scan);
   return (
     // Paper is light: the sheet takes the light theme's tokens whatever the page's.
     <div className={styles.printSheet} data-kit-print="" data-theme="light">
-      <h1 className={styles.printTitle}>{words.printTitle(name)}</h1>
-      <p className={styles.printLead}>{words.printLead}</p>
+      <h1 className={styles.printTitle}>{t(keys.title, { name })}</h1>
+      {english ? (
+        <p className={styles.printLead} lang="en">
+          {english}
+        </p>
+      ) : null}
+      <p className={styles.printLead}>{t(keys.lead)}</p>
       {qr ? (
         <figure className={styles.printQr}>
-          <QrCode value={qr} size={220} label={words.printScan} />
-          <figcaption>{words.printScan}</figcaption>
+          <QrCode value={qr} size={220} label={scan} />
+          <figcaption>{scan}</figcaption>
         </figure>
       ) : null}
-      <pre className={styles.printText}>{kitText}</pre>
+      <pre className={styles.printText} lang="en">
+        {kitText}
+      </pre>
     </div>
   );
 }

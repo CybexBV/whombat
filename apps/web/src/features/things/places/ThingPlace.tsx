@@ -10,16 +10,17 @@
 
 import { useRouterState } from '@tanstack/react-router';
 import {
-  PLACE_WORDS,
   type PlaceRow,
   placeOfThing,
   placeOpening,
-  SERVERS_DOWN,
+  placeWords,
+  serversDown,
   type ThingPlace,
 } from '@whombat/client';
 import { type ReactNode, useEffect } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
 import { PLACE_HREFS } from '../../../app/shell/assistantSidebarModel';
+import { useWebI18n } from '../../../i18n/provider';
 import { useInboxSplit } from '../../chats/inboxNav';
 import { isAskOpen } from '../AskPane';
 import { useThingSearch } from '../search';
@@ -34,10 +35,10 @@ function rowsOf(lists: PlaceLists, place: ThingPlace): PlaceRow[] {
 }
 
 /** What an empty list says when nothing could be read, with Retry; null when it simply holds nothing. */
-function failureOf(lists: PlaceLists, place: ThingPlace, rows: readonly PlaceRow[]) {
+function failureOf(lists: PlaceLists, place: ThingPlace, rows: readonly PlaceRow[], locale?: string) {
   if (rows.length) return null;
-  if (lists.failed) return { message: PLACE_WORDS[place].failed, onRetry: lists.retry };
-  if (place === 'servers' && lists.hostsDown) return { message: SERVERS_DOWN, onRetry: lists.retry };
+  if (lists.failed) return { message: placeWords(locale)[place].failed, onRetry: lists.retry };
+  if (place === 'servers' && lists.hostsDown) return { message: serversDown(locale), onRetry: lists.retry };
   return null;
 }
 
@@ -63,6 +64,7 @@ export function ThingInPlace({
   children: ReactNode;
 }) {
   const lists = usePlaceLists(burrow);
+  const { tag: locale } = useWebI18n();
   const [search] = useThingSearch();
   // With Ask open beside the page there is no room for the list too: the page and Ask keep the width, as on a narrow
   // window, with “‹ Servers” back to the list.
@@ -82,7 +84,7 @@ export function ThingInPlace({
     ? undefined
     : wide
       ? null
-      : { href: PLACE_HREFS[place], label: PLACE_WORDS[place].back };
+      : { href: PLACE_HREFS[place], label: placeWords(locale)[place].back };
   return (
     <div className={styles.split}>
       {place && wide ? (
@@ -96,7 +98,7 @@ export function ThingInPlace({
           addHref={addOf(lists, place)}
           alone={false}
           loading={!lists.settled[place]}
-          failure={failureOf(lists, place, rowsOf(lists, place))}
+          failure={failureOf(lists, place, rowsOf(lists, place), locale)}
         />
       ) : null}
       <div className={styles.page}>
@@ -108,6 +110,7 @@ export function ThingInPlace({
 
 export function PlaceScreen({ burrow, place }: { burrow: string; place: ThingPlace }) {
   const lists = usePlaceLists(burrow);
+  const { tag: locale } = useWebI18n();
   const wide = useInboxSplit();
   const navigate = useNavigateHref();
   const rows = rowsOf(lists, place);
@@ -148,7 +151,7 @@ export function PlaceScreen({ burrow, place }: { burrow: string; place: ThingPla
         addHref={addOf(lists, place)}
         alone
         loading={!lists.settled[place]}
-        failure={failureOf(lists, place, rows)}
+        failure={failureOf(lists, place, rows, locale)}
       />
     </div>
   );

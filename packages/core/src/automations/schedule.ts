@@ -9,6 +9,8 @@
  *   repeated: `once` → the first of the two instants, `twice` → both.
  */
 import type { DstPolicy, ScheduleSpec } from '../domain/automation.js';
+import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
+import { weekdayName } from '../text/time.js';
 
 export class ScheduleError extends Error {}
 
@@ -324,7 +326,6 @@ export function checkSchedule(spec: ScheduleSpec, timeZone: string, now: number)
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 const DAY_ALIASES: Readonly<Record<string, number>> = {
   sun: 0,
   mon: 1,
@@ -344,36 +345,48 @@ function dayIndex(field: string): number | null {
 }
 
 /** “Monday”, “Monday and Thursday”, “Monday, Wednesday and Friday”. */
-function andList(items: readonly string[]): string {
+function andList(tr: CoreTranslator, items: readonly string[]): string {
   return items.length <= 1
     ? (items[0] ?? '')
-    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] as string}`;
+    : tr.t('schedule.and', { items: items.slice(0, -1).join(', '), last: items[items.length - 1] as string });
 }
 
 /** The days a cron day-of-week field names, after “Every”: “day”, “weekday”, “Friday”, “Monday and Thursday”. */
-function cronDays(dow: string): string | null {
-  if (dow === '*') return 'day';
-  if (/^(1-5|mon-fri)$/i.test(dow)) return 'weekday';
+function cronDays(tr: CoreTranslator, dow: string): string | null {
+  const day = (d: number) => weekdayName(d, tr.locale);
+  if (dow === '*') return tr.t('schedule.day');
+  if (/^(1-5|mon-fri)$/i.test(dow)) return tr.t('schedule.weekday');
   const range = /^([a-z0-7]+)-([a-z0-7]+)$/i.exec(dow);
   if (range) {
     const a = dayIndex(range[1] as string);
     const b = dayIndex(range[2] as string);
-    return a === null || b === null ? null : `${WEEKDAYS[a]} to ${WEEKDAYS[b]}`;
+    return a === null || b === null ? null : tr.t('schedule.range', { from: day(a), to: day(b) });
   }
   const days = dow.split(',').map(dayIndex);
   if (days.some((d) => d === null)) return null;
   const sorted = [...new Set(days as number[])].sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7));
-  return andList(sorted.map((d) => WEEKDAYS[d] as string));
+  return andList(tr, sorted.map(day));
 }
 
-const ordinal = (n: number) =>
-  `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
+/** “1st”, “2nd”, “11th” in English; “1e”, “2e”, “3e” in Dutch. */
+function ordinal(tr: CoreTranslator, n: number): string {
+  const key =
+    n % 10 === 1 && n !== 11
+      ? 'schedule.nth.1'
+      : n % 10 === 2 && n !== 12
+        ? 'schedule.nth.2'
+        : n % 10 === 3 && n !== 13
+          ? 'schedule.nth.3'
+          : 'schedule.nth.other';
+  return tr.t(key, { n });
+}
 
 /**
  * A cron expression as people say it (“Every Friday at 16:00”, “Every weekday at 08:30”, “Every 15 minutes”, “On the
  * 1st of every month at 09:00”); null for one these words can't say, which is then “On its own schedule”.
  */
-export function cronWords(expr: string): string | null {
+export function cronWords(expr: string, locale?: string | null): string | null {
+  const tr = coreTranslator(locale);
   const fields = expr.trim().split(/\s+/);
   if (fields.length !== 5) return null;
   const [min, hour, dom, mon, dow] = fields as [string, string, string, string, string];
@@ -381,18 +394,22 @@ export function cronWords(expr: string): string | null {
   const step = /^\*\/(\d{1,2})$/;
   if (hour === '*' && dom === '*' && dow === '*') {
     const every = step.exec(min);
-    if (every) return Number(every[1]) === 1 ? 'Every minute' : `Every ${Number(every[1])} minutes`;
-    if (/^\d{1,2}$/.test(min)) return 'Every hour';
+    if (every)
+      return Number(every[1]) === 1
+        ? tr.t('schedule.everyMinute')
+        : tr.t('schedule.everyMinutes', { n: Number(every[1]) });
+    if (/^\d{1,2}$/.test(min)) return tr.t('schedule.everyHour');
     return null;
   }
   if (/^\d{1,2}$/.test(min) && step.test(hour) && dom === '*' && dow === '*')
-    return `Every ${Number((step.exec(hour) as RegExpExecArray)[1])} hours`;
+    return tr.t('schedule.everyHours', { n: Number((step.exec(hour) as RegExpExecArray)[1]) });
   if (!/^\d{1,2}$/.test(min) || !/^\d{1,2}$/.test(hour)) return null;
   const time = `${pad(Number(hour))}:${pad(Number(min))}`;
-  if (/^\d{1,2}$/.test(dom) && dow === '*') return `On the ${ordinal(Number(dom))} of every month at ${time}`;
+  if (/^\d{1,2}$/.test(dom) && dow === '*')
+    return tr.t('schedule.monthly', { nth: ordinal(tr, Number(dom)), time });
   if (dom !== '*') return null;
-  const days = cronDays(dow);
-  return days ? `Every ${days} at ${time}` : null;
+  const days = cronDays(tr, dow);
+  return days ? tr.t('schedule.everyAt', { days, time }) : null;
 }
 
 /**
@@ -400,12 +417,15 @@ export function cronWords(expr: string): string | null {
  * “On its own schedule” for a cron expression words can't say. The time zone is the Whombat's own, so it goes without
  * saying; `timeZone` is kept for callers that name the schedule's zone elsewhere.
  */
-export function describeSchedule(spec: ScheduleSpec, _timeZone: string): string {
+export function describeSchedule(spec: ScheduleSpec, _timeZone: string, locale?: string | null): string {
+  const tr = coreTranslator(locale);
   if (spec.kind === 'interval') {
     const m = spec.everyMinutes;
-    if (m % 1440 === 0) return m === 1440 ? 'Every day' : `Every ${m / 1440} days`;
-    if (m % 60 === 0) return m === 60 ? 'Every hour' : `Every ${m / 60} hours`;
-    return `Every ${m} minutes`;
+    if (m % 1440 === 0)
+      return m === 1440 ? tr.t('schedule.everyDay') : tr.t('schedule.everyDays', { n: m / 1440 });
+    if (m % 60 === 0)
+      return m === 60 ? tr.t('schedule.everyHour') : tr.t('schedule.everyHours', { n: m / 60 });
+    return tr.t('schedule.everyMinutes', { n: m });
   }
-  return cronWords(spec.expr) ?? 'On its own schedule';
+  return cronWords(spec.expr, locale) ?? tr.t('schedule.own');
 }

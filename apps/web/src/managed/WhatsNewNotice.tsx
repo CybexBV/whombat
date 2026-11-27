@@ -14,10 +14,10 @@ import { Link } from '@tanstack/react-router';
 import {
   onSessionReopen,
   WHATS_NEW_PATH,
-  WHATS_NEW_TEXT,
   whatsNewNotice,
   whatsNewRefetchInterval,
   whatsNewSeenKey,
+  whatsNewText,
 } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
@@ -27,6 +27,7 @@ import { cx } from '../components/cx';
 import { StatusDot } from '../components/StatusDot';
 import { APPLIANCE_STATUS_KEY } from '../features/settings/version';
 import { whatsNewOpensFresh } from '../features/whatsNew/freshPage';
+import { useLocaleWords } from '../i18n/words';
 
 /** The release this browser saw for a Whombat: undefined where its storage can't be read. */
 function readSeen(key: string): string | null | undefined {
@@ -101,6 +102,7 @@ export function forgetWhatsNewNotices() {
 }
 
 export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
+  const newsWords = useLocaleWords(whatsNewText);
   const { managed, session } = useAppServices();
   const queryClient = useQueryClient();
   const id = managed?.applianceId;
@@ -154,17 +156,17 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   return (
     <div className={styles.notice} role="status" data-testid="whats-new-notice">
       <StatusDot tone="ok" size={7} label={null} />
-      <span className={styles.noticeText}>{WHATS_NEW_TEXT.notice}</span>
+      <span className={styles.noticeText}>{newsWords.notice}</span>
       <Link
         to={WHATS_NEW_PATH as never}
         reloadDocument={whatsNewOpensFresh()}
         className={styles.noticeLink}
         onClick={close}
       >
-        {WHATS_NEW_TEXT.see}
+        {newsWords.see}
       </Link>
       <button type="button" className={cx(styles.noticeButton, styles.noticeQuiet)} onClick={close}>
-        {WHATS_NEW_TEXT.dismiss}
+        {newsWords.dismiss}
       </button>
     </div>
   );

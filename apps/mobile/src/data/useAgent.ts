@@ -7,6 +7,7 @@
  */
 import { type AgentWords, agentWords } from '@whombat/client';
 import { useMemo } from 'react';
+import { useI18n } from '../i18n';
 import { useBurrowBase } from './BurrowProvider';
 import type { AgentPrincipal } from './people';
 
@@ -18,5 +19,6 @@ export function useTheAgentHere(): AgentPrincipal | undefined {
 /** “Neo”, “Ask Neo…”, “Reply to Neo…”; “your agent” while the bootstrap has none. */
 export function useAgentWords(): AgentWords {
   const name = useTheAgentHere()?.name ?? null;
-  return useMemo(() => agentWords(name), [name]);
+  const { rawLocale } = useI18n();
+  return useMemo(() => agentWords(name, rawLocale), [name, rawLocale]);
 }

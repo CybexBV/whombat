@@ -16,6 +16,7 @@ import {
   formatShortWeekday,
 } from '@whombat/core';
 import type { AutomationSample } from '@whombat/core/contracts';
+import { currentLocale } from '../../i18n/provider';
 
 export interface PlanCardWords {
   /** `NEW AUTOMATION · WAITING FOR YOU`, `CHANGE · TURNED ON`. */
@@ -83,8 +84,8 @@ export function planWhen(at: string, now: Date | number, timeZone: string): stri
   const days = daysAgo(at, now, timeZone);
   const clock = formatClock(at, timeZone);
   if (days <= 0) return clock;
-  if (days < 7) return `${formatShortWeekday(at, timeZone)} ${clock}`;
-  return formatDate(at, timeZone, { now });
+  if (days < 7) return `${formatShortWeekday(at, timeZone, currentLocale())} ${clock}`;
+  return formatDate(at, timeZone, { now }, currentLocale());
 }
 
 /**

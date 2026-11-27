@@ -4,8 +4,10 @@
  * the page draws them. A short panel (Working on or Done today showing too) keeps the figures and drops the chart
  * (CG-59).
  */
+
 import { WhombatLogo } from '@whombat/brand/react';
 import { type ReactNode, useId } from 'react';
+import { useT } from '../i18n/react';
 import type { DeskBox } from '../lib/desk';
 import {
   CHART_H,
@@ -17,12 +19,10 @@ import {
   TEMP_SEGMENTS,
   tempLit,
 } from '../lib/deskBox';
-import { DESK_WORDS, degrees, fill } from '../lib/deskCopy';
+import { degrees, deskWordsCopy, fill } from '../lib/deskCopy';
 import styles from './desk.module.css';
 import { Icon } from './icons';
 import { CardLines, cardLabel, OpenCard, PageHead } from './parts';
-
-const W = DESK_WORDS.box;
 
 /** A figure drawn big with its small unit (“812” “GB free”). */
 function Figure({ value, unit }: { value: string | number; unit: string }) {
@@ -51,6 +51,8 @@ export function SeriesChart({
   spanS?: number;
   top: number;
 }) {
+  const W = deskWordsCopy(useT()).box;
+
   const id = useId().replace(/[^A-Za-z0-9_-]/g, '');
   const series = [
     { key: 'cpu', points: cpu, className: styles.lineCpu },
@@ -113,6 +115,8 @@ function Chart({ box }: { box: DeskBox }) {
 }
 
 function LastHour({ box }: { box: DeskBox }) {
+  const W = deskWordsCopy(useT()).box;
+
   return (
     <div className={`${styles.fig} ${styles.figHour}`}>
       <span className={styles.figKey}>{W.lastHour}</span>
@@ -143,6 +147,8 @@ function LastHour({ box }: { box: DeskBox }) {
 }
 
 function Storage({ storage, assistant }: { storage: DeskBox['storage']; assistant: string }) {
+  const W = deskWordsCopy(useT()).box;
+
   return (
     <div className={styles.fig} data-tone={storage.tone}>
       <div className={styles.figRow}>
@@ -173,6 +179,8 @@ function Storage({ storage, assistant }: { storage: DeskBox['storage']; assistan
 }
 
 function Temperature({ temp }: { temp: NonNullable<DeskBox['temp']> }) {
+  const W = deskWordsCopy(useT()).box;
+
   const lit = tempLit(temp.value);
   return (
     <div className={styles.fig} data-tone={temp.tone}>
@@ -216,6 +224,11 @@ export function Box({
   onOpen?: () => void;
   page?: boolean;
 }) {
+  const t = useT();
+  const W = deskWordsCopy(t).box;
+
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <section className={`${styles.card} ${styles.box}`} aria-label={W.title} data-page={page || undefined}>
       {!page && (
@@ -267,6 +280,9 @@ export function Box({
  * it has been up, the processor, the memory and the data disk; it opens This Whombat's own screen.
  */
 export function BoxCard({ box, onOpen }: { box: DeskBox; onOpen?: () => void }) {
+  const t = useT();
+  const W = deskWordsCopy(t).box;
+
   const figures = {
     cpu: { value: box.cpu.percent, tone: box.cpu.tone },
     memory: { value: box.memory.percent, tone: box.memory.tone },
@@ -275,7 +291,7 @@ export function BoxCard({ box, onOpen }: { box: DeskBox; onOpen?: () => void }) 
   return (
     <OpenCard
       className={`${styles.card} ${styles.server} ${styles.self}`}
-      label={cardLabel(W.title, box.up, figures)}
+      label={cardLabel(W.title, box.up, figures, t)}
       onOpen={onOpen}
     >
       <span className={styles.serverHead}>
@@ -303,6 +319,8 @@ export function SelfScreen({
   lock: ReactNode;
   onBack: () => void;
 }) {
+  const W = deskWordsCopy(useT()).box;
+
   return (
     <div className={styles.page} data-page="self">
       <div className={styles.pageBody}>

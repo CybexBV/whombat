@@ -9,8 +9,10 @@
  * line and the admin panel's. The shapes that cross a wire are in `@whombat/protocol/session` (`RemoteHelpState`,
  * `RemoteHelpVisit`, `RemoteHelpStep`) and `@whombat/control-contracts/local` (the support socket). Pure: no I/O.
  */
+
 import { z } from 'zod';
 import { FEEDBACK_REFERENCE_ALPHABET } from '../feedback/install.js';
+import { coreTree, tCore, type WordTree } from '../i18n/catalog.js';
 import { type DateInput, daysAgo, formatClock, formatDate, formatShortWeekday } from '../text/time.js';
 import { deskText } from './desk.js';
 
@@ -164,109 +166,144 @@ export const REMOTE_HELP_LIMITS = {
 
 /* Words (Whombat remote-help.md §4) ------------------------------------------------------------------------------ */
 
+const REMOTE_HELP_WORDS_SHAPE = {
+  title: 0,
+  off: 0,
+  notAvailable: 0,
+  howMuch: 0,
+  forHowLong: 0,
+  levels: {
+    look: {
+      label: 0,
+      hint: 0,
+    },
+    fix: {
+      label: 0,
+      hint: 0,
+    },
+  },
+  durations: {
+    hour: 0,
+    day: 0,
+    week: 0,
+    forever: 0,
+  },
+  turnOn: 0,
+  passkeyHint: 0,
+  /** The dialog of an owner without a passkey (`remoteHelpConfirmText`). */
+  confirm: {
+    title: 0,
+    body: 0,
+    levels: {
+      look: 0,
+      fix: 0,
+    },
+    durations: {
+      hour: 0,
+      day: 0,
+      week: 0,
+      forever: 0,
+    },
+    turnOn: 0,
+    cancel: 0,
+  },
+  /** `remoteHelpStateLine`: “On · Look and fix · until tomorrow 14:00”. */
+  state: {
+    on: 0,
+    until: 0,
+    forever: 0,
+  },
+  stop: 0,
+  helpCode: 0,
+  helpCodeHint: 0,
+  connected: 0,
+  visits: 0,
+  noVisits: 0,
+  /** `remoteHelpStepText`. */
+  steps: {
+    connected: 0,
+    left: 0,
+    look: {
+      help: 0,
+      status: 0,
+      units: 0,
+      logs: 0,
+      boots: 0,
+      hardware: 0,
+      network: 0,
+      disks: 0,
+      memory: 0,
+      processes: 0,
+      updates: 0,
+      report: 0,
+    },
+    logsOf: 0,
+    /** The command line in code style. */
+    exec: 0,
+    shellMinute: 0,
+    shellMinutes: 0,
+    shellShort: 0,
+    restart: 0,
+    forward: 0,
+    refused: 0,
+    why: {
+      level: 0,
+      code: 0,
+      other: 0,
+    },
+    wrongCode: 0,
+  },
+  transcript: {
+    show: 0,
+    title: 0,
+    download: 0,
+  },
+  /** The refusals' words, by `details.code` (`remoteHelpRefusalText`). */
+  refusals: {
+    forever_not_allowed: 0,
+    passkey_failed: 0,
+    remote_help_busy: 0,
+    remote_help_unavailable: 0,
+  },
+  /** What the person's assistant says (`remoteHelpVisitText`, `remoteHelpTurnedOnText`). */
+  messages: {
+    visit: 0,
+    turnedOn: 0,
+    durations: {
+      hour: 0,
+      day: 0,
+      week: 0,
+      forever: 0,
+    },
+    lockedOut: 0,
+  },
+  /** The box's screen (`remoteHelpDeskLine`). */
+  desk: {
+    on: 0,
+    onForever: 0,
+    connected: 0,
+    stop: 0,
+  },
+  /** The admin panel's device page (`remoteHelpPanelLine`). */
+  panel: {
+    off: 0,
+    on: 0,
+    forever: 0,
+    connected: 0,
+  },
+  /** Who a visitor is when their certificate names nobody (`remoteHelpWho`). */
+  someone: 0,
+} as const;
+
 /**
  * Every word remote help shows, shared by the web, the phone, the desk, the admin panel and the runtime's messages.
  * `{who}`, `{n}`, … are filled by the helpers below (`fillRemoteHelpWords`).
  */
-export const REMOTE_HELP_WORDS = {
-  title: 'Remote help',
-  off: 'Let Whombat support look inside this Whombat for a while to find out what’s wrong. Nobody can get in while this is off.',
-  notAvailable: 'Remote help isn’t available on this Whombat yet.',
-  howMuch: 'How much',
-  forHowLong: 'For how long',
-  levels: {
-    look: {
-      label: 'Look',
-      hint: 'Read its logs, status, hardware and network. They can’t change anything or see your chats, files or Vault.',
-    },
-    fix: {
-      label: 'Look and fix',
-      hint: 'Also restart parts, change settings and run commands. This lets them see everything on this Whombat.',
-    },
-  },
-  durations: { hour: '1 hour', day: '1 day', week: '1 week', forever: 'Forever' },
-  turnOn: 'Turn on remote help',
-  passkeyHint: 'You’ll confirm with your passkey.',
-  /** The dialog of an owner without a passkey (`remoteHelpConfirmText`). */
-  confirm: {
-    title: 'Turn on remote help?',
-    body: 'Whombat support can {level} {duration}.',
-    levels: { look: 'look', fix: 'look and fix' },
-    durations: { hour: 'for 1 hour', day: 'for 1 day', week: 'for 1 week', forever: 'until you stop it' },
-    turnOn: 'Turn on',
-    cancel: 'Cancel',
-  },
-  /** `remoteHelpStateLine`: “On · Look and fix · until tomorrow 14:00”. */
-  state: { on: 'On', until: 'until {time}', forever: 'forever' },
-  stop: 'Stop',
-  helpCode: 'Help code',
-  helpCodeHint: 'Give this to Whombat support. They need it to connect.',
-  connected: '{who} is connected now',
-  visits: 'What support did',
-  noVisits: 'Nobody has used remote help yet.',
-  /** `remoteHelpStepText`. */
-  steps: {
-    connected: '{who} connected',
-    left: '{who} left',
-    look: {
-      help: 'Looked at the help',
-      status: 'Looked at the status',
-      units: 'Looked at the running parts',
-      logs: 'Read the logs',
-      boots: 'Looked at the restarts',
-      hardware: 'Looked at the hardware',
-      network: 'Looked at the network',
-      disks: 'Looked at the disks',
-      memory: 'Looked at the memory',
-      processes: 'Looked at running programs',
-      updates: 'Looked at updates',
-      report: 'Made a full report',
-    },
-    logsOf: 'Read the logs of {names}',
-    /** The command line in code style. */
-    exec: 'Ran {line}',
-    shellMinute: 'Used a command line for 1 minute',
-    shellMinutes: 'Used a command line for {n} minutes',
-    shellShort: 'Used a command line for less than a minute',
-    restart: 'Restarted {name}',
-    forward: 'Opened a connection to {target}',
-    refused: 'Was stopped: {why}',
-    why: { level: 'that needs Look and fix', code: 'wrong help code', other: 'not allowed' },
-    wrongCode: 'Typed a wrong help code',
-  },
-  transcript: { show: 'Show', title: 'Command line', download: 'Download' },
-  /** The refusals' words, by `details.code` (`remoteHelpRefusalText`). */
-  refusals: {
-    forever_not_allowed: 'Forever is only for test Whombats.',
-    passkey_failed: 'Your passkey didn’t confirm it. Try again.',
-    remote_help_busy: 'Remote help didn’t answer. Try again in a moment.',
-    remote_help_unavailable: 'Remote help isn’t available on this Whombat yet.',
-  },
-  /** What the person's assistant says (`remoteHelpVisitText`, `remoteHelpTurnedOnText`). */
-  messages: {
-    visit:
-      '{who} is looking at this Whombat now through remote help. You can stop it in Settings → This Whombat → About.',
-    turnedOn: 'You turned on remote help: {level}, {duration}.',
-    durations: { hour: 'for 1 hour', day: 'for 1 day', week: 'for 1 week', forever: 'forever' },
-    lockedOut: 'Remote help turned itself off after 5 wrong help codes.',
-  },
-  /** The box's screen (`remoteHelpDeskLine`). */
-  desk: {
-    on: 'Remote help is on · until {time}',
-    onForever: 'Remote help is on · forever',
-    connected: '{who} is connected',
-    stop: 'Stop',
-  },
-  /** The admin panel's device page (`remoteHelpPanelLine`). */
-  panel: {
-    off: 'Remote help: off',
-    on: 'Remote help: {level} · {n} h left',
-    forever: 'Remote help: {level} · forever',
-    connected: '{n} connected',
-  },
-  /** Who a visitor is when their certificate names nobody (`remoteHelpWho`). */
-  someone: 'Someone',
-} as const;
+export function remoteHelpWords(locale?: string | null): WordTree<typeof REMOTE_HELP_WORDS_SHAPE> {
+  return coreTree(locale, 'remoteHelp', REMOTE_HELP_WORDS_SHAPE);
+}
+
+export const REMOTE_HELP_WORDS = remoteHelpWords('en');
 
 /** Fills `{who}`-style holes in one of `REMOTE_HELP_WORDS`; a hole without a value stays as it is. */
 export function fillRemoteHelpWords(
@@ -279,13 +316,17 @@ export function fillRemoteHelpWords(
 }
 
 /** “Look”, “Look and fix”. */
-export function remoteHelpLevelLabel(level: RemoteHelpLevel): string {
-  return REMOTE_HELP_WORDS.levels[level].label;
+export function remoteHelpLevelLabel(level: RemoteHelpLevel, locale?: string | null): string {
+  return remoteHelpWords(locale).levels[level].label;
 }
 
 /** “Whombat support can look and fix for 1 hour.”, “… until you stop it.” */
-export function remoteHelpConfirmText(level: RemoteHelpLevel, duration: RemoteHelpDuration): string {
-  const c = REMOTE_HELP_WORDS.confirm;
+export function remoteHelpConfirmText(
+  level: RemoteHelpLevel,
+  duration: RemoteHelpDuration,
+  locale?: string | null,
+): string {
+  const c = remoteHelpWords(locale).confirm;
   return fillRemoteHelpWords(c.body, { level: c.levels[level], duration: c.durations[duration] });
 }
 
@@ -293,12 +334,17 @@ export function remoteHelpConfirmText(level: RemoteHelpLevel, duration: RemoteHe
  * When a grant ends, in the zone's clock: today the clock (“14:00”), “tomorrow 14:00”, otherwise the short weekday and
  * date (“Thu 23 Oct, 14:00”, with the year when it isn't now's).
  */
-export function remoteHelpUntilText(until: DateInput, now: DateInput, timeZone = 'UTC'): string {
+export function remoteHelpUntilText(
+  until: DateInput,
+  now: DateInput,
+  timeZone = 'UTC',
+  locale?: string | null,
+): string {
   const clock = formatClock(until, timeZone);
   const days = -daysAgo(until, now, timeZone);
   if (days <= 0) return clock;
-  if (days === 1) return `tomorrow ${clock}`;
-  return `${formatShortWeekday(until, timeZone)} ${formatDate(until, timeZone, { now })}, ${clock}`;
+  if (days === 1) return `${tCore(locale, 'time.tomorrowLower')} ${clock}`;
+  return `${formatShortWeekday(until, timeZone, locale)} ${formatDate(until, timeZone, { now }, locale)}, ${clock}`;
 }
 
 /**
@@ -310,13 +356,14 @@ export function remoteHelpStateLine(s: {
   until: string | null;
   now: Date;
   timeZone?: string;
+  locale?: string | null;
 }): string {
-  const w = REMOTE_HELP_WORDS.state;
+  const w = remoteHelpWords(s.locale).state;
   const when =
     s.until === null
       ? w.forever
-      : fillRemoteHelpWords(w.until, { time: remoteHelpUntilText(s.until, s.now, s.timeZone) });
-  return `${w.on} · ${remoteHelpLevelLabel(s.level)} · ${when}`;
+      : fillRemoteHelpWords(w.until, { time: remoteHelpUntilText(s.until, s.now, s.timeZone, s.locale) });
+  return `${w.on} · ${remoteHelpLevelLabel(s.level, s.locale)} · ${when}`;
 }
 
 /** The desk's line: “Remote help is on · until 14:00”, “… · until tomorrow 14:00”, “Remote help is on · forever”. */
@@ -357,8 +404,8 @@ export function remoteHelpTurnedOnText(level: RemoteHelpLevel, duration: RemoteH
 }
 
 /** The words of a refusal's `details.code`, or null for a code remote help doesn't name. */
-export function remoteHelpRefusalText(code: string): string | null {
-  const r: Readonly<Record<string, string>> = REMOTE_HELP_WORDS.refusals;
+export function remoteHelpRefusalText(code: string, locale?: string | null): string | null {
+  const r: Readonly<Record<string, string>> = remoteHelpWords(locale).refusals;
   return Object.hasOwn(r, code) ? (r[code] ?? null) : null;
 }
 
@@ -384,9 +431,12 @@ export function remoteHelpWho(keyId: string): string {
   return name === '' ? REMOTE_HELP_WORDS.someone : name;
 }
 
-function joinAnd(parts: readonly string[]): string {
+function joinAnd(parts: readonly string[], locale?: string | null): string {
   if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return tCore(locale, 'recipe.and', {
+    items: parts.slice(0, -1).join(', '),
+    last: parts[parts.length - 1] ?? '',
+  });
 }
 
 /** What `remoteHelpStepText` reads of a step (`RemoteHelpStep` of `@whombat/protocol/session` is one). */
@@ -405,8 +455,8 @@ export interface RemoteHelpStepView {
  * “Used a command line for 3 minutes”, “Restarted voice”, “Opened a connection to 127.0.0.1:8123”, “Was stopped: that
  * needs Look and fix”, “Typed a wrong help code”. `who` names the visitor.
  */
-export function remoteHelpStepText(step: RemoteHelpStepView, who: string): string {
-  const s = REMOTE_HELP_WORDS.steps;
+export function remoteHelpStepText(step: RemoteHelpStepView, who: string, locale?: string | null): string {
+  const s = remoteHelpWords(locale).steps;
   switch (step.kind) {
     case 'connected':
       return fillRemoteHelpWords(s.connected, { who });
@@ -415,7 +465,7 @@ export function remoteHelpStepText(step: RemoteHelpStepView, who: string): strin
     case 'look': {
       const command = step.command ?? 'help';
       if (command === 'logs' && step.units && step.units.length > 0)
-        return fillRemoteHelpWords(s.logsOf, { names: joinAnd(step.units.map(remoteHelpUnitName)) });
+        return fillRemoteHelpWords(s.logsOf, { names: joinAnd(step.units.map(remoteHelpUnitName), locale) });
       return s.look[command];
     }
     case 'exec':

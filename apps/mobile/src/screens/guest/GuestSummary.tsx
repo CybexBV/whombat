@@ -4,6 +4,7 @@
  * one and whether a job covers it), what waits for a restart with Restart to apply, its notes, the Proxmox hints of
  * this guest each with its way out (PX-07), and its facts.
  */
+
 import { formatPct, formatPct1, formatTooltipTime, timeTicks } from '@whombat/client/hosts';
 import {
   type GuestHintRow,
@@ -20,6 +21,7 @@ import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
 import type { HostReadout } from '../../data/hostStatus';
+import { useI18n, useMobileT } from '../../i18n';
 import { LineChart, Readout } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -61,6 +63,8 @@ export function GuestSummary({
   /** After what waits for a restart: an Incus instance's hints, snapshots and backups (AP-1620). */
   extra?: ReactNode;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const on = g.state === 'running' || g.state === 'unhealthy';
   const m = useHostGuestMetrics(
@@ -110,7 +114,7 @@ export function GuestSummary({
           />
           {g.memoryLimitMb ? (
             <ChartCard
-              title="Memory"
+              title={tClient('settings.agent.memory')}
               values={charts.memPct}
               max={100}
               ticks={[0, 50, 100]}
@@ -125,27 +129,31 @@ export function GuestSummary({
         </>
       ) : null}
       {hints.length ? (
-        <OneCard label="Needs a look">
+        <OneCard label={tClient('thing.status.warn')}>
           {hints.map((h, i) => (
             <HintLine key={h.id} hint={h} first={i === 0} canChange={canChange} onWayOut={onWayOut} />
           ))}
         </OneCard>
       ) : null}
       {pending.length ? (
-        <OneCard label="Waiting for a restart">
+        <OneCard label={tMobile('screens.waiting-for-a-restart')}>
           {pending.map((p, i) => (
             <SettingLine key={p.key} first={i === 0} label={p.label} value={`${p.now} → ${p.after}`} />
           ))}
           {canChange ? (
             <View style={{ padding: 14, paddingTop: 4 }}>
-              <BigButton label="Restart to apply" variant="secondary" onPress={() => onWayOut('restart')} />
+              <BigButton
+                label={tMobile('screens.restart-to-apply')}
+                variant="secondary"
+                onPress={() => onWayOut('restart')}
+              />
             </View>
           ) : null}
         </OneCard>
       ) : null}
       {extra}
       {pve ? (
-        <OneCard label="Backups">
+        <OneCard label={tMobile('screens.backups')}>
           <View
             accessible
             accessibilityLabel={`Last backup: ${backup.last}`}
@@ -160,23 +168,27 @@ export function GuestSummary({
             <Dot tone={backup.lastTone === 'mut' ? null : backup.lastTone === 'ok' ? 'ok' : 'bad'} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text size={12.5} color={theme.colors.mut}>
-                Last backup
+                {tMobile('screens.last-backup')}
               </Text>
               <Text size={15} weight={500}>
                 {backup.last}
               </Text>
             </View>
           </View>
-          {backup.job ? <SettingLine label="Backup job" value={backup.job} /> : null}
+          {backup.job ? <SettingLine label={tMobile('screens.backup-job')} value={backup.job} /> : null}
           {canChange ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 14, paddingTop: 4 }}>
               <View style={{ flexGrow: 1, flexBasis: '45%' }}>
-                <BigButton label="Back up now" variant="secondary" onPress={() => onWayOut('back_up')} />
+                <BigButton
+                  label={tMobile('screens.back-up-now')}
+                  variant="secondary"
+                  onPress={() => onWayOut('back_up')}
+                />
               </View>
               {jobs && backup.inJob === false ? (
                 <View style={{ flexGrow: 1, flexBasis: '45%' }}>
                   <BigButton
-                    label="Add to a backup plan"
+                    label={tMobile('screens.add-to-a-backup-plan')}
                     variant="secondary"
                     onPress={() => onWayOut('add_to_job')}
                   />
@@ -187,7 +199,7 @@ export function GuestSummary({
         </OneCard>
       ) : null}
       {notes ? (
-        <OneCard label="Notes">
+        <OneCard label={tMobile('screens.notes')}>
           <Text
             size={14.5}
             lh={1.5}
@@ -198,7 +210,7 @@ export function GuestSummary({
           </Text>
         </OneCard>
       ) : null}
-      <OneCard label="About it">
+      <OneCard label={tMobile('screens.about-it')}>
         <View style={{ paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2 }}>
           <Facts facts={guestSummaryFacts(g, serverName)} />
         </View>
@@ -281,6 +293,9 @@ function ChartCard({
   timeZone: string;
   name: string;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [picked, setPicked] = useState<number | null>(null);
   const lastMeasured = (() => {
@@ -292,7 +307,7 @@ function ChartCard({
     shown == null
       ? null
       : {
-          title: formatTooltipTime('24h', Date.parse(timestamps[shown] ?? ''), timeZone),
+          title: formatTooltipTime('24h', Date.parse(timestamps[shown] ?? ''), timeZone, rawLocale),
           lines: [{ swatch: 'chart1', value: format(values[shown] ?? null), rest: word }],
         };
   const step = Math.max(1, Math.round(values.length / 24));
@@ -301,7 +316,7 @@ function ChartCard({
       label={title}
       right={
         <Text size={12} color={theme.colors.mut}>
-          last 24 h
+          {tMobile('screens.last-24-h')}
         </Text>
       }
     >

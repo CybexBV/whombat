@@ -7,17 +7,19 @@
  * `RemoteHelpLayer` wraps the console once, inside the Bluetooth layer (CG-204's way): it holds the grant shown and
  * whether the sheet is open, and draws the sheet over the whole stage, so the scenes only place a chip.
  */
+
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/react';
 import { SHEET_IDLE_MS } from '../lib/bluetooth';
 import type { Client } from '../lib/client';
 import {
-  REMOTE_HELP_DESK_WORDS,
-  REMOTE_HELP_PAGE_WORDS,
   type RemoteHelp,
   remoteHelpChipLabel,
   remoteHelpConnected,
+  remoteHelpDeskWordsCopy,
   remoteHelpLevel,
   remoteHelpLine,
+  remoteHelpPageWordsCopy,
 } from '../lib/remoteHelp';
 import { useHoldFocus, useLastInput, useNow } from '../ui/hooks';
 import wifiStyles from '../wifi/wifi.module.css';
@@ -114,6 +116,9 @@ export function RemoteHelpLayer({
 
 /** The chip: a headset in the warn colour and “Remote”; its label is the whole line. */
 export function RemoteHelpChip({ after }: { after?: ReactNode }) {
+  const t = useT();
+  const REMOTE_HELP_PAGE_WORDS = remoteHelpPageWordsCopy(t);
+
   const { help, offset, timeZone, open } = useContext(Context);
   if (!help) return null;
   return (
@@ -122,7 +127,7 @@ export function RemoteHelpChip({ after }: { after?: ReactNode }) {
         type="button"
         className={`${deskStyles.chip} ${deskStyles.chipButton}`}
         data-tone="warn"
-        aria-label={remoteHelpChipLabel(help, Date.now() + offset, timeZone)}
+        aria-label={remoteHelpChipLabel(help, Date.now() + offset, timeZone, t)}
         onClick={(e) => {
           // Not the locked glance's “touch to unlock”.
           e.stopPropagation();
@@ -167,6 +172,10 @@ function RemoteHelpSheet({
   onStop?: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
+  const REMOTE_HELP_PAGE_WORDS = remoteHelpPageWordsCopy(t);
+  const REMOTE_HELP_DESK_WORDS = remoteHelpDeskWordsCopy(t);
+
   const card = useRef<HTMLElement>(null);
   useHoldFocus(card);
   const now = useNow(1000);
@@ -175,8 +184,8 @@ function RemoteHelpSheet({
   useEffect(() => {
     if (now - lastInput >= SHEET_IDLE_MS) onClose();
   }, [now, lastInput, onClose]);
-  const connected = remoteHelpConnected(help);
-  const level = remoteHelpLevel(help);
+  const connected = remoteHelpConnected(help, t);
+  const level = remoteHelpLevel(help, t);
   return (
     // The sheet's own keys stay here: the desk's (Talk, the PIN pad) don't see them (CG-109).
     // biome-ignore lint/a11y/noStaticElementInteractions: catches bubbling keys and clicks, nothing of its own
@@ -206,7 +215,7 @@ function RemoteHelpSheet({
         >
           <div className={wifiStyles.head}>
             <span className={wifiStyles.kicker}>{REMOTE_HELP_PAGE_WORDS.title}</span>
-            <h2 className={wifiStyles.title}>{remoteHelpLine(help, now + offset, timeZone)}</h2>
+            <h2 className={wifiStyles.title}>{remoteHelpLine(help, now + offset, timeZone, t)}</h2>
             {connected && (
               <p className={wifiStyles.line} data-tone="warn">
                 {connected}

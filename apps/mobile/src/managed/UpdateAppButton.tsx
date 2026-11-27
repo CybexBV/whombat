@@ -4,12 +4,14 @@
  * “Allow installs” or “Install” or “Try again”; `withNote` says why under it. Otherwise (the iPhone, nothing newer
  * published, a build without the updater) it opens the hosted UI's Mobile app page (AP-537).
  */
+
 import { Linking, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Button, QuietText } from '../ui/primitives';
 import { installView } from './appInstall';
 import { UPDATE_URL } from './config';
 import { useManaged } from './context';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { useAppInstall } from './useAppInstall';
 import { useAppUpdate } from './useAppUpdate';
 
@@ -22,12 +24,15 @@ export function UpdateAppButton({
   size?: 'lg';
   withNote?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const update = useAppUpdate(useManaged()?.updates);
   const install = useAppInstall();
-  const view = update && install ? installView(install.state, update, COPY.update.label) : null;
+  const view = update && install ? installView(install.state, update, managedCopyHere.update.label) : null;
   const button = (
     <Button
-      label={view?.label ?? COPY.update.label}
+      label={view?.label ?? managedCopyHere.update.label}
       variant={variant}
       {...(size ? { size } : {})}
       busy={view?.busy}

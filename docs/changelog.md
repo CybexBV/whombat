@@ -5,6 +5,8 @@ them once they have been tried on Beta.
 
 ## 27 November 2026
 
+- Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,
+  dashboards, notifications, emails and your Whombat’s screen.
 - Your agent’s face shows what it’s doing: it thinks, works, waits for you, is glad when a run is done and says sorry
   when one fails. It blinks, has a little move of its own, and you can tap it. Turn it off under Settings → Moving
   faces.

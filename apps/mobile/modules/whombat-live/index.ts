@@ -39,6 +39,7 @@ export {
 interface NativeWhombatLive {
   isSupported(): boolean;
   configure(colorsJson: string): void;
+  setLocale?(locale: string): void;
   /** Start or update; resolves with the activity's push token when there is one (iOS). */
   upsert(displayJson: string, burrow: string, attributesJson: string | null): Promise<string | null>;
   /** End; with a last display the activity keeps showing it (dismissible), without it it goes. */
@@ -83,6 +84,10 @@ export const WhombatLive = {
   supported: (): boolean => native?.isSupported() ?? false,
 
   /** Tone colors from the tokens, kept natively for pushes that arrive while the app is closed. */
+  setLocale(locale: string): void {
+    native?.setLocale?.(locale);
+  },
+
   configure(colors: LiveColors): void {
     native?.configure(JSON.stringify(colors));
   },
@@ -93,14 +98,15 @@ export const WhombatLive = {
    */
   async show(
     display: LiveActivityDisplay,
-    context: { burrow: string; attributes: LiveActivityAttributes },
+    context: { burrow: string; attributes: LiveActivityAttributes; locale?: string },
   ): Promise<string | null> {
     if (!native?.isSupported()) return null;
+    const payload = JSON.stringify({ ...display, locale: context.locale });
     if (!display.ongoing) {
-      await native.end(display.key, JSON.stringify(display), context.burrow);
+      await native.end(display.key, payload, context.burrow);
       return null;
     }
-    return native.upsert(JSON.stringify(display), context.burrow, JSON.stringify(context.attributes));
+    return native.upsert(payload, context.burrow, JSON.stringify(context.attributes));
   },
 
   /** Dismiss an activity (its run or approval is gone). */

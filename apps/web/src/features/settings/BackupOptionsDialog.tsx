@@ -3,7 +3,7 @@
  * terms, the recommended answer marked, Save sends them all at once (`backup.setPolicy`) and the list is read again.
  * The summary follows the draft, so “about 20 GB” changes as the choice does.
  */
-import { BACKUP_OPTIONS_TEXT, keepTicks, policySummary, relativeDay } from '@whombat/client/managed';
+import { keepTicks, policySummary, relativeDay } from '@whombat/client/managed';
 import { useSetBackupPolicy } from '@whombat/client/react';
 import { formatBytes } from '@whombat/core/text';
 import type {
@@ -24,6 +24,8 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { Tag } from '../../components/Tag';
 import { Toggle } from '../../components/Toggle';
+import { BACKUP_OPTIONS_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { backupErrorText } from './BackupDestination';
 import styles from './BackupOverview.module.css';
 import { draftInput, draftKeep, draftLimit, draftOf, type PolicyDraft } from './backupOptionsModel';
@@ -66,7 +68,9 @@ export function BackupOptionsDialog({
   // The limit off says the place's real free space, or nothing more.
   const free = list?.space?.freeBytes ?? null;
   const drill = status?.recoverability.lastDrill ?? null;
-  const last = drill ? (drill.ok ? D.lastGood : D.lastBad)(capital(relativeDay(drill.at))) : null;
+  const last = drill
+    ? (drill.ok ? D.lastGood : D.lastBad)(capital(relativeDay(drill.at, undefined, currentLocale())))
+    : null;
 
   const onSave = () => {
     setError(null);
@@ -111,7 +115,7 @@ export function BackupOptionsDialog({
       <div className={tw.dialog} data-backup-options="">
         <ModalTitle className={tw.dialogTitle}>{D.title}</ModalTitle>
         <p className={styles.summary} data-summary="">
-          {policySummary(keep, list, placeName)}
+          {policySummary(keep, list, placeName, currentLocale())}
         </p>
 
         <div className={styles.field}>
@@ -176,8 +180,8 @@ export function BackupOptionsDialog({
                 </span>
                 <span className={styles.choiceMeta}>
                   {limit === null
-                    ? D.limitOff(placeName, free === null ? null : formatBytes(free))
-                    : D.limitOn(formatBytes(limit))}
+                    ? D.limitOff(placeName, free === null ? null : formatBytes(free, currentLocale()))
+                    : D.limitOn(formatBytes(limit, currentLocale()))}
                 </span>
               </span>
               <Toggle

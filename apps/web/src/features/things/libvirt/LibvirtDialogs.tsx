@@ -15,6 +15,7 @@ import {
 } from '@whombat/client/hosts';
 import type { HostBackupVolume, HostGuest } from '@whombat/core/domain';
 import { useState } from 'react';
+import { currentLocale } from '../../../i18n/provider';
 import { Check, FormDialog, SelectField, TextField } from '../manage/fields';
 import { useLibvirtChoices, useLibvirtManage } from './useLibvirt';
 
@@ -33,7 +34,7 @@ type Started = (taskId: string | null, newId?: string) => void;
 /** “Oct 16, 02:00” for a backup. */
 export function lvBackupWhen(b: HostBackupVolume, timeZone?: string): string {
   const t = libvirtBackupTime(b);
-  return t != null ? formatDayTime(t, timeZone) : b.volume;
+  return t != null ? formatDayTime(t, timeZone, currentLocale()) : b.volume;
 }
 
 /* Back up now ------------------------------------------------------------------------------------- */

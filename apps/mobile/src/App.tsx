@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { markFaceActivity } from './avatars/faceActivity';
 import { DEMO } from './data/config';
 import { noteEndingsAfterFirstFrame } from './errors/nativeErrorNotes';
+import { MobileI18nProvider } from './i18n/provider';
 import { sharedFiles } from './lib/sharedCache';
 import { secureStore } from './lib/storage';
 import { PageBoundary } from './navigation/PageBoundary';
@@ -88,7 +89,9 @@ export function App() {
       <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
         <SafeAreaProvider>
           <ThemeProvider store={secureStore}>
-            <Root />
+            <MobileI18nProvider>
+              <Root />
+            </MobileI18nProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </KeyboardProvider>

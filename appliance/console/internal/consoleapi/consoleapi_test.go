@@ -75,6 +75,19 @@ func (f *fixture) get(t *testing.T) map[string]any {
 	return st
 }
 
+func TestLocale(t *testing.T) {
+	f := newFixture(t)
+	for _, tc := range []struct{ locale, want string }{{`"nl-NL"`, "nl-NL"}, {`"en-GB"`, "en-GB"}, {`"bad tag"`, ""}} {
+		f.writeState(t, `{"v":1,"state":"claimable","code":"KXQM","url":"https://example.com/claim","locale":`+tc.locale+`}`)
+		st := f.get(t)
+		got, _ := st["locale"].(string)
+		claim, _ := st["claim"].(map[string]any)
+		if got != tc.want || claim["code"] != "KXQM" {
+			t.Errorf("locale %s: %v", tc.locale, st)
+		}
+	}
+}
+
 func TestStateShapes(t *testing.T) {
 	f := newFixture(t)
 	// No file: starting, never an error.

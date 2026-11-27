@@ -26,6 +26,7 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import { VAULT_TEXT } from './copy';
 import { Fold } from './Fold';
 import { envNameBody, envNameOf, hasEnvName, inCommands } from './model';
@@ -50,6 +51,7 @@ function howLine(entry: Pick<VaultEntryDetail, 'kind'>, agentName: string): stri
 }
 
 export function AgentAccess({ burrow, entry }: { burrow: string; entry: VaultEntryDetail }) {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const { agent } = useTheAgent(burrow);
   const give = useVaultWrite(api.vault.giveKey, burrow);
@@ -67,7 +69,7 @@ export function AgentAccess({ burrow, entry }: { burrow: string; entry: VaultEnt
   if (!agent) return null;
 
   const name = agent.name;
-  const copy = vaultAgentAccessCopy(name);
+  const copy = vaultAgentAccessCopy(name, uiLocale);
   const value: VaultAgentAccess = key ? 'on' : 'off';
   const shown = choosing ?? value;
   const busy = give.isPending || take.isPending || setEnvName.isPending;

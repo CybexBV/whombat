@@ -15,6 +15,7 @@ export default defineConfig({
       'scripts/package',
       'scripts/notices',
       'scripts/decision-ids',
+      'scripts/i18n',
       'apps/web/css-modules',
     ],
     // Locally the files that took longest last time start first; CI keeps Vitest's own order.

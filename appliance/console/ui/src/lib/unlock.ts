@@ -2,9 +2,11 @@
  * Unlocking the desk (DK-04; appliance CG-42): the PIN pad's digits, Whombat's answer to a PIN, and what the pad says.
  * Whombat holds the unlock and counts the wrong PINs; the page only shows its answers.
  */
+
+import { english, type Translate } from '../i18n/translate';
 import { minutesLeft } from './console';
 import { type DeskLock, type DeskPaired, deskErrorCode } from './desk';
-import { DESK, DESK_WORDS, fill, wrongPinText } from './deskCopy';
+import { deskCopy, deskWordsCopy, fill, wrongPinText } from './deskCopy';
 
 /**
  * The PIN's length (DK-26): 4 to 6 digits, as Whombat says; a runtime from before 0.103 doesn't say, and its PINs
@@ -55,11 +57,19 @@ export function backoffUntil(lock: DeskLock, last: UnlockAnswer | null, now: num
 }
 
 /** The line under the dots: the wrong PIN with the tries left, or the wait. */
-export function padMessage(lock: DeskLock, last: UnlockAnswer | null, now: number): string | null {
+export function padMessage(
+  lock: DeskLock,
+  last: UnlockAnswer | null,
+  now: number,
+  t: Translate = english,
+): string | null {
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const wait = backoffUntil(lock, last, now);
   if (wait) return fill(DESK_WORDS.tooManyPins, { m: minutesLeft(wait, now) });
   if (last?.result === 'wrong') {
-    return last.triesLeft === null ? DESK.wrongPin : wrongPinText(last.triesLeft);
+    return last.triesLeft === null ? DESK.wrongPin : wrongPinText(last.triesLeft, t);
   }
   return null;
 }

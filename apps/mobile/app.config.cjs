@@ -16,18 +16,12 @@ const uiOrigins = (process.env.EXPO_PUBLIC_WHOMBAT_UI_URL || 'https://app.whomba
   .map((o) => o.trim())
   .filter(Boolean)
   .map((o) => new URL(o));
-const CAMERA_TEXT =
-  'Whombat uses the camera to take a photo you attach to a message, and to scan QR codes: the one on your Whombat’s page, the sign-in code on your computer and your Whombat’s claim card.';
-// Voice typing (docs/decisions/dictation.md): the microphone records only from a composer's mic to Done or Cancel, and
-// is asked for the first time the mic is pressed. modules/whombat-voice declares RECORD_AUDIO on Android.
-const MICROPHONE_TEXT =
-  'Whombat uses the microphone for voice typing: what you say goes to your Whombat, which turns it into text.';
-// iOS asks before the app reaches anything on the local network, and the app goes straight to the Whombat at home there
-// (its plain `ws://` address; everything inside is the end-to-end encrypted session).
-const LOCAL_NETWORK_TEXT =
-  'Whombat connects straight to your Whombat when you’re on the same network, which is quicker than going over the internet.';
-// A picture's Download opens the share sheet, whose Save Image puts it in the person's photos.
-const PHOTO_SAVE_TEXT = 'Whombat saves a picture to your photos only when you choose Save Image.';
+const permissions = require('./locales/en.json').ios;
+const {
+  NSCameraUsageDescription: CAMERA_TEXT,
+  NSMicrophoneUsageDescription: MICROPHONE_TEXT,
+  NSPhotoLibraryUsageDescription: PHOTO_TEXT,
+} = permissions;
 // Burrow pages of the hosted UI without a burrow in the path (AP-360, AP-367) that the phone has a screen for: they open
 // in the Whombat last used (`?burrow=` picks the burrow). Settings and canvases stay in the browser.
 // The person's Chat and Feedback room (and the threads, plans and approvals in them, `?thread=` …), branch rooms, runs,
@@ -157,6 +151,7 @@ module.exports = {
     ],
     ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),
   },
+  locales: { en: './locales/en.json', nl: './locales/nl.json' },
   ios: {
     bundleIdentifier: 'com.whombat.mobile',
     buildNumber: String(versionCodeOf(VERSION)),
@@ -166,11 +161,9 @@ module.exports = {
     associatedDomains: APPLE_DOMAINS,
     infoPlist: {
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: allowCleartext, NSAllowsLocalNetworking: true },
-      NSLocalNetworkUsageDescription: LOCAL_NETWORK_TEXT,
+      ...permissions,
+      CFBundleAllowMixedLocalizations: true,
       ITSAppUsesNonExemptEncryption: false,
-      NSMicrophoneUsageDescription: MICROPHONE_TEXT,
-      // The share sheet's Save Image, on a picture's Download: iOS ends an app that saves to Photos without it.
-      NSPhotoLibraryAddUsageDescription: PHOTO_SAVE_TEXT,
     },
     // Declare App Group UserDefaults (`1C8F.1`) on the main app's own PrivacyInfo.xcprivacy when extensions are on,
     // which also registers `Whombat/PrivacyInfo.xcprivacy` before `pod install` so RN aggregates into the app's
@@ -239,7 +232,7 @@ module.exports = {
     [
       'expo-image-picker',
       {
-        photosPermission: 'Whombat opens your photos only when you attach one to a message.',
+        photosPermission: PHOTO_TEXT,
         // Photos for messages (AP-714); the QR scanner uses the same permission.
         cameraPermission: CAMERA_TEXT,
         microphonePermission: MICROPHONE_TEXT,

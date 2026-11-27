@@ -1436,6 +1436,7 @@ export function t3Counts(input: T3Input) {
       icon: 'log',
       title: 'Finished today',
       value: `${n}${today.more ? '+' : ''}`,
+      figureKey: 'f-finished-today',
       ...(today.failed
         ? { note: `${today.failed} failed`, noteTone: 'warn' as const }
         : { note: n ? 'None failed' : 'Nothing yet' }),

@@ -7,6 +7,7 @@
  * Main shapes are mapped field by field; rarely used nested parts (virtualization, health, cluster, choices, firewall)
  * by `camel`, which renames keys and keeps the keys of data maps (`values`, `options`, `series`, …) as they are.
  */
+
 import {
   HOST_CONTROL_LEVELS,
   HOST_SCREEN_CODES,
@@ -66,6 +67,7 @@ import {
   hostWatchLimit,
 } from '@whombat/core';
 import { toAgentUpdate, withAgentUpdateHints } from './agent-updates';
+import { rememberEnglish } from './localize';
 import { serverVerdict } from './quiet-lines';
 
 type J = Record<string, unknown>;
@@ -441,6 +443,8 @@ export function toHostHint(raw: unknown): HostHint {
   };
   const guests = arr(h.guests).filter((g): g is string => typeof g === 'string');
   if (guests.length) HINT_GUESTS.set(hint, guests);
+  // What Ignore compares stays the hub's English whatever language the words are in.
+  rememberEnglish(hint, h);
   return hint;
 }
 

@@ -4,45 +4,21 @@
  * (AP-258), quietly; `reload` reads it again without going back to loading, and once a status is shown a failed read
  * leaves it there.
  */
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import { updatePollMs } from '@whombat/client/managed';
-import { type ApplianceStatus, sessionOps } from '@whombat/client/session';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { sessionOps } from '@whombat/client/session';
+import { useCallback, useEffect, useState } from 'react';
 import { type ManagedContextValue, useManagedOrThrow } from './context';
 
 export function useApplianceStatus({ follow = true }: { follow?: boolean } = {}) {
-  const { session } = useManagedOrThrow();
-  const [status, setStatus] = useState<ApplianceStatus | null>(null);
-  const [error, setError] = useState(false);
-  const shown = useRef(false);
-  const load = useCallback(() => {
-    setError(false);
-    sessionOps.applianceStatus(session).then(
-      (s) => {
-        shown.current = true;
-        setStatus(s);
-      },
-      () => !shown.current && setError(true),
-    );
-  }, [session]);
-  useEffect(load, [load]);
-  const pollMs = follow ? updatePollMs(status?.update) : null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each new status arms the next ask
-  useEffect(() => {
-    if (!pollMs) return;
-    let live = true;
-    const timer = setTimeout(() => {
-      sessionOps.applianceStatus(session).then(
-        (s) => live && setStatus(s),
-        () => {},
-      );
-    }, pollMs);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [session, status, pollMs]);
-  return { status, error, reload: load };
+  const managed = useManagedOrThrow();
+  const { data, isError, isFetching, refetch } = useQuery({
+    ...applianceStatusQuery(managed),
+    refetchOnMount: 'always',
+    refetchInterval: (query) => (follow ? (updatePollMs(query.state.data?.update) ?? false) : false),
+  });
+  const reload = useCallback(() => void refetch(), [refetch]);
+  return { status: data ?? null, error: !data && isError && !isFetching, reload };
 }
 
 /** What control says a release brought (`rollout.releaseSummary`); null while unknown or when it has none. */
@@ -65,8 +41,7 @@ export function useReleaseSummary(release: string | null): string | null {
 }
 
 /**
- * The Whombat's `appliance.status` as the Settings list reads it. Other readers (the “Whombat updated” notice) share
- * it by this key, so the app asks once; the Settings tab's dot keeps it fresh every five minutes.
+ * Settings, its detail pages and the update notice share one read. A language change refreshes any open reader.
  */
 export function applianceStatusQuery(managed: Pick<ManagedContextValue, 'session' | 'cacheScope'> | null) {
   return queryOptions({

@@ -1,9 +1,10 @@
 import { phaseForError, startedChatPath } from '@whombat/client';
 import { useStartChat, useTheAgent } from '@whombat/client/react';
-import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
+import { approvalCardWords } from '@whombat/core/approvals';
 import { useCallback, useSyncExternalStore } from 'react';
 import { useNavigateHref } from '../../app/routing/navigation';
 import { useToast } from '../../components/Toast';
+import { useLocaleWords } from '../../i18n/words';
 
 /*
  * Answers that may have gone through (command-safety.md): the connection dropped after the answer left, so the
@@ -50,6 +51,7 @@ export function useUnknownAnswer(burrow: string, number: number | null | undefin
  * Returns the button's words and what it does.
  */
 export function useAskToCheck(burrow: string, title: string, onStarted?: () => void) {
+  const APPROVAL_CARD_WORDS = useLocaleWords(approvalCardWords);
   const { words } = useTheAgent(burrow);
   const start = useStartChat(burrow);
   const navigateHref = useNavigateHref();
@@ -63,6 +65,6 @@ export function useAskToCheck(burrow: string, title: string, onStarted?: () => v
       },
       () => toast.show('That didn’t work. Try again in a moment.'),
     );
-  }, [start, title, toast, navigateHref, onStarted]);
+  }, [start, title, toast, navigateHref, onStarted, APPROVAL_CARD_WORDS.checkText]);
   return { checkLabel: APPROVAL_CARD_WORDS.check(words.name), onCheck };
 }

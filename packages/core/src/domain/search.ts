@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { AnswerId, BurrowId, ConversationId, PrincipalId } from '../ids.js';
 import { Count, Timestamp, Tone } from './common.js';
 import { LinkRef } from './links.js';
@@ -33,16 +34,25 @@ export const SEARCH_FILTERS = [
 export const SearchFilter = z.enum(SEARCH_FILTERS);
 export type SearchFilter = z.infer<typeof SearchFilter>;
 
-export const SEARCH_FILTER_LABELS: Record<SearchFilter, string> = {
-  all: 'All',
-  threads: 'Threads',
-  patches: 'Patches',
-  runs: 'Runs',
-  canvases: 'Canvases',
-  plans: 'Plans',
-  decisions: 'Decisions',
-  automations: 'Automations',
-};
+const SEARCH_FILTER_LABELS_KEYS = [
+  'all',
+  'threads',
+  'patches',
+  'runs',
+  'canvases',
+  'plans',
+  'decisions',
+  'automations',
+] as const;
+
+/** `SEARCH_FILTER_LABELS` in a locale. */
+export function searchFilterLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof SEARCH_FILTER_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'search.filter', SEARCH_FILTER_LABELS_KEYS);
+}
+
+export const SEARCH_FILTER_LABELS: Record<SearchFilter, string> = searchFilterLabels('en');
 
 /** The TYPE tag a result row shows. */
 export const SEARCH_TYPE_LABELS: Record<SearchResultType, string> = {

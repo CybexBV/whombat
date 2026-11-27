@@ -6,6 +6,7 @@
  */
 import { createSign } from 'node:crypto';
 import { liveActivityRef, type PushPayload } from '@whombat/core';
+import { guardPreview } from './preview-off';
 import type { PushOutcome, PushTransport } from './types';
 
 interface ServiceAccount {
@@ -36,7 +37,9 @@ export function parseServiceAccount(json: string): ServiceAccount | null {
 
 /** The FCM HTTP v1 message body. Data-only (no `notification` block): the app builds the shown
  *  notification and, for `run_progress` / `approval_updated`, updates the live activity from the data. */
-export function buildFcmMessage(payload: PushPayload, token: string) {
+export function buildFcmMessage(handed: PushPayload, token: string) {
+  // Previews off: only generic words go to Google, in the data fields and in the payload copy alike.
+  const payload = guardPreview(handed);
   return {
     message: {
       token,
@@ -46,6 +49,8 @@ export function buildFcmMessage(payload: PushPayload, token: string) {
         body: payload.body,
         path: payload.path,
         notificationId: payload.notificationId ?? '',
+        // FCM data is strings only; present only when previews are off.
+        ...(payload.preview === false ? { preview: 'false' } : {}),
         payload: JSON.stringify(payload),
       },
       android: {

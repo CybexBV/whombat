@@ -9,6 +9,7 @@ import {
   FEEDBACK_REPORTER_TOKEN_PATTERN,
   type ReporterStatus,
 } from '@whombat/core/feedback/reporters';
+import { EN, english, type WidgetTranslator } from '../i18n/catalog';
 import { REFERENCE, type ReportType, TIMESTAMP } from '../shared/protocol';
 import type { SentReport } from './reporter-store';
 import { SUMMARY_MAX } from './reporter-store';
@@ -236,20 +237,23 @@ export function mergeReports(
   return rows.sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt));
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /** “29 Sep” in the visitor's time zone; “29 Sep 2025” in another year. */
-export function formatDay(iso: string, now: Date = new Date()): string {
+export function formatDay(iso: string, now: Date = new Date(), locale = 'en-GB'): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const day = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  return d.getFullYear() === now.getFullYear() ? day : `${day} ${d.getFullYear()}`;
+  const day = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  }).format(d);
+  return locale === 'en-GB' ? day.replace('Sept', 'Sep') : day;
 }
 
 /** “Try again in 2 minutes.” */
-export function retryText(retryAfter: number | null): string {
-  const minutes = retryAfter ? Math.max(1, Math.ceil(retryAfter / 60)) : null;
-  return `Try again ${minutes === null ? 'later' : minutes === 1 ? 'in a minute' : `in ${minutes} minutes`}.`;
+export function retryText(retryAfter: number | null, words: WidgetTranslator = english): string {
+  if (!retryAfter) return words.t('tryAgainLater');
+  const minutes = Math.max(1, Math.ceil(retryAfter / 60));
+  return words.tp('tryAgainInMinutes', minutes, { count: minutes.toLocaleString(words.locale) });
 }
 
 /**
@@ -257,6 +261,24 @@ export function retryText(retryAfter: number | null): string {
  * test keeps them equal).
  */
 export const SIGNIN_MESSAGES = {
-  code_refused: 'That code didn’t work. Check it or ask for a new one.',
-  signed_out: 'Your sign-in has ended. Sign in again.',
+  code_refused: EN.codeRefused,
+  signed_out: EN.sessionEnded,
 } as const;
+
+const REPORT_STATUS_KEYS = {
+  received: 'statusReceived',
+  reviewing: 'statusReviewing',
+  needs_info: 'statusNeedsInfo',
+  confirmed: 'statusConfirmed',
+  in_progress: 'statusInProgress',
+  fixed: 'statusFixed',
+  closed: 'statusClosed',
+} as const satisfies Record<ReporterStatus, keyof typeof EN>;
+
+export function reportStatusText(type: ReportType, status: ReporterStatus, words: WidgetTranslator): string {
+  if (type === 'feature') {
+    if (status === 'confirmed') return words.t('statusNoted');
+    if (status === 'fixed') return words.t('statusDone');
+  }
+  return words.t(REPORT_STATUS_KEYS[status]);
+}

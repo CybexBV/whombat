@@ -4,6 +4,7 @@
  * on another of your devices, and reaches only on its direct ways — its local network and its Tailscale name. Pure TypeScript (tested): the record the phone keeps for it, the addresses a link gives, and the
  * phone's own words for joining.
  */
+
 import type { KnownAppliance, LocalLinkParts } from '@whombat/client/managed';
 import {
   COMMUNITY_TEXT,
@@ -14,6 +15,7 @@ import {
 } from '@whombat/client/managed';
 import { DIRECT_PATH, DIRECT_PORT } from '@whombat/protocol/direct';
 import type { DirectAddresses, DirectRoute } from '@whombat/protocol/session';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * The organization a community box is kept under on this phone (no control, so no organization): its storage scope is
@@ -172,81 +174,84 @@ export function communityNotificationsView() {
 }
 
 /** The phone's own words for joining a community box (the shared `LINK_TEXT` and `COMMUNITY_TEXT` besides). */
-export const PHONE_COMMUNITY_TEXT = {
-  /** A new install's first screen (LNK-44): no cloud sign-in is needed to use a Whombat. */
-  start: {
-    // No kicker: the Whombat logo right above says it already.
-    title: 'Join a Whombat',
-    sub: 'Scan the QR code on your Whombat’s page, or type its address.',
-    tip: 'On your Whombat’s page, the QR code is under Settings → This Whombat → Devices.',
-    scan: 'Scan the QR code',
-    address: 'Its address',
-    addressHint: 'Like name.whombat.app, its Tailscale name, or the address on its screen.',
-    placeholder: 'name.whombat.app',
-    go: 'Continue',
-    bad: 'That isn’t an address. Type it like name.whombat.app or 192.168.1.20.',
-    signIn: 'Sign in with a Whombat account',
-    /** Opens the demo world (look-around.md): for anyone without a Whombat, App Review among them. */
-    lookAround: SHARED_COPY.lookAround.open,
-  },
-  /** A cloud account with no Whombat yet: join one; nothing is set up or bought in the app. */
-  noWhombat: {
-    kicker: 'WHOMBAT',
-    title: 'No Whombat here yet',
-    sub: 'Join your Whombat with the QR code on its page, or its address.',
-    join: 'Join a Whombat',
-    again: 'Check again',
-    signOut: 'Sign out',
-  },
-  /** Joining at a typed address. */
-  address: {
-    kicker: 'JOIN A WHOMBAT',
-    reaching: 'Reaching your Whombat…',
-    unreachable: 'This phone can’t reach that address. Check it, and that your Whombat is on.',
-    notSetUp: 'Nobody has set this Whombat up yet. Open its address in a browser to set it up first.',
-  },
-  /**
-   * Claiming a box at its address on this network: the letters on its screen, then who you are
-   * (`COMMUNITY_TEXT`'s words for both); then the app opens it.
-   */
-  claim: {
-    kicker: 'SET UP YOUR WHOMBAT',
-  },
-  signIn: {
-    joinLink: 'Add this phone with a link or QR code',
-    known: 'ON THIS PHONE',
-    open: (name: string) => `Open ${name}`,
-    unnamed: 'Your Whombat',
-    openMeta: 'On your own network or tailnet',
-  },
-  join: {
-    kicker: 'ADD THIS PHONE',
-    title: 'Add this phone with a link',
-    sub: 'Scan the QR code your other device shows, or paste the link from it.',
-    tip: 'Make one on a device you already use this Whombat on: Settings → This Whombat → Devices.',
-    scan: 'Scan a QR code',
-    scanTitle: 'Scan the Whombat’s QR code',
-    scanClose: 'Close',
-    scanWrong: 'That isn’t a Whombat link.',
-    paste: 'Link',
-    pasteHint: 'Paste the whole link, starting with http.',
-    go: 'Continue',
-    pasteInstead: 'Paste the link instead',
-    bad: 'That isn’t a Whombat link. Make a new one on your other device.',
-    denied: 'Whombat can’t use the camera. Paste the link instead.',
-    back: 'Back',
-  },
-  device: {
-    kicker: 'ADD THIS PHONE',
-    title: 'Add this phone',
-    sub: LINK_TEXT.device.sub,
-    tip: 'You’ll see this phone under Devices on your other device, where you can remove it.',
-  },
-  reaching: 'Reaching your Whombat…',
-  /** The title when a box didn't answer: what happened, not the step's name again. */
-  unreachableTitle: 'Can’t reach this Whombat',
-  unreachable:
-    'This phone can’t reach that Whombat. Be on the same network as it, or on its tailnet, and try again.',
-  tryAgain: 'Try again',
-  leave: 'Sign out',
-} as const;
+export function phoneCommunityText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** A new install's first screen (LNK-44): no cloud sign-in is needed to use a Whombat. */
+    start: {
+      // No kicker: the Whombat logo right above says it already.
+      title: t('community.phoneCommunityText.start.title'),
+      sub: t('community.phoneCommunityText.start.sub'),
+      tip: t('community.phoneCommunityText.start.tip'),
+      scan: t('community.phoneCommunityText.start.scan'),
+      address: t('community.phoneCommunityText.start.address'),
+      addressHint: t('community.phoneCommunityText.start.addressHint'),
+      placeholder: 'name.whombat.app',
+      go: t('community.phoneCommunityText.start.go'),
+      bad: t('community.phoneCommunityText.start.bad'),
+      signIn: t('community.phoneCommunityText.start.signIn'),
+      /** Opens the demo world (look-around.md): for anyone without a Whombat, App Review among them. */
+      lookAround: SHARED_COPY.lookAround.open,
+    },
+    /** A cloud account with no Whombat yet: join one; nothing is set up or bought in the app. */
+    noWhombat: {
+      kicker: 'WHOMBAT',
+      title: t('community.phoneCommunityText.noWhombat.title'),
+      sub: t('community.phoneCommunityText.noWhombat.sub'),
+      join: t('community.phoneCommunityText.noWhombat.join'),
+      again: t('community.phoneCommunityText.noWhombat.again'),
+      signOut: t('community.phoneCommunityText.noWhombat.signOut'),
+    },
+    /** Joining at a typed address. */
+    address: {
+      kicker: t('community.phoneCommunityText.address.kicker'),
+      reaching: t('community.phoneCommunityText.address.reaching'),
+      unreachable: t('community.phoneCommunityText.address.unreachable'),
+      notSetUp: t('community.phoneCommunityText.address.notSetUp'),
+    },
+    /**
+     * Claiming a box at its address on this network: the letters on its screen, then who you are
+     * (`COMMUNITY_TEXT`'s words for both); then the app opens it.
+     */
+    claim: {
+      kicker: t('community.phoneCommunityText.claim.kicker'),
+    },
+    signIn: {
+      joinLink: t('community.phoneCommunityText.signIn.joinLink'),
+      known: t('community.phoneCommunityText.signIn.known'),
+      open: (name: string) => t('community.phoneCommunityText.signIn.open', { name }),
+      unnamed: t('community.phoneCommunityText.signIn.unnamed'),
+      openMeta: t('community.phoneCommunityText.signIn.openMeta'),
+    },
+    join: {
+      kicker: t('community.phoneCommunityText.join.kicker'),
+      title: t('community.phoneCommunityText.join.title'),
+      sub: t('community.phoneCommunityText.join.sub'),
+      tip: t('community.phoneCommunityText.join.tip'),
+      scan: t('community.phoneCommunityText.join.scan'),
+      scanTitle: t('community.phoneCommunityText.join.scanTitle'),
+      scanClose: t('community.phoneCommunityText.join.scanClose'),
+      scanWrong: t('community.phoneCommunityText.join.scanWrong'),
+      paste: t('community.phoneCommunityText.join.paste'),
+      pasteHint: t('community.phoneCommunityText.join.pasteHint'),
+      go: t('community.phoneCommunityText.join.go'),
+      pasteInstead: t('community.phoneCommunityText.join.pasteInstead'),
+      bad: t('community.phoneCommunityText.join.bad'),
+      denied: t('community.phoneCommunityText.join.denied'),
+      back: t('community.phoneCommunityText.join.back'),
+    },
+    device: {
+      kicker: t('community.phoneCommunityText.device.kicker'),
+      title: t('community.phoneCommunityText.device.title'),
+      sub: LINK_TEXT.device.sub,
+      tip: t('community.phoneCommunityText.device.tip'),
+    },
+    reaching: t('community.phoneCommunityText.reaching'),
+    /** The title when a box didn't answer: what happened, not the step's name again. */
+    unreachableTitle: t('community.phoneCommunityText.unreachableTitle'),
+    unreachable: t('community.phoneCommunityText.unreachable'),
+    tryAgain: t('community.phoneCommunityText.tryAgain'),
+    leave: t('community.phoneCommunityText.leave'),
+  } as const;
+}
+export const PHONE_COMMUNITY_TEXT = phoneCommunityText();

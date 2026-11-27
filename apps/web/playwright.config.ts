@@ -57,27 +57,27 @@ export default defineConfig({
       testDir: './e2e-runtime',
       timeout: 90_000,
       retries: 0,
-      use: { ...desktop, baseURL: runtimeURL },
+      use: { ...desktop, baseURL: runtimeURL, locale: 'en-GB' },
     },
     // Managed journeys (AP-15): the hosted UI in session mode against the in-browser fake control and appliances.
     {
       name: 'managed',
       testDir: './e2e-managed',
       testIgnore: /hosted\.spec\.ts/,
-      use: { ...desktop, baseURL: managedURL, acceptDownloads: true },
+      use: { ...desktop, baseURL: managedURL, acceptDownloads: true, locale: 'en-GB' },
     },
     // The hosted build (strict CSP, own fonts, no inline script) against the fake world: no CSP violations.
     {
       name: 'hosted',
       testDir: './e2e-managed',
       testMatch: /hosted\.spec\.ts/,
-      use: { ...desktop, baseURL: hostedURL, acceptDownloads: true },
+      use: { ...desktop, baseURL: hostedURL, acceptDownloads: true, locale: 'en-GB' },
     },
     // The box's own page (AP-5430): the box target in fake mode, on the fake world's community box.
     {
       name: 'box',
       testDir: './e2e-box',
-      use: { ...desktop, baseURL: boxURL },
+      use: { ...desktop, baseURL: boxURL, locale: 'en-GB' },
     },
     // The README's pictures (`readme/`): written only when README_SHOTS names a folder.
     {
@@ -85,7 +85,7 @@ export default defineConfig({
       testDir: './readme',
       timeout: 120_000,
       retries: 0,
-      use: { baseURL: readmeURL, launchOptions: { args: ['--disable-lcd-text'] } },
+      use: { baseURL: readmeURL, locale: 'en-GB', launchOptions: { args: ['--disable-lcd-text'] } },
     },
     {
       name: 'visual',

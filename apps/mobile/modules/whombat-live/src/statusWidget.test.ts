@@ -2,10 +2,15 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { WIDGET_EMPTY_COPY } from '@whombat/client';
+import { WIDGET_EMPTY_COPY, widgetEmptyCopy } from '@whombat/client';
 import { fixedColors, themeColors } from '@whombat/tokens';
 import { describe, expect, it } from 'vitest';
-import { createStatusWidgetQueue, type StatusWidgetPayload, shouldClearStatusWidget } from './statusWidget';
+import {
+  createStatusWidgetQueue,
+  type StatusWidgetPayload,
+  shouldClearStatusWidget,
+  statusWidgetLabels,
+} from './statusWidget';
 
 const require = createRequire(import.meta.url);
 const ROOT = join(__dirname, '..');
@@ -39,6 +44,13 @@ function parseSwiftPalette(filePath: string): Record<string, { light: string; da
     ]),
   );
 }
+
+it('provides Dutch date templates with placeholders for local redraws', () => {
+  expect(statusWidgetLabels('nl-NL')).toEqual({
+    asOfTemplate: 'van {when}',
+    asOfYesterdayTemplate: 'van gisteren {clock}',
+  });
+});
 
 describe('home-screen status widget tokens and copy', () => {
   it('mirrors @whombat/tokens in Android light and dark colors.xml', () => {
@@ -83,22 +95,22 @@ describe('home-screen status widget tokens and copy', () => {
     expect(palette.progress).toEqual({ light: fixedColors.progress, dark: fixedColors.progress });
   });
 
-  it('uses the shared empty-state copy on Android and iOS', () => {
-    const stringsXml = readFileSync(join(ROOT, 'android/src/main/res/values/strings.xml'), 'utf8');
+  it.each([
+    ['en-GB', 'values'],
+    ['nl-NL', 'values-nl'],
+  ])('uses the shared empty-state copy in %s on Android and iOS', (locale, folder) => {
+    const xml = readFileSync(join(ROOT, `android/src/main/res/${folder}/strings.xml`), 'utf8');
     const strings = Object.fromEntries(
-      [...stringsXml.matchAll(/<string name="([^"]+)">([^<]+)<\/string>/g)].map((m) => [
-        m[1] as string,
-        m[2] as string,
-      ]),
+      [...xml.matchAll(/<string name="([^"]+)">([^<]+)<\/string>/g)].map((match) => [match[1], match[2]]),
     );
-    expect(strings.whombat_widget_empty_box).toBe(WIDGET_EMPTY_COPY.boxName);
-    expect(strings.whombat_widget_empty_status).toBe(WIDGET_EMPTY_COPY.status);
-    expect(strings.whombat_widget_empty_as_of).toBe(WIDGET_EMPTY_COPY.asOf);
-
+    const copy = locale === 'en-GB' ? WIDGET_EMPTY_COPY : widgetEmptyCopy(locale);
+    expect(strings.whombat_widget_empty_box).toBe(copy.boxName);
+    expect(strings.whombat_widget_empty_status).toBe(copy.status);
+    expect(strings.whombat_widget_empty_as_of).toBe(copy.asOf);
     const swift = readFileSync(join(ROOT, 'ios/widget/WhombatStatusWidget.swift'), 'utf8');
-    expect(swift).toContain(`static let boxName = "${WIDGET_EMPTY_COPY.boxName}"`);
-    expect(swift).toContain(`static let status = "${WIDGET_EMPTY_COPY.status}"`);
-    expect(swift).toContain(`static let asOf = "${WIDGET_EMPTY_COPY.asOf}"`);
+    expect(swift).toContain(`"${copy.boxName}"`);
+    expect(swift).toContain(`"${copy.status}"`);
+    expect(swift).toContain(`"${copy.asOf}"`);
   });
 
   it('uses only Android @RemoteView tags in widget layouts', () => {
@@ -164,9 +176,11 @@ describe('home-screen status widget tokens and copy', () => {
     for (const src of [storeKt, widgetSwift]) {
       expect(src).not.toContain('asOfEarlier');
       expect(src).not.toContain('asOfDay');
-      expect(src).toContain('as of yesterday ');
     }
-    expect(storeKt).not.toContain('val asOf:');
+    expect(storeKt).toContain('R.string.whombat_widget_as_of_yesterday');
+    expect(widgetSwift).toContain('as of yesterday ');
+    expect(widgetSwift).toContain('van gisteren ');
+    expect(storeKt).toContain('val updatedAt: Long');
     expect(storeKt).toContain('updatedAt <= 0L');
     expect(storeKt).toContain('fun nextRolloverAtMs');
 

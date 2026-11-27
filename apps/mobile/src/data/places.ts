@@ -12,7 +12,6 @@
 import type { MarkLike } from '@whombat/brand';
 import {
   connectionPlaceRows,
-  PLACE_WORDS as LIST_WORDS,
   type OverviewTile,
   type PlaceRow,
   placeRowsTone,
@@ -23,8 +22,9 @@ import {
   thingRows,
 } from '@whombat/client';
 import type { HostServer, ThingSummary } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { serviceRowOpens } from './home';
-import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from './shell';
+import type { Tab } from './shell';
 import { type PhoneGlyph, phoneThingGlyph } from './thingLook';
 
 export type PlaceId =
@@ -55,52 +55,40 @@ export const PLACES: readonly PlaceId[] = [
   'settings',
 ];
 
-/** What each place is called: the tabs' own words, Overview's title, the lists' titles, and Usage for what was Spend. */
-export const PLACE_WORDS: Record<PlaceId, string> = {
-  search: 'Search',
-  chat: TAB_WORDS.ChatRoom,
-  inbox: TAB_WORDS.NeedsYou,
-  overview: OVERVIEW_TITLE,
-  servers: LIST_WORDS.servers.title,
-  connections: LIST_WORDS.connections.title,
-  automations: TAB_WORDS.Automations,
-  files: 'Files',
-  vault: 'Vault',
-  usage: 'Usage',
-  settings: TAB_WORDS.Settings,
-};
+/** What each place is called: the tabs' own words, Overview's title, and Usage for what was Spend. */
+export function placeWords(locale?: string): Record<PlaceId, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    search: t('places.search'),
+    chat: t('places.chat'),
+    inbox: t('places.inbox'),
+    overview: t('places.overview'),
+    servers: t('places.servers'),
+    connections: t('places.connections'),
+    automations: t('places.automations'),
+    files: t('places.files'),
+    vault: t('places.vault'),
+    usage: t('places.usage'),
+    settings: t('places.settings'),
+  };
+}
+export const PLACE_WORDS = placeWords();
 
-export const PLACES_COPY = {
-  title: 'Places',
-  /** What opens the sheet, for VoiceOver and TalkBack too. */
-  open: 'Places',
-  close: 'Close Places',
-} as const;
+export function placesCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    title: t('places.title'),
+    open: t('places.title'),
+    close: t('places.close'),
+    servers: t('places.servers'),
+    connections: t('places.connections'),
+  };
+}
+export const PLACES_COPY = placesCopy();
 
 /** One line on what is in each place, under its name in Search's results. */
-export function placeLine(place: Exclude<PlaceId, 'search'>, assistant: string): string {
-  switch (place) {
-    case 'chat':
-      return `You and ${assistant}`;
-    case 'inbox':
-      return 'What needs you';
-    case 'overview':
-      return 'Servers and connections';
-    case 'servers':
-      return 'Your servers and how they are';
-    case 'connections':
-      return 'What’s connected and how it is';
-    case 'automations':
-      return 'Plans and schedules';
-    case 'files':
-      return 'Files shared in your conversations';
-    case 'vault':
-      return 'Sign-ins and secrets';
-    case 'usage':
-      return `What it cost and how much ${assistant} worked`;
-    case 'settings':
-      return `You, ${assistant} and this Whombat`;
-  }
+export function placeLine(place: Exclude<PlaceId, 'search'>, assistant: string, locale?: string): string {
+  return mobileTranslator(locale).t(`places.line.${place}`, { assistant });
 }
 
 /** The tab a place is, for the places that are tabs. */
@@ -218,12 +206,13 @@ export interface ServerFacts {
 export function placesThings(
   things: readonly ThingSummary[] | undefined,
   servers: readonly ServerFacts[] = [],
+  locale?: string,
 ): PlacesThings {
   const list = things ?? [];
   const serverIds = new Set(list.filter((t) => t.kind === 'server').map((t) => t.id));
   const facts = new Map(servers.map((s) => [s.thingId, s]));
   const byId = new Map(list.map((t) => [t.id, t]));
-  const rows = thingRows(list).map((r): PlaceThingRow => {
+  const rows = thingRows(list, undefined, locale).map((r): PlaceThingRow => {
     const mark = facts.get(r.id)?.mark;
     const thing = byId.get(r.id);
     return {
@@ -243,13 +232,14 @@ export function placesThings(
  * What a place's row says to VoiceOver and TalkBack, its count included once (the number on screen is decorative):
  * “Chat, 1 unread reply”, “Inbox, 3 things need you, something isn’t working”.
  */
-export function placeLabel(place: PlaceId, count: number, broken = false): string {
-  const name = PLACE_WORDS[place];
+export function placeLabel(place: PlaceId, count: number, broken = false, locale?: string): string {
+  const name = placeWords(locale)[place];
+  const { t } = mobileTranslator(locale);
   if (count <= 0) return name;
-  if (place === 'chat') return `${name}, ${count} unread ${count === 1 ? 'reply' : 'replies'}`;
+  if (place === 'chat') return `${name}, ${t('places.unread', { count })}`;
   if (place === 'inbox') {
-    const need = `${count} ${count === 1 ? 'thing needs' : 'things need'} you`;
-    return broken ? `${name}, ${need}, something isn’t working` : `${name}, ${need}`;
+    const need = t('places.needs', { count });
+    return broken ? `${name}, ${need}, ${t('places.broken')}` : `${name}, ${need}`;
   }
   return name;
 }
@@ -287,10 +277,11 @@ export function placeLists(input: {
   tiles: readonly OverviewTile[] | null | undefined;
   now: number;
   timeZone: string;
+  locale?: string | null;
 }): PlaceLists {
   const list = input.things ?? [];
   const byId = new Map(list.map((t) => [t.id, t]));
-  const rows = thingRows(list);
+  const rows = thingRows(list, undefined, input.locale);
   const serverIds = new Set(list.filter((t) => t.kind === 'server').map((t) => t.id));
   const serverThings = rows.filter((r) => serverIds.has(r.id));
   const connectionThings = rows.filter((r) => !serverIds.has(r.id));
@@ -302,9 +293,16 @@ export function placeLists(input: {
       opens: thing ? serviceRowOpens(thing) : null,
     };
   };
-  const quiet = serverQuietWords(list, input.now, input.timeZone);
-  const servers = serverPlaceRows(input.fleet, serverThings, input.now, input.timeZone, quiet).map(phone);
-  const connections = connectionPlaceRows(connectionThings, input.tiles).map(phone);
+  const quiet = serverQuietWords(list, input.now, input.timeZone, input.locale);
+  const servers = serverPlaceRows(
+    input.fleet,
+    serverThings,
+    input.now,
+    input.timeZone,
+    quiet,
+    input.locale,
+  ).map(phone);
+  const connections = connectionPlaceRows(connectionThings, input.tiles, input.locale).map(phone);
   return {
     servers,
     connections,

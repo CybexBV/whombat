@@ -10,21 +10,17 @@ import {
   advancedRowsHere,
   agentGroupParts,
   agentKeysText,
-  appPlaceWords,
-  PLACE_WORDS,
-  SEARCH_WORDS,
-  SETTINGS_GROUP_TEXT,
-  SETTINGS_HOME_TEXT,
+  placeWords,
   type SettingsHere,
-  THING_STATUS_LABELS,
+  settingsGroupText,
+  settingsHomeText,
   type ThingGlyph,
   type ThingPlace,
   thingRows,
+  thingStatusLabels,
   USAGE_HREF,
   youParts,
 } from '@whombat/client';
-import { DESK_SCREENS_TEXT } from '@whombat/client/desk';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import {
   CONNECTIONS_HREF,
   NEWS_KIND_WORDS,
@@ -35,16 +31,14 @@ import {
 } from '@whombat/core';
 import { PLACE_HREFS as THING_PLACE_HREFS } from '../../app/shell/assistantSidebarModel';
 import { INBOX_PATH } from '../../app/shell/location';
+import { DESK_SCREENS_TEXT, THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
+import { currentLocale, webTranslator } from '../../i18n/provider';
+import { appPlaceWords, SEARCH_WORDS } from '../../i18n/shared';
 
 export type CatalogGroup = 'things' | 'settings' | 'places';
 
 /** The app's places and the sidebar's Servers and Connections, which Search lists right after Overview. */
 export type SearchPlace = AppPlace | ThingPlace;
-
-const THING_PLACE_LINES: Record<ThingPlace, string> = {
-  servers: 'Your servers and how they are',
-  connections: 'What’s connected and how it is',
-};
 
 export type CatalogIcon =
   | { kind: 'mark'; mark: MarkLike }
@@ -100,9 +94,12 @@ export function placeHref(place: AppPlace): string {
 }
 
 export function searchCatalog({ things, agent, here, news = false }: CatalogInput): CatalogEntry[] {
+  const THING_STATUS_LABELS = thingStatusLabels(currentLocale());
+  const SETTINGS_GROUP_TEXT = settingsGroupText(currentLocale());
+  const SETTINGS_HOME_TEXT = settingsHomeText(currentLocale());
   const entries: CatalogEntry[] = [];
   const kinds = SEARCH_WORDS.kinds;
-  for (const row of thingRows(things ?? [])) {
+  for (const row of thingRows(things ?? [], undefined, currentLocale())) {
     const kind = parseThingId(row.id)?.kind ?? 'connection';
     const how = row.reason ?? THING_STATUS_LABELS[row.status];
     entries.push({
@@ -158,7 +155,7 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
       part === 'profile' ? '/settings?tab=agent' : `/settings?tab=agent&part=${part}`,
     );
   // The keys and the commands always allowed, by the name they had: on What it may do.
-  const keysPage = agentKeysText(agent);
+  const keysPage = agentKeysText(agent, currentLocale());
   setting('agent:keys', 'agent', keysPage.title, '/settings?tab=agent&part=may', keysPage.line);
   setting('connections', 'connections', groups.connections, '/settings?tab=connections');
   setting('appliance:overview', 'appliance', groups.appliance, '/settings?tab=appliance');
@@ -187,7 +184,7 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
       terms: `${SETTINGS_GROUP_TEXT.title} ${NEWS_SEARCH_TERMS}`,
     });
   // Advanced's pages with their own line; Usage isn't offered (its row is hidden too).
-  for (const row of advancedRowsHere(agent, here))
+  for (const row of advancedRowsHere(agent, here, currentLocale()))
     if (row.key !== 'spend')
       setting(
         `advanced:${row.key}`,
@@ -227,8 +224,8 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
         (place): CatalogEntry => ({
           key: `place:${place}`,
           group: 'places',
-          title: PLACE_WORDS[place].title,
-          line: THING_PLACE_LINES[place],
+          title: placeWords(currentLocale())[place].title,
+          line: webTranslator(currentLocale()).t(`place.${place}.line`),
           href: THING_PLACE_HREFS[place],
           icon: { kind: 'place', place },
           terms: SEARCH_WORDS.groups.places,
@@ -255,6 +252,7 @@ export function matchCatalog(entries: readonly CatalogEntry[], query: string): C
 
 /** Suggestions under an empty query, from what is here: the first thing's name, a setting, a place. */
 export function searchSuggestions(entries: readonly CatalogEntry[], agent: string): string[] {
+  const SETTINGS_GROUP_TEXT = settingsGroupText(currentLocale());
   const thing = entries.find((e) => e.group === 'things')?.title;
   return [...(thing ? [thing] : []), SETTINGS_GROUP_TEXT.you.notifications, appPlaceWords(agent).files.label];
 }

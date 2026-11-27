@@ -21,13 +21,11 @@
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
-  CHAT_WORDS,
   headFacts,
   holdSaysBadge,
   holdView,
   KEEP_QUIET_WORDS,
   LOOK_PLAN_WORDS,
-  OVERVIEW_WORDS,
   pageHeadBadge,
   pageHeadVerdict,
   parseThingTab,
@@ -84,6 +82,9 @@ import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Tabs } from '../../../components/Tabs';
 import { useToast } from '../../../components/Toast';
+import { useWebI18n } from '../../../i18n/provider';
+import { CHAT_WORDS } from '../../../i18n/shared';
+import { useOverviewWords } from '../../../i18n/words';
 import { ReadNote } from '../../home/ReadState';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
 import { AskButton, AskPane, isAskOpen } from '../AskPane';
@@ -129,6 +130,8 @@ export interface ThingPageScreenProps {
 }
 
 export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
+  const OVERVIEW_WORDS = useOverviewWords();
+  const { tag: uiLocale } = useWebI18n();
   const { timeZone } = useBurrowContext(burrow);
   const now = useNow(60_000);
   const [search, set] = useThingSearch();
@@ -263,7 +266,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
       </div>
     );
   } else {
-    const tabs = thingTabs(page);
+    const tabs = thingTabs(page, uiLocale);
     const own = tabs.find((t) => t.key === tab)?.own ?? null;
     // A tab about a server the page draws from that server's own reads (Find My's names its Mac).
     const about = tabs.find((t) => t.key === tab)?.server ?? null;
@@ -618,6 +621,7 @@ function Fact({ line }: { line: ThingPage['facts'][number] }) {
  * it back.”).
  */
 function usePutBack(burrow: string, thing: string) {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const qc = useQueryClient();
   const undo = useUndoChange(burrow);
@@ -629,20 +633,20 @@ function usePutBack(burrow: string, thing: string) {
       try {
         const result = await undo.mutateAsync(changeId);
         if (result.status !== 'ok') {
-          toast.show(commitOutcomeText(result) ?? '', { duration: FAILED_TOAST_MS });
+          toast.show(commitOutcomeText(result, uiLocale) ?? '', { duration: FAILED_TOAST_MS });
           return;
         }
         const outcome = undoOutcome(result.data, agent?.name);
         toast.show(outcome.kind === 'undone' ? 'Put back.' : outcome.message);
       } catch (error) {
-        toast.show(hostErrorInfo(error).message, { duration: FAILED_TOAST_MS });
+        toast.show(hostErrorInfo(error, uiLocale).message, { duration: FAILED_TOAST_MS });
       } finally {
         setBusy(null);
         void qc.invalidateQueries({ queryKey: queryKeys.scope('things.page', { burrow, thing }) });
         void qc.invalidateQueries({ queryKey: queryKeys.scope('changes.list', { burrow }) });
       }
     },
-    [undo, toast, qc, burrow, thing, agent?.name],
+    [undo, toast, qc, burrow, thing, agent?.name, uiLocale],
   );
   return { run: (changeId: string) => void run(changeId), busy };
 }

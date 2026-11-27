@@ -5,25 +5,27 @@
  * answers null when the text was what the caller wanted (the scanner closes) or a line to show when it wasn't (it
  * keeps looking). The words default to the claim card's.
  */
+
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FullScreenModal } from '../ui/fullScreen';
 import { X } from '../ui/icons';
 import { Loading } from '../ui/primitives';
 import { Touchable } from '../ui/Touchable';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 
 export function QrScanner({
   visible,
   onClose,
   onDenied,
   onScanned,
-  title = COPY.claim.scanTitle,
-  closeLabel = COPY.claim.scanClose,
-  escapeLabel = COPY.claim.typeIt,
+  title: suppliedTitle,
+  closeLabel: suppliedCloseLabel,
+  escapeLabel: suppliedEscapeLabel,
   onEscape,
 }: {
   visible: boolean;
@@ -37,6 +39,12 @@ export function QrScanner({
   escapeLabel?: string;
   onEscape?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+  const escapeLabel = suppliedEscapeLabel ?? managedCopyHere.claim.typeIt;
+  const closeLabel = suppliedCloseLabel ?? managedCopyHere.claim.scanClose;
+  const title = suppliedTitle ?? managedCopyHere.claim.scanTitle;
+
   const theme = useTheme();
   const [permission, request] = useCameraPermissions();
   const [problem, setProblem] = useState<string | null>(null);

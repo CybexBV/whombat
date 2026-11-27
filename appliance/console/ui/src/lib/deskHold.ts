@@ -4,10 +4,12 @@
  * Talk or pairing letters — for up to 10 minutes, with “Reconnecting…” after 10 s; after that, or as soon as the box
  * isn't `claimed` or Whombat says nobody is paired, today's console. Pure: the page's clock comes in.
  */
+
+import { english, type Translate } from '../i18n/translate';
 import type { ConsoleState } from './api';
 import { QUIET_MS } from './connection';
 import type { DeskGlance, DeskLock, DeskLockedView, DeskState } from './desk';
-import { DESK_WORDS, fill, SCREEN_WORDS } from './deskCopy';
+import { deskWordsCopy, fill, screenWordsCopy } from './deskCopy';
 import { bareAsk, isUnlocked } from './deskScene';
 import { lockedGrid } from './grid';
 
@@ -43,13 +45,14 @@ export function shownDesk(
   s: ConsoleState,
   now: number,
   locked: DeskState | null = null,
+  t: Translate = english,
 ): ShownDesk {
   if (s.desk) return { desk: s.desk, held: false, reconnecting: false };
   const gone = { desk: null, held: false, reconnecting: false };
   if (!h.last || h.missingSince === null || s.claim?.state !== 'claimed') return gone;
   const away = now - h.missingSince;
   if (away >= DESK_HOLD_MS) return gone;
-  return { desk: locked ?? heldDesk(h.last), held: true, reconnecting: away >= QUIET_MS };
+  return { desk: locked ?? heldDesk(h.last, t), held: true, reconnecting: away >= QUIET_MS };
 }
 
 /**
@@ -57,7 +60,9 @@ export function shownDesk(
  * trimmed to what the person's lock view lets show (the runtime's rule, DK-03), a locked one stays as Whombat sent it.
  * Quiet hours stay as they were (the night scene stays the night scene).
  */
-export function lockedDesk(d: DeskState): DeskState {
+export function lockedDesk(d: DeskState, t: Translate = english): DeskState {
+  const SCREEN_WORDS = screenWordsCopy(t);
+
   const view = d.paired?.lockedView ?? 'summary';
   return {
     ...d,
@@ -70,6 +75,7 @@ export function lockedDesk(d: DeskState): DeskState {
             d.glance,
             view,
             fill(SCREEN_WORDS.locked.ask, { assistant: d.paired?.assistant.name ?? '' }),
+            t,
           )
         : d.glance,
   };
@@ -80,8 +86,8 @@ export function lockedDesk(d: DeskState): DeskState {
  * there, so the camera is off (DK-72): no camera mark, and nobody seen keeps the glance up; the screen goes idle by
  * touch alone.
  */
-export function heldDesk(d: DeskState): DeskState {
-  return { ...lockedDesk(d), presence: undefined };
+export function heldDesk(d: DeskState, t: Translate = english): DeskState {
+  return { ...lockedDesk(d, t), presence: undefined };
 }
 
 /**
@@ -97,7 +103,9 @@ export function unlockLapsed(lock: DeskLock, serverNow: number, failing: boolean
  * (no servers, no tiles, nothing asked, nothing worked on: `fresh`, DK-23) is ready, with the hint as its muted part;
  * *Only the time* stays as it was.
  */
-function statusLine(g: DeskGlance, view: 'summary' | 'time'): DeskGlance['status'] {
+function statusLine(g: DeskGlance, view: 'summary' | 'time', t: Translate = english): DeskGlance['status'] {
+  const DESK_WORDS = deskWordsCopy(t);
+
   const s = DESK_WORDS.status;
   const n = g.needsYou.count;
   const bad = g.servers.find((x) => x.state === 'bad');
@@ -112,7 +120,12 @@ function statusLine(g: DeskGlance, view: 'summary' | 'time'): DeskGlance['status
 }
 
 /** A glance as the locked screen may show it (DK-03): what the runtime would have sent for the lock view. */
-export function trimGlance(g: DeskGlance, view: DeskLockedView, askTitle = ''): DeskGlance {
+export function trimGlance(
+  g: DeskGlance,
+  view: DeskLockedView,
+  askTitle = '',
+  t: Translate = english,
+): DeskGlance {
   // The screen of widgets as the lock view shows it (lockedGrid); the monitors' too.
   const screens = (v: DeskLockedView) => ({
     grid: g.grid ? lockedGrid(g.grid, v, askTitle) : null,
@@ -125,7 +138,7 @@ export function trimGlance(g: DeskGlance, view: DeskLockedView, askTitle = ''): 
     return { ...g, needsYou: { ...g.needsYou, items: g.needsYou.items.map(bareAsk) }, ...screens(view) };
   const summary: DeskGlance = {
     ...g,
-    status: statusLine(g, view),
+    status: statusLine(g, view, t),
     // What needs a look shows with the cards (DK-93), not in *Only the time*.
     needsYou: {
       count: g.needsYou.count,

@@ -7,12 +7,13 @@
  * all), the quiet line about older backups on the places used before, the line about asking the assistant, and Details
  * (where, who clears, checking the newest, the paper copy). The web's page stacked, words from `BACKUP_OPTIONS_TEXT`.
  */
+
 import {
-  ACCOUNTS_TEXT,
-  BACKUP_OPTIONS_TEXT,
+  accountsText,
   type BackupGroup,
   type BackupHero,
   backupGroups,
+  backupOptionsText,
   longDate,
 } from '@whombat/client/managed';
 import type { BackupPasskeyTap } from '@whombat/client/managed/react';
@@ -22,6 +23,7 @@ import { formatBytes } from '@whombat/core/text';
 import type { BackupCheckpointsOutput, BackupKeep } from '@whombat/protocol/session';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -46,8 +48,6 @@ import { Touchable } from '../ui/Touchable';
 import { backupErrorText } from './BackupDestination';
 import { shortDate } from './backupOptions';
 import { Note } from './ui';
-
-const T = BACKUP_OPTIONS_TEXT;
 
 /** The first rows the list shows before Show all (the web's 9). */
 export const BACKUP_LIST_FIRST = 9;
@@ -133,6 +133,8 @@ export function BackupHeroCard({
   askFix?: { label: string; busy: boolean; onPress: () => void } | null;
   passkey?: HeroPasskey | null;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale);
   const theme = useTheme();
   const problemColor = hero.tone === 'bad' ? theme.colors.bad : theme.colors.ink;
   return (
@@ -239,6 +241,8 @@ function MarkLine({ icon: Icon, color, text }: { icon: LucideIcon; color: string
 
 /** Keep setup status and progress together beneath the backup summary. */
 function PasskeyLine({ passkey }: { passkey: HeroPasskey }) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale);
   const theme = useTheme();
   const W = T.wayBack;
   const busy = passkey.tap?.busy ?? false;
@@ -320,22 +324,27 @@ export function BackupNeedsYou({
   local: BackupCheckpointsOutput['local'];
   placeName: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale);
+
   const { move, remove } = useBackupLocal(session);
   const [note, setNote] = useState<string | null>(null);
   const hasLocal = !!local && local.count > 0;
   if (!hasLocal && !note) return null;
-  const size = local ? formatBytes(local.bytes) : '';
+  const size = local ? formatBytes(local.bytes, rawLocale) : '';
   const range =
-    local?.oldest && local.newest ? `${shortDate(local.oldest)} – ${shortDate(local.newest)}` : '';
+    local?.oldest && local.newest
+      ? `${shortDate(local.oldest, rawLocale)} – ${shortDate(local.newest, rawLocale)}`
+      : '';
   const confirmRemove = () =>
     Alert.alert(T.local.removeTitle, T.local.removeLead(size), [
-      { text: ACCOUNTS_TEXT.cancel, style: 'cancel' },
+      { text: accountsText(rawLocale).cancel, style: 'cancel' },
       {
         text: T.local.removeConfirm,
         style: 'destructive',
         onPress: () => {
           setNote(null);
-          remove.mutate(undefined, { onError: (e) => setNote(backupErrorText(e)) });
+          remove.mutate(undefined, { onError: (e) => setNote(backupErrorText(e, rawLocale)) });
         },
       },
     ]);
@@ -357,7 +366,7 @@ export function BackupNeedsYou({
               setNote(null);
               move.mutate(undefined, {
                 onSuccess: (r) => setNote(T.local.moved(r.copied)),
-                onError: (e) => setNote(backupErrorText(e)),
+                onError: (e) => setNote(backupErrorText(e, rawLocale)),
               });
             }}
           />
@@ -386,10 +395,16 @@ export function BackupList({
   keep: BackupKeep | null;
   onOpen: (checkpointId: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale);
   const theme = useTheme();
   const [all, setAll] = useState(false);
   const total = list.checkpoints.length;
-  const groups: BackupGroup[] = backupGroups(list, keep, all ? {} : { limit: BACKUP_LIST_FIRST });
+  const groups: BackupGroup[] = backupGroups(
+    list,
+    keep,
+    all ? { locale: rawLocale } : { locale: rawLocale, limit: BACKUP_LIST_FIRST },
+  );
   return (
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -530,6 +545,8 @@ export function BackupEarlierLine({ text }: { text: string | null }) {
 
 /** “You can also tell Dusty …”. */
 export function BackupDustyLine({ agent }: { agent: string }) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale);
   const theme = useTheme();
   return (
     <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
@@ -562,6 +579,8 @@ export function BackupDetailsCard({
     onFile: () => void;
   } | null;
 }) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale);
   const theme = useTheme();
   const D = T.details;
   const P = T.paper;
@@ -620,7 +639,7 @@ export function BackupDetailsCard({
                     {P.title}
                   </Text>
                   <Text size={13} lh={1.45} color={theme.colors.mut}>
-                    {paper.paperAt ? P.saved(longDate(paper.paperAt)) : P.meta}
+                    {paper.paperAt ? P.saved(longDate(paper.paperAt, rawLocale)) : P.meta}
                   </Text>
                 </View>
               </View>

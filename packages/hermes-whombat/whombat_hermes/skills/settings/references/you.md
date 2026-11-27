@@ -5,9 +5,9 @@
 Your name, title and photo, and how Chat settles finished threads.
 
 - Read your name, title and settings — `me.get` · read
-- Read your theme and time zone — `me.getPreferences` · read
+- Read your theme, language and time zone — `me.getPreferences` · read
 - Set or remove your photo — `me.setAvatar` · change
-- Change your theme or time zone — `me.updatePreferences` · change
+- Change your theme, language or time zone — `me.updatePreferences` · change
 - Change your name and title — `me.updateProfile` · change
 
 ## Settings → You → Notifications (`you.notifications`)

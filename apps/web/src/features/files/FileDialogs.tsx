@@ -22,6 +22,7 @@ import { Input } from '../../components/Input';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { MoreDetail } from '../../components/MoreDetail';
 import { SectionLabel } from '../../components/SectionLabel';
+import { useWebI18n } from '../../i18n/provider';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import confirm from '../conversations/Conversations.module.css';
 import styles from './Files.module.css';
@@ -98,6 +99,7 @@ export interface RenameDialogProps {
 
 /** Rename a file saved straight into Files (FS-05): the name with its extension, the Whombat's refusal kept here. */
 export function RenameDialog({ file, onClose, onRename }: RenameDialogProps) {
+  const { tag: uiLocale } = useWebI18n();
   const id = useId();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | Problem | null>(null);
@@ -123,7 +125,7 @@ export function RenameDialog({ file, onClose, onRename }: RenameDialogProps) {
         setBusy(true);
         onRename(file, next)
           .then(onClose)
-          .catch((e: unknown) => setError(problemOf(e)))
+          .catch((e: unknown) => setError(problemOf(e, undefined, uiLocale)))
           .finally(() => setBusy(false));
       }}
     >
@@ -161,6 +163,7 @@ export interface MoveDialogProps {
  * typed in (`Drawings/2024`, made on the way; an existing folder's spelling is taken over).
  */
 export function MoveDialog({ file, entries, places, onClose, onMove }: MoveDialogProps) {
+  const { tag: uiLocale } = useWebI18n();
   const id = useId();
   const [picked, setPicked] = useState<string>('');
   const [typed, setTyped] = useState('');
@@ -196,7 +199,7 @@ export function MoveDialog({ file, entries, places, onClose, onMove }: MoveDialo
         setBusy(true);
         onMove(file, folder)
           .then(onClose)
-          .catch((e: unknown) => setError(problemOf(e)))
+          .catch((e: unknown) => setError(problemOf(e, undefined, uiLocale)))
           .finally(() => setBusy(false));
       }}
     >
@@ -318,6 +321,7 @@ export interface RemoveDialogProps {
 
 /** Remove from Files (FS-06): a message's file stays on its message; a saved one is deleted for everyone. */
 export function RemoveDialog({ file, where, onClose, onRemove, text }: RemoveDialogProps) {
+  const { tag: uiLocale } = useWebI18n();
   const [error, setError] = useState<string | Problem | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -337,7 +341,7 @@ export function RemoveDialog({ file, where, onClose, onRemove, text }: RemoveDia
         setBusy(true);
         onRemove(file)
           .then(onClose)
-          .catch((e: unknown) => setError(problemOf(e)))
+          .catch((e: unknown) => setError(problemOf(e, undefined, uiLocale)))
           .finally(() => setBusy(false));
       }}
     >

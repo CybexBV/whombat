@@ -40,15 +40,18 @@ import { discussNeedsYou } from '../chats/commands';
 import { externalEffect } from '../commit/scope';
 import { thePerson } from '../domain/the-person';
 import { hostsFor } from '../hosts/service';
+import { isEnglish, tServer } from '../i18n/catalog';
+import { accountLocale } from '../i18n/locale';
 import { ApiError } from '../lib/errors';
 import { iso } from '../lib/time';
 import { forgetOnePasswordBases } from '../vault/onepassword/restore';
-import { BACKUP_DOWN_TEXT, LIST, port, READ, reason } from './backup';
+import { LIST, port, READ, reason } from './backup';
 import { noteBroughtBack, placeMovedTo, withBringBack } from './backup-key';
+import { backupDownText } from './backup-port';
 import { boxBackupStatus } from './box-backup';
 import type { SessionOpContext } from './dispatcher';
 import { hostTimeZone } from './host-metrics';
-import { restoreStateOf } from './restore-state';
+import { restoreStateIn, restoreStateOf } from './restore-state';
 import { requirePerson } from './trust';
 
 const unavailable = (body: unknown) =>
@@ -167,6 +170,12 @@ async function policyAnswer(c: SessionOpContext, now?: PlacesNow | null): Promis
   return { policy: await policyOf(c), clearedBy: await clearedBy(c, places) };
 }
 
+/** The asking person's language (English when it can't be read). */
+async function principalLocale(c: SessionOpContext): Promise<string | null> {
+  const account = c.principal.account?.id;
+  return account ? accountLocale(c.services, account).catch(() => null) : null;
+}
+
 /* Bringing a Whombat back ---------------------------------------------------------------------------------------- */
 
 /**
@@ -194,12 +203,11 @@ export function answers(input: {
 }
 
 /** What the assistant tells the person once the box is back (BKO-13): plain words, the time it is back to. */
-export function restoredMessage(createdAt: string | null, timeZone: string): string {
-  if (!createdAt)
-    return 'Your Whombat is back from its backup. Anything after that backup isn’t here; tell me if something’s missing and I’ll look for it.';
+export function restoredMessage(createdAt: string | null, timeZone: string, locale?: string | null): string {
+  if (!createdAt) return tServer(locale, 'managed.backup.restored');
   let when = createdAt;
   try {
-    when = new Intl.DateTimeFormat('en-GB', {
+    when = new Intl.DateTimeFormat(isEnglish(locale) ? 'en-GB' : 'nl-NL', {
       timeZone,
       weekday: 'long',
       day: 'numeric',
@@ -210,7 +218,7 @@ export function restoredMessage(createdAt: string | null, timeZone: string): str
   } catch {
     // the instant as it is
   }
-  return `Your Whombat is back as it was on ${when}. Anything after that isn’t here: tell me if something’s missing and I’ll look in GitHub and your accounts.`;
+  return tServer(locale, 'managed.backup.restoredAt', { when });
 }
 
 /** What a restore is known by in the runtime's notes: when it began (the marker's, else the result's). */
@@ -231,6 +239,7 @@ async function sayRestored(
     const text = restoredMessage(
       before.restored?.createdAt ?? null,
       await hostTimeZone(c.services.db, accountId),
+      await accountLocale(c.services, accountId).catch(() => null),
     );
     await c.services.pipeline.commit(discussNeedsYou, { text }, { burrowId, actorId: person.id });
     await changeBoxBackupNotes(c.services, (n) => ({ ...n, restoreSaid: key }));
@@ -239,9 +248,6 @@ async function sayRestored(
     c.services.log.warn({ err: String(err) }, 'backup restore: the assistant’s message wasn’t posted');
   }
 }
-
-/** The words of a restart that didn't happen: the person tries again. */
-const RESTART_FAILED = 'Your Whombat is back, but it couldn’t restart to finish. Try again in a moment.';
 
 /**
  * The manager restarts the runtime and the hosts service, once per restore: noted before it is asked (it stops this
@@ -259,7 +265,9 @@ async function restartAfterRestore(c: SessionOpContext, key: string): Promise<vo
     await changeBoxBackupNotes(c.services, (n) =>
       n.restartedFor === key ? without(n, 'restartedFor') : null,
     );
-    throw new ApiError('unavailable', RESTART_FAILED, { details: { code: 'backup_restart_failed' } });
+    // The words of a restart that didn't happen: the person tries again.
+    const words = tServer(await principalLocale(c), 'managed.backup.restartFailed');
+    throw new ApiError('unavailable', words, { details: { code: 'backup_restart_failed' } });
   }
 }
 
@@ -267,7 +275,7 @@ async function stateOf(c: SessionOpContext) {
   const res = await port(c).call('GET', '/v1/quarantine', undefined, READ);
   olderService(res.status);
   if (res.status !== 200) throw unavailable(res.body);
-  const state = restoreStateOf(res.body);
+  const state = restoreStateIn(restoreStateOf(res.body), await principalLocale(c));
   if (!state) throw notUnderstood();
   // Once it is back: whether Whombat can give the backups a new password if the old one was lost or stolen, so the
   // question and the done screen promise only that.
@@ -310,7 +318,8 @@ export const BACKUP_OPTIONS_HANDLERS: Readonly<Record<string, Handler>> = {
       places: places ? { places: places.places, currentPlaceId: places.currentPlaceId } : null,
       checkpoints,
       policy,
-      notice: down.value || (!service && !checkpoints && !policy) ? BACKUP_DOWN_TEXT : null,
+      notice:
+        down.value || (!service && !checkpoints && !policy) ? backupDownText(await principalLocale(c)) : null,
       earlierPlaces: places ? earlierPlaces(places) : [],
     };
   },

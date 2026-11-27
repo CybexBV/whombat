@@ -6,6 +6,7 @@
  * status changes as quiet lines — and, while the report is open, the reply box. The team's words are plain
  * text: no formatting, no links to tap, no pictures. Withdraw report is in the ⋯, asked first. Opening it reads it.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   TEAM_REPORT_WORDS,
@@ -23,17 +24,18 @@ import {
 import {
   TEAM_REPORT_MESSAGES_MAX,
   TEAM_REPORT_REPLY_MAX,
-  TEAM_REPORT_STATUS_WORDS,
   type TeamReport,
   type TeamReportAction,
   TeamReportId,
   teamReportCanConfirmNow,
   teamReportOpen,
+  teamReportStatusWords,
 } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase, useNow, useNowStore } from '../data/BurrowProvider';
 import { teamReportTone } from '../data/teamReports';
+import { useI18n } from '../i18n';
 import { ErrorLine } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -50,6 +52,9 @@ import { ReportMore, ReportTrack, reportKicker } from './teamReportParts';
 type Props = NativeStackScreenProps<RootStackParamList, 'TeamReport'>;
 
 export function TeamReportScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const teamReportStatusWordsHere = teamReportStatusWords(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const bottomRoom = useBottomRoom();
@@ -166,7 +171,7 @@ export function TeamReportScreen({ navigation, route }: Props) {
             </Text>
             <View style={{ paddingTop: 4 }}>
               <StatusPill
-                text={TEAM_REPORT_STATUS_WORDS[report.status]}
+                text={teamReportStatusWordsHere[report.status]}
                 tone={teamReportTone(report.status)}
               />
             </View>

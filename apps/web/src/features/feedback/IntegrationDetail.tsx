@@ -12,6 +12,7 @@ import { CopyButton } from '../../components/CopyButton';
 import { cx } from '../../components/cx';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import settings from '../settings/SettingsScreen.module.css';
 import {
   dropAvailable,
@@ -188,6 +189,7 @@ export function IntegrationStatus({ burrow, detail }: IntegrationDetailProps) {
 
 /** HEALTH: reports, assessments, the public address or the drop's delivery, and the server's warnings. */
 export function IntegrationHealth({ burrow, detail }: IntegrationDetailProps) {
+  const { tag: uiLocale } = useWebI18n();
   const timeZone = useTimeZone(burrow);
   const navigate = useNavigateHref();
   const where = useReportsDestination(burrow)(detail.integration);
@@ -220,7 +222,9 @@ export function IntegrationHealth({ burrow, detail }: IntegrationDetailProps) {
         <dt>Reports</dt>
         <dd>{reportsLine(health.reportsLast24h)}</dd>
         <dt>Last report</dt>
-        <dd>{health.lastReportAt ? formatRecent(health.lastReportAt, now, timeZone) : 'None yet'}</dd>
+        <dd>
+          {health.lastReportAt ? formatRecent(health.lastReportAt, now, timeZone, uiLocale) : 'None yet'}
+        </dd>
         <dt>Assessments</dt>
         <dd>
           {a.queued} queued · {a.running} running ·{' '}
@@ -242,13 +246,13 @@ export function IntegrationHealth({ burrow, detail }: IntegrationDetailProps) {
             <dt>{FEEDBACK_TEXT.published}</dt>
             <dd className={delivery.publishedAt ? undefined : styles.warn}>
               {delivery.publishedAt
-                ? formatRecent(delivery.publishedAt, now, timeZone)
+                ? formatRecent(delivery.publishedAt, now, timeZone, uiLocale)
                 : FEEDBACK_TEXT.notPublished}
             </dd>
             <dt>{FEEDBACK_TEXT.lastCollected}</dt>
             <dd>
               {delivery.lastCollectedAt
-                ? formatRecent(delivery.lastCollectedAt, now, timeZone)
+                ? formatRecent(delivery.lastCollectedAt, now, timeZone, uiLocale)
                 : FEEDBACK_TEXT.notCollected}
             </dd>
             {health.publicUrl && (
@@ -345,7 +349,9 @@ export function TestReport({
   // Where it lands (feedback-chat.md AP-1832).
   const where = destination(i);
   const origin = i.allowedOrigins[0];
-  const last = health.lastReportAt ? formatRecent(health.lastReportAt, Date.now(), timeZone) : 'None yet';
+  const last = health.lastReportAt
+    ? formatRecent(health.lastReportAt, Date.now(), timeZone, currentLocale())
+    : 'None yet';
   return (
     <div className={settings.card}>
       <div className={styles.testBody}>

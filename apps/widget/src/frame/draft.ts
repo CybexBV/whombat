@@ -9,6 +9,7 @@ import {
   sanitizePageUrl,
   sanitizeReferences,
 } from '@whombat/core/feedback/sanitize';
+import { english, type WidgetTranslator } from '../i18n/catalog';
 import type { ReportType, TrailStep, WidgetContext } from '../shared/protocol';
 import { formatBytes, type PublicConfig } from './config';
 
@@ -53,58 +54,60 @@ export function emptyDraft(type: ReportType): DraftValues {
 // Deliberately loose (the server validates properly): something@something.tld, no spaces.
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const count = (n: number) => n.toLocaleString('en-US');
-
 /** Why a chosen file can't be added (type, size), or null. */
 export function fileProblem(
   file: { name: string; type: string; size: number },
   config: PublicConfig,
+  words: WidgetTranslator = english,
 ): string | null {
-  const name = `“${displayName(file.name)}”`;
-  if (!(config.attachments.types as string[]).includes(file.type))
-    return `${name} isn’t a PNG or JPEG image.`;
+  const name = displayName(file.name, words.t('screenshotFileName'));
+  if (!(config.attachments.types as string[]).includes(file.type)) return words.t('imageType', { name });
   if (file.size > config.attachments.maxBytes)
-    return `${name} is larger than ${formatBytes(config.attachments.maxBytes)}.`;
-  if (file.size === 0) return `${name} is empty.`;
+    return words.t('imageSize', { name, size: formatBytes(config.attachments.maxBytes, words.locale) });
+  if (file.size === 0) return words.t('imageEmpty', { name });
   return null;
 }
 
 /** A file name fit for the report: printable, at most 120 characters, never empty. */
-export function displayName(name: string): string {
+export function displayName(name: string, fallback = 'screenshot'): string {
   const clean = cleanText(name.replace(/[/\\]/g, '_'), ATTACHMENT_NAME_MAX);
-  return clean || 'screenshot';
+  return clean || fallback;
 }
 
-export function tooManyFiles(config: PublicConfig): string {
+export function tooManyFiles(config: PublicConfig, words: WidgetTranslator = english): string {
   const max = config.attachments.max;
-  return max === 1 ? 'You can add one screenshot.' : `You can add up to ${max} screenshots.`;
+  return words.tp('imageCount', max, { count: max.toLocaleString(words.locale) });
 }
 
 /**
  * Every problem the visitor can fix before sending, by field. Signed in, the email field is gone (the session's
  * address is sent).
  */
-export function validateDraft(values: DraftValues, config: PublicConfig, signedIn = false): FieldErrors {
+export function validateDraft(
+  values: DraftValues,
+  config: PublicConfig,
+  signedIn = false,
+  words: WidgetTranslator = english,
+): FieldErrors {
   const errors: FieldErrors = {};
-  if (!config.reportTypes.includes(values.type)) errors.type = 'Choose what kind of feedback this is.';
+  const shorten = (max: number) => words.tp('textTooLong', max, { count: max.toLocaleString(words.locale) });
+  if (!config.reportTypes.includes(values.type)) errors.type = words.t('chooseKind');
   const description = values.description.trim();
-  if (!description)
-    errors.description =
-      values.type === 'bug' ? 'Describe what went wrong.' : 'Describe what you’d like to be able to do.';
+  if (!description) errors.description = words.t(values.type === 'bug' ? 'describeProblem' : 'describeIdea');
   else if (description.length > config.text.description)
-    errors.description = `Shorten this to ${count(config.text.description)} characters or fewer.`;
+    errors.description = shorten(config.text.description);
   if (values.type === 'bug' && values.expected.trim().length > config.text.expected)
-    errors.expected = `Shorten this to ${count(config.text.expected)} characters or fewer.`;
+    errors.expected = shorten(config.text.expected);
   if (config.contactFields.name === 'optional' && values.name.trim().length > CONTACT_LIMITS.name)
-    errors.name = `Shorten your name to ${CONTACT_LIMITS.name} characters or fewer.`;
+    errors.name = words.t('nameTooLong', { max: CONTACT_LIMITS.name });
   if (config.contactFields.email === 'optional' && !signedIn) {
     const email = values.email.trim();
     if (email && (email.length > CONTACT_LIMITS.email || !EMAIL.test(email)))
-      errors.email = 'Enter an email address like name@example.com, or leave it empty.';
+      errors.email = words.t('optionalEmailInvalid');
   }
-  if (values.files.length > config.attachments.max) errors.attachments = tooManyFiles(config);
+  if (values.files.length > config.attachments.max) errors.attachments = tooManyFiles(config, words);
   values.files.forEach((file, i) => {
-    const problem = fileProblem(file, config);
+    const problem = fileProblem(file, config, words);
     if (problem) errors[`attachments.${i}`] = problem;
   });
   return errors;
@@ -232,30 +235,39 @@ export interface PreviewRow {
 }
 
 /** The context and screenshots the report will carry, in plain words (the “What will be sent” list). */
-export function previewRows(context: SubmissionContext, files: readonly DraftFile[]): PreviewRow[] {
+export function previewRows(
+  context: SubmissionContext,
+  files: readonly DraftFile[],
+  { t }: WidgetTranslator = english,
+): PreviewRow[] {
   const rows: PreviewRow[] = [];
   if (context.page) {
-    rows.push({ label: 'Page', value: context.page.url });
-    if (context.page.title) rows.push({ label: 'Page title', value: context.page.title });
+    rows.push({ label: t('page'), value: context.page.url });
+    if (context.page.title) rows.push({ label: t('pageTitle'), value: context.page.title });
   }
   const b = context.browser;
   if (b) {
-    rows.push({ label: 'Browser', value: b.name });
-    if (b.language) rows.push({ label: 'Language', value: b.language });
-    if (b.viewport) rows.push({ label: 'Window', value: `${b.viewport.width}×${b.viewport.height}` });
-    if (b.timeZone) rows.push({ label: 'Time zone', value: b.timeZone });
+    rows.push({ label: t('browser'), value: b.name });
+    if (b.language) rows.push({ label: t('language'), value: b.language });
+    if (b.viewport) rows.push({ label: t('window'), value: `${b.viewport.width}×${b.viewport.height}` });
+    if (b.timeZone) rows.push({ label: t('timeZone'), value: b.timeZone });
   }
   const a = context.app;
   if (a && (a.version || a.environment || a.build)) {
-    const parts = [a.version && `version ${a.version}`, a.environment, a.build && `build ${a.build}`].filter(
-      (v): v is string => Boolean(v),
-    );
-    rows.push({ label: 'App', value: parts.join(' · ') });
+    const parts = [
+      a.version && t('version', { version: a.version }),
+      a.environment,
+      a.build && t('build', { build: a.build }),
+    ].filter((v): v is string => Boolean(v));
+    rows.push({ label: t('app'), value: parts.join(' · ') });
   }
   for (const [key, value] of Object.entries(context.custom))
     rows.push({ label: key, value: value === null ? '—' : String(value) });
-  if (context.references.length) rows.push({ label: 'References', value: context.references.join(', ') });
+  if (context.references.length) rows.push({ label: t('references'), value: context.references.join(', ') });
   if (files.length)
-    rows.push({ label: 'Screenshots', value: files.map((f) => displayName(f.name)).join(', ') });
+    rows.push({
+      label: t('screenshots'),
+      value: files.map((f) => displayName(f.name, t('screenshotFileName'))).join(', '),
+    });
   return rows;
 }

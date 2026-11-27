@@ -39,6 +39,7 @@ import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Tabs } from '../../../components/Tabs';
+import { useWebI18n } from '../../../i18n/provider';
 import { AskButton } from '../AskPane';
 import { VerdictLine } from '../dashboard/Verdict';
 import type { EditCtx } from '../guest/EditDialog';
@@ -343,6 +344,7 @@ function Head({
 }
 
 function Facts({ guest: g }: { guest: HostGuestDetail }) {
+  const { tag: uiLocale } = useWebI18n();
   const on = g.state === 'running' || g.state === 'unhealthy';
   const parts: { pre: string; strong: string }[] = [{ pre: '', strong: guestKindText(g) }];
   if (g.vcpu) parts.push({ pre: '', strong: plural(g.vcpu, 'vCPU') });
@@ -352,7 +354,7 @@ function Facts({ guest: g }: { guest: HostGuestDetail }) {
       // A switched-off VM shows what it gets, not a dash.
       strong: on ? formatMemPair(g.memoryUsedMb, g.memoryLimitMb) : mibText(g.memoryLimitMb),
     });
-  if (on && g.uptimeS != null) parts.push({ pre: 'Up ', strong: formatDuration(g.uptimeS) });
+  if (on && g.uptimeS != null) parts.push({ pre: 'Up ', strong: formatDuration(g.uptimeS, uiLocale) });
   if (g.addresses?.length) parts.push({ pre: '', strong: g.addresses[0] ?? DASH });
   return (
     <div className={styles.facts}>

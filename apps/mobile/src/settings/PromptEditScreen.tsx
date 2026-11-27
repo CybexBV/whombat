@@ -7,6 +7,7 @@
  * message's words and a title from their first line; that one goes back to the chat once saved, with “Saved to your
  * prompts”. Why it couldn't be saved shows over Save. Leaving with changes not saved asks first.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { PROMPT_WORDS, problemText } from '@whombat/client';
 import { queryHook } from '@whombat/client/react';
@@ -26,6 +27,7 @@ import {
   samePromptDraft,
 } from '../data/prompts';
 import { usePrompts, usePromptWrites } from '../data/usePrompts';
+import { useI18n, useMobileT } from '../i18n';
 import { Card } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { LEAVE_TEXT } from '../screens/agent/parts';
@@ -52,6 +54,9 @@ export const PROMPT_LEAVE_TEXT = 'Your changes to this prompt aren’t saved yet
 const useDelegationModels = queryHook(api.delegations.models);
 
 export function PromptEditScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug } = useBurrowBase();
@@ -117,7 +122,7 @@ export function PromptEditScreen({ navigation, route }: Props) {
     setProblem(null);
   };
   const canSave = !!draft && promptCanSave(draft, promptId ? original : null) && !busy;
-  const failed = (error: unknown) => setProblem(problemText(error, PROMPT_WORDS.failed));
+  const failed = (error: unknown) => setProblem(problemText(error, PROMPT_WORDS.failed, rawLocale));
   const onSave = () => {
     if (!draft || !canSave) return;
     const body = promptDraftBody(draft);
@@ -162,7 +167,9 @@ export function PromptEditScreen({ navigation, route }: Props) {
   };
 
   const title = promptId ? PROMPT_WORDS.edit : PROMPT_WORDS.add;
-  const back = <BackBar label={fromText === null ? PROMPT_WORDS.title : 'Back'} onPress={goBack} />;
+  const back = (
+    <BackBar label={fromText === null ? PROMPT_WORDS.title : tMobile('managed.back')} onPress={goBack} />
+  );
   if (!draft)
     return (
       <Screen>
@@ -170,7 +177,7 @@ export function PromptEditScreen({ navigation, route }: Props) {
         {waiting ? (
           <Loading />
         ) : (
-          <ErrorState text={problemText(here.error, PROMPT_WORDS.failed)} onRetry={here.refetch} />
+          <ErrorState text={problemText(here.error, PROMPT_WORDS.failed, rawLocale)} onRetry={here.refetch} />
         )}
       </Screen>
     );

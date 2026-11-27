@@ -6,7 +6,8 @@
  * repoint (`/things/servers?repoint=1`, the app reads `hosts.addressChange` and starts `hosts.repoint`). It goes away
  * when they are back, and a newer change replaces it (its ref is the change's time).
  */
-import { HOST_REPOINT_WORDS, hostsAddressChangeText, type NeedsYouItem } from '@whombat/core';
+import { hostRepointWords, hostsAddressChangeText, type NeedsYouItem } from '@whombat/core';
+import { isEnglish, tServer } from '../i18n/catalog';
 import { addressChangeText, type HubInfo } from './hub';
 import { arr, obj, str, ts } from './map';
 
@@ -93,7 +94,7 @@ export function agentAddresses(agents: readonly unknown[]): Map<string, string> 
  * BF-16's item: “Your Whombat’s address changed from 10.100.1.160 to 10.100.1.158, and 5 servers haven’t found it yet.”
  * (`hostsAddressChangeText`) with Point them here.
  */
-export function addressNeedsYou(change: AddressChange): NeedsYouItem {
+export function addressNeedsYou(change: AddressChange, locale?: string | null): NeedsYouItem {
   const one = change.waiting.length === 1;
   return {
     id: `hosts.address:${change.changedAt}`,
@@ -101,15 +102,26 @@ export function addressNeedsYou(change: AddressChange): NeedsYouItem {
     // The servers' kind of item (its server glyph); the ref says what it is.
     kind: 'enrollment',
     severity: 'warn',
-    title: hostsAddressChangeText(change).slice(0, 200),
-    body: one
-      ? 'Whombat can sign in to it with your Vault key and point it here.'
-      : 'Whombat can sign in to them with your Vault keys and point them here.',
+    title: (isEnglish(locale)
+      ? hostsAddressChangeText(change)
+      : one
+        ? tServer(locale, 'hosts.address.titleOne', {
+            from: change.from,
+            to: change.to,
+            name: change.waiting[0]?.name ?? '',
+          })
+        : tServer(locale, 'hosts.address.titleMany', {
+            from: change.from,
+            to: change.to,
+            n: change.waiting.length,
+          })
+    ).slice(0, 200),
+    body: tServer(locale, one ? 'hosts.address.bodyOne' : 'hosts.address.bodyMany'),
     at: change.changedAt,
     actions: [
       {
         id: 'repoint',
-        label: one ? HOST_REPOINT_WORDS.pointItHere : HOST_REPOINT_WORDS.pointThemHere,
+        label: one ? hostRepointWords(locale).pointItHere : hostRepointWords(locale).pointThemHere,
         style: 'primary',
         kind: 'open',
         href: REPOINT_HREF,

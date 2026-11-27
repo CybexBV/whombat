@@ -1,12 +1,4 @@
-import {
-  CHAT_WORDS,
-  SETTLE_WORDS,
-  SETTLED_PAGE,
-  settledMeta,
-  type ThreadRow,
-  threadIconFields,
-  threadRows,
-} from '@whombat/client';
+import { SETTLED_PAGE, settledMeta, type ThreadRow, threadIconFields, threadRows } from '@whombat/client';
 import { useChatPreferences, useChatRooms, useChatThreads } from '@whombat/client/react';
 import type { ChatRoom } from '@whombat/core';
 import { Undo2 } from 'lucide-react';
@@ -14,6 +6,7 @@ import type { MouseEvent } from 'react';
 import { IconButton } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
+import { CHAT_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
 import styles from './SettledPane.module.css';
 import { SubjectChip } from './SubjectChip';

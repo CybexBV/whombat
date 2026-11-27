@@ -8,6 +8,7 @@
  * everywhere. No setting.
  */
 import { z } from 'zod';
+import { coreTranslator } from '../i18n/catalog.js';
 
 /** The credit MET Norway's licence asks for, wherever its data is shown. */
 export const WEATHER_CREDIT = 'Data from MET Norway';
@@ -93,10 +94,10 @@ export function weatherSymbolParts(code: string): {
   };
 }
 
-/** What a symbol says (“Partly cloudy”); empty for one the table doesn't know. */
-export function weatherSymbolText(code: string): string {
+/** What a symbol says (“Partly cloudy”, “Half bewolkt”); empty for one the table doesn't know. */
+export function weatherSymbolText(code: string, locale?: string | null): string {
   const { base } = weatherSymbolParts(code);
-  return base ? WEATHER_SYMBOLS[base][0] : '';
+  return base ? coreTranslator(locale).t(`weather.symbol.${base}`) : '';
 }
 
 /** The units a place's weather is told in. */
@@ -122,15 +123,21 @@ export function windIn(unit: WeatherUnits['wind'], metresPerSecond: number): num
   return Math.round(value * 10) / 10 + 0;
 }
 
-/** The compass point a wind comes from (`SW`), from MET's degrees. */
-export function windFrom(degrees: number): string {
-  const points = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
-  return points[Math.round((((degrees % 360) + 360) % 360) / 45) % 8] as string;
+/** The compass point a wind comes from (`SW`; `ZW` in Dutch), from MET's degrees. */
+export function windFrom(degrees: number, locale?: string | null): string {
+  const point = Math.round((((degrees % 360) + 360) % 360) / 45) % 8;
+  return coreTranslator(locale).t(`weather.compass.${point as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}`);
+}
+
+/** The words the weather widget and Settings say beyond the forecast, in a locale. */
+export function weatherWords(locale?: string | null): { credit: string; problem: string; noPlace: string } {
+  const tr = coreTranslator(locale);
+  return {
+    credit: tr.t('weather.credit'),
+    problem: tr.t('weather.problem'),
+    noPlace: tr.t('weather.noPlace'),
+  };
 }
 
 /** The words the weather widget and Settings say beyond the forecast (the screen's own are `@whombat/screen`'s). */
-export const WEATHER_WORDS = {
-  credit: WEATHER_CREDIT,
-  problem: 'Can’t read the weather just now',
-  noPlace: 'Choose where this Whombat is in Settings',
-} as const;
+export const WEATHER_WORDS = weatherWords('en');

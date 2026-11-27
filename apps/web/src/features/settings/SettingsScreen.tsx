@@ -1,15 +1,10 @@
 import { Link, useLocation } from '@tanstack/react-router';
-import {
-  type AdvancedPart,
-  type AgentGroupPart,
-  SETTINGS_GROUP_TEXT,
-  SETTINGS_HOME_TEXT,
-  type YouPart,
-} from '@whombat/client';
+import type { AdvancedPart, AgentGroupPart, YouPart } from '@whombat/client';
 import { placeNewsShown, useSessionProtocol, useTheAgent } from '@whombat/client/react';
-import { NEWS_WORDS } from '@whombat/core';
+import { newsWords } from '@whombat/core';
 import { useEffect } from 'react';
 import type { SettingsTab, WhombatTabPart } from '../../app/routing/search';
+import { useLocaleWords, useSettingsGroupText, useSettingsHomeText } from '../../i18n/words';
 import { AgentTab } from '../agent/settings/AgentTab';
 import type { ScreenPart } from '../desk/screenTab';
 import { PhoneAppPanel, PhoneAppSub, usePhoneAppSources } from '../mobile';
@@ -125,6 +120,9 @@ export function SettingsScreen({
   onScreenChange,
   onEditLayout,
 }: SettingsScreenProps) {
+  const NEWS_WORDS = useLocaleWords(newsWords);
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
+  const SETTINGS_GROUP_TEXT = useSettingsGroupText();
   // The agent, by its name (Whombat one-agent.md OA-08).
   const { words } = useTheAgent(burrow);
   const names = SETTINGS_GROUP_TEXT.groups(words.name);

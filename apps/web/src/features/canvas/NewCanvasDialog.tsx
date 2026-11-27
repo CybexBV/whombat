@@ -9,6 +9,7 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { currentLocale } from '../../i18n/provider';
 import styles from './NewCanvasDialog.module.css';
 
 /** Longest canvas title (`canvases.create`). */
@@ -118,11 +119,11 @@ function outcomeText(result: Exclude<CommitResult<unknown>, { status: 'ok' }>): 
 }
 
 function errorText(err: unknown): string {
-  const licence = licenceRefusalText(err);
+  const licence = licenceRefusalText(err, currentLocale());
   if (licence) return licence;
   if (err instanceof ApiError) {
     if (err.status === 403) return 'You can’t create canvases on this Whombat.';
-    return problemText(err, 'Couldn’t create that canvas. Try again.');
+    return problemText(err, 'Couldn’t create that canvas. Try again.', currentLocale());
   }
   return 'Couldn’t create that canvas. Try again.';
 }

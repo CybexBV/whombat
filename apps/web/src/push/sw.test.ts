@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { PUSH_TEXT } from '@whombat/client/managed';
+import { PUSH_TEXT, pushText } from '@whombat/client/managed';
 import { describe, expect, it, vi } from 'vitest';
 
 /** `public/sw.js` in a fake worker scope: what it shows and closes for a push (AP-808). */
-function worker() {
+function worker(url = '/sw.js') {
   const listeners = new Map<string, (event: unknown) => void>();
   const shown: Array<{ title: string; options: Record<string, unknown> }> = [];
   const open = [{ tag: 't:thread', close: vi.fn() }];
@@ -17,7 +17,7 @@ function worker() {
       },
       getNotifications: async ({ tag }: { tag: string }) => open.filter((n) => n.tag === tag),
     },
-    location: { origin: 'https://app.example' },
+    location: { origin: 'https://app.example', href: `https://app.example${url}` },
     clients: { matchAll: async () => [], openWindow: async () => null },
   };
   const source = readFileSync(resolve(import.meta.dirname, '../../public/sw.js'), 'utf8');
@@ -43,6 +43,16 @@ describe('the web push worker', () => {
       [...block.matchAll(/(\w+): '([^']+)'/g)].map((m) => [m[1] as string, m[2] as string]),
     );
     expect(words).toEqual(PUSH_TEXT);
+  });
+
+  it('has exactly the shared Dutch words per kind', () => {
+    const { source } = worker();
+    const start = source.indexOf('const GENERIC_TEXT_NL');
+    const block = source.slice(start, source.indexOf('};', start) + 2);
+    const words = Object.fromEntries(
+      [...block.matchAll(/(\w+): '([^']+)'/g)].map((m) => [m[1] as string, m[2] as string]),
+    );
+    expect(words).toEqual(pushText('nl-NL'));
   });
 
   it('shows a managed push’s preview under its tag, quietly replacing the one before', async () => {
@@ -89,5 +99,88 @@ describe('the web push worker', () => {
     });
     expect(w.shown).toEqual([]);
     expect(w.open[0]?.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a push without a preview', () => {
+  const secret = { title: 'Mara in #payroll', body: 'Salaries go up 12% in March' };
+
+  for (const [url, language] of [
+    ['/sw.js', 'en'],
+    ['/sw.js?lang=nl', 'nl'],
+  ] as const) {
+    const lines = language === 'nl' ? pushText('nl-NL') : PUSH_TEXT;
+
+    it(`never shows the managed push’s preview (${language})`, async () => {
+      const w = worker(url);
+      await w.push({ ...secret, kind: 'message', ref: 'r1', preview: false });
+      expect(w.shown.map((s) => [s.title, s.options.body])).toEqual([['Whombat', lines.message]]);
+      expect(JSON.stringify(w.shown)).not.toContain('Salaries');
+    });
+
+    it(`never shows the box’s own push’s preview (${language})`, async () => {
+      const w = worker(url);
+      await w.push({
+        ...secret,
+        kind: 'mention',
+        path: '/c/general',
+        notificationId: 'n1',
+        burrow: 'b',
+        preview: false,
+      });
+      await w.push({
+        ...secret,
+        kind: 'needs_you',
+        path: '/inbox',
+        notificationId: 'n2',
+        burrow: 'b',
+        preview: false,
+      });
+      expect(w.shown.map((s) => [s.title, s.options.body, s.options.data])).toEqual([
+        ['Whombat', lines.mention, { path: '/c/general' }],
+        ['Whombat', lines.approval, { path: '/inbox' }],
+      ]);
+      expect(JSON.stringify(w.shown)).not.toContain('Mara');
+      expect(JSON.stringify(w.shown)).not.toContain('Salaries');
+    });
+  }
+
+  it('groups the box’s own kinds like the box and the Android app do', async () => {
+    const w = worker();
+    const kinds = [
+      'needs_you',
+      'approval_updated',
+      'mention',
+      'reply',
+      'direct',
+      'agent_update',
+      'run_progress',
+      'odd',
+    ];
+    for (const kind of kinds) {
+      await w.push({ ...secret, kind, path: '/inbox', notificationId: kind, burrow: 'b', preview: false });
+    }
+    expect(w.shown.map((s) => s.options.body)).toEqual([
+      PUSH_TEXT.approval,
+      PUSH_TEXT.approval,
+      PUSH_TEXT.mention,
+      PUSH_TEXT.message,
+      PUSH_TEXT.message,
+      PUSH_TEXT.message,
+      PUSH_TEXT.run,
+      PUSH_TEXT.generic,
+    ]);
+  });
+
+  it('falls back to English for a language it has no lines for', async () => {
+    const w = worker('/sw.js?lang=fr');
+    await w.push({ ...secret, kind: 'message', ref: 'r1', preview: false });
+    expect(w.shown.map((s) => s.options.body)).toEqual([PUSH_TEXT.message]);
+  });
+
+  it('shows the box’s own push as it came when previews are on', async () => {
+    const w = worker();
+    await w.push({ ...secret, kind: 'mention', path: '/c/general', notificationId: 'n3', burrow: 'b' });
+    expect(w.shown.map((s) => [s.title, s.options.body])).toEqual([[secret.title, secret.body]]);
   });
 });

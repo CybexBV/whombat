@@ -5,6 +5,7 @@
 import { badgeText } from '../data/inbox';
 import type { ScreenShape } from '../data/screenShape';
 import type { Tab } from '../data/shell';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * - `system`: iOS's own tab bar (UIKit's tab bar controller, Liquid Glass on iOS 26 and later), along the bottom of an
@@ -58,10 +59,11 @@ export function systemBadgeValue(badge: TabBadge | undefined): string | undefine
  * What VoiceOver hears for a tab of iOS's bar: its name, what a dot means, since a dot has nothing to read, and that
  * something isn't working, since the badge's colour doesn't say it. A count iOS reads from the badge itself.
  */
-export function systemTabLabel(label: string, badge: TabBadge | undefined): string {
+export function systemTabLabel(label: string, badge: TabBadge | undefined, locale?: string): string {
   if (badge && badge.count === 0 && badge.dot && badge.spoken) return `${label}, ${badge.spoken}`;
   // Every badge is drawn alike on iPhone (`GlassTabs`): that something isn't working is said in words.
-  if (badge && badge.count > 0 && badge.tone === 'bad') return `${label}, ${BROKEN_WORDS}`;
+  if (badge && badge.count > 0 && badge.tone === 'bad')
+    return `${label}, ${mobileTranslator(locale).t('places.broken')}`;
   return label;
 }
 

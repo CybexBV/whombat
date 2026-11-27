@@ -17,6 +17,7 @@ import {
   type Plan,
   type PrincipalLite,
 } from '@whombat/core';
+import { DEFAULT_LOCALE, formatLocaleOf, LANGUAGE_DEFAULT_LOCALE, resolveLanguage } from '@whombat/core/i18n';
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { commandsContextFor, commandsTurn } from '../agent-commands/context';
 import { grantedResultOf } from '../approvals/granted-result';
@@ -50,6 +51,7 @@ import { dispatchAttachments, dispatchFiles } from '../files/dispatch';
 import { ghContextFor } from '../github/agent-gh-context';
 import { undoRequestOf } from '../home/reports';
 import { taskFinishedOf } from '../hosts/followed';
+import { configuredAccountLocale, configuredBoxLocale } from '../i18n/locale';
 import { atMost } from '../lib/side-by-side';
 import { iso, isoOrNull } from '../lib/time';
 import { localModelDispatch } from '../local-model/check';
@@ -380,6 +382,10 @@ export async function buildDispatchContext(
     return side(() => t3HandoffsOf(db, row, outside));
   })();
 
+  // A search answer is written in the language it was asked in, even when the person switched languages since: its
+  // turn and its results follow the answer, so it isn't written in one language and kept as another.
+  const searchPart = side(async () => searchAnswerOf(services, row));
+
   const [
     { run, stalledRun },
     { grantedApproval, grantedResult },
@@ -419,7 +425,9 @@ export async function buildDispatchContext(
     // data next to Whombat's fixed handoff message.
     outside ? null : side(async () => feedbackHandoffPart(db, row, trigger)),
     outside ? null : side(async () => planStepContext(db, row)),
-    outside ? null : side(async () => searchContext(services, row, burrowRow, now)),
+    outside
+      ? null
+      : searchPart.then((answer) => side(async () => searchContext(services, row, burrowRow, now, answer))),
     // The failed turn a retry tries again.
     outside ? null : side(async () => retryOriginOf(db, row)),
     // The server tasks it started that ended, for it to tell the person how they went.
@@ -496,8 +504,20 @@ export async function buildDispatchContext(
   // asks, the organization access the tracker granted now (or why not). Both write, so they come after the reads.
   const token = await issueDispatchToken(services, row.id);
   const tracker = await trackerPart(services, row);
+  // An owner turn always names its language, English when none was chosen, so a resumed session that last
+  // spoke Dutch switches back when the person goes back to the default. A search answer's turn speaks the language the
+  // search was asked in.
+  const pinnedLocale = outside ? null : ((await searchPart)?.locale ?? null);
+  const turnLocale = outside
+    ? null
+    : (pinnedLocale ??
+      (person?.accountId
+        ? await configuredAccountLocale(services, person.accountId)
+        : await configuredBoxLocale(services)) ??
+      DEFAULT_LOCALE);
   const context: DispatchContextType = {
     dispatch: toDispatch(runnerRow),
+    ...(turnLocale ? { locale: turnLocale } : {}),
     burrow: { id: burrowRow.id, slug: burrowRow.slug, name: burrowRow.name, timeZone: burrowRow.timeZone },
     agent: {
       id: agent.id,
@@ -578,23 +598,64 @@ export async function buildDispatchContext(
   return services.config.NODE_ENV === 'production' ? context : DispatchContext.parse(context);
 }
 
+/**
+ * The locale a search answer is written in: the language it was asked in (English for answers from before languages),
+ * in the region the person reads now when that is the same language (`en-US` stays `en-US`), else the language's own.
+ */
+export function pinnedSearchLocale(
+  language: string | null | undefined,
+  current: string | null | undefined,
+): string {
+  const pinned = resolveLanguage(language);
+  if (current && resolveLanguage(current) === pinned) return formatLocaleOf(current);
+  return LANGUAGE_DEFAULT_LOCALE[pinned];
+}
+
+interface SearchAnswerOfTurn {
+  asker: PrincipalRow | undefined;
+  locale: string;
+}
+
+/** The asker of an answer-mode turn's search and the locale its answer was asked in; null for other turns. */
+async function searchAnswerOf(services: Services, row: DispatchRow): Promise<SearchAnswerOfTurn | null> {
+  if (!row.search || outsidersTurn(row)) return null;
+  const db = services.db;
+  const [answer] = await db
+    .select({ askedById: searchAnswers.askedById, language: searchAnswers.language })
+    .from(searchAnswers)
+    .where(eq(searchAnswers.id, row.search.answerId));
+  if (!answer) return null;
+  const asker = await loadPrincipalRow(db, answer.askedById);
+  const current = asker?.accountId
+    ? await configuredAccountLocale(services, asker.accountId)
+    : await configuredBoxLocale(services);
+  return { asker, locale: pinnedSearchLocale(answer.language, current) };
+}
+
 /** An answer-mode turn's search results, as the person who asked may see them: every receipt must be openable by them. */
 async function searchContext(
   services: Services,
   row: DispatchRow,
   burrowRow: NonNullable<Awaited<ReturnType<typeof loadBurrowRow>>>,
   now: Date,
+  answer: SearchAnswerOfTurn | null,
 ): Promise<DispatchContextType['search']> {
   if (!row.search) return null;
   const db = services.db;
-  const [answer] = await db.select().from(searchAnswers).where(eq(searchAnswers.id, row.search.answerId));
-  const asker = answer ? await loadPrincipalRow(db, answer.askedById) : undefined;
+  const asker = answer?.asker;
+  const locale = answer?.locale;
   const results = asker
     ? await searchResults(
         db,
         asker,
         burrowRow,
-        { q: row.search.query, type: 'all', limit: ANSWER_RESULTS, log: services.log },
+        {
+          q: row.search.query,
+          type: 'all',
+          limit: ANSWER_RESULTS,
+          ...(locale ? { locale } : {}),
+          log: services.log,
+        },
         now,
       )
     : [];

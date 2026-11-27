@@ -15,6 +15,7 @@ import {
   RemoteHelpLayer,
   useRemoteHelpChip,
 } from '../desk/RemoteHelp';
+import { useT } from '../i18n/react';
 import type { ConsoleState } from '../lib/api';
 import { burnIn } from '../lib/burnin';
 import type { Client } from '../lib/client';
@@ -145,7 +146,8 @@ function ClaimScreens({
   const claim = state.claim;
   // Whombat Link starting takes the claim's place; the notes sit above every claim screen (CG-404).
   const link = linkScreen(state, serverNow);
-  const notes = reachNotes(state);
+  const t = useT();
+  const notes = reachNotes(state, t.locale);
   const noteQr = notes.some((n) => n.kind === 'tailscaleLogin' && n.qr.length > 0);
   const headQr = link
     ? link === 'code' && (state.reach?.link?.qr.length ?? 0) > 0
@@ -201,7 +203,9 @@ function ClaimScreens({
           )}
         </main>
         {state.footer && footerShown(state, link) && (
-          <footer className={styles.footer}>{state.footer}</footer>
+          <footer className={styles.footer}>
+            {state.standardFooter ? t('console.recoveryFooter') : state.footer}
+          </footer>
         )}
       </div>
       {celebrating && claim && <Celebration claim={claim} />}

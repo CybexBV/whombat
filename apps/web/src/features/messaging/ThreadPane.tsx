@@ -1,12 +1,9 @@
 import {
-  CHAT_WORDS,
   canSettle,
   composerMentionTargets,
-  INBOX_WORDS,
   jobHandoffs,
   jobInMessage,
   jobPartsAfter,
-  SETTLE_WORDS,
   SHARE_TEXT,
   settledLine,
   threadHandoffs,
@@ -40,6 +37,7 @@ import { useHereHref, useNavigateHref, useSearchUpdate } from '../../app/routing
 import { IconButton } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
+import { CHAT_WORDS, INBOX_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { MessageCard } from '../cards';
 import { CardLookContext } from '../cards/cardLook';
 import { inboxNextAfter, useInboxSplit } from '../chats/inboxNav';

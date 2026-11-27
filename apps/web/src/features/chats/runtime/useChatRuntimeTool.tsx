@@ -11,13 +11,15 @@ import {
   modelRuntimeSaved,
 } from '@whombat/client';
 import { useChatRuntime, useMakeChatDefault, useSetThreadRuntime, useTheAgent } from '@whombat/client/react';
-import { type ChatRuntime, type ChatRuntimeView, type Message, MODEL_EFFORT_COPY } from '@whombat/core';
+import { type ChatRuntime, type ChatRuntimeView, type Message, modelEffortCopy } from '@whombat/core';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { useToast } from '../../../components/Toast';
+import { useLocaleWords } from '../../../i18n/words';
 import { ChatRuntimeButton } from './ChatRuntimeButton';
 
 /** “Make this Neo’s default” (CR-03): the whole choice as the assistant's runtime, then the toast or the refusal. */
 function useMakeDefault(burrow: string, view: ChatRuntimeView | undefined, after?: () => void) {
+  const MODEL_EFFORT_COPY = useLocaleWords(modelEffortCopy);
   const { agent: assistant } = useTheAgent(burrow);
   const toast = useToast();
   const make = useMakeChatDefault(burrow);

@@ -4,6 +4,7 @@
  * in every chat — one text you write, how much of its 1,500 characters it uses and when you changed it last — edited
  * in a sheet (the count, Save and Cancel). Beside what it remembers about you, so what it knows is in one place.
  */
+
 import { MEMORY_TEXT } from '@whombat/client';
 import { useAgentNotes, useSetAgentNotes } from '@whombat/client/react';
 import { memoryUsageText } from '@whombat/core';
@@ -11,6 +12,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { notesCopy, notesCount, notesEdit, notesMeta } from '../../data/agentParity';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { RowButtons } from '../../ui/facts';
@@ -21,6 +23,9 @@ import { errorText, showNotice } from '../feedback';
 import type { PartProps } from './parts';
 
 export function NotesSection({ profile }: Pick<PartProps, 'profile'>) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
@@ -40,7 +45,7 @@ export function NotesSection({ profile }: Pick<PartProps, 'profile'>) {
           </Text>
           {data ? (
             <Text size={11.5} mono color={theme.colors.mut}>
-              {memoryUsageText(data.used, data.limit)}
+              {memoryUsageText(data.used, data.limit, rawLocale)}
             </Text>
           ) : null}
         </View>
@@ -48,7 +53,7 @@ export function NotesSection({ profile }: Pick<PartProps, 'profile'>) {
           query.error ? (
             <ErrorState text={MEMORY_TEXT.loadFailed} onRetry={() => void query.refetch()} />
           ) : (
-            <SkeletonRows count={2} lines={1} label="Loading the notes" />
+            <SkeletonRows count={2} lines={1} label={tMobile('screens.loading-the-notes')} />
           )
         ) : (
           <Section title={copy.title}>

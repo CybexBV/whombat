@@ -9,6 +9,7 @@ import {
   DESK_WORDS,
   type DeskShow,
   type DeskShowOption,
+  deskWords,
   fillDeskWords,
   type HostServer,
   type ThingSummary,
@@ -36,11 +37,12 @@ const PLATFORM_NAMES: Partial<Record<HostServer['platform'], string>> = {
  * What a server is, in a few words (“Proxmox · 16 cores”, “Debian · 4 cores”): its platform or its system's name
  * without the version, and its processor's cores when known.
  */
-export function serverLine(row: Pick<HostServer, 'platform' | 'os' | 'cpu'>): string {
+export function serverLine(row: Pick<HostServer, 'platform' | 'os' | 'cpu'>, locale?: string | null): string {
   const system =
     PLATFORM_NAMES[row.platform] ?? (row.os ?? '').split(/\s+(?:GNU\/Linux\b|v?\d|\()/)[0]?.trim();
-  const cores =
-    row.cpu && row.cpu.cores > 0 ? `${row.cpu.cores} ${row.cpu.cores === 1 ? 'core' : 'cores'}` : '';
+  const w = (locale ? deskWords(locale) : DESK_WORDS).server;
+  const n = row.cpu?.cores ?? 0;
+  const cores = n > 0 ? (n === 1 ? w.coresOne : fillDeskWords(w.cores, { n })) : '';
   return screenText([system, cores].filter(Boolean).join(' · '), 120);
 }
 
@@ -55,11 +57,13 @@ export interface ShowOptionsInput {
   show: Pick<DeskShow, 'order'>;
   /** What a kind shows as its activity (“Who’s watching”), or null (`DeskCalmSources.activityLine`). */
   activityLine: (catalogId: string) => string | null;
+  /** The owner's language, when known; defaults to English. */
+  locale?: string | null;
 }
 
 /** Settings → Screen's lists (DK-106): grouped in `DESK_SHOW_GROUPS`' order, the servers in the strip's (DK-108). */
 export function deskShowOptions(input: ShowOptionsInput): DeskShowOption[] {
-  const words = DESK_WORDS.settings;
+  const words = (input.locale ? deskWords(input.locale) : DESK_WORDS).settings;
   const a = { assistant: input.assistant };
   const option = (o: DeskShowOption): DeskShowOption[] => (o.name && DESK_SHOW_KEY_RE.test(o.key) ? [o] : []);
   const things = input.things
@@ -99,7 +103,7 @@ export function deskShowOptions(input: ShowOptionsInput): DeskShowOption[] {
         key: `server:${s.card.id}`,
         group: 'server',
         name: screenText(s.card.name, 80),
-        line: s.row ? serverLine(s.row) : '',
+        line: s.row ? serverLine(s.row, input.locale) : '',
         mark: s.card.mark,
         activity: false,
       }),

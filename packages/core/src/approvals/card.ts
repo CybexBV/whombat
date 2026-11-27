@@ -6,9 +6,18 @@
  */
 
 import type { Approval } from '../domain/approval.js';
-import { KEY_CATALOG, type KeyId } from '../keys/catalog.js';
-import { type DateInput, formatClock, MONTHS, WEEKDAYS, zonedParts } from '../text/time.js';
-import { APPROVAL_ASK_WORDS, type ApprovalView } from './display.js';
+import { coreTranslator } from '../i18n/catalog.js';
+import { KEY_CATALOG, type KeyId, keyLabel } from '../keys/catalog.js';
+import {
+  type DateInput,
+  formatClock,
+  MONTHS,
+  monthName,
+  WEEKDAYS,
+  weekdayName,
+  zonedParts,
+} from '../text/time.js';
+import { APPROVAL_ASK_WORDS, type ApprovalView, approvalAskWords } from './display.js';
 
 export const APPROVAL_CARD_WORDS = {
   /** Above the key's label. */
@@ -47,16 +56,66 @@ export const APPROVAL_CARD_WORDS = {
   close: 'Close',
 } as const;
 
+const CARD_WORD_KEYS = [
+  'permission',
+  'notSupplied',
+  'waiting',
+  'means',
+  'details',
+  'answersLabel',
+  'contentLabel',
+  'unknown',
+  'unknownBody',
+  'lastReviewed',
+  'loading',
+  'empty',
+  'emptyBody',
+  'openInbox',
+  'failed',
+  'failedRefresh',
+  'noSaved',
+  'saved',
+  'retry',
+  'moreDetail',
+  'close',
+] as const;
+
+/** `APPROVAL_CARD_WORDS` in a locale. */
+export function approvalCardWords(locale?: string | null): {
+  [K in (typeof CARD_WORD_KEYS)[number]]: string;
+} & { check: (name: string) => string; checkText: (title: string) => string } {
+  const tr = coreTranslator(locale);
+  const words = Object.fromEntries(CARD_WORD_KEYS.map((key) => [key, tr.t(`approval.card.${key}`)])) as {
+    [K in (typeof CARD_WORD_KEYS)[number]]: string;
+  };
+  return {
+    ...words,
+    check: (name: string) => tr.t('approval.card.check', { name }),
+    checkText: (title: string) => tr.t('approval.card.checkText', { title }),
+  };
+}
+
 /** “Change things in connected services” in quotes, or *Not supplied in this request* without a key. */
-export function approvalPermissionText(keyId: KeyId | null | undefined): string {
+export function approvalPermissionText(keyId: KeyId | null | undefined, locale?: string | null): string {
   const def = keyId ? KEY_CATALOG[keyId] : undefined;
-  return def ? `“${def.label}”` : APPROVAL_CARD_WORDS.notSupplied;
+  if (!def || !keyId) return coreTranslator(locale).t('approval.card.notSupplied');
+  return `“${keyLabel(keyId, locale)}”`;
 }
 
 /** “Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam”: an exact moment, its day, year and zone spelled out. */
-export function exactMomentText(at: DateInput, timeZone: string): string {
+export function exactMomentText(at: DateInput, timeZone: string, locale?: string | null): string {
   const p = zonedParts(at, timeZone);
-  return `${WEEKDAYS[p.weekday]}, ${p.day} ${MONTHS[p.month - 1]} ${p.year} at ${formatClock(at, timeZone)} · ${timeZone}`;
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en')
+    return `${WEEKDAYS[p.weekday]}, ${p.day} ${MONTHS[p.month - 1]} ${p.year} at ${formatClock(at, timeZone)} · ${timeZone}`;
+  return tr.t('approval.card.moment', {
+    weekday: weekdayName(p.weekday, locale),
+    day: p.day,
+    month: monthName(p.month, locale),
+    year: p.year,
+    clock: formatClock(at, timeZone),
+    zone: timeZone,
+  });
 }
 
 /** What *Yes, tonight* means, before the answers: its label and the exact moment. */
@@ -72,12 +131,14 @@ export interface ApprovalTonightView {
 export function approvalTonight(
   at: DateInput | null | undefined,
   timeZone: string,
+  locale?: string | null,
 ): ApprovalTonightView | null {
   if (at === null || at === undefined) return null;
+  const tr = coreTranslator(locale);
   return {
-    label: APPROVAL_ASK_WORDS.later,
-    means: APPROVAL_CARD_WORDS.means,
-    at: exactMomentText(at, timeZone),
+    label: tr.t('approval.ask.later'),
+    means: tr.t('approval.card.means'),
+    at: exactMomentText(at, timeZone, locale),
   };
 }
 
@@ -93,8 +154,8 @@ export interface ApprovalAnswerChoice {
  * The answers in the one order every place uses, all of equal weight: *Yes, now* · *Yes, tonight* · *No* where a later
  * time is offered, *Yes, do it* · *No* where it isn't.
  */
-export function approvalAnswerChoices(offersLater: boolean): ApprovalAnswerChoice[] {
-  const W = APPROVAL_ASK_WORDS;
+export function approvalAnswerChoices(offersLater: boolean, locale?: string | null): ApprovalAnswerChoice[] {
+  const W = locale ? approvalAskWords(locale) : APPROVAL_ASK_WORDS;
   return offersLater
     ? [
         { key: 'now', label: W.now },
@@ -141,15 +202,15 @@ export interface ApprovalCardFacts {
 export function approvalCardFacts(
   approval: Pick<Approval, 'keyId' | 'createdAt'>,
   view: Pick<ApprovalView, 'ask' | 'title' | 'whatHappens' | 'conditions' | 'kicker'>,
-  options: { timeZone: string; tonight?: DateInput | null },
+  options: { timeZone: string; tonight?: DateInput | null; locale?: string | null },
 ): ApprovalCardFacts {
   return {
     status: view.ask?.needs ?? view.kicker,
     asked: formatClock(approval.createdAt, options.timeZone),
     title: view.title,
     happens: view.whatHappens.map((s) => s.text),
-    permission: approvalPermissionText(approval.keyId),
+    permission: approvalPermissionText(approval.keyId, options.locale),
     unmet: approvalUnmet(view),
-    tonight: approvalTonight(options.tonight, options.timeZone),
+    tonight: approvalTonight(options.tonight, options.timeZone, options.locale),
   };
 }

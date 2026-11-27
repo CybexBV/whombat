@@ -359,6 +359,7 @@ func (h *Hub) publishServerUpdated(id string) {
 	}
 	fs := model.BuildFleetServer(st, h.now())
 	h.bus.Publish("server.updated", map[string]any{"id": id, "status": fs.Status, "status_note": fs.StatusNote,
+		"status_note_code": fs.StatusNoteCode, "status_note_params": fs.StatusNoteParams,
 		"current": fs.Current, "last_seen": fs.LastSeen, "agent_connected": fs.AgentConnected})
 }
 

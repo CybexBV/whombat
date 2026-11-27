@@ -18,6 +18,7 @@ import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { EmptyNote, ErrorNote, SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
+import { useWebI18n } from '../../i18n/provider';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import styles from './Plans.module.css';
 import {
@@ -85,12 +86,13 @@ export function PlanPane({ burrow, planId, stepId, onClose }: PlanPaneProps) {
 }
 
 function PlanContext({ burrow, plan }: { burrow: string; plan: Plan }) {
+  const { tag: uiLocale } = useWebI18n();
   const { data: detail } = useConversation(
     plan.conversationId ? { params: { burrow, conversationId: plan.conversationId } } : null,
     { retry: false },
   );
   const where = detail ? conversationLabel(detail.conversation) : null;
-  const due = plan.due ? formatDue(plan.due) : null;
+  const due = plan.due ? formatDue(plan.due, uiLocale) : null;
   const text = [where, due].filter(Boolean).join(' · ');
   return text ? <span className={styles.paneContext}>{text}</span> : null;
 }

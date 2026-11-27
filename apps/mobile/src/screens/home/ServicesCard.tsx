@@ -9,6 +9,7 @@
  * one row. A long press on a connection Whombat keeps offers Open and Rename. While the page is arranged a tile is no
  * link: its gear opens its sheet, and *Add to Overview* closes the list.
  */
+
 import {
   ARRANGE_WORDS,
   type ArrangedTile,
@@ -24,12 +25,13 @@ import type { DeskWidgetView, OverviewTileSize, ThingSummary } from '@whombat/co
 import { type ReactNode, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { CONNECTIONS_COPY, serviceRowOpens } from '../../data/home';
+import { connectionsCopy, serviceRowOpens } from '../../data/home';
 import { figureWhat, tileRows } from '../../data/overviewArranged';
 import { parseThingRowPick, RENAME_COPY, thingRowMenu } from '../../data/rename';
 import { OVERVIEW_TITLE } from '../../data/shell';
 import { type PhoneGlyph, phoneThingGlyph } from '../../data/thingLook';
 import { useThingRename } from '../../data/useThingRename';
+import { useI18n } from '../../i18n';
 import { openHref, useAppNavigation } from '../../navigation/hooks';
 import { isBeside, useBeside } from '../../navigation/panes';
 import { Text } from '../../theme/Text';
@@ -72,6 +74,9 @@ export function ServicesCard({
   onGear?: (thing: string) => void;
   onAdd?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectionsCopyHere = connectionsCopy(rawLocale);
+
   const navigation = useAppNavigation();
   const beside = useBeside();
   const theme = useTheme();
@@ -147,7 +152,9 @@ export function ServicesCard({
       count={tiles.length ? view.count : null}
       summary={view.summary}
       links={
-        add && tiles.length ? <SectionLink label={CONNECTIONS_COPY.addConnection} onPress={adding} /> : null
+        add && tiles.length ? (
+          <SectionLink label={connectionsCopyHere.addConnection} onPress={adding} />
+        ) : null
       }
     >
       {cells.length ? (
@@ -175,11 +182,11 @@ export function ServicesCard({
           <OneRow
             first
             leading={<Plus size={19} color={theme.colors.brand} strokeWidth={2} />}
-            title={CONNECTIONS_COPY.addConnection}
-            line={CONNECTIONS_COPY.addConnectionLine}
+            title={connectionsCopyHere.addConnection}
+            line={connectionsCopyHere.addConnectionLine}
             chevron
-            label={CONNECTIONS_COPY.addConnection}
-            hint={CONNECTIONS_COPY.addConnectionLine}
+            label={connectionsCopyHere.addConnection}
+            hint={connectionsCopyHere.addConnectionLine}
             onPress={adding}
           />
         </OneCard>
@@ -234,6 +241,9 @@ export function ConnectionTile({
   /** A preview (in a gear's sheet): no button, no gear. */
   still?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const connectionsCopyHere = connectionsCopy(rawLocale);
+
   const theme = useTheme();
   const toneColor = useToneColor();
   const { line } = tile;
@@ -388,7 +398,7 @@ export function ConnectionTile({
       accessibilityRole="button"
       accessibilityLabel={spoken}
       ringRadius={18}
-      accessibilityHint={CONNECTIONS_COPY.opens}
+      accessibilityHint={connectionsCopyHere.opens}
       accessibilityState={{ selected }}
       // Screen readers can't hold: Rename is the tile's own action too.
       {...(menu

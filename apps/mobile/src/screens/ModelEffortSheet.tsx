@@ -5,10 +5,12 @@
  * once; a refusal shows in the sheet, read out, and the sheet stays open. On Local the model sheet ends with “Another
  * model”: a field and Use, which saves a model the list doesn't name (hermes-engine-app.md AP-5001, AP-5121).
  */
+
 import type { AgentModelRuntimeUpdate } from '@whombat/core';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import type { ModelEffortChoice, ModelEffortView } from '../data/runsOn';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField } from '../ui/formField';
@@ -48,6 +50,7 @@ export function ModelEffortSheet({
   another = null,
   onAnother,
 }: ModelEffortSheetProps) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   const [typed, setTyped] = useState('');
   // A fresh field every time the sheet opens.
@@ -143,7 +146,7 @@ export function ModelEffortSheet({
         ) : null}
       </ScrollView>
       <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
-        <Button label="Cancel" variant="secondary" onPress={onClose} />
+        <Button label={tClient('reports.cancel')} variant="secondary" onPress={onClose} />
       </View>
     </Sheet>
   );

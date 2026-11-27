@@ -74,6 +74,7 @@ import { Input } from '../../components/Input';
 import { SectionLabel } from '../../components/SectionLabel';
 import { Tabs } from '../../components/Tabs';
 import { useToast } from '../../components/Toast';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import nw from './NewsWeather.module.css';
 import {
   browseLine,
@@ -117,6 +118,7 @@ export function NewsWeatherTab({ burrow }: { burrow: string }) {
 /* PLACE ------------------------------------------------------------------------------------------------------------ */
 
 function PlaceSection({ burrow }: { burrow: string }) {
+  const { tag: uiLocale } = useWebI18n();
   const id = useId();
   const { data: bootstrap } = useBootstrap({ params: { burrow } });
   const [open, setOpen] = useState(false);
@@ -139,9 +141,11 @@ function PlaceSection({ burrow }: { burrow: string }) {
           </span>
           <span className={styles.rowMain}>
             <span className={styles.rowTitle} data-place-line="">
-              {placeRowText(place)}
+              {placeRowText(place, uiLocale)}
             </span>
-            {place ? <span className={styles.rowMeta}>{countryName(place.country)}</span> : null}
+            {place ? (
+              <span className={styles.rowMeta}>{countryName(place.country, undefined, uiLocale)}</span>
+            ) : null}
           </span>
           <Button
             size="sm"
@@ -219,7 +223,7 @@ function PlaceChange({
     const input = next ? withoutGuessed(next) : null;
     set.mutate(input, {
       onSuccess: (burrowNow) => {
-        toast.show(placeSavedText(burrowNow.place));
+        toast.show(placeSavedText(burrowNow.place, currentLocale()));
         onDone();
       },
       onError: () => setProblem(P.failed),
@@ -247,7 +251,7 @@ function PlaceChange({
             <li key={`${p.name}:${p.lat}:${p.lon}`}>
               <button type="button" className={nw.result} disabled={busy} onClick={() => keep(p)}>
                 <span className={nw.resultName}>{placeLabel(p)}</span>
-                <span className={nw.resultMeta}>{placeResultMeta(p)}</span>
+                <span className={nw.resultMeta}>{placeResultMeta(p, currentLocale())}</span>
               </button>
             </li>
           ))}
@@ -619,13 +623,14 @@ function FindMore({
 
 /** Turning a suggestion on: it goes last in YOUR SOURCES, and the toast says so. */
 function useTurnOn(burrow: string, view: NewsSourcesView) {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const set = useSetNewsSources(burrow);
   const [problem, setProblem] = useState<string | null>(null);
   const turnOn = (sourceId: string, name: string) => {
     setProblem(null);
     set.mutate(newsIdsWith(view, sourceId), {
-      onSuccess: () => toast.show(newsAddedText(name)),
+      onSuccess: () => toast.show(newsAddedText(name, uiLocale)),
       onError: (e) => setProblem(fieldProblem(e, 'ids') ?? e.message),
     });
   };
@@ -634,6 +639,7 @@ function useTurnOn(burrow: string, view: NewsSourcesView) {
 
 /** *Suggested*: a country (the place's first), its topics that have sites, and its sites with *Add* or “On”. */
 function Suggested({ burrow, view, full }: { burrow: string; view: NewsSourcesView; full: boolean }) {
+  const { tag: uiLocale } = useWebI18n();
   const selectId = useId();
   const [country, setCountry] = useState<string | undefined>(undefined);
   const [chip, setChip] = useState<NewsChip>('all');
@@ -647,9 +653,9 @@ function Suggested({ burrow, view, full }: { burrow: string; view: NewsSourcesVi
   const countries = useMemo(
     () =>
       (data?.countries ?? [])
-        .map((c) => ({ code: c.code, name: countryName(c.code) }))
+        .map((c) => ({ code: c.code, name: countryName(c.code, undefined, uiLocale) }))
         .sort((a, b) => a.name.localeCompare(b.name, 'en')),
-    [data?.countries],
+    [data?.countries, uiLocale],
   );
   const sites = data?.sites ?? [];
   const chips = newsChips(sites);
@@ -762,8 +768,9 @@ function BrowseRow({
 
 /** A Whombat from before browsing: its suggestions for the place, the nearest first, each with *Add*. */
 function OlderSuggested({ burrow, view, full }: { burrow: string; view: NewsSourcesView; full: boolean }) {
+  const { tag: uiLocale } = useWebI18n();
   const { turnOn, busy, problem } = useTurnOn(burrow, view);
-  const title = newsSuggestedTitle(view.place);
+  const title = newsSuggestedTitle(view.place, uiLocale);
   if (!title || view.suggestions.length === 0) return null;
   return (
     <>
@@ -827,7 +834,7 @@ function AddOwn({
     add.mutate(url.trim(), {
       onSuccess: (result) => {
         setUrl('');
-        toast.show(newsAddedText(result.added.name));
+        toast.show(newsAddedText(result.added.name, currentLocale()));
       },
       onError: (err) => setProblem(fieldProblem(err, 'url') ?? N.unreachable),
     });

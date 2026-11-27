@@ -5,12 +5,13 @@
  * the same as one card. libvirt VMs get Autostart wherever libvirt runs.
  */
 import { canUpdateContainer, guestWebUi, hasAutostart } from '@whombat/client/hosts';
-import { HOST_ERROR_WORDS, type HostGuest, type HostServerDetail } from '@whombat/core/domain';
+import { type HostGuest, type HostServerDetail, hostErrorWords } from '@whombat/core/domain';
 import { ExternalLink } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Button, ButtonLink } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Toggle } from '../../../components/Toggle';
+import { useLocaleWords } from '../../../i18n/words';
 import { Card } from '../parts';
 import styles from '../Things.module.css';
 import type { GuestsTabExtras } from '../tabs/GuestsTab';
@@ -24,6 +25,7 @@ export function useUnraidGuestExtras(
   detail: HostServerDetail,
   onUnraid: boolean,
 ): { extras: GuestsTabExtras; dialogs: ReactNode } {
+  const HOST_ERROR_WORDS = useLocaleWords(hostErrorWords);
   const access = useUnraidAccess(burrow, detail);
   const { run, busy } = useUnraidChange(burrow, detail.server.id);
   const [dialog, setDialog] = useState<UnraidDialog | null>(null);
@@ -112,6 +114,7 @@ export function UnraidGuestCard({
   guest: HostGuest;
   onUnraid: boolean;
 }) {
+  const HOST_ERROR_WORDS = useLocaleWords(hostErrorWords);
   const access = useUnraidAccess(burrow, detail);
   const { run, busy } = useUnraidChange(burrow, detail.server.id);
   const [dialog, setDialog] = useState<UnraidDialog | null>(null);

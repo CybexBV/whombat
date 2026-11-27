@@ -4,18 +4,20 @@
  * WHAT’S IN IT from its own coverage (what comes back, what it left out, what a new Whombat sets up again), “Check this
  * backup now” (`backup.check`; the result lands on the backup) and, below it, “Bring things back from this backup”.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  BACKUP_LOOK_TEXT,
-  BACKUP_OPTIONS_TEXT,
   backupContents,
   backupLabel,
+  backupLookText,
+  backupOptionsText,
   relativeDay,
 } from '@whombat/client/managed';
 import { useBackupCheckpoints, useCheckBackup } from '@whombat/client/react';
 import { formatBytes } from '@whombat/core/text';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -25,15 +27,17 @@ import { Button, ErrorState, Loading, SectionLabel } from '../ui/primitives';
 import { useBottomRoom } from '../ui/screenBottom';
 import { backupErrorText } from './BackupDestination';
 import { backupTitle } from './backupOptions';
-import { MANAGED_TEXT } from './copy';
+import { managedText } from './copy';
 import { ErrorLine, Note } from './ui';
 import { useBackupPlaceName, useBackupSession } from './useBackups';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BackupDetail'>;
 
-const T = BACKUP_OPTIONS_TEXT.detail;
-
 export function BackupDetailScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const T = backupOptionsText(rawLocale).detail;
+  const managedTextHere = managedText(rawLocale);
+
   const theme = useTheme();
   const bottomRoom = useBottomRoom();
   const session = useBackupSession();
@@ -52,7 +56,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={() => void list.refetch()} />
+        <ErrorState text={managedTextHere.loadError} onRetry={() => void list.refetch()} />
       </Screen>
     );
   if (!list.data)
@@ -68,13 +72,13 @@ export function BackupDetailScreen({ route, navigation }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={BACKUP_OPTIONS_TEXT.list.empty} />
+        <ErrorState text={backupOptionsText(rawLocale).list.empty} />
       </Screen>
     );
   const isFirst = cp.own && own.at(-1)?.id === cp.id;
-  const added = cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded);
-  const reason = backupLabel(cp, isFirst);
-  const checkDay = cp.check ? relativeDay(cp.check.at) : null;
+  const added = cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded, rawLocale);
+  const reason = backupLabel(cp, isFirst, rawLocale);
+  const checkDay = cp.check ? relativeDay(cp.check.at, undefined, rawLocale) : null;
 
   return (
     <Screen>
@@ -82,7 +86,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 + bottomRoom, gap: 10 }}>
         <View style={{ paddingHorizontal: 6, gap: 6 }}>
           <Text size={28} weight={700} tracking={-0.02} lh={1.2} accessibilityRole="header">
-            {backupTitle(cp.createdAt)}
+            {backupTitle(cp.createdAt, undefined, rawLocale)}
           </Text>
           <Text size={14.5} color={theme.colors.ink2}>
             {T.meta(reason, added, placeName)}
@@ -116,7 +120,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
               overflow: 'hidden',
             }}
           >
-            {backupContents(cp).map((item, i) => (
+            {backupContents(cp, rawLocale).map((item, i) => (
               <View
                 key={item.key}
                 accessible
@@ -162,7 +166,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
             setError(null);
             check.mutate(cp.id, {
               onSuccess: () => setQueued(true),
-              onError: (e) => setError(backupErrorText(e)),
+              onError: (e) => setError(backupErrorText(e, rawLocale)),
             });
           }}
         />
@@ -170,7 +174,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
         <ErrorLine text={error} />
         {/* Getting one thing back from this backup (backup-look.md): its own screen. */}
         <Button
-          label={BACKUP_LOOK_TEXT.entry}
+          label={backupLookText(rawLocale).entry}
           size="lg"
           onPress={() =>
             navigation.navigate('BackupBringBack', { checkpointId: cp.id, createdAt: cp.createdAt })

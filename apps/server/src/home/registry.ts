@@ -25,6 +25,7 @@ import { and, desc, eq, gte, isNull } from 'drizzle-orm';
 import type { ApplyContext } from '../commit/types';
 import type { Db, Tx } from '../db/client';
 import { changes } from '../db/schema/index';
+import { burrowLocale } from '../i18n/locale';
 import type { KeyCustody } from '../keys/custody';
 import type { ActorInfo, PrincipalRow } from '../read/principals';
 import { turnThread } from '../runtime/dispatch-scope';
@@ -43,6 +44,14 @@ export interface SourceCtx {
   services?: Services;
   /** What this read shares with Home's other parts and sources; absent, a source reads everything itself. */
   reads?: SourceReads;
+  /** The locale the read renders in (`en-GB`, `nl-NL`); absent, the burrow's (`sourceLocale`). */
+  locale?: string;
+}
+
+/** The locale a source writes its words in: the read's own, else the burrow's (English when it can't be read). */
+export async function sourceLocale(ctx: Pick<SourceCtx, 'locale' | 'services'>): Promise<string> {
+  if (ctx.locale) return ctx.locale;
+  return burrowLocale(ctx.services);
 }
 
 /**

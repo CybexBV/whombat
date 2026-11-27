@@ -5,6 +5,7 @@
  * phone's push token and the price people see. Cross-language where the device API and the manager socket use them;
  * the price and the offer sentence are TypeScript only.
  */
+import { coreTranslator } from '@whombat/core/i18n';
 import { z } from 'zod';
 import { CLAIM_CODE_ALPHABET } from './claim/alphabet.js';
 
@@ -43,6 +44,16 @@ export const LINK_TRIAL_TEXT = 'First month free';
  * account site and control's e-mails all show this, never their own wording. Not on the iPhone (no price there).
  */
 export const LINK_OFFER_TEXT = `${LINK_TRIAL_TEXT}, then ${LINK_PRICE_TEXT} or ${LINK_PRICE_YEAR_TEXT}`;
+
+/** The offer sentence in the person's language: “Eerste maand gratis, daarna €2,50 per maand of €25 per jaar”. */
+export function linkOfferText(locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return tr.t('link.offer', {
+    trial: tr.t('link.trial'),
+    price: tr.t('link.price'),
+    priceYear: tr.t('link.priceYear'),
+  });
+}
 
 /**
  * The one-time code the box shows when Link starts (`XXXX-XXXX`, the claim alphabet in upper case): the person types

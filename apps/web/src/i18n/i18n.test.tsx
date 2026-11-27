@@ -1,0 +1,488 @@
+/**
+ * The web app's language: English by default, Dutch loaded only when asked for, the pseudo-locale for QA, `<html lang>`
+ * kept right, queries asked again after a change, each box's language remembered in this browser, the Settings choice
+ * (which never turns on the Dutch voice), visitors of a shared link in their own language, the legal pages' notice and
+ * the push worker's words without a preview.
+ */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { runInNewContext } from 'node:vm';
+import { QueryClient } from '@tanstack/react-query';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {
+  backupOptionsText,
+  BACKUP_OPTIONS_TEXT as ENGLISH_BACKUP_OPTIONS,
+  pushText,
+} from '@whombat/client/managed';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LegalPage } from '../legal/LegalPage';
+import { fixtureServices, renderApp } from '../test/renderApp';
+import { BACKUP_OPTIONS_TEXT } from './clientWords';
+import { EN } from './en';
+import { claimantLocale, LOCALE_LAST_KEY, LOCALE_OVERRIDE_KEY, localeBoxKey } from './locale';
+import { NL } from './nl';
+import {
+  currentLocale,
+  useOwnerLocaleSync,
+  useWebI18n,
+  useWebLocaleControl,
+  type WebI18nControl,
+  WebI18nProvider,
+} from './provider';
+
+function Probe() {
+  const { t, language, tag } = useWebI18n();
+  return (
+    <p data-probe="" data-language={language} data-tag={tag ?? ''}>
+      {t('settings.language.title')}
+    </p>
+  );
+}
+
+let control: WebI18nControl | null = null;
+function Control() {
+  control = useWebLocaleControl();
+  return null;
+}
+
+function Owner({ locale }: { locale: string | null | undefined }) {
+  useOwnerLocaleSync(locale);
+  return <Probe />;
+}
+
+const probe = async () => (await screen.findByText(/./, { selector: '[data-probe]' })) as HTMLElement;
+const at = (url: string) => window.history.replaceState(null, '', url);
+
+beforeEach(() => {
+  at('/');
+  localStorage.clear();
+  sessionStorage.clear();
+  control = null;
+});
+
+afterEach(() => {
+  at('/');
+  localStorage.clear();
+  sessionStorage.clear();
+  vi.restoreAllMocks();
+});
+
+describe('the language provider', () => {
+  it('shows English by default and says so on <html lang>', async () => {
+    render(
+      <WebI18nProvider>
+        <Probe />
+      </WebI18nProvider>,
+    );
+    const p = await probe();
+    expect(p.textContent).toBe(EN['settings.language.title']);
+    expect(p.dataset.language).toBe('en');
+    // English gives the shared packages no locale, so their English stays exactly as it was.
+    expect(p.dataset.tag).toBe('');
+    expect(currentLocale()).toBeUndefined();
+    expect(document.documentElement.lang).toBe('en-GB');
+  });
+
+  it('loads Dutch when ?lang=nl asks for it, and keeps it for the tab', async () => {
+    at('/?lang=nl');
+    render(
+      <WebI18nProvider>
+        <Probe />
+      </WebI18nProvider>,
+    );
+    await waitFor(async () => expect((await probe()).textContent).toBe(NL['settings.language.title']));
+    expect(document.documentElement.lang).toBe('nl-NL');
+    expect(currentLocale()).toBe('nl-NL');
+    expect(sessionStorage.getItem(LOCALE_OVERRIDE_KEY)).toBe('nl-NL');
+  });
+
+  it('shows the pseudo-locale for QA', async () => {
+    at('/?lang=pseudo');
+    render(
+      <WebI18nProvider>
+        <Probe />
+      </WebI18nProvider>,
+    );
+    const p = await probe();
+    expect(p.dataset.language).toBe('en');
+    expect(p.textContent).not.toBe(EN['settings.language.title']);
+    expect(document.documentElement.lang).toBe('en-XA');
+  });
+
+  it('asks the queries again when the language changes, not on the first paint', async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['probe'], 1);
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    render(
+      <WebI18nProvider queryClient={queryClient}>
+        <Control />
+        <Probe />
+      </WebI18nProvider>,
+    );
+    await probe();
+    expect(invalidate).not.toHaveBeenCalled();
+    act(() => control?.setLocale('nl-NL'));
+    await waitFor(async () => expect((await probe()).textContent).toBe(NL['settings.language.title']));
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+  });
+
+  it('follows the owner’s stored language and remembers it per box', async () => {
+    const first = render(
+      <WebI18nProvider boxId="box_a">
+        <Owner locale="nl-NL" />
+      </WebI18nProvider>,
+    );
+    await waitFor(async () => expect((await probe()).textContent).toBe(NL['settings.language.title']));
+    expect(localStorage.getItem(localeBoxKey('box_a'))).toBe('nl-NL');
+    expect(localStorage.getItem(LOCALE_LAST_KEY)).toBe('nl-NL');
+    first.unmount();
+
+    // The next visit to that box starts in Dutch before the box has answered.
+    render(
+      <WebI18nProvider boxId="box_a">
+        <Owner locale={undefined} />
+      </WebI18nProvider>,
+    );
+    await waitFor(async () => expect((await probe()).textContent).toBe(NL['settings.language.title']));
+  });
+
+  it('keeps a visitor in their own browser’s language, never the owner’s', async () => {
+    localStorage.setItem(LOCALE_LAST_KEY, 'nl-NL');
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US', 'en']);
+    render(
+      <WebI18nProvider scope="visitor">
+        <Owner locale="nl-NL" />
+      </WebI18nProvider>,
+    );
+    const p = await probe();
+    expect(p.textContent).toBe(EN['settings.language.title']);
+    expect(document.documentElement.lang).toBe('en-GB');
+  });
+
+  it('gives a visitor with a Dutch browser Dutch', async () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['nl-BE', 'en']);
+    render(
+      <WebI18nProvider scope="visitor">
+        <Probe />
+      </WebI18nProvider>,
+    );
+    await waitFor(async () => expect((await probe()).textContent).toBe(NL['settings.language.title']));
+  });
+});
+
+describe('the language a new box is claimed in', () => {
+  function Claimant({ seen }: { seen: (tag: string) => void }) {
+    const control = useWebLocaleControl();
+    seen(claimantLocale(control?.chosenLocale() ?? null, '', ['en-US', 'en']));
+    return <Probe />;
+  }
+
+  it('is the English browser’s, never the Dutch this browser kept for another box', async () => {
+    localStorage.setItem(LOCALE_LAST_KEY, 'nl-NL');
+    localStorage.setItem(localeBoxKey('wb-old'), 'nl-NL');
+    const seen: string[] = [];
+    render(
+      <WebI18nProvider>
+        <Claimant seen={(tag) => seen.push(tag)} />
+      </WebI18nProvider>,
+    );
+    await probe();
+    expect(seen.at(-1)).toBe('en-GB');
+    expect(claimantLocale(null, '', ['en-US'])).toBe('en-GB');
+  });
+
+  it('is what the claimant chose on this page, then their browser’s', async () => {
+    localStorage.setItem(LOCALE_LAST_KEY, 'en-GB');
+    const seen: string[] = [];
+    render(
+      <WebI18nProvider>
+        <Claimant seen={(tag) => seen.push(tag)} />
+        <Control />
+      </WebI18nProvider>,
+    );
+    await probe();
+    const now = () => claimantLocale(control?.chosenLocale() ?? null, '', ['en-US', 'en']);
+    expect(seen.at(-1)).toBe('en-GB');
+    act(() => control?.setLocale('nl-NL'));
+    expect(now()).toBe('nl-NL');
+    // A box chosen anew forgets the choice.
+    act(() => control?.setBox('wb-new'));
+    expect(now()).toBe('en-GB');
+    expect(claimantLocale(null, '', ['nl-BE', 'en'])).toBe('nl-NL');
+    expect(claimantLocale(null, '', null)).toBe('en-GB');
+  });
+
+  it('takes the tab’s test language, but never the pseudo-locale', () => {
+    expect(claimantLocale(null, '?lang=nl', ['en'])).toBe('nl-NL');
+    expect(claimantLocale(null, '?lang=pseudo', ['en'])).toBe('en-GB');
+  });
+});
+
+describe('the shared packages’ words', () => {
+  it('read in the page’s language, a module-level alias too', async () => {
+    const detail = BACKUP_OPTIONS_TEXT.detail;
+    render(
+      <WebI18nProvider initialLocale="nl-NL">
+        <Probe />
+      </WebI18nProvider>,
+    );
+    await waitFor(async () => expect((await probe()).dataset.language).toBe('nl'));
+    const dutch = backupOptionsText('nl-NL');
+    expect(JSON.stringify(BACKUP_OPTIONS_TEXT.dialog)).toBe(JSON.stringify(dutch.dialog));
+    expect(JSON.stringify(detail)).toBe(JSON.stringify(dutch.detail));
+    expect(JSON.stringify(dutch.detail)).not.toBe(JSON.stringify(ENGLISH_BACKUP_OPTIONS.detail));
+  });
+});
+
+describe('the legal pages', () => {
+  it('say in Dutch that the English text governs, and keep the English text', async () => {
+    at('/?lang=nl');
+    render(
+      <WebI18nProvider>
+        <LegalPage text={'# Terms\n\nThe English text.'} />
+      </WebI18nProvider>,
+    );
+    expect(await screen.findByText(NL['legal.englishGoverns'])).toBeTruthy();
+    expect(screen.getByText('The English text.').closest('[lang="en"]')).not.toBeNull();
+  });
+
+  it('show no notice in English', async () => {
+    render(
+      <WebI18nProvider>
+        <LegalPage text={'# Terms\n\nThe English text.'} />
+      </WebI18nProvider>,
+    );
+    expect(await screen.findByText('The English text.')).toBeTruthy();
+    expect(screen.queryByText(NL['legal.englishGoverns'])).toBeNull();
+  });
+});
+
+describe('Settings → You → Language', () => {
+  it('switches the app to Dutch, saves it, and only points at the Dutch voice', async () => {
+    const user = userEvent.setup();
+    const services = fixtureServices({ voice: 'ready' });
+    const save = vi.spyOn(services.client.me, 'updatePreferences');
+    renderApp('/settings?part=profile', services);
+    const group = await screen.findByRole('radiogroup', { name: EN['settings.language.title'] });
+    await user.click(within(group).getByRole('radio', { name: 'Nederlands' }));
+    await waitFor(() => expect(document.documentElement.lang).toBe('nl-NL'));
+    expect(save).toHaveBeenCalledWith({ body: { locale: 'nl-NL' } });
+    const note = await waitFor(() => {
+      const found = document.querySelector('[data-dutch-voice-note]');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(within(note).getByRole('link').getAttribute('href')).toContain('tab=appliance');
+    // Choosing Dutch asks the box nothing about the voice: it stays off until the person agrees to its licence.
+    const voice = await services.voice.get();
+    expect(voice.dutchVoice?.on).toBe(false);
+  });
+});
+
+describe('Settings → You → Language while the box saves', () => {
+  it('changes the page only once the box has saved, and never springs back to the old language', async () => {
+    const user = userEvent.setup();
+    const services = fixtureServices();
+    const me = services.client.me;
+    const real = me.updatePreferences.bind(me);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let saved = false;
+    vi.spyOn(me, 'updatePreferences').mockImplementation(async (...args: Parameters<typeof real>) => {
+      await gate;
+      const result = await real(...args);
+      saved = true;
+      return result;
+    });
+    const asked: boolean[] = [];
+    const invalidate = services.queryClient.invalidateQueries.bind(services.queryClient);
+    vi.spyOn(services.queryClient, 'invalidateQueries').mockImplementation((...args) => {
+      asked.push(saved);
+      return invalidate(...args);
+    });
+
+    renderApp('/settings?part=profile', services);
+    const group = await screen.findByRole('radiogroup', { name: EN['settings.language.title'] });
+    const langs: string[] = [document.documentElement.lang];
+    const observer = new MutationObserver(() => {
+      const lang = document.documentElement.lang;
+      if (langs.at(-1) !== lang) langs.push(lang);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+
+    await user.click(within(group).getByRole('radio', { name: 'Nederlands' }));
+    // While the box saves, the picker shows the choice and the page keeps its language.
+    expect((within(group).getByRole('radio', { name: 'Nederlands' }) as HTMLInputElement).checked).toBe(true);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.documentElement.lang).toBe('en-GB');
+    expect(asked).toEqual([]);
+
+    await act(async () => release());
+    await screen.findByRole('radiogroup', { name: NL['settings.language.title'] });
+    await waitFor(() => expect(asked.length).toBeGreaterThan(0));
+    await waitFor(() => expect(services.queryClient.isFetching()).toBe(0));
+    observer.disconnect();
+
+    expect(langs).toEqual(['en-GB', 'nl-NL']);
+    expect(document.documentElement.lang).toBe('nl-NL');
+    // The box's words are asked for again only after it saved the new language.
+    expect(asked.every(Boolean)).toBe(true);
+  });
+});
+
+describe('Settings → You → Language on an older box', () => {
+  it('offers no language choice on a Whombat from before languages, and says the update brings it', async () => {
+    const services = fixtureServices();
+    const real = services.session.state.bind(services.session);
+    // The same answer for the same state, as a session gives: React reads it on every render.
+    const older = new WeakMap<object, ReturnType<typeof real>>();
+    vi.spyOn(services.session, 'state').mockImplementation(() => {
+      const state = real();
+      if (state.status !== 'open') return state;
+      const seen = older.get(state);
+      if (seen) return seen;
+      const made = { ...state, info: { ...state.info, protocol: { major: 5, minor: 20 } } };
+      older.set(state, made);
+      return made;
+    });
+    renderApp('/settings?part=profile', services);
+    expect(await screen.findByText(EN['settings.language.needsUpdate'])).toBeTruthy();
+    expect(screen.queryByRole('radiogroup', { name: EN['settings.language.title'] })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Nederlands' })).toBeNull();
+  });
+
+  it('keeps the page’s language and says so when the box answered the save without the language', async () => {
+    const user = userEvent.setup();
+    const services = fixtureServices();
+    const me = services.client.me;
+    const real = me.updatePreferences.bind(me);
+    vi.spyOn(me, 'updatePreferences').mockImplementation(async (...args: Parameters<typeof real>) => {
+      const result = await real(...args);
+      // What a box from before languages answers: everything it keeps, without the language.
+      return result.status === 'ok' ? { ...result, data: { ...result.data, locale: null } } : result;
+    });
+    renderApp('/settings?part=profile', services);
+    const group = await screen.findByRole('radiogroup', { name: EN['settings.language.title'] });
+    await user.click(within(group).getByRole('radio', { name: 'Nederlands' }));
+    expect(await screen.findByText(EN['settings.language.notSaved'])).toBeTruthy();
+    expect(document.documentElement.lang).toBe('en-GB');
+    expect((within(group).getByRole('radio', { name: 'English' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('stops reads already on their way before it writes the saved language into the cache', async () => {
+    const user = userEvent.setup();
+    const services = fixtureServices();
+    const steps: string[] = [];
+    const cancel = services.queryClient.cancelQueries.bind(services.queryClient);
+    vi.spyOn(services.queryClient, 'cancelQueries').mockImplementation((...args) => {
+      steps.push('cancel');
+      return cancel(...args);
+    });
+    const setData = services.queryClient.setQueryData.bind(services.queryClient);
+    vi.spyOn(services.queryClient, 'setQueryData').mockImplementation(((
+      ...args: Parameters<typeof setData>
+    ) => {
+      steps.push('put');
+      return setData(...args);
+    }) as typeof setData);
+    renderApp('/settings?part=profile', services);
+    const group = await screen.findByRole('radiogroup', { name: EN['settings.language.title'] });
+    steps.length = 0;
+    await user.click(within(group).getByRole('radio', { name: 'Nederlands' }));
+    await waitFor(() => expect(document.documentElement.lang).toBe('nl-NL'));
+    const firstPut = steps.indexOf('put');
+    expect(firstPut).toBeGreaterThan(0);
+    expect(steps.slice(0, firstPut).filter((step) => step === 'cancel')).toHaveLength(2);
+  });
+});
+
+/** `public/sw.js` in a fake worker scope, loaded from `url`, with or without the Cache API. */
+function worker(url: string, withCache = false) {
+  const listeners = new Map<string, (event: unknown) => void>();
+  const shown: Array<{ title: string; body: unknown }> = [];
+  const store = new Map<string, string>();
+  const caches = {
+    open: async () => ({
+      match: async (key: string) => {
+        const value = store.get(key);
+        return value === undefined ? undefined : { text: async () => value };
+      },
+      put: async (key: string, response: Response) => {
+        store.set(key, await response.text());
+      },
+    }),
+  };
+  const self = {
+    addEventListener: (type: string, fn: (event: unknown) => void) => listeners.set(type, fn),
+    registration: {
+      showNotification: async (title: string, options: { body: unknown }) => {
+        shown.push({ title, body: options.body });
+      },
+      getNotifications: async () => [],
+    },
+    location: { origin: 'https://app.example', href: `https://app.example${url}` },
+    clients: { matchAll: async () => [], openWindow: async () => null },
+  };
+  const source = readFileSync(resolve(import.meta.dirname, '../../public/sw.js'), 'utf8');
+  runInNewContext(source, {
+    self,
+    Object,
+    URL,
+    Response,
+    encodeURIComponent,
+    ...(withCache ? { caches } : {}),
+  });
+  const send = async (type: string, event: Record<string, unknown>) => {
+    let done: Promise<unknown> = Promise.resolve();
+    listeners.get(type)?.({
+      ...event,
+      waitUntil: (p: Promise<unknown>) => {
+        done = p;
+      },
+    });
+    await done;
+  };
+  const push = (payload: unknown) => send('push', { data: { json: () => payload } });
+  const message = (data: unknown) => send('message', { data });
+  return { push, message, shown };
+}
+
+describe('the push worker’s language', () => {
+  const dutch = pushText('nl-NL');
+  const english = pushText();
+
+  it('hides a preview the payload marks private, in the language of its address', async () => {
+    const w = worker('/sw.js?lang=nl');
+    await w.push({ title: 'Mara', body: 'The secret plan', kind: 'message', ref: 'r1', preview: false });
+    await w.push({ title: 'Mara', body: 'The secret plan', kind: 'approval', ref: 'r2', generic: true });
+    expect(w.shown).toEqual([
+      { title: 'Whombat', body: dutch.message },
+      { title: 'Whombat', body: dutch.approval },
+    ]);
+  });
+
+  it('still reads control’s fixed English text as no preview', async () => {
+    const w = worker('/sw.js?lang=nl');
+    await w.push({ title: 'Whombat', body: 'Whombat needs you', kind: 'run', ref: 'r3' });
+    expect(w.shown).toEqual([{ title: 'Whombat', body: dutch.run }]);
+  });
+
+  it('shows a real preview as it came', async () => {
+    const w = worker('/sw.js?lang=nl');
+    await w.push({ title: 'Mara', body: 'Lunch?', kind: 'message', ref: 'r4' });
+    expect(w.shown).toEqual([{ title: 'Mara', body: 'Lunch?' }]);
+  });
+
+  it('is English without a language, and takes the page’s language from a message', async () => {
+    const w = worker('/sw.js', true);
+    await w.push({ title: 'Mara', body: 'x', kind: 'message', ref: 'r5', preview: false });
+    await w.message({ type: 'locale', lang: 'nl' });
+    await w.push({ title: 'Mara', body: 'x', kind: 'message', ref: 'r6', preview: false });
+    expect(w.shown.map((s) => s.body)).toEqual([english.message, dutch.message]);
+  });
+});

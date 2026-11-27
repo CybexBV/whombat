@@ -5,18 +5,15 @@
  * browser joins there in one step. There it is asked to add a passkey for the new address (the passkeys section). A
  * full-width line in the shell's notice slot, like Link's; nothing anywhere else.
  */
-import {
-  OWN_NAME_TEXT,
-  ownAddressMovedView,
-  ownAddressMoveTarget,
-  readOwnAddress,
-} from '@whombat/client/managed';
+import { ownAddressMovedView, ownAddressMoveTarget, readOwnAddress } from '@whombat/client/managed';
 import { type ApplianceSession, type OwnAddressSummary, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { useAppServices } from '../app/providers';
 import styles from '../app/shell/ShellLayout.module.css';
 import { Button } from '../components/Button';
 import { StatusDot } from '../components/StatusDot';
+import { OWN_NAME_TEXT } from '../i18n/clientWords';
+import { currentLocale } from '../i18n/provider';
 import { useOwnAddressChanges } from './ownAddressEvents';
 
 /** Asked again now and then: a change made on another device shows here too. */
@@ -49,7 +46,7 @@ function MovedLine({ host }: { host: string }) {
       clearInterval(timer);
     };
   }, [session, changes]);
-  const view = ownAddressMovedView(own, host);
+  const view = ownAddressMovedView(own, host, undefined, currentLocale());
   if (!view || !own) return null;
   const go = () => {
     setBusy(true);

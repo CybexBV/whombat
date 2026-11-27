@@ -9,6 +9,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { FormDialog, SelectField, TextField } from '../manage/fields';
 import { useManage } from '../manage/useManage';
 import { Card, Empty, StateCell } from '../parts';
@@ -71,8 +72,8 @@ export function ReplicationTab({
                   {j.error ? (
                     <StateCell tone="bad" text={j.error} />
                   ) : j.lastSync ? (
-                    <span title={formatDayTime(Date.parse(j.lastSync), timeZone)}>
-                      <StateCell tone="ok" text={formatAgoIso(j.lastSync, now)} />
+                    <span title={formatDayTime(Date.parse(j.lastSync), timeZone, currentLocale())}>
+                      <StateCell tone="ok" text={formatAgoIso(j.lastSync, now, currentLocale())} />
                     </span>
                   ) : (
                     <span className={styles.muted}>{j.disabled ? 'Switched off' : 'Not yet'}</span>

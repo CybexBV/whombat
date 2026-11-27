@@ -11,7 +11,6 @@
 import { isBrandMark } from '@whombat/brand';
 import { deskHeroButtons } from '@whombat/client';
 import {
-  DESK_WORDS,
   type DeskCalm,
   type DeskMoment,
   type DeskPreview,
@@ -20,12 +19,14 @@ import {
   formatPowerLeft,
 } from '@whombat/client/desk';
 import type { AgentFace } from '@whombat/core';
-import { formatClock, MONTHS, WEEKDAYS, zonedParts } from '@whombat/core/text';
+import { deskWords } from '@whombat/core/domain';
+import { formatClock, monthName, weekdayName, zonedParts } from '@whombat/core/text';
 import { nativeThemes } from '@whombat/tokens';
 import { useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { WhombatAvatar } from '../avatars/Avatars';
+import { useI18n } from '../i18n';
 import { Text, type TextProps } from '../theme/Text';
 import { BrandMark } from '../ui/BrandMark';
 import { tint } from '../ui/glanceColors';
@@ -36,7 +37,6 @@ const W = 1280;
 const H = 800;
 /** The desk is dark (DK-101): its tokens, whatever the phone's theme. */
 const C = nativeThemes.dark.colors;
-const CW = DESK_WORDS.calm;
 
 const TONE: Record<DeskCalm['headline']['tone'], string> = {
   ok: C.ok,
@@ -90,13 +90,14 @@ export function DeskPreviewScreen({
   timeZone: string;
   now: number;
 }) {
+  const { rawLocale } = useI18n();
   const [width, setWidth] = useState(0);
   const scale = width / W;
   return (
     <View
       accessible
       accessibilityRole="image"
-      accessibilityLabel={deskPreviewSpoken(preview)}
+      accessibilityLabel={deskPreviewSpoken(preview, rawLocale)}
       style={{ borderRadius: 10, padding: 6, backgroundColor: C.code }}
     >
       {/* The screen inside its bezel: the drawing scales to this width, not the bezel's. */}
@@ -162,10 +163,11 @@ function Glance({
   timeZone: string;
   now: number;
 }) {
+  const { rawLocale } = useI18n();
   const small = calm.clock === 'small' || calm.hero !== undefined;
   const tone = TONE[calm.headline.tone];
   const p = zonedParts(now, timeZone);
-  const date = `${WEEKDAYS[p.weekday]} ${p.day} ${MONTHS[p.month - 1]}`;
+  const date = `${weekdayName(p.weekday, rawLocale)} ${p.day} ${monthName(p.month, rawLocale)}`;
   return (
     <View style={{ width: W, height: H, backgroundColor: C.bg }}>
       {calm.hero ? (
@@ -246,6 +248,8 @@ function Glance({
 
 /** The top bar (DK-110): the name on the left, the chips the choices keep on the right, quiet and grey. */
 function TopBar({ calm, name }: { calm: DeskCalm; name: string }) {
+  const { rawLocale } = useI18n();
+  const CW = deskWords(rawLocale).calm;
   const chips = [
     calm.bar.network === 'always' ? CW.bar.cable : null,
     calm.bar.internet === 'always' ? CW.bar.online : null,
@@ -294,6 +298,8 @@ function Hero({
   timeZone: string;
   now: number;
 }) {
+  const { rawLocale } = useI18n();
+  const CW = deskWords(rawLocale).calm;
   const hero = calm.hero;
   if (!hero) return null;
   const tone = heroTone(hero);
@@ -302,7 +308,7 @@ function Hero({
   const since = hero.since
     ? fillDeskWords(CW.since, {
         clock: formatClock(hero.since, timeZone),
-        ago: formatPowerLeft((now - Date.parse(hero.since)) / 60_000),
+        ago: formatPowerLeft((now - Date.parse(hero.since)) / 60_000, rawLocale),
       })
     : null;
   // The hero names a server by its hosts id; the button by the name the strip shows.
@@ -415,6 +421,8 @@ function Hero({
 
 /** Up to three things going on (DK-115), with *Done today* at the label's right (DK-109). */
 function Moments({ calm, assistant }: { calm: DeskCalm; assistant: string }) {
+  const { rawLocale } = useI18n();
+  const CW = deskWords(rawLocale).calm;
   if (calm.moments.length === 0) return null;
   const done =
     calm.doneCount !== undefined && calm.doneCount > 0
@@ -485,6 +493,8 @@ function MomentCard({ moment: m, wide }: { moment: DeskMoment; wide: boolean }) 
 
 /** The servers along the bottom (DK-116, DK-117). */
 function Strip({ calm }: { calm: DeskCalm }) {
+  const { rawLocale } = useI18n();
+  const CW = deskWords(rawLocale).calm;
   return (
     <View style={{ position: 'absolute', left: 56, right: 56, bottom: 44, flexDirection: 'row', gap: 10 }}>
       {calm.strip.map((s) => (
@@ -501,18 +511,15 @@ function Strip({ calm }: { calm: DeskCalm }) {
   );
 }
 
-const STRIP_WORK: Record<NonNullable<DeskStripServer['work']>, string> = {
-  done: CW.strip.done,
-  now: CW.strip.updating,
-  next: CW.strip.next,
-};
-
 function StripChip({ server: s }: { server: DeskStripServer }) {
+  const { rawLocale } = useI18n();
+  const { done, updating, next } = deskWords(rawLocale).calm.strip;
+  const work = { done, now: updating, next };
   const edge = s.state === 'bad' ? C.bad : s.state === 'warn' ? C.warn : s.work === 'now' ? C.brand : null;
   const sayColor =
     s.work === 'done' ? C.ok : s.work === 'next' ? C.mut : s.work === 'now' ? C.brand : (edge ?? C.mut);
   // Work through the strip says where it is (DK-117) when the server has nothing else to say.
-  const say = s.say ?? (s.work ? STRIP_WORK[s.work] : undefined);
+  const say = s.say ?? (s.work ? work[s.work] : undefined);
   return (
     <View
       style={{

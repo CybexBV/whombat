@@ -7,6 +7,7 @@
  * the packages, security first, each now → new (Look inside's list, so read-only checks must be on). A started task is
  * followed until it ends (`HostTasksBridge`). `whombat://things/server%3Apve-02/updates`.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   hostErrorInfo,
@@ -28,6 +29,7 @@ import { api, type HostTask } from '@whombat/core';
 import { useEffect, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -47,6 +49,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ServerUpdates'>;
 const INSET = 18;
 
 export function ServerUpdatesScreen({ route, navigation }: Props) {
+  const { rawLocale, tClient } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const { serverId, title, back } = route.params;
   const theme = useTheme();
@@ -103,7 +108,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
       void list.refetch();
     } else if (out.waiting) close();
     else if (op === 'install') setError(out.message);
-    else Alert.alert('That didn’t go through', out.message);
+    else Alert.alert(tMobile('managed.that-didnt-go-through'), out.message);
   };
 
   const reboot = () => {
@@ -116,7 +121,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
           close();
           showNotice(`Restarting ${name}.`);
         },
-        onError: (e) => setError(hostErrorInfo(e).message),
+        onError: (e) => setError(hostErrorInfo(e, rawLocale).message),
       },
     );
   };
@@ -162,9 +167,9 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
         </View>
         {!d ? (
           q.isError ? (
-            <ErrorState text="This server didn’t load." onRetry={() => void q.refetch()} />
+            <ErrorState text={tMobile('screens.this-server-didnt-load')} onRetry={() => void q.refetch()} />
           ) : (
-            <SkeletonRows count={4} lines={2} label="Loading the updates" />
+            <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-updates')} />
           )
         ) : !view?.available ? (
           <CardQuiet>{UPDATES_WORDS.noReport}</CardQuiet>
@@ -240,15 +245,17 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
                 </View>
               </OneCard>
             ) : null}
-            <OneCard label={rows.length ? `Waiting · ${rows.length}` : 'Waiting'}>
+            <OneCard
+              label={rows.length ? `Waiting · ${rows.length}` : tClient('automations.runStatus.waiting')}
+            >
               {!lookOk ? (
                 <CardQuiet>
-                  {rc?.diagnoseReason ?? 'Read-only checks are switched off for this server.'}
+                  {rc?.diagnoseReason ?? tMobile('screens.read-only-checks-are-switched-off-for-this')}
                 </CardQuiet>
               ) : list.isPending ? (
-                <SkeletonRows count={3} lines={2} label="Loading the packages" />
+                <SkeletonRows count={3} lines={2} label={tMobile('screens.loading-the-packages')} />
               ) : list.isError ? (
-                <CardQuiet>{hostErrorInfo(list.error).message}</CardQuiet>
+                <CardQuiet>{hostErrorInfo(list.error, rawLocale).message}</CardQuiet>
               ) : rows.length ? (
                 rows.map((r) => (
                   <OneRow
@@ -256,7 +263,9 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
                     title={r.name}
                     titleMono
                     meta={r.versions}
-                    badge={r.security ? <ToneBadge text="security" tone="warn" /> : undefined}
+                    badge={
+                      r.security ? <ToneBadge text={tMobile('screens.security')} tone="warn" /> : undefined
+                    }
                     label={r.label}
                   />
                 ))

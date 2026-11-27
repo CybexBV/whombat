@@ -14,6 +14,7 @@ import {
   type PushPreview,
 } from '@whombat/control-contracts/device';
 import type { PushPayload } from '@whombat/core';
+import { isEnglish, type ServerMessageKey, tServer } from '../i18n/catalog';
 
 /** The title when there is nothing else to say (previews off, or a title that sanitized to nothing). */
 export const GENERIC_PUSH_TITLE = 'Whombat';
@@ -51,9 +52,11 @@ export function pushKind(kind: PushPayload['kind']): PushKind {
   }
 }
 
-/** The generic line for a notification kind (previews off). */
-export function genericPushText(kind: PushPayload['kind']): string {
-  return GENERIC_PUSH_TEXT[pushKind(kind)];
+/** The generic line for a notification kind (previews off), in the recipient's language. */
+export function genericPushText(kind: PushPayload['kind'], locale?: string | null): string {
+  const generic = pushKind(kind);
+  if (isEnglish(locale)) return GENERIC_PUSH_TEXT[generic];
+  return tServer(locale, `managed.push.generic.${generic}` as ServerMessageKey);
 }
 
 const DROPPED = /[\p{Cf}\p{Cs}]/u;
@@ -110,18 +113,26 @@ export type NotificationPushKind = 'needs_you' | 'mention' | 'agent_update' | 'd
  * Who and where, before sanitizing: “Dusty mentioned you in #general”, “Dusty replied in #general”, “Dusty ·
  * #general”, an agent in its DM just “Dusty”, “Needs you · #general”.
  */
-export function notificationPushTitle(kind: NotificationPushKind, actor: string, where: string): string {
+export function notificationPushTitle(
+  kind: NotificationPushKind,
+  actor: string,
+  where: string,
+  locale?: string | null,
+  direct = false,
+): string {
+  // An agent's DM has no place name of its own: the reader's language names it (“Direct”).
+  const place = direct ? tServer(locale, 'managed.push.direct') : where;
   switch (kind) {
     case 'needs_you':
-      return `Needs you · ${where}`;
+      return tServer(locale, 'managed.push.needsYou', { where: place });
     case 'mention':
-      return `${actor} mentioned you in ${where}`;
+      return tServer(locale, 'managed.push.mention', { actor, where: place });
     case 'reply':
-      return `${actor} replied in ${where}`;
+      return tServer(locale, 'managed.push.reply', { actor, where: place });
     case 'direct':
-      return `${actor} · ${where}`;
+      return `${actor} · ${place}`;
     case 'agent_update':
-      return where === 'Direct' ? actor : `${actor} · ${where}`;
+      return direct ? actor : `${actor} · ${place}`;
   }
 }
 
@@ -130,11 +141,20 @@ export function buildPushPreview(input: {
   kind: NotificationPushKind;
   actor: string;
   where: string;
+  /** The agent's own DM with the person (the draft says so; never read from the stored words). */
+  direct?: boolean;
   text: string;
+  locale?: string | null;
 }): PushPreview {
   return {
     title: previewTitle(
-      notificationPushTitle(input.kind, input.actor.trim() || GENERIC_PUSH_TITLE, input.where),
+      notificationPushTitle(
+        input.kind,
+        input.actor.trim() || GENERIC_PUSH_TITLE,
+        input.where,
+        input.locale,
+        input.direct === true,
+      ),
     ),
     body: previewBody(input.text),
   };

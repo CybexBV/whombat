@@ -4,6 +4,7 @@
  * with Remove), standing rules (“What to watch for”), stopped kinds, and recent checks. Every change saves at once with a note; one that didn't go through says why. Pulling down reads
  * it again. Only on a Whombat that has it (`hasLooksAhead`).
  */
+
 import {
   hasLooksAheadMatters,
   hasLooksAheadV2,
@@ -20,11 +21,12 @@ import {
   useSessionProtocol,
   useUpdateLooksAhead,
 } from '@whombat/client/react';
-import { AHEAD_KIND_WORDS, AHEAD_RULE_MAX, AHEAD_RULES_MAX, type LooksAheadUpdate } from '@whombat/core';
+import { AHEAD_RULE_MAX, AHEAD_RULES_MAX, aheadKindWords, type LooksAheadUpdate } from '@whombat/core';
 import { useState } from 'react';
 import { Alert, Switch, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { threadRoute } from '../../data/chatRoom';
+import { useI18n } from '../../i18n';
 import { navigateTo, useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -36,6 +38,9 @@ import { showNotice } from '../feedback';
 import { Note, type PartProps, PartScroll } from './parts';
 
 export function LooksAheadPart({ profile }: PartProps) {
+  const { rawLocale } = useI18n();
+  const aheadKindWordsHere = aheadKindWords(rawLocale);
+
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { slug, timeZone } = useBurrowBase();
@@ -67,18 +72,18 @@ export function LooksAheadPart({ profile }: PartProps) {
         if (r.status === 'ok') {
           showNotice(said);
           onDone?.();
-        } else failed(commitOutcomeText(r) ?? '');
+        } else failed(commitOutcomeText(r, rawLocale) ?? '');
       },
-      onError: (error) => failed(hostErrorInfo(error).message),
+      onError: (error) => failed(hostErrorInfo(error, rawLocale).message),
     });
   };
   const runCheckNow = () => {
     checkNow.mutate(undefined, {
       onSuccess: (r) => {
         if (r.status === 'ok') showNotice(r.data.started ? T.checkStarted : T.nothingDue);
-        else failed(commitOutcomeText(r) ?? '');
+        else failed(commitOutcomeText(r, rawLocale) ?? '');
       },
-      onError: (error) => failed(hostErrorInfo(error).message),
+      onError: (error) => failed(hostErrorInfo(error, rawLocale).message),
     });
   };
   const rules = view.rules ?? [];
@@ -295,7 +300,7 @@ export function LooksAheadPart({ profile }: PartProps) {
               }}
             >
               <Text size={15} weight={600} style={{ flex: 1, minWidth: 0 }}>
-                {AHEAD_KIND_WORDS[kind]}
+                {aheadKindWordsHere[kind]}
               </Text>
               <Button
                 label={T.turnBackOn}

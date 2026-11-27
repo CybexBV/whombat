@@ -65,6 +65,30 @@ const PRESSES: Record<string, { service: string; label: string; done: string }> 
 };
 /** The Security dashboard's favourites that show here. */
 const SECURITY = new Set(['lock', 'alarm_control_panel']);
+/** Home Assistant domains whose readings reveal presence, locks or cameras on a locked desk screen. */
+const PRIVATE_DOMAINS = new Set([
+  'person',
+  'device_tracker',
+  'zone',
+  'lock',
+  'alarm_control_panel',
+  'camera',
+]);
+/** Binary sensor device classes that reveal presence, motion, locks, doors or alarms regardless of display language. */
+const PRIVATE_BINARY_CLASSES = new Set([
+  'presence',
+  'occupancy',
+  'motion',
+  'moving',
+  'lock',
+  'door',
+  'window',
+  'garage_door',
+  'opening',
+  'smoke',
+  'safety',
+  'tamper',
+]);
 
 /** An entity as the registries place it. */
 export interface HaPlace {
@@ -368,7 +392,11 @@ export function controlOf(
   const domain = domainOf(id);
   const a = state.a;
   const name = clip(labelIn(str(a.friendly_name) ?? id, area), 60);
-  const base: ThingControl = { id: id.slice(0, 200), label: name };
+  const isPrivate =
+    PRIVATE_DOMAINS.has(domain) ||
+    (domain === 'binary_sensor' && PRIVATE_BINARY_CLASSES.has(str(a.device_class) ?? '')) ||
+    (domain === 'cover' && DOORS.has(str(a.device_class) ?? ''));
+  const base: ThingControl = { id: id.slice(0, 200), label: name, ...(isPrivate ? { private: true } : {}) };
   const s = state.s;
   if (s === 'unavailable' || s === 'unknown') {
     const unknownOk =

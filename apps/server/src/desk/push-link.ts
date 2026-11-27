@@ -4,6 +4,8 @@
  * `desk-unlock:{id}` (`opaqueRef`), so `push.resolve` matches it against the requests this runtime sent the account,
  * kept as long as a push lives (`PUSH_TTL_S`).
  */
+import { deskWords } from '@whombat/core';
+import { tServer } from '../i18n/catalog';
 import type { PushTarget } from '../managed/push';
 
 /** The page a tap opens, under the hosted app's origin. */
@@ -11,6 +13,14 @@ export const DESK_SETTINGS_PATH = '/settings?tab=appliance';
 
 /** The push's subject (`forAccounts`' `what` and its collapse group). */
 export const unlockPushWhat = (requestId: string) => `desk-unlock:${requestId}`;
+
+/** What the unlock push says on the phone, in the person's language (English without one). */
+export function unlockPushPreview(locale?: string | null): { title: string; body: string } {
+  return {
+    title: deskWords(locale ?? null).settings.unlockRequest,
+    body: tServer(locale, 'desk.unlockPush.body'),
+  };
+}
 
 interface Sent {
   accountId: string;

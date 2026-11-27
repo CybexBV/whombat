@@ -1,4 +1,4 @@
-import { SCHEDULE_TEXT, scheduleStatusText, scheduleTimeText } from '@whombat/client';
+import { scheduleStatusText, scheduleText, scheduleTimeText } from '@whombat/client';
 import {
   type AgentScheduleView,
   describeScheduleWhen,
@@ -12,6 +12,8 @@ import {
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { StatusDot } from '../../components/StatusDot';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import cardStyles from '../cards/Card.module.css';
 import { TONE_CLASS } from '../cards/parts';
 import { SCHEDULE_TONES } from './model';
@@ -53,6 +55,7 @@ export function ScheduleCard({
   busy = false,
   problem,
 }: ScheduleCardProps) {
+  const SCHEDULE_TEXT = useLocaleWords(scheduleText);
   const s = card.schedule;
   if (!s)
     return (
@@ -85,10 +88,10 @@ export function ScheduleCard({
         <span>
           {describeScheduleWhen(s.when, timeZone, Date.now())}
           {s.status === 'ended'
-            ? ` · ${scheduleStatusText(s)}`
+            ? ` · ${scheduleStatusText(s, currentLocale())}`
             : s.nextAt
-              ? ` · next ${scheduleTimeText(s.nextAt, timeZone, Date.now())}`
-              : ` · ${scheduleStatusText(s)}`}
+              ? ` · next ${scheduleTimeText(s.nextAt, timeZone, Date.now(), currentLocale())}`
+              : ` · ${scheduleStatusText(s, currentLocale())}`}
         </span>
       </p>
       {canCancel && scheduleActions(s).remove && (

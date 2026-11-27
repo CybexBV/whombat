@@ -7,7 +7,6 @@
  * read stays as cheap as it was.
  */
 import {
-  DESK_CALM_WORDS,
   DESK_SHOW_KEY_RE,
   DeskCalm,
   type DeskCalmActivity,
@@ -21,6 +20,7 @@ import {
   type DeskPreviewScenario,
   type DeskShow,
   deskCalmFor,
+  deskCalmWords,
   deskPreviewInput,
 } from '@whombat/core';
 import type { DeskCalmSources, DeskCalmViewer } from './calm-sources';
@@ -298,36 +298,39 @@ export interface CalmSample {
 
 /**
  * The calm glance the screen shows now (DK-101…DK-124): the planner's, for the person's choices and what the lock lets
- * show (`view`: `everything` unlocked). While Settings tries a scenario on the screen it is that scenario's, with its
- * banner, still trimmed by the lock; *Welcome back* then waits. Null when what came out isn't one the screen takes (a
- * bug, logged by the caller): the screen then draws the glance beside it.
+ * show (`view`: `everything` unlocked), in the person's language (`locale`; English without one). While Settings tries
+ * a scenario on the screen it is that scenario's, with its banner, still trimmed by the lock; *Welcome back* then
+ * waits. Null when what came out isn't one the screen takes (a bug, logged by the caller): the screen then draws the
+ * glance beside it.
  */
 export function calmNow(
   input: DeskCalmInput,
   show: DeskShow,
   view: DeskCalmView,
   now: Date,
-  extra: { digest?: DeskDigest | null; sample?: CalmSample | null } = {},
+  extra: { digest?: DeskDigest | null; sample?: CalmSample | null; locale?: string | null } = {},
 ): DeskCalm | null {
   const at = { ...input, now };
+  const locale = extra.locale ?? null;
   const sample = extra.sample && extra.sample.until > now.getTime() ? extra.sample : null;
   const calm = sample
     ? {
         ...deskCalmFor(
-          deskPreviewInput(at, sample.show, sample.scenario, DESK_CALM_WORDS),
+          deskPreviewInput(at, sample.show, sample.scenario, deskCalmWords(locale)),
           sample.show,
           view,
+          locale,
         ),
         sample: { scenario: sample.scenario, until: new Date(sample.until).toISOString() },
       }
-    : deskCalmFor({ ...at, ...(extra.digest ? { digest: extra.digest } : {}) }, show, view);
+    : deskCalmFor({ ...at, ...(extra.digest ? { digest: extra.digest } : {}) }, show, view, locale);
   const parsed = DeskCalm.safeParse(calm);
   return parsed.success ? parsed.data : null;
 }
 
 /**
  * Settings' preview (`desk.preview`, DK-123): the calm glance for `show` and `scenario` as the person sees it at the
- * screen unlocked, with the name the top bar shows.
+ * screen unlocked, in their language, with the name the top bar shows.
  */
 export function calmPreview(
   input: DeskCalmInput,
@@ -335,7 +338,8 @@ export function calmPreview(
   scenario: DeskPreviewScenario,
   name: string,
   now: Date,
+  locale?: string | null,
 ): DeskPreview {
-  const at = deskPreviewInput({ ...input, now }, show, scenario, DESK_CALM_WORDS);
-  return { name, calm: DeskCalm.parse(deskCalmFor(at, show, 'everything')) };
+  const at = deskPreviewInput({ ...input, now }, show, scenario, deskCalmWords(locale ?? null));
+  return { name, calm: DeskCalm.parse(deskCalmFor(at, show, 'everything', locale)) };
 }

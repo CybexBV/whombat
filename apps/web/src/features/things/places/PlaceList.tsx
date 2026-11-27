@@ -7,9 +7,9 @@
  */
 import { BrandMark } from '@whombat/brand/react';
 import {
-  PLACE_WORDS,
   type PlaceRow,
   placeSummaryParts,
+  placeWords,
   type ThingPlace,
   thingRenameTarget,
 } from '@whombat/client';
@@ -22,6 +22,7 @@ import { Icon } from '../../../components/Icon';
 import { InlineRename } from '../../../components/InlineRename';
 import { ErrorNote } from '../../../components/ListState';
 import { StatusMark } from '../../../components/StatusMark';
+import { useWebI18n } from '../../../i18n/provider';
 import { AppLink } from '../../files/AppLink';
 import { useThingLinkProps } from '../prefetch';
 import { THING_ICONS } from '../thingIcons';
@@ -57,8 +58,9 @@ export function PlaceList({
   loading = false,
   failure,
 }: PlaceListProps) {
-  const words = PLACE_WORDS[place];
-  const summary = placeSummaryParts(place, rows);
+  const i18n = useWebI18n();
+  const words = placeWords(i18n.tag)[place];
+  const summary = placeSummaryParts(place, rows, i18n.tag);
   const linkProps = useThingLinkProps(burrow);
   const menu = useRowMenu();
   const navigate = useNavigateHref();
@@ -109,8 +111,10 @@ export function PlaceList({
               onMenu={(event) => {
                 const target = thingRenameTarget(row);
                 menu.open(event, `row:${row.id}`, row.name, [
-                  { label: 'Open', onSelect: () => navigate(row.href) },
-                  ...(target ? [{ label: 'Rename', onSelect: () => rename.start(row.id) }] : []),
+                  { label: i18n.t('sidebar.open'), onSelect: () => navigate(row.href) },
+                  ...(target
+                    ? [{ label: i18n.t('sidebar.rename'), onSelect: () => rename.start(row.id) }]
+                    : []),
                 ]);
               }}
             />
@@ -141,6 +145,7 @@ function Row({
   menuOpen: boolean;
   onMenu: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
+  const i18n = useWebI18n();
   const logo = (
     <span className={styles.logo} aria-hidden="true">
       {row.mark ? <BrandMark mark={row.mark} size={22} /> : <Icon icon={THING_ICONS[row.glyph]} size={20} />}
@@ -155,8 +160,8 @@ function Row({
           <InlineRename
             value={target.name}
             maxLength={target.max}
-            label={`Rename ${row.name}`}
-            hint={target.kind === 'server' ? 'Leave it empty to use its id again.' : undefined}
+            label={i18n.t('sidebar.renameThing', { name: row.name })}
+            hint={target.kind === 'server' ? i18n.t('sidebar.renameServerHint') : undefined}
             onSave={(typed) => rename.save(target, typed)}
             onClose={rename.stop}
           />

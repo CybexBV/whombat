@@ -7,6 +7,7 @@ import type { Run } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useState } from 'react';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import type { RunAction } from './RunView';
 
 /** Toasts after a run control succeeds: shared with the phone (AP-711). */
@@ -30,6 +31,7 @@ export interface RunControl {
  * (`runActionToast`, a refusal's own sentence, or the error's); after an error the run is fetched again.
  */
 export function useRunControl(burrow: string): RunControl {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const qc = useQueryClient();
   const pause = useApiMutation(api.runs.pause);
@@ -56,7 +58,7 @@ export function useRunControl(burrow: string): RunControl {
           }
         },
         onError: (err) => {
-          toast.show(licenceRefusalText(err) ?? problemText(err));
+          toast.show(licenceRefusalText(err, uiLocale) ?? problemText(err, undefined, uiLocale));
           void qc.invalidateQueries({ queryKey: queryKeys.runs.get({ params }) });
         },
         onSettled: () => setPending(null),

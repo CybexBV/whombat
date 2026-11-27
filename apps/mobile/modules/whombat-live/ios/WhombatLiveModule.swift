@@ -37,6 +37,13 @@ public class WhombatLiveModule: Module {
     /// Android keeps tone colors for background pushes; the widget has them built in.
     Function("configure") { (_: String) in }
 
+    Function("setLocale") { (locale: String) in
+      guard let group = Self.statusWidgetAppGroup, let defaults = UserDefaults(suiteName: group),
+            defaults.string(forKey: LiveWidgetLocale.key) != locale else { return }
+      defaults.set(locale, forKey: LiveWidgetLocale.key)
+      WidgetCenter.shared.reloadTimelines(ofKind: Self.statusWidgetKind)
+    }
+
     AsyncFunction("upsert") { (displayJson: String, burrow: String, attributesJson: String?) async throws -> String? in
       let display = try Self.decode(WhombatLiveAttributes.ContentState.self, displayJson)
       let content = ActivityContent(state: display, staleDate: nil)

@@ -6,6 +6,7 @@
 import type { Handoff, Run } from '@whombat/core';
 import { formatDuration, typingLabel } from '@whombat/core/text';
 import { ANSWERING_T3_CODE, handoffRow } from './handoff';
+import { clientTranslator } from './i18n/catalog';
 import type { AgentNowEntry, TypingEntry } from './query/keys';
 
 /** An action older than this no longer says what the agent does now (a quiet tool, a long model call). */
@@ -29,12 +30,17 @@ export function agentNowFor(
  * The thinking line: `Banjo · Editing Layout.astro · 1m 12s` while its turn reports actions (the clock from 10 s on),
  * else `Banjo is thinking`.
  */
-export function workingLabel(name: string, now: AgentNowEntry | null, nowMs: number): string {
+export function workingLabel(
+  name: string,
+  now: AgentNowEntry | null,
+  nowMs: number,
+  locale?: string | null,
+): string {
   const title = now?.title.trim();
-  if (!now || !title) return typingLabel(name);
+  if (!now || !title) return typingLabel(name, locale);
   const elapsed = nowMs - now.since;
   return elapsed >= AGENT_NOW_CLOCK_FROM_MS
-    ? `${name} · ${title} · ${formatDuration(elapsed)}`
+    ? `${name} · ${title} · ${formatDuration(elapsed, locale)}`
     : `${name} · ${title}`;
 }
 
@@ -76,15 +82,17 @@ export function threadWork(
   runs: readonly Pick<Run, 'agentId' | 'status' | 'progress' | 'attention' | 'threadRootId'>[],
   typing: readonly Pick<TypingEntry, 'principalId' | 'threadRootId'>[],
   handoffs: readonly Handoff[] = [],
+  locale?: string | null,
 ): ThreadWork | null {
+  const tr = clientTranslator(locale);
   const live = runs.filter((r) => r.status === 'live' && r.threadRootId === rootId);
   const stuck = live.find((r) => r.attention?.trim());
-  if (stuck) return { agentId: stuck.agentId, text: 'needs you', progress: null, tone: 'warn' };
+  if (stuck) return { agentId: stuck.agentId, text: tr.t('working.needsYou'), progress: null, tone: 'warn' };
   const run = [...live].sort((a, b) => b.progress - a.progress)[0];
   if (run)
     return {
       agentId: run.agentId,
-      text: `is working · ${Math.round(run.progress)}%`,
+      text: tr.t('working.isWorking', { pct: Math.round(run.progress) }),
       progress: run.progress,
       tone: 'live',
     };
@@ -93,7 +101,11 @@ export function threadWork(
     const answering = handoffs.some((h) => h.state === 'asked' && h.agentId === thinking.principalId);
     return {
       agentId: thinking.principalId,
-      text: answering ? ANSWERING_T3_CODE : 'is thinking',
+      text: answering
+        ? locale
+          ? tr.t('working.answeringT3')
+          : ANSWERING_T3_CODE
+        : tr.t('working.isThinking'),
       progress: null,
       tone: 'live',
     };

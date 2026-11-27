@@ -18,9 +18,11 @@ import {
   type GuideAction,
   suggestedAccess,
 } from '@whombat/core';
+import { formatLocaleList } from '@whombat/core/i18n';
 import { FOUND_PAGE_PATH, foundName } from '../connections/found-view';
 import { DEVICE_CATALOG_ID } from '../devices/store';
 import { addServerHref } from '../hosts/tools';
+import { hasServerMessage, isEnglish, type ServerMessageKey, tpServer, tServer } from '../i18n/catalog';
 import * as copy from './copy';
 import { makeCard, type Step } from './flows';
 
@@ -79,27 +81,65 @@ export function spokenFind(f: Pick<WelcomeFind, 'catalogId' | 'version'>): reado
 }
 
 /** “A, B and C”. */
-function andList(items: readonly string[]): string {
+function andList(items: readonly string[], locale?: string | null): string {
+  if (!isEnglish(locale)) return formatLocaleList(items, locale);
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
+
+/**
+ * A find as people say it in `locale`: one (with its article), several, and the one (“the UniFi gateway”, “de
+ * UniFi-gateway”). Each language says its own articles; Dutch never gets an English one swapped in.
+ */
+export function spokenFindIn(
+  f: Pick<WelcomeFind, 'catalogId' | 'version'>,
+  locale?: string | null,
+): readonly [string, string, string] {
+  const [one, many] = spokenFind(f);
+  if (isEnglish(locale)) return [one, many, the(one)];
+  const own = `guides.spoken.${f.catalogId}`;
+  if (hasServerMessage(`${own}.one`)) {
+    const say = (form: string) => tServer(locale, `${own}.${form}` as ServerMessageKey);
+    return [say('one'), say('many'), say('the')];
+  }
+  const name = foundName(f);
+  if (f.catalogId === FOUND_SERVER_ID || f.catalogId === DEVICE_CATALOG_ID) {
+    const kind = f.catalogId === FOUND_SERVER_ID ? 'server' : 'device';
+    // “Debian server” is one word in Dutch: “Debian-server”.
+    const word =
+      name === 'Server' ? tServer(locale, 'guides.spoken.serverWord') : name.replace(/ server$/i, '-server');
+    const say = (form: 'one' | 'many' | 'the') =>
+      tServer(locale, `guides.spoken.${kind}.${form}` as ServerMessageKey, { name: word });
+    return [say('one'), say('many'), say('the')];
+  }
+  // A product's own name (“Home Assistant”) takes no article.
+  return [name, name, name];
 }
 
 /**
  * What the sentence names: every kind when there are at most three (“two Proxmox servers” for one found twice), else
  * “7 things, like A, B and C” (the first three kinds, in the scan's order).
  */
-export function foundPhrase(finds: readonly WelcomeFind[]): string {
-  const kinds = new Map<string, { said: readonly [string, string]; n: number }>();
+export function foundPhrase(finds: readonly WelcomeFind[], locale?: string | null): string {
+  const kinds = new Map<string, { said: readonly [string, string, string]; n: number }>();
   for (const f of finds) {
-    const said = spokenFind(f);
+    const said = spokenFindIn(f, locale);
     const kind = kinds.get(said[0]) ?? { said, n: 0 };
     kind.n++;
     kinds.set(said[0], kind);
   }
-  const said = [...kinds.values()].map(({ said: [one, many], n }) =>
-    n > 1 ? `${SMALL[n] ?? n} ${many}` : one,
-  );
-  if (kinds.size <= NAMED_MAX) return andList(said);
+  const small = (n: number) => {
+    if (isEnglish(locale)) return SMALL[n] ?? String(n);
+    const key = `guides.small.${n}`;
+    return hasServerMessage(key) ? tServer(locale, key) : String(n);
+  };
+  const said = [...kinds.values()].map(({ said: [one, many], n }) => (n > 1 ? `${small(n)} ${many}` : one));
+  if (kinds.size <= NAMED_MAX) return andList(said, locale);
+  if (!isEnglish(locale))
+    return tServer(locale, 'guides.things', {
+      n: finds.length,
+      list: andList(said.slice(0, NAMED_MAX), locale),
+    });
   return `${finds.length} things, like ${andList(said.slice(0, NAMED_MAX))}`;
 }
 
@@ -118,11 +158,25 @@ function asServer(f: Pick<WelcomeFind, 'catalogId'>, entry: CatalogEntry | null)
  * by risk), or “Add the Debian server” to Add a server with its address. `twice`: another button has the same words,
  * so the address tells them apart.
  */
-export function findAction(f: WelcomeFind, index: number, twice: boolean): GuideAction {
+export function findAction(
+  f: WelcomeFind,
+  index: number,
+  twice: boolean,
+  locale?: string | null,
+): GuideAction {
   const entry = catalogEntry(f.catalogId);
   const server = asServer(f, entry);
-  const words = `${server ? 'Add' : 'Connect'} ${the(spokenFind(f)[0])}`;
-  const label = (twice ? `${words} at ${f.host}` : words).slice(0, 40);
+  const thing = spokenFindIn(f, locale)[2];
+  const words = isEnglish(locale)
+    ? `${server ? 'Add' : 'Connect'} ${thing}`
+    : tServer(locale, server ? 'guides.find.add' : 'guides.find.connect', { thing });
+  const label = (
+    twice
+      ? isEnglish(locale)
+        ? `${words} at ${f.host}`
+        : tServer(locale, 'guides.find.at', { words, host: f.host })
+      : words
+  ).slice(0, 40);
   const href = server
     ? addServerHref({ address: f.host, username: null, control: null, name: null })
     : connectAskHref({
@@ -134,14 +188,18 @@ export function findAction(f: WelcomeFind, index: number, twice: boolean): Guide
 }
 
 /** The finds' buttons: each one up to four, else three and “See all {n}”. */
-export function findActions(finds: readonly WelcomeFind[]): GuideAction[] {
+export function findActions(finds: readonly WelcomeFind[], locale?: string | null): GuideAction[] {
   const shown = finds.length > BUTTONS_MAX ? finds.slice(0, BUTTONS_MAX - 1) : finds;
   const words = shown.map((f) => spokenFind(f)[0]);
-  const actions = shown.map((f, i) => findAction(f, i, words.filter((w) => w === words[i]).length > 1));
+  const actions = shown.map((f, i) =>
+    findAction(f, i, words.filter((w) => w === words[i]).length > 1, locale),
+  );
   if (finds.length > shown.length)
     actions.push({
       id: 'see_all',
-      label: copy.seeAllLabel(finds.length),
+      label: isEnglish(locale)
+        ? copy.seeAllLabel(finds.length)
+        : tServer(locale, 'guides.seeAll', { n: finds.length }),
       style: 'quiet',
       href: FOUND_PAGE_PATH,
     });
@@ -150,43 +208,59 @@ export function findActions(finds: readonly WelcomeFind[]): GuideAction[] {
 
 /** The card under a message that names finds: one link per find. Never waits: it is `done` at once. */
 function foundStep(text: string, finds: readonly WelcomeFind[]): Step {
-  return (_f, id) => ({
-    id,
-    text,
-    card: makeCard({
-      guide: 'welcome',
-      node: 'found',
-      title: copy.FOUND_TITLE,
-      body: copy.foundBody(finds.length === 1),
-      blocks: [{ type: 'actions', actions: findActions(finds) }],
-    }),
-  });
+  return (f, id) => {
+    const locale = f.locale;
+    const english = isEnglish(locale);
+    return {
+      id,
+      text,
+      card: makeCard({
+        guide: 'welcome',
+        node: 'found',
+        title: english ? copy.FOUND_TITLE : tServer(locale, 'guides.foundTitle'),
+        body: english
+          ? copy.foundBody(finds.length === 1)
+          : tServer(locale, finds.length === 1 ? 'guides.foundBodyOne' : 'guides.foundBodyMany'),
+        blocks: [{ type: 'actions', actions: findActions(finds, locale) }],
+      }),
+    };
+  };
 }
 
 /**
  * Mail, second: other email first (its connect form), Gmail through the Google setup, or later. Answers find their
  * action by its id, so cards posted with older labels still work.
  */
-export const mailStep: Step = (_f, id) => ({
-  id,
-  text: '',
-  card: makeCard({
-    guide: 'welcome',
-    node: 'mail',
-    title: copy.MAIL_TITLE,
-    body: copy.MAIL_BODY,
-    blocks: [
-      {
-        type: 'actions',
-        actions: [
-          { id: 'imap', label: copy.MAIL_OTHER, style: 'primary', href: IMAP_HREF },
-          { id: 'google', label: copy.MAIL_GOOGLE, style: 'secondary' },
-          { id: 'later', label: copy.MAYBE_LATER, style: 'quiet' },
-        ],
-      },
-    ],
-  }),
-});
+export const mailStep: Step = (f, id) => {
+  const locale = f.locale;
+  const say = (english: string, key: ServerMessageKey) =>
+    isEnglish(locale) ? english : tServer(locale, key);
+  return {
+    id,
+    text: '',
+    card: makeCard({
+      guide: 'welcome',
+      node: 'mail',
+      title: say(copy.MAIL_TITLE, 'guides.mailTitle'),
+      body: say(copy.MAIL_BODY, 'guides.mailBody'),
+      blocks: [
+        {
+          type: 'actions',
+          actions: [
+            {
+              id: 'imap',
+              label: say(copy.MAIL_OTHER, 'guides.mailOther'),
+              style: 'primary',
+              href: IMAP_HREF,
+            },
+            { id: 'google', label: say(copy.MAIL_GOOGLE, 'guides.mailGoogle'), style: 'secondary' },
+            { id: 'later', label: say(copy.MAYBE_LATER, 'guides.maybeLater'), style: 'quiet' },
+          ],
+        },
+      ],
+    }),
+  };
+};
 
 /** The welcome: the finds (or what it can do), then mail, which `postSteps` puts in the first one's thread. */
 export function welcomeSteps(found: FoundNow): Step[] {
@@ -195,16 +269,28 @@ export function welcomeSteps(found: FoundNow): Step[] {
     return [
       (f, id) =>
         foundStep(
-          copy.welcomeFoundText(f.personName, f.agentName, foundPhrase(finds), finds.length === 1),
+          isEnglish(f.locale)
+            ? copy.welcomeFoundText(f.personName, f.agentName, foundPhrase(finds), finds.length === 1)
+            : tpServer(f.locale, 'guides.welcomeFound', finds.length, {
+                person: f.personName,
+                agent: f.agentName,
+                found: foundPhrase(finds, f.locale),
+              }),
           finds,
         )(f, id),
       mailStep,
     ];
   const hello: Step = (f, id) => ({
     id,
-    text: found.looking
-      ? copy.welcomeLookingText(f.personName, f.agentName)
-      : copy.welcomeQuietText(f.personName, f.agentName),
+    text: isEnglish(f.locale)
+      ? found.looking
+        ? copy.welcomeLookingText(f.personName, f.agentName)
+        : copy.welcomeQuietText(f.personName, f.agentName)
+      : tServer(f.locale, found.looking ? 'guides.welcomeLooking' : 'guides.welcomeQuiet', {
+          person: f.personName,
+          agent: f.agentName,
+          canDo: tServer(f.locale, 'guides.canDo'),
+        }),
     card: null,
   });
   return [hello, mailStep];
@@ -213,5 +299,13 @@ export function welcomeSteps(found: FoundNow): Step[] {
 /** The scan's finds after the welcome went out without them: one message with the same buttons, in its thread. */
 export function foundLaterSteps(finds: readonly WelcomeFind[]): Step[] {
   if (finds.length === 0) return [];
-  return [foundStep(copy.foundLaterText(foundPhrase(finds), finds.length === 1), finds)];
+  return [
+    (f, id) =>
+      foundStep(
+        isEnglish(f.locale)
+          ? copy.foundLaterText(foundPhrase(finds), finds.length === 1)
+          : tpServer(f.locale, 'guides.foundLater', finds.length, { found: foundPhrase(finds, f.locale) }),
+        finds,
+      )(f, id),
+  ];
 }

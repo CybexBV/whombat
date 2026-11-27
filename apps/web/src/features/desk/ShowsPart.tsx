@@ -62,6 +62,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { currentLocale } from '../../i18n/provider';
 import styles from '../settings/SettingsScreen.module.css';
 import { DeskPreviewScreen } from './DeskPreviewScreen';
 import s from './Screen.module.css';
@@ -100,7 +101,7 @@ export function ShowsPart({ api, screen, assistant, face, timeZone }: ShowsPartP
   const groups = showGroups(screen.showOptions ?? []);
   const fill = (text: string) => fillDeskWords(text, { assistant });
   const save = (patch: DeskShowPatch) =>
-    void actions.update({ show: patch }).catch((error) => toast.show(deskErrorText(error)));
+    void actions.update({ show: patch }).catch((error) => toast.show(deskErrorText(error, currentLocale())));
   const setLevel = (key: string) => (level: DeskShowLevel) => save({ items: { [key]: level } });
   const option = (o: DeskShowOption) => (
     <LevelRow
@@ -236,7 +237,7 @@ export function TopBarPart({ api, screen, assistant }: Pick<ShowsPartProps, 'api
   const show = screen.settings.show;
   const fill = (text: string) => fillDeskWords(text, { assistant });
   const save = (patch: DeskShowPatch) =>
-    void actions.update({ show: patch }).catch((error) => toast.show(deskErrorText(error)));
+    void actions.update({ show: patch }).catch((error) => toast.show(deskErrorText(error, currentLocale())));
   return (
     <div className={s.choices}>
       <ChoiceCard title={W.bar} hint={W.barHint} data="bar">
@@ -309,7 +310,7 @@ function PreviewCard({ api, screen, assistant, face, timeZone }: ShowsPartProps)
   const tryIt = () =>
     void api.tryOnScreen(input).then(
       (r) => setUntil(Date.parse(r.until) || Date.now() + DESK_TRY_S * 1000),
-      (error) => toast.show(deskErrorText(error)),
+      (error) => toast.show(deskErrorText(error, currentLocale())),
     );
   return (
     <section className={cx(styles.card, s.preview)} aria-labelledby={id} data-preview-card="">

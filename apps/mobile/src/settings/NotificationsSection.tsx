@@ -6,6 +6,7 @@
  * whole, built from what the server has now (`useSaveNotificationPreferences`); a failure puts the old value back and
  * says so.
  */
+
 import { dndSetText, quietHoursText, toggleDay, WEEKDAY_LABELS } from '@whombat/client';
 import { type DateInput, dndUntilFor, type QuietHours, WEEKDAY_KEYS, type Weekday } from '@whombat/core';
 import { useState } from 'react';
@@ -22,6 +23,7 @@ import {
   QUIET_HOURS_HINT,
 } from '../data/notify';
 import { useNotificationPreferences, useSaveNotificationPreferences } from '../data/useEssentials';
+import { useI18n, useMobileT } from '../i18n';
 import { errorText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -33,6 +35,9 @@ import { Touchable } from '../ui/Touchable';
 import { hitSlopFor } from '../ui/touchTarget';
 
 export function NotificationsSection() {
+  const { rawLocale, tClient } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const now = useNow();
@@ -56,7 +61,7 @@ export function NotificationsSection() {
     }
   };
   const setDnd = (at: string, now: DateInput) =>
-    apply((p) => ({ ...p, dndUntil: at }), dndSetText(at, now, timeZone));
+    apply((p) => ({ ...p, dndUntil: at }), dndSetText(at, now, timeZone, rawLocale));
   const setSchedule = (change: (s: QuietHours) => QuietHours) =>
     apply((p) => ({ ...p, schedule: change(p.schedule) }));
   const state = dndStateText(prefs, now, timeZone);
@@ -69,7 +74,7 @@ export function NotificationsSection() {
   return (
     <View style={{ gap: 18 }}>
       <View style={{ gap: 8 }}>
-        <SectionLabel>DO NOT DISTURB</SectionLabel>
+        <SectionLabel>{tMobile('settings.do-not-disturb')}</SectionLabel>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 6 }}>
           <View
             style={{
@@ -88,12 +93,12 @@ export function NotificationsSection() {
               disabled={busy}
               feedback="fade"
               ringRadius={10}
-              accessibilityLabel="Turn off Do not disturb"
+              accessibilityLabel={tMobile('settings.turn-off-do-not-disturb')}
               hitSlop={hitSlopFor(32)}
               style={{ minHeight: 32, justifyContent: 'center', paddingHorizontal: 8 }}
             >
               <Text size={14} weight={500} color={theme.colors.brand}>
-                Turn off
+                {tMobile('settings.turn-off')}
               </Text>
             </Touchable>
           ) : null}
@@ -101,7 +106,10 @@ export function NotificationsSection() {
         <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
           {DND_HINT}
         </Text>
-        <View accessibilityLabel="Do not disturb for" style={{ flexDirection: 'row', gap: 8 }}>
+        <View
+          accessibilityLabel={tMobile('settings.do-not-disturb-for')}
+          style={{ flexDirection: 'row', gap: 8 }}
+        >
           {DND_PRESETS.map((p) => (
             <Button
               key={p.preset}
@@ -117,7 +125,7 @@ export function NotificationsSection() {
           {picksTime ? (
             <View style={{ paddingLeft: 6 }}>
               <ClockField
-                label="Until"
+                label={tClient('keepQuiet.pickLabel')}
                 spoken="Do not disturb until this time"
                 value={untilClock}
                 disabled={busy}
@@ -127,14 +135,14 @@ export function NotificationsSection() {
           ) : (
             <>
               <Text size={13} color={theme.colors.mut} style={{ paddingLeft: 6 }}>
-                Until
+                {tClient('keepQuiet.pickLabel')}
               </Text>
               <TextInput
                 value={until}
                 onChangeText={setUntil}
                 placeholder="18:30"
                 placeholderTextColor={theme.colors.mut}
-                accessibilityLabel="Do not disturb until this time"
+                accessibilityLabel={tMobile('settings.do-not-disturb-until-this-time')}
                 keyboardType="numbers-and-punctuation"
                 returnKeyType="done"
                 maxLength={5}
@@ -157,7 +165,7 @@ export function NotificationsSection() {
             </>
           )}
           <Button
-            label="Set"
+            label={tMobile('settings.set')}
             variant="secondary"
             disabled={busy || !untilClock.trim()}
             onPress={() => {
@@ -174,21 +182,21 @@ export function NotificationsSection() {
       </View>
 
       <View style={{ gap: 8 }}>
-        <SectionLabel>QUIET HOURS</SectionLabel>
+        <SectionLabel>{tMobile('settings.quiet-hours')}</SectionLabel>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 6 }}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text size={15} weight={500}>
-              Quiet hours
+              {tMobile('settings.quiet-hours-2')}
             </Text>
             <Text size={12.5} mono color={theme.colors.mut}>
-              {quietHoursText(schedule)}
+              {quietHoursText(schedule, rawLocale)}
             </Text>
           </View>
           <Switch
             value={schedule.enabled}
             disabled={busy}
             onValueChange={(v) => void setSchedule((s) => ({ ...s, enabled: v }))}
-            accessibilityLabel="Quiet hours"
+            accessibilityLabel={tMobile('settings.quiet-hours-2')}
             accessibilityRole="switch"
             {...switchColors(theme, schedule.enabled)}
             style={{ minHeight: 44 }}
@@ -201,19 +209,22 @@ export function NotificationsSection() {
           <>
             <View style={{ flexDirection: 'row', gap: 16, paddingHorizontal: 6 }}>
               <ClockField
-                label="From"
+                label={tMobile('settings.from')}
                 value={schedule.start}
                 disabled={busy}
                 onChange={(start) => void setSchedule((s) => ({ ...s, start }))}
               />
               <ClockField
-                label="To"
+                label={tMobile('settings.to')}
                 value={schedule.end}
                 disabled={busy}
                 onChange={(end) => void setSchedule((s) => ({ ...s, end }))}
               />
             </View>
-            <View accessibilityLabel="Days" style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 6 }}>
+            <View
+              accessibilityLabel={tMobile('settings.days')}
+              style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 6 }}
+            >
               {WEEKDAY_KEYS.map((day: Weekday) => {
                 const active = schedule.days.includes(day);
                 return (
@@ -249,7 +260,7 @@ export function NotificationsSection() {
         ) : null}
       </View>
       <View style={{ gap: 8 }}>
-        <SectionLabel>PREVIEWS</SectionLabel>
+        <SectionLabel>{tMobile('settings.previews')}</SectionLabel>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 6 }}>
           <Text size={15} weight={500} style={{ flex: 1 }}>
             {PREVIEWS_TITLE}

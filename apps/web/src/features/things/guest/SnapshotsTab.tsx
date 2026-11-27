@@ -8,13 +8,14 @@ import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { useWebI18n } from '../../../i18n/provider';
 import { Check, FormDialog, TextField } from '../manage/fields';
 import { Card, ConfirmDialog, Empty, ErrorLine, useChangeRunner } from '../parts';
 import styles from '../Things.module.css';
-
 import type { GuestTabProps } from './tabProps';
 
 export function SnapshotsTab({ burrow, serverId, guest, timeZone }: GuestTabProps) {
+  const { tag: uiLocale } = useWebI18n();
   const list = useHostManageRead({
     params: { burrow, serverId },
     query: {
@@ -95,7 +96,7 @@ export function SnapshotsTab({ burrow, serverId, guest, timeZone }: GuestTabProp
                   {s.memory ? <span className={styles.kind}>with memory</span> : null}
                 </td>
                 <td className={cx(styles.num, styles.dropXs)}>
-                  {s.created ? formatRelativeDay(Date.parse(s.created), now, timeZone) : DASH}
+                  {s.created ? formatRelativeDay(Date.parse(s.created), now, timeZone, uiLocale) : DASH}
                 </td>
                 <td className={cx(styles.muted, styles.dropM)} style={{ whiteSpace: 'normal' }}>
                   {s.description || ''}

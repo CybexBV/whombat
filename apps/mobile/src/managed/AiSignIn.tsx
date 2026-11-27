@@ -5,7 +5,7 @@
  * is installed first when it isn't. Connect your AI uses it; any screen with a client can (Settings → AI).
  */
 import type { createClient } from '@whombat/client';
-import { CONNECT_AI_TEXT } from '@whombat/client/managed';
+import { connectAiText } from '@whombat/client/managed';
 import {
   CLIENT_NAMES,
   type ConsoleDriver,
@@ -25,6 +25,7 @@ import type { LiveProvider, ProviderLogin } from '@whombat/core/domain';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { copyToClipboard } from '../ui/clipboard';
@@ -32,7 +33,6 @@ import { Button, Loading } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { Card, ErrorLine, Field, Note } from './ui';
 
-const T = CONNECT_AI_TEXT;
 const S = SIGNIN_TEXT;
 type Client = Pick<ReturnType<typeof createClient>, 'signins' | 'clients'>;
 
@@ -115,6 +115,8 @@ function DeviceSignIn({
   onSignedIn: () => void;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = connectAiText(rawLocale);
   const theme = useTheme();
   const [login, setLogin] = useState<ProviderLogin | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -200,6 +202,8 @@ function ConsoleSignIn({
   onSignedIn: () => void;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = connectAiText(rawLocale);
   const [state, setState] = useState<ConsoleDriverState>({ phase: 'starting', console: null, error: null });
   const [output, setOutput] = useState<SignInOutput>(() => readSignInOutput(''));
   const [code, setCode] = useState('');

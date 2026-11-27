@@ -90,7 +90,7 @@ export async function backupBringBackTool(ctx: ToolContext, input: Input): Promi
   const zone = who.burrow.timeZone || 'UTC';
 
   if (input.bring) {
-    const open = looks.current(who.person);
+    const open = await looks.current(who.person);
     if (open?.state !== 'ready') return fail('not_open', BRING_BACK_TOOL_TEXT.notOpen);
     const named = await looks.named(who, open.lookId, input.bring);
     if (named.length === 0) return fail('not_open', BRING_BACK_TOOL_TEXT.notOpen);

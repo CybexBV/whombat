@@ -7,6 +7,7 @@ import type {
   MissingMailAttachment,
   MissingMailAttachmentReason,
 } from '../domain/automation.js';
+import { type CoreMessageKey, type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
 
 /** Fallback name when a mail connection's address isn't available to the viewer. */
 export const UNKNOWN_MAIL_CONNECTION = 'a mail account';
@@ -265,11 +266,6 @@ export function mailTriggerProblems(
   return problems;
 }
 
-function listWords(parts: readonly string[], conj: 'or' | 'and'): string {
-  if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} ${conj} ${parts.at(-1)}`;
-}
-
 function attachmentPhrase(raw: string): string {
   const norm = normalizeAttachmentType(raw);
   const known = ATTACHMENT_PHRASES[norm];
@@ -284,12 +280,68 @@ function attachmentPhrase(raw: string): string {
   return `${article} ${upper} file`;
 }
 
-function formatAttachmentTypes(types: readonly string[]): string {
-  const phrases = [...new Set(types.slice(0, 3).map(attachmentPhrase))];
+/** What an attachment type is called outside English: a phrase of its own, or its short name in a frame. */
+const ATTACHMENT_WORDS: Readonly<Record<string, CoreMessageKey | { named: string } | { file: string }>> = {
+  pdf: { named: 'PDF' },
+  'application/pdf': { named: 'PDF' },
+  csv: { named: 'CSV' },
+  'text/csv': { named: 'CSV' },
+  'image/*': 'mailWhen.attach.image',
+  png: { named: 'PNG' },
+  'image/png': { named: 'PNG' },
+  jpg: { named: 'JPEG' },
+  jpeg: { named: 'JPEG' },
+  'image/jpeg': { named: 'JPEG' },
+  gif: { named: 'GIF' },
+  'image/gif': { named: 'GIF' },
+  webp: 'mailWhen.attach.webp',
+  'image/webp': 'mailWhen.attach.webp',
+  doc: 'mailWhen.attach.word',
+  docx: 'mailWhen.attach.word',
+  xls: 'mailWhen.attach.sheet',
+  xlsx: 'mailWhen.attach.sheet',
+  zip: { file: 'ZIP' },
+  'application/zip': { file: 'ZIP' },
+  xml: { file: 'XML' },
+  'application/xml': { file: 'XML' },
+  'text/xml': { file: 'XML' },
+  json: { file: 'JSON' },
+  'application/json': { file: 'JSON' },
+  txt: 'mailWhen.attach.text',
+  'text/plain': 'mailWhen.attach.text',
+  ics: 'mailWhen.attach.calendar',
+  'text/calendar': 'mailWhen.attach.calendar',
+};
+
+function attachmentPhraseIn(tr: CoreTranslator, raw: string): string {
+  const norm = normalizeAttachmentType(raw);
+  const known = ATTACHMENT_WORDS[norm];
+  if (typeof known === 'string') return tr.t(known);
+  if (known && 'named' in known) return tr.t('mailWhen.attach.named', { type: known.named });
+  if (known) return tr.t('mailWhen.attach.file', { type: known.file });
+  if (norm.includes('/')) {
+    const [major, minor] = norm.split('/');
+    return tr.t('mailWhen.attach.file', { type: minor === '*' ? (major ?? norm) : norm });
+  }
+  return tr.t('mailWhen.attach.file', { type: norm.toUpperCase() });
+}
+
+function formatAttachmentTypes(types: readonly string[], tr: CoreTranslator): string {
+  const english = tr.language === 'en';
+  const phrases = [
+    ...new Set(types.slice(0, 3).map((t) => (english ? attachmentPhrase(t) : attachmentPhraseIn(tr, t)))),
+  ];
   if (phrases.length === 1) return phrases[0] as string;
-  // Share a leading article where possible: “a PDF or CSV” reads more naturally than “a PDF or a CSV”.
-  const bare = phrases.map((p, i) => (i === 0 ? p : p.replace(/^an?\s+/, '')));
-  return `${listWords(bare, 'or')}${types.length > 3 ? '…' : ''}`;
+  // Share a leading article where possible: “a PDF or CSV” reads more naturally than “a PDF or a CSV”. Only English
+  // and Dutch phrases are drawn here, so their articles are the ones to share.
+  const bare = phrases.map((p, i) => (i === 0 ? p : p.replace(english ? /^an?\s+/ : /^een\s+/, '')));
+  return `${listIn(tr, bare)}${types.length > 3 ? '…' : ''}`;
+}
+
+/** “a, b or c” in a locale. */
+function listIn(tr: CoreTranslator, parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return tr.t('recipe.or', { items: parts.slice(0, -1).join(', '), last: parts.at(-1) ?? '' });
 }
 
 function displayFrom(from: string): string {
@@ -305,30 +357,41 @@ function displayFrom(from: string): string {
 export function mailWhenText(
   trigger: Pick<MailTrigger, 'from' | 'subjectContains' | 'hasAttachment' | 'attachmentTypes'>,
   mailbox?: string,
+  locale?: string | null,
 ): string {
-  const fromPart = trigger.from ? `from ${displayFrom(trigger.from)}` : null;
+  const tr = coreTranslator(locale);
+  const fromPart = trigger.from ? tr.t('mailWhen.from', { from: displayFrom(trigger.from) }) : null;
   const subjectPart = trigger.subjectContains?.length
-    ? `${listWords(
-        trigger.subjectContains.slice(0, 3).map((w) => `“${w}”`),
-        'or',
-      )}${trigger.subjectContains.length > 3 ? '…' : ''} in the subject`
+    ? tr.t('mailWhen.subject', {
+        words: `${listIn(
+          tr,
+          trigger.subjectContains.slice(0, 3).map((w) => `“${w}”`),
+        )}${trigger.subjectContains.length > 3 ? '…' : ''}`,
+      })
     : null;
   const attachPart = trigger.attachmentTypes?.length
-    ? formatAttachmentTypes(trigger.attachmentTypes)
+    ? formatAttachmentTypes(trigger.attachmentTypes, tr)
     : trigger.hasAttachment
-      ? 'an attachment'
+      ? tr.t('mailWhen.attach.any')
       : null;
   const withParts = [subjectPart, attachPart].filter((p): p is string => !!p);
-  const withClause = withParts.length ? `with ${withParts.join(' and ')}` : null;
+  const withClause = withParts.length
+    ? tr.t('mailWhen.with', {
+        parts:
+          withParts.length === 2
+            ? tr.t('recipe.and', { items: withParts[0] ?? '', last: withParts[1] ?? '' })
+            : (withParts[0] ?? ''),
+      })
+    : null;
   const hasFilters = Boolean(fromPart || withClause);
-  const core = ['mail', fromPart, withClause].filter(Boolean).join(' ');
-  if (!hasFilters && mailbox) return `When mail arrives in ${mailbox}’s inbox`;
-  return `When ${core} arrives in your inbox`;
+  const core = [tr.t('mailWhen.mail'), fromPart, withClause].filter(Boolean).join(' ');
+  if (!hasFilters && mailbox) return tr.t('mailWhen.mailbox', { mailbox });
+  return tr.t('mailWhen.inbox', { mail: core });
 }
 
 /** Detail line under `whenLine` naming which mailbox is watched (“In you@example.com”). */
-export function mailTriggerDetail(mailbox?: string): string | null {
-  return mailbox ? `In ${mailbox}` : null;
+export function mailTriggerDetail(mailbox?: string, locale?: string | null): string | null {
+  return mailbox ? coreTranslator(locale).t('mailWhen.detail', { mailbox }) : null;
 }
 
 /** Default name for a mail recipe when the person hasn't given one (“Handle mail from example.com”). */

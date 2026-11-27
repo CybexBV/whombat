@@ -27,6 +27,7 @@ import {
   runScreen,
   type StepMarker,
 } from '../data/run';
+import { useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -140,11 +141,12 @@ function StepRow({ step }: { step: RunStepView }) {
 }
 
 export function RunScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug, bootstrap } = useBurrow();
   const ctx = useViewContext();
-  const { number, back = 'Inbox' } = route.params;
+  const { number, back = tMobile('places.inbox') } = route.params;
   const query = useRun({ params: { burrow: slug, number } });
   const detail = query.data;
   useSubscription(detail ? topics.run(detail.run.id) : null);
@@ -157,11 +159,11 @@ export function RunScreen({ route, navigation }: Props) {
       <Screen>
         <BackBar label={back} onPress={goBack} />
         {notFound ? (
-          <ErrorState text="This run isn’t here any more." />
+          <ErrorState text={tMobile('screens.this-run-isnt-here-any-more')} />
         ) : query.error ? (
-          <ErrorState text="This run didn’t load." onRetry={() => void query.refetch()} />
+          <ErrorState text={tMobile('screens.this-run-didnt-load')} onRetry={() => void query.refetch()} />
         ) : (
-          <View style={{ paddingTop: 10 }} accessibilityLabel="Loading the run">
+          <View style={{ paddingTop: 10 }} accessibilityLabel={tMobile('screens.loading-the-run')}>
             <View style={{ alignItems: 'center', gap: 10, paddingHorizontal: 22, paddingBottom: 22 }}>
               <Skeleton width={112} height={112} radius={56} />
               <Skeleton width={140} height={13} />
@@ -184,7 +186,7 @@ export function RunScreen({ route, navigation }: Props) {
     const go = () => control.act(b.action, detail.run, model.agentName);
     if (!b.confirm) return go();
     Alert.alert(b.confirm.title, b.confirm.body, [
-      { text: 'Cancel', style: 'cancel' },
+      { text: tMobile('screens.run.cancel'), style: 'cancel' },
       { text: b.confirm.cta, style: 'destructive', onPress: go },
     ]);
   };
@@ -337,7 +339,7 @@ export function RunScreen({ route, navigation }: Props) {
 
         <View>
           {model.steps.length > 0 ? (
-            <Section title="STEPS">
+            <Section title={tMobile('screens.steps')}>
               <View style={{ paddingVertical: 2 }}>
                 {model.steps.map((s) => (
                   <StepRow key={s.key} step={s} />
@@ -348,9 +350,9 @@ export function RunScreen({ route, navigation }: Props) {
           <RunActivity runNumber={model.number} />
           {model.log.length > 0 ? (
             <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
-              <SectionLabel>LIVE LOG</SectionLabel>
+              <SectionLabel>{tMobile('screens.live-log')}</SectionLabel>
               <View
-                accessibilityLabel="Live log"
+                accessibilityLabel={tMobile('screens.live-log-2')}
                 style={{
                   borderRadius: 16,
                   backgroundColor: theme.colors.code,
@@ -390,13 +392,13 @@ export function RunScreen({ route, navigation }: Props) {
                 variant="secondary"
                 size="lg"
                 onPress={() => navigation.navigate('PullRequest', { ...pr, back: `Run #${model.number}` })}
-                accessibilityHint="Opens the pull request: checks, files changed and merge"
+                accessibilityHint={tMobile('screens.opens-the-pull-request-checks-files-changed-and')}
                 style={{ flex: 1 }}
               />
             ) : null}
             {room ? (
               <Button
-                label="Branch room"
+                label={tMobile('screens.branch-room')}
                 variant="secondary"
                 size="lg"
                 onPress={() => navigation.navigate('Conversation', { conversationId: room.id })}

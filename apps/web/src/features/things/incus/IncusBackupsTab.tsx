@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { GuestName } from '../GuestName';
 import { Card, Empty, ErrorLine, StateCell } from '../parts';
 import { useThingSearch } from '../search';
@@ -125,7 +126,7 @@ export function IncusBackupsTab({
                   </td>
                   <td className={cx(styles.num, styles.dropXs)}>
                     {newest ? (
-                      formatRelativeDay(Date.parse(newest), now, timeZone)
+                      formatRelativeDay(Date.parse(newest), now, timeZone, currentLocale())
                     ) : list.isLoading ? (
                       DASH
                     ) : (

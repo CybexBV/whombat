@@ -8,13 +8,7 @@
  * show, the rest behind “Show N more”. Two or more lines that ask get the one button that hands them to the assistant.
  * A strip with no line draws nothing: the server leaves it out then.
  */
-import {
-  handleTheseView,
-  KEEP_QUIET_WORDS,
-  NEEDS_YOU_WORDS,
-  noticeLink,
-  quietLineText,
-} from '@whombat/client';
+import { handleTheseView, KEEP_QUIET_WORDS, noticeLink, quietLineText } from '@whombat/client';
 import { useTheAgent } from '@whombat/client/react';
 import type { ThingPageLink, ThingPageNotice, ThingPagePanel } from '@whombat/core';
 import { Info } from 'lucide-react';
@@ -22,6 +16,7 @@ import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { useNeedsYouWords } from '../../../i18n/words';
 import { NoticeMenu, QuietUndo } from '../quiet/NoticeMenu';
 import things from '../Things.module.css';
 import { NOTICE_ICONS } from '../thingIcons';
@@ -51,6 +46,7 @@ function rowLink(link: ThingPageLink, ask: string): ThingPageLink {
 }
 
 export function NoticeStrip({ panel, ctx }: { panel: NoticesPanel; ctx: DashboardContext }) {
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
   const [open, setOpen] = useState(false);
   const [headsUps, setHeadsUps] = useState(false);
   const [kept, setKept] = useState(false);

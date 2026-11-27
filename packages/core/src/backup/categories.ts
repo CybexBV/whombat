@@ -4,8 +4,11 @@
  * (CT-900; BF-13, BF-21) eleven: `servers`, and messages and servers on by default. Since 3.0 (CT-1512) `people` is
  * `settings`: one person, no one else's things to leave out.
  */
+
 import { z } from 'zod';
 import { Count } from '../domain/common.js';
+import { coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { DOT } from '../text/format.js';
 
 /** Category ids, in the order panels, files and summaries list them. Stable: files and defaults store them. */
@@ -56,6 +59,15 @@ export const BACKUP_CATEGORY_LABELS: Readonly<Record<BackupCategoryId, string>> 
   files: 'Files',
   repositories: 'Repositories on this Whombat',
 };
+
+/** `BACKUP_CATEGORY_LABELS` in a locale. */
+export function backupCategoryLabels(locale?: string | null): Readonly<Record<BackupCategoryId, string>> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(BACKUP_CATEGORY_IDS.map((id) => [id, tr.t(`backup.category.${id}`)])) as Record<
+    BackupCategoryId,
+    string
+  >;
+}
 
 /**
  * Categories whose records carry sign-ins (secrets, tokens): a file with one of them has `includesSecrets` (BF-08). `servers` since 0.117 (BF-13): the hosts service's certificate authority.
@@ -120,7 +132,15 @@ const count = (v: number, one: string, many: string) => `${n(v)} ${v === 1 ? one
  * The plain line under a category in the download panel (BF-05): “Its name, face, model and keys”, “9 automations ·
  * come back switched off”, “Your 8 entries”.
  */
-export function backupCategoryMeta(facts: BackupCategoryFacts): string {
+export function backupCategoryMeta(facts: BackupCategoryFacts, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  if (tr.language !== 'en') {
+    const id = facts.id;
+    if (id === 'settings') return tr.t('backup.meta.settings');
+    if (facts.count === 0) return tr.t(`backup.meta.${id}.none`);
+    if (id === 'agents' || id === 'memories') return tr.t(`backup.meta.${id}`);
+    return tr.tp(`backup.meta.${id}`, facts.count, { count: facts.count.toLocaleString('nl-NL') });
+  }
   const c = facts.count;
   switch (facts.id) {
     case 'agents':
@@ -160,17 +180,14 @@ export function backupCategoryMeta(facts: BackupCategoryFacts): string {
 }
 
 const NBSP = ' ';
-const trim1 = (v: number) => {
-  const s = (Math.round(v * 10) / 10).toFixed(1);
-  return s.endsWith('.0') ? s.slice(0, -2) : s;
-};
-
 /**
  * A size in the backup panels (decimal units, as the mock): “4 KB”, “640 KB”, “1.1 MB”, “120 MB”, “1.4 GB”. Kilobytes
  * are whole (at least 1 for anything above 0), megabytes and gigabytes get one decimal below 10. A no-break space
  * joins number and unit (as `formatBytes`).
  */
-export function formatBackupSize(bytes: number): string {
+export function formatBackupSize(bytes: number, locale?: string | null): string {
+  const trim1 = (v: number) =>
+    formatLocaleNumber(Math.round(v * 10) / 10, locale, { maximumFractionDigits: 1, useGrouping: false });
   const b = Math.max(0, Math.round(bytes));
   if (b === 0) return `0${NBSP}KB`;
   if (b < 999_500) return `${Math.max(1, Math.round(b / 1_000))}${NBSP}KB`;

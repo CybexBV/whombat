@@ -12,7 +12,6 @@ import { VAULT_AUTH_LABELS, vaultProblemOf } from '@whombat/client';
 import { useTheAgent, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import {
-  VAULT_COPY,
   VAULT_DESCRIPTION_MAX,
   VAULT_NAME_MAX,
   VAULT_NEW_TEMPLATES,
@@ -24,6 +23,7 @@ import {
   type VaultAuthType,
   type VaultNetwork,
   type VaultTemplate,
+  vaultCopy,
   vaultTemplateDescription,
 } from '@whombat/core/vault';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
@@ -34,6 +34,8 @@ import { Modal, ModalClose, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { TEMPLATE_AUTHS, VAULT_TEXT } from './copy';
 import { Fold } from './Fold';
 import {
@@ -94,6 +96,7 @@ function AddForm({
   onDone: () => void;
   onAdded: (entryId: string) => void;
 }) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const toast = useToast();
   const create = useVaultWrite(api.vault.create, burrow);
   const check = useVaultWrite(api.vault.check, burrow);
@@ -172,7 +175,7 @@ function AddForm({
         )}
         <p className={styles.savedAs} data-saved-as={template}>
           <strong>{VAULT_TEMPLATE_DEFS[template].label}</strong> ·{' '}
-          {vaultTemplateDescription(template, agent.name)}
+          {vaultTemplateDescription(template, agent.name, currentLocale())}
         </p>
         <Fold label={VAULT_TEXT.advanced} name="advanced">
           <div className={styles.fields}>
@@ -278,6 +281,7 @@ function Fields({
   problems: FieldProblems;
   onPasteKey: () => void;
 }) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const words = useVaultWords(useOpenBurrow());
   const kind = VAULT_TEMPLATE_DEFS[template].kind;
   const saved = formFor(template, form);
@@ -403,6 +407,7 @@ function AdvancedFields({
   set: SetField;
   problems: FieldProblems;
 }) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const auths = TEMPLATE_AUTHS[template];
   const auth = formFor(template, form).auth;
   return (

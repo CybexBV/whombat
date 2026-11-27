@@ -15,57 +15,62 @@ import {
   type SpendWindow,
   spendTokens,
 } from '@whombat/core/domain';
-import { formatClock, formatDate, plural } from '@whombat/core/text';
+import { formatLocaleNumber, formatLocaleOf, resolveLanguage } from '@whombat/core/i18n';
+import { formatClock, formatDate } from '@whombat/core/text';
 import { agentWords } from './agentName';
+import { clientTranslator } from './i18n/catalog';
 
 export { SPEND_WINDOWS as USAGE_WINDOWS };
 export type UsageWindow = SpendWindow;
 
-export const USAGE_TEXT = {
-  title: 'Usage',
-  intro: (agent: string) => `What it cost and how much ${agentWords(agent).Name} worked.`,
-  /** The window chooser's group name, for screen readers. */
-  windowsLabel: 'Usage time window',
-  windows: { today: 'Today', week: 'Last 7 days', month: 'Last 30 days' } satisfies Record<
-    SpendWindow,
-    string
-  >,
-  cost: 'Estimated cost',
-  unit: 'USD',
-  worked: (agent: string) => `Times ${agentWords(agent).Name} worked`,
-  noCost: 'No cost reported',
-  /** What one time is: never a count of finished tasks. */
-  definition:
-    'Each time is one go at answering or working for you. It can include several steps; it isn’t a count of completed tasks.',
-  loading: 'Loading Usage…',
-  emptyTitle: 'No usage reported for this window',
-  emptyLine: 'No reports is different from no use. There is no cost or work total to show.',
-  failedTitle: 'Couldn’t read Usage',
-  failedLine: 'There’s no saved copy to show on this device yet.',
-  retry: 'Try again',
-  more: 'More',
-  coverageTitle: 'Provider coverage',
-  coverageLines: [
-    'All providers reporting here are combined. This report doesn’t name them or split their use.',
-    'It is different from the provider selected for your next reply.',
-  ],
-  textTitle: 'Text read and written',
-  textLine: (agent: string) =>
-    `Counted in the small pieces of text the AI providers measure what ${agentWords(agent).Name} reads and writes in. They measure text, not tasks or time.`,
-  plansTitle: 'Recorded by plan',
-  plansLine: 'What saved plans used in the last 30 days, separate from the chosen window. It is not a bill.',
-} as const;
+export function usageText(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.t('usage.title'),
+    intro: (agent: string) => tr.t('usage.intro', { Name: agentWords(agent, locale).Name }),
+    windowsLabel: tr.t('usage.windowsLabel'),
+    windows: {
+      today: tr.t('usage.window.today'),
+      week: tr.t('usage.window.week'),
+      month: tr.t('usage.window.month'),
+    } satisfies Record<SpendWindow, string>,
+    cost: tr.t('usage.cost'),
+    unit: 'USD',
+    worked: (agent: string) => tr.t('usage.worked', { Name: agentWords(agent, locale).Name }),
+    noCost: tr.t('usage.noCost'),
+    definition: tr.t('usage.definition'),
+    loading: tr.t('usage.loading'),
+    emptyTitle: tr.t('usage.emptyTitle'),
+    emptyLine: tr.t('usage.emptyLine'),
+    failedTitle: tr.t('usage.failedTitle'),
+    failedLine: tr.t('usage.failedLine'),
+    retry: tr.t('usage.retry'),
+    more: tr.t('usage.more'),
+    coverageTitle: tr.t('usage.coverageTitle'),
+    coverageLines: [tr.t('usage.coverageLine1'), tr.t('usage.coverageLine2')] as const,
+    textTitle: tr.t('usage.textTitle'),
+    textLine: (agent: string) => tr.t('usage.textLine', { Name: agentWords(agent, locale).Name }),
+    plansTitle: tr.t('usage.plansTitle'),
+    plansLine: tr.t('usage.plansLine'),
+  };
+}
+
+export const USAGE_TEXT = usageText();
 
 /** “$0.37”, “$1,204.00”, “under $0.01”; null when nothing reported a cost. */
-export function usageCost(usd: number | null): string | null {
+export function usageCost(usd: number | null, locale?: string | null): string | null {
   if (usd === null || !Number.isFinite(usd)) return null;
-  if (usd > 0 && usd < 0.01) return 'under $0.01';
-  return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (usd > 0 && usd < 0.01) return clientTranslator(locale).t('usage.underCent');
+  const num =
+    resolveLanguage(locale) === 'en' && !locale
+      ? usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : formatLocaleNumber(usd, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `$${num}`;
 }
 
 /** “Cost reported for 4 of 5”: how many of the window's times reported a cost. */
-export function usageCoverage(t: Pick<SpendTotals, 'turns' | 'costTurns'>): string {
-  return `Cost reported for ${t.costTurns} of ${t.turns}`;
+export function usageCoverage(t: Pick<SpendTotals, 'turns' | 'costTurns'>, locale?: string | null): string {
+  return clientTranslator(locale).t('usage.coverage', { costTurns: t.costTurns, turns: t.turns });
 }
 
 /** The place's city, as people say it: “Europe/Amsterdam” → “Amsterdam”. */
@@ -75,24 +80,52 @@ export function zoneCity(timeZone: string): string {
 
 const DAY = 86_400_000;
 
+function shortDayMonth(d: Date, timeZone: string, locale?: string | null): string {
+  if (!locale) return formatDate(d, timeZone, { year: 'never' });
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), { day: 'numeric', month: 'short', timeZone })
+    .format(d)
+    .replace(/\.$/, '');
+}
+
+function fullDayMonthYear(d: Date, timeZone: string, locale?: string | null): string {
+  if (!locale) return formatDate(d, timeZone, { year: 'always' });
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone,
+  })
+    .format(d)
+    .replace(/\.$/, '');
+}
+
 /**
  * The window the numbers cover, ending when the report was prepared: “23 Sep 00:00–11:22 · Europe/Amsterdam” for
  * today, “16 Sep 11:22–23 Sep 11:22 · Europe/Amsterdam” for the last 7 days.
  */
-export function usageWindowText(window: SpendWindow, generatedAt: string, timeZone: string): string {
+export function usageWindowText(
+  window: SpendWindow,
+  generatedAt: string,
+  timeZone: string,
+  locale?: string | null,
+): string {
   const end = new Date(generatedAt);
-  const at = (d: Date) => `${formatDate(d, timeZone, { year: 'never' })} ${formatClock(d, timeZone)}`;
+  const at = (d: Date) => `${shortDayMonth(d, timeZone, locale)} ${formatClock(d, timeZone)}`;
   const span =
     window === 'today'
-      ? `${formatDate(end, timeZone, { year: 'never' })} 00:00–${formatClock(end, timeZone)}`
+      ? `${shortDayMonth(end, timeZone, locale)} 00:00–${formatClock(end, timeZone)}`
       : `${at(new Date(end.getTime() - SPEND_WINDOW_DAYS[window] * DAY))}–${at(end)}`;
   return `${span} · ${timeZone}`;
 }
 
 /** “Prepared 23 Sep 2026 at 11:22 Amsterdam. Estimates cover the times that reported a cost.” */
-export function usagePreparedText(generatedAt: string, timeZone: string): string {
+export function usagePreparedText(generatedAt: string, timeZone: string, locale?: string | null): string {
   const d = new Date(generatedAt);
-  return `Prepared ${formatDate(d, timeZone, { year: 'always' })} at ${formatClock(d, timeZone)} ${zoneCity(timeZone)}. Estimates cover the times that reported a cost.`;
+  return clientTranslator(locale).t('usage.prepared', {
+    date: fullDayMonthYear(d, timeZone, locale),
+    clock: formatClock(d, timeZone),
+    city: zoneCity(timeZone),
+  });
 }
 
 /** One window of the report, ready to draw. */
@@ -134,40 +167,56 @@ function windowView(
   generatedAt: string,
   timeZone: string,
   agent: string,
+  locale?: string | null,
 ): UsageWindowView {
-  const cost = usageCost(t.costUsd);
-  const coverage = usageCoverage(t);
-  const times = plural(t.turns, 'time');
+  const tr = clientTranslator(locale);
+  const text = usageText(locale);
+  const cost = usageCost(t.costUsd, locale);
+  const coverage = usageCoverage(t, locale);
+  const times = tr.tp('usage.times', t.turns);
   return {
     window,
-    label: USAGE_TEXT.windows[window],
+    label: text.windows[window],
     empty: t.turns === 0,
     cost,
     coverage,
     times: t.turns,
-    span: usageWindowText(window, generatedAt, timeZone),
-    text: `${formatTokenCount(spendTokens(t))} pieces of text`,
+    span: usageWindowText(window, generatedAt, timeZone, locale),
+    text: tr.t('usage.piecesOfText', { tokens: formatTokenCount(spendTokens(t)) }),
     reports:
       t.unreportedTurns === 0
         ? t.turns === 1
-          ? 'That time sent a usage report.'
-          : `All ${times} sent a usage report.`
-        : `${plural(t.unreportedTurns, 'time')} sent no usage report.`,
-    spoken: `${USAGE_TEXT.windows[window]}: ${cost ? `about ${cost}` : USAGE_TEXT.noCost}, ${coverage}. ${agentWords(agent).Name} worked ${times}.`,
+          ? tr.t('usage.reportOne')
+          : tr.tp('usage.reportAll', t.turns)
+        : tr.tp('usage.reportMissing', t.unreportedTurns),
+    spoken: tr.t('usage.spoken', {
+      window: text.windows[window],
+      cost: cost ? tr.t('usage.aboutCost', { cost }) : text.noCost,
+      coverage,
+      Name: agentWords(agent, locale).Name,
+      times,
+    }),
   };
 }
 
 /** The report as the page draws it, the assistant by its name. */
-export function usageView(data: SpendOverview, agent: string): UsageView {
+export function usageView(data: SpendOverview, agent: string, locale?: string | null): UsageView {
+  const tr = clientTranslator(locale);
+  const text = usageText(locale);
   const windows = Object.fromEntries(
-    SPEND_WINDOWS.map((w) => [w, windowView(w, data.totals[w], data.generatedAt, data.timeZone, agent)]),
+    SPEND_WINDOWS.map((w) => [
+      w,
+      windowView(w, data.totals[w], data.generatedAt, data.timeZone, agent, locale),
+    ]),
   ) as Record<SpendWindow, UsageWindowView>;
   return {
-    title: USAGE_TEXT.title,
-    intro: USAGE_TEXT.intro(agent),
-    worked: USAGE_TEXT.worked(agent),
-    prepared: usagePreparedText(data.generatedAt, data.timeZone),
+    title: text.title,
+    intro: text.intro(agent),
+    worked: text.worked(agent),
+    prepared: usagePreparedText(data.generatedAt, data.timeZone, locale),
     windows,
-    plans: data.plans.map((p) => `${p.title} · ${formatTokenCount(p.usedTokens)} pieces of text`),
+    plans: data.plans.map((p) =>
+      tr.t('usage.planLine', { title: p.title, tokens: formatTokenCount(p.usedTokens) }),
+    ),
   };
 }

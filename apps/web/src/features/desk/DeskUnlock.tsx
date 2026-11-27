@@ -5,13 +5,15 @@
  * NEEDS YOU row on This Whombat's Overview, where the line steps aside. It goes when answered here or elsewhere
  * (`desk.changed`) or when its time is up. What the answer did is a toast. The row is `DeskSection.tsx`'s.
  */
-import { DESK_TEXT, type DeskUnlockRequest, deskUnlockAnswerText } from '@whombat/client/desk';
+import { type DeskUnlockRequest, deskUnlockAnswerText } from '@whombat/client/desk';
 import { useDeskActions } from '@whombat/client/desk/react';
 import { useState } from 'react';
 import shell from '../../app/shell/ShellLayout.module.css';
 import { cx } from '../../components/cx';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
+import { DESK_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { type DeskHere, useDeskUnlockHere } from './useDeskHere';
 
 const U = DESK_TEXT.unlock;
@@ -26,9 +28,9 @@ export function useDeskUnlockAnswer(here: DeskHere, request: DeskUnlockRequest |
     setBusy(true);
     try {
       await actions.answerUnlock({ id: request.id, unlock });
-      toast.show(deskUnlockAnswerText(unlock));
+      toast.show(deskUnlockAnswerText(unlock, undefined, currentLocale()));
     } catch (error) {
-      toast.show(deskUnlockAnswerText(unlock, error));
+      toast.show(deskUnlockAnswerText(unlock, error, currentLocale()));
     } finally {
       setBusy(false);
     }

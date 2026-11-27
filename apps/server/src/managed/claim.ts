@@ -173,6 +173,7 @@ export class ClaimCeremony {
   private status: ClaimStatus | null = null;
   private burrows: ConsoleBurrows | undefined;
   private signIn: ConsoleSignIn | undefined;
+  private locale: string | undefined;
   private timer: NodeJS.Timeout | null = null;
   private lastWritten: string | null = null;
   private closed = false;
@@ -300,6 +301,14 @@ export class ClaimCeremony {
    */
   setBurrows(burrows: ConsoleBurrows | undefined): void {
     this.burrows = burrows;
+    this.write();
+  }
+
+  /** The owner's language tag for the console UI, or undefined for the default. */
+  setLocale(locale: string | null | undefined): void {
+    const next = locale && ConsoleState.shape.locale.safeParse(locale).success ? locale : undefined;
+    if (next === this.locale) return;
+    this.locale = next;
     this.write();
   }
 
@@ -460,6 +469,7 @@ export class ClaimCeremony {
       ...(pageOpen ? { pageOpen: true as const } : {}),
       ...(alert ? { alert } : {}),
       ...(reach ? { reach } : {}),
+      ...(this.locale ? { locale: this.locale } : {}),
     };
   }
 

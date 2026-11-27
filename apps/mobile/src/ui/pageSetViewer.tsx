@@ -8,6 +8,7 @@
  * What a page asks for beyond its own files is never done by itself: a link out shows where it goes with Open, a link to
  * a file shows its name and size with Download (a copy in `cache/shared/<attachment id>/`, then the share sheet).
  */
+
 import { PageSetHost, PageSetReader, pageTarget } from '@whombat/client/pages';
 import { type ResourceRef, resourceFromUrl } from '@whombat/client/session';
 import { type Attachment, PAGES_DEFAULT_OPEN, pageFileType, pageSetTitle } from '@whombat/core';
@@ -35,6 +36,7 @@ import {
   sharedCopyPath,
 } from '../data/pageSets';
 import { PREVIEW_WEBVIEW_PROPS } from '../data/richPreview';
+import { useMobileT } from '../i18n';
 import { expoFileApi } from '../managed/expoFiles';
 import { rangeToFile } from '../managed/files';
 import { Text } from '../theme/Text';
@@ -339,6 +341,7 @@ function Cover({ failed, onTryAgain }: { failed: boolean; onTryAgain: () => void
 
 /** Under the page: what a link asked for, with the one thing to do about it. */
 function NoticeBar({ notice, download }: { notice: Notice; download: (path: string) => Promise<void> }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
   // A new notice starts afresh.
@@ -383,7 +386,7 @@ function NoticeBar({ notice, download }: { notice: Notice; download: (path: stri
         </Text>
         {state === 'failed' ? (
           <Text size={11} mono color={theme.colors.bad}>
-            Couldn’t open it. Tap to try again.
+            {tMobile('ui.couldnt-open-it-tap-to-try-again')}
           </Text>
         ) : null}
       </View>

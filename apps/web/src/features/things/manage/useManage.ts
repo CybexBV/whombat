@@ -12,6 +12,7 @@ import { api } from '@whombat/core/contracts';
 import type { HostManageOp, HostManageResult } from '@whombat/core/domain';
 import { useCallback } from 'react';
 import { useToast } from '../../../components/Toast';
+import { useWebI18n } from '../../../i18n/provider';
 import { useChangeRunner } from '../parts';
 import { showTask, type TaskPlatform, type TrackedTask, trackTask } from '../tasks/taskTracker';
 
@@ -41,6 +42,7 @@ export type ManageOutcome =
   | { ok: false; message: string; conflict: boolean; fields: Record<string, string> };
 
 export function useManage(burrow: string, serverId: string) {
+  const { tag: uiLocale } = useWebI18n();
   const change = useHostsChange(api.hosts.manage);
   const { run, busy } = useChangeRunner();
   const toast = useToast();
@@ -104,13 +106,13 @@ export function useManage(burrow: string, serverId: string) {
         return { ok: true, result: out.data };
       }
       const info = out.error
-        ? hostErrorInfo(out.error)
+        ? hostErrorInfo(out.error, uiLocale)
         : { message: out.message, conflict: false, fields: {} };
       // The configuration changed meanwhile: read it again, so the review shows what is there now.
       if (info.conflict) void qc.invalidateQueries({ queryKey: queryKeys.scope('hosts.manageRead') });
       return { ok: false, message: info.message, conflict: info.conflict, fields: info.fields };
     },
-    [change, run, burrow, serverId, qc, toast],
+    [change, run, burrow, serverId, qc, toast, uiLocale],
   );
   return { send, busy };
 }

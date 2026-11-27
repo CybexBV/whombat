@@ -98,16 +98,17 @@ class WhombatStatusWidgetProvider : AppWidgetProvider() {
     private fun buildViews(context: Context, snapshot: StatusWidgetSnapshot?, nowMs: Long): RemoteViews {
       val views = RemoteViews(context.packageName, R.layout.whombat_status_widget)
       if (snapshot == null) {
-        val box = context.getString(R.string.whombat_widget_empty_box)
-        val status = context.getString(R.string.whombat_widget_empty_status)
-        val asOf = context.getString(R.string.whombat_widget_empty_as_of)
+        val words = LiveLocale.localized(context)
+        val box = words.getString(R.string.whombat_widget_empty_box)
+        val status = words.getString(R.string.whombat_widget_empty_status)
+        val asOf = words.getString(R.string.whombat_widget_empty_as_of)
         views.setTextViewText(R.id.whombat_widget_box_name, box)
         views.setTextViewText(R.id.whombat_widget_status, status)
         views.setTextViewText(R.id.whombat_widget_as_of, asOf)
         views.setImageViewResource(R.id.whombat_widget_dot, R.drawable.whombat_widget_dot_neutral)
         views.setContentDescription(R.id.whombat_widget_root, "$box. $status. $asOf.")
       } else {
-        val asOf = snapshot.asOfForNow(nowMs)
+        val asOf = snapshot.asOfForNow(context, nowMs)
         views.setTextViewText(R.id.whombat_widget_box_name, snapshot.boxName)
         views.setTextViewText(R.id.whombat_widget_status, snapshot.status)
         views.setTextViewText(R.id.whombat_widget_as_of, asOf)

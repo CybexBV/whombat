@@ -18,7 +18,9 @@ import {
   type YouPart,
   youParts,
 } from '@whombat/client';
+import { andList } from '@whombat/client/managed';
 import type { AppMode } from '../data/config';
+import { mobileTranslator } from '../i18n/translate';
 
 /** What the Spend page is called now: Usage (docs/decisions/phone-shell-final.md). */
 export const USAGE_TITLE = 'Usage';
@@ -40,19 +42,19 @@ export function youPartsHere(here: SettingsHere & { prompts?: boolean }): YouPar
   );
 }
 
-const YOU_WORDS: Record<YouPart, string> = {
-  profile: 'Your photo',
-  notifications: 'notifications',
-  devices: 'devices',
-  links: 'shared links',
-  prompts: 'prompts',
-};
+const YOU_WORDS = {
+  profile: 'settings.you.photo',
+  notifications: 'settings.you.notifications',
+  devices: 'settings.you.devices',
+  links: 'settings.you.links',
+  prompts: 'settings.you.prompts',
+} as const satisfies Record<YouPart, string>;
 
 /** The profile card's line under your name: what You holds here (“Your photo, notifications and devices”). */
-export function youLine(parts: readonly YouPart[]): string {
-  const words = [YOU_WORDS.profile, ...parts.filter((p) => p !== 'profile').map((p) => YOU_WORDS[p])];
-  const last = words.pop() as string;
-  return words.length ? `${words.join(', ')} and ${last}` : last;
+export function youLine(parts: readonly YouPart[], locale?: string | null): string {
+  const { t } = mobileTranslator(locale);
+  const words = [t(YOU_WORDS.profile), ...parts.filter((p) => p !== 'profile').map((p) => t(YOU_WORDS[p]))];
+  return andList(words, locale);
 }
 
 /**

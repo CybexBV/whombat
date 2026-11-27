@@ -4,6 +4,7 @@
  * `NETWORK_TEXT`), in the same voice, with “Whombat” for the box as HD-11 has it. Kinds and states come from the
  * server; the words are made here.
  */
+import { english, localized, type Translate } from '../i18n/translate';
 import type {
   HostNetwork,
   NetworkChange,
@@ -15,114 +16,119 @@ import type {
 } from './network';
 import { connectedVia } from './network';
 
-/** The box as the words name it (HD-11: “… but Whombat couldn’t reach the internet there …”). */
-const BOX = 'Whombat';
-
-export const WIFI = {
-  kicker: 'WI-FI',
-  title: 'Join a Wi-Fi network',
-  readOnlyTitle: 'Wi-Fi',
-  cable: 'Cable',
-  /** The chip on top of the screen: a word alone there has to say what it is about. */
-  chipCable: 'Wired network',
-  wifi: 'Wi-Fi',
-  connected: 'Connected',
-  notConnected: 'Not connected',
-  connecting: (ssid: string | undefined) => (ssid ? `Connecting to ${ssid}…` : 'Connecting…'),
-  noNetwork: 'No network',
-  offline: 'Can’t reach Whombat right now',
-  unreadable: 'The network couldn’t be read right now.',
-  /** With a cable plugged in, the Wi-Fi waits (HD-05). */
-  cableWins: 'Used when the cable is unplugged',
-  saved: 'Saved',
-  open: 'Open',
-  secured: 'Secured',
-  forget: 'Forget',
-  nearby: 'Wi-Fi networks nearby',
-  looking: 'Looking for networks…',
-  none: 'No Wi-Fi networks nearby.',
-  again: 'Look again',
-  couldNotLook: 'Couldn’t look for networks. Try again.',
-  other: 'Other network…',
-  otherTitle: 'Other network',
-  otherLead: 'A network that doesn’t show its name. Type it exactly.',
-  name: 'Network name',
-  security: 'Security',
-  securities: { psk: 'Password', open: 'None' } as Record<'psk' | 'open', string>,
-  password: 'Password',
-  show: 'Show',
-  hide: 'Hide',
-  join: 'Join',
-  joining: 'Joining…',
-  joinTitle: (ssid: string) => `Join ${ssid}`,
-  back: 'Back',
-  cancel: 'Cancel',
-  close: 'Close',
-  done: 'Done',
-  tryAgain: 'Try again',
-  guard: `If ${BOX} can’t reach the internet on the new network, it goes back to the one it uses now.`,
-  /** HD-07: the screen may not change the Wi-Fi now. */
-  readOnly: 'Unlock the screen to change Wi-Fi, or change it in the app.',
-  chooseWifi: 'Choose Wi-Fi',
-  /** The waiting scene, when the box has a Wi-Fi card (CG-106). */
-  waitingHint: 'Connect a network cable, or choose a Wi-Fi network.',
-  missing: {
-    no_adapter: 'This Whombat has no Wi-Fi card. Connect a network cable.',
-    no_driver: 'This Wi-Fi card has no driver yet. Connect a network cable.',
-    disabled: 'Wi-Fi is switched off. Turn it on with the machine’s Wi-Fi key or switch.',
-  } satisfies Record<WifiMissing, string>,
-  rowReason: {
-    enterprise: 'Company networks can’t be joined yet.',
-    other: 'This kind of network can’t be joined.',
-  } as Record<'enterprise' | 'other', string>,
-  problems: {
-    name: 'Type the network’s name.',
-    nameLong: 'That name is too long for a Wi-Fi network.',
-    password: 'A Wi-Fi password is 8 to 63 characters.',
-  },
-  forgetTitle: (ssid: string) => `Forget ${ssid}?`,
-  forgetLead: (secured: boolean) =>
-    secured
-      ? `${BOX} won’t join it again until someone types its password.`
-      : `${BOX} won’t join it again by itself.`,
-  forgetting: 'Forgetting…',
-  errors: {
-    no_wifi: `${BOX} has no Wi-Fi.`,
-    busy: 'Another network change is still running. Try again in a moment.',
-    in_use: `${BOX} reaches the internet through this network. Plug in a cable or join another network first.`,
-    not_saved: 'That network isn’t saved any more.',
-    invalid_passphrase: 'A Wi-Fi password is 8 to 63 characters.',
-  } as Record<string, string>,
-  failed: 'That didn’t work. Try again.',
-  /** The installer's step (HD-08, CG-120). */
-  installer: {
-    title: 'Connect to Wi-Fi',
-    sub: 'There’s no network cable. Choose a Wi-Fi network so Whombat can reach the internet after the restart.',
-    say: 'No cable? I can sniff out the Wi-Fi.',
-    skip: 'Skip',
-    checking: 'Checking the connection…',
-    joinedSay: 'Got it. That one works.',
-    joined: (ssid: string) => `Joined ${ssid}. Whombat uses it after the restart.`,
-    missing: {
-      no_adapter: 'This machine has no Wi-Fi card. Connect a network cable, then check again.',
-      no_driver: 'This Wi-Fi card has no driver yet. Connect a network cable, then check again.',
-      disabled: 'Wi-Fi is switched off. Turn it on with the machine’s Wi-Fi key or switch.',
-    } satisfies Record<WifiMissing, string>,
-  },
-} as const;
+export const wifiCopy = localized(
+  (t) =>
+    ({
+      kicker: t('wifi.kicker'),
+      title: t('wifi.title'),
+      readOnlyTitle: 'Wi-Fi',
+      cable: t('desk.calm.bar.cable'),
+      /** The chip on top of the screen: a word alone there has to say what it is about. */
+      chipCable: t('wifi.chipCable'),
+      wifi: 'Wi-Fi',
+      connected: t('bluetooth.connected'),
+      notConnected: t('bluetooth.notConnected'),
+      connecting: (ssid: string | undefined) =>
+        ssid ? t('wifi.connecting.WithValue', { ssid }) : t('bluetooth.connecting'),
+      noNetwork: t('desk.calm.bar.noNetwork'),
+      offline: t('wifi.offline'),
+      unreadable: t('wifi.unreadable'),
+      /** With a cable plugged in, the Wi-Fi waits (HD-05). */
+      cableWins: t('wifi.cableWins'),
+      saved: t('wifi.saved'),
+      open: t('wifi.open'),
+      secured: t('wifi.secured'),
+      forget: t('wifi.forget'),
+      nearby: t('wifi.nearby'),
+      looking: t('wifi.looking'),
+      none: t('wifi.none'),
+      again: t('bluetooth.again'),
+      couldNotLook: t('wifi.couldNotLook'),
+      other: t('wifi.other'),
+      otherTitle: t('wifi.otherTitle'),
+      otherLead: t('wifi.otherLead'),
+      name: t('wifi.name'),
+      security: t('wifi.security'),
+      securities: { psk: t('wifi.securities.psk'), open: t('wifi.securities.open') } as Record<
+        'psk' | 'open',
+        string
+      >,
+      password: t('wifi.securities.psk'),
+      show: t('wifi.show'),
+      hide: t('wifi.hide'),
+      join: t('wifi.join'),
+      joining: t('wifi.joining'),
+      joinTitle: (ssid: string) => t('wifi.joinTitle', { ssid }),
+      back: t('bluetooth.back'),
+      cancel: t('bluetooth.cancel'),
+      close: t('bluetooth.close'),
+      done: t('bluetooth.done'),
+      tryAgain: t('bluetooth.tryAgain'),
+      guard: t('wifi.guard'),
+      /** HD-07: the screen may not change the Wi-Fi now. */
+      readOnly: t('wifi.readOnly'),
+      chooseWifi: t('wifi.chooseWifi'),
+      /** The waiting scene, when the box has a Wi-Fi card (CG-106). */
+      waitingHint: t('wifi.waitingHint'),
+      missing: {
+        no_adapter: t('wifi.missing.no_adapter'),
+        no_driver: t('wifi.missing.no_driver'),
+        disabled: t('wifi.missing.disabled'),
+      } satisfies Record<WifiMissing, string>,
+      rowReason: {
+        enterprise: t('wifi.rowReason.enterprise'),
+        other: t('wifi.rowReason.other'),
+      } as Record<'enterprise' | 'other', string>,
+      problems: {
+        name: t('wifi.problems.name'),
+        nameLong: t('wifi.problems.nameLong'),
+        password: t('wifi.problems.password'),
+      },
+      forgetTitle: (ssid: string) => t('wifi.forgetTitle', { ssid }),
+      forgetLead: (secured: boolean) =>
+        secured ? t('wifi.forgetLead.WithValue') : t('wifi.forgetLead.Fallback'),
+      forgetting: t('wifi.forgetting'),
+      errors: {
+        no_wifi: t('wifi.errors.no_wifi'),
+        busy: t('wifi.errors.busy'),
+        in_use: t('wifi.errors.in_use'),
+        not_saved: t('wifi.errors.not_saved'),
+        invalid_passphrase: t('wifi.problems.password'),
+      } as Record<string, string>,
+      failed: t('bluetooth.failed'),
+      /** The installer's step (HD-08, CG-120). */
+      installer: {
+        title: t('wifi.installer.title'),
+        sub: t('wifi.installer.sub'),
+        say: t('wifi.installer.say'),
+        skip: t('wifi.installer.skip'),
+        checking: t('wifi.installer.checking'),
+        joinedSay: t('wifi.installer.joinedSay'),
+        joined: (ssid: string) => t('wifi.installer.joined', { ssid }),
+        missing: {
+          no_adapter: t('wifi.installer.missing.no_adapter'),
+          no_driver: t('wifi.installer.missing.no_driver'),
+          disabled: t('wifi.missing.disabled'),
+        } satisfies Record<WifiMissing, string>,
+      },
+    }) as const,
+);
+export const WIFI = wifiCopy();
 
 /** “Strong signal”, “Good signal”, “Weak signal” (4 bars; 3–2; 1–0), as the app says. */
-export function signalText(s: WifiSignal): string {
-  return s >= 4 ? 'Strong signal' : s >= 2 ? 'Good signal' : 'Weak signal';
+export function signalText(s: WifiSignal, t: Translate = english): string {
+  return s >= 4 ? t('wifiCopy.strongSignal') : s >= 2 ? t('wifiCopy.goodSignal') : t('wifiCopy.weakSignal');
 }
 
 /** The sheet's connection line (HD-11): “Cable · Connected”, “Wi-Fi · Home · Strong signal”, … */
-export function connectionLine(n: HostNetwork): string {
+export function connectionLine(n: HostNetwork, t: Translate = english): string {
+  const WIFI = wifiCopy(t);
+
   const via = connectedVia(n);
   if (via === 'cable') return `${WIFI.cable} · ${WIFI.connected}`;
   const w = n.wifi;
   if (via === 'wifi' && w) {
-    return [WIFI.wifi, w.ssid ?? null, w.signal === undefined ? null : signalText(w.signal)]
+    return [WIFI.wifi, w.ssid ?? null, w.signal === undefined ? null : signalText(w.signal, t)]
       .filter(Boolean)
       .join(' · ');
   }
@@ -131,11 +137,16 @@ export function connectionLine(n: HostNetwork): string {
 }
 
 /** The chip (CG-104): what the box uses, short; amber when it can't reach Whombat. */
-export function chipView(s: NetworkSummary): {
+export function chipView(
+  s: NetworkSummary,
+  t: Translate = english,
+): {
   icon: 'cable' | 'wifi' | 'none';
   text: string;
   warn: boolean;
 } {
+  const WIFI = wifiCopy(t);
+
   const warn = !s.online;
   if (s.via === 'cable') return { icon: 'cable', text: WIFI.chipCable, warn };
   if (s.via === 'wifi') return { icon: 'wifi', text: s.ssid ?? WIFI.wifi, warn };
@@ -143,46 +154,62 @@ export function chipView(s: NetworkSummary): {
 }
 
 /** What a screen reader hears for the chip. */
-export function chipLabel(s: NetworkSummary): string {
-  const v = chipView(s);
+export function chipLabel(s: NetworkSummary, t: Translate = english): string {
+  const WIFI = wifiCopy(t);
+
+  const v = chipView(s, t);
   const what = s.via === 'wifi' ? `${WIFI.wifi} · ${v.text}` : v.text;
   return s.online || s.via === 'none' ? what : `${what} · ${WIFI.offline}`;
 }
 
 /** A row's second line: “Connected”, “Saved”, or why it can't be joined. */
-export function rowMeta(n: WifiNetwork): string | null {
+export function rowMeta(n: WifiNetwork, t: Translate = english): string | null {
+  const WIFI = wifiCopy(t);
+
   if (n.security === 'enterprise' || n.security === 'other') return WIFI.rowReason[n.security];
   if (n.connected) return WIFI.connected;
   return n.saved ? WIFI.saved : null;
 }
 
 /** What a screen reader hears for a row: “Home, secured, strong signal, saved”. */
-export function rowLabel(n: WifiNetwork): string {
+export function rowLabel(n: WifiNetwork, t: Translate = english): string {
+  const WIFI = wifiCopy(t);
+
   return [
     n.ssid,
     n.security === 'open' ? WIFI.open.toLowerCase() : WIFI.secured.toLowerCase(),
-    signalText(n.signal).toLowerCase(),
-    rowMeta(n),
+    signalText(n.signal, t).toLowerCase(),
+    rowMeta(n, t),
   ]
     .filter(Boolean)
     .join(', ');
 }
 
 /** A typed network name's problem, or null (1–32 bytes, printable). */
-export function nameProblem(name: string, valid: (s: string) => boolean): string | null {
+export function nameProblem(
+  name: string,
+  valid: (s: string) => boolean,
+  t: Translate = english,
+): string | null {
+  const WIFI = wifiCopy(t);
+
   if (name.trim() === '') return WIFI.problems.name;
   return valid(name) ? null : WIFI.problems.nameLong;
 }
 
-const failureLine: Record<NetworkChangeFailure, (ssid: string) => string> = {
-  wrong_password: () => 'That password didn’t work.',
-  not_found: (ssid) => `Couldn’t find ${ssid} nearby.`,
-  no_address: (ssid) => `${ssid} didn’t give ${BOX} an address.`,
-  no_internet: () => `${BOX} couldn’t reach the internet there.`,
-  failed: () => 'Something went wrong. Try again.',
-};
+const failurelineCopy = localized(
+  (t): Record<NetworkChangeFailure, (ssid: string) => string> => ({
+    wrong_password: () => t('wifi.failure.wrong_password'),
+    not_found: (ssid) => t('wifi.failure.not_found', { ssid }),
+    no_address: (ssid) => t('wifi.failure.no_address', { ssid }),
+    no_internet: () => t('wifi.failure.no_internet'),
+    failed: () => t('wifi.failure.failed'),
+  }),
+);
 
-export function failureText(f: NetworkChangeFailure, ssid: string): string {
+export function failureText(f: NetworkChangeFailure, ssid: string, t: Translate = english): string {
+  const failureLine = failurelineCopy(t);
+
   return failureLine[f](ssid);
 }
 
@@ -197,10 +224,12 @@ export interface ChangeView {
 }
 
 /** A join's or a forget's phase in words (the app's `networkChangeView`, HD-11's sentences). */
-export function changeView(c: NetworkChange): ChangeView {
+export function changeView(c: NetworkChange, t: Translate = english): ChangeView {
+  const WIFI = wifiCopy(t);
+
   const { ssid } = c;
   const prev = c.previous ?? null;
-  const why = c.failure ? failureText(c.failure, ssid) : null;
+  const why = c.failure ? failureText(c.failure, ssid, t) : null;
   const v = (title: string, line: string | null, tone: ChangeView['tone'], running = false): ChangeView => ({
     running,
     title,
@@ -211,53 +240,60 @@ export function changeView(c: NetworkChange): ChangeView {
   if (c.kind === 'join') {
     switch (c.phase) {
       case 'applying':
-        return v(`Joining ${ssid}…`, prev ? WIFI.guard : null, 'mut', true);
+        return v(t('wifiCopy.joining', { ssid }), prev ? WIFI.guard : null, 'mut', true);
       case 'confirming':
-        return v(`Joined ${ssid}`, `Checking that ${BOX} reaches the internet there…`, 'mut', true);
+        return v(t('wifiCopy.joined', { ssid }), t('wifiCopy.checkingThatWhombatReachesThe'), 'mut', true);
       case 'committed':
-        return v(`Joined ${ssid}`, null, 'ok');
+        return v(t('wifiCopy.joined', { ssid }), null, 'ok');
       case 'reverting':
         return v(
-          prev ? `Going back to ${prev}…` : `Leaving ${ssid}…`,
-          why ?? failureText('no_internet', ssid),
+          prev ? t('wifiCopy.goingBackTo', { prev }) : t('wifiCopy.leaving', { ssid }),
+          why ?? failureText('no_internet', ssid, t),
           'warn',
           true,
         );
       case 'reverted': {
-        const back = prev ? `went back to ${prev}` : 'left it again';
+        const back = prev ? t('wifiCopy.wentBackTo', { prev }) : t('wifiCopy.leftItAgain');
         return v(
-          `Couldn’t switch to ${ssid}`,
+          t('wifiCopy.couldntSwitchTo', { ssid }),
           c.failure === 'no_address'
-            ? `${ssid} didn’t give ${BOX} an address, so it ${back}.`
-            : `Joined ${ssid}, but ${BOX} couldn’t reach the internet there, so it ${back}.`,
+            ? t('wifiCopy.didntGiveWhombatAnAddress', { ssid, back })
+            : t('wifiCopy.joinedButWhombatCouldntReach', { ssid, back }),
           'warn',
         );
       }
       default:
-        return v(`Couldn’t join ${ssid}`, why ?? failureText('failed', ssid), 'bad');
+        return v(t('wifiCopy.couldntJoin', { ssid }), why ?? failureText('failed', ssid, t), 'bad');
     }
   }
   switch (c.phase) {
     case 'applying':
-      return v(`Forgetting ${ssid}…`, null, 'mut', true);
+      return v(t('wifiCopy.forgetting', { ssid }), null, 'mut', true);
     case 'confirming':
-      return v(`Forgot ${ssid}`, `Checking that ${BOX} still reaches the internet…`, 'mut', true);
+      return v(t('wifiCopy.forgot', { ssid }), t('wifiCopy.checkingThatWhombatStillReaches'), 'mut', true);
     case 'committed':
-      return v(`Forgot ${ssid}`, null, 'ok');
+      return v(t('wifiCopy.forgot', { ssid }), null, 'ok');
     case 'reverting':
-      return v(`Joining ${ssid} again…`, `${BOX} couldn’t reach the internet without it.`, 'warn', true);
+      return v(
+        t('wifiCopy.joiningAgain', { ssid }),
+        t('wifiCopy.whombatCouldntReachTheInternet'),
+        'warn',
+        true,
+      );
     case 'reverted':
       return v(
-        `Kept ${ssid}`,
-        `${BOX} couldn’t reach the internet without ${ssid}, so it joined it again.`,
+        t('wifiCopy.kept', { ssid }),
+        t('wifiCopy.whombatCouldntReachTheInternetAlt', { ssid }),
         'warn',
       );
     default:
-      return v(`Couldn’t forget ${ssid}`, why ?? failureText('failed', ssid), 'bad');
+      return v(t('wifiCopy.couldntForget', { ssid }), why ?? failureText('failed', ssid, t), 'bad');
   }
 }
 
 /** A refusal of a join or a forget (`{"message": code}`), in words. */
-export function refusalText(code: string | null): string {
+export function refusalText(code: string | null, t: Translate = english): string {
+  const WIFI = wifiCopy(t);
+
   return (code && WIFI.errors[code]) || WIFI.failed;
 }

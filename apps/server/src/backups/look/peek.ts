@@ -11,20 +11,44 @@
 import { formatBytes } from '@whombat/core/text';
 import type { BackupLookProblem } from '@whombat/protocol/session';
 import { z } from 'zod';
+import { tServer } from '../../i18n/catalog';
 import type { BackupPort } from '../../managed/backup-port';
 
-/** What a look shows when something stops it, in plain words. */
-export const LOOK_TEXT = {
-  busy: 'Another backup is open, or a backup is running right now. Try again in a few minutes.',
-  notSupported: 'This Whombat can’t open a backup to look inside it yet. It can once its next update is in.',
-  notFound: 'That backup isn’t there any more.',
-  failed: 'The backup couldn’t be opened. Try again in a few minutes.',
-  closed: 'The backup closed after two hours. Open it again to bring more back.',
-  noRoom: (need: number | null, free: number | null) =>
-    need !== null && free !== null
-      ? `There isn’t room on this Whombat to open this backup: it needs about ${formatBytes(need)} and ${formatBytes(free)} is free.`
-      : 'There isn’t room on this Whombat to open this backup.',
-} as const;
+/** What a look shows when something stops it, in plain words, in `locale`. */
+export function lookText(locale?: string | null) {
+  return {
+    busy: tServer(locale, 'look.busy'),
+    notSupported: tServer(locale, 'look.notSupported'),
+    notFound: tServer(locale, 'look.notFound'),
+    failed: tServer(locale, 'look.failed'),
+    closed: tServer(locale, 'look.closed'),
+    noRoom: (need: number | null, free: number | null) =>
+      need !== null && free !== null
+        ? tServer(locale, 'look.noRoomSized', { need: formatBytes(need), free: formatBytes(free) })
+        : tServer(locale, 'look.noRoom'),
+  };
+}
+
+/** The same words in English. */
+export const LOOK_TEXT = lookText('en');
+
+/** A problem's words in `locale`, from its code (and its sizes): what was stored in English, said again. */
+export function lookProblemIn(problem: BackupLookProblem, locale?: string | null): BackupLookProblem {
+  const t = lookText(locale);
+  const message =
+    problem.code === 'no_room'
+      ? t.noRoom(problem.needBytes ?? null, problem.freeBytes ?? null)
+      : problem.code === 'busy'
+        ? t.busy
+        : problem.code === 'not_supported'
+          ? t.notSupported
+          : problem.code === 'not_found'
+            ? t.notFound
+            : problem.code === 'closed'
+              ? t.closed
+              : t.failed;
+  return { ...problem, message };
+}
 
 /** The peek's database: never another (the runtime connects only to this one, read-only). */
 export const PEEK_DATABASE = /^whombat_peek_[0-9a-f]{12}$/;

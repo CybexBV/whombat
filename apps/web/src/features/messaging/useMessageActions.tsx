@@ -18,6 +18,7 @@ import type { Message } from '@whombat/core';
 import { type MouseEvent, type ReactNode, useCallback, useMemo, useState } from 'react';
 import { type ContextMenuItem, useRowMenu } from '../../app/shell/ContextMenu';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import { DeleteMessageDialog } from './DeleteMessageDialog';
 import { type EmojiAnchor, EmojiPicker } from './emoji/EmojiPicker';
 import { rememberEmoji } from './emoji/recentEmoji';
@@ -330,7 +331,7 @@ function errorText(err: unknown, fallback: string): string {
   // The connection dropped after the request left: it may have happened (AP-14). Nothing is retried by itself.
   if (err instanceof OutcomeUnknownError)
     return 'Not confirmed yet: the connection dropped. Check the conversation before trying again.';
-  const licence = licenceRefusalText(err);
+  const licence = licenceRefusalText(err, currentLocale());
   if (licence) return licence;
   if (err instanceof ApiError) {
     if (err.status === 404 || err.status === 501) return 'That isn’t available here yet.';

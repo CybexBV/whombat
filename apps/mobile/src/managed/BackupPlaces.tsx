@@ -11,12 +11,12 @@
  * words and actions are `@whombat/client`'s, so the web says the same.
  */
 import {
-  ACCOUNTS_TEXT,
+  accountsText,
   BACKUP_PLACE_DEADLINE_MS,
-  BACKUP_PLACES_TEXT,
   type BackupPlaceAction,
   type BackupPlaceRow,
   backupPlaceRows,
+  backupPlacesText,
   currentPlaceLine,
   moveFromPlace,
   moveNeeded,
@@ -29,10 +29,11 @@ import {
 } from '@whombat/client/managed';
 import { useBackupPlaces, useReloadBackupPlaces } from '@whombat/client/react';
 import { type BackupPlaceByHand, sessionOps } from '@whombat/client/session';
-import { BACKUP_PLACE_TEXT, type BackupPlace } from '@whombat/core/domain';
+import { type BackupPlace, backupPlaceText } from '@whombat/core/domain';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { connectionLogo } from '../data/connections';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -45,8 +46,6 @@ import { Button } from '../ui/primitives';
 import { Touchable } from '../ui/Touchable';
 import { useManagedOrThrow } from './context';
 import { Card, Note } from './ui';
-
-const W = BACKUP_PLACES_TEXT;
 
 /** A row with the place's logo tile: the settings card's row (`Row`) with the tile where its dot goes. */
 function PlaceLine({
@@ -105,9 +104,10 @@ function PlaceLine({
 
 /** BACKUPS' line for the place that keeps the backups now (BPL-10); nothing while none does. */
 export function CurrentPlaceRow() {
+  const { rawLocale } = useI18n();
   const { session } = useManagedOrThrow();
   const places = useBackupPlaces(session);
-  const line = currentPlaceLine(places.data);
+  const line = currentPlaceLine(places.data, rawLocale);
   if (!line) return null;
   return <PlaceLine mark={line.mark} title={line.title} line={line.meta} />;
 }
@@ -129,6 +129,9 @@ export function BackupPlacesCard({
   /** A Whombat from before the passkey: a new place needs a new recovery kit. Absent: the passkey locks it again. */
   onKit?: (() => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const W = backupPlacesText(rawLocale);
+  const placeText = backupPlaceText(rawLocale);
   const managed = useManagedOrThrow();
   const { session } = managed;
   const navigation = useAppNavigation();
@@ -149,7 +152,7 @@ export function BackupPlacesCard({
     alive.current = controller;
     return () => controller.abort();
   }, []);
-  const rows = backupPlaceRows(places.data);
+  const rows = backupPlaceRows(places.data, rawLocale);
   if (rows.length === 0) return null;
   const placeOf = (id: string): BackupPlace | null => places.data?.places.find((p) => p.id === id) ?? null;
 
@@ -176,15 +179,15 @@ export function BackupPlacesCard({
       const result = check
         ? await sessionOps.backupPlaceCheck(session, input, options)
         : await sessionOps.backupUsePlace(session, input, options);
-      note(row.id, placeSetNotes(result));
+      note(row.id, placeSetNotes({ ...result, locale: rawLocale }));
       setKitNeeded(true);
       await reload();
       onChanged();
       return true;
     } catch (error) {
-      const needed = move ? null : moveNeeded(error);
+      const needed = move ? null : moveNeeded(error, rawLocale);
       if (needed) setAsking({ row, from: needed.from, byHand: check, ...(location ? { location } : {}) });
-      else note(row.id, placeErrorText(error), true);
+      else note(row.id, placeErrorText(error, rawLocale), true);
       return false;
     } finally {
       setWorking(null);
@@ -205,11 +208,16 @@ export function BackupPlacesCard({
         { placeId: row.id, location, ...(change.move ? { move: true } : {}) },
         { deadlineMs: BACKUP_PLACE_DEADLINE_MS },
       );
-      note(row.id, change.move ? placeSetNotes(result) : W.moved(result.locationName ?? change.where));
+      note(
+        row.id,
+        change.move
+          ? placeSetNotes({ ...result, locale: rawLocale })
+          : W.moved(result.locationName ?? change.where),
+      );
       // A NAS starts a new repository there, which a new recovery kit needs.
       if (change.move) setKitNeeded(true);
     } catch (error) {
-      if (change.move || !placeMoveMayRun(error)) note(row.id, placeErrorText(error), true);
+      if (change.move || !placeMoveMayRun(error)) note(row.id, placeErrorText(error, rawLocale), true);
       else {
         const signal = alive.current.signal;
         const there = await waitForPlaceLocation(() => sessionOps.backupPlaces(session), row.id, location, {
@@ -227,14 +235,14 @@ export function BackupPlacesCard({
 
   /** Asked first when another place keeps the backups (BPL-06). */
   const backUpAt = (row: BackupPlaceRow, location?: string) => {
-    const from = moveFromPlace(places.data, row.id);
+    const from = moveFromPlace(places.data, row.id, rawLocale);
     if (from) setAsking({ row, from, byHand: false, ...(location ? { location } : {}) });
     else void use(row, false, false, location);
   };
 
   /** Where on it first, when it has more than one location (BPL-13). */
   const backUpHere = (row: BackupPlaceRow) => {
-    if (placeLocations(placeOf(row.id))) setChoosing({ row, mode: 'use' });
+    if (placeLocations(placeOf(row.id), rawLocale)) setChoosing({ row, mode: 'use' });
     else backUpAt(row);
   };
 
@@ -244,7 +252,7 @@ export function BackupPlacesCard({
     setChoosing(null);
     if (mode === 'use') return backUpAt(row, location);
     const place = placeOf(row.id);
-    const change = place ? placeLocationChange(place, location) : null;
+    const change = place ? placeLocationChange(place, location, rawLocale) : null;
     if (change) setChanging({ row, location, change });
   };
 
@@ -306,8 +314,8 @@ export function BackupPlacesCard({
         })}
         {kitNeeded && onKit ? (
           <View style={{ padding: 16, gap: 12 }}>
-            <Note text={ACCOUNTS_TEXT.newKit} />
-            <Button label={ACCOUNTS_TEXT.saveKit} variant="secondary" onPress={onKit} />
+            <Note text={accountsText(rawLocale).newKit} />
+            <Button label={accountsText(rawLocale).saveKit} variant="secondary" onPress={onKit} />
           </View>
         ) : null}
       </Card>
@@ -315,14 +323,14 @@ export function BackupPlacesCard({
       <OneSheet
         visible={asking !== null}
         onClose={() => setAsking(null)}
-        title={asking ? BACKUP_PLACE_TEXT.moveTitle(asking.row.name) : ''}
-        body={asking ? BACKUP_PLACE_TEXT.moveBody(asking.from) : null}
+        title={asking ? placeText.moveTitle(asking.row.name) : ''}
+        body={asking ? placeText.moveBody(asking.from) : null}
         buttons={
           asking
             ? [
                 {
                   id: 'move',
-                  label: asking.byHand ? BACKUP_PLACE_TEXT.check : BACKUP_PLACE_TEXT.use,
+                  label: asking.byHand ? placeText.check : placeText.use,
                   variant: 'primary',
                   onPress: () => {
                     setAsking(null);
@@ -375,7 +383,7 @@ export function BackupPlacesCard({
           error={notes[byHand.id]?.error ? notes[byHand.id]?.text : null}
           onClose={() => setByHand(null)}
           onCheck={async () => {
-            const from = moveFromPlace(places.data, byHand.id);
+            const from = moveFromPlace(places.data, byHand.id, rawLocale);
             if (from) {
               setByHand(null);
               setAsking({ row: byHand, from, byHand: true });
@@ -407,8 +415,10 @@ function WhereSheet({
   onClose: () => void;
   onChoose: (location: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const W = backupPlacesText(rawLocale);
   const theme = useTheme();
-  const asked = placeLocations(place);
+  const asked = placeLocations(place, rawLocale);
   const [picked, setPicked] = useState(asked?.selected ?? '');
   if (!asked) return null;
   const current = asked.rows.find((r) => r.current)?.id ?? null;
@@ -437,7 +447,7 @@ function WhereSheet({
       buttons={[
         {
           id: 'choose',
-          label: mode === 'change' ? W.change : BACKUP_PLACE_TEXT.use,
+          label: mode === 'change' ? W.change : backupPlaceText(rawLocale).use,
           variant: 'primary',
           disabled: !picked || (mode === 'change' && picked === current),
           onPress: () => onChoose(picked),
@@ -512,6 +522,8 @@ function ByHandSheet({
   onClose: () => void;
   onCheck: () => Promise<void>;
 }) {
+  const { rawLocale } = useI18n();
+  const W = backupPlacesText(rawLocale);
   const { session } = useManagedOrThrow();
   const theme = useTheme();
   const [sheet, setSheet] = useState<BackupPlaceByHand | 'failed' | null>(null);
@@ -537,7 +549,7 @@ function ByHandSheet({
       buttons={[
         {
           id: 'check',
-          label: BACKUP_PLACE_TEXT.check,
+          label: backupPlaceText(rawLocale).check,
           variant: 'primary',
           disabled: !ready,
           onPress: () => void onCheck(),

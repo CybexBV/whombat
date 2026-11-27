@@ -28,6 +28,8 @@ export interface WidgetCtx {
   viewer: ConnectionViewer;
   now: Date;
   timeZone: string;
+  /** The person's BCP-47 locale (`en-GB`, `nl-NL`); defaults to English. */
+  locale?: string;
   /** The assistant's name, for Whombat's own widgets' words. */
   assistant: string;
 }

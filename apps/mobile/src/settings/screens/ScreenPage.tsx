@@ -8,12 +8,10 @@
  * (`?part=night` opens one). A screen elsewhere ends with *Remove*, a monitor on the box with forgetting its layout,
  * each asked first.
  */
+
 import { type RouteProp, useRoute } from '@react-navigation/native';
 import {
   DESK_DOORBELL,
-  DESK_SCREEN_WORDS,
-  DESK_SCREENS_TEXT,
-  DESK_WORDS,
   type DeskApi,
   type DeskDoorbell,
   type DeskPopups,
@@ -21,6 +19,7 @@ import {
   type DeskShowPatch,
   deskErrorText,
   deskLockAgainOf,
+  deskScreensText,
   deskSectionShown,
   fillDeskWords,
   screensErrorText,
@@ -32,11 +31,13 @@ import {
   useDeskScreenActions,
   useDeskScreens,
 } from '@whombat/client/desk/react';
+import { deskScreenWords, deskWords } from '@whombat/core/domain';
 import { useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { toasts } from '../../data/toast';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n, useMobileT } from '../../i18n';
 import { DeskLockCard, DeskNightCard, DeskSwitchCard, DeskTalkCard } from '../../managed/DeskSection';
 import { DeskUnlockCard } from '../../managed/DeskUnlockCard';
 import { Card, Field, LinkRow } from '../../managed/ui';
@@ -52,8 +53,8 @@ import { DeskAroundCard, DeskBarCard } from '../DeskShowsPart';
 import { SettingsPage } from '../SettingsPages';
 import { useDeskNameSync } from '../useDeskName';
 import {
-  BOX_PART_LABELS,
   type BoxPart,
+  boxPartLabels,
   boxParts,
   layoutLine,
   popupOptions,
@@ -61,21 +62,32 @@ import {
   screenRow,
 } from './screensList';
 
-const P = DESK_SCREENS_TEXT.page;
-const failed = (error: unknown) => Alert.alert('That didn’t go through', screensErrorText(error));
+function useScreenFailure() {
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
+  return (error: unknown) =>
+    Alert.alert(t('managed.that-didnt-go-through'), screensErrorText(error, undefined, rawLocale));
+}
 
 export function SettingsScreenPage() {
+  const { rawLocale } = useI18n();
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsScreen'>>();
   const id = route.params.screen;
   const api = useDeskApi();
   const detail = useDeskScreen(api, id);
   const screen = detail.data;
   return (
-    <SettingsPage title={screen?.name ?? DESK_SCREENS_TEXT.title} back={DESK_SCREENS_TEXT.back}>
+    <SettingsPage
+      title={screen?.name ?? deskScreensText(rawLocale).title}
+      back={deskScreensText(rawLocale).back}
+    >
       {api && screen ? (
         <ScreenParts api={api} screen={screen} part={route.params.part} />
       ) : detail.error ? (
-        <ErrorState text={screensErrorText(detail.error)} onRetry={() => void detail.refetch()} />
+        <ErrorState
+          text={screensErrorText(detail.error, undefined, rawLocale)}
+          onRetry={() => void detail.refetch()}
+        />
       ) : (
         <Loading />
       )}
@@ -92,6 +104,9 @@ function ScreenParts({
   screen: DeskScreenDetail;
   part?: string | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const P = deskScreensText(rawLocale).page;
+  const failed = useScreenFailure();
   const theme = useTheme();
   const navigation = useAppNavigation();
   const assistant = useAgentWords().name;
@@ -104,7 +119,9 @@ function ScreenParts({
     lockedView: desk?.settings.lockedView ?? null,
     now: Date.now(),
     timeZone,
+    locale: rawLocale,
   });
+  const layout = layoutLine(screen, rawLocale);
   const box = screen.kind === 'box';
   const setPopups = (popups: DeskPopups) => void actions.update({ screen: screen.id, popups }).catch(failed);
   // Only where the Whombat follows a doorbell, and the box says what this screen does.
@@ -120,9 +137,9 @@ function ScreenParts({
       <Card>
         <LinkRow
           first
-          title={DESK_SCREENS_TEXT.editLayout}
-          meta={layoutLine(screen)}
-          label={`${DESK_SCREENS_TEXT.editLayout}, ${layoutLine(screen)}`}
+          title={deskScreensText(rawLocale).editLayout}
+          meta={layout}
+          label={`${deskScreensText(rawLocale).editLayout}, ${layout}`}
           onPress={() =>
             navigation.navigate('SettingsScreenLayout', { screen: screen.id, back: screen.name })
           }
@@ -131,7 +148,7 @@ function ScreenParts({
       <View style={{ gap: 8 }}>
         <SectionLabel>{P.popups.toUpperCase()}</SectionLabel>
         <Segmented<DeskPopups>
-          options={popupOptions()}
+          options={popupOptions(rawLocale)}
           value={screen.popups}
           onChange={setPopups}
           label={P.popups}
@@ -145,7 +162,10 @@ function ScreenParts({
         <View style={{ gap: 8 }}>
           <SectionLabel>{P.doorbell.toUpperCase()}</SectionLabel>
           <Segmented<DeskDoorbell>
-            options={DESK_DOORBELL.map((value) => ({ value, label: DESK_SCREEN_WORDS.doorbell[value] }))}
+            options={DESK_DOORBELL.map((value) => ({
+              value,
+              label: deskScreenWords(rawLocale).doorbell[value],
+            }))}
             value={doorbell}
             onChange={setDoorbell}
             label={P.doorbell}
@@ -180,6 +200,9 @@ function BoxTop({ api }: { api: DeskApi }) {
 
 /** A screen elsewhere's or a monitor's name: saved when the field is left or Done is pressed. */
 function NameCard({ api, screen }: { api: DeskApi; screen: DeskScreenDetail }) {
+  const { rawLocale } = useI18n();
+  const failed = useScreenFailure();
+  const P = deskScreensText(rawLocale).page;
   const actions = useDeskScreenActions(api);
   const [name, setName] = useState(screen.name);
   useEffect(() => setName(screen.name), [screen.name]);
@@ -208,6 +231,9 @@ function NameCard({ api, screen }: { api: DeskApi; screen: DeskScreenDetail }) {
  * the screen is paired, as before.
  */
 function BoxParts({ api, asked }: { api: DeskApi; asked?: string | undefined }) {
+  const { rawLocale } = useI18n();
+  const labels = boxPartLabels(rawLocale);
+  const { t: tMobile } = useMobileT();
   const desk = useDesk(api);
   const actions = useDeskActions(api);
   const screen = desk.data;
@@ -219,15 +245,17 @@ function BoxParts({ api, asked }: { api: DeskApi; asked?: string | undefined }) 
   const save = (patch: DeskShowPatch) =>
     void actions
       .update({ show: patch })
-      .catch((e: unknown) => Alert.alert('That didn’t go through', deskErrorText(e)));
+      .catch((e: unknown) =>
+        Alert.alert(tMobile('managed.that-didnt-go-through'), deskErrorText(e, rawLocale)),
+      );
   return (
     <>
       <View style={{ marginTop: -2 }}>
         <UnderlineTabs<BoxPart>
-          tabs={parts.map((key) => ({ key, label: BOX_PART_LABELS[key] }))}
+          tabs={parts.map((key) => ({ key, label: labels[key] }))}
           value={part}
           onChange={setChosen}
-          label={DESK_WORDS.settings.tab}
+          label={deskWords(rawLocale).settings.tab}
           bleed={16}
         />
       </View>
@@ -252,6 +280,9 @@ function BoxParts({ api, asked }: { api: DeskApi; asked?: string | undefined }) 
  * box forgets its layout. Asked first; then back to the list.
  */
 function RemoveCard({ api, screen }: { api: DeskApi; screen: DeskScreenDetail }) {
+  const { rawLocale } = useI18n();
+  const failed = useScreenFailure();
+  const P = deskScreensText(rawLocale).page;
   const theme = useTheme();
   const navigation = useAppNavigation();
   const actions = useDeskScreenActions(api);
@@ -259,7 +290,7 @@ function RemoveCard({ api, screen }: { api: DeskApi; screen: DeskScreenDetail })
   const line = output ? P.removeOutput : P.removeLine;
   const remove = () =>
     Alert.alert(fillDeskWords(P.removeTitle, { name: screen.name }), line, [
-      { text: DESK_SCREENS_TEXT.addDialog.cancel, style: 'cancel' },
+      { text: deskScreensText(rawLocale).addDialog.cancel, style: 'cancel' },
       {
         text: P.removeConfirm,
         style: 'destructive',

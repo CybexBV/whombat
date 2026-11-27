@@ -1,5 +1,5 @@
 import { useBlocker } from '@tanstack/react-router';
-import { type AgentGroupPart, agentGroupParts, hasLooksAhead, SETTINGS_GROUP_TEXT } from '@whombat/client';
+import { type AgentGroupPart, agentGroupParts, hasLooksAhead } from '@whombat/client';
 import { useAgent, useBootstrap, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import type { AgentProfile } from '@whombat/core';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -8,6 +8,7 @@ import { Button } from '../../../components/Button';
 import { SkeletonRows } from '../../../components/ListState';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { useSettingsGroupText } from '../../../i18n/words';
 import { YourAi } from '../../ai/YourAi';
 import { MemorySection } from '../../memory/MemorySection';
 import { NotesTab } from '../../memory/NotesTab';
@@ -46,6 +47,7 @@ export interface SettingsTabProps {
  * unsaved changes asks first.
  */
 export function AgentTab({ burrow, part, agentKey, onPartChange }: AgentTabProps) {
+  const SETTINGS_GROUP_TEXT = useSettingsGroupText();
   const { words } = useTheAgent(burrow);
   const labels = SETTINGS_GROUP_TEXT.agent(words.name);
   // Looks ahead only on a Whombat that has it; its address on an older one opens Name and face.

@@ -12,11 +12,12 @@
  * From the app's Backups (`later`): `resume` opens where a restore stands (finishing it, trying again); `replace` brings
  * one back on a Whombat that started fresh, after saying what's on it now is set aside (`backup.adopt` with `replace`).
  */
+
 import { agentWords, createClient, theAgentOf } from '@whombat/client';
 import {
   accountKitsToBringBack,
-  BACKUP_OPTIONS_TEXT,
   type BringBackKit,
+  backupOptionsText,
   bringBackName,
   type ControlApi,
   capital,
@@ -38,6 +39,7 @@ import { type ApplianceSession, OperationError, sessionOps } from '@whombat/clie
 import type { BackupCheckpoint, BackupRestoreState } from '@whombat/protocol/session';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -62,8 +64,6 @@ import { phoneLabel } from './env';
 import { QrScanner } from './QrScanner';
 import type { KitPicker } from './screens';
 import { ErrorLine, Field, Frame, Note } from './ui';
-
-const B = BACKUP_OPTIONS_TEXT.bringBack;
 
 type Step =
   | { kind: 'question' }
@@ -185,6 +185,8 @@ function Hint({ text }: { text: string }) {
 }
 
 export function BringBackFlow(props: BringBackProps) {
+  const { rawLocale } = useI18n();
+  const B = backupOptionsText(rawLocale).bringBack;
   const { session, control, platform, later } = props;
   const theme = useTheme();
   const [step, setStep] = useState<Step | null>(null);
@@ -313,7 +315,7 @@ export function BringBackFlow(props: BringBackProps) {
       setStep({ kind: 'working' });
     } catch (e) {
       // A refusal is an answer; a dropped connection is the runtime stopping for the restore.
-      if (e instanceof OperationError) setError(backupErrorText(e));
+      if (e instanceof OperationError) setError(backupErrorText(e, rawLocale));
       else setStep({ kind: 'working' });
     } finally {
       setBusy(false);
@@ -331,7 +333,7 @@ export function BringBackFlow(props: BringBackProps) {
       setPicked(defaultCheckpoint(theirs));
       go({ kind: 'choose', checkpoints: theirs });
     } catch (e) {
-      setError(backupErrorText(e));
+      setError(backupErrorText(e, rawLocale));
     } finally {
       setBusy(false);
     }
@@ -383,7 +385,7 @@ export function BringBackFlow(props: BringBackProps) {
       setState(s);
       setStep({ kind: restoreScreen(s) === 'done' ? 'done' : 'working' });
     } catch (e) {
-      if (e instanceof OperationError) setError(backupErrorText(e));
+      if (e instanceof OperationError) setError(backupErrorText(e, rawLocale));
       else {
         finished.current = true;
         setStep({ kind: 'working' });
@@ -395,8 +397,9 @@ export function BringBackFlow(props: BringBackProps) {
 
   if (!step) return <Frame title={B.opening} />;
   // The old Whombat's own name, else “your Whombat” (never its device id).
-  const who = bringBackName(name ?? kit?.whombatName);
+  const who = bringBackName(name ?? kit?.whombatName, rawLocale);
   const time = restoredTime(state);
+  const foundKit = foundKitNote(kit, rawLocale);
   const backToStart = () => (later ? props.onCancel?.() : go({ kind: 'question' }));
 
   switch (step.kind) {
@@ -417,7 +420,7 @@ export function BringBackFlow(props: BringBackProps) {
               onPress={() => setChoice('back')}
             />
           </View>
-          {choice === 'back' && foundKitNote(kit) ? <OkNote text={foundKitNote(kit) as string} /> : null}
+          {choice === 'back' && foundKit ? <OkNote text={foundKit} /> : null}
           <Button
             label={B.continue}
             size="lg"
@@ -427,7 +430,7 @@ export function BringBackFlow(props: BringBackProps) {
         </Frame>
       );
     case 'replace': {
-      const L = BACKUP_OPTIONS_TEXT.later;
+      const L = backupOptionsText(rawLocale).later;
       return (
         <Frame
           title={L.confirmTitle}
@@ -527,7 +530,7 @@ export function BringBackFlow(props: BringBackProps) {
         </Frame>
       );
     case 'choose': {
-      const rows = chooseRows(step.checkpoints);
+      const rows = chooseRows(step.checkpoints, undefined, rawLocale);
       const shown = allRows ? rows : rows.slice(0, 3);
       return (
         <Frame
@@ -556,7 +559,7 @@ export function BringBackFlow(props: BringBackProps) {
     case 'working':
       return (
         <Frame title={B.workingTitle(who)} sub={B.workingLead}>
-          <Steps steps={restoreSteps(state, reachable, place)} />
+          <Steps steps={restoreSteps(state, reachable, place, rawLocale)} />
           {!reachable ? <Hint text={BACKUP_PHONE_TEXT.waiting(who)} /> : null}
           <Hint text={B.workingFoot(place)} />
         </Frame>
@@ -612,6 +615,8 @@ export function BringBackFlow(props: BringBackProps) {
 
 /** The passkey's copy found (the account's, or next to the backups on this network). */
 function KitCard({ kit, name, email }: { kit: BringBackKit; name: string; email: string }) {
+  const { rawLocale } = useI18n();
+  const B = backupOptionsText(rawLocale).bringBack;
   const theme = useTheme();
   return (
     <View
@@ -644,8 +649,8 @@ function KitCard({ kit, name, email }: { kit: BringBackKit; name: string; email:
         </Text>
         <Text size={13} color={theme.colors.mut}>
           {kit.from === 'network'
-            ? B.foundNear(longDate(kit.createdAt))
-            : BACKUP_PHONE_TEXT.saved(longDate(kit.createdAt))}
+            ? B.foundNear(longDate(kit.createdAt, rawLocale))
+            : BACKUP_PHONE_TEXT.saved(longDate(kit.createdAt, rawLocale))}
         </Text>
       </View>
     </View>
@@ -663,6 +668,8 @@ function ChooseList({
   onPick: (id: string) => void;
   more: (() => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const B = backupOptionsText(rawLocale).bringBack;
   const theme = useTheme();
   return (
     <View
@@ -677,7 +684,7 @@ function ChooseList({
     >
       {rows.length === 0 ? (
         <Text size={14} color={theme.colors.mut} style={{ padding: 16 }}>
-          {BACKUP_OPTIONS_TEXT.list.empty}
+          {backupOptionsText(rawLocale).list.empty}
         </Text>
       ) : null}
       {rows.map((r, i) => {
@@ -845,6 +852,8 @@ function Almost({
   error: string | null;
   onStart: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const B = backupOptionsText(rawLocale).bringBack;
   const theme = useTheme();
   return (
     <Frame title={B.almostTitle} sub={B.almostLead(name, time)}>
@@ -865,7 +874,7 @@ function Almost({
           </Text>
         </View>
         <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-          {oldWhombatMeta(answer, newPassword)}
+          {oldWhombatMeta(answer, newPassword, rawLocale)}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Button
@@ -913,6 +922,9 @@ function Done({
   state: BackupRestoreState | null;
   onOpen: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const B = backupOptionsText(rawLocale).bringBack;
+
   const theme = useTheme();
   const client = useMemo(() => createClient({ session }), [session]);
   const [agent, setAgent] = useState<string | null>(null);
@@ -930,12 +942,12 @@ function Done({
       live = false;
     };
   }, [client]);
-  const words = agentWords(agent);
+  const words = agentWords(agent, rawLocale);
   const lines = [
     servers === 'staged' ? B.doneServers(null) : null,
     B.doneBackups(state?.newPassword?.place ?? null),
     B.doneVoices,
-    ...oldWhombatDoneLines(state, name),
+    ...oldWhombatDoneLines(state, name, rawLocale),
   ].filter((l): l is string => !!l);
   const connection = session.state();
   const tap = useOnePasskeySetup(
@@ -949,6 +961,7 @@ function Done({
           name: passkeyName(phoneLabel()),
         }
       : null,
+    rawLocale,
   );
   const armed = tap?.view?.phase === 'ready';
   const row = (i: number) => ({

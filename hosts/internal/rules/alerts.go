@@ -1,8 +1,12 @@
 package rules
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 
@@ -19,6 +23,13 @@ const (
 	RuleSpaceHigh        = "disk.space_high"
 	RuleOvercommit       = "hypervisor.overcommit"
 	RuleMemAssigned      = "hypervisor.memory_assigned"
+)
+
+// Hub-wide rules are shared with the model so it can look up their status notes.
+const (
+	HubRuleDeniedRequests = "security.denied_requests"
+	HubRuleCheckDown      = "check.down"
+	HubRuleCheckCert      = "check.cert_expiring"
 )
 
 // Severities.
@@ -56,6 +67,25 @@ type Text struct {
 	Detail       string // "936 of 1,200 TBW written"
 	BannerTitle  string // "nvme1n1 wear is at 78%"
 	BannerDetail string // "936 of 1,200 TBW written. Plan a replacement."
+	Code         string
+	Params       map[string]any // string, int, int64, float64, bool, or []string
+}
+
+// Equal compares the displayed text and the data used to translate it.
+func (t Text) Equal(other Text) bool {
+	return t.Title == other.Title && t.Detail == other.Detail &&
+		t.BannerTitle == other.BannerTitle && t.BannerDetail == other.BannerDetail &&
+		t.Code == other.Code && maps.EqualFunc(t.Params, other.Params, equalParam)
+}
+
+func equalParam(a, b any) bool {
+	if reflect.TypeOf(a) == reflect.TypeOf(b) {
+		return reflect.DeepEqual(a, b)
+	}
+	// SQLite stores JSON numbers, which do not distinguish Go numeric types.
+	aj, aerr := json.Marshal(a)
+	bj, berr := json.Marshal(b)
+	return aerr == nil && berr == nil && bytes.Equal(aj, bj)
 }
 
 // Condition is a rule that currently holds for an entity of a host.
@@ -142,11 +172,15 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 					warning := FormatTemp(math.Floor(thr))
 					d := fmt.Sprintf("Above %s for %s", warning, FormatDuration(held))
 					bd := fmt.Sprintf("%s. The warning limit is %s.", d, warning)
+					code := RuleTempHigh
 					if customHigh {
 						d = limitWords(s.TempC, thr, "°C") + " for " + FormatDuration(held)
 						bd = d + "."
+						code += ".custom"
 					}
-					return Text{Title: title, Detail: d, BannerTitle: bannerTitle, BannerDetail: bd}
+					return Text{Title: title, Detail: d, BannerTitle: bannerTitle, BannerDetail: bd, Code: code,
+						Params: map[string]any{"sensor": s.ID, "label": label, "tempC": s.TempC, "limitC": thr,
+							"heldSeconds": int64(held / time.Second), "customLimit": customHigh}}
 				},
 			})
 		}
@@ -156,11 +190,15 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 				For: TempCriticalFor, ClearAfter: TempClearAfter, Link: LinkTemps, StatusNote: note,
 				Render: func(held time.Duration) Text {
 					d := fmt.Sprintf("At or above the %s limit for %s", FormatTemp(critical), FormatDuration(held))
+					code := RuleTempCritical
 					if customCritical {
 						d = limitWords(s.TempC, critical, "°C") + " for " + FormatDuration(held)
+						code += ".custom"
 					}
 					return Text{Title: title, Detail: d, BannerTitle: bannerTitle,
-						BannerDetail: d + ". Check cooling and load."}
+						BannerDetail: d + ". Check cooling and load.", Code: code,
+						Params: map[string]any{"sensor": s.ID, "label": label, "tempC": s.TempC, "limitC": critical,
+							"heldSeconds": int64(held / time.Second), "customLimit": customCritical}}
 				},
 			})
 		}
@@ -180,7 +218,7 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 		dev := d.Device
 		title := fmt.Sprintf("Disk %s is %s%% worn out", dev, pct0(w))
 		bannerTitle := title
-		evidence := wearEvidence(d)
+		evidence, variant, params := wearEvidence(d, w)
 		rule, sev, advice := RuleWearHigh, SevWarning, "Plan to replace it."
 		threshold, custom := warning, customWarning
 		if w >= critical-eps {
@@ -188,6 +226,7 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 			threshold, custom = critical, customCritical
 		}
 		evidence = withLimitWords(evidence, w, threshold, "%", custom)
+		params["limitPct"], params["customLimit"] = threshold, custom
 		bd := advice
 		if evidence != "" {
 			bd = evidence + ". " + advice
@@ -195,7 +234,8 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 		out = append(out, Condition{
 			Rule: rule, Entity: dev, Severity: sev, ClearAfter: ClearAfter, Link: LinkStorage, StatusNote: "disk wear",
 			Render: func(time.Duration) Text {
-				return Text{Title: title, Detail: evidence, BannerTitle: bannerTitle, BannerDetail: bd}
+				return Text{Title: title, Detail: evidence, BannerTitle: bannerTitle, BannerDetail: bd,
+					Code: rule + variant, Params: params}
 			},
 		})
 	}
@@ -212,11 +252,14 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 		name := PlainVolume(v.entity, v.label)
 		title := fmt.Sprintf("%s %s%% full", name, pct0(p))
 		bt := fmt.Sprintf("%s is %s%% full", name, pct0(p))
+		params := v.params()
+		params["limitPct"], params["customLimit"] = threshold, custom
 		out = append(out, Condition{
 			Rule: RuleSpaceHigh, Entity: v.entity, Severity: SevWarning, For: SpaceFor, ClearAfter: ClearAfter,
 			Link: LinkStorage, StatusNote: "disk space",
 			Render: func(time.Duration) Text {
-				return Text{Title: title, Detail: ev, BannerTitle: bt, BannerDetail: ev + ". Free up space or add more."}
+				return Text{Title: title, Detail: ev, BannerTitle: bt, BannerDetail: ev + ". Free up space or add more.",
+					Code: RuleSpaceHigh, Params: params}
 			},
 		})
 	}
@@ -238,7 +281,8 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 					d := fmt.Sprintf("%d virtual processors share %d real ones (%s : 1) while it’s busy, for %s", alloc, threads, rs, FormatDuration(held))
 					return Text{Title: "Machines want more processors than the server has", Detail: d,
 						BannerTitle:  "Machines want more processors than the server has",
-						BannerDetail: d + "."}
+						BannerDetail: d + ".", Code: RuleOvercommit,
+						Params: map[string]any{"allocated": alloc, "threads": threads, "ratio": ratio, "heldSeconds": int64(held / time.Second)}}
 				},
 			})
 		}
@@ -252,7 +296,8 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 				Link: LinkVirtualization, StatusNote: "memory assigned",
 				Render: func(time.Duration) Text {
 					return Text{Title: fmt.Sprintf("Machines have %s%% of the memory", pct0(mp)), Detail: ev,
-						BannerTitle: fmt.Sprintf("Machines have %s%% of the memory", pct0(mp)), BannerDetail: ev + "."}
+						BannerTitle: fmt.Sprintf("Machines have %s%% of the memory", pct0(mp)), BannerDetail: ev + ".",
+						Code: RuleMemAssigned, Params: map[string]any{"pct": mp, "usedGiB": float64(a.MemAssignedBytes) / GiB, "totalGiB": float64(host) / GiB}}
 				},
 			})
 		}
@@ -277,6 +322,11 @@ type spaceEntity struct {
 }
 
 func (v spaceEntity) usedPct() float64 { return float64(v.used) / float64(v.total) * 100 }
+
+func (v spaceEntity) params() map[string]any {
+	return map[string]any{"entity": v.entity, "volume": v.label, "pct": v.usedPct(),
+		"usedGB": float64(v.used) / GB, "totalGB": float64(v.total) / GB}
+}
 
 // evidence is the "440 GB of 1 TB used" text.
 func (v spaceEntity) evidence() string {
@@ -311,15 +361,26 @@ func watchedVolumes(r *proto.Report) []proto.Volume {
 	return out
 }
 
-func wearEvidence(d proto.Disk) string {
+func wearEvidence(d proto.Disk, pct float64) (detail, variant string, params map[string]any) {
+	params = map[string]any{"device": d.Device, "pct": pct}
 	switch {
 	case d.WrittenBytes != nil && d.RatedTBW != nil && *d.RatedTBW > 0:
+		params["writtenTb"] = float64(*d.WrittenBytes) / TB
+		setFinite(params, "ratedTbw", *d.RatedTBW)
 		return fmt.Sprintf("%s of the %s TB it’s built to write",
-			FormatNumber(float64(*d.WrittenBytes)/TB, 0), FormatNumber(*d.RatedTBW, 0))
+			FormatNumber(float64(*d.WrittenBytes)/TB, 0), FormatNumber(*d.RatedTBW, 0)), ".tbw", params
 	case d.WrittenBytes != nil:
-		return fmt.Sprintf("%s TB written", FormatNumber(float64(*d.WrittenBytes)/TB, 0))
+		params["writtenTb"] = float64(*d.WrittenBytes) / TB
+		return fmt.Sprintf("%s TB written", FormatNumber(float64(*d.WrittenBytes)/TB, 0)), ".written", params
 	}
-	return "Worn by writing"
+	return "Worn by writing", ".plain", params
+}
+
+// A report can contain non-finite floats, which have no JSON representation.
+func setFinite(params map[string]any, key string, value float64) {
+	if finite(value) {
+		params[key] = value
+	}
 }
 
 // HeartbeatCondition is the agent.heartbeat_missing condition for a host
@@ -342,11 +403,16 @@ func HeartbeatConditionWith(lastSeen, now time.Time, timeout time.Duration) (Con
 		Rule: RuleHeartbeatMissing, Entity: "host", Severity: SevCritical, StatusNote: "not checking in",
 		Since: since,
 		Render: func(time.Duration) Text {
-			d := "Nothing heard from it yet"
+			txt := Text{Title: "Whombat’s helper isn’t checking in", BannerTitle: "Whombat’s helper isn’t checking in",
+				Detail: "Nothing heard from it yet", Code: RuleHeartbeatMissing + ".never"}
 			if !lastSeen.IsZero() {
-				d = "Nothing heard from it for " + FormatDuration(now.Sub(lastSeen))
+				elapsed := now.Sub(lastSeen)
+				txt.Detail = "Nothing heard from it for " + FormatDuration(elapsed)
+				txt.Code = RuleHeartbeatMissing + ".elapsed"
+				txt.Params = map[string]any{"heldSeconds": int64(elapsed / time.Second)}
 			}
-			return Text{Title: "Whombat’s helper isn’t checking in", Detail: d, BannerTitle: "Whombat’s helper isn’t checking in", BannerDetail: d + "."}
+			txt.BannerDetail = txt.Detail + "."
+			return txt
 		},
 	}, true
 }

@@ -17,16 +17,19 @@ import type {
   RecipeGitHubEvent,
   RecipeJob,
 } from '../domain/automation.js';
+import { type CoreTranslator, coreTranslator, coreWords } from '../i18n/catalog.js';
 import { mailWhenText } from './mail.js';
-import { mergesFix, recipeOf, repliesToCustomer, trackerItemNoun, writesBack } from './recipes.js';
+import { mergesFix, recipeOf, repliesToCustomer, writesBack } from './recipes.js';
 import { describeSchedule } from './schedule.js';
-import { triggerSummary } from './validate.js';
+import { trackerItemKind, triggerSummary } from './validate.js';
 
 export interface GlanceNames {
   /** “Chat”; undefined when unknown. The runtime says “a private room” for rooms the viewer isn't in. */
   conversationTitle: (id: string) => string | undefined;
   /** A tracker connection's label: “Acme Desk dev”; “a tracker connection” when the viewer can't see it. */
   connectionLabel?: (id: string) => string | undefined;
+  /** The viewer's locale tag (`en-GB`, `nl-NL`); null or absent is English. */
+  locale?: string | null;
 }
 
 /** The tags' words, by what they say. */
@@ -48,6 +51,13 @@ export const AUTOMATION_DOES_LABELS: Record<AutomationDoes, string> = {
   merge: 'Merges when checks pass',
   reply: 'Replies to customers',
 };
+
+const DOES_IDS = Object.keys(AUTOMATION_DOES_LABELS) as AutomationDoes[];
+
+/** `AUTOMATION_DOES_LABELS` in a locale. */
+export function automationDoesLabels(locale?: string | null): Record<AutomationDoes, string> {
+  return coreWords(locale, 'glance.does', DOES_IDS);
+}
 
 const TONES: Record<AutomationDoes, AutomationGlanceTag['tone']> = {
   assess: 'plain',
@@ -78,14 +88,6 @@ const JOB_DOES: Record<RecipeJob, AutomationDoes> = {
   custom: 'instructions',
 };
 
-/** What a GitHub event is called on the trigger chip (“New issue · Fusebox”). */
-const GITHUB_EVENT_SHORT: Record<RecipeGitHubEvent, string> = {
-  issue_opened: 'New issue',
-  pr_opened: 'New pull request',
-  pr_updated: 'New commits',
-  checks_failed: 'Failed checks',
-};
-
 const SOURCES: Record<AutomationTrigger['kind'], AutomationSource> = {
   github: 'github',
   tracker: 'tracker',
@@ -100,20 +102,28 @@ const SOURCES: Record<AutomationTrigger['kind'], AutomationSource> = {
 };
 
 /** The tags, deduplicated and mildest first; in the order given within a tone. `product`: a tracker's name. */
-function tags(ids: readonly AutomationDoes[], product?: string): AutomationGlanceTag[] {
+function tags(ids: readonly AutomationDoes[], tr: CoreTranslator, product?: string): AutomationGlanceTag[] {
   const unique = [...new Set(ids)];
   const label = (id: AutomationDoes) =>
-    id === 'write_back' && product ? `Writes back to ${product}` : AUTOMATION_DOES_LABELS[id];
+    id === 'write_back' && product ? tr.t('glance.writesBackTo', { product }) : tr.t(`glance.does.${id}`);
   return TONE_ORDER.flatMap((tone) =>
     unique.filter((id) => TONES[id] === tone).map((id) => ({ id, label: label(id), tone })),
   );
 }
 
-/** “New issue or new pull request”. */
-function githubEvents(events: readonly RecipeGitHubEvent[]): string {
-  const words = events.map((e, i) => (i === 0 ? GITHUB_EVENT_SHORT[e] : GITHUB_EVENT_SHORT[e].toLowerCase()));
-  if (words.length <= 1) return words[0] ?? 'Activity';
-  return `${words.slice(0, -1).join(', ')} or ${words.at(-1)}`;
+/** “New issue or new pull request”: what a GitHub event is called on the trigger chip (“New issue · Fusebox”). */
+function githubEvents(events: readonly RecipeGitHubEvent[], tr: CoreTranslator): string {
+  const words = events.map((e, i) => {
+    const said = tr.t(`glance.github.${e}`);
+    return i === 0 ? said : said.toLocaleLowerCase(tr.locale);
+  });
+  if (words.length <= 1) return words[0] ?? tr.t('glance.activity');
+  return tr.t('recipe.or', { items: words.slice(0, -1).join(', '), last: words.at(-1) ?? '' });
+}
+
+/** The tag to hand on to other words: the translator's locale, or the pseudo locale while testing. */
+function tagOf(tr: CoreTranslator): string {
+  return tr.language === 'pseudo' ? 'pseudo' : tr.locale;
 }
 
 /** At most `max` characters, “…” when cut. */
@@ -133,7 +143,7 @@ function scheduleWords(...args: Parameters<typeof describeSchedule>): string {
   return words.endsWith(zone) ? words.slice(0, -zone.length) : words;
 }
 
-function recipeGlance(recipe: AutomationRecipe, names: GlanceNames): AutomationGlance {
+function recipeGlance(recipe: AutomationRecipe, names: GlanceNames, tr: CoreTranslator): AutomationGlance {
   const when = recipe.when;
   const does: AutomationDoes[] = [JOB_DOES[recipe.job]];
   if (recipe.replyOnGitHub && when.kind === 'github') does.push('comment');
@@ -141,50 +151,51 @@ function recipeGlance(recipe: AutomationRecipe, names: GlanceNames): AutomationG
   if (repliesToCustomer(recipe)) does.push('reply');
   if (recipe.fix) does.push(recipe.fix.mode === 'auto' ? 'fix_auto' : 'fix_ask');
   if (mergesFix(recipe)) does.push('merge');
-  const room = clip(names.conversationTitle(recipe.conversationId) ?? 'a private room', 120);
+  const room = clip(names.conversationTitle(recipe.conversationId) ?? tr.t('trigger.privateRoom'), 120);
   const base = {
     agentStep: true,
     room,
-    does: tags(does, when.kind === 'tracker' ? when.words?.product : undefined),
+    does: tags(does, tr, when.kind === 'tracker' ? when.words?.product : undefined),
   };
   switch (when.kind) {
     case 'github':
       return {
         source: 'github',
         repo: when.repo,
-        trigger: `${githubEvents(when.events)} · ${repoName(when.repo)}`,
+        trigger: tr.t('glance.trigger', { what: githubEvents(when.events, tr), where: repoName(when.repo) }),
         ...base,
       };
     case 'tracker': {
-      const kind = trackerItemNoun(when.itemKinds);
-      const connection = names.connectionLabel?.(when.connectionId) ?? 'a tracker connection';
+      const connection = names.connectionLabel?.(when.connectionId) ?? tr.t('recipe.tracker.unknown');
       return {
         source: 'tracker',
         repo: null,
-        trigger: clip(`New ${kind} · ${connection}`, 160),
+        trigger: clip(tr.t(`glance.tracker.${trackerItemKind(when.itemKinds)}`, { connection }), 160),
         ...base,
       };
     }
     case 'message': {
       // The room is the next chip: it listens where it answers.
       const first = when.contains[0];
-      const words = first ? `Message with “${first}”${when.contains.length > 1 ? '…' : ''}` : 'Any message';
+      const words = first
+        ? tr.t('glance.messageWith', { word: first, more: when.contains.length > 1 ? '…' : '' })
+        : tr.t('glance.anyMessage');
       return { source: 'message', repo: null, trigger: clip(words, 160), ...base };
     }
     case 'schedule':
       return {
         source: 'schedule',
         repo: null,
-        trigger: scheduleWords(when.schedule, when.timeZone),
+        trigger: scheduleWords(when.schedule, when.timeZone, tagOf(tr)),
         ...base,
       };
     case 'manual':
-      return { source: 'manual', repo: null, trigger: 'Started by hand', ...base };
+      return { source: 'manual', repo: null, trigger: tr.t('glance.manual'), ...base };
     case 'mail':
       return {
         source: 'mail',
         repo: null,
-        trigger: clip(mailWhenText(when, names.connectionLabel?.(when.connectionId)), 160),
+        trigger: clip(mailWhenText(when, names.connectionLabel?.(when.connectionId), tagOf(tr)), 160),
         ...base,
       };
   }
@@ -227,31 +238,43 @@ function stepDoes(step: AutomationStep): AutomationDoes | null {
  * steps — the first trigger for the tile and the words (“and 1 more” when there are others), whether the agent does a
  * step, the definition's room, and a tag per kind of step that does something.
  */
-export function automationGlance(definition: AutomationDefinition, names: GlanceNames): AutomationGlance {
+export function automationGlance(
+  definition: AutomationDefinition,
+  names: GlanceNames,
+  locale?: string | null,
+): AutomationGlance {
+  const tr = coreTranslator(locale ?? names.locale);
   const recipe = recipeOf(definition);
-  if (recipe) return recipeGlance(recipe, names);
+  if (recipe) return recipeGlance(recipe, names, tr);
   const [first, ...others] = definition.triggers;
   const source: AutomationSource = first ? SOURCES[first.kind] : 'manual';
   const github = definition.triggers.find((t): t is GitHubTrigger => t.kind === 'github');
+  const privateRoom = tr.t('trigger.privateRoom');
   const words =
     first?.kind === 'schedule'
-      ? scheduleWords(first.schedule, first.timeZone)
+      ? scheduleWords(first.schedule, first.timeZone, tagOf(tr))
       : first?.kind === 'reaction_added'
-        ? `Reaction ${first.value} in ${names.conversationTitle(first.conversationId) ?? 'a private room'}`
+        ? tr.t('glance.reaction', {
+            value: first.value,
+            room: names.conversationTitle(first.conversationId) ?? privateRoom,
+          })
         : first
-          ? triggerSummary([first], names.conversationTitle, names.connectionLabel)
-          : 'Started by hand';
+          ? triggerSummary([first], names.conversationTitle, names.connectionLabel, tagOf(tr))
+          : tr.t('glance.manual');
   const agentStep = definition.steps.some((s) => s.kind === 'dispatch_agent');
-  const room = clip(names.conversationTitle(definition.conversationId) ?? 'a private room', 120);
+  const room = clip(names.conversationTitle(definition.conversationId) ?? privateRoom, 120);
   // “Message in #bugs” when it answers in #bugs too: the room is the next chip.
-  const inRoom = ` in ${room}`;
+  const inRoom = tr.t('glance.inRoom', { room });
   const trigger = words.endsWith(inRoom) && words !== inRoom ? words.slice(0, -inRoom.length) : words;
   return {
     source,
     repo: source === 'github' && github ? github.repo : null,
-    trigger: clip(others.length ? `${trigger} and ${others.length} more` : trigger, 160),
+    trigger: clip(others.length ? tr.t('glance.andMore', { trigger, n: others.length }) : trigger, 160),
     agentStep,
     room,
-    does: tags(definition.steps.map(stepDoes).filter((d): d is AutomationDoes => d !== null)),
+    does: tags(
+      definition.steps.map(stepDoes).filter((d): d is AutomationDoes => d !== null),
+      tr,
+    ),
   };
 }

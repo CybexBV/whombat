@@ -6,9 +6,9 @@
  */
 import { toggleDay, WEEKDAY_LABELS } from '@whombat/client';
 import {
-  DESK_SCREENS_TEXT,
   type DeskPage,
   type DeskPageShow,
+  deskScreensText,
   fillDeskWords,
   PAGE_TIMES_DEFAULT,
   pageHoursText,
@@ -17,6 +17,7 @@ import {
 import { WEEKDAY_KEYS, type Weekday } from '@whombat/core';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ClockField } from '../../ui/ClockField';
@@ -24,8 +25,6 @@ import { Clock, MessageCircle } from '../../ui/icons';
 import { OneSheet } from '../../ui/oneSheet';
 import { Touchable } from '../../ui/Touchable';
 import { hitSlopFor } from '../../ui/touchTarget';
-
-const E = DESK_SCREENS_TEXT.editor;
 
 /** A page among the chips: its name, and for a page at set times a small clock and its hours. */
 export function PageChip({
@@ -37,9 +36,11 @@ export function PageChip({
   active: boolean;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const fg = active ? theme.colors.btnfg : theme.colors.ink;
-  const hours = page.show ? pageHoursText(page.show) : null;
+  const hours = page.show ? pageHoursText(page.show, rawLocale) : null;
   return (
     <Touchable
       onPress={onPress}
@@ -47,7 +48,7 @@ export function PageChip({
       accessibilityState={{ selected: active }}
       accessibilityLabel={
         page.show
-          ? `${page.name}, ${fillDeskWords(E.times.label, { when: pageWhenText(page.show) })}`
+          ? `${page.name}, ${fillDeskWords(E.times.label, { when: pageWhenText(page.show, rawLocale) })}`
           : page.name
       }
       feedback={active ? 'fade' : 'wash'}
@@ -130,6 +131,8 @@ export function PageTimesSheet({
   /** Saves the times (null: always); the words of a refusal, else null. */
   onSave: (show: DeskPageShow | null) => string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const start = show ?? PAGE_TIMES_DEFAULT;
   const [from, setFrom] = useState(start.from);

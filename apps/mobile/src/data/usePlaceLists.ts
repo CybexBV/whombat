@@ -8,6 +8,7 @@ import { isHostsUnavailable } from '@whombat/client/hosts';
 import { useHostsFleet, useHostsStatus } from '@whombat/client/hosts/react';
 import { useHomeOverview } from '@whombat/client/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useI18n } from '../i18n';
 import { STORAGE_KEYS } from '../lib/kv';
 import { secureStore } from '../lib/storage';
 import { useBurrowBase, useNow } from './BurrowProvider';
@@ -29,6 +30,7 @@ export function usePlaceLists(): PlaceListsRead {
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const assistant = useAgentWords();
+  const { rawLocale } = useI18n();
   const home = useHomeOverview({ params: { burrow: slug } });
   const status = useHostsStatus({ params: { burrow: slug } }, { retry: false });
   const present = status.data?.present === true;
@@ -37,9 +39,16 @@ export function usePlaceLists(): PlaceListsRead {
   const tiles = useMemo(
     () =>
       things
-        ? overviewTiles(homeThingRows(things, now, timeZone), things, now, timeZone, assistant.name)
+        ? overviewTiles(
+            homeThingRows(things, now, timeZone, rawLocale),
+            things,
+            now,
+            timeZone,
+            assistant.name,
+            rawLocale,
+          )
         : null,
-    [things, now, timeZone, assistant.name],
+    [things, now, timeZone, assistant.name, rawLocale],
   );
   const lists = useMemo(
     () =>
@@ -50,8 +59,9 @@ export function usePlaceLists(): PlaceListsRead {
         tiles,
         now: now.getTime(),
         timeZone,
+        locale: rawLocale,
       }),
-    [things, fleet.data?.servers, present, tiles, now, timeZone],
+    [things, fleet.data?.servers, present, tiles, now, timeZone, rawLocale],
   );
   const refetchHome = home.refetch;
   const refetchFleet = fleet.refetch;

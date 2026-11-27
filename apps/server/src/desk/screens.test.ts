@@ -4,6 +4,7 @@ import {
   DESK_SCREEN_WORDS,
   type DeskLayout,
   type DeskWidget,
+  deskAttentionFor,
   deskDefaultLayout,
 } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
@@ -194,6 +195,21 @@ describe('a screen as Settings lists it and the screen draws it (DK-128, DK-135â
     });
     expect(bad).toBeNull();
     expect(warned).toHaveLength(1);
+    // What needs the person, in their language: the same items, said in Dutch.
+    const dutch = screenGrid({
+      record,
+      layout: record.layout,
+      trying: null,
+      views: [],
+      calm,
+      view: 'everything',
+      locale: 'nl-NL',
+    });
+    expect(dutch?.attention.items.map((i) => i.key)).toEqual(grid?.attention.items.map((i) => i.key));
+    expect(dutch?.attention).toEqual(
+      deskAttentionFor(calm, record.show, 'everything', record.popups, 'nl-NL'),
+    );
+    expect(JSON.stringify(dutch?.attention)).not.toEqual(JSON.stringify(grid?.attention));
   });
 
   it('gives the widgets what the glance read', () => {

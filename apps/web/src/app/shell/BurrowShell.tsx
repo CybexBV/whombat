@@ -8,6 +8,7 @@ import { lazy, Suspense, useCallback, useMemo } from 'react';
 import { useInboxSplit } from '../../features/chats/inboxNav';
 import { DeskUnlockNotice } from '../../features/desk/DeskUnlock';
 import { MessageFilesProvider } from '../../features/messaging/messageFiles';
+import { useOwnerLocaleSync } from '../../i18n/provider';
 import { LinkBanner } from '../../managed/LinkBanner';
 import { MovedBanner } from '../../managed/MovedBanner';
 import { PasskeyNotices } from '../../managed/PasskeyNotices';
@@ -122,6 +123,8 @@ export function BurrowShell() {
   );
   useBurrowRealtime(burrow, realtimeTopics);
   useShellThemeSync(burrow, bootstrap?.preferences.theme);
+  // The owner's language as the box stores it (absent means English); unknown until the bootstrap arrives.
+  useOwnerLocaleSync(bootstrap ? (bootstrap.preferences.locale ?? null) : undefined);
   // Where a room's thread was opened from: its back link and Escape go back there.
   const { words } = useTheAgent(burrow);
   const thingName = useCallback((id: string) => things?.find((t) => t.id === id)?.name ?? null, [things]);

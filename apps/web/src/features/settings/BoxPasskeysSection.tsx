@@ -10,7 +10,6 @@ import {
   boxPasskeyOutcome,
   createBoxPasskey,
   OWN_ADDRESS_TEXT,
-  OWN_NAME_TEXT,
   ownAddressPasskeyMoved,
   PASSKEY_COPY,
   PasskeyCancelled,
@@ -30,6 +29,7 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { OWN_NAME_TEXT } from '../../i18n/clientWords';
 import { browserLabel } from '../../managed/keys';
 import { goToNewAddress } from '../../managed/MovedBanner';
 import { PASSKEYS, webAuthnExists } from '../../managed/passkeyEnv';

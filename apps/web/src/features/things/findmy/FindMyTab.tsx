@@ -33,6 +33,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { useToast } from '../../../components/Toast';
+import { currentLocale } from '../../../i18n/provider';
 import { useNow } from '../../messaging/useRoom';
 import mac from '../macos/Mac.module.css';
 import { Badge, Card, Empty, ErrorLine, Skeleton, StateCell } from '../parts';
@@ -240,7 +241,7 @@ function FindMyMap({
         />
       ) : (
         <span className={fm.drawing} role={map.error ? 'status' : undefined}>
-          {map.error ? hostErrorInfo(map.error).message : FIND_MY_WORDS.drawing}
+          {map.error ? hostErrorInfo(map.error, currentLocale()).message : FIND_MY_WORDS.drawing}
         </span>
       )}
       {pins.map((pin) => {
@@ -325,7 +326,7 @@ function ExactDialog({
           {view.kind === 'failed' ? (
             <StateCell tone="warn" text={view.text} />
           ) : view.kind === 'ready' && picture.error ? (
-            <StateCell tone="warn" text={hostErrorInfo(picture.error).message} />
+            <StateCell tone="warn" text={hostErrorInfo(picture.error, currentLocale()).message} />
           ) : (
             view.text
           )}

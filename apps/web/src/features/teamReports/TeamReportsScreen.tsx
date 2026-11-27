@@ -7,20 +7,22 @@
  */
 import { createLink, Link } from '@tanstack/react-router';
 import {
-  TEAM_REPORT_KIND_WORDS,
-  TEAM_REPORT_WORDS,
   teamReportGroups,
+  teamReportKindWords,
   teamReportRowLabel,
   teamReportsUnavailableText,
   teamReportWhen,
+  teamReportWords,
 } from '@whombat/client';
 import { useTeamReports } from '@whombat/client/react';
-import { TEAM_REPORT_STATUS_WORDS, type TeamReportRow, teamReportNeedsYou } from '@whombat/core';
+import { type TeamReportRow, teamReportNeedsYou, teamReportStatusWords } from '@whombat/core';
 import { ChevronDown, ChevronRight, ChevronUp, CloudOff, MessageSquareText, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import { ButtonLink } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
 import { errorDetail, PlacePage, PlaceState, placeStyles as place } from '../settings/Place';
 import { KindIcon } from './parts';
@@ -29,6 +31,8 @@ import styles from './TeamReports.module.css';
 const RouterButtonLink = createLink(ButtonLink);
 
 export function TeamReportsScreen({ burrow }: { burrow: string }) {
+  const { tag: uiLocale } = useWebI18n();
+  const words = teamReportWords(uiLocale);
   const list = useTeamReports(burrow);
   const { timeZone } = useBurrowContext(burrow);
   const now = useNow(60_000);
@@ -38,11 +42,12 @@ export function TeamReportsScreen({ burrow }: { burrow: string }) {
   const groups = teamReportGroups(data?.reports ?? []);
   const closedOpen = !groups.foldable || showClosed;
   const closedRows = closedOpen ? groups.closed : groups.closedWhileFolded;
-  const unavailable = data && !data.available && !data.stale ? teamReportsUnavailableText(data.reason) : null;
+  const unavailable =
+    data && !data.available && !data.stale ? teamReportsUnavailableText(data.reason, uiLocale) : null;
   return (
     <PlacePage
-      title={TEAM_REPORT_WORDS.title}
-      intro={TEAM_REPORT_WORDS.intro}
+      title={words.title}
+      intro={words.intro}
       screen="team-reports"
       action={
         data?.available ? (
@@ -54,7 +59,7 @@ export function TeamReportsScreen({ burrow }: { burrow: string }) {
             iconStart={<Icon icon={Plus} size={16} />}
             data-new-report=""
           >
-            {TEAM_REPORT_WORDS.newReport}
+            {words.newReport}
           </RouterButtonLink>
         ) : undefined
       }
@@ -62,32 +67,32 @@ export function TeamReportsScreen({ burrow }: { burrow: string }) {
       {data?.stale ? (
         <p className={styles.quiet} role="status" data-stale="">
           <Icon icon={CloudOff} size={15} />
-          {TEAM_REPORT_WORDS.stale}
+          {words.stale}
         </p>
       ) : unavailable ? (
         <p className={styles.quiet}>{unavailable}</p>
       ) : null}
       {!list.supported ? (
-        <PlaceState kind="empty" icon={MessageSquareText} title={TEAM_REPORT_WORDS.updateFirst} />
+        <PlaceState kind="empty" icon={MessageSquareText} title={words.updateFirst} />
       ) : list.error && !data ? (
         <PlaceState
           kind="failed"
           icon={MessageSquareText}
-          title={TEAM_REPORT_WORDS.listFailed}
+          title={words.listFailed}
           onRetry={() => void list.refetch()}
           detail={errorDetail(list.error)}
         />
       ) : !data ? (
-        <PlaceState kind="loading" icon={MessageSquareText} title={TEAM_REPORT_WORDS.loading} />
+        <PlaceState kind="loading" icon={MessageSquareText} title={words.loading} />
       ) : data.reports.length === 0 ? (
-        <PlaceState kind="empty" icon={MessageSquareText} title={TEAM_REPORT_WORDS.empty} />
+        <PlaceState kind="empty" icon={MessageSquareText} title={words.empty} />
       ) : (
         <>
           {groups.open.length ? (
             <section className={styles.section} aria-labelledby={`${ids}-open`}>
               <div className={styles.sectionHead}>
                 <h2 className={styles.sectionTitle} id={`${ids}-open`}>
-                  {TEAM_REPORT_WORDS.open}
+                  {words.open}
                 </h2>
                 <span className={styles.count}>{groups.open.length}</span>
               </div>
@@ -102,7 +107,7 @@ export function TeamReportsScreen({ burrow }: { burrow: string }) {
             <section className={styles.section} aria-labelledby={`${ids}-closed`}>
               <div className={styles.sectionHead}>
                 <h2 className={styles.sectionTitle} id={`${ids}-closed`}>
-                  {TEAM_REPORT_WORDS.closed}
+                  {words.closed}
                 </h2>
                 <span className={styles.count}>{groups.closed.length}</span>
                 {groups.foldable ? (
@@ -113,7 +118,7 @@ export function TeamReportsScreen({ burrow }: { burrow: string }) {
                     aria-controls={`${ids}-closed-list`}
                     onClick={() => setShowClosed((was) => !was)}
                   >
-                    {closedOpen ? TEAM_REPORT_WORDS.hideClosed : TEAM_REPORT_WORDS.showClosed}
+                    {closedOpen ? words.hideClosed : words.showClosed}
                     <Icon icon={closedOpen ? ChevronUp : ChevronDown} size={14} />
                   </button>
                 ) : null}
@@ -135,6 +140,8 @@ export function TeamReportsScreen({ burrow }: { burrow: string }) {
 
 /** One report: its kind (with the new dot), title, number, kind and status, when it last changed, and the chevron. */
 function ReportRow({ row, now, timeZone }: { row: TeamReportRow; now: number; timeZone: string }) {
+  const { tag: uiLocale } = useWebI18n();
+  const TEAM_REPORT_STATUS_WORDS = useLocaleWords(teamReportStatusWords);
   const needsYou = teamReportNeedsYou(row.status);
   return (
     <li>
@@ -143,7 +150,7 @@ function ReportRow({ row, now, timeZone }: { row: TeamReportRow; now: number; ti
         params={{ reportId: row.id }}
         search={{}}
         className={cx(place.row, styles.reportRow, row.unread && styles.unread)}
-        aria-label={teamReportRowLabel(row)}
+        aria-label={teamReportRowLabel(row, uiLocale)}
         data-report-row={row.id}
         data-unread={row.unread || undefined}
       >
@@ -154,13 +161,13 @@ function ReportRow({ row, now, timeZone }: { row: TeamReportRow; now: number; ti
         <span className={place.main}>
           <span className={place.name}>{row.title}</span>
           <span className={place.line}>
-            #{row.number} · {TEAM_REPORT_KIND_WORDS[row.kind]} ·{' '}
+            #{row.number} · {teamReportKindWords(uiLocale)[row.kind]} ·{' '}
             <span className={needsYou ? styles.needsYou : undefined}>
               {TEAM_REPORT_STATUS_WORDS[row.status]}
             </span>
           </span>
         </span>
-        <span className={styles.time}>{teamReportWhen(row.updatedAt, now, timeZone)}</span>
+        <span className={styles.time}>{teamReportWhen(row.updatedAt, now, timeZone, uiLocale)}</span>
         <span className={place.chevron} aria-hidden="true">
           <Icon icon={ChevronRight} size={16} />
         </span>
