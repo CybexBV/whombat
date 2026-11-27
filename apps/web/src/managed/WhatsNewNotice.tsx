@@ -116,7 +116,8 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   useEffect(() => {
     if (!key || !data || !release || action === 'none' || action === undefined) return;
     let live = true;
-    void claimRelease(key, data, action === 'show' && !onWhatsNew, () => live).then((mine) => {
+    // Whether to tell is decided again in the lock, from what is kept by then.
+    void claimRelease(key, data, !onWhatsNew, () => live).then((mine) => {
       if (live && mine) setShown({ key, release });
     });
     return () => {

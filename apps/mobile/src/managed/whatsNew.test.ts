@@ -241,6 +241,31 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(later).toEqual([]);
   });
 
+  it('a watcher stopped while it reads (the app moved to another Whombat) keeps nothing, so coming back tells', async () => {
+    const kept = JSON.stringify({ release: 'pve-20260927.1', at: installedAt('pve-20260927.1') });
+    const inner = memoryStore({ [KEY]: kept });
+    let answer: (() => void) | null = null;
+    const store: KeyValueStore = {
+      get: async (key) => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return inner.get(key);
+      },
+      set: (key, value) => inner.set(key, value),
+      remove: (key) => inner.remove(key),
+    };
+    const shown: string[] = [];
+    const watcher = whatsNewWatcher(store, WHOMBAT, (r) => shown.push(r));
+    watcher.see(status('pve-20260928.6'));
+    await vi.waitFor(() => expect(answer).not.toBeNull());
+    watcher.stop();
+    (answer as unknown as () => void)();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(shown).toEqual([]);
+    expect(inner.data.get(KEY)).toBe(kept);
+  });
+
   it('is drawn in the strip with the passkey nudge, never waiting for it', () => {
     expect(stripNotices({ open: true, nudge: true, whatsNew: true })).toEqual({
       nudge: true,

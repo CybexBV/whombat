@@ -372,6 +372,31 @@ describe('the notice after an update', () => {
     }
   });
 
+  it('a page that finds an older update kept by another page when its turn comes tells of the new one', async () => {
+    const queued: (() => void)[] = [];
+    const locks = {
+      request: (_name: string, take: () => unknown) =>
+        new Promise((resolve) => queued.push(() => resolve(take()))),
+    };
+    vi.stubGlobal('navigator', { ...navigator, locks });
+    try {
+      // A first look here: nothing kept yet, so this page would only remember.
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await vi.waitFor(() => expect(queued).toHaveLength(1));
+      // Before its turn, another page's first look kept the release from before the update.
+      window.localStorage.setItem(
+        seenEntry,
+        JSON.stringify({ release: 'whombat-20261126.5', at: installedAt('whombat-20261126.5') }),
+      );
+      await act(async () => queued.shift()?.());
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+      expect(seenRelease()).toBe('whombat-20261127.2');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('a read that fails just after the box is back is asked again', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

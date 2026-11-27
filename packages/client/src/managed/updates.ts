@@ -346,7 +346,16 @@ export function whatsNewNotice(
   const value = JSON.stringify({ release, at } satisfies SeenRelease);
   // A status without update facts (an unmanaged box, or none read yet) says nothing either way.
   if (!status?.update) return { action: 'none', release, value };
-  if (seen === null) return { action: 'remember', release, value };
+  if (seen === null) {
+    // While a repair is needed there is nothing to tell, but the last update is still the one to compare with later:
+    // remembered as `none`, the repair starting would bring back the notice for that old release.
+    const last = status.update.lastUpdate;
+    if (release === WHATS_NEW_NO_UPDATE && last) {
+      const known = { release: last.release, at: last.at ?? null } satisfies SeenRelease;
+      return { action: 'remember', release: known.release, value: JSON.stringify(known) };
+    }
+    return { action: 'remember', release, value };
+  }
   const kept = readSeenRelease(seen);
   if (release === WHATS_NEW_NO_UPDATE || release === kept.release) return { action: 'none', release, value };
   if (kept.at && at && Date.parse(at) <= Date.parse(kept.at)) return { action: 'none', release, value };

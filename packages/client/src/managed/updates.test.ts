@@ -442,6 +442,19 @@ describe('the one-time “Whombat updated” notice', () => {
     );
   });
 
+  it('a first look while an update is being repaired remembers the last good update, so the repair tells nothing old', () => {
+    const repair = updated('pve-20260928.6', 'ForwardRepairRequired');
+    const first = whatsNewNotice(repair, null);
+    expect(first).toMatchObject({ action: 'remember', release: 'pve-20260928.6' });
+    // The repair is under way (or done without a new release): the same release is no news.
+    expect(whatsNewNotice(updated('pve-20260928.6', 'Downloading'), first.value).action).toBe('none');
+    expect(whatsNewNotice(updated('pve-20260928.6'), first.value).action).toBe('none');
+    // What the repair installs is.
+    expect(
+      whatsNewNotice(updated('pve-20260929.1', 'Healthy', '2026-09-29T13:00:00Z'), first.value).action,
+    ).toBe('show');
+  });
+
   it('asks again every few seconds only while an update is being installed', () => {
     expect(whatsNewPollMs({ update: { ...base, state: 'Verifying', candidate: 'pve-20260929.1' } })).toBe(
       5_000,
@@ -531,6 +544,6 @@ describe('the one-time “Whombat updated” notice', () => {
   });
 
   it('keeps one seen release per Whombat, in letters a secure store takes', () => {
-    expect(whatsNewSeenKey('wb-4hxx/7ydw:1')).toBe('whombat.whatsNew.seen.wb-4hxx_7ydw_1');
+    expect(whatsNewSeenKey('wb-abcd/efgh:1')).toBe('whombat.whatsNew.seen.wb-abcd_efgh_1');
   });
 });

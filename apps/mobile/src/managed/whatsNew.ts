@@ -48,6 +48,7 @@ export function whatsNewToShow(
   store: KeyValueStore,
   whombat: string,
   status: Pick<ApplianceStatus, 'update'> | null | undefined,
+  live: () => boolean = () => true,
 ): Promise<string | null> {
   const key = whatsNewSeenKey(whombat);
   return inTurn(store, key, async () => {
@@ -57,6 +58,8 @@ export function whatsNewToShow(
     } catch {
       return null;
     }
+    // Gone while reading (the app moved to another Whombat): nothing is kept, so coming back still tells.
+    if (!live()) return null;
     // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
     const { action, release, value } = whatsNewNotice(status, seen);
     if (action === 'none') return null;
@@ -83,7 +86,7 @@ export function whatsNewWatcher(
   return {
     see: (status) => {
       if (!status) return;
-      void whatsNewToShow(store, whombat, status).then((release) => {
+      void whatsNewToShow(store, whombat, status, () => live).then((release) => {
         if (live && release) show(release);
       });
     },
