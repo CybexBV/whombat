@@ -7,6 +7,10 @@ them once they have been tried on Beta.
 
 - This page is in the app now: open What’s new under Settings → This Whombat → About. After an update, the app
   tells you once, with a link here.
+- An automation that fixes a report keeps going after you send its T3 Code thread more work from the report’s own
+  Chat thread: it can still read that thread and its review.
+- Restarting such a run never skips a review that asked for changes, and the fix is told to keep the commits its
+  review read.
 
 ## 22 November 2026
 

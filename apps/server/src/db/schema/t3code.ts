@@ -48,6 +48,15 @@ export const t3Watches = pgTable(
       .notNull()
       .references(() => principals.id, { onDelete: 'cascade' }),
     personId: text('person_id').references(() => principals.id, { onDelete: 'set null' }),
+    /**
+     * The Chat thread of the customer's report whose own turn started this thread (migration 0042): its conversation
+     * and thread root (null: the top of a flat conversation). It stays when someone hands the thread more work from
+     * that Chat thread, so the report's turns keep reading the thread they started (`connections/report-turn.ts`);
+     * a hand-over from anywhere else clears it. Null conversation: no report's turn started it, or it is a person's
+     * now.
+     */
+    reportConversationId: text('report_conversation_id'),
+    reportThreadRootId: text('report_thread_root_id'),
     state: text('state').$type<T3WatchState>().notNull().default('watching'),
     /**
      * Whether the agent is woken when the thread moves on. False for a thread an automation's step (or another turn that waits for its

@@ -643,8 +643,14 @@ Automations. Code finds it by kind
   T3 Code connection and nothing else (`connections/context.ts`), and hands looking into the code to a T3 Code thread,
   which runs with full access on the person's computer. There it may only list projects, start a thread in a new
   worktree and follow its report’s own hand-overs. The turn’s context lists those hand-overs, and the same ownership
-  checks apply to every call. The person's threads, schedules, environments
-  and projects are refused before T3 Code is asked (`connections/report-turn.ts`).
+  checks apply to every call. A thread is the report's own when its turn started it: the watch keeps the report's Chat
+  thread (`t3_watches.report_conversation_id`, `report_thread_root_id`), also after a person's turn hands that thread
+  a follow-up from the report's own Chat thread, which only changes who is woken; a hand-over from anywhere else makes
+  it the person's, and a report's turn never takes a hand-over a person still waits for. The person's threads,
+  schedules, environments and projects are refused before T3 Code is asked (`connections/report-turn.ts`). A message
+  that hands over an automation's fix and asks for a review (its fix step's, or a person's follow-up on a fix that
+  didn't land) also tells the thread to keep the commits a review read (`t3code/follow.ts`
+  `withReviewedCommitRules`): the fix merges only when the commit the last review names is on the pushed branch.
 
 - **Settings for the person** (`apps/server/src/settings/`): in the person's own turns (never an automation's step or an
   outsiders' turn) the agent finds, reads and changes Whombat's settings with `settings_find`,

@@ -6,13 +6,17 @@
  *   it a message or answering its question watches it from that turn's conversation and thread, for its person;
  *   stopping it ends the watch; what a call showed it (a wait that saw it end, a read, its questions) is seen. A thread
  *   an automation's step (or another turn that waits for its thread itself) hands work to is watched without waking anyone (that turn waits for it
- *   itself), only so it is settled once its work completed.
+ *   itself), only so it is settled once its work completed. A thread a customer's report's turn starts is marked as
+ *   that report's, and stays so when a person's turn hands it more work from the report's own Chat thread
+ *   (`connections/report-turn.ts`); a report's turn never takes a hand-over a person still waits for.
  * - `t3code.thread_moved`: the watcher (`watch.ts`) read something the agent hasn't told or seen. Under the burrow's
  *   lock it checks again and wakes the agent there with a `t3_thread` turn — a queued one in the same place takes up to
  *   `T3_THREADS_MAX` threads — once per key; while a turn of the agent is at work there it waits for the next pass.
  * - `t3ThreadsOf` is a `t3_thread` turn's `DispatchContext.t3Threads`.
  * - `t3CallArgs`: a thread the agent starts carries its name first, so the person sees in T3 Code who handed it over,
- *   and a message to a thread carries what the person wrote, unchanged, when their own message started the turn.
+ *   and a message to a thread carries what the person wrote, unchanged, when their own message started the turn. A
+ *   message that hands over an automation's fix and asks for a review also says to keep the commits a review read
+ *   (`withReviewedCommitRules`).
  */
 import {
   type DispatchContext,
@@ -25,11 +29,18 @@ import {
   T3ThreadUpdate,
 } from '@whombat/core';
 import { and, asc, count, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { readsRoom } from '../chats/rooms';
 import { type ApplyContext, defineCommand } from '../commit/types';
 import type { Db, Tx } from '../db/client';
-import { catalogConnections, dispatches, type T3WatchRow, t3Watches } from '../db/schema/index';
+import {
+  automationRunSteps,
+  catalogConnections,
+  dispatches,
+  type T3WatchRow,
+  t3Watches,
+} from '../db/schema/index';
 import { SUBAGENT_MARK, subagentRules } from '../delegate/briefs';
 import { agentBriefOf } from '../domain/agent-brief';
 import { wakeQuietly } from '../domain/wake';
@@ -76,18 +87,37 @@ export const followT3Thread = defineCommand({
       wakes: z.boolean(),
       /** A prompt's thread whose pull request Whombat merges once it is done (`mergeAsked`); a later arm keeps it. */
       merge: z.boolean().optional(),
+      /** A turn on a customer's report hands it work: the thread is that report's, where its turns work. */
+      report: z.boolean().optional(),
     }),
-    z.object({ how: z.literal('seen'), connectionId: Id, threadId: ThreadId, key: Key }),
-    z.object({ how: z.literal('stop'), connectionId: Id, threadId: ThreadId }),
+    z.object({
+      how: z.literal('seen'),
+      connectionId: Id,
+      threadId: ThreadId,
+      key: Key,
+      /** A report's turn saw it: a hand-over a person still waits for is left for their wake. */
+      report: z.boolean().optional(),
+    }),
+    z.object({
+      how: z.literal('stop'),
+      connectionId: Id,
+      threadId: ThreadId,
+      /** A report's turn stopped it: a person who still waits for it hears that it ended. */
+      report: z.boolean().optional(),
+    }),
   ]),
   async apply(tx, ctx, input): Promise<{ watching: boolean }> {
     if (ctx.actor.kind !== 'agent') throw forbidden('Only the agent hands work to T3 Code.');
     const where = theWatch(ctx.burrow.id, input.connectionId, input.threadId);
+    // A hand-over a person still waits for: their turn is woken when the thread moves on. A report's turn that works
+    // on the same thread meanwhile (a restarted step) must not use that wake up or take it away.
+    const personWaits = sql`(${t3Watches.personId} is not null and ${t3Watches.wakes} and ${t3Watches.state} = 'watching')`;
+    const notTheirs = input.report ? sql`not ${personWaits}` : undefined;
     if (input.how === 'seen') {
       const rows = await tx
         .update(t3Watches)
         .set({ seenKey: input.key })
-        .where(and(where, eq(t3Watches.agentId, ctx.actor.id)))
+        .where(and(where, eq(t3Watches.agentId, ctx.actor.id), notTheirs))
         .returning({ state: t3Watches.state });
       return { watching: rows[0]?.state === 'watching' };
     }
@@ -95,7 +125,7 @@ export const followT3Thread = defineCommand({
       await tx
         .update(t3Watches)
         .set({ state: 'idle' })
-        .where(and(where, eq(t3Watches.agentId, ctx.actor.id)));
+        .where(and(where, eq(t3Watches.agentId, ctx.actor.id), notTheirs));
       return { watching: false };
     }
     const [connection] = await tx
@@ -128,6 +158,30 @@ export const followT3Thread = defineCommand({
       runStartedAt: null,
       runEndedAt: null,
     };
+    // Whose thread it is doesn't follow the latest hand-over. A report's turn can only start a thread or hand work to
+    // one that is its own already, so its hand-over marks the thread as its report's. Anyone else's hand-over from the
+    // report's own Chat thread keeps the mark (a follow-up the person asked for there, which the run's review must
+    // still read), and a watch from before the mark that is still as a report's turn left it (for nobody, with no
+    // wake) gets it then. A hand-over from anywhere else ends it: what a person's turn tells a thread there, their own
+    // words too, isn't for a stranger's report to read.
+    const reports = input.report
+      ? { reportConversationId: conversation.id, reportThreadRootId: input.threadRootId }
+      : {};
+    const root = sql`${input.threadRootId}::text`;
+    const here = (conversationOf: AnyPgColumn, rootOf: AnyPgColumn) =>
+      sql`${conversationOf} = ${conversation.id} and ${rootOf} is not distinct from ${root}`;
+    const staysReports = sql`((${here(t3Watches.reportConversationId, t3Watches.reportThreadRootId)}) or (${t3Watches.reportConversationId} is null and ${t3Watches.personId} is null and ${t3Watches.wakes} = false and ${t3Watches.councilId} is null and ${t3Watches.delegationTaskId} is null and ${here(t3Watches.conversationId, t3Watches.threadRootId)}))`;
+    const keptReports = input.report
+      ? {
+          ...reports,
+          // The person who still waits for it keeps their wake: the report's turn waits for the thread itself.
+          personId: sql`case when ${personWaits} then ${t3Watches.personId} else ${input.personId}::text end`,
+          wakes: sql`case when ${personWaits} then true else ${input.wakes}::boolean end`,
+        }
+      : {
+          reportConversationId: sql`case when ${staysReports} then ${conversation.id}::text else null end`,
+          reportThreadRootId: sql`case when ${staysReports} then ${root} else null end`,
+        };
     // The latest hand-over says where it is told; what the agent knew of it stays known.
     await tx
       .insert(t3Watches)
@@ -137,12 +191,14 @@ export const followT3Thread = defineCommand({
         threadId: input.threadId,
         title: input.title ?? 'A T3 Code thread',
         ...place,
+        ...reports,
         ...(input.merge ? { merge: { state: 'wanted' as const } } : {}),
       })
       .onConflictDoUpdate({
         target: [t3Watches.connectionId, t3Watches.threadId],
         set: {
           ...place,
+          ...keptReports,
           ...(input.title ? { title: input.title } : {}),
           ...(input.merge ? { merge: { state: 'wanted' as const } } : {}),
           // The job's track goes on through answers and messages; work on a thread whose job was over starts it anew.
@@ -327,6 +383,8 @@ export interface T3CallTurn {
   agentId: string;
   dispatch: Pick<DispatchRow, 'id' | 'trigger' | 'mode' | 'onBehalfOfAccountId' | 'messageId'>;
   reportTurn: boolean;
+  /** A person's turn in the thread of a report's fix that didn't land yet (`trackers/unlanded.ts`). */
+  followsUpFix?: boolean;
 }
 
 /**
@@ -375,6 +433,45 @@ export async function personWordsFor(db: Db, turn: T3CallTurn): Promise<string |
   });
 }
 
+/** How `REVIEWED_COMMIT_LINES` begin: a message that has them already keeps it. */
+export const REVIEWED_COMMITS_MARK = 'Keep every commit a review has read';
+
+/**
+ * What a thread that fixes something for an automation is told about the commits its reviews read. Whombat merges the fix only when the commit
+ * the last review names is on the pushed branch; a thread that rewrote its history after the review (a push hook
+ * refused something in an earlier commit) left a fix nobody could merge, and the run stopped for the person.
+ */
+export const REVIEWED_COMMIT_LINES = [
+  `${REVIEWED_COMMITS_MARK}: never amend, rebase or squash it afterwards. The fix is merged only when the commit the last review names is on the pushed branch.`,
+  'Before the first review, run git push --dry-run for the branch, so a hook that refuses the push shows while nothing was reviewed yet.',
+  'If history must change after a review all the same, have the new head reviewed again the same way before you finish, and name the commit that review read.',
+] as const;
+
+/** A message that hands over a fix and asks for a review, with `REVIEWED_COMMIT_LINES` at its end (once). Pure. */
+export function withReviewedCommitRules(message: string): string {
+  if (!/\breview/i.test(message) || message.includes(REVIEWED_COMMITS_MARK)) return message;
+  return `${message.trimEnd()}\n\n${REVIEWED_COMMIT_LINES.join('\n')}`;
+}
+
+/**
+ * Whether this turn hands a fix to T3 Code that Whombat's own steps then review and merge: an automation's fix step
+ * (the step named `fix`, as `unlanded.ts` reads it), or a person's turn that follows up on such a fix that didn't land
+ * (`followsUpFix`).
+ */
+async function handsOverFix(db: Db, turn: T3CallTurn): Promise<boolean> {
+  if (turn.followsUpFix) return true;
+  if (turn.dispatch.trigger !== 'automation') return false;
+  const [row] = await db
+    .select({ stepId: automationRunSteps.stepId })
+    .from(automationRunSteps)
+    .where(eq(automationRunSteps.dispatchId, turn.dispatch.id))
+    .limit(1);
+  return row?.stepId === 'fix';
+}
+
+/** How `wordsGiven` remembers that a turn gave a thread `REVIEWED_COMMIT_LINES`. */
+const commitRulesKey = (threadId: string) => `commit-rules ${threadId}`;
+
 /**
  * The arguments of an agent's call to T3 Code as they go out. A message that starts a thread or goes to one ends with
  * what the person wrote, word for word, when their own message started the turn, so the coding agents read the request
@@ -396,6 +493,10 @@ export async function t3CallArgs(
     const given = threadId !== null && wordsGiven.get(turn.dispatch.id)?.has(threadId) === true;
     if (!given) message = withPersonWords(message, await personWordsFor(db, turn));
     if (launches) message = withLaunchRules(message as string, turn.dispatch);
+    // Once per turn and thread, like the person's words: an answer about a finding doesn't repeat them.
+    const told =
+      threadId !== null && wordsGiven.get(turn.dispatch.id)?.has(commitRulesKey(threadId)) === true;
+    if (!told && (await handsOverFix(db, turn))) message = withReviewedCommitRules(message as string);
   }
   if (!launches) return message === args.message ? args : { ...args, message };
   const agent = await loadPrincipalRow(db, turn.agentId);
@@ -474,6 +575,8 @@ export async function followT3Call(
       'id' | 'trigger' | 'mode' | 'onBehalfOfAccountId' | 'conversationId' | 'threadRootId' | 'messageId'
     >;
     personId: string | null;
+    /** The turn works on a customer's report: a thread it hands work to is that report's (`report-turn.ts`). */
+    reportTurn?: boolean;
     tool: string;
     args: Record<string, unknown>;
     output: { content: string; structured?: unknown; isError: boolean };
@@ -496,6 +599,8 @@ export async function followT3Call(
       // The thread has this turn's person's words now: a later message of the turn doesn't repeat them.
       if (typeof call.args.message === 'string' && call.args.message.includes(PERSON_WORDS_MARK))
         rememberWords(call.dispatch.id, meaning.threadId);
+      if (typeof call.args.message === 'string' && call.args.message.includes(REVIEWED_COMMITS_MARK))
+        rememberWords(call.dispatch.id, commitRulesKey(meaning.threadId));
       await services.pipeline.commit(
         followT3Thread,
         {
@@ -507,6 +612,7 @@ export async function followT3Call(
           threadRootId: call.dispatch.threadRootId ?? null,
           personId: call.personId,
           wakes: handsOver(call.dispatch),
+          ...(call.reportTurn ? { report: true } : {}),
           ...((await mergeAsked(services.db, call)) ? { merge: true } : {}),
         },
         opts,
@@ -530,8 +636,19 @@ export async function followT3Call(
     await services.pipeline.commit(
       followT3Thread,
       meaning.how === 'stop'
-        ? { how: 'stop', connectionId: call.connectionId, threadId: meaning.threadId }
-        : { how: 'seen', connectionId: call.connectionId, threadId: meaning.threadId, key: meaning.key },
+        ? {
+            how: 'stop',
+            connectionId: call.connectionId,
+            threadId: meaning.threadId,
+            ...(call.reportTurn ? { report: true } : {}),
+          }
+        : {
+            how: 'seen',
+            connectionId: call.connectionId,
+            threadId: meaning.threadId,
+            key: meaning.key,
+            ...(call.reportTurn ? { report: true } : {}),
+          },
       opts,
     );
     if (meaning.how === 'stop') await publishHandoffs(services, call.burrowId, call.dispatch.conversationId);

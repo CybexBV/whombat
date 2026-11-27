@@ -30,6 +30,7 @@ import { approvals, automations, dispatches, pullRequests, vaultNetworks } from 
 import { callTool } from '../mcp/server';
 import { loadPrincipalRow } from '../read/principals';
 import { buildDispatchContext } from '../runtime/context';
+import { REVIEWED_COMMITS_MARK, t3CallArgs } from '../t3code/follow';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
@@ -422,6 +423,35 @@ describe('the fix for a report (RN-S4, RN-S5)', () => {
       { runId: run.id, fromStepId: 'review' },
     );
     expect(blocked.isError).toBe(true);
+
+    // A message that hands the fix to T3 Code and asks for a review says to keep the commits a review read: the fix
+    // step's own, and the person's follow-up on the fix that didn't land. A look gets none.
+    const handsOver = async (dispatchId: string, followsUpFix: boolean) => {
+      const [dispatch] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+      if (!dispatch) throw new Error('expected dispatch');
+      const sent = await t3CallArgs(
+        w.services.db,
+        { agentId: IDS.dusty, dispatch, reportTurn: dispatch.trigger === 'automation', followsUpFix },
+        't3_thread_send',
+        { threadId: 'mcp:fix', message: 'Fix what the review found, then have the new head reviewed.' },
+      );
+      return String(sent.message).includes(REVIEWED_COMMITS_MARK);
+    };
+    expect(await handsOver(step(now, 'fix').dispatchId as string, false)).toBe(true);
+    expect(await handsOver(personDispatch.id, true)).toBe(true);
+    expect(await handsOver(step(now, 'ask').dispatchId as string, false)).toBe(false);
+    expect(await handsOver(personDispatch.id, false)).toBe(false);
+
+    // Past a review that asked for changes nothing merges: the turn hears it, and the run stays as it ended.
+    const skipped = await callTool(
+      w.services,
+      { burrowId: w.burrowId, agentId: IDS.dusty, dispatchId: personDispatch.id },
+      'automation_continue_run',
+      { runId: run.id, fromStepId: 'pr' },
+    );
+    expect(JSON.stringify(skipped)).toContain('review');
+    expect(skipped.structuredContent).not.toMatchObject({ status: 'ok' });
+    expect((await w.run(run.id)).status).toBe(now.status);
 
     // The person turn continues the run from `review` with a note about the pushed follow-up commit.
     await w.fakePush(REPO, branch, 'Add empty export test');

@@ -261,6 +261,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Unsolicited Looks ahead findings land in the Inbox before Chat (docs/decisions/looks-ahead.md): two nullable columns (title, promoted_at), one defaulted jsonb column (sources) and a partial inbox index on ahead_checks; the release before it reads and writes past them, and Inbox reads skip rows whose thread message already exists so rollback and upgrade rows stay in Chat."
+    },
+    "0042_report_threads": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A report's T3 Code thread stays the report's (docs/decisions/outsiders-turns.md OT-27): two nullable text columns on t3_watches (report_conversation_id, report_thread_root_id), the Chat thread of the report whose turn started the thread. The release before it reads and writes past them; a thread it starts has none and counts as the report's while it is still as that turn left it, as before, and one a person's turn takes while that release runs stays the person's."
     }
   }
 }

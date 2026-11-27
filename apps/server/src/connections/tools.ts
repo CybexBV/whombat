@@ -36,6 +36,7 @@ import { dispatchPerson } from '../runtime/person';
 import { followT3Call, t3CallArgs } from '../t3code/follow';
 import { settleRefusal } from '../t3code/settle';
 import { callT3 } from '../things/kinds/business/t3code';
+import { unlandedFixOf } from '../trackers/unlanded';
 import { type CallWords, callWordsFor } from './adapters/index';
 import {
   callArgsAad,
@@ -250,13 +251,25 @@ export const CONNECTION_TOOL_HANDLERS: {
       if (err instanceof ConnectionArgumentError) return failed('invalid_arguments', err.message);
       throw err;
     }
-    if (c.row.catalogId === 't3code')
+    if (c.row.catalogId === 't3code') {
+      // A person's turn that follows up on a report's fix that didn't land hands that fix over again.
+      const followsUpFix =
+        !c.reportTurn &&
+        ctx.dispatch.trigger !== 'automation' &&
+        !!ctx.dispatch.threadRootId &&
+        (tool.name === 't3_thread_launch' || tool.name === 't3_thread_send') &&
+        (await unlandedFixOf(services.db, {
+          burrowId: ctx.burrowId,
+          conversationId: ctx.dispatch.conversationId,
+          threadRootId: ctx.dispatch.threadRootId,
+        })) !== null;
       args = await t3CallArgs(
         services.db,
-        { agentId: ctx.agentId, dispatch: ctx.dispatch, reportTurn: c.reportTurn },
+        { agentId: ctx.agentId, dispatch: ctx.dispatch, reportTurn: c.reportTurn, followsUpFix },
         tool.name,
         args,
       );
+    }
     const missing = missingArgsText(tool, args);
     if (missing) return failed('invalid_arguments', missing);
     // The agent settles a thread it handed work to once the job is finished; settling one still at work would stop it.
@@ -385,6 +398,7 @@ export const CONNECTION_TOOL_HANDLERS: {
         connectionId: c.row.id,
         dispatch: ctx.dispatch,
         personId: person?.id ?? null,
+        reportTurn: c.reportTurn,
         tool: tool.name,
         args,
         output: out,

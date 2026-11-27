@@ -1,7 +1,7 @@
 import { JOB_REPORT_MARK } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { SUBAGENT_MARK } from '../delegate/briefs';
-import { withLaunchRules } from './follow';
+import { REVIEWED_COMMITS_MARK, withLaunchRules, withReviewedCommitRules } from './follow';
 
 const person = { trigger: 'dm' as const, mode: 'reply' as const, onBehalfOfAccountId: 'acc_mara' };
 
@@ -29,5 +29,19 @@ describe('a new thread’s message (withLaunchRules)', () => {
       expect(out).toContain(SUBAGENT_MARK);
       expect(out).not.toContain(JOB_REPORT_MARK);
     }
+  });
+});
+
+describe('a report’s fix message (withReviewedCommitRules)', () => {
+  it('tells a thread asked for a review to keep the commits it read, after the agent’s words, once', () => {
+    const out = withReviewedCommitRules('Fix it, then have the commits reviewed with delegate_task.');
+    expect(out.startsWith('Fix it, then have the commits reviewed')).toBe(true);
+    expect(out).toContain(REVIEWED_COMMITS_MARK);
+    expect(out).toContain('git push --dry-run');
+    expect(withReviewedCommitRules(out)).toBe(out);
+  });
+
+  it('leaves a message that asks for no review as it is', () => {
+    expect(withReviewedCommitRules('Also rename the button.')).toBe('Also rename the button.');
   });
 });

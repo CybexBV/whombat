@@ -66,6 +66,7 @@ import { OUTSIDERS_TOOLS } from '../mcp/served';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadPrincipalRow } from '../read/principals';
 import { buildDispatchContext, WINDOW_SIZE } from '../runtime/context';
+import { followT3Thread } from '../t3code/follow';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
@@ -994,6 +995,72 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
       ).not.toBe('blocked');
       expect((await claim(dispatchId)).t3Handoffs).toEqual([
         { connection: handle, threadId: 'mcp:started-here', title: 'Look into exports', state: 'working' },
+      ]);
+      // The person's turn hands the report's own thread more work from this Chat thread (a follow-up after the run
+      // stopped): it wakes them now, and stays the report's, so the run's review still reads it.
+      const place = {
+        conversationId: turn?.conversationId as string,
+        threadRootId: turn?.threadRootId ?? null,
+      };
+      const asAgent = { burrowId: w.burrowId, actorId: IDS.dusty };
+      const arm = (threadId: string, from: { threadRootId: string | null }, who: 'report' | 'person') =>
+        w.services.pipeline.commit(
+          followT3Thread,
+          {
+            how: 'arm',
+            connectionId: t3,
+            threadId,
+            title: null,
+            conversationId: place.conversationId,
+            threadRootId: from.threadRootId,
+            personId: who === 'person' ? IDS.mara : null,
+            wakes: who === 'person',
+            ...(who === 'report' ? { report: true } : {}),
+          },
+          asAgent,
+        );
+      const watch = async (threadId: string) =>
+        (
+          await w.services.db
+            .select()
+            .from(t3Watches)
+            .where(and(eq(t3Watches.connectionId, t3), eq(t3Watches.threadId, threadId)))
+        )[0];
+      const own = async (threadId: string) =>
+        (await call('t3_thread_send', { threadId, message: 'Go on.' })).body.status !== 'blocked';
+      // One from before threads were marked, still as the report's turn left it.
+      await arm('mcp:started-here', place, 'person');
+      // One a report's turn started since.
+      await arm('mcp:fix-here', place, 'report');
+      await arm('mcp:fix-here', place, 'person');
+      expect(await watch('mcp:fix-here')).toMatchObject({ personId: IDS.mara, wakes: true });
+      expect(await own('mcp:started-here')).toBe(true);
+      expect(await own('mcp:fix-here')).toBe(true);
+      expect((await call('t3_thread_read', { threadId: 'mcp:started-here' })).body.status).not.toBe(
+        'blocked',
+      );
+      expect(((await claim(dispatchId)).t3Handoffs ?? []).map((h) => h.threadId).sort()).toEqual([
+        'mcp:fix-here',
+        'mcp:started-here',
+      ]);
+      // While the person still waits for it, the report's turn working on it neither takes their wake nor uses it up.
+      await arm('mcp:fix-here', place, 'report');
+      await w.services.pipeline.commit(
+        followT3Thread,
+        { how: 'seen', connectionId: t3, threadId: 'mcp:fix-here', key: 'done:run-1', report: true },
+        asAgent,
+      );
+      expect(await watch('mcp:fix-here')).toMatchObject({ personId: IDS.mara, wakes: true, seenKey: null });
+      // Handed work from another thread, it is the person's from then on: what they said there isn't the report's.
+      await arm('mcp:fix-here', { threadRootId: 'msg_another_thread' }, 'person');
+      expect(await own('mcp:fix-here')).toBe(false);
+      await arm('mcp:fix-here', place, 'person');
+      expect(await own('mcp:fix-here')).toBe(false);
+      // A thread the person's turn started in this Chat thread is still theirs, however often they hand it work.
+      await arm('mcp:person-in-same-thread', place, 'person');
+      expect(await own('mcp:person-in-same-thread')).toBe(false);
+      expect(((await claim(dispatchId)).t3Handoffs ?? []).map((h) => h.threadId)).toEqual([
+        'mcp:started-here',
       ]);
       // Another outsiders' turn (no report behind it) sees no connection at all.
       const seen = await visibleConnections(w.services.db, IDS.dusty, {

@@ -132,6 +132,9 @@ describe('where code work goes (t3code.md)', () => {
     expect(line).toContain('automation_continue_run');
     expect(line).toContain('fromStepId "review"');
     expect(line).toContain('feat/whombat-production-2');
+    // Follow-up work goes to the run's own thread, the only one its review reads.
+    expect(line).toContain('t3_thread_send');
+    expect(line).toContain('never a new one');
     // Never shown in outsiders' turns or automation steps.
     expect(unlandedFixLines({ unlandedFix, outside: true })).toEqual([]);
     expect(unlandedFixLines({ unlandedFix, dispatch: { trigger: 'automation' } })).toEqual([]);
