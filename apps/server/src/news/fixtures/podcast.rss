@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
+  <channel>
+    <title>Example Morning</title>
+    <link>https://radio.example.com/morning</link>
+    <description>The day's news in ten minutes.</description>
+    <itunes:author>Example Radio</itunes:author>
+    <item>
+      <title>Thursday: the ferry, the market and the weather</title>
+      <link>https://radio.example.com/morning/2026-11-26</link>
+      <pubDate>Thu, 26 Nov 2026 05:00:00 +0000</pubDate>
+      <enclosure length="11846261" type="audio/mpeg" url="https://cdn.example.com/morning/2026-11-26.mp3"/>
+      <itunes:duration>612</itunes:duration>
+    </item>
+    <item>
+      <title>Wednesday: the council votes</title>
+      <link>https://radio.example.com/morning/2026-11-25</link>
+      <pubDate>Wed, 25 Nov 2026 05:00:00 +0000</pubDate>
+      <enclosure length="11246261" type="audio/mpeg" url="https://cdn.example.com/morning/2026-11-25.mp3"/>
+    </item>
+  </channel>
+</rss>

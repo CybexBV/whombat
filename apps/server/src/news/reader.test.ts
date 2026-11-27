@@ -1,22 +1,35 @@
 import { NEWS_FEED_KEEP_S } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { type OpenDataAnswer, useOpenDataForTests } from '../lib/open-data';
+import {
+  OPEN_DATA_MAX_BYTES,
+  type OpenDataAnswer,
+  type OpenDataOptions,
+  useOpenDataForTests,
+} from '../lib/open-data';
 import type { Services } from '../services';
 import { findFeed } from './discover';
-import { mergeHeadlines, NEWS_READ_WORDS, NEWS_RETRY_MS, NewsReader } from './reader';
+import {
+  eachLimited,
+  mergeHeadlines,
+  NEWS_READ_WORDS,
+  NEWS_READS_AT_ONCE,
+  NEWS_RETRY_MS,
+  NewsReader,
+  newsShare,
+} from './reader';
 
 const MIN = 60_000;
 
-function world(answer: (url: string) => OpenDataAnswer) {
+function world(answer: (url: string) => OpenDataAnswer | Promise<OpenDataAnswer>) {
   let now = Date.parse('2026-11-26T08:00:00Z');
-  const asked: { url: string; headers: Record<string, string> }[] = [];
+  const asked: { url: string; headers: Record<string, string>; options: OpenDataOptions | undefined }[] = [];
   const services = {
     clock: () => new Date(now),
     log: { warn: () => undefined },
     config: { NODE_ENV: 'test' },
   } as unknown as Services;
-  useOpenDataForTests(services, async (url, headers) => {
-    asked.push({ url, headers });
+  useOpenDataForTests(services, async (url, headers, options) => {
+    asked.push({ url, headers, options });
     return answer(url);
   });
   return {
@@ -89,7 +102,57 @@ describe('all sites’ headlines together', () => {
   });
 });
 
+describe('thirty sources', () => {
+  it('give each source a fair share of a list, and one source all of it', () => {
+    const items = (prefix: string, n: number, newest: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        title: `${prefix} ${i}`,
+        link: `https://${prefix}.example/${i}`,
+        at: newest - i,
+      }));
+    const busy = { source: { id: 'own-busy', name: 'Busy' }, items: items('busy', 20, 100) };
+    const calm = { source: { id: 'own-calm', name: 'Calm' }, items: items('calm', 3, 50) };
+    const out = mergeHeadlines([busy, calm], 6, 3);
+    expect(out.map((h) => h.source)).toEqual(['Busy', 'Busy', 'Busy', 'Calm', 'Calm', 'Calm']);
+    expect(newsShare(30, 1)).toBe(30);
+    expect(newsShare(30, 2)).toBe(15);
+    expect(newsShare(30, 30)).toBe(3);
+    expect(newsShare(10, 30)).toBe(3);
+  });
+
+  it('are read a few at a time, each answer in its place', async () => {
+    let running = 0;
+    let most = 0;
+    const out = await eachLimited(
+      Array.from({ length: 30 }, (_, i) => i),
+      NEWS_READS_AT_ONCE,
+      async (i) => {
+        running++;
+        most = Math.max(most, running);
+        await Promise.resolve();
+        running--;
+        return i * 2;
+      },
+    );
+    expect(out).toEqual(Array.from({ length: 30 }, (_, i) => i * 2));
+    expect(most).toBe(NEWS_READS_AT_ONCE);
+  });
+});
+
 describe('the news reader', () => {
+  it('reads only the first part of a long feed, its newest items', async () => {
+    const w = world(() => ({
+      ...xml(
+        200,
+        `<rss><channel><item><title>New</title><link>https://a.example.com/1</link><pubDate>Thu, 26 Nov 2026 07:00:00 GMT</pubDate></item><item><title>Cut sh`,
+      ),
+      truncated: true,
+    }));
+    const [read] = await new NewsReader(w.services).read([SITE_A]);
+    expect(read).toMatchObject({ ok: true, items: [{ title: 'New' }] });
+    expect(w.asked[0]?.options?.keepFirst).toBe(OPEN_DATA_MAX_BYTES);
+  });
+
   it('reads each site as Whombat, keeps it 15 minutes, then reads it again', async () => {
     const w = world(() =>
       xml(200, rss(['Storm', 'https://a.example.com/1', 'Thu, 26 Nov 2026 07:00:00 GMT'])),
@@ -146,10 +209,12 @@ describe('adding a news site', () => {
     expect(await findFeed(w.services, 'example.com')).toEqual({
       url: 'https://www.example.com/rss',
       name: 'Site',
+      kind: 'site',
     });
     expect(await findFeed(w.services, 'https://www.example.com/rss')).toEqual({
       url: 'https://www.example.com/rss',
       name: 'Site',
+      kind: 'site',
     });
   });
 
