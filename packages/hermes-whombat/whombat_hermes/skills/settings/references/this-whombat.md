@@ -1,8 +1,8 @@
-# This Whombat (the box)
+# This Whombat (the box), and its news and weather
 
 ## Settings → This Whombat → Overview (`appliance.overview`)
 
-How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail, where it is and its news.
+How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail.
 
 - Read how this Whombat is doing — `appliance.status` · read
 - Read this Whombat’s name and time zone — `burrows.get` · read
@@ -33,11 +33,6 @@ How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing 
 - Forget a Wi-Fi network — `host.wifi.forget` · change, always asks
 - Join a Wi-Fi network (it needs a password) — `host.wifi.join` · theirs: send them there
 - Look for Wi-Fi networks nearby — `host.wifi.scan` · read
-- Add a news site — `news.addSite` · change, always asks
-- Turn news sites on or off — `news.setSources` · change
-- Read the news sites that are on and the ones suggested — `news.sources` · read
-- Look up a place on OpenStreetMap — `place.find` · read
-- Set where this Whombat is, for the weather and local news — `place.set` · change
 - Download the voice typing model — `voice.fetchModel` · change
 - Read the voice typing settings — `voice.get` · read
 - Delete the voice typing model — `voice.removeModel` · change, always asks
@@ -144,3 +139,15 @@ Versions and updates, when updates may happen, remote help and the licence.
 - Read the support visits — `remoteHelp.visits` · theirs: send them there
 - Read which updates this Whombat takes — `updates.channel.get` · read
 - Choose Production or Development updates — `updates.channel.set` · theirs: send them there
+
+## Settings → News and weather (`news`)
+
+Where this Whombat is (for the weather and local news), and the news sources it reads: on and off, their order, suggestions by country and topic, adding your own, importing a list.
+
+- Add a news site — `news.addSite` · change, always asks
+- Browse the news sites suggested in a country — `news.browse` · read
+- Add news sources from another reader’s list — `news.importSites` · change, always asks
+- Turn news sites on or off — `news.setSources` · change
+- Read the news sites that are on and the ones suggested — `news.sources` · read
+- Look up a place on OpenStreetMap — `place.find` · read
+- Set where this Whombat is, for the weather and local news — `place.set` · change
