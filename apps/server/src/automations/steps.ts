@@ -43,6 +43,7 @@ import { executeMergePullRequest } from './steps/merge-pull-request';
 import {
   alreadyOpenOutput,
   executeOpenPullRequest,
+  githubRetriesOf,
   openPrFrom,
   postPreparedPr,
   useOpenPr,
@@ -66,7 +67,13 @@ export { branchHead, stepBinding } from './steps/binding';
 export { stepRoomsCheck } from './steps/checks';
 export { dispatchResult } from './steps/dispatch-agent';
 export { commentPlan, NOTHING_TO_COMMENT_ON } from './steps/github-comment';
-export { alreadyOpenOutput, mayCommentOnPr, openedPr, openPrFrom } from './steps/open-pull-request';
+export {
+  alreadyOpenOutput,
+  githubRetriesOf,
+  mayCommentOnPr,
+  openedPr,
+  openPrFrom,
+} from './steps/open-pull-request';
 export {
   definitionStep,
   GateFactsInput,
@@ -322,17 +329,21 @@ export const automationStep = defineCommand({
           const { queuedBehind: _noted, ...kept } = row.output as JsonObject;
           // A card of proposed connection actions tried again starts fresh: no earlier yes, and its names read again
           // from where the calls go now; only what the caller says (which connections changed since the yes) stays.
+          // Any other step keeps its output, with what the caller adds (how often it tried something again).
           const fresh = step.kind === 'connection_actions';
+          const added = (input.output ?? {}) as JsonObject;
           await updateStep(
             tx,
             run.id,
             input.idx,
             {
               ...(fresh
-                ? { output: (input.output ?? {}) as JsonObject }
+                ? { output: added }
                 : noted
-                  ? { inputSummary: noted.asked, output: kept }
-                  : {}),
+                  ? { inputSummary: noted.asked, output: { ...kept, ...added } }
+                  : input.output
+                    ? { output: { ...(row.output as JsonObject), ...added } }
+                    : {}),
               state: 'pending',
               attempt: row.attempt + 1,
               error: input.error ?? null,
@@ -810,6 +821,7 @@ export const openPrStep = defineCommand({
           publisher: who.publisher,
           output: { ...(row.output as JsonObject), command: null, ...alreadyOpenOutput(already, {}) },
           fields: {},
+          bodyOnIt: githubRetriesOf(row.output).open > 0,
         },
         announcePr,
       );

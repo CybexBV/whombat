@@ -2,8 +2,9 @@
  * An automation merges its fix once its checks pass (docs/decisions/automation-recipes.md AR-44…AR-47), on a real
  * database with the in-memory FakeGitHub, its poller and FAKE AGENTS (test/automations.ts): a recipe made and published
  * with merging gets “Merge into main”; its fix's pull request waits for the checks and merges — passed, pending then
- * passed, none after the grace —, and AR-42 then deletes the branch; failed checks, a head that moved after the review,
- * changes requested, a closed pull request and checks that don't finish in time leave it for a person; merged by
+ * passed, none after the grace (a short one in a repository known to run none) —, and AR-42 then deletes the branch;
+ * failed checks, a head that moved after the review, changes requested, a closed pull request and checks that don't
+ * finish in time leave it for a person; merged by
  * someone meanwhile succeeds; failed GitHub Actions jobs run once more (AR-57), only for an infrastructure fault where
  * the repository says so; the key at No and at Asks; and no pull request skips the step.
  */
@@ -35,7 +36,12 @@ import {
   saveAutomationDraft,
   setAutomationKeys,
 } from './commands';
-import { MERGE_CHECKS_GRACE_MS, NOTHING_TO_MERGE } from './merge';
+import {
+  MERGE_CHECKS_GRACE_MS,
+  MERGE_NO_CHECKS_GRACE_MS,
+  NOTHING_TO_MERGE,
+  QUIET_MERGES_KNOWN,
+} from './merge';
 import { loadAutomationRow, loadRunRow, toAutomation } from './store';
 
 const w = useAutomationWorld();
@@ -351,12 +357,13 @@ describe('merging once the checks pass (AR-45…AR-47)', () => {
     await done(id);
   });
 
-  it('merges a pull request without checks once the grace is over, in a repository that runs none', async () => {
-    // No merge of this repository ran checks.
+  it('merges a pull request without checks after the short grace, in a repository known to run none', async () => {
+    // No merge of this repository ran checks, and it merged enough to know.
     await w.services.db.delete(prChecks);
     const id = await recipe();
     const { runId, pr } = await fixed(id, 'No CI here');
-    w.advance(MERGE_CHECKS_GRACE_MS - 60_000);
+    await mergesWithoutChecks(pr, QUIET_MERGES_KNOWN);
+    w.advance(MERGE_NO_CHECKS_GRACE_MS - 60_000);
     await poll();
     expect(step(await w.run(runId), 'merge').state).toBe('waiting');
     w.advance(2 * 60_000);
@@ -370,7 +377,50 @@ describe('merging once the checks pass (AR-45…AR-47)', () => {
     expect(merged(pr.number)).toHaveLength(1);
     await done(id);
   });
+
+  it('keeps the full grace when a merge of the repository showed a check', async () => {
+    await w.services.db.delete(prChecks);
+    const id = await recipe();
+    const { runId, pr } = await fixed(id, 'Maybe CI');
+    // One skipped check: the repository isn't known to run none, though no check is usual on its merges.
+    const [newest] = await mergesWithoutChecks(pr, QUIET_MERGES_KNOWN);
+    await w.services.db.insert(prChecks).values({ prId: newest as string, name: 'docs', state: 'skipped' });
+    w.advance(MERGE_CHECKS_GRACE_MS - 60_000);
+    await poll();
+    expect(step(await w.run(runId), 'merge').state).toBe('waiting');
+    w.advance(2 * 60_000);
+    await w.settle();
+    expect((await w.run(runId)).status).toBe('succeeded');
+    expect(merged(pr.number)).toHaveLength(1);
+    await done(id);
+  });
 });
+
+/**
+ * Merges of the repository into main the mirror knows, without checks, as the newest: Whombat-only rows, so the
+ * poller leaves them as they are.
+ */
+async function mergesWithoutChecks(pr: typeof pullRequests.$inferSelect, count: number) {
+  const ids = Array.from({ length: count }, (_, i) => `${pr.id}-merged-${i}`);
+  await w.services.db.insert(pullRequests).values(
+    ids.map((id, i) => ({
+      id,
+      burrowId: pr.burrowId,
+      repoId: pr.repoId,
+      number: 9000 + pr.number * 10 + i,
+      branch: `old/${id}`,
+      baseBranch: 'main',
+      title: 'An earlier change',
+      state: 'merged' as const,
+      headSha: 'c'.repeat(40),
+      conversationId: pr.conversationId,
+      openedAt: w.now(),
+      mergedAt: w.now(),
+      localOnly: true,
+    })),
+  );
+  return ids;
+}
 
 describe('leaving it for a person (AR-46)', () => {
   /** The run failed at its merge step with `line` and why (`cause`), nothing merged, and the thread said so. */

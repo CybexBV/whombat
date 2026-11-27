@@ -968,15 +968,18 @@ published automation details read their definition and publisher from one versio
   nothing waits for an approval nobody gives); their turns are outsiders'. With T3 Code a recipe's fix goes to the
   thread that looked into the report, which makes the fix branch in its own worktree from origin's default branch (a
   new thread on its own worktree and branch when no thread looked), and has another model review it once (`delegate_task`,
-  the recipe's `t3Review` or another provider's), fixes what that review found and pushes, with its before and after
-  screenshots on `pr-shots/<branch>`; the thread gets the report in the agent's own words, never the customer's text.
+  the recipe's `t3Review` or another provider's; up to ten rounds with `t3Review.maxRounds`). The reviewer marks each
+  finding blocking or later: the thread fixes the blocking ones, names the later ones it left, and pushes, with its
+  before and after screenshots on `pr-shots/<branch>`; the thread gets the report in the agent's own words, never the
+  customer's text. Three report fixes are at work at once on a Whombat; a fourth waits.
   Whombat's review step reads that review itself (a report turn may list and read the reviews its own threads hand out)
-  and approves when the review approved or the thread dealt with each thing it found; the server reads the reviewer's
-  own answer too, which must be another model's and name a commit on the branch, and the approval binds the branch's
-  head, and Whombat's steps open the pull request (named by the assessment's `title`, carrying a marker that names the report and
+  and approves when the review approved or the thread dealt with each blocking thing it found; the server reads the
+  reviewer's own answer too, which must be another model's and name a commit on the branch, and the approval binds the
+  branch's head, and Whombat's steps open the pull request (named by the assessment's `title`, carrying a marker that names the report and
   the driver's own line,
-  with the screenshots as a table) and merge it once the checks the repository runs on every merge have passed on that
-  commit. A fix that doesn't get through goes round again by itself (`automations/again.ts`, for every run with a
+  with the screenshots as a table; tried again when GitHub fails for a moment) and merge it once the checks the
+  repository runs on every merge have passed on that commit (in a repository whose merges show no checks, on the review
+  alone, four minutes after it opened). A fix that doesn't get through goes round again by itself (`automations/again.ts`, for every run with a
   `fix` agent step, a GitHub issue's too): where the run would end because the review asked for changes or couldn't be
   confirmed, the fix step failed, the pull request's checks failed, it changed after its review or it conflicts with
   the base branch, the engine puts the steps back from `fix`, tells the fix turn how the earlier try ended and to carry

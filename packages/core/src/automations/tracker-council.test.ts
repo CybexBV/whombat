@@ -118,7 +118,7 @@ describe('the fix in T3 Code (TA-57)', () => {
     expect(fix).toContain('in your own words');
     expect(fix).toContain('this one review is all');
     expect(fix).not.toContain('at most three reviews');
-    expect(fix).toContain('the commit it reviewed');
+    expect(fix).toContain('reviewed <commit>');
     expect(fix).toContain('the model gpt-6.1-sol at effort xhigh');
     expect(fix).toContain('For the customer (fixed)');
     expect(fix).toContain('For the customer (partly fixed)');

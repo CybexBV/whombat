@@ -9,6 +9,7 @@ import {
   actionsJobOf,
   actionsRunOf,
   MERGE_CHECKS_GRACE_MS,
+  MERGE_NO_CHECKS_GRACE_MS,
   MERGE_RERUN_SEEN_MS,
   type MergeRerun,
   mergeReadiness,
@@ -63,10 +64,12 @@ function ready(
     rerun?: MergeRerun;
     expected?: string[];
     requireChecks?: boolean;
+    quiet?: boolean;
   } = {},
 ) {
   return mergeReadiness({
     ...(o.expected ? { expected: o.expected } : {}),
+    ...(o.quiet ? { quiet: true } : {}),
     ...(o.requireChecks ? { requireChecks: true } : {}),
     number: 10,
     repo: 'acme/web',
@@ -175,6 +178,39 @@ describe('mergeReadiness', () => {
     expect(ready(target({ openedAt: T0 - 86_400_000 }), { at: T0 })).toMatchObject({ kind: 'merge' });
     // Never past its own wait.
     expect(ready(target(), { waitMinutes: 5, at: T0 + 5 * 60_000 })).toMatchObject({ kind: 'merge' });
+  });
+
+  it('gives a repository known to run no checks the shorter grace', () => {
+    const none = target({ openedAt: T0 });
+    expect(ready(none, { quiet: true, at: T0 + MERGE_NO_CHECKS_GRACE_MS - 1 })).toEqual({ kind: 'wait' });
+    expect(ready(none, { quiet: true, at: T0 + MERGE_NO_CHECKS_GRACE_MS })).toEqual({
+      kind: 'merge',
+      reviewed: true,
+      summary: 'No checks on PR #10',
+    });
+    // Not known to be quiet: the full grace.
+    expect(ready(none, { at: T0 + MERGE_NO_CHECKS_GRACE_MS })).toEqual({ kind: 'wait' });
+    // A check that shows as running is waited for as usual.
+    const running = target({ checks: ['running'], openedAt: T0 });
+    expect(ready(running, { quiet: true, at: T0 + MERGE_NO_CHECKS_GRACE_MS })).toEqual({ kind: 'wait' });
+    // A report's fix still merges only on the run's review of this very head.
+    expect(
+      ready(none, { quiet: true, requireChecks: true, review: null, at: T0 + MERGE_NO_CHECKS_GRACE_MS }),
+    ).toEqual({ kind: 'wait' });
+    expect(
+      ready(none, {
+        quiet: true,
+        requireChecks: true,
+        review: { ...approved, head: 'f'.repeat(40) },
+        at: T0 + MERGE_NO_CHECKS_GRACE_MS,
+      }),
+    ).toMatchObject({ kind: 'fail', cause: 'changed' });
+    expect(
+      ready(none, { quiet: true, requireChecks: true, at: T0 + MERGE_NO_CHECKS_GRACE_MS }),
+    ).toMatchObject({
+      kind: 'merge',
+      reviewed: true,
+    });
   });
 
   it('leaves it for a person, in order', () => {

@@ -14,11 +14,12 @@ import {
 import { and, eq } from 'drizzle-orm';
 import { mergeTarget } from '../../commands/prs';
 import { repos } from '../../db/schema/index';
-import { type GhPullRequest, GitHubError } from '../../github/adapter';
+import { type GhPullRequest, GitHubError, GitHubNotConnectedError } from '../../github/adapter';
+import { ApiError } from '../../lib/errors';
 import { OutboundError, outboundRequest } from '../../lib/outbound';
 import { githubScope } from '../../managed/providers/github-adapter';
 import { MERGE_WORDS, mergeOutputOf } from '../merge';
-import { openedPr, openPrStep } from '../steps';
+import { githubRetriesOf, openedPr, openPrStep } from '../steps';
 import { shotsBranch, shotsSection } from '../steps/shots';
 import { type AutomationStepRow, loadStepRows } from '../store';
 import { runConnectionActions } from './connection-actions-effect';
@@ -226,8 +227,9 @@ async function pullRequestOnGitHub(
 
 /**
  * An `open_pull_request` step marked running: opens it (`openPrStep`, which records it in the same commit), then posts
- * its own body on one it found already open (RN-S3d). A failure retries while retries are left, and the last one posts
- * the prepared pull request for a person and says why it wasn't opened (M1).
+ * its own body on one it found already open (RN-S3d). GitHub failing for a moment (`passingGitHubFault`) is tried again
+ * up to `OPEN_TRIES` times in all. Any other failure retries while retries are left, and the last one posts the prepared
+ * pull request for a person and says why it wasn't opened (M1).
  */
 async function openPullRequest(
   lease: LeasedRun,
@@ -243,14 +245,19 @@ async function openPullRequest(
   // A report's organization never reaches GitHub (report-trackers.md TA-68): the server scrubs the title and body, but
   // the branch's own commits it can't change, so commits that name it leave the pull request for a person.
   const named = await commitsNameOrganization(lease, row);
+  // Each kind of retry keeps its own count, so reading the commits again never uses up the tries at opening, nor the
+  // other way round.
+  const retried = githubRetriesOf(row.output);
   // GitHub didn't show the commits: asked again a little later, twice; still unread, the pull request waits for a
   // person like one that names the organization — never opened unchecked.
-  if (named === COMMITS_UNREAD && row.attempt < COMMIT_READS - 1) {
+  if (named === COMMITS_UNREAD && retried.commits < COMMIT_READS - 1) {
     await lease.commit({
       op: 'settle',
       idx: row.idx,
       state: 'pending',
       retry: true,
+      retryFrom: row.attempt - retried.commits,
+      output: { githubRetries: { ...retried, commits: retried.commits + 1 } },
       error: 'GitHub didn’t show the branch’s commits, so they are read again.',
       from: ['running'],
     });
@@ -264,6 +271,31 @@ async function openPullRequest(
     );
     return;
   }
+  const openAgain = (): Promise<unknown> => {
+    // The mirror reads the repository at once, so a pull request GitHub did open is found before the next try.
+    services.github.poller.wake(run.burrowId, step.repo);
+    return lease.commit({
+      op: 'settle',
+      idx: row.idx,
+      state: 'pending',
+      retry: true,
+      retryFrom: row.attempt - retried.open,
+      output: { githubRetries: { ...retried, open: retried.open + 1 } },
+      error: 'GitHub didn’t answer, so opening the pull request is tried again.',
+      from: ['running'],
+    });
+  };
+  const triesLeft = retried.open < OPEN_TRIES - 1;
+  // GitHub failed while opening it before: it may have opened it all the same. Found on GitHub but not yet in the
+  // mirror, the step waits for the mirror rather than open it twice (GitHub would refuse that).
+  if (retried.open > 0 && triesLeft) {
+    const branch = String((row.output as { branch?: string }).branch ?? '');
+    const found = branch ? await openOnGitHub(lease, step.repo, branch) : null;
+    if (found && found !== 'none') {
+      await openAgain();
+      return;
+    }
+  }
   try {
     const shots = await screenshotsOf(lease, row);
     const res = await services.pipeline.commit(
@@ -276,6 +308,10 @@ async function openPullRequest(
       if (now?.state === 'running') await commentOnOpenedPr(lease, now, step);
     }
   } catch (err) {
+    if (triesLeft && passingGitHubFault(err)) {
+      await openAgain();
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     const op = failure(row, step, message);
     // No retries left: post the prepared pull request for a person, and say why it wasn't opened (M1).
@@ -284,6 +320,38 @@ async function openPullRequest(
       last ? { op: 'fallback', idx: row.idx, reason: `opening it failed: ${message}`.slice(0, 500) } : op,
     );
   }
+}
+
+/**
+ * How many times in all a step tries to open its pull request when GitHub fails for a moment: GitHub's own outages and
+ * dropped connections mostly pass within a minute or two, and the retries wait 30 seconds, then 2 minutes.
+ */
+const OPEN_TRIES = 3;
+
+/**
+ * Whether opening the pull request failed for a passing reason: GitHub answered 500 or above, its rate limit, or no
+ * answer at all (a dropped connection, a timeout, a name that didn't resolve). The GitHub service hands the adapter's
+ * failure on with GitHub's status in its details (null: no answer); a refusal (422, 403, 404, not connected) is not
+ * passing.
+ */
+function passingGitHubFault(err: unknown): boolean {
+  const status = githubStatusOf(err);
+  if (status === null) return true;
+  if (status !== undefined) return status >= 500 || status === 429;
+  // Not marked as GitHub's: only its own words can say so.
+  return /\bHTTP 5\d\d\b/.test(err instanceof Error ? err.message : String(err));
+}
+
+/** GitHub's status for a failure: a number, null when GitHub didn't answer, undefined when it isn't GitHub's failure. */
+function githubStatusOf(err: unknown): number | null | undefined {
+  if (err instanceof GitHubError) return err instanceof GitHubNotConnectedError ? 401 : err.status;
+  if (!(err instanceof ApiError)) return undefined;
+  const details = err.extra.details;
+  if (!details || typeof details !== 'object' || Array.isArray(details) || !('github' in details))
+    return undefined;
+  // Not connected: the sign-in needs a person.
+  if ('fix' in details) return 401;
+  return typeof details.github === 'number' ? details.github : null;
 }
 
 /** Why a report's pull request isn't opened by itself when its branch's commits name the organization. */

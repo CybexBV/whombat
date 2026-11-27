@@ -18,13 +18,13 @@ import { keyDecision, publisherCheck } from '../authority';
 import {
   actionsJobOf,
   actionsRunOf,
-  expectedChecks,
   MERGE_SUMMARIES,
   MERGE_WORDS,
   type MergeCause,
   type MergeOutput,
   type MergeReadiness,
   type MergeStep,
+  mergeHistory,
   mergeOutputOf,
   mergeReadiness,
   runReview,
@@ -349,6 +349,9 @@ async function mergeState(
       })
     : null;
   const waitingSince = new Date(out.waitingSince ?? row.startedAt ?? now);
+  const history = target
+    ? await mergeHistory(db, target.repo.id, target.row.baseBranch, target.row.id)
+    : { expected: [], quiet: false };
   const ready = mergeReadiness({
     number,
     repo: step.repo,
@@ -358,7 +361,7 @@ async function mergeState(
     waitMinutes: step.waitMinutes,
     rerun: out.rerun ?? null,
     now,
-    expected: target ? await expectedChecks(db, target.repo.id, target.row.baseBranch, target.row.id) : [],
+    ...history,
     // A fix of a customer's report never merges without checks (TA-58).
     requireChecks: (run.scope as { kind?: unknown } | null)?.kind === 'tracker',
   });

@@ -309,6 +309,11 @@ export class FakeGitHub implements GitHubAdapter {
   readonly comments: FakeComment[] = [];
   /** The next `commentOnIssue` fails with this (tests: a refusal, or an answer that was lost). */
   failNextComment: GitHubError | Error | null = null;
+  /**
+   * The next `createPullRequest` calls fail with these, in order (tests: an outage, a refusal); `afterOpening` opens the
+   * pull request first, as GitHub does when it opened it and its answer was still an error.
+   */
+  readonly failOpens: { error: GitHubError | Error; afterOpening?: boolean }[] = [];
   /** The next `mergePullRequest` fails with this, merging nothing (tests: a refusal, or an answer that was lost). */
   failNextMerge: GitHubError | Error | null = null;
   /** Workflow runs whose failed jobs were run again (all repos), oldest first (AR-57). */
@@ -658,6 +663,8 @@ export class FakeGitHub implements GitHubAdapter {
   }): Promise<GhPullRequest> {
     this.connected();
     await this.ready();
+    const failure = this.failOpens.shift();
+    if (failure && !failure.afterOpening) throw failure.error;
     const r = this.repo(pr.repo);
     let headSha = await this.headOf(r, pr.head);
     if (!headSha && !r.git) {
@@ -705,6 +712,7 @@ export class FakeGitHub implements GitHubAdapter {
       changedFiles: files.length,
     };
     r.prs.set(number, fake);
+    if (failure) throw failure.error;
     return this.toGhPr(r, fake, true);
   }
 
