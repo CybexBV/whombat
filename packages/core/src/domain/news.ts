@@ -468,6 +468,16 @@ export const NEWS_WORDS = {
   /** The `news` widget with no site on, and with none read. */
   widgetEmpty: 'Choose your news in Settings',
   widgetProblem: 'Can’t read the news just now',
+  // web
+  /** Find more's row for a site that is on already. */
+  on: 'On',
+  /** A source's buttons beside its grip, for the keyboard and touch. */
+  moveUp: 'Move {name} up',
+  moveDown: 'Move {name} down',
+  /** After a source's problem: Add your own with its address, to add it as it is now. */
+  findAgain: 'Find it again',
+  /** Find more for a country without suggestions. */
+  browseNone: 'No suggestions here yet. Add your own instead.',
 } as const;
 
 /** A topic's name (“Tech”). */
