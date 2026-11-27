@@ -15,6 +15,11 @@ them once they have been tried on Beta.
   the pull request’s checks fail, Whombat sends it back, up to ten tries, and asks for you only when that no longer
   helps.
 - A report automation can ask for up to ten review rounds instead of three.
+- A fix’s review now says which of its findings are blocking and which can wait. Only blocking ones hold a fix up;
+  the rest are written down in the pull request, so a fix isn’t reviewed round after round over small things.
+- In a repository that runs no checks, a reviewed fix merges after four minutes instead of ten.
+- When GitHub fails for a moment while a pull request is opened, Whombat tries again by itself.
+- Three report fixes can be worked on at the same time instead of two.
 
 ## 22 November 2026
 
