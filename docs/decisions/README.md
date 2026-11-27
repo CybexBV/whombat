@@ -336,12 +336,13 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
   app page by state and on a phone, Settings at a phone's width, the home's rows saying how things are, plainer words,
   Connections on the home, Phone app inside the app, Advanced cleaned up (keys and home networks in What it may do, GitHub
   and Website feedback as connections, schedules in Automations).
-- `settings-groups.md` — Settings in groups (You · the assistant · Connections · This Whombat · Advanced), what the assistant may
-  do in three words, old addresses, connections added on Connections, developer things gated, the Vault in plain words.
+- `settings-groups.md` — Settings in groups (You · the assistant · Connections · This Whombat · News and weather · Advanced),
+  what the assistant may do in three words, old addresses, connections added on Connections, developer things gated, the Vault in plain words.
 - `mobile-app.md`, `mobile-live.md`, `phone-connect.md`, `bp-fix-mobile.md` — the Android app (*mobile-app in part*).
 - `../app/decisions/phone-audit-1112.md` — the phone after the 2026-11-12 audit: failures in an alert, never a toast; the updater has no Stop.
-- `../app/decisions/weather-news-apps.md` — the weather and news widgets' forms and signs on every screen, and Place and
-  News in This Whombat on the web and the phone.
+- `../app/decisions/weather-news-apps.md` — the weather and news widgets' forms and signs on every screen, Settings →
+  News and weather on the web (the place, the sources in order, finding more, importing a list), and Place and News on
+  the phone.
 - `phone-shell-final.md` — the phone's final shell: the tabs with Search and Places above them, the Places sheet, Back
   first on pushed pages, the Search page, readable iPhone badges, Spend shown as Usage.
 

@@ -2055,12 +2055,13 @@ sentence, its raw words under More detail where there is room. Schedules are sai
 
 Settings opens on a home, the same on the web and the phone: Often used (Notifications, Theme, and on the web Phone app,
 the QR sign-in at `/settings?tab=phone` that You → Devices' Add a phone also opens; `/mobile` keeps a page of its own
-in the sign-in frame only where no Whombat is open), then six groups —
+in the sign-in frame only where no Whombat is open), then seven groups —
 You (profile, notifications, devices), the assistant by its name (name and face, the AI sign-in, memory with its notes,
 and what it may do — every permission by thing in the words Just watch · Ask me first · Go ahead), Connections (what
 this Whombat is signed in to: what needs you, accounts, apps and services; `@whombat/client/connections`
-`settingsList.ts`; also on Overview), This Whombat (overview, backups, About), Screens (where it has a screen) and
-Advanced, a folded list of the expert pages (the model, the AI programs, what runs, skills, the audit log and signing
+`settingsList.ts`; also on Overview), This Whombat (overview, backups, About), News and weather (where it is and the
+news sources it reads, in order, with suggestions by country and topic and an OPML import; where the Whombat answers
+them), Screens (where it has a screen) and Advanced, a folded list of the expert pages (the model, the AI programs, what runs, skills, the audit log and signing
 keys, diagnostics); each group is a page of its own. What the assistant may do holds its keys, the commands always
 allowed (folded) and, while the local network is closed to it, the home networks it may reach. On both, a home row says how things are
 where it can (This Whombat's what needs you there, the web's Phone app which phone is in). The groups, their parts, the home's
