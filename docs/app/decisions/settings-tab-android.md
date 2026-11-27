@@ -1,4 +1,4 @@
-# Settings as a tab on the phone (AP-2620…AP-2629)
+# Settings as a tab on the phone (AP-2620…AP-2629, AP-10050)
 
 John, 2026-10-19: “In the Android app I want a dedicated settings button in the menu at the bottom of the screen. The
 current settings page is very long and should be redesigned … perhaps we should use tabs on mobile also?” I proposed a
@@ -95,3 +95,14 @@ follows the phone, so a choice kept before keeps working. On Android each word h
 Moon, and Smartphone for Auto (the web draws a monitor: on a phone it is the phone that Auto follows) — 15dp in the
 word's colour, the segments still 38dp tall with the 44dp touch target. On iPhone the control stays iOS's own segmented
 control with the words alone: its segments show a word or a picture, not both side by side.
+
+## AP-10050 “Update ready” on This Whombat's row
+
+John, 2026-11-27: where an update waits for the owner, Settings says so. While `updateReady(status)` names a release
+(“Ask before updating” is on and one is ready), This Whombat's row says “Update ready” (`UPDATE_STATE_WORDS.ready`) in
+the warning's text colour and opens This Whombat → About, where Update now is, instead of the Overview. Only something
+broken (a `bad` row on the Overview) comes before it; a step that merely waits (“Backups are off”) comes after it, and
+the line says it once (the Overview's update row says “Update ready” too; it isn't added beside it). Without a
+release waiting the line and the row are as AP-2626 says. The VERSION card at the bottom of the tab shows this app only
+and says nothing about it: About's VERSION & UPDATES has the update and its Update now. A `warn` line is drawn in
+`warnText` on every row of the list now, as AP-2622 meant (“Not signed in”, a connection that needs you).

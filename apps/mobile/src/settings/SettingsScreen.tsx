@@ -54,7 +54,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 import { TabTop } from '../ui/topRow';
 import { useSetTheme } from './accountTheme';
 import { youLine, youPartsHere } from './groups';
-import { SETTINGS_TEXT, type SettingsRowKey } from './list';
+import { SETTINGS_TEXT, type SettingsRowKey, type SettingsRowView } from './list';
 import { UpdateCard } from './UpdateCard';
 import { useApplianceLine, useSettingsRows } from './useSettingsFacts';
 import { VersionCard } from './VersionCard';
@@ -75,20 +75,23 @@ const ICONS: Record<Exclude<SettingsRowKey, 'agent'>, LucideIcon> = {
 const ROW_ROUTES: Record<SettingsRowKey, readonly string[]> = {
   agent: ['SettingsAgent'],
   connections: ['Connections'],
-  appliance: ['Whombat', 'SettingsWhombat'],
+  appliance: ['Whombat', 'SettingsWhombat', 'WhombatAbout'],
   screen: ['SettingsDesk'],
   advanced: ['SettingsAdvanced'],
 };
 
-/** Where a row goes (AP-2625): its group's page. */
-function openRow(navigation: AppNavigation, key: SettingsRowKey, managed: boolean) {
+/** Where a row goes (AP-2625): its group's page, or the page its line is about (“Update ready”: About). */
+function openRow(navigation: AppNavigation, row: SettingsRowView, managed: boolean) {
+  const key = row.key;
   switch (key) {
     case 'agent':
       return navigation.navigate('SettingsAgent');
     case 'connections':
       return navigation.navigate('Connections');
     case 'appliance':
-      // A Whombat's Overview is This Whombat (AP-2626); the demo world's is its own page.
+      // A Whombat's Overview is This Whombat (AP-2626); the demo world's is its own page. An update that waits for
+      // the owner opens About, where Update now is.
+      if (managed && row.opens === 'about') return navigation.navigate('WhombatAbout');
       return managed ? navigation.navigate('Whombat') : navigation.navigate('SettingsWhombat');
     case 'screen':
       return navigation.navigate('SettingsDesk');
@@ -216,9 +219,10 @@ export function SettingsScreen() {
                 title={row.key === 'screen' ? SETTINGS_HOME_TEXT.screensTitle : row.title}
                 line={row.value ?? homeLine(row.key)}
                 bad={row.tone === 'bad'}
+                warn={row.tone === 'warn'}
                 label={row.label}
                 selected={!!beside && ROW_ROUTES[row.key].includes(beside.name)}
-                onPress={() => openRow(navigation, row.key, !!managed)}
+                onPress={() => openRow(navigation, row, !!managed)}
               />
             ))}
           </PlaceCard>

@@ -115,6 +115,36 @@ describe('each row’s line (AP-2623)', () => {
     expect(demoApplianceLine('managed')).toBeNull();
     expect(demoApplianceLine('fixtures')?.value).toBeTruthy();
   });
+
+  it('says “Update ready” once while an update waits for the owner, and opens About', () => {
+    const waiting = {
+      needsYou: [],
+      glance: [
+        { key: 'update', dot: 'warn' as const, title: 'About', state: 'Update ready' },
+        { key: 'backups', dot: 'ok' as const, title: 'Backed up' },
+      ],
+    };
+    const line = managedApplianceLine(waiting, '0.312.0');
+    expect(line).toEqual({ value: 'Update ready', tone: 'warn', opens: 'about' });
+    const row = settingsRows({ ...base, appliance: line }).find((r) => r.key === 'appliance');
+    expect(row).toMatchObject({ value: 'Update ready', tone: 'warn', opens: 'about' });
+    expect(row?.label).toBe('This Whombat, Update ready');
+    // Before anything that merely waits, after anything broken.
+    expect(
+      managedApplianceLine({ ...waiting, needsYou: [{ dot: 'warn', title: 'Backups are off' }] }, '0.312.0'),
+    ).toMatchObject({ value: 'Update ready', opens: 'about' });
+    expect(
+      managedApplianceLine(
+        { ...waiting, needsYou: [{ dot: 'bad', title: 'The last backup failed' }] },
+        '0.312.0',
+      ),
+    ).toEqual({ value: 'The last backup failed', tone: 'bad' });
+    // Without a release waiting for the owner the line and the row are as before.
+    expect(managedApplianceLine(waiting)).toEqual({ value: 'Update ready', tone: 'warn' });
+    expect(settingsRows({ ...base, appliance: managedApplianceLine(waiting) })[2]).not.toHaveProperty(
+      'opens',
+    );
+  });
 });
 
 describe('the Settings tab’s dot (AP-2624)', () => {

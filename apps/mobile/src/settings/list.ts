@@ -5,6 +5,7 @@
  * doing, a tone when something there isn't fine, and the tab's dot. Pure: the screen and the bar read the facts.
  */
 import { SETTINGS_GROUP_TEXT } from '@whombat/client';
+import { UPDATE_STATE_WORDS } from '@whombat/client/managed';
 import { type AgentProvider, DESK_WORDS, PROVIDER_LABELS } from '@whombat/core';
 import type { AppMode } from '../data/config';
 import type { AiProviderCardView } from './ai';
@@ -23,6 +24,8 @@ export interface SettingsRowView {
   tone: SettingsTone | null;
   /** What TalkBack reads for the row. */
   label: string;
+  /** Where the row goes when its line is about one page of the part (`ApplianceLine.opens`). */
+  opens?: 'about';
 }
 
 export const SETTINGS_TEXT = {
@@ -69,6 +72,8 @@ export interface SettingsFacts {
 export interface ApplianceLine {
   value: string;
   tone: SettingsTone | null;
+  /** The line is about This Whombat → About (an update waiting for the owner's yes): the row opens it there. */
+  opens?: 'about';
 }
 
 /**
@@ -125,6 +130,7 @@ export function settingsRows(f: SettingsFacts): SettingsRowView[] {
       value: l?.value ?? null,
       tone: l?.tone ?? null,
       label: l ? `${t}, ${l.value}` : t,
+      ...(l?.opens && { opens: l.opens }),
     };
   });
 }
@@ -148,14 +154,21 @@ type OverviewDot = 'ok' | 'warn' | 'bad' | 'mut';
 
 /**
  * A managed Whombat's line from the shared Overview (AP-2626): the first thing that needs the viewer, else one that
- * isn't fine, else its update and backups (“Up to date · Backed up”).
+ * isn't fine, else its update and backups (“Up to date · Backed up”). An update that waits for the owner's yes
+ * (`ready`, the release `updateReady` names) says “Update ready” and opens About, where Update now is: only something
+ * broken comes before it, and the line says it once.
  */
-export function managedApplianceLine(overview: {
-  needsYou: readonly { dot: OverviewDot; title: string }[];
-  glance: readonly { key: string; dot: OverviewDot; title: string; state?: string }[];
-}): ApplianceLine {
+export function managedApplianceLine(
+  overview: {
+    needsYou: readonly { dot: OverviewDot; title: string }[];
+    glance: readonly { key: string; dot: OverviewDot; title: string; state?: string }[];
+  },
+  ready: string | null = null,
+): ApplianceLine {
   // The About row's title names the page; its `state` says how the updates stand.
   const said = (g: { title: string; state?: string }) => g.state ?? g.title;
+  const broken = [...overview.needsYou, ...overview.glance].some((item) => item.dot === 'bad');
+  if (ready && !broken) return { value: UPDATE_STATE_WORDS.ready, tone: 'warn', opens: 'about' };
   const off = overview.needsYou[0] ?? overview.glance.find((g) => g.dot === 'bad' || g.dot === 'warn');
   if (off) return { value: said(off), tone: off.dot === 'bad' ? 'bad' : 'warn' };
   const parts = ['update', 'backups'].flatMap((key) => {
