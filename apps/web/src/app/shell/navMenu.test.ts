@@ -34,6 +34,14 @@ describe('navMenu', () => {
     expect(ids(navMenu(row('home', '/'), { servers: null }))).toEqual(['add-connection']);
   });
 
+  it('adds a server from Servers and a connection from Connections (servers-connections-places.md)', () => {
+    expect(navMenu(row('servers', '/servers'), owner)).toEqual([
+      { id: 'add-server', label: 'Add a server', href: '/connections?tab=servers&add=1' },
+    ]);
+    expect(navMenu(row('servers', '/servers'), member)).toEqual([]);
+    expect(ids(navMenu(row('connections', '/connected'), member))).toEqual(['add-connection']);
+  });
+
   it('starts an automation, adds to the Vault, and has nothing for the other places', () => {
     expect(navMenu(row('automations', '/automations'), owner)[0]?.href).toBe('/automations?new=1');
     expect(navMenu(row('vault', '/vault'), owner)[0]?.href).toBe('/vault?add=1');

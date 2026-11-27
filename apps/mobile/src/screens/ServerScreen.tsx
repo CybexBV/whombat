@@ -47,6 +47,7 @@ import {
   SERVER_DASHBOARD_PHONE_RANGES,
   type ServerDashboardHead,
   serverDashboardKind,
+  serverHeadWords,
   serverMark,
   serverReportAt,
   shortOs,
@@ -367,7 +368,10 @@ export function ServerScreen({
       >
         <ServerHead
           head={dash.head}
-          verdict={dash.verdict}
+          // A problem Right now or Worth a look tells isn't said again in a sentence under the name.
+          verdict={
+            dash.head && serverHeadWords(dash.head, dash.verdict, dash.told).verdict ? dash.verdict : null
+          }
           name={shown}
           idLine={isOwnId(shown, serverId) ? null : serverId}
           renaming={

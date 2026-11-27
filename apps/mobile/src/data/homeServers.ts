@@ -2,7 +2,7 @@
  * Overview's Servers on the phone (docs/decisions/overview-one-page.md, the phone form of OVP-11): one card per server
  * from the shared `overviewServerRows` (`@whombat/client/hosts`), which carry the order, the words, the figures and what
  * a screen reader hears. This module keeps only what the phone adds: its words, the groups a live update keeps in
- * place (a server and those that run on it move together), and the servers' facts the Places sheet and Search show.
+ * place (a server and those that run on it move together), and the servers' facts Search shows.
  * Pure; the cards are `screens/home/ServersCard.tsx`.
  */
 import { type OverviewServerRow, serverOsLine, serverRows } from '@whombat/client/hosts';
@@ -23,7 +23,7 @@ export const HOME_SERVERS_COPY = {
     n === 1 ? 'A server is waiting to be added' : `${n} servers are waiting to be added`,
   waitingLine: 'It ran the install command. Add it, or turn it away if you don’t know it.',
   review: 'Review',
-  /** The word Search and the Places sheet show for a server that runs fine. */
+  /** The word Search shows for a server that runs fine. */
   running: 'Running',
 } as const;
 
@@ -41,7 +41,7 @@ export function serverGroups(rows: readonly OverviewServerRow[]): OverviewServer
   return groups;
 }
 
-/** What the Places sheet and Search say of each server: its logo, its system and how it is. */
+/** What Search says of each server: its logo, its system and how it is. */
 export function serverFacts(servers: readonly HostServer[]): ServerFacts[] {
   const byId = new Map(servers.map((s) => [s.id, s]));
   return serverRows(servers).map((r) => {

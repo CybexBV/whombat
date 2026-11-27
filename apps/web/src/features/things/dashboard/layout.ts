@@ -16,6 +16,15 @@ export function chartRowColumns(spans: readonly number[]): string {
 }
 
 /**
+ * A wide card beside a narrow one keeps its pair on a middling page (servers-connections-places.md: beside a
+ * place's list), the wide one a little narrower than on a full page; null for any other row.
+ */
+export function chartPairColumns(spans: readonly number[]): string | null {
+  if (spans.length !== 2 || spans.reduce((a, b) => a + b, 0) !== 3) return null;
+  return spans[0] === 2 ? 'minmax(0, 1.4fr) minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1.4fr)';
+}
+
+/**
  * Which cards of a chart row take the whole width when the row has two columns (a narrower page): a wide card, and a
  * card left alone on its line — so no line of two columns has a hole.
  */

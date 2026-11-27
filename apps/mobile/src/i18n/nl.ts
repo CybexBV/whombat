@@ -382,6 +382,8 @@ export const NL = {
   'places.line.chat': 'Jij en {assistant}',
   'places.line.inbox': 'Wat op je wacht',
   'places.line.overview': 'Servers en koppelingen',
+  'places.line.servers': 'Je servers en hoe ze erbij staan',
+  'places.line.connections': 'Wat er gekoppeld is en hoe het ervoor staat',
   'places.line.automations': 'Plannen en schema’s',
   'places.line.files': 'Bestanden die in je gesprekken zijn gedeeld',
   'places.line.vault': 'Inloggegevens en geheimen',

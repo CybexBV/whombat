@@ -14,6 +14,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { AppLink, Badge } from '../parts';
+import { usePlaceCrumb } from '../places/placeContext';
 import things from '../Things.module.css';
 import styles from './Head.module.css';
 
@@ -23,7 +24,14 @@ const ICON_TONES = {
   warm: styles.iconWarm,
 } as const;
 
+/**
+ * The way back above a page's head: to Overview, or in a place (servers-connections-places.md) none beside the
+ * list and the list's own (“‹ Servers”) when the page is alone.
+ */
 export function Crumb({ href, label }: { href: string; label: string }) {
+  const place = usePlaceCrumb();
+  if (place === null) return null;
+  if (place) ({ href, label } = place);
   return (
     <AppLink href={href} className={things.crumb}>
       <Icon icon={ChevronLeft} size={15} />
@@ -45,8 +53,8 @@ export function PageHead({
   verdict,
   facts,
   renaming,
-  statusFirst = false,
   detail,
+  detailOpen,
 }: {
   crumb: { href: string; label: string };
   icon: LucideIcon;
@@ -71,19 +79,23 @@ export function PageHead({
   facts?: ReactNode;
   /** The name being renamed: a box in the title's place (`InlineRename`). */
   renaming?: ReactNode;
-  /** The status pill leads the fact line instead of following the name (a service's page). */
-  statusFirst?: boolean;
   /** What “More detail” at the end of the fact line opens under it (a service's version, database, uptime). */
   detail?: ReactNode;
+  /**
+   * Whether the detail shows, when the page opens it from its ⋯ menu (servers-connections-places.md): then the
+   * fact line has no More detail of its own.
+   */
+  detailOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOpen] = useState(false);
+  const controlled = detailOpen !== undefined;
+  const open = controlled ? detailOpen : ownOpen;
   const detailId = useId();
   const badgeEl = badge ? (
     <Badge tone={badge.tone} dot className={styles.badge}>
       {badge.text}
     </Badge>
   ) : null;
-  const lead = statusFirst ? badgeEl : null;
   return (
     <>
       <Crumb {...crumb} />
@@ -98,7 +110,7 @@ export function PageHead({
             ) : (
               <h1 className={mono ? styles.nameMono : styles.name}>{name}</h1>
             )}
-            {statusFirst ? null : badgeEl}
+            {badgeEl}
             {chips?.length ? (
               <ul className={styles.chips} aria-label="About it">
                 {chips.map((c) => (
@@ -110,32 +122,37 @@ export function PageHead({
             ) : null}
             {verdict ? <p className={styles.verdict}>{verdict}</p> : null}
           </div>
-          {facts || lead || detail ? (
-            <div className={cx(things.facts, styles.facts)}>
-              {lead ? <span className={styles.lead}>{lead}</span> : null}
-              {facts}
-              {detail ? (
-                <span className={styles.moreSlot}>
-                  <button
-                    type="button"
-                    className={styles.more}
-                    aria-expanded={open}
-                    aria-controls={detailId}
-                    onClick={() => setOpen((o) => !o)}
-                  >
-                    More detail
-                  </button>
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-          {detail ? (
-            <div id={detailId} className={cx(things.facts, styles.facts, styles.detail)} hidden={!open}>
-              {detail}
-            </div>
-          ) : null}
         </div>
         <div className={cx(things.actions, styles.actions)}>{actions}</div>
+        {facts || (detail && (!controlled || open)) ? (
+          // The fact line runs the page's width under the name, not squeezed beside the buttons; on a narrow page it
+          // stays under the name, above the buttons that wrap.
+          <div className={styles.below}>
+            {facts || (detail && !controlled) ? (
+              <div className={cx(things.facts, styles.facts)}>
+                {facts}
+                {detail && !controlled ? (
+                  <span className={styles.moreSlot}>
+                    <button
+                      type="button"
+                      className={styles.more}
+                      aria-expanded={open}
+                      aria-controls={detailId}
+                      onClick={() => setOpen((o) => !o)}
+                    >
+                      More detail
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {detail ? (
+              <div id={detailId} className={cx(things.facts, styles.facts, styles.detail)} hidden={!open}>
+                {detail}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </>
   );

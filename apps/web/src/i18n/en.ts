@@ -229,6 +229,8 @@ export const EN = {
   'place.inbox.line': 'What needs you',
   'place.overview.label': 'Overview',
   'place.overview.line': 'Servers and connections',
+  'place.servers.line': 'Your servers and how they are',
+  'place.connections.line': 'What’s connected and how it is',
   'place.automations.label': 'Automations',
   'place.automations.line': 'Plans and schedules',
   'place.files.label': 'Files',

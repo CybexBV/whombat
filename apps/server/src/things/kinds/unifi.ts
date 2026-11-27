@@ -356,8 +356,9 @@ export function unifiNotices(s: UnifiSnapshot, cpu?: GatewayCpu): KindNotice[] {
           tone: 'warn',
           icon: 'network',
           title,
-          // The model and address are in the Devices table; the line says what happened.
-          detail: STATE_WORDS[d.state] ?? 'Offline',
+          // The model and address are in the Devices table; the line says what happened, its state only when it says
+          // more than the title's “is offline” (“Connection lost”).
+          ...(d.state !== 'OFFLINE' && STATE_WORDS[d.state] ? { detail: STATE_WORDS[d.state] } : {}),
           link: {
             kind: 'ask',
             label: 'Look into it',
@@ -713,21 +714,18 @@ export function unifiLive(input: UnifiInput): LivePanel | null {
   if (s.devices.length) {
     const down = s.devices.filter(offline);
     const up = s.devices.filter(online).length;
-    const first = down[0];
-    const words = first
-      ? down.length === 1
-        ? `${first.name} is offline`
-        : `${someNames(down.map((d) => d.name))} are offline`
-      : 'All online';
+    // Which ones are offline is Worth a look's to say, each with its Ignore (servers-connections-places.md):
+    // here only how many, under the count.
+    const words = down.length ? `${down.length} offline` : 'All online';
     items.push(
       countLine({
         id: 'online',
         title: 'Devices online',
         icon: 'network',
         value: `${up} of ${s.devices.length}`,
-        detail: clip(words, 300),
-        ...(first
-          ? { tone: 'warn' as const, note: clip(words, 40), noteTone: 'warn' as const }
+        detail: 'Access points, switches and the gateway',
+        ...(down.length
+          ? { tone: 'warn' as const, note: words, noteTone: 'warn' as const }
           : { note: words }),
       }),
     );
@@ -824,8 +822,8 @@ export function unifiInventory(s: UnifiSnapshot): InventoryPanel | null {
             : someNames(updates.map((d) => d.name)),
           200,
         ),
-        note: 'Firmware to install',
-        noteTone: 'warn',
+        // Grey: an update waiting isn't a problem (the mock's “firmware”).
+        note: 'Firmware',
       }),
     );
   return inventory({

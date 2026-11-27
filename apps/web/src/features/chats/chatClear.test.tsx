@@ -44,12 +44,15 @@ describe('the places’ right-click menus (AP-4500, AP-4501)', () => {
     expect(items()).toEqual(['Add a connection']);
     await user.keyboard('{Escape}');
 
-    // Nothing a menu would add: no menu, and not the browser's either (a row, the lists' tabs).
+    // Nothing a menu would add: no menu, and not the browser's either (a row, the sidebar's own space).
     expect(fireEvent.contextMenu(place(side, /^Inbox/))).toBe(false);
-    expect(
-      fireEvent.contextMenu(within(side).getByRole('tablist', { name: 'Servers and connections' })),
-    ).toBe(false);
+    expect(fireEvent.contextMenu(within(side).getByRole('navigation', { name: 'Whombat' }))).toBe(false);
     expect(screen.queryByRole('menu')).toBeNull();
+
+    // Connections adds a connection (servers-connections-places.md).
+    await user.pointer({ keys: '[MouseRight]', target: place(side, /^Connections/) });
+    expect(items()).toEqual(['Add a connection']);
+    await user.keyboard('{Escape}');
 
     await user.pointer({ keys: '[MouseRight]', target: place(side, 'Automations') });
     expect(items()).toEqual(['New automation']);

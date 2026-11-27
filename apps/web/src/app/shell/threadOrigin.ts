@@ -3,7 +3,7 @@
  * (“← Inbox”, “← Overview”, “← Home Assistant”) and goes back there, as Escape does. A thread opened in its own room, by
  * an address or after a reload goes back to its room.
  */
-import { permissionsText } from '@whombat/client';
+import { permissionsText, placeWords } from '@whombat/client';
 import { useEffect, useRef } from 'react';
 import { currentLocale } from '../../i18n/provider';
 import { CHAT_WORDS } from '../../i18n/shared';
@@ -28,6 +28,8 @@ export function originLabel(
       return 'Inbox';
     case 'dashboard':
       return CHAT_WORDS.dashboard;
+    case 'place':
+      return placeWords(currentLocale())[location.place].title;
     case 'automations':
       return 'Automations';
     case 'vault':

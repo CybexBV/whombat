@@ -222,6 +222,7 @@ const ConnectionsPages = lazyRouteComponent(
 const DoneScreen = lazyRouteComponent(() => import('../features/home/DoneScreen'), 'DoneScreen');
 const ChatRoomScreen = lazyRouteComponent(() => import('../features/chats/ChatRoomScreen'), 'ChatRoomScreen');
 const ThingScreen = lazyRouteComponent(() => import('../features/things/ThingScreen'), 'ThingScreen');
+const PlaceScreen = lazyRouteComponent(() => import('../features/things/places/ThingPlace'), 'PlaceScreen');
 // The Skills page of a Whombat without the skill library (AP-1261, AP-2305).
 const BrandPage = lazyRouteComponent(() => import('./pages/brand/BrandPage'), 'BrandPage');
 const MobileInfoPage = lazyRouteComponent(() => import('./pages/MobileInfoPage'), 'MobileInfoPage');
@@ -491,6 +492,28 @@ const connectionsRoute = createRoute({
   }),
 });
 
+/**
+ * Servers and Connections, places of their own (servers-connections-places.md): `/servers` and `/connected`
+ * (`/connections` stays Overview's). A wide window opens the page looked at last there; a narrow one shows the list.
+ */
+const serversRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'servers',
+  component: withScreens([PlaceScreen, ThingScreen], function ServersRoute() {
+    const burrow = useOpenBurrow();
+    return <PlaceScreen burrow={burrow} place="servers" />;
+  }),
+});
+
+const connectedRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'connected',
+  component: withScreens([PlaceScreen, ThingScreen], function ConnectedRoute() {
+    const burrow = useOpenBurrow();
+    return <PlaceScreen burrow={burrow} place="connections" />;
+  }),
+});
+
 /** The Dashboard's address, in older messages and bookmarks: Connections, the query and the anchor kept (AP-2501). */
 const dashboardRoute = createRoute({
   getParentRoute: () => burrowRoute,
@@ -652,7 +675,9 @@ const thingRoute = createRoute({
   component: withScreens([ThingScreen], function ThingRoute() {
     const burrow = useOpenBurrow();
     const { thing } = thingRoute.useParams();
-    return <ThingScreen key={thing} burrow={burrow} thing={thing} />;
+    // Not keyed by the thing: the place's list beside the page stays as it is (its scroll, focus) while a row is
+    // picked; each page is keyed inside.
+    return <ThingScreen burrow={burrow} thing={thing} />;
   }),
 });
 
@@ -1169,6 +1194,8 @@ export const routeTree = rootRoute.addChildren([
   burrowRoute.addChildren([
     burrowIndexRoute,
     connectionsRoute,
+    serversRoute,
+    connectedRoute,
     dashboardRoute,
     chatRoomRoute,
     codeRoute,

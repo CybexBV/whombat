@@ -55,9 +55,10 @@ describe('a server’s page (mock 2)', () => {
     const { location } = renderThing('/things/server%3Apve-02');
     expect(await screen.findByRole('heading', { level: 1, name: 'pve-02' })).toBeTruthy();
     // One badge (dashboards.md DS-01); its one hint, the warm CPU, is a heads-up and doesn't count
-    // (quiet-notices.md AP-4812): the hub's own words. The verdict says it in a sentence.
-    expect(screen.getByText('Running hot')).toBeTruthy();
-    expect(screen.getByText(/^pve-02 is running hot\./)).toBeTruthy();
+    // (quiet-notices.md): the hub's own words. Worth a look tells what needs Mara, so no sentence says it again
+    // in the head (servers-connections-places.md).
+    expect(await screen.findByText('Running hot')).toBeTruthy();
+    expect(screen.queryByText(/^pve-02 is running hot\./)).toBeNull();
     // Versions and what Whombat may do are Technical details now, not chips.
     expect(screen.queryByRole('list', { name: 'About it' })).toBeNull();
     // Ask first; a shell and the power are behind ⋯.
@@ -143,12 +144,12 @@ describe('a server’s Summary is the dashboard (dashboards.md DS-02, DS-03, DS-
     expect((within(range).getByRole('radio', { name: '7d' }) as HTMLInputElement).checked).toBe(true);
     await user.click(within(range).getByRole('radio', { name: '30d' }));
     await waitFor(() => expect(location()).toContain('range=30d'));
-    // The crumb goes back to Overview (CN-09).
+    // On a narrow window the crumb goes back to the Servers list.
     expect(
       within(screen.getByRole('main', { name: 'pve-02' }))
-        .getByRole('link', { name: 'Overview' })
+        .getByRole('link', { name: 'Servers' })
         .getAttribute('href'),
-    ).toBe('/connections');
+    ).toBe('/servers');
     await user.click(screen.getByRole('tab', { name: /^Machines/ }));
     await waitFor(() => expect(location()).toContain('tab=guests'));
     expect(screen.queryByRole('group', { name: 'Range' })).toBeNull();

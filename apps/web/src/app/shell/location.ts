@@ -24,8 +24,10 @@ export type ShellLocation =
   | { kind: 'home' }
   /** Chat or the Feedback room (`/chat`, `/feedback`; chat-channel.md AP-2401). */
   | { kind: 'room'; room: 'chat' | 'feedback' }
-  /** Connections (`/connections`, the Dashboard before and Home before that; AP-2401, AP-2501). */
+  /** Overview (`/connections`, the Dashboard before and Home before that). */
   | { kind: 'dashboard' }
+  /** Servers (`/servers`) or Connections (`/connected`) with no page picked (servers-connections-places.md). */
+  | { kind: 'place'; place: 'servers' | 'connections' }
   /** The Inbox (`/inbox`, and the older `/needs-you` and Watch's `/watch`, which open it; inbox.md IBX-01). */
   | { kind: 'needsYou' }
   /** A task chat (`/chats/:id`), or a new one (`/chats/new`; AP-1260). */
@@ -96,6 +98,10 @@ export function parseShellLocation(pathname: string, search?: Record<string, unk
     case 'connections':
     case 'dashboard':
       return id ? { kind: 'other' } : { kind: 'dashboard' };
+    case 'servers':
+      return id ? { kind: 'other' } : { kind: 'place', place: 'servers' };
+    case 'connected':
+      return id ? { kind: 'other' } : { kind: 'place', place: 'connections' };
     case 'chats':
       return id ? { kind: 'chat', id } : { kind: 'other' };
     case 'done':

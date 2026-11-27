@@ -1,9 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PLACES_WORDS, thingRows } from '@whombat/client';
+import { PLACES_WORDS } from '@whombat/client';
 import { describe, expect, it } from 'vitest';
-import { buildAssistantSidebarModel, sidebarLists } from '../../app/shell/assistantSidebarModel';
-import { SIDEBAR_LIST_KEY } from '../../app/shell/useSidebarList';
+import { buildAssistantSidebarModel } from '../../app/shell/assistantSidebarModel';
 import { fixtureServices, renderApp } from '../../test/renderApp';
 
 const assistant = () => fixtureServices({});
@@ -39,12 +38,14 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
         needsYou: 3,
       },
     );
-    // The six places in one order; before the Chat shell Overview is the home page. Automations without a count
-    // (AP-2606); Settings is in the account menu.
+    // The places in one order; before the Chat shell Overview is the home page. Servers with its server, selected on
+    // its page, with the mark of the one that needs a look. Automations without a count;
+    // Settings is in the account menu.
     expect(model.nav.map((r) => [r.label, r.href, r.badge])).toEqual([
       ['Chat', '/chat', null],
       ['Inbox', '/inbox', 3],
       ['Overview', '/', null],
+      ['Servers', '/servers', null],
       ['Automations', '/automations', null],
       ['Files', '/files', null],
       ['Vault', '/vault', null],
@@ -52,12 +53,17 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
     // An older Whombat doesn't say how bad: the badge stays red (AP-2601).
     expect(model.nav.find((r) => r.id === 'needsYou')?.badgeTone).toBe('bad');
     expect(model.servers?.rows.map((r) => [r.id, r.selected])).toEqual([['server:pve-02', true]]);
+    expect(model.nav.find((r) => r.id === 'servers')).toMatchObject({
+      selected: true,
+      mark: 'warn',
+      ariaLabel: 'Servers, something needs a look',
+    });
     expect(model.things).toEqual([]);
     // No hosts status yet: the section shows its server, the `+` waits for the hosts service.
     expect(model.servers?.addHref).toBeNull();
   });
 
-  it('shows SERVERS with the hosts service even before the first server, with its `+` (AP-1748, AP-5698)', () => {
+  it('shows Servers with the hosts service even before the first server, with Add a server', () => {
     const build = (hosts: { present: boolean } | undefined, location = { kind: 'home' }) =>
       buildAssistantSidebarModel(
         { burrow: { name: 'Lumio', slug: 'lumio' } as never, me: { id: 'prn_john', name: 'John' } as never },
@@ -81,10 +87,23 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
       );
     expect(build(undefined).servers).toBeNull();
     expect(build({ present: false }).servers).toBeNull();
+    expect(build({ present: false }).nav.map((r) => r.id)).not.toContain('servers');
     const model = build({ present: true });
     // Add a server opens on Overview's Servers tab: `/` before the Chat shell (AP-2523, AP-2608).
     expect(model.servers).toMatchObject({ addHref: '/?tab=servers&add=1', rows: [] });
     expect(model.things.map((t) => t.id)).toEqual(['connection:ha']);
+    expect(
+      model.nav.filter((r) => r.id === 'servers' || r.id === 'connections').map((r) => [r.id, r.mark]),
+    ).toEqual([
+      ['servers', null],
+      ['connections', null],
+    ]);
+    // A place's address selects it.
+    const place = build({ present: true }, { kind: 'place', place: 'connections' } as never);
+    expect(place.nav.find((r) => r.id === 'connections')).toMatchObject({
+      selected: true,
+      href: '/connected',
+    });
     // Every guest of every server is reached from Overview, which stays selected.
     const guests = build({ present: true }, { kind: 'thing', id: 'servers' } as never);
     expect(guests.nav.find((r) => r.id === 'home')?.selected).toBe(true);
@@ -95,7 +114,7 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
   const me = { id: 'prn_john', name: 'John' } as never;
   const rooms = { chat: { unread: 0 }, feedback: { unread: 2 } } as never;
 
-  it('lists the six places in one order; Chat counts Feedback’s unread too; the Inbox’s badge takes the worst colour', () => {
+  it('lists the places in one order; Chat counts Feedback’s unread too; the Inbox’s badge takes the worst colour', () => {
     const build = (
       needsYouWorst: 'bad' | 'warn' | 'info' | null,
       needsYou = 18,
@@ -175,122 +194,75 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
     expect(model.nav.some((r) => r.href === '/code')).toBe(false);
   });
 
-  it('shows Servers and Connections as tabs; a problem in the other one still shows (sidebar-tabs.md)', () => {
-    const rows = thingRows(
+  it('carries the worst mark of what each place holds, and Connections only once something is connected', () => {
+    const thing = (id: string, kind: 'server' | 'connection', status: string) => ({
+      id,
+      kind,
+      name: id,
+      icon: kind === 'server' ? 'server' : 'film',
+      status,
+      facts: [],
+      href: `/things/${id}`,
+    });
+    const build = (things: unknown[], location: unknown = { kind: 'search' }) =>
+      buildAssistantSidebarModel(
+        { burrow: { name: 'Lumio', slug: 'lumio' } as never, me },
+        { location: location as never, things: things as never, chats: [], needsYou: 0, rooms },
+      );
+    const model = build(
       [
-        {
-          id: 'server:a',
-          kind: 'server',
-          name: 'a',
-          icon: 'server',
-          status: 'ok',
-          facts: [],
-          href: '/things/a',
-        },
-        {
-          id: 'server:b',
-          kind: 'server',
-          name: 'b',
-          icon: 'server',
-          status: 'warn',
-          facts: [],
-          href: '/things/b',
-        },
-        {
-          id: 'server:c',
-          kind: 'server',
-          name: 'c',
-          icon: 'server',
-          status: 'ok',
-          facts: [],
-          href: '/things/c',
-        },
+        thing('server:a', 'server', 'ok'),
+        thing('server:b', 'server', 'warn'),
+        thing('connection:plex', 'connection', 'ok'),
+        thing('connection:hetzner', 'connection', 'offline'),
       ],
-      'server:c',
+      { kind: 'thing', id: 'connection:plex' },
     );
-    const conn = thingRows([
-      {
-        id: 'connection:ok',
-        kind: 'connection',
-        name: 'Plex',
-        icon: 'film',
-        status: 'ok',
-        facts: [],
-        href: '/things/ok',
-      },
-      {
-        id: 'connection:bad',
-        kind: 'connection',
-        name: 'Hetzner Cloud · dev',
-        icon: 'cloud',
-        status: 'bad',
-        facts: [],
-        href: '/things/bad',
-      },
-    ]);
-    const model = { servers: { addHref: '/connections?tab=servers&add=1', rows }, things: conn };
-    const servers = sidebarLists(model, null);
-    // Servers by default; the Connections tab's dot and its row that isn't fine under the servers.
-    expect(servers?.open).toBe('servers');
-    expect(servers?.tabs.map((t) => [t.key, t.tone])).toEqual([
-      ['servers', 'warn'],
-      ['connections', 'bad'],
-    ]);
-    expect(servers?.rows.map((r) => r.id)).toEqual(['server:a', 'server:b', 'server:c']);
-    expect(servers?.carried.map((r) => r.id)).toEqual(['connection:bad']);
-    expect(servers?.add).toEqual({ href: '/connections?tab=servers&add=1', label: 'Add a server' });
-    // Connections open: the servers that aren't fine, and the one open now, come along.
-    const connections = sidebarLists(model, 'connections');
-    expect(connections?.rows.map((r) => [r.main, r.note])).toEqual([
-      ['Plex', null],
-      ['Hetzner Cloud', 'dev'],
-    ]);
-    expect(connections?.carried.map((r) => r.id)).toEqual(['server:b', 'server:c']);
-    expect(connections?.add).toEqual({ href: '/connections?connection=add', label: 'Add a connection' });
-    // One list alone: no tabs to pick.
-    expect(sidebarLists({ servers: null, things: conn }, 'servers')?.tabs.map((t) => t.key)).toEqual([
+    expect(model.nav.map((r) => r.id)).toEqual([
+      'chat',
+      'needsYou',
+      'dashboard',
+      'servers',
       'connections',
+      'automations',
+      'files',
+      'vault',
     ]);
-    expect(sidebarLists({ servers: null, things: [] }, null)).toBeNull();
+    const place = (id: string) => model.nav.find((r) => r.id === id);
+    expect(place('servers')).toMatchObject({ mark: 'warn', selected: false, href: '/servers' });
+    expect(place('connections')).toMatchObject({
+      mark: 'bad',
+      selected: true,
+      href: '/connected',
+      ariaLabel: 'Connections, something isn’t working',
+    });
+    // Nothing connected and no server: neither place.
+    expect(build([]).nav.map((r) => r.id)).not.toContain('connections');
+    expect(build([]).nav.map((r) => r.id)).not.toContain('servers');
   });
 
-  it('draws dots only on what isn’t fine, says why, shows Servers or Connections, and keeps the theme in the account menu', async () => {
-    localStorage.removeItem(SIDEBAR_LIST_KEY);
+  it('has Servers and Connections as places with their marks, and keeps the theme in the account menu', async () => {
     const user = userEvent.setup();
     renderApp('/connections', assistant());
     const side = await sidebar();
     // The burrow alone at the top: the theme moved to the account menu (AP-2605).
     expect(within(side).queryByRole('button', { name: /theme/ })).toBeNull();
-    const mark = (name: string | RegExp) =>
-      within(side).getByRole('link', { name }).querySelector('[data-level][role="img"]');
-    const pve02 = await within(side).findByRole('link', { name: 'pve-02: running warm' });
-    // Why, in the tooltip (AP-2602) and the mark's name; a mark only where it isn’t connected, by its shape.
-    expect(pve02.getAttribute('title')).toBe('pve-02 · Running warm');
-    expect(mark('pve-02: running warm')?.getAttribute('aria-label')).toBe('pve-02: running warm');
-    expect(mark('pve-02: running warm')?.getAttribute('data-level')).toBe('needsLook');
-    expect(mark('pve-01')).toBeNull();
     // The Inbox's badge: the one count (needs-you-list.md NYL-04).
     expect(within(side).getByRole('link', { name: /^Inbox, \d+ things need you/ })).toBeTruthy();
-    // Servers first; Connections a tab away, with a dot, and what isn't fine there stays in view (sidebar-tabs.md).
-    const tabs = within(side).getByRole('tablist', { name: 'Servers and connections' });
-    expect(within(tabs).getByRole('tab', { name: 'Servers' }).getAttribute('aria-selected')).toBe('true');
-    const connections = within(tabs).getByRole('tab', { name: /^Connections/ });
-    expect(within(connections).getByRole('img', { name: 'something needs a look' })).toBeTruthy();
-    expect(within(side).queryByRole('link', { name: 'Heat pump: learning' })).toBeNull();
-    const carried = within(side).getByRole('region', { name: 'Also in Connections' });
-    expect(within(carried).getAllByRole('link').length).toBeGreaterThan(0);
-    await user.click(connections);
-    expect(mark('Heat pump: learning')?.getAttribute('data-level')).toBe('learning');
-    expect(within(side).queryByRole('link', { name: 'pve-01' })).toBeNull();
-    expect(within(side).getByRole('link', { name: 'pve-02: running warm' })).toBeTruthy();
-    expect(within(side).getByRole('link', { name: 'Add a connection' }).getAttribute('href')).toBe(
-      '/connections?connection=add',
-    );
-    // The browser remembers the open tab.
-    expect(localStorage.getItem(SIDEBAR_LIST_KEY)).toBe('connections');
-    await user.click(within(tabs).getByRole('tab', { name: /^Servers/ }));
-    expect(within(side).getByRole('link', { name: 'pve-01' })).toBeTruthy();
-    expect(localStorage.getItem(SIDEBAR_LIST_KEY)).toBe('servers');
+    // Servers and Connections are places with the worst mark of what they hold; no list of servers in the sidebar
+    //.
+    const servers = await within(side).findByRole('link', { name: /^Servers/ });
+    expect(servers.getAttribute('href')).toBe('/servers');
+    expect(servers.querySelector('[data-level]')).toBeTruthy();
+    const connections = within(side).getByRole('link', { name: /^Connections/ });
+    expect(connections.getAttribute('href')).toBe('/connected');
+    expect(connections.getAttribute('aria-label')).toMatch(/^Connections, something/);
+    expect(within(side).queryByRole('link', { name: /^pve-02/ })).toBeNull();
+    expect(within(side).queryByRole('tablist')).toBeNull();
+    // Right-click Connections: Add a connection.
+    await user.pointer({ keys: '[MouseRight]', target: connections });
+    expect(await screen.findByRole('menuitem', { name: 'Add a connection' })).toBeTruthy();
+    await user.keyboard('{Escape}');
     // No Settings, Usage or Search among the places: Settings is in the account menu.
     const places = within(side).getByRole('navigation', { name: 'Whombat' });
     expect(within(places).queryByRole('link', { name: 'Settings' })).toBeNull();
