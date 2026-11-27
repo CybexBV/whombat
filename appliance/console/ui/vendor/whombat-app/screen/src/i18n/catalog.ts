@@ -183,7 +183,7 @@ export const NL = {
   'ago.hourMin': '{h} u {m} min',
   'ago.day': '{n} d',
   back: 'Terug',
-  trying: 'Je probeert een indeling uit Instellingen · {s} s',
+  trying: 'Indeling uit Instellingen proberen · {s} s',
   'spotlight.doorbell': 'Er staat iemand voor de deur',
   pages: 'Pagina’s',
   page: '{name}, pagina {i} van {n}',
