@@ -1,10 +1,10 @@
-import type { Translate } from '../i18n/translate';
 /** The desk's shared pieces: the top bar, the agent's face, a server card, a home tile, the power line. */
 import { type FaceState, LiveFace } from '@whombat/avatars/live';
 import { isBrandMark } from '@whombat/brand';
 import { BrandMark, WhombatLogo } from '@whombat/brand/react';
 import { createContext, type ReactNode, type Ref, useContext } from 'react';
 import { useT } from '../i18n/react';
+import type { Translate } from '../i18n/translate';
 import type { AgentFace, DeskMeter, DeskPower, DeskServer, DeskTile } from '../lib/desk';
 import { deskWordsCopy, fill, percent, powerBanner, powerChip, unlockedText } from '../lib/deskCopy';
 import styles from './desk.module.css';
