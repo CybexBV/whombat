@@ -1,6 +1,6 @@
+import type { FaceState } from '@whombat/avatars/motion';
 import { WhombatAvatar } from '@whombat/avatars/react';
 import {
-  ANSWERING_T3_CODE,
   agentFaceBackground,
   agentFaceOf,
   attachmentsBesideCard,
@@ -32,6 +32,7 @@ import { ArrowUpRight, Check, ChevronRight, Workflow } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import { RanOnNotes, ranOnTitle } from '../chats/runtime/RanOn';
 import { HandoffMinutes, T3Mark } from './Handoff';
 import { MessageAttachments } from './MessageAttachments';
@@ -47,6 +48,7 @@ import {
   VaultSavedLines,
 } from './MessageParts';
 import styles from './MessageRow.module.css';
+import { THINKING_WORK } from './model';
 import { PersonAvatar } from './PersonAvatar';
 import { PrincipalAvatar } from './PrincipalAvatar';
 import { RichText } from './RichText';
@@ -129,17 +131,33 @@ export interface MessageRowProps {
   workLine?: WorkLineData | null;
   /** The viewer's own message: their face and the time, no name (docs/decisions/chat-threads-cards.md). */
   self?: boolean;
+  /**
+   * A chat's newest message of the assistant: its face is the live one and shows what it does about the reply now
+   * (thinking, working, sorry). Null: the still face, as on every older message.
+   */
+  faceState?: FaceState | null;
 }
 
 /**
  * The assistant's face in a task chat (mock 3, `.msg .face`; Whombat assistant-name.md AN-04): its drawing's head, 30px,
- * on a 34px disc of its face's colour at 14%, not clipped (FA-06). The name is printed beside it.
+ * on a 34px disc of its face's colour at 14%, not clipped (FA-06). The name is printed beside it. Beside its newest
+ * message the face is live (`state`): at 30px it changes pose only, in the same head framing.
  */
-function ChatAgentFace({ agent }: { agent: Extract<Principal, { kind: 'agent' }> }) {
+function ChatAgentFace({
+  agent,
+  state,
+}: {
+  agent: Extract<Principal, { kind: 'agent' }>;
+  state: FaceState | null;
+}) {
   const face = agentFaceOf(agent);
   return (
     <span className={styles.chatFace} style={{ background: agentFaceBackground(face) }} aria-hidden="true">
-      <WhombatAvatar face={face} size={30} crop="head" />
+      {state ? (
+        <LiveAgentFace face={face} size={30} state={state} decorative />
+      ) : (
+        <WhombatAvatar face={face} size={30} crop="head" />
+      )}
     </span>
   );
 }
@@ -202,12 +220,6 @@ function StageWord({
 const OWN_CLICK =
   'a, button, input, textarea, select, summary, label, video, audio, [role="button"], [role="link"], ' +
   '[role="menuitem"], [role="checkbox"], [role="switch"], [contenteditable="true"], [data-message-toolbar]';
-
-/**
- * A work line that pulses its three dots: an agent thinking, looking into a thread (chat-channel.md AP-2405) or answering
- * T3 Code's question (t3code-handoff.md AP-6612).
- */
-const THINKING_WORK = new Set(['is thinking', 'is looking into it', ANSWERING_T3_CODE]);
 
 /** “Banjo is working · 38%” with its bar, “Banjo needs you”, “Banjo is thinking” with dots: work in a thread (AP-735). */
 export function ThreadWorkLine({
@@ -296,6 +308,7 @@ export function MessageRow({
   assistant = 'Your assistant',
   workLine = null,
   self = false,
+  faceState = null,
 }: MessageRowProps) {
   const chat = look === 'chat';
   // A task chat is between one person and their assistant: the person goes by their first name (mock 3, “John”); a
@@ -405,7 +418,7 @@ export function MessageRow({
         {chat && continued ? null : deleted ? (
           <DeletedAvatar size={chat ? 32 : 40} />
         ) : chat && author?.kind === 'agent' && !isAutomationPrincipal(author) ? (
-          <ChatAgentFace agent={author} />
+          <ChatAgentFace agent={author} state={faceState} />
         ) : chat && author?.kind === 'person' ? (
           <PersonAvatar
             avatarUrl={author.avatarUrl}

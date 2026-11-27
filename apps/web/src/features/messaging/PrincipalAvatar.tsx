@@ -1,3 +1,4 @@
+import type { FaceState } from '@whombat/avatars/motion';
 import { HumanAvatar, WhombatAvatar } from '@whombat/avatars/react';
 import { agentFaceOf, automationLabel, isAutomationPrincipal } from '@whombat/client';
 import type { Principal } from '@whombat/core';
@@ -5,6 +6,7 @@ import { Workflow } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import { PersonAvatar } from './PersonAvatar';
 import styles from './PrincipalAvatar.module.css';
 
@@ -49,6 +51,8 @@ export interface PrincipalAvatarProps {
   initialsSize?: number;
   /** Announce the avatar ("Banjo, developer"); leave off when the name is shown next to it. */
   labelled?: boolean;
+  /** An agent's live face, showing what it does now (thinking); without it, the still face. */
+  state?: FaceState | null;
   className?: string;
   style?: CSSProperties;
 }
@@ -60,6 +64,7 @@ export function PrincipalAvatar({
   crop,
   initialsSize,
   labelled = false,
+  state = null,
   className,
   style,
 }: PrincipalAvatarProps) {
@@ -76,6 +81,19 @@ export function PrincipalAvatar({
       />
     );
   if (principal.kind === 'agent') {
+    if (state)
+      return (
+        <LiveAgentFace
+          face={agentFaceOf(principal)}
+          size={size}
+          crop={crop}
+          state={state}
+          label={labelled ? principal.name : undefined}
+          decorative={!labelled}
+          className={className}
+          style={style}
+        />
+      );
     return (
       <WhombatAvatar
         face={agentFaceOf(principal)}

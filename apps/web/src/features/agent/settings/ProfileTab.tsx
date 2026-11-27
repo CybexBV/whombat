@@ -29,6 +29,7 @@ import { useToast } from '../../../components/Toast';
 import { Toggle } from '../../../components/Toggle';
 import { useAssistantPreferences, useSaveAssistantPreferences } from '../../settings/assistantPreferences';
 import styles from '../../settings/SettingsScreen.module.css';
+import { LiveAgentFace } from '../LiveAgentFace';
 import type { SettingsTabProps } from './AgentTab';
 import { outcomeNotice } from './model';
 import own from './ProfileTab.module.css';
@@ -148,7 +149,16 @@ export function ProfileTab({ burrow, profile }: SettingsTabProps) {
     <div className={styles.card} data-agent-profile="">
       <form className={`${styles.row} ${own.nameRow}`} onSubmit={saveName} noValidate>
         <span className={own.bust} style={{ background: agentFaceBackground(face) }}>
-          <WhombatAvatar face={face} size={96} crop="bust" eager label={agentFaceLabel(face)} />
+          {/* A tap pokes it; a face just picked plays its own move. */}
+          <LiveAgentFace
+            face={face}
+            size={96}
+            eager
+            label={agentFaceLabel(face)}
+            state="idle"
+            pokeable
+            gestureKey={face}
+          />
         </span>
         <div className={own.nameField}>
           <label className={styles.fieldLabel} htmlFor={`${ids}-name`}>

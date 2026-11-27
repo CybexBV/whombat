@@ -1,4 +1,3 @@
-import { WhombatAvatar } from '@whombat/avatars/react';
 import { agentFaceOf, RUN_ATTENTION_LABEL } from '@whombat/client';
 import {
   type AgentFace,
@@ -15,12 +14,14 @@ import { type MouseEvent, type ReactNode, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { SectionLabel } from '../../components/SectionLabel';
+import { LiveAgentFace } from '../agent/LiveAgentFace';
 import styles from './RunView.module.css';
 import {
   type RunNotice,
   runAttention,
   runControls,
   runDot,
+  runFaceState,
   runKicker,
   runNotice,
   stepViews,
@@ -103,7 +104,13 @@ export function RunView({
         </AppLink>
 
         <header className={styles.header}>
-          <WhombatAvatar face={agentFaceOf(agent)} size={96} eager label={agent.name} />
+          <LiveAgentFace
+            face={agentFaceOf(agent)}
+            size={96}
+            eager
+            label={agent.name}
+            state={runFaceState(run)}
+          />
           <div className={styles.heading}>
             <span className={styles.kicker} data-testid="run-kicker">
               <span
