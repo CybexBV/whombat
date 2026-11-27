@@ -26,7 +26,7 @@ import { ORGANIZATION_IN_COMMITS } from '../automations/engine/external';
 import { MERGE_CHECKS_GRACE_MS } from '../automations/merge';
 import { sampleReport } from '../automations/routes';
 import { automationStep } from '../automations/steps';
-import { FIX_WAITS_WORDS } from '../automations/steps/dispatch-agent';
+import { FIX_WAITS_WORDS, FIXES_AT_ONCE } from '../automations/steps/dispatch-agent';
 import { loadRunRow, runTokens } from '../automations/store';
 import { STEP_WAIT_SLICE_MS } from '../automations/turn-waits';
 import { loadBurrowRow } from '../commit/pipeline';
@@ -1220,25 +1220,28 @@ describe('a step’s turn hands its T3 Code wait to Whombat while another custom
     }
   });
 
-  it('two fixes at work hold no place: the next customer’s report starts and its turn waits only for the profile', async () => {
-    await fixAtWork('Exports drop their header');
-    await fixAtWork('Device page stays blank');
-    const third = await newRun('Users can’t sign in after an update');
-    const run = await w.run(third.runId);
+  it('fixes at work hold no place: the next customer’s report starts and its turn waits only for the profile', async () => {
+    const titles = ['Exports drop their header', 'Device page stays blank', 'Search finds nothing'];
+    expect(titles.length).toBe(FIXES_AT_ONCE);
+    for (const title of titles) await fixAtWork(title);
+    const next = await newRun('Users can’t sign in after an update');
+    const run = await w.run(next.runId);
     expect(run.status).not.toBe('queued');
     expect(step(run, 'ask').state).toBe('waiting');
   });
 
-  it('a third fix waits while two are at work, and starts once one of them ends', async () => {
+  it('one more fix waits while the most are at work, and starts once one of them ends', async () => {
     // A new day: the fixes the tests before started today don't count toward the automation's daily limit.
     w.advance(25 * 60 * 60_000);
-    const first = await fixAtWork('Clock drifts on kiosks');
-    await fixAtWork('Wallpaper resets at login');
-    const third = await newRun('Printers vanish from the list');
-    let run = await assess(third.runId, bug());
+    const titles = ['Clock drifts on kiosks', 'Wallpaper resets at login', 'Fonts look blurry on the kiosk'];
+    expect(titles.length).toBe(FIXES_AT_ONCE);
+    const first = await fixAtWork(titles[0] as string);
+    for (const title of titles.slice(1)) await fixAtWork(title);
+    const waiting = await newRun('Printers vanish from the list');
+    let run = await assess(waiting.runId, bug());
     expect(step(run, 'fix')).toMatchObject({ state: 'pending', inputSummary: FIX_WAITS_WORDS });
     expect(run.status).not.toBe('queued');
-    // One fix ends: a minute later the third one starts.
+    // One fix ends: a minute later the waiting one starts.
     const [firstRun] = await w.services.db
       .select({ number: automationRuns.number })
       .from(automationRuns)
@@ -1246,7 +1249,7 @@ describe('a step’s turn hands its T3 Code wait to Whombat while another custom
     await w.ok(IDS.mara, controlAutomationRun, { number: firstRun?.number as number, action: 'cancel' });
     w.advance(61_000);
     await w.settle();
-    run = await w.run(third.runId);
+    run = await w.run(waiting.runId);
     expect(step(run, 'fix').state).toBe('waiting');
   });
 

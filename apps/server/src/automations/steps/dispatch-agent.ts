@@ -459,8 +459,12 @@ async function reuseAssessment(
     .where(eq(automationRuns.id, run.id));
 }
 
-/** How many report fixes may be at work at once on this Whombat, whichever automation's (TA-69). */
-export const FIXES_AT_ONCE = 2;
+/**
+ * How many report fixes may be at work at once on this Whombat, whichever automation's. Reports tend to come in bursts
+ * of three, so a third fix shouldn't wait for one of the first two; each fix is one T3 Code thread plus its reviewer,
+ * and more than three together crowd the computer T3 Code runs on.
+ */
+export const FIXES_AT_ONCE = 3;
 /** A fix step's summary while it waits for another fix to finish. */
 export const FIX_WAITS_WORDS = 'Waits for another fix to finish';
 
