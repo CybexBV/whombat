@@ -3,6 +3,11 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## 27 November 2026
+
+- This page is in the app now: open What’s new under Settings → This Whombat → About. After an update, the app
+  tells you once, with a link here.
+
 ## 22 November 2026
 
 - Automations can now read your mail and act on it, and automations that change your connected services are switched
@@ -38,4 +43,5 @@ them once they have been tried on Beta.
 **Keeping this page up to date.** A change people can notice adds one line here, in the same pull request, under
 the date it lands on `main` (a new date heading when there is none yet). Write it for the person who uses Whombat,
 not for a developer: what they will see or can do now, in one plain sentence, with no version numbers, commit
-hashes or file names. Changes nobody can notice (refactors, tests, internal tools) don't get a line.
+hashes or file names. Changes nobody can notice (refactors, tests, internal tools) don't get a line. Everything
+above the line is what the apps show as What’s new.
