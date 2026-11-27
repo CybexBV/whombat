@@ -7,12 +7,18 @@ import {
   askFirstView,
   backupBlocksText,
   hasUpdateCheck,
+  onSessionReopen,
   sinceText,
   type UpdateStatus,
   updateCheckNotice,
   updatePollMs,
   updateReady,
   updateView,
+  WHATS_NEW_NO_UPDATE,
+  whatsNewNotice,
+  whatsNewPollMs,
+  whatsNewSeenKey,
+  whatsNewTold,
 } from './updates';
 
 const NOW = new Date('2026-09-29T12:00:00Z');
@@ -392,5 +398,168 @@ describe('Check for updates (check-for-updates.md)', () => {
     expect(updateCheckNotice('found', true)).toMatch(/your yes/);
     expect(updateCheckNotice('nothingNewer', undefined)).toMatch(/already on its way/);
     expect(updateCheckNotice('refused', undefined)).toMatch(/won’t install/);
+  });
+});
+
+describe('the one-time “Whombat updated” notice', () => {
+  const updated = (release: string, state: UpdateStatus['state'] = 'Healthy', at = NOW.toISOString()) => ({
+    update: {
+      ...base,
+      state,
+      current: release,
+      lastUpdate: { release, from: 'pve-20260927.1', at },
+    },
+  });
+
+  it('shows once the last update differs from the release this device saw', () => {
+    expect(whatsNewNotice(updated('pve-20260928.6'), 'pve-20260927.1')).toMatchObject({
+      action: 'show',
+      release: 'pve-20260928.6',
+    });
+  });
+
+  it('says nothing for the release already seen', () => {
+    expect(whatsNewNotice(updated('pve-20260928.6'), 'pve-20260928.6').action).toBe('none');
+  });
+
+  it('only remembers on the first look, with nothing to compare with', () => {
+    expect(whatsNewNotice(updated('pve-20260928.6'), null)).toMatchObject({
+      action: 'remember',
+      release: 'pve-20260928.6',
+    });
+    // No update yet: remembered as such, so the first update gets the notice.
+    const none = whatsNewNotice({ update: base }, null);
+    expect(none).toMatchObject({ action: 'remember', release: WHATS_NEW_NO_UPDATE });
+    expect(whatsNewNotice(updated('pve-20260928.6'), none.value).action).toBe('show');
+    expect(whatsNewNotice(updated('pve-20260928.6'), WHATS_NEW_NO_UPDATE).action).toBe('show');
+  });
+
+  it('says nothing without update facts or after an update that went wrong', () => {
+    expect(whatsNewNotice(null, null).action).toBe('none');
+    expect(whatsNewNotice({ update: null }, 'pve-20260927.1').action).toBe('none');
+    expect(whatsNewNotice({ update: base }, 'pve-20260927.1').action).toBe('none');
+    expect(whatsNewNotice(updated('pve-20260928.6', 'ForwardRepairRequired'), 'pve-20260927.1').action).toBe(
+      'none',
+    );
+  });
+
+  it('a first look while an update is being repaired remembers the last good update, so the repair tells nothing old', () => {
+    const repair = updated('pve-20260928.6', 'ForwardRepairRequired');
+    const first = whatsNewNotice(repair, null);
+    expect(first).toMatchObject({ action: 'remember', release: 'pve-20260928.6' });
+    // The repair is under way (or done without a new release): the same release is no news.
+    expect(whatsNewNotice(updated('pve-20260928.6', 'Downloading'), first.value).action).toBe('none');
+    expect(whatsNewNotice(updated('pve-20260928.6'), first.value).action).toBe('none');
+    // What the repair installs is.
+    expect(
+      whatsNewNotice(updated('pve-20260929.1', 'Healthy', '2026-09-29T13:00:00Z'), first.value).action,
+    ).toBe('show');
+  });
+
+  it('an update kept before it could be shown (`untold`) still shows, until it is marked told', () => {
+    const shown = whatsNewNotice(updated('pve-20260928.6'), 'pve-20260927.1');
+    expect(whatsNewNotice(updated('pve-20260928.6'), shown.untold)).toMatchObject({
+      action: 'show',
+      release: 'pve-20260928.6',
+    });
+    const told = whatsNewTold(shown.untold, 'pve-20260928.6');
+    expect(told).not.toBeNull();
+    expect(whatsNewNotice(updated('pve-20260928.6'), told).action).toBe('none');
+    // Already told, or another release kept since: nothing to mark.
+    expect(whatsNewTold(told, 'pve-20260928.6')).toBeNull();
+    expect(whatsNewTold(shown.untold, 'pve-20260929.1')).toBeNull();
+    expect(whatsNewTold(null, 'pve-20260928.6')).toBeNull();
+  });
+
+  it('asks again every few seconds only while an update is being installed', () => {
+    expect(whatsNewPollMs({ update: { ...base, state: 'Verifying', candidate: 'pve-20260929.1' } })).toBe(
+      5_000,
+    );
+    expect(whatsNewPollMs({ update: { ...base, state: 'Activating', candidate: 'pve-20260929.1' } })).toBe(
+      5_000,
+    );
+    expect(whatsNewPollMs(updated('pve-20260928.6'))).toBe(false);
+    // Waiting for the owner's yes can take days: not news yet, and no reason to ask.
+    expect(
+      whatsNewPollMs({
+        update: {
+          ...base,
+          state: 'Staged',
+          candidate: 'pve-20260929.1',
+          waiting: { reason: 'owner', since: NOW.toISOString(), blockers: [] },
+        },
+      }),
+    ).toBe(false);
+    expect(whatsNewPollMs(null)).toBe(false);
+  });
+
+  it('keeps asking through the last checks of an update while updates are paused', () => {
+    const paused = (state: UpdateStatus['state']) => ({
+      update: { ...base, state, candidate: 'pve-20260929.1', paused: true },
+    });
+    expect(whatsNewPollMs(paused('Verifying'))).toBe(5_000);
+    expect(whatsNewPollMs(paused('Activating'))).toBe(5_000);
+    expect(whatsNewPollMs(paused('Downloading'))).toBe(false);
+  });
+
+  it('keeps the release with when it was installed, and never goes back to an older one', () => {
+    const newer = updated('pve-20260928.6', 'Healthy', '2026-09-28T03:00:00Z');
+    const older = updated('pve-20260927.1', 'Healthy', '2026-09-27T03:00:00Z');
+    const kept = whatsNewNotice(newer, 'pve-20260927.1').value;
+    expect(JSON.parse(kept)).toEqual({ release: 'pve-20260928.6', at: '2026-09-28T03:00:00Z' });
+    // A page still holding the older answer says nothing and keeps nothing.
+    expect(whatsNewNotice(older, kept).action).toBe('none');
+    expect(whatsNewNotice(newer, kept).action).toBe('none');
+    // A newer update after it shows.
+    const next = updated('pve-20261001.2', 'Healthy', '2026-10-01T03:00:00Z');
+    expect(whatsNewNotice(next, kept).action).toBe('show');
+  });
+
+  it('asks again soon after the box is back when a read failed', () => {
+    expect(whatsNewPollMs(updated('pve-20260928.6'), { justBack: true, failed: true })).toBe(5_000);
+    expect(whatsNewPollMs(updated('pve-20260928.6'), { justBack: false, failed: true })).toBe(false);
+    expect(whatsNewPollMs(null, { justBack: true, failed: true })).toBe(5_000);
+  });
+
+  it('asks again for a short while after the box is back but hasn’t said how its updates stand', () => {
+    expect(whatsNewPollMs({ update: null }, { justBack: true })).toBe(5_000);
+    expect(whatsNewPollMs({ update: null }, { justBack: false })).toBe(false);
+    expect(whatsNewPollMs({ update: null })).toBe(false);
+    expect(whatsNewPollMs(updated('pve-20260928.6'), { justBack: true })).toBe(false);
+  });
+
+  it('runs something each time the box’s session opens again, not when it is open already', () => {
+    let status = 'open';
+    const listeners = new Set<(s: { status: string }) => void>();
+    const session = {
+      state: () => ({ status }),
+      onState: (cb: (s: { status: string }) => void) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+    };
+    const move = (next: string) => {
+      status = next;
+      for (const cb of [...listeners]) cb({ status });
+    };
+    let back = 0;
+    const stop = onSessionReopen(session, () => back++);
+    move('open');
+    expect(back).toBe(0);
+    move('connecting');
+    move('open');
+    expect(back).toBe(1);
+    move('connecting');
+    move('connecting');
+    move('open');
+    expect(back).toBe(2);
+    stop();
+    move('connecting');
+    move('open');
+    expect(back).toBe(2);
+  });
+
+  it('keeps one seen release per Whombat, in letters a secure store takes', () => {
+    expect(whatsNewSeenKey('wb-abcd/efgh:1')).toBe('whombat.whatsNew.seen.wb-abcd_efgh_1');
   });
 });

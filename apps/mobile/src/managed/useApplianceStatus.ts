@@ -4,10 +4,11 @@
  * (AP-258), quietly; `reload` reads it again without going back to loading, and once a status is shown a failed read
  * leaves it there.
  */
+import { queryOptions } from '@tanstack/react-query';
 import { updatePollMs } from '@whombat/client/managed';
 import { type ApplianceStatus, sessionOps } from '@whombat/client/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useManagedOrThrow } from './context';
+import { type ManagedContextValue, useManagedOrThrow } from './context';
 
 export function useApplianceStatus({ follow = true }: { follow?: boolean } = {}) {
   const { session } = useManagedOrThrow();
@@ -61,4 +62,21 @@ export function useReleaseSummary(release: string | null): string | null {
     };
   }, [release, control]);
   return summary && summary.release === release ? summary.text : null;
+}
+
+/**
+ * The Whombat's `appliance.status` as the Settings list reads it. Other readers (the “Whombat updated” notice) share
+ * it by this key, so the app asks once; the Settings tab's dot keeps it fresh every five minutes.
+ */
+export function applianceStatusQuery(managed: Pick<ManagedContextValue, 'session' | 'cacheScope'> | null) {
+  return queryOptions({
+    queryKey: ['settings', 'appliance-status', managed?.cacheScope ?? null],
+    queryFn: () => {
+      if (!managed) throw new Error('not a managed Whombat');
+      return sessionOps.applianceStatus(managed.session);
+    },
+    enabled: !!managed,
+    retry: false,
+    staleTime: 60_000,
+  });
 }

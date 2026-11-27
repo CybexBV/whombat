@@ -9,7 +9,6 @@ import { deskScreenLine, deskSectionShown } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
 import { updateReady, whombatOverview } from '@whombat/client/managed';
 import { placeNewsShown, useSessionProtocol } from '@whombat/client/react';
-import { sessionOps } from '@whombat/client/session';
 import Constants from 'expo-constants';
 import { useMemo } from 'react';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -18,6 +17,7 @@ import { useTheAgentHere } from '../data/useAgent';
 import { useConnections } from '../data/useConnections';
 import { useManaged } from '../managed/context';
 import { overviewInput } from '../managed/thisWhombat';
+import { applianceStatusQuery } from '../managed/useApplianceStatus';
 import { useAppUpdate } from '../managed/useAppUpdate';
 import { useDeskApi } from '../managed/useDesk';
 import { useAiProviderCards } from './AiSection';
@@ -42,17 +42,7 @@ const FIVE_MINUTES = 5 * 60_000;
 export function useApplianceLine(): ApplianceLine | null | undefined {
   const managed = useManaged();
   const { mode, timeZone } = useBurrowBase();
-  const status = useQuery({
-    queryKey: ['settings', 'appliance-status', managed?.cacheScope ?? null],
-    queryFn: () => {
-      if (!managed) throw new Error('not a managed Whombat');
-      return sessionOps.applianceStatus(managed.session);
-    },
-    enabled: !!managed,
-    retry: false,
-    staleTime: 60_000,
-    refetchInterval: FIVE_MINUTES,
-  });
+  const status = useQuery({ ...applianceStatusQuery(managed), refetchInterval: FIVE_MINUTES });
   return useMemo(() => {
     if (!managed) return demoApplianceLine(mode);
     if (!status.data) return status.error ? null : undefined;
