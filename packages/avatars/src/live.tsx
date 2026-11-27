@@ -3,7 +3,7 @@
  * loads the live drawing and its engine (`puppet.ts`, about 130 KB with the poses) on its own, then takes over in place.
  * Under 25 px it is `<WhombatAvatar>`: the still small head, which never changes.
  *
- * How much it moves follows the device: the system's “reduce motion” and this device's “Face moves” switch both make it
+ * How much it moves follows the device: the system's “reduce motion” and this device's “Moving faces” switch both make it
  * change pose without moving (`useFaceMotionMode`). A screen passes `motion` itself only when it knows better (the box's
  * desk screen without a graphics chip says `calm`).
  */
@@ -15,6 +15,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import type { FaceCrop } from './face';
 import { type FaceMotionMode, type FaceState, faceAllowance, liveFaceCrop } from './faceMotion';
 import { type AvatarFace, DEFAULT_AVATAR_SIZE } from './index';
 import type { FacePuppet } from './puppet';
@@ -43,6 +44,11 @@ export interface LiveFaceProps {
   pokeable?: boolean;
   /** Plays the face's own gesture whenever this value changes (a face just picked). */
   gestureKey?: string | number | null;
+  /** The framing; by default the head under 40 px and the bust from 40. A round face that shows the head at any size
+   * says `head`. */
+  crop?: FaceCrop;
+  /** Plays its state's sequence when it first draws, not only when the state changes: `welcome` greets the person. */
+  greet?: boolean;
   className?: string;
   style?: CSSProperties;
 }
@@ -64,6 +70,8 @@ export function LiveFace({
   level = null,
   pokeable = false,
   gestureKey = null,
+  crop,
+  greet = false,
   className,
   style,
 }: LiveFaceProps): ReactElement {
@@ -72,8 +80,8 @@ export function LiveFace({
   const stage = useRef<HTMLSpanElement>(null);
   const puppet = useRef<FacePuppet | null>(null);
   const [ready, setReady] = useState(false);
-  const latest = useRef({ face, size, state, mode, level, pokeable });
-  latest.current = { face, size, state, mode, level, pokeable };
+  const latest = useRef({ face, size, state, mode, level, pokeable, crop, greet });
+  latest.current = { face, size, state, mode, level, pokeable, crop, greet };
 
   useEffect(() => {
     if (!live) return;
@@ -96,8 +104,8 @@ export function LiveFace({
   }, [live]);
 
   useEffect(() => {
-    puppet.current?.set({ face, size, state, mode, level, pokeable });
-  }, [face, size, state, mode, level, pokeable]);
+    puppet.current?.set({ face, size, state, mode, level, pokeable, crop });
+  }, [face, size, state, mode, level, pokeable, crop]);
 
   const firstGesture = useRef(gestureKey);
   useEffect(() => {
@@ -111,6 +119,7 @@ export function LiveFace({
       <WhombatAvatar
         face={face}
         size={size}
+        crop={crop}
         label={label}
         decorative={decorative}
         eager={eager}
@@ -133,7 +142,7 @@ export function LiveFace({
     >
       {ready ? null : (
         <img
-          src={avatarUrl(face, size, liveFaceCrop(size) === 'bust' ? 'bust' : 'head')}
+          src={avatarUrl(face, size, crop ?? liveFaceCrop(size))}
           alt=""
           width={size}
           height={size}
@@ -149,7 +158,7 @@ export function LiveFace({
   );
 }
 
-/** This device's “Face moves” switch (on unless turned off). */
+/** This device's “Moving faces” switch (on unless turned off). */
 export const FACE_MOTION_KEY = 'whombat.faceMotion';
 const CHANGED = 'whombat-face-motion';
 const REDUCE = '(prefers-reduced-motion: reduce)';
@@ -196,13 +205,13 @@ function currentMode(): FaceMotionMode {
   return reduced || !on ? 'reduced' : 'full';
 }
 
-/** How much faces move on this device: `reduced` under the system's reduce motion or with “Face moves” off. */
+/** How much faces move on this device: `reduced` under the system's reduce motion or with “Moving faces” off. */
 export function useFaceMotionMode(override?: FaceMotionMode): FaceMotionMode {
   const mode = useSyncExternalStore(subscribe, currentMode, () => 'full' as const);
   return override ?? mode;
 }
 
-/** The “Face moves” switch, for a settings screen. */
+/** The “Moving faces” switch, for a settings screen. */
 export function useFaceMotionSetting(): [boolean, (on: boolean) => void] {
   const on = useSyncExternalStore(subscribe, readFaceMotionSetting, () => true);
   return [on, writeFaceMotionSetting];

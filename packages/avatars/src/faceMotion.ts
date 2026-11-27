@@ -44,7 +44,7 @@ export const FACE_STATE_POSE: Record<FaceState | 'poke', FacePose> = {
 
 /**
  * `full`: everything the size allows. `calm`: no loops (the box's screen without a graphics chip; its kiosk forces
- * reduced motion for exactly that). `reduced`: the person asked for less motion, or turned “Face moves” off: poses still
+ * reduced motion for exactly that). `reduced`: the person asked for less motion, or turned “Moving faces” off: poses still
  * change, because they say something, but nothing moves between them.
  */
 export type FaceMotionMode = 'full' | 'calm' | 'reduced';
@@ -96,7 +96,7 @@ export function faceAllowance(size: number, mode: FaceMotionMode, holdsMotion = 
   };
 }
 
-/** The crop a live face of `size` px uses. */
+/** The crop a live face of `size` px uses unless it asks for one: the head under 40 px, where the bust reads too small. */
 export function liveFaceCrop(size: number): 'bust' | 'head' {
   return size >= LIVE_BUST_MIN_SIZE ? 'bust' : 'head';
 }

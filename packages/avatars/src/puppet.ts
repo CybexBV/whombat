@@ -6,7 +6,7 @@
  * At most one face on a page moves: the biggest, or the newest of the biggest (`holdsMotion`). The others still change
  * pose, at once. Nothing runs while the page is hidden.
  */
-import { type FacePart, type FacePose, facePivot, faceSvg } from './face';
+import { type FaceCrop, type FacePart, type FacePose, facePivot, faceSvg } from './face';
 import {
   BLINK,
   composeFrames,
@@ -43,7 +43,13 @@ export interface PuppetOptions {
   level?: (() => number) | null;
   /** A tap pokes it (it is play, not a button: nothing depends on it). */
   pokeable?: boolean;
+  /** The framing; by default the head under 40 px and the bust from 40 (`liveFaceCrop`). */
+  crop?: FaceCrop;
+  /** Plays its state's sequence when it first draws (a face that greets, `welcome`), where gestures are allowed. */
+  greet?: boolean;
 }
+
+const cropOf = (o: PuppetOptions): FaceCrop => o.crop ?? liveFaceCrop(o.size);
 
 const PUPPETS = new Set<FacePuppet>();
 let nextId = 0;
@@ -113,7 +119,8 @@ export class FacePuppet {
     host.addEventListener('click', this.onTap);
     PUPPETS.add(this);
     listenForActivity();
-    this.settle(this.o.state);
+    if (this.o.greet && this.allow.gestures) void this.play(this.o.state, null);
+    else this.settle(this.o.state);
     reclaim();
   }
 
@@ -133,7 +140,7 @@ export class FacePuppet {
     const redraw =
       next.face !== undefined && next.face !== prev.face
         ? true
-        : liveFaceCrop(this.o.size) !== liveFaceCrop(prev.size) || this.o.mode !== prev.mode;
+        : cropOf(this.o) !== cropOf(prev) || this.o.mode !== prev.mode;
     if (this.o.size !== prev.size) reclaim();
     if (next.state !== undefined && next.state !== prev.state) {
       this.activeSince = now();
@@ -243,7 +250,7 @@ export class FacePuppet {
     box.innerHTML = faceSvg(this.o.face, {
       pose,
       idPrefix: this.prefix,
-      crop: liveFaceCrop(this.o.size),
+      crop: cropOf(this.o),
       mouthFrom,
       cue: this.allow.cue && pose !== 'listening',
     });

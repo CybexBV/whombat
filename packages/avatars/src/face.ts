@@ -37,13 +37,16 @@ export const FACE_PARTS = [
 ] as const;
 export type FacePart = (typeof FACE_PARTS)[number];
 
+/** `bust`: the whole drawing; `head`: the same drawing at the head file's framing (closer, the shirt cut off). */
+export type FaceCrop = 'bust' | 'head';
+
 export interface FaceSvgOptions {
   /** The drawn expression to show. Default `neutral`, the bust as it is. */
   pose?: FacePose;
   /** Put in front of every id: many faces share a page. */
   idPrefix: string;
-  /** `bust` (default, 40 px and up) or `head`: the bust drawing at the head file's framing, for 25–39 px. */
-  crop?: 'bust' | 'head';
+  /** Default `bust`. */
+  crop?: FaceCrop;
   /** The mouth of another expression (speaking takes `happy`'s open mouth on the neutral face). */
   mouthFrom?: FacePose;
   /** The small symbol beside the head (thought dots, zZ, sparkles). Default true; too small to read under 64 px. */
