@@ -61,8 +61,9 @@ test('Notifications: from the box on a secure page, said plainly on the local-ne
   await setUp(page);
   await page.goto('/settings?tab=notifications');
   const browser = page.getByRole('region', { name: 'THIS BROWSER' });
-  await expect(browser.getByRole('status')).toHaveText('Off in this browser', { timeout: 20_000 });
-  await expect(browser.getByRole('button', { name: 'Turn on' })).toBeVisible();
+  const toggle = browser.getByRole('switch', { name: 'Notifications in this browser' });
+  await expect(toggle).toBeEnabled({ timeout: 20_000 });
+  await expect(toggle).not.toBeChecked();
   await fake(page, 'insecurePage', true);
   await page.reload();
   await expect(page.getByText('secure Tailscale page', { exact: false })).toBeVisible({ timeout: 20_000 });

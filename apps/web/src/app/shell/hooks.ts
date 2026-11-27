@@ -168,7 +168,7 @@ export function useShellKeyboard(options: ShellKeyboardOptions) {
 /**
  * Registers `apps/web/public/sw.js` once the shell mounts (`docs/decisions/web-push-connect.md`): no
  * permission prompt, just gets `notificationclick` deep-linking and future push delivery ready.
- * Subscribing is a separate, explicit opt-in (`apps/web/src/push/useWebPush.ts`).
+ * Subscribing is `apps/web/src/push/useWebPush.ts`'s: by itself where the browser already allows it, else from a click.
  */
 export function useServiceWorkerRegistration() {
   const managed = useManaged();

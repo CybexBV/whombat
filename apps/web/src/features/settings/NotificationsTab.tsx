@@ -24,7 +24,7 @@ import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
 import { BOX_PAGE_TEXT } from '../../managed/pageText';
-import { useWebPush, type WebPushStatus } from '../../push/useWebPush';
+import { useWebPush } from '../../push/useWebPush';
 import { useReach } from '../machine/useReach';
 import { useNow } from '../messaging/useRoom';
 import own from './NotificationsTab.module.css';
@@ -560,20 +560,23 @@ function PreviewsSection({ prefs, apply }: { prefs: NotificationPreferences; app
 const PREVIEWS_HINT =
   'Notifications show who wrote and the start of the message. Off: they only say what kind of notification it is.';
 
-/** What THIS BROWSER says; `off` and `unsupported` say it in the shell's words (`NotificationsWords`). */
-const PUSH_TEXT: Record<WebPushStatus, { title: string; meta: string }> = {
-  on: { title: 'On in this browser', meta: 'Notifications show here even when Whombat isn’t open.' },
-  off: { title: 'Off in this browser', meta: '' },
-  denied: {
-    title: 'Blocked by this browser',
-    meta: 'Allow notifications for this site in the browser’s settings, then come back here.',
+/** THIS BROWSER's switch and what its line says in each state; `off` and `unsupported` in the shell's words. */
+const BROWSER_PUSH_TEXT = {
+  title: 'Notifications in this browser',
+  meta: {
+    on: 'They show here even when Whombat isn’t open.',
+    denied:
+      'Blocked in this browser’s site settings. Allow notifications for this site there, then come back here.',
+    busy: 'One moment…',
+    unknown: 'Checking this browser…',
   },
-  unsupported: { title: 'Not available in this browser', meta: '' },
-  busy: { title: 'One moment…', meta: 'Asking the browser.' },
-  unknown: { title: 'Checking this browser…', meta: 'Asking the browser whether notifications are on.' },
-};
+} as const;
 
-/** THIS BROWSER: the push subscription of this browser, turned on only from a click (the browser asks then). */
+/**
+ * THIS BROWSER: one switch for this browser's notifications. On asks the browser (from the click); Off unsubscribes and
+ * is remembered here, so they don't come back by themselves. Blocked in the browser's site settings, the switch rests
+ * and the line says where to allow them; where this browser can't show any, the phone app is the way.
+ */
 function BrowserSection({ words }: { words: NotificationsWords }) {
   const ids = useId();
   const push = useWebPush();
@@ -583,53 +586,54 @@ function BrowserSection({ words }: { words: NotificationsWords }) {
   // or a commercial box, whose notifications come through control (AP-5325, AP-5428). A secure box page has the box's
   // own Web Push (`managed.push`).
   const boxPage = managed?.page !== undefined && !managed.push;
-  const base = PUSH_TEXT[push.status];
+  const t = BROWSER_PUSH_TEXT;
   const text = boxPage
     ? community
       ? { title: COMMUNITY_TEXT.push.insecureTitle, meta: COMMUNITY_TEXT.push.insecureMeta }
       : { title: BOX_PAGE_TEXT.notificationsTitle, meta: BOX_PAGE_TEXT.notifications }
-    : push.status === 'off'
-      ? { ...base, meta: words.pushOff }
-      : push.status === 'unsupported'
-        ? { ...base, meta: words.pushUnsupported }
-        : base;
+    : {
+        title: t.title,
+        meta:
+          push.status === 'off'
+            ? words.pushOff
+            : push.status === 'unsupported'
+              ? words.pushUnsupported
+              : t.meta[push.status],
+      };
+  const toggles = !boxPage && push.status !== 'unsupported';
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
         THIS BROWSER
       </SectionLabel>
       <div className={styles.card}>
-        <div className={styles.row}>
-          <StatusDot
-            tone={push.status === 'on' ? 'ok' : push.status === 'denied' ? 'bad' : 'mut'}
-            size={8}
-            label={null}
-          />
+        <div className={styles.row} data-browser-push={boxPage ? 'box-page' : push.status}>
           <span className={styles.rowMain}>
-            <span className={styles.rowTitle} role="status">
-              {text.title}
+            {toggles ? (
+              <label className={styles.rowTitle} htmlFor={`${ids}-push`}>
+                {text.title}
+              </label>
+            ) : (
+              <span className={styles.rowTitle}>{text.title}</span>
+            )}
+            <span className={styles.rowMeta} id={`${ids}-meta`} role="status">
+              {text.meta}
             </span>
-            <span className={styles.rowMeta}>{text.meta}</span>
           </span>
-          {boxPage ? null : push.status === 'on' ? (
-            <Button variant="secondary" size="sm" onClick={() => void push.disable()}>
-              Turn off
-            </Button>
-          ) : push.status === 'unsupported' ? (
+          {boxPage ? null : push.status === 'unsupported' ? (
             // A dead end otherwise: the phone app is how this person hears from Whombat.
             <RouterButtonLink variant="secondary" size="sm" to="/settings" search={{ tab: 'phone' } as never}>
               {words.getApp}
             </RouterButtonLink>
-          ) : push.status === 'off' || push.status === 'busy' ? (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={push.status === 'busy'}
-              onClick={() => void push.enable()}
-            >
-              Turn on
-            </Button>
-          ) : null}
+          ) : (
+            <Toggle
+              id={`${ids}-push`}
+              checked={push.status === 'on'}
+              disabled={push.status !== 'on' && push.status !== 'off'}
+              aria-describedby={`${ids}-meta`}
+              onCheckedChange={(on) => void (on ? push.enable() : push.disable())}
+            />
+          )}
         </div>
       </div>
     </section>
