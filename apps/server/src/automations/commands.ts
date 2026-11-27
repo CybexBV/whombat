@@ -77,6 +77,7 @@ import { driverIdOf, noDriverText, recipeWordsOf } from '../trackers/drivers';
 import { stopRunRequests } from '../trackers/features';
 import { scopeReport, type TrackerRunItem, TrackerRunItemSchema, trackerItemScope } from '../trackers/items';
 import { nextContinueStepId, unlandedReason } from '../trackers/unlanded';
+import { type AgainMark, resetOutput, resetStepsFrom } from './again';
 import { automationAgent, publisherCheck } from './authority';
 import { GitHubItem, githubItemScope, itemRef, sampleTrigger } from './github-items';
 import { postRunNotice } from './notice';
@@ -1540,43 +1541,34 @@ export const continueAutomationRun = defineCommand({
         'This run’s review hasn’t approved the fix, and Whombat merges nothing past it. Continue from "review" so it reads the newest review; if the person wants it merged without that, they merge the pull request themselves.',
       );
     // When resuming after `fix`, append the follow-up note to `steps.fix.output.reply` so `review` and `pr` see what
-    // changed in the follow-up (the server still verifies the reviewer and GitHub branch head independently).
-    if (input.note && fromRow.idx > fixRow.idx) {
-      const prevOut = (fixRow.output ?? {}) as JsonObject;
-      const prevReply = typeof prevOut.reply === 'string' ? prevOut.reply.trim() : '';
-      const combined = prevReply ? `${prevReply}\n\nFollow-up:\n${input.note}` : input.note;
-      await tx
-        .update(automationRunSteps)
-        .set({
-          output: { ...prevOut, reply: combined.slice(0, FIX_REPLY_NOTE_MAX) },
-          updatedAt: ctx.now,
-        })
-        .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, fixRow.idx)));
-    }
-    for (const s of stepRows) {
-      if (s.idx < fromRow.idx) continue;
-      await tx
-        .update(automationRunSteps)
-        .set({
-          state: 'pending',
-          attempt: s.attempt + 1,
-          idempotencyKey: null,
-          startedAt: null,
-          finishedAt: null,
-          wakeAt: null,
-          deadlineAt: null,
-          inputSummary: '',
-          output: {},
-          error: null,
-          dispatchId: null,
-          approvalId: null,
-          promptMessageId: null,
-          messageIds: [],
-          prNumber: null,
-          updatedAt: ctx.now,
-        })
-        .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, s.idx)));
-    }
+    // changed in the follow-up (the server still verifies the reviewer and GitHub branch head independently). After a
+    // person looked, the count of tries the engine makes by itself starts over (`again.ts`), and the review's one
+    // re-read of an unread reviewer is this restart's too.
+    const restart: AgainMark | null =
+      reviewRow && reviewRow.idx >= fromRow.idx ? { tries: 1, reviewAttempt: reviewRow.attempt + 1 } : null;
+    const written = await resetStepsFrom(tx, run.id, stepRows, fromRow.idx, ctx.now);
+    const { again: _tries, ...prevOut } =
+      fromRow.idx > fixRow.idx
+        ? ((fixRow.output ?? {}) as JsonObject)
+        : (written.get(fixRow.idx) ?? resetOutput(fixRow.output));
+    const prevReply = typeof prevOut.reply === 'string' ? prevOut.reply.trim() : '';
+    const combined =
+      input.note && fromRow.idx > fixRow.idx
+        ? prevReply
+          ? `${prevReply}\n\nFollow-up:\n${input.note}`
+          : input.note
+        : null;
+    await tx
+      .update(automationRunSteps)
+      .set({
+        output: {
+          ...prevOut,
+          ...(combined ? { reply: combined.slice(0, FIX_REPLY_NOTE_MAX) } : {}),
+          ...(restart ? { again: { ...restart } } : {}),
+        },
+        updatedAt: ctx.now,
+      })
+      .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, fixRow.idx)));
     const deadlineAt = new Date(ctx.now.getTime() + run.definition.limits.runTimeoutMinutes * 60_000);
     await tx
       .update(automationRuns)

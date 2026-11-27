@@ -122,6 +122,8 @@ export interface FakePr {
   authorAssociation?: string | null;
   /** Logins assigned to it. */
   assignees?: string[];
+  /** It clashes with its base branch (`simulateConflict`): GitHub refuses to merge it and says `dirty`. */
+  conflict?: boolean;
 }
 
 /** An issue on the fake GitHub (automation-recipes.md). */
@@ -718,6 +720,11 @@ export class FakeGitHub implements GitHubAdapter {
       });
   }
 
+  /** Tests: pull request `number` clashes with its base branch (or, `false`, no longer does). */
+  simulateConflict(repo: string, number: number, conflict = true): void {
+    this.pr(this.repo(repo), number).conflict = conflict;
+  }
+
   async getPullRequest(repo: string, number: number): Promise<GhPullRequest> {
     this.connected();
     await this.ready();
@@ -1054,7 +1061,7 @@ export class FakeGitHub implements GitHubAdapter {
     if (failure) throw failure;
     const r = this.repo(merge.repo);
     const pr = this.pr(r, merge.number);
-    if (pr.state !== 'open') throw new GitHubError('Pull Request is not mergeable', 405);
+    if (pr.state !== 'open' || pr.conflict) throw new GitHubError('Pull Request is not mergeable', 405);
     if (merge.sha && !sameSha(pr.headSha, merge.sha))
       throw new GitHubError('Head branch was modified. Review and try the merge again.', 409);
     const now = new Date().toISOString();
@@ -1226,6 +1233,7 @@ export class FakeGitHub implements GitHubAdapter {
       additions: single ? pr.additions : null,
       deletions: single ? pr.deletions : null,
       changedFiles: single ? pr.changedFiles : null,
+      ...(single && pr.state === 'open' ? { mergeableState: pr.conflict ? 'dirty' : 'clean' } : {}),
     };
   }
 

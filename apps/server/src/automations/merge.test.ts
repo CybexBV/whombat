@@ -113,6 +113,7 @@ describe('mergeReadiness', () => {
       kind: 'fail',
       error: 'No checks ran on PR #10, so I left it for you.',
       summary: 'No checks ran on PR #10',
+      cause: 'no_checks',
     });
     // A repository that runs no checks (its gate runs in the fix's thread): a report's fix merges on the run's own
     // review of its head, after the same grace as any pull request without checks.
@@ -158,6 +159,7 @@ describe('mergeReadiness', () => {
       kind: 'fail',
       error: 'Checks on PR #10 didn’t finish in time, so I left it for you.',
       summary: 'Checks on PR #10 didn’t finish in time',
+      cause: 'timed_out',
     });
   });
 
@@ -301,6 +303,7 @@ describe('failed checks run once more (AR-57)', () => {
       kind: 'fail',
       error: 'Checks failed again on PR #10, so I left it for you.',
       summary: 'Checks failed again on PR #10',
+      cause: 'checks_failed_again',
     });
   });
 

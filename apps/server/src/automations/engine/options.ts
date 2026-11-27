@@ -1,3 +1,5 @@
+import { FIX_TRIES_MAX } from '../again';
+
 /** The automations engine's cadences, lease and limits (bp-automations BP-C05, server-efficiency SV-03). */
 export interface EngineOptions {
   /**
@@ -26,6 +28,8 @@ export interface EngineOptions {
   burrowRunsPerHour: number;
   /** A schedule fire older than this when noticed counts as missed (downtime). */
   missedGraceMs: number;
+  /** The most tries a run makes at a fix that doesn't get through (`again.ts`): the first and the ones after it. */
+  fixTriesMax: number;
 }
 
 export const DEFAULT_ENGINE_OPTIONS: EngineOptions = {
@@ -39,4 +43,5 @@ export const DEFAULT_ENGINE_OPTIONS: EngineOptions = {
   maxCausalDepth: 2,
   burrowRunsPerHour: 120,
   missedGraceMs: 120_000,
+  fixTriesMax: FIX_TRIES_MAX,
 };
