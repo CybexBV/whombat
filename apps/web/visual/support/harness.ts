@@ -2,8 +2,8 @@
  * Shared harness for the visual suite (`pnpm visual`, see tools/visual/README.md).
  *
  * - `test` routes unpkg and Google Fonts through the disk cache with retries (tools/visual `network.ts`).
- * - `openApp` opens the web app (fixture mode) deterministically: theme in localStorage, macOS platform
- *   (B-03: the ⌘K hint), clock frozen at 2026-09-23 11:22 Europe/Amsterdam, fixed viewport.
+ * - `openApp` opens the web app (fixture mode) deterministically: theme in localStorage and the colour scheme, macOS
+ *   platform (B-03: the ⌘K hint), clock frozen at 2026-09-23 11:22 Europe/Amsterdam, fixed viewport.
  * - `settle` waits for network idle, the web fonts (not a fallback) and two frames.
  * - `patchQueries` / `neutraliseWorld` patch the cached fixture data where the fixture world differs from
  *   the mock's hard-coded seed (documented per call site, never a mask).
@@ -55,9 +55,13 @@ export interface OpenOptions {
   height?: number;
 }
 
-/** Open the app at `path` with the stored theme, the macOS shortcut hint and the frozen clock. */
+/**
+ * Open the app at `path` with the stored theme, the macOS shortcut hint and the frozen clock. The browser's own colour
+ * scheme matches the theme too: the fixture account's theme is Auto, which follows it once the Whombat answers.
+ */
 export async function openApp(page: Page, { path, theme, width = 1440, height = HEIGHT }: OpenOptions) {
   await page.setViewportSize({ width, height });
+  await page.emulateMedia({ colorScheme: theme });
   await page.addInitScript((t) => {
     localStorage.setItem('whombat:theme', t);
     // B-03: the reference shows ⌘K; the app shows ⌘K on Apple platforms and Ctrl K elsewhere.

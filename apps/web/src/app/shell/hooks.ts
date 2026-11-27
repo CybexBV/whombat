@@ -29,13 +29,13 @@ export function useBurrowRealtime(burrow: string, topics: readonly string[] | un
 }
 
 /**
- * Per-user theme (TODO 1.1): the preference from the bootstrap wins once loaded; toggling the theme
- * pill saves it through `PATCH /me/preferences` and patches the cached bootstrap.
+ * Per-user theme (TODO 1.1): the preference from the bootstrap wins once loaded (`system` follows the device); the
+ * person's choice — Light, Dark or Auto — is saved through `PATCH /me/preferences` and patches the cached bootstrap.
  */
 export function useShellThemeSync(burrow: string, preference: ThemePreference | undefined) {
   const { client, queryClient } = useAppServices();
   const save = useCallback(
-    (theme: 'light' | 'dark') => {
+    (theme: ThemePreference) => {
       client.me
         .updatePreferences({ body: { theme } })
         .then((result) => {
@@ -51,7 +51,7 @@ export function useShellThemeSync(burrow: string, preference: ThemePreference | 
     },
     [client, queryClient, burrow],
   );
-  useThemePreferenceSync(preference === 'light' || preference === 'dark' ? preference : null, save);
+  useThemePreferenceSync(preference ?? null, save);
 }
 
 /**
