@@ -3,6 +3,7 @@
  * since 3.0 without the computer, CT-1530). Shared by web, Android, the runner (what an agent reads when a command is
  * refused) and the server.
  */
+import { coreTranslator } from '../i18n/catalog.js';
 import { KEY_CATALOG } from '../keys/catalog.js';
 import { BLOCKED_GUIDANCE } from '../text/outcomes.js';
 import { type CommandCategory, type CommandScope, commandCategoryKey } from './commands.js';
@@ -28,12 +29,25 @@ export function isToolCategory(category: CommandCategory): boolean {
 }
 
 /** The `run_command` card's buttons, in order (AC-42), with the agent's name: “Always allow for Banjo”. */
-export function commandScopeLabels(agentName: string): Readonly<Record<CommandScope, string>> {
-  return { once: 'Allow once', task: 'Allow for this task', agent: `Always allow for ${agentName}` };
+export function commandScopeLabels(
+  agentName: string,
+  locale?: string | null,
+): Readonly<Record<CommandScope, string>> {
+  const tr = coreTranslator(locale);
+  return {
+    once: tr.t('command.scope.once'),
+    task: tr.t('command.scope.task'),
+    agent: tr.t('command.scope.agent', { agent: agentName }),
+  };
 }
 
 /** The `run_command` card's decline button. */
 export const COMMAND_DECLINE_CTA = 'Don’t allow';
+
+/** `COMMAND_DECLINE_CTA` in a locale. */
+export function commandDeclineCta(locale?: string | null): string {
+  return coreTranslator(locale).t('command.decline');
+}
 
 /** How a refused command ends (AC-41): exit 126 for Off and a no, 125 when nobody answered in time. */
 export const COMMAND_EXIT_CODES = { refused: 126, timedOut: 125 } as const;

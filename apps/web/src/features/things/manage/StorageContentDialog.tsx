@@ -31,6 +31,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal, ModalDescription, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
 import wc from '../HostFleet.module.css';
 import { ConfirmDialog, Empty, ErrorLine, Skeleton } from '../parts';
 import styles from '../Things.module.css';
@@ -157,7 +158,7 @@ function ListView({
                 <b className={wc.wcMono}>{i.name}</b>
                 <small>
                   {i.sizeBytes != null ? formatBytesBinary(i.sizeBytes) : DASH}
-                  {i.created ? ` · added ${formatAgoIso(i.created, now)}` : ''}
+                  {i.created ? ` · added ${formatAgoIso(i.created, now, currentLocale())}` : ''}
                 </small>
               </div>
               <button

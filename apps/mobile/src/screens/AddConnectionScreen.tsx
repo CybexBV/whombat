@@ -8,23 +8,25 @@
  * managed app caught and turned back into Settings → Connections. The footer offers the Custom entries: “Not in the
  * list? Connect any MCP server or any HTTP API.” Found on your network comes first (PC-08, AP-2913).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import {
-  ADD_CONNECTION_TEXT,
   type AddCategory,
   type AvailableRow,
   addConnectionChips,
   addConnectionFooter,
   addConnectionGroups,
+  addConnectionText,
   addNoMatch,
   addSearchPlaceholder,
-  CONNECTIONS_TEXT,
   type ConnectionOpens,
+  connectionsText,
 } from '../data/connections';
 import { useConnections } from '../data/useConnections';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -43,6 +45,11 @@ import { FoundOnNetwork } from './connect/FoundOnNetwork';
 type Props = NativeStackScreenProps<RootStackParamList, 'AddConnection'>;
 
 export function AddConnectionScreen({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const addConnectionTextHere = addConnectionText(rawLocale);
+  const connectionsTextHere = connectionsText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrow();
@@ -51,11 +58,11 @@ export function AddConnectionScreen({ navigation }: Props) {
   const open = (opens: ConnectionOpens | null) => {
     if (!opens) return undefined;
     if (opens.screen === 'AddServer')
-      return () => navigation.navigate('AddServer', { back: ADD_CONNECTION_TEXT.title });
+      return () => navigation.navigate('AddServer', { back: addConnectionTextHere.title });
     return () =>
       opens.screen === 'Connect'
-        ? navigation.navigate('Connect', { catalogId: opens.catalogId, back: ADD_CONNECTION_TEXT.title })
-        : navigation.navigate('ConnectAccount', { page: opens.page, back: ADD_CONNECTION_TEXT.title });
+        ? navigation.navigate('Connect', { catalogId: opens.catalogId, back: addConnectionTextHere.title })
+        : navigation.navigate('ConnectAccount', { page: opens.page, back: addConnectionTextHere.title });
   };
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<AddCategory>('all');
@@ -72,7 +79,7 @@ export function AddConnectionScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <BackBar label={CONNECTIONS_TEXT.title} onPress={goBack} />
+      <BackBar label={connectionsTextHere.title} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
@@ -89,7 +96,7 @@ export function AddConnectionScreen({ navigation }: Props) {
       >
         <View style={{ paddingHorizontal: 22, paddingBottom: 12 }}>
           <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
-            {ADD_CONNECTION_TEXT.title}
+            {addConnectionTextHere.title}
           </Text>
         </View>
         <View style={{ paddingHorizontal: 16 }}>
@@ -130,7 +137,7 @@ export function AddConnectionScreen({ navigation }: Props) {
             {q ? (
               <Touchable
                 onPress={() => setQ('')}
-                accessibilityLabel="Clear search"
+                accessibilityLabel={tMobile('screens.clear-search')}
                 ringRadius={16}
                 hitSlop={hitSlopFor(34)}
                 style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}
@@ -171,17 +178,17 @@ export function AddConnectionScreen({ navigation }: Props) {
             row.action === 'server' && row.serverAddress
               ? navigation.navigate('AddServer', {
                   address: row.serverAddress,
-                  back: ADD_CONNECTION_TEXT.title,
+                  back: addConnectionTextHere.title,
                 })
               : navigation.navigate('Connect', {
                   catalogId: row.catalogId,
                   url: row.url,
-                  back: ADD_CONNECTION_TEXT.title,
+                  back: addConnectionTextHere.title,
                 })
           }
         />
         {!ready ? (
-          <SkeletonRows count={6} avatarSize={40} lines={2} label={ADD_CONNECTION_TEXT.loading} />
+          <SkeletonRows count={6} avatarSize={40} lines={2} label={addConnectionTextHere.loading} />
         ) : groups.length === 0 ? (
           q.trim() ? (
             <Section>
@@ -243,6 +250,9 @@ function AddRow({ row, onPress }: { row: AvailableRow; onPress: (() => void) | u
  * server”, a link).
  */
 function AddFooter({ mcp, api }: { mcp: (() => void) | undefined; api: (() => void) | undefined }) {
+  const { rawLocale } = useI18n();
+  const addConnectionTextHere = addConnectionText(rawLocale);
+
   const theme = useTheme();
   if (!mcp && !api) return null;
   // “Connect” is in each link's TalkBack label instead.
@@ -270,23 +280,26 @@ function AddFooter({ mcp, api }: { mcp: (() => void) | undefined; api: (() => vo
         paddingTop: 6,
       }}
     >
-      {words(ADD_CONNECTION_TEXT.footer)}
-      {words(ADD_CONNECTION_TEXT.connect, true)}
-      {mcp ? <FooterLink label={ADD_CONNECTION_TEXT.mcp} onPress={mcp} last={!api} /> : null}
-      {mcp && api ? words(ADD_CONNECTION_TEXT.or) : null}
-      {api ? <FooterLink label={ADD_CONNECTION_TEXT.api} onPress={api} last /> : null}
+      {words(addConnectionTextHere.footer)}
+      {words(addConnectionTextHere.connect, true)}
+      {mcp ? <FooterLink label={addConnectionTextHere.mcp} onPress={mcp} last={!api} /> : null}
+      {mcp && api ? words(addConnectionTextHere.or) : null}
+      {api ? <FooterLink label={addConnectionTextHere.api} onPress={api} last /> : null}
     </View>
   );
 }
 
 /** A link in the footer: underlined like the app's other inline links, padded to 44dp; the sentence's full stop after the last. */
 function FooterLink({ label, onPress, last }: { label: string; onPress: () => void; last: boolean }) {
+  const { rawLocale } = useI18n();
+  const addConnectionTextHere = addConnectionText(rawLocale);
+
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
       <Touchable
         accessibilityRole="link"
-        accessibilityLabel={`${ADD_CONNECTION_TEXT.connect} ${label}`}
+        accessibilityLabel={`${addConnectionTextHere.connect} ${label}`}
         feedback="fade"
         hitSlop={{ top: 13, bottom: 13, left: 6, right: 6 }}
         onPress={onPress}

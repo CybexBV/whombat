@@ -65,6 +65,20 @@ function facts(over: Partial<WelcomeFacts> = {}): WelcomeFacts {
 }
 
 describe('Welcome back’s rows (DK-120, DK-122)', () => {
+  it('says what changed in the person’s language', () => {
+    const log = new DeskLookLog();
+    log.observe([down], KEYS, T0);
+    log.observe([], KEYS, T0 + MIN);
+    log.observe([down], KEYS, T0 + 2 * MIN);
+    const changes = (from: number) => log.changesSince(from);
+    const english = welcomeItems(facts({ changes, askCount: 0, asks: [] }), T0, 'everything');
+    const dutch = welcomeItems(facts({ changes, askCount: 0, asks: [], locale: 'nl-NL' }), T0, 'everything');
+    expect(english.at(-1)?.text).toContain('went down');
+    expect(dutch.at(-1)?.text).toContain('ging plat');
+    expect(dutch.at(-1)?.text).toContain('pve-02');
+    expect(dutch.map((i) => i.icon)).toEqual(english.map((i) => i.icon));
+  });
+
   it('starts with the question, then what was done since, then what changed', () => {
     const changes = () => [
       { key: 'server:nas', icon: 'look' as const, text: 'nas needs a look', at: T0 + 30 * MIN },

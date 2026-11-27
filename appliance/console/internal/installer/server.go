@@ -42,7 +42,8 @@ type Job struct {
 // Check is one pre-flight check (CG-13).
 type Check struct {
 	ID     string `json:"id"`
-	Status string `json:"status"` // running | ok | warn | fail
+	Status string `json:"status"`          // running | ok | warn | fail
+	Count  *int   `json:"count,omitempty"` // processor cores, for plural formatting
 	Value  string `json:"value"`
 }
 
@@ -91,6 +92,7 @@ type Install struct {
 // State is GET /api/state.
 type State struct {
 	Mode        string    `json:"mode"`
+	Locale      string    `json:"locale,omitempty"`
 	Platform    string    `json:"platform"`
 	Storage     string    `json:"storage"`
 	Environment string    `json:"environment"`
@@ -118,6 +120,7 @@ type Server struct {
 	preflight Preflight
 	runs      int // pre-flight runs started (a result of an older run is dropped)
 	install   Install
+	locale    string
 	rebooting bool
 	wired     *bool
 
@@ -146,7 +149,7 @@ func (s *Server) State() State {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st := State{Mode: "installer", Platform: s.image.Platform, Storage: s.image.Storage, Environment: s.image.Environment,
-		Release: s.image.Release, AppURL: s.image.AppURL, Edition: s.image.Edition}
+		Release: s.image.Release, AppURL: s.image.AppURL, Edition: s.image.Edition, Locale: s.locale}
 	st.Preflight = Preflight{Status: s.preflight.Status, Checks: append([]Check{}, s.preflight.Checks...),
 		Disks: append([]Disk{}, s.preflight.Disks...)}
 	st.Install = s.install
@@ -243,6 +246,7 @@ func (s *Server) check(id, host string) (Check, []Disk) {
 		}
 	case "cpu":
 		n := s.sys.CPUs()
+		c.Count = &n
 		c.Value = plural(n, "core")
 		c.Status = grade(n < cpuFail, n < cpuWarn)
 	case "memory":
@@ -506,6 +510,7 @@ func (s *Server) Handler() http.Handler {
 			web.JSON(w, http.StatusOK, s.State())
 		}
 	})
+	mux.HandleFunc("/api/locale", s.setLocale)
 	mux.HandleFunc("/api/preflight", func(w http.ResponseWriter, r *http.Request) {
 		if !web.Method(w, r, http.MethodPost) {
 			return
@@ -566,4 +571,29 @@ func (s *Server) Handler() http.Handler {
 	s.wifiRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { web.Error(w, http.StatusNotFound, "not found") })
 	return mux
+}
+
+func (s *Server) setLocale(w http.ResponseWriter, r *http.Request) {
+	if !web.Method(w, r, http.MethodPost) {
+		return
+	}
+	var body struct {
+		Locale string `json:"locale"`
+	}
+	if !web.DecodeJSON(w, r, &body) {
+		return
+	}
+	switch body.Locale {
+	case "en", "en-GB":
+		body.Locale = "en-GB"
+	case "nl", "nl-NL":
+		body.Locale = "nl-NL"
+	default:
+		web.Error(w, http.StatusBadRequest, "invalid locale")
+		return
+	}
+	s.mu.Lock()
+	s.locale = body.Locale
+	s.mu.Unlock()
+	web.JSON(w, http.StatusOK, body)
 }

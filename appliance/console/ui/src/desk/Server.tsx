@@ -6,6 +6,7 @@
  * runtime writes every figure; the page asks for them at open, every 10 s and on a range chip, and draws what it gets.
  * Nothing on it changes the server (DK-84).
  */
+
 import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
@@ -14,6 +15,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useT } from '../i18n/react';
 import type { Client } from '../lib/client';
 import {
   type DeskServer,
@@ -25,7 +27,7 @@ import {
   type ServerRange,
 } from '../lib/desk';
 import { topOf } from '../lib/deskBox';
-import { DESK, DESK_WORDS, fill } from '../lib/deskCopy';
+import { deskCopy, deskWordsCopy, fill } from '../lib/deskCopy';
 import {
   chartFoot,
   DOTS_MAX,
@@ -49,8 +51,6 @@ import { SeriesChart } from './Box';
 import styles from './desk.module.css';
 import { Icon } from './icons';
 import { Mark, PageHead, Segments } from './parts';
-
-const W = DESK_WORDS.server;
 
 /** Why the screen goes back by itself: the runtime says it may not show (`locked`) or knows no such server. */
 export type PageGone = 'locked' | 'not_found' | 'not_paired';
@@ -160,6 +160,8 @@ function Kpi({ k, f }: { k: string; f: Figure }) {
 
 /** The chart's range: three chips, the one shown pressed (each says its range in full to a screen reader). */
 function RangeChips({ range, onRange }: { range: ServerRange; onRange: (r: ServerRange) => void }) {
+  const W = deskWordsCopy(useT()).server;
+
   return (
     <div className={styles.range}>
       {SERVER_RANGES.map((r) => (
@@ -195,14 +197,17 @@ function ChartCard({
   timeZone: string;
   onRange: (r: ServerRange) => void;
 }) {
+  const t = useT();
+  const W = deskWordsCopy(t).server;
+
   // The page answered for the range asked; until the new range's answer comes, the last one's chart and times.
   const shown = page?.history.range ?? range;
   const foot = useMemo(
-    () => chartFoot(shown, page ? Date.parse(page.now) : Date.now(), timeZone),
-    [shown, page, timeZone],
+    () => chartFoot(shown, page ? Date.parse(page.now) : Date.now(), timeZone, t),
+    [shown, page, timeZone, t],
   );
   const off = server.state === 'off';
-  const words = page && !off ? legend(page, timeZone) : null;
+  const words = page && !off ? legend(page, timeZone, t) : null;
   const h = page?.history;
   let body: ReactNode;
   if (off) body = <div className={styles.chartEmpty}>{fill(W.off, { server: server.name })}</div>;
@@ -253,6 +258,9 @@ function ChartCard({
 }
 
 function Storage({ volumes }: { volumes: DeskServerPage['volumes'] }) {
+  const t = useT();
+  const W = deskWordsCopy(t).server;
+
   return (
     <div className={`${styles.fig} ${styles.pageFig} ${styles.storageCard}`}>
       <span className={styles.figKey}>{W.storage}</span>
@@ -261,7 +269,7 @@ function Storage({ volumes }: { volumes: DeskServerPage['volumes'] }) {
           {volumes.map((v) => (
             <div key={v.name} className={styles.vol}>
               <b className={styles.volName}>{v.name}</b>
-              <span className={styles.volNote}>{volumeNote(v)}</span>
+              <span className={styles.volNote}>{volumeNote(v, t)}</span>
               <Segments value={v.percent} tone={v.tone} count={VOLUME_SEGMENTS} className={styles.volSeg} />
             </div>
           ))}
@@ -272,6 +280,9 @@ function Storage({ volumes }: { volumes: DeskServerPage['volumes'] }) {
 }
 
 function Guests({ guests }: { guests: DeskServerPage['guests'] | undefined }) {
+  const t = useT();
+  const W = deskWordsCopy(t).server;
+
   return (
     <div className={`${styles.fig} ${styles.pageFig} ${styles.guestsCard}`}>
       <div className={styles.figRow}>
@@ -293,7 +304,7 @@ function Guests({ guests }: { guests: DeskServerPage['guests'] | undefined }) {
                 aria-label={W.guestStates[g.state]}
               />
               <b className={styles.guestName}>{g.name}</b>
-              <span className={styles.guestFig}>{guestCpu(g)}</span>
+              <span className={styles.guestFig}>{guestCpu(g, t)}</span>
               <span className={styles.guestFig}>{g.memory}</span>
             </div>
           ))}
@@ -320,6 +331,9 @@ function Alerts({ items }: { items: DeskServerPage['alerts']['items'] }) {
 
 /** The dots through the servers it was opened from (44 px targets), or “5 of 24” when they wouldn't fit. */
 function Dots({ list, index, onIndex }: { list: DeskServer[]; index: number; onIndex: (i: number) => void }) {
+  const t = useT();
+  const DESK = deskCopy(t);
+
   if (list.length < 2) return null;
   if (list.length > DOTS_MAX)
     return <span className={styles.dotsText}>{fill(DESK.serverOf, { n: index + 1, m: list.length })}</span>;
@@ -365,6 +379,11 @@ export interface ServerScreenProps {
 }
 
 export function ServerScreen(props: ServerScreenProps) {
+  const t = useT();
+  const W = deskWordsCopy(t).server;
+
+  const DESK_WORDS = deskWordsCopy(t);
+
   const { client, list, index, timeZone, assistant, lock, onBack, onIndex, onAsk, onGone } = props;
   const card = list[index] ?? list[0];
   const id = card?.id ?? '';
@@ -373,8 +392,8 @@ export function ServerScreen(props: ServerScreenProps) {
   const swipe = useSwipe(index, list.length, onIndex);
   if (!card) return null;
   const server = page?.server ?? card;
-  const figures = figuresOf(server, page);
-  const state = headState(server, page?.alerts ?? null);
+  const figures = figuresOf(server, page, t);
+  const state = headState(server, page?.alerts ?? null, t);
   const items = page?.alerts.items ?? [];
   const side = !page || page.volumes.length > 0 || page.guests !== null;
   return (
@@ -383,7 +402,7 @@ export function ServerScreen(props: ServerScreenProps) {
         <PageHead
           mark={<Mark mark={server.mark} fallback="server" size={24} />}
           title={server.name}
-          sub={subLine(page)}
+          sub={subLine(page, t)}
           onBack={onBack}
         >
           {state && (

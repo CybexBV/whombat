@@ -7,6 +7,7 @@
 import { DASH, detailGuests, formatGb, formatNum, formatRelativeDay } from '@whombat/client/hosts';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume } from '@whombat/core/domain';
+import { useWebI18n } from '../../../i18n/provider';
 import { BackupJobsCard } from '../manage/BackupJobs';
 import { BackupTable } from '../manage/BackupTable';
 import { Card, Empty, ErrorLine, StateCell } from '../parts';
@@ -14,6 +15,7 @@ import styles from '../Things.module.css';
 import type { TabProps } from './tabProps';
 
 export function BackupsTab({ burrow, serverId, detail, timeZone }: TabProps) {
+  const { tag: uiLocale } = useWebI18n();
   const backups = detail.proxmox?.backups ?? null;
   const pve = detail.server.platform === 'proxmox';
   const manage = detail.server.remoteControl.manage === true;
@@ -42,7 +44,7 @@ export function BackupsTab({ burrow, serverId, detail, timeZone }: TabProps) {
       <Card title={manage ? 'Last job run' : 'Backup job'} meta={job ? job.schedule : undefined}>
         {job ? (
           <div className={styles.facts2}>
-            <Fact label="Last run" value={formatRelativeDay(Date.parse(job.at), now, timeZone)}>
+            <Fact label="Last run" value={formatRelativeDay(Date.parse(job.at), now, timeZone, uiLocale)}>
               <StateCell
                 tone={job.result === 'ok' ? 'ok' : job.result === 'warning' ? 'warn' : 'bad'}
                 text={job.result === 'ok' ? 'went fine' : job.result}
@@ -65,7 +67,11 @@ export function BackupsTab({ burrow, serverId, detail, timeZone }: TabProps) {
             />
             <Fact
               label="Next run"
-              value={backups?.nextRun ? formatRelativeDay(Date.parse(backups.nextRun), now, timeZone) : DASH}
+              value={
+                backups?.nextRun
+                  ? formatRelativeDay(Date.parse(backups.nextRun), now, timeZone, uiLocale)
+                  : DASH
+              }
             />
             <Fact label="Saved on" value={backups?.target ?? DASH} />
           </div>

@@ -10,19 +10,15 @@ import {
   advancedRowsHere,
   agentGroupParts,
   agentKeysText,
-  appPlaceWords,
-  SEARCH_WORDS,
-  SETTINGS_GROUP_TEXT,
-  SETTINGS_HOME_TEXT,
   type SettingsHere,
-  THING_STATUS_LABELS,
+  settingsGroupText,
+  settingsHomeText,
   type ThingGlyph,
   thingRows,
+  thingStatusLabels,
   USAGE_HREF,
   youParts,
 } from '@whombat/client';
-import { DESK_SCREENS_TEXT } from '@whombat/client/desk';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import {
   CONNECTIONS_HREF,
   NEWS_KIND_WORDS,
@@ -32,6 +28,9 @@ import {
   type ThingSummary,
 } from '@whombat/core';
 import { INBOX_PATH } from '../../app/shell/location';
+import { DESK_SCREENS_TEXT, THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
+import { appPlaceWords, SEARCH_WORDS } from '../../i18n/shared';
 
 export type CatalogGroup = 'things' | 'settings' | 'places';
 
@@ -89,9 +88,12 @@ export function placeHref(place: AppPlace): string {
 }
 
 export function searchCatalog({ things, agent, here, news = false }: CatalogInput): CatalogEntry[] {
+  const THING_STATUS_LABELS = thingStatusLabels(currentLocale());
+  const SETTINGS_GROUP_TEXT = settingsGroupText(currentLocale());
+  const SETTINGS_HOME_TEXT = settingsHomeText(currentLocale());
   const entries: CatalogEntry[] = [];
   const kinds = SEARCH_WORDS.kinds;
-  for (const row of thingRows(things ?? [])) {
+  for (const row of thingRows(things ?? [], undefined, currentLocale())) {
     const kind = parseThingId(row.id)?.kind ?? 'connection';
     const how = row.reason ?? THING_STATUS_LABELS[row.status];
     entries.push({
@@ -147,7 +149,7 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
       part === 'profile' ? '/settings?tab=agent' : `/settings?tab=agent&part=${part}`,
     );
   // The keys and the commands always allowed, by the name they had: on What it may do.
-  const keysPage = agentKeysText(agent);
+  const keysPage = agentKeysText(agent, currentLocale());
   setting('agent:keys', 'agent', keysPage.title, '/settings?tab=agent&part=may', keysPage.line);
   setting('connections', 'connections', groups.connections, '/settings?tab=connections');
   setting('appliance:overview', 'appliance', groups.appliance, '/settings?tab=appliance');
@@ -176,7 +178,7 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
       terms: `${SETTINGS_GROUP_TEXT.title} ${NEWS_SEARCH_TERMS}`,
     });
   // Advanced's pages with their own line; Usage isn't offered (its row is hidden too).
-  for (const row of advancedRowsHere(agent, here))
+  for (const row of advancedRowsHere(agent, here, currentLocale()))
     if (row.key !== 'spend')
       setting(
         `advanced:${row.key}`,
@@ -218,6 +220,7 @@ export function matchCatalog(entries: readonly CatalogEntry[], query: string): C
 
 /** Suggestions under an empty query, from what is here: the first thing's name, a setting, a place. */
 export function searchSuggestions(entries: readonly CatalogEntry[], agent: string): string[] {
+  const SETTINGS_GROUP_TEXT = settingsGroupText(currentLocale());
   const thing = entries.find((e) => e.group === 'things')?.title;
   return [...(thing ? [thing] : []), SETTINGS_GROUP_TEXT.you.notifications, appPlaceWords(agent).files.label];
 }

@@ -4,6 +4,8 @@
  */
 import { z } from 'zod';
 import { Count } from '../domain/common.js';
+import { isEnglishLocale, tCore, tpCore } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { BackupCategoryId } from './categories.js';
 
 /**
@@ -47,53 +49,25 @@ export const BackupNote = z.object({
 export type BackupNote = z.infer<typeof BackupNote>;
 export type BackupNoteInput = z.input<typeof BackupNote>;
 
-const num = (v: number) => v.toLocaleString('en-US');
-
-/** A note in one sentence: “2 automations no longer fit this Whombat, so they come back as drafts.” */
-export function backupNoteText(note: BackupNoteInput): string {
-  const n = note.count ?? 1;
-  switch (note.code) {
-    case 'unreadable':
-      return n === 1
-        ? '1 thing in the file couldn’t be read, so it’s left out.'
-        : `${num(n)} things in the file couldn’t be read, so they’re left out.`;
-    case 'missing_reference':
-      return n === 1
-        ? '1 thing points to something that isn’t here, so that part is left out.'
-        : `${num(n)} things point to something that isn’t here, so that part is left out.`;
-    case 'drafts':
-      return n === 1
-        ? '1 automation no longer fits this Whombat, so it comes back as a draft.'
-        : `${num(n)} automations no longer fit this Whombat, so they come back as drafts.`;
-    case 'schedules_paused':
-      return n === 1 ? '1 schedule comes back paused.' : `${num(n)} schedules come back paused.`;
-    case 'bundled_missing':
-      return n === 1
-        ? '1 skill comes with another version of Whombat, so it’s left out.'
-        : `${num(n)} skills come with another version of Whombat, so they’re left out.`;
-    case 'unknown_authors':
-      return n === 1
-        ? 'Messages from 1 person who isn’t here keep their name.'
-        : `Messages from ${num(n)} people who aren’t here keep their names.`;
-    case 'too_large':
-      return n === 1
-        ? '1 thing is too large to restore here, so it’s left out.'
-        : `${num(n)} things are too large to restore here, so they’re left out.`;
-    case 'model_unavailable':
-      return 'The agent’s model isn’t offered here, so it uses this Whombat’s default.';
-    case 'sign_in_left_out':
-      return n === 1
-        ? '1 sign-in couldn’t go in the file, so it needs you to sign in again.'
-        : `${num(n)} sign-ins couldn’t go in the file, so they need you to sign in again.`;
-    case 'files_left_out':
-      return n === 1
-        ? '1 message comes back without its files, because Files wasn’t in the backup.'
-        : `${num(n)} messages come back without their files, because Files wasn’t in the backup.`;
-  }
+/** A count as the note says it: English keeps its thousands commas, other languages their own separators. */
+function num(v: number, locale: string | null | undefined): string {
+  return isEnglishLocale(locale) ? v.toLocaleString('en-US') : formatLocaleNumber(v, locale);
 }
 
-/** “a, b and c”. */
-export function joinAnd(parts: readonly string[]): string {
+/** A note in one sentence: “2 automations no longer fit this Whombat, so they come back as drafts.” */
+export function backupNoteText(note: BackupNoteInput, locale?: string | null): string {
+  // A formatter passed straight to `Array.map` receives an index here; anything but a tag means English.
+  const tag = typeof locale === 'string' ? locale : null;
+  const n = note.count ?? 1;
+  if (note.code === 'model_unavailable') return tCore(tag, 'backupNote.model_unavailable');
+  return tpCore(tag, `backupNote.${note.code}`, n, { count: num(n, tag) });
+}
+
+/** “a, b and c”, in a locale. */
+export function joinAnd(parts: readonly string[], locale?: string | null): string {
   if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return tCore(typeof locale === 'string' ? locale : null, 'recipe.and', {
+    items: parts.slice(0, -1).join(', '),
+    last: parts[parts.length - 1] ?? '',
+  });
 }

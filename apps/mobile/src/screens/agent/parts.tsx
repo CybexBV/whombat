@@ -3,10 +3,12 @@
  * own scroll with pull to refresh, a quiet note in a card, and the save bar under a part with a draft (Keys). A part
  * tells the screen when it has unsaved changes, so leaving it asks first (`useUnsavedGuard`).
  */
+
 import type { AgentProfile } from '@whombat/core';
 import { type ReactNode, type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useI18n, useMobileT } from '../../i18n';
 import { useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -139,6 +141,8 @@ export function SaveBar({
   onSave: () => void;
   onDiscard: () => void;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   if (!dirty && !notice) return null;
@@ -161,8 +165,20 @@ export function SaveBar({
       ) : null}
       {dirty ? (
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Button label="Discard" variant="secondary" size="lg" onPress={onDiscard} style={{ flex: 1 }} />
-          <Button label="Save" size="lg" onPress={onSave} busy={saving} style={{ flex: 1 }} />
+          <Button
+            label={tMobile('screens.discard')}
+            variant="secondary"
+            size="lg"
+            onPress={onDiscard}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label={tClient('limit.save')}
+            size="lg"
+            onPress={onSave}
+            busy={saving}
+            style={{ flex: 1 }}
+          />
         </View>
       ) : null}
     </View>

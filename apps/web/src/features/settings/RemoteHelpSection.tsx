@@ -1,8 +1,6 @@
 import {
   REMOTE_HELP_DEFAULT_CHOICE,
   REMOTE_HELP_FOLD,
-  REMOTE_HELP_TEXT,
-  REMOTE_HELP_WORDS,
   type RemoteHelpChoice,
   type RemoteHelpStepRow,
   type RemoteHelpTranscript,
@@ -23,6 +21,8 @@ import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../component
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { REMOTE_HELP_TEXT, REMOTE_HELP_WORDS } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { saveBlob } from '../../lib/saveBlob';
 import { PASSKEYS, webAuthnExists } from '../../managed/passkeyEnv';
 import rh from './RemoteHelp.module.css';
@@ -53,6 +53,7 @@ export function RemoteHelpSection() {
     state: model.state,
     hasPasskey: model.hasPasskey,
     now: new Date(),
+    locale: currentLocale(),
   });
   if (!managed) return null;
   return (
@@ -161,7 +162,9 @@ function OffPart({ card, model }: { card: OffCard; model: RemoteHelpModel }) {
           <div className={tw.dialogHead}>
             <ModalTitle className={tw.dialogTitle}>{W.confirm.title}</ModalTitle>
             <ModalDescription className={tw.dialogLead}>
-              {confirm.open ? remoteHelpConfirmText(confirm.open.level, confirm.open.duration) : null}
+              {confirm.open
+                ? remoteHelpConfirmText(confirm.open.level, confirm.open.duration, currentLocale())
+                : null}
             </ModalDescription>
           </div>
           <div className={tw.dialogActions}>
@@ -264,7 +267,8 @@ function VisitsPart({
   const [failed, setFailed] = useState(false);
   const [all, setAll] = useState(false);
   const groups = useMemo(
-    () => (model.visits ? remoteHelpVisitGroups(model.visits, { now: new Date() }) : null),
+    () =>
+      model.visits ? remoteHelpVisitGroups(model.visits, { now: new Date(), locale: currentLocale() }) : null,
     [model.visits],
   );
   const show = async (visitId: string) => {

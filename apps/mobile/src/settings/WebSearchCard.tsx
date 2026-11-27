@@ -6,17 +6,19 @@
  * under the field. On: the dot, “On, with your Brave Search key.”, what the last check found, and Check again, Use
  * another key (the field again, with Cancel) and Remove (which asks first). The key is never shown again.
  */
+
 import {
   BRAVE_SEARCH_KEYS_URL,
   BRAVE_SEARCH_SIGNUP_URL,
-  WEB_SEARCH_COPY,
   type WebSearchView,
+  webSearchCopy,
 } from '@whombat/core';
 import { type ReactNode, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
 import { useClearWebSearch, useSetWebSearch, useTestWebSearch } from '../data/useWebSearch';
+import { useI18n, useMobileT } from '../i18n';
 import { openOutside, TextLink } from '../screens/connect/parts';
 import { errorText, outcomeText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -46,6 +48,10 @@ function refusalOf(result: Parameters<typeof outcomeText>[0]): string | null {
 }
 
 export function WebSearchCard() {
+  const { rawLocale } = useI18n();
+  const webSearchCopyHere = webSearchCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
   const view = bootstrap.burrow.webSearch ?? null;
@@ -58,15 +64,15 @@ export function WebSearchCard() {
         <>
           <Head hint={words.hint} />
           <Text size={13} lh={1.45} color={theme.colors.ink2}>
-            {WEB_SEARCH_COPY.steps}
+            {webSearchCopyHere.steps}
           </Text>
           <Button
-            label={WEB_SEARCH_COPY.getKey}
-            accessibilityHint="Opens Brave’s API keys page in your browser"
+            label={webSearchCopyHere.getKey}
+            accessibilityHint={tMobile('settings.opens-braves-api-keys-page-in-your-browser')}
             onPress={() => openOutside(BRAVE_SEARCH_KEYS_URL)}
           />
           <TextLink
-            label={WEB_SEARCH_COPY.signUp}
+            label={webSearchCopyHere.signUp}
             external
             onPress={() => openOutside(BRAVE_SEARCH_SIGNUP_URL)}
           />
@@ -99,18 +105,21 @@ function Card({ children }: { children: ReactNode }) {
 
 /** The card's head: the dot while it is on (what the last check found) and the section's name, then its sentence. */
 function Head({ hint, dot }: { hint: string; dot?: { tone: WebSearchTone; label: string } }) {
+  const { rawLocale } = useI18n();
+  const webSearchCopyHere = webSearchCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <>
       <View
         accessible
         accessibilityRole="header"
-        accessibilityLabel={dot ? `${WEB_SEARCH_COPY.title}. ${dot.label}` : WEB_SEARCH_COPY.title}
+        accessibilityLabel={dot ? `${webSearchCopyHere.title}. ${dot.label}` : webSearchCopyHere.title}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
       >
         {dot ? <StatusDot color={toneColor(theme, dot.tone)} label={dot.label} /> : null}
         <Text size={15.5} weight={600}>
-          {WEB_SEARCH_COPY.title}
+          {webSearchCopyHere.title}
         </Text>
       </View>
       <Text size={13} lh={1.45} color={theme.colors.mut}>
@@ -131,13 +140,16 @@ function On({
   hint: string;
   removeBody: string;
 }) {
+  const { rawLocale } = useI18n();
+  const webSearchCopyHere = webSearchCopy(rawLocale);
+
   const theme = useTheme();
   const [replacing, setReplacing] = useState(false);
   const test = useTestWebSearch(slug);
   const clear = useClearWebSearch(slug);
   const [problem, setProblem] = useState<string | null>(null);
   const line = webSearchCheckLine(view.check);
-  const status = line.text ?? WEB_SEARCH_COPY.on;
+  const status = line.text ?? webSearchCopyHere.on;
   const checkAgain = () => {
     setProblem(null);
     test.mutate(
@@ -149,10 +161,10 @@ function On({
     );
   };
   const remove = () =>
-    Alert.alert(WEB_SEARCH_COPY.removeTitle, removeBody, [
+    Alert.alert(webSearchCopyHere.removeTitle, removeBody, [
       { text: CANCEL, style: 'cancel' },
       {
-        text: WEB_SEARCH_COPY.remove,
+        text: webSearchCopyHere.remove,
         style: 'destructive',
         onPress: () => {
           setProblem(null);
@@ -162,7 +174,7 @@ function On({
               onSuccess: (r) => {
                 const refused = refusalOf(r);
                 if (refused) setProblem(refused);
-                else showNotice(WEB_SEARCH_COPY.removed);
+                else showNotice(webSearchCopyHere.removed);
               },
               onError: (e) => setProblem(errorText(e)),
             },
@@ -176,11 +188,11 @@ function On({
       <Head hint={hint} dot={{ tone: line.tone, label: status }} />
       <View
         accessible
-        accessibilityLabel={line.text ? `${WEB_SEARCH_COPY.on} ${line.text}` : WEB_SEARCH_COPY.on}
+        accessibilityLabel={line.text ? `${webSearchCopyHere.on} ${line.text}` : webSearchCopyHere.on}
         style={{ gap: 3 }}
       >
         <Text size={15} weight={600}>
-          {WEB_SEARCH_COPY.on}
+          {webSearchCopyHere.on}
         </Text>
         {line.text ? (
           <Text
@@ -199,7 +211,7 @@ function On({
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Button
-            label={WEB_SEARCH_COPY.checkAgain}
+            label={webSearchCopyHere.checkAgain}
             variant="secondary"
             busy={test.isPending}
             disabled={busy}
@@ -207,7 +219,7 @@ function On({
             style={GROW}
           />
           <Button
-            label={WEB_SEARCH_COPY.replace}
+            label={webSearchCopyHere.replace}
             variant="secondary"
             disabled={busy}
             onPress={() => {
@@ -217,11 +229,11 @@ function On({
             style={GROW}
           />
           <Button
-            label={WEB_SEARCH_COPY.remove}
+            label={webSearchCopyHere.remove}
             variant="secondary"
             busy={clear.isPending}
             disabled={busy}
-            accessibilityLabel={`${WEB_SEARCH_COPY.remove} ${WEB_SEARCH_COPY.title.toLowerCase()}`}
+            accessibilityLabel={`${webSearchCopyHere.remove} ${webSearchCopyHere.title.toLowerCase()}`}
             onPress={remove}
             style={GROW}
           />
@@ -233,6 +245,9 @@ function On({
 
 /** The key field and Save (and Cancel while replacing a saved key). Save checks the key with Brave first. */
 function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void; onCancel?: () => void }) {
+  const { rawLocale } = useI18n();
+  const webSearchCopyHere = webSearchCopy(rawLocale);
+
   const set = useSetWebSearch(slug);
   const [key, setKey] = useState('');
   const [keyProblem, setKeyProblem] = useState<string | null>(null);
@@ -249,7 +264,7 @@ function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void;
           const refused = refusalOf(r);
           if (refused) return setProblem(refused);
           setKey('');
-          showNotice(WEB_SEARCH_COPY.saved);
+          showNotice(webSearchCopyHere.saved);
           onDone();
         },
         onError: (e) => {
@@ -263,7 +278,7 @@ function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void;
   return (
     <>
       <FormField
-        label={WEB_SEARCH_COPY.apiKey}
+        label={webSearchCopyHere.apiKey}
         value={key}
         onChangeText={(value) => {
           setKey(value);
@@ -284,10 +299,10 @@ function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void;
           <Button label={CANCEL} variant="quiet" disabled={set.isPending} onPress={onCancel} style={GROW} />
         ) : null}
         <Button
-          label={WEB_SEARCH_COPY.save}
+          label={webSearchCopyHere.save}
           busy={set.isPending}
           disabled={empty}
-          accessibilityLabel={`${WEB_SEARCH_COPY.save} ${WEB_SEARCH_COPY.apiKey}`}
+          accessibilityLabel={`${webSearchCopyHere.save} ${webSearchCopyHere.apiKey}`}
           onPress={save}
           style={GROW}
         />

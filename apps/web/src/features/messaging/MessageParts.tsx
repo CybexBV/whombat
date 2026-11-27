@@ -3,7 +3,7 @@
  * pills, “(edited)”, the pin marker, the tombstone, link previews, what the Vault took and the inline editor.
  */
 import { Link } from '@tanstack/react-router';
-import { composerText, SETTLE_WORDS, vaultSavedRows } from '@whombat/client';
+import { composerText, vaultSavedRows } from '@whombat/client';
 import {
   emojiByChar,
   formatClock,
@@ -30,6 +30,8 @@ import {
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n, type WebTranslator, webTranslator } from '../../i18n/provider';
+import { SETTLE_WORDS } from '../../i18n/shared';
 import styles from './MessageParts.module.css';
 import { messageFits, TOO_LONG_NOTE } from './messageLimit';
 import { useMentionAutocorrect } from './useMentionAutocorrect';
@@ -68,14 +70,14 @@ export function MessageToolbar({
   menuOpen = false,
   pickerOpen = false,
 }: MessageToolbarProps) {
+  const { t } = useWebI18n();
   if (!onSettle && !onReplyInThread && !onMenu) return null;
-  const whose = self ? 'your' : `${name}’s`;
   return (
     // biome-ignore lint/a11y/useSemanticElements: a set of buttons, not form fields (a fieldset would be read as a form)
     <div
       className={cx(styles.toolbar, (open || menuOpen || pickerOpen) && styles.toolbarOpen)}
       role="group"
-      aria-label={`Actions for ${whose} message`}
+      aria-label={self ? t('chat.message.actionsOwn') : t('chat.message.actions', { name })}
       data-message-toolbar=""
     >
       {onSettle && (
@@ -96,8 +98,8 @@ export function MessageToolbar({
         <button
           type="button"
           className={cx(styles.tool, onMenu && styles.inMenu)}
-          aria-label="Reply in thread"
-          title="Reply in thread"
+          aria-label={t('chat.message.replyInThread')}
+          title={t('chat.message.replyInThread')}
           tabIndex={onMenu ? -1 : undefined}
           onClick={onReplyInThread}
         >
@@ -108,8 +110,8 @@ export function MessageToolbar({
         <button
           type="button"
           className={styles.tool}
-          aria-label={`More actions for ${whose} message`}
-          title="More actions"
+          aria-label={self ? t('chat.message.moreActionsOwn') : t('chat.message.moreActionsFor', { name })}
+          title={t('chat.message.moreActions')}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           onClick={onMenu}
@@ -124,12 +126,18 @@ export function MessageToolbar({
 /* Reactions --------------------------------------------------------------------------------------- */
 
 /** “Mara, Neo reacted with 👍” (the pill's tooltip). */
-export function reactionTitle(r: Reaction, lookup: (id: string) => Principal | undefined): string {
+export function reactionTitle(
+  r: Reaction,
+  lookup: (id: string) => Principal | undefined,
+  words: WebTranslator = webTranslator(null),
+): string {
   const names = r.principalIds.map((id) => {
     const p = lookup(id);
-    return p ? shortNameOf(p) : 'Someone';
+    return p ? shortNameOf(p) : words.t('chat.message.someone');
   });
-  return names.length ? `${names.join(', ')} reacted with ${r.value}` : `Reacted with ${r.value}`;
+  return names.length
+    ? words.t('chat.message.reactedBy', { names: names.join(', '), emoji: r.value })
+    : words.t('chat.message.reacted', { emoji: r.value });
 }
 
 export interface ReactionPillsProps {
@@ -141,6 +149,7 @@ export interface ReactionPillsProps {
 
 /** The mock's sf2 mono pills (“finally · 4”); an emoji reads “👍 · 3”. */
 export function ReactionPills({ reactions, lookup, onToggle, className }: ReactionPillsProps) {
+  const words = useWebI18n();
   if (reactions.length === 0) return null;
   return (
     <div className={cx(styles.reactions, className)}>
@@ -150,8 +159,10 @@ export function ReactionPills({ reactions, lookup, onToggle, className }: Reacti
           type="button"
           className={styles.reaction}
           aria-pressed={r.mine}
-          aria-label={`${r.value}, ${r.count} ${r.count === 1 ? 'reaction' : 'reactions'}${r.mine ? ', including yours' : ''}`}
-          title={reactionTitle(r, lookup)}
+          aria-label={words.tp(r.mine ? 'chat.message.reactionsMine' : 'chat.message.reactions', r.count, {
+            emoji: r.value,
+          })}
+          title={reactionTitle(r, lookup, words)}
           onClick={() => onToggle?.(r)}
         >
           {emojiByChar(r.value) ? (
@@ -172,8 +183,9 @@ export function ReactionPills({ reactions, lookup, onToggle, className }: Reacti
 
 /** “(edited)” beside the time; its tooltip says when. */
 export function EditedLabel({ at, timeZone }: { at: string; timeZone: string }) {
+  const { t } = useWebI18n();
   return (
-    <span className={styles.edited} title={`Edited ${formatClock(at, timeZone)}`}>
+    <span className={styles.edited} title={t('chat.message.editedAt', { time: formatClock(at, timeZone) })}>
       {MESSAGE_EDITED_LABEL}
     </span>
   );
@@ -181,11 +193,12 @@ export function EditedLabel({ at, timeZone }: { at: string; timeZone: string }) 
 
 /** The pin marker in the meta line: “Pinned”, and who pinned it in the tooltip and for screen readers. */
 export function PinnedMarker({ by }: { by: Principal | undefined }) {
-  const title = by ? `Pinned by ${by.name}` : 'Pinned';
+  const { t } = useWebI18n();
+  const title = by ? t('chat.message.pinnedBy', { name: by.name }) : t('chat.message.pinned');
   return (
     <span className={styles.pinned} title={title} aria-label={title} role="img" data-pinned="">
       <Icon name="pin" size={12} />
-      <span aria-hidden="true">Pinned</span>
+      <span aria-hidden="true">{t('chat.message.pinned')}</span>
     </span>
   );
 }
@@ -301,6 +314,7 @@ export function MessageEditor({
   compact = false,
   mentionTargets = NO_TARGETS,
 }: MessageEditorProps) {
+  const { t } = useWebI18n();
   const [text, setText] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
   const autocorrect = useMentionAutocorrect(ref, mentionTargets, setText);
@@ -349,7 +363,7 @@ export function MessageEditor({
         rows={1}
         className={styles.editorInput}
         value={text}
-        aria-label="Edit message"
+        aria-label={t('chat.message.edit')}
         onChange={(event) => {
           setText(event.target.value);
           autocorrect(event, text);
@@ -359,13 +373,13 @@ export function MessageEditor({
       />
       <div className={styles.editorBar}>
         <span className={cx(styles.editorHint, (error || tooLong) && styles.editorError)} role="status">
-          {error ?? (tooLong ? TOO_LONG_NOTE : 'Enter to save · Esc to cancel')}
+          {error ?? (tooLong ? TOO_LONG_NOTE : t('chat.message.editHint'))}
         </span>
         <Button variant="secondary" size="xs" onClick={onCancel} disabled={pending}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button variant="primary" size="xs" onClick={save} disabled={!canSave}>
-          {pending ? 'Saving…' : 'Save'}
+          {pending ? t('chat.message.saving') : t('common.save')}
         </Button>
       </div>
     </div>

@@ -75,6 +75,9 @@ type Hint struct {
 	// Guests: the hub guest ids a per-host guest hint is about, when it
 	// names guests (incus.no_snapshots), for a way out to the guest.
 	Guests []string `json:"guests,omitempty"`
+
+	Code   string         `json:"code,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // HintRank orders hint severities: warning first.
@@ -114,6 +117,7 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 			label = s.ID
 		}
 		out = append(out, Hint{Kind: HintNearLimit, Severity: sev, Entity: s.ID, Link: LinkTemps,
+			Code: HintNearLimit, Params: map[string]any{"sensor": s.ID, "label": label, "tempC": s.TempC, "limitC": limit, "pct": ratio * 100},
 			Title:  fmt.Sprintf("%s at %s", label, FormatTemp(s.TempC)),
 			Detail: fmt.Sprintf("%s%% of the %s limit", pct0(ratio*100), FormatTemp(limit))})
 	}
@@ -129,7 +133,9 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 			}
 			d := fmt.Sprintf("%s of %s used", FormatMemoryGB(float64(m.SwapUsedBytes)/GiB), FormatMemoryGB(float64(m.SwapTotalBytes)/GiB))
 			d += fmt.Sprintf(" · RAM %s%% used", pct0(float64(m.UsedBytes)/float64(m.TotalBytes)*100))
-			out = append(out, Hint{Kind: HintSwapHigh, Severity: sev, Entity: "host", Title: "Swap almost full", Detail: d})
+			out = append(out, Hint{Kind: HintSwapHigh, Severity: sev, Entity: "host", Title: "Swap almost full", Detail: d,
+				Code: HintSwapHigh, Params: map[string]any{"usedGiB": float64(m.SwapUsedBytes) / GiB, "totalGiB": float64(m.SwapTotalBytes) / GiB,
+					"ramPct": float64(m.UsedBytes) / float64(m.TotalBytes) * 100}})
 		}
 	}
 	if m.TotalBytes > 0 {
@@ -140,6 +146,7 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 				sev = HintWarning
 			}
 			out = append(out, Hint{Kind: HintMemoryLow, Severity: sev, Entity: "host", Title: "Memory almost full",
+				Code: HintMemoryLow, Params: map[string]any{"availableGiB": float64(m.AvailableBytes) / GiB, "totalGiB": float64(m.TotalBytes) / GiB},
 				Detail: fmt.Sprintf("%s available of %s", FormatMemoryGB(float64(m.AvailableBytes)/GiB), FormatMemoryGB(float64(m.TotalBytes)/GiB))})
 		}
 	}
@@ -151,6 +158,7 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 			continue
 		}
 		out = append(out, Hint{Kind: HintDiskSpace, Severity: HintInfo, Entity: v.entity, Link: LinkStorage,
+			Code: HintDiskSpace, Params: v.params(),
 			Title: fmt.Sprintf("%s %s%% full", PlainVolume(v.entity, v.label), pct0(p)), Detail: v.evidence()})
 	}
 
@@ -160,8 +168,9 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 		if !ok || w < WearWatchPct-eps || WearLevel(w) != Good || alerted(open, d.Device, RuleWearHigh, RuleWearCritical) {
 			continue
 		}
+		detail, variant, params := wearEvidence(d, w)
 		out = append(out, Hint{Kind: HintDiskWear, Severity: HintInfo, Entity: d.Device, Link: LinkStorage,
-			Title: fmt.Sprintf("Disk %s is %s%% worn", d.Device, pct0(w)), Detail: wearEvidence(d)})
+			Title: fmt.Sprintf("Disk %s is %s%% worn", d.Device, pct0(w)), Detail: detail, Code: HintDiskWear + variant, Params: params})
 	}
 
 	// Collectors that failed.
@@ -174,6 +183,7 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 			d = "It didn’t say why."
 		}
 		out = append(out, Hint{Kind: HintCollectorError, Severity: HintWarning, Entity: c.Name, Link: LinkAgent,
+			Code: HintCollectorError, Params: map[string]any{"collector": c.Name, "error": c.Error},
 			Title: "Whombat can’t read this server’s " + collectorWords(c.Name), Detail: d})
 	}
 
@@ -200,6 +210,7 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 				detail = strings.Join(names[:UnhealthyNames], ", ") + ", …"
 			}
 			out = append(out, Hint{Kind: HintGuestsUnhealthy, Severity: HintWarning, Entity: "docker", Link: LinkGuests,
+				Code: HintGuestsUnhealthy, Params: map[string]any{"count": n, "names": firstN(names, UnhealthyNames)},
 				Title: title, Detail: detail})
 		}
 	}
@@ -213,6 +224,7 @@ func HostHints(r *proto.Report, hubVersion string, open []Alert) []Hint {
 	// Agent version differs from the hub's.
 	if v := r.Agent.Version; hubVersion != "" && v != "" && v != hubVersion {
 		out = append(out, Hint{Kind: HintAgentOutdated, Severity: HintInfo, Entity: "host", Link: LinkAgent,
+			Code: HintAgentOutdated, Params: map[string]any{"agentVersion": v, "hubVersion": hubVersion},
 			Title: "Whombat’s helper on this server is out of date", Detail: fmt.Sprintf("It runs %s, Whombat %s.", v, hubVersion)})
 	}
 

@@ -3,10 +3,12 @@
  * UPDATES card, only where the box's manager says it keeps it. Saved at once, with a note; shows the choice until the
  * box's next status agrees.
  */
+
 import { askFirstView, UPDATE_TEXT } from '@whombat/client/managed';
 import { type ApplianceStatus, OperationError, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
+import { useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -14,6 +16,7 @@ import { switchColors } from '../ui/switchColors';
 import { useManagedOrThrow } from './context';
 
 export function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; onChanged: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { session } = useManagedOrThrow();
   const view = askFirstView(status);
@@ -35,12 +38,15 @@ export function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; on
         (r) => {
           setWanted(r.askFirst);
           if (r.askFirst === next) showNotice(UPDATE_TEXT.askSwitched(r.askFirst));
-          else Alert.alert('That didn’t go through', UPDATE_TEXT.failed);
+          else Alert.alert(tMobile('managed.that-didnt-go-through'), UPDATE_TEXT.failed);
           onChanged();
         },
         (e) => {
           setWanted(null);
-          Alert.alert('That didn’t go through', e instanceof OperationError ? e.message : UPDATE_TEXT.failed);
+          Alert.alert(
+            tMobile('managed.that-didnt-go-through'),
+            e instanceof OperationError ? e.message : UPDATE_TEXT.failed,
+          );
         },
       )
       .finally(() => setBusy(false));

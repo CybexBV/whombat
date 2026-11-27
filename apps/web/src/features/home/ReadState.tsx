@@ -5,7 +5,7 @@
  * saved to show), with Try again — which only reads again — and what the app said folded under More detail. Overview's
  * placeholders are its own (`OverviewServers.tsx`).
  */
-import { OVERVIEW_WORDS, readingTime } from '@whombat/client';
+import { readingTime } from '@whombat/client';
 import { hostErrorInfo } from '@whombat/client/hosts';
 import { Clock } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -13,6 +13,8 @@ import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { MoreDetail } from '../../components/MoreDetail';
+import { currentLocale } from '../../i18n/provider';
+import { useOverviewWords } from '../../i18n/words';
 import styles from './ReadState.module.css';
 
 /** “Read 12 min ago” with a clock, from the thing's own report; “Reading time unknown” without one. */
@@ -27,7 +29,7 @@ export function ReadTime({
   timeZone: string;
   className?: string;
 }) {
-  const t = readingTime(at, now, timeZone);
+  const t = readingTime(at, now, timeZone, currentLocale());
   return (
     <span className={cx(styles.readTime, className)} title={t.known ? t.exact : undefined}>
       <Icon icon={Clock} size={13} />
@@ -58,7 +60,8 @@ export function ReadNote({
   busy?: boolean;
   className?: string;
 }) {
-  const detail = error ? hostErrorInfo(error).message : null;
+  const OVERVIEW_WORDS = useOverviewWords();
+  const detail = error ? hostErrorInfo(error, currentLocale()).message : null;
   return (
     <section className={cx(styles.note, className)} role="alert" aria-label={title}>
       <h2 className={styles.noteTitle}>{title}</h2>

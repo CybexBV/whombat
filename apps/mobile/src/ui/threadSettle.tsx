@@ -3,8 +3,10 @@
  * after the time of a settled thread still in its room, the thread screen's ✓ Settle in the `ok` tone, and a settled
  * thread's line under its head (✓ “Settled 2 hours ago” and Open again, on the `ok` tint). Colours from the theme only.
  */
+
 import { Platform, View } from 'react-native';
 import { SETTLE_COPY } from '../data/threadSettle';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from './glanceColors';
@@ -57,6 +59,7 @@ export function SettleButton({ onPress }: { onPress: () => void }) {
  * Android) in a Chat thread's header, before Settle.
  */
 export function ShareThreadButton({ onPress }: { onPress: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const Mark = Platform.OS === 'ios' ? Share : Share2;
   return (
@@ -64,8 +67,8 @@ export function ShareThreadButton({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       feedback="wash"
       ringRadius={9}
-      accessibilityLabel="Share this thread"
-      accessibilityHint="Makes a link to a copy of this thread"
+      accessibilityLabel={tMobile('ui.share-this-thread')}
+      accessibilityHint={tMobile('ui.makes-a-link-to-a-copy-of-this')}
       hitSlop={hitSlopFor(34)}
       style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 9 }}
     >

@@ -5,8 +5,8 @@
  * beyond them are `BACKUP_PHONE_TEXT` (AP-6852).
  */
 import {
-  BACKUP_OPTIONS_TEXT,
   backupLabel,
+  backupOptionsText,
   backupToBringBack,
   bringBackName,
   type ControlApi,
@@ -17,6 +17,7 @@ import {
   type Passkey,
   relativeDay,
 } from '@whombat/client/managed';
+import { resolveLanguage } from '@whombat/core/i18n';
 import {
   BACKUP_KEEP_90_DAYS,
   BACKUP_KEEP_YEAR,
@@ -118,8 +119,8 @@ function hhmm(d: Date): string {
 }
 
 /** “Today, 03:00”, “Yesterday, 21:00”, “Sunday, 03:00”, “25 October, 03:00”. */
-export function backupTitle(iso: string, now = new Date()): string {
-  const day = relativeDay(iso, now);
+export function backupTitle(iso: string, now = new Date(), locale?: string | null): string {
+  const day = relativeDay(iso, now, locale);
   return `${day.charAt(0).toUpperCase()}${day.slice(1)}, ${hhmm(new Date(iso))}`;
 }
 
@@ -127,18 +128,20 @@ export function backupTitle(iso: string, now = new Date()): string {
 export function chooseRows(
   checkpoints: readonly BackupCheckpoint[],
   now = new Date(),
+  locale?: string | null,
 ): { id: string; title: string; meta: string; newest: boolean; afterReplaced: boolean }[] {
+  const words = backupOptionsText(locale);
   const firsts = firstBackups({ checkpoints, nextCursor: null });
   const late = madeAfterReplaced(checkpoints);
   const pick = backupToBringBack(checkpoints);
   return checkpoints.map((cp) => {
-    const label = backupLabel(cp, firsts.has(cp.id) && checkpoints.length > 1);
-    const ok = cp.check?.ok === true ? BACKUP_OPTIONS_TEXT.list.checkedOk.toLowerCase() : null;
+    const label = backupLabel(cp, firsts.has(cp.id) && checkpoints.length > 1, locale);
+    const ok = cp.check?.ok === true ? words.list.checkedOk.toLowerCase() : null;
     const why = cp.reason === 'scheduled' ? null : label;
-    const replaced = late.has(cp.id) ? BACKUP_OPTIONS_TEXT.bringBack.afterReplaced : null;
+    const replaced = late.has(cp.id) ? words.bringBack.afterReplaced : null;
     return {
       id: cp.id,
-      title: backupTitle(cp.createdAt, now),
+      title: backupTitle(cp.createdAt, now, locale),
       meta: [why ?? agoAt(cp.createdAt, now), replaced, ok].filter(Boolean).join(' · '),
       // NEWEST marks the one picked first: never one the old Whombat made after it was replaced.
       newest: cp.id === pick,
@@ -174,9 +177,10 @@ export function initialKitWays(prf: boolean): KitWays {
 }
 
 /** The primary button: “Use my passkey” while it is ticked, else “Save”; null when nothing is ticked. */
-export function kitPrimary(ways: KitWays): string | null {
-  if (ways.passkey) return BACKUP_OPTIONS_TEXT.kit.usePasskey;
-  if (ways.print || ways.file) return BACKUP_OPTIONS_TEXT.dialog.save;
+export function kitPrimary(ways: KitWays, locale?: string | null): string | null {
+  const words = backupOptionsText(locale);
+  if (ways.passkey) return words.kit.usePasskey;
+  if (ways.print || ways.file) return words.dialog.save;
   return null;
 }
 
@@ -189,17 +193,20 @@ export function kitPasskeyIds(
 }
 
 /** “3 Nov”. */
-export function shortDate(iso: string): string {
-  const [day, month] = longDate(iso).split(' ');
+export function shortDate(iso: string, locale?: string | null): string {
+  const [day, month] = longDate(iso, locale).split(' ');
   return `${day} ${month?.slice(0, 3) ?? ''}`.trim();
 }
 
 /** The account's kits a new Whombat can bring back, for “Is this a new Whombat?”'s note: the newest, by name and day. */
-export function foundKitNote(envelope: Pick<KitEnvelope, 'whombatName' | 'createdAt'> | null): string | null {
+export function foundKitNote(
+  envelope: Pick<KitEnvelope, 'whombatName' | 'createdAt'> | null,
+  locale?: string | null,
+): string | null {
   if (!envelope) return null;
-  return BACKUP_OPTIONS_TEXT.bringBack.found(
-    bringBackName(envelope.whombatName),
-    longDate(envelope.createdAt),
+  return backupOptionsText(locale).bringBack.found(
+    bringBackName(envelope.whombatName, locale),
+    longDate(envelope.createdAt, locale),
   );
 }
 
@@ -246,13 +253,14 @@ export function kitPrintHtml(input: {
   qrPayload: string | null;
   /** The sheet's words: the recovery kit's, or the paper copy's (`BACKUP_OPTIONS_TEXT.paper`). */
   words?: { printTitle: (name: string) => string; printLead: string; printScan: string };
+  locale?: string | undefined;
 }): string {
-  const K = input.words ?? BACKUP_OPTIONS_TEXT.kit;
+  const K = input.words ?? backupOptionsText(input.locale).kit;
   const qr = input.qrPayload
     ? `<figure>${qrSvg(input.qrPayload)}<figcaption>${escapeHtml(K.printScan)}</figcaption></figure>`
     : '';
   return [
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">',
+    `<!doctype html><html lang="${resolveLanguage(input.locale)}"><head><meta charset="utf-8">`,
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeHtml(K.printTitle(input.name))}</title>`,
     '<style>body{font:15px/1.5 system-ui,sans-serif;color:#000;background:#fff;margin:32px;max-width:720px}',

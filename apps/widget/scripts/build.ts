@@ -37,8 +37,9 @@ import { CONTROL_META } from '../src/frame/drop';
 import { WIDGET_VERSION } from '../src/version';
 
 export const WIDGET_ROOT = resolve(import.meta.dirname, '..');
-/** Browsers the widget supports: the host page may be old, so the loader is plain ES2019. */
-const TARGET = ['es2019', 'chrome80', 'firefox78', 'safari15'];
+const BROWSERS = ['chrome80', 'firefox78', 'safari15'];
+/** The host page may be old, so the loader is plain ES2019. */
+const LOADER_TARGET = ['es2019', ...BROWSERS];
 /** The loader must stay small (it runs on every page of the website). */
 export const LOADER_GZIP_BUDGET = 8 * 1024;
 
@@ -84,6 +85,24 @@ async function bundleWithInputs(
 async function bundle(entry: string, options: esbuild.BuildOptions): Promise<Uint8Array> {
   return (await bundleWithInputs(entry, options)).contents;
 }
+
+/** Resolve the loader's stylesheet and fallback styles at build time so unused tokens stay out of the bundle. */
+const inlineLoaderStyles: esbuild.Plugin = {
+  name: 'inline-loader-styles',
+  setup({ onLoad }) {
+    onLoad({ filter: /[/\\]loader[/\\]styles\.ts$/ }, async () => {
+      const source = await bundle('src/loader/styles.ts', { format: 'esm', platform: 'node' });
+      const url = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
+      const { loaderCss, FALLBACK_STYLES }: typeof import('../src/loader/styles') = await import(
+        /* @vite-ignore */ url
+      );
+      return {
+        contents: `export const loaderCss = () => ${JSON.stringify(loaderCss())};
+export const FALLBACK_STYLES = ${JSON.stringify(FALLBACK_STYLES)};`,
+      };
+    });
+  },
+};
 
 /**
  * What the frame bundle must never contain (FD-28 (7), FD-30): storage of any kind and HTML parsing. The frame is
@@ -224,11 +243,15 @@ export async function buildWidget(
   manifest: WidgetManifest;
   sizes: BuiltFile[];
 }> {
-  const js = { format: 'iife', platform: 'browser', target: TARGET } as const;
-  const loader = await bundle('src/loader/index.ts', js);
-  const frame = await bundleWithInputs('src/frame/index.ts', js);
+  const js = { format: 'iife', platform: 'browser' } as const;
+  const loader = await bundle('src/loader/index.ts', {
+    ...js,
+    target: LOADER_TARGET,
+    plugins: [inlineLoaderStyles],
+  });
+  const frame = await bundleWithInputs('src/frame/index.ts', { ...js, target: BROWSERS });
   const frameJs = frame.contents;
-  const frameCss = await bundle('src/frame/frame.css', { target: TARGET });
+  const frameCss = await bundle('src/frame/frame.css', { target: BROWSERS });
 
   const loaderText = new TextDecoder().decode(loader);
   for (const banned of ['eval(', 'new Function', 'innerHTML', 'document.write'])

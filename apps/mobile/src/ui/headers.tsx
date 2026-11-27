@@ -7,6 +7,7 @@ import { createContext, type ReactNode, useContext, useEffect, useId } from 'rea
 import { Platform, type StyleProp, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Tab } from '../data/shell';
+import { useI18n, useMobileT } from '../i18n';
 import { HeaderLineContext, ListToggleContext, usePaneRole } from '../navigation/panes';
 import { backButtonLabel } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -77,19 +78,22 @@ export const CLOSE_WORD = 'Close';
  * pages, “✕ Close”, since going back there only empties the page.
  */
 export function useBackLook(label: string): { closes: boolean; spoken: string } {
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
   const closes = usePaneRole() === 'beside-first';
-  return { closes, spoken: closes ? CLOSE_WORD : backButtonLabel(label) };
+  return { closes, spoken: closes ? t('ui.close') : backButtonLabel(label, rawLocale) };
 }
 
 /** “✕ Close” in the back button's colour; the cross alone when `words` is false. */
 export function CloseLook({ words = true }: { words?: boolean }) {
+  const { t } = useMobileT();
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
       <X size={words ? 18 : 20} color={theme.colors.brand} strokeWidth={2} />
       {words ? (
         <Text size={16} weight={500} color={theme.colors.brand}>
-          {CLOSE_WORD}
+          {t('ui.close')}
         </Text>
       ) : null}
     </View>
@@ -106,19 +110,26 @@ export const OTHER_LIST_TOGGLE_WORDS = { hide: 'Hide the list', show: 'Show the 
  * something is open there. Nothing on one page or on the list.
  */
 export function ListToggleButton() {
+  const { t } = useMobileT();
   const theme = useTheme();
   const toggle = useContext(ListToggleContext);
   const side = useContext(PageSideContext);
   if (!toggle || side !== 'beside') return null;
   const Icon = toggle.hidden ? PanelLeftOpen : PanelLeftClose;
-  const words = toggle.chat ? LIST_TOGGLE_WORDS : OTHER_LIST_TOGGLE_WORDS;
+  const key = toggle.chat
+    ? toggle.hidden
+      ? 'navigation.showThreads'
+      : 'navigation.hideThreads'
+    : toggle.hidden
+      ? 'navigation.showList'
+      : 'navigation.hideList';
   return (
     <Touchable
       onPress={toggle.toggle}
       feedback="wash"
       ringRadius={22}
       accessibilityRole="button"
-      accessibilityLabel={toggle.hidden ? words.show : words.hide}
+      accessibilityLabel={t(key)}
       style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
     >
       <Icon size={20} color={theme.colors.ink2} strokeWidth={1.75} />

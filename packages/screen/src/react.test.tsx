@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { MODAL_CLOSED } from './attention';
 import {
   FIXTURE_ASSISTANT,
   FIXTURE_BOX_GRID,
@@ -10,13 +11,14 @@ import {
   FIXTURE_DOORBELL_GRID_LOCKED,
   FIXTURE_LIMITS_VIEWS,
   FIXTURE_NOW,
+  FIXTURE_OUTAGE,
   FIXTURE_QUESTION,
   FIXTURE_TABLET_GRID,
   FIXTURE_TIME_ZONE,
   FIXTURE_VIEWS,
   FIXTURE_WEATHER_NEWS_VIEWS,
 } from './fixtures';
-import { Screen, type ScreenProps, WidgetPreview, WidgetView } from './react';
+import { AttentionModal, EnvProvider, Screen, type ScreenProps, WidgetPreview, WidgetView } from './react';
 import type { DeskGrid, DeskWidget } from './types';
 
 const draw = (grid: DeskGrid, more: Partial<ScreenProps> = {}) =>
@@ -34,20 +36,22 @@ const draw = (grid: DeskGrid, more: Partial<ScreenProps> = {}) =>
     />,
   );
 
-const widget = (id: string, type: DeskWidget['type'], w: number, h: number) =>
+const widget = (id: string, type: DeskWidget['type'], w: number, h: number, locale?: string) =>
   renderToStaticMarkup(
-    <WidgetView
-      widget={{ id, type, opts: {} }}
-      view={[...FIXTURE_VIEWS, ...FIXTURE_WEATHER_NEWS_VIEWS, ...FIXTURE_LIMITS_VIEWS].find(
-        (v) => v.id === id,
-      )}
-      calm={FIXTURE_CALM}
-      w={w}
-      h={h}
-      pw={w * 144 + (w - 1) * 12}
-      ph={h * 135 + (h - 1) * 12}
-      now={FIXTURE_NOW}
-    />,
+    <EnvProvider value={{ assistant: FIXTURE_ASSISTANT, editing: false, locale }}>
+      <WidgetView
+        widget={{ id, type, opts: {} }}
+        view={[...FIXTURE_VIEWS, ...FIXTURE_WEATHER_NEWS_VIEWS, ...FIXTURE_LIMITS_VIEWS].find(
+          (v) => v.id === id,
+        )}
+        calm={FIXTURE_CALM}
+        w={w}
+        h={h}
+        pw={w * 144 + (w - 1) * 12}
+        ph={h * 135 + (h - 1) * 12}
+        now={FIXTURE_NOW}
+      />
+    </EnvProvider>,
   );
 
 describe('<Screen>', () => {
@@ -60,6 +64,19 @@ describe('<Screen>', () => {
       expect(html).toContain(`data-widget="${id}"`);
     expect(html).not.toContain('data-widget="w_playing"');
     expect(html).not.toContain('role="dialog"');
+  });
+
+  it('shows Dutch dates, actions and accessible names across the screen', () => {
+    const locale = 'nl-NL';
+    const away = FIXTURE_BOX_GRID_WRONG.attention.items.map((i) => i.key);
+    const html = draw(FIXTURE_BOX_GRID_WRONG, { locale, away });
+    expect(html).toContain('lang="nl-NL"');
+    expect(html).toContain('aria-label="Pagina’s"');
+    expect(html).toContain('aria-label="Hoe het gaat"');
+    expect(html).toContain('Actie nodig · 2 dingen');
+    expect(html).toContain('dinsdag 27 oktober');
+    expect(draw(FIXTURE_BOX_GRID, { locale, onlyTime: true })).toContain('dinsdag 27 oktober');
+    expect(draw(FIXTURE_DOORBELL_GRID, { locale })).toContain('aria-label="Terug"');
   });
 
   it('draws the page the host chooses', () => {
@@ -186,11 +203,13 @@ describe('<Screen>', () => {
         { ...house, show: { from: '14:00', to: '15:00', days: ['tue' as const] } },
       ],
     };
-    const html = draw({ ...FIXTURE_BOX_GRID, layout });
-    expect(html).toContain('>House</button>');
-    expect(html).not.toContain('>Media</button>');
-    expect(html).toContain('aria-current="page">House');
-    expect(html).toContain('data-widget="w_door"');
+    for (const locale of ['en-GB', 'nl-NL']) {
+      const html = draw({ ...FIXTURE_BOX_GRID, layout }, { locale });
+      expect(html).toContain('>House</button>');
+      expect(html).not.toContain('>Media</button>');
+      expect(html).toContain('aria-current="page">House');
+      expect(html).toContain('data-widget="w_door"');
+    }
     // The editor shows every page, whatever the time.
     expect(draw({ ...FIXTURE_BOX_GRID, layout }, { editing: true, page: 0 })).toContain('>Media</button>');
   });
@@ -224,6 +243,30 @@ describe('<Screen>', () => {
   });
 });
 
+describe('<AttentionModal>', () => {
+  it('draws Dutch navigation, actions and elapsed time', () => {
+    const html = renderToStaticMarkup(
+      <AttentionModal
+        attention={{ items: [FIXTURE_OUTAGE, FIXTURE_QUESTION], more: 0 }}
+        away={new Set()}
+        state={MODAL_CLOSED}
+        onState={() => {}}
+        onAway={() => {}}
+        onFix={() => {}}
+        width={860}
+        now={Date.parse(FIXTURE_OUTAGE.since) + 130 * 60_000}
+        env={{ assistant: FIXTURE_ASSISTANT, timeZone: FIXTURE_TIME_ZONE, locale: 'nl-BE', editing: false }}
+      />,
+    );
+    expect(html).toContain('aria-label="Sluiten"');
+    expect(html).toContain('aria-label="Volgende"');
+    expect(html).toContain('1 van 2');
+    expect(html).toContain('Sinds 14:30 · 2 u 10 min');
+    expect(html).toContain('Vraag Dusty');
+    expect(html).toContain('Nu niet');
+  });
+});
+
 describe('<WidgetView>', () => {
   it('draws now playing as a count, a list, posters', () => {
     expect(widget('w_playing', 'panel', 2, 1)).toContain('2 watching');
@@ -235,6 +278,16 @@ describe('<WidgetView>', () => {
     expect(widget('w_pve01', 'server', 2, 1)).toContain('processor');
     expect(widget('w_pve01', 'server', 2, 2)).toContain('Memory');
     expect(widget('w_pve01', 'server', 4, 2)).toContain('Processor · 24 h');
+  });
+
+  it('localizes weather headings, weekdays, measurements and meter labels in Dutch', () => {
+    const weather = widget('w_weather', 'weather', 4, 3, 'nl');
+    expect(weather).toContain('>Vandaag<');
+    expect(weather).toContain('>wo<');
+    expect(weather).toContain('2,3 mm');
+    expect(weather).toMatch(/Zonsopkomst \d\d:\d\d · Zonsondergang \d\d:\d\d/);
+    const meters = widget('w_pve01', 'server', 2, 2, 'nl');
+    expect(meters).toContain('aria-label="Geheugen ');
   });
 
   it('draws a problem in its place, a locked view as locked', () => {
@@ -338,6 +391,23 @@ describe('<WidgetPreview>', () => {
     expect(html).toContain('pve-01');
     expect(html).toContain('data-theme="dark"');
     expect(html).not.toContain('<button');
+  });
+
+  it('uses the preview’s language for its widget', () => {
+    const html = renderToStaticMarkup(
+      <WidgetPreview
+        widget={{ id: 'w_clock', type: 'clock', opts: {} }}
+        w={4}
+        h={2}
+        width={300}
+        assistant={FIXTURE_ASSISTANT}
+        timeZone={FIXTURE_TIME_ZONE}
+        now={FIXTURE_NOW}
+        locale="nl-BE"
+      />,
+    );
+    expect(html).toContain('lang="nl-BE"');
+    expect(html).toContain('dinsdag 27 oktober');
   });
 });
 

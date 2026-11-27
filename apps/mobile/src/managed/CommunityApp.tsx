@@ -9,6 +9,7 @@
  * There are no Android App Links for a box's own page (an address on a home network or a tailnet can't be verified for
  * an app), so a link reaches the app by scanning its QR code or pasting it (AP-5471).
  */
+
 import {
   type ApplianceRegistry,
   type ControlApi,
@@ -26,6 +27,7 @@ import { DIRECT_PATH, DirectIdentity } from '@whombat/protocol/direct';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { WhombatLive } from '../../modules/whombat-live';
+import { useI18n } from '../i18n';
 import { clearDepartingStatusWidget, switchActiveAppliance } from '../live/statusWidget';
 import { UpdateRow } from '../settings/UpdateCard';
 import { Button, Loading } from '../ui/primitives';
@@ -472,6 +474,7 @@ export function JoinStartScreen({
   onSignIn: () => void;
   onLookAround?: () => void;
 }) {
+  const { tClient } = useI18n();
   const t = P.start;
   const [scanning, setScanning] = useState(false);
   const [text, setText] = useState('');
@@ -496,7 +499,7 @@ export function JoinStartScreen({
               meta={P.signIn.openMeta}
               action={
                 <Button
-                  label="Open"
+                  label={tClient('automations.waiting.open')}
                   variant="secondary"
                   accessibilityLabel={P.signIn.open(b.name ?? P.signIn.unnamed)}
                   onPress={() => onOpen(b.device)}

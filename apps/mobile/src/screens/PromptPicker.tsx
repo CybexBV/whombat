@@ -9,6 +9,7 @@
  * “Put its words in the message”. A failure shows as a failed send does. Only in the person's own Chat, and only where
  * the Whombat keeps prompts.
  */
+
 import { PROMPT_WORDS, problemText } from '@whombat/client';
 import type { ChatRoom, Prompt, UsePromptResponse } from '@whombat/core';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
@@ -16,6 +17,7 @@ import { ActivityIndicator, ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { type PromptRow, promptChoice, promptPickerView, promptRow, slashRows } from '../data/prompts';
 import { usePromptProjects, usePrompts, useUsePrompt } from '../data/usePrompts';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
@@ -246,6 +248,8 @@ function RepositorySheet({
   onInstead: (prompt: Prompt) => void;
   onUsed: (used: UsePromptResponse) => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { slug, clock } = useBurrowBase();
   const open = prompt !== null;
@@ -277,7 +281,7 @@ function RepositorySheet({
           haptic('send');
           onUsed(r.data);
         },
-        onError: (error) => showFailure(problemText(error, PROMPT_WORDS.useFailed)),
+        onError: (error) => showFailure(problemText(error, PROMPT_WORDS.useFailed, rawLocale)),
       },
     );
   };

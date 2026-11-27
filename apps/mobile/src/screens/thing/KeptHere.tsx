@@ -6,20 +6,22 @@
  */
 import { keptHere } from '@whombat/client/managed';
 import { useBackupPlaces } from '@whombat/client/react';
-import { BACKUP_PLACE_TEXT } from '@whombat/core/domain';
+import { backupPlaceText } from '@whombat/core/domain';
 import { useNow } from '../../data/BurrowProvider';
+import { useI18n } from '../../i18n';
 import { useManaged } from '../../managed/context';
 import { OneCard, OneRow } from '../../ui/assistant';
 
 /** `thing`: the page's thing id, `server:<id>` or `connection:<id>`. */
 export function BackupsKeptHere({ thing }: { thing: string }) {
+  const { rawLocale } = useI18n();
   const managed = useManaged();
   const places = useBackupPlaces(managed?.session);
   const now = useNow().getTime();
-  const rows = keptHere(places.data, thing, { whombat: managed?.applianceName, now });
+  const rows = keptHere(places.data, thing, { locale: rawLocale, whombat: managed?.applianceName, now });
   if (!rows) return null;
   return (
-    <OneCard label={BACKUP_PLACE_TEXT.keptHere}>
+    <OneCard label={backupPlaceText(rawLocale).keptHere}>
       {rows.map((row) => (
         <OneRow
           key={row.title}

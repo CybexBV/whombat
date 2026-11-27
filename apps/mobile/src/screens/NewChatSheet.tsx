@@ -11,14 +11,16 @@
  * The mic under the field is voice typing (docs/decisions/dictation.md DT-01): while it records the bar is there and
  * Ask waits; the words go into the field at the cursor.
  */
+
 import { useStartChat } from '@whombat/client/react';
 import type { ChatSubject } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { CHAT_COPY, startedChatRoute } from '../data/chatRoom';
-import { askAboutLine, CHATS_COPY } from '../data/chats';
+import { chatCopy, startedChatRoute } from '../data/chatRoom';
+import { askAboutLine, chatsCopy } from '../data/chats';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { navigateTo, useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -47,6 +49,10 @@ export function NewChatSheet({
   /** The sheet's title and the field's label and placeholder, instead of “Ask about …” / “Ask Dusty”. */
   words?: { title: string; label: string; placeholder: string } | null;
 }) {
+  const { rawLocale } = useI18n();
+  const chatCopyHere = chatCopy(rawLocale);
+  const chatsCopyHere = chatsCopy(rawLocale);
+
   const { slug } = useBurrowBase();
   const navigation = useAppNavigation();
   const start = useStartChat(slug);
@@ -83,7 +89,7 @@ export function NewChatSheet({
       }, feedback.onError)
       .finally(() => setBusy(false));
   };
-  const title = words?.title ?? (subject ? `Ask about ${subject.name}` : CHATS_COPY.newChat);
+  const title = words?.title ?? (subject ? `Ask about ${subject.name}` : chatsCopyHere.newChat);
   return (
     <OneSheet
       visible={visible}
@@ -94,11 +100,11 @@ export function NewChatSheet({
     >
       <View style={{ marginTop: 14, gap: 14 }}>
         <FormField
-          label={words?.label ?? CHATS_COPY.newChatField(assistant)}
+          label={words?.label ?? chatsCopyHere.newChatField(assistant)}
           kicker
           value={text}
           onChangeText={setText}
-          placeholder={words?.placeholder ?? CHATS_COPY.newChatPlaceholder(assistant)}
+          placeholder={words?.placeholder ?? chatsCopyHere.newChatPlaceholder(assistant)}
           multiline
           autoFocus
           editable={!voice.active}
@@ -132,7 +138,7 @@ export function NewChatSheet({
           </Text>
         ) : null}
         <BigButton
-          label={CHAT_COPY.askButton}
+          label={chatCopyHere.askButton}
           variant="primary"
           onPress={send}
           busy={busy}

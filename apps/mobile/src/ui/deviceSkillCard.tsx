@@ -6,8 +6,9 @@
  * device until you press Switch on; the limits are the agent's proposal, kept as they are (the web edits them).
  * Once decided the card says so and shows each action's tier.
  */
+
 import { useDecideDeviceSkill, useDeclineDeviceSkill } from '@whombat/client/react';
-import { DEVICE_SKILL_COPY, type DeviceSkillCard } from '@whombat/core';
+import { type DeviceSkillCard, deviceSkillCopy } from '@whombat/core';
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -21,6 +22,7 @@ import {
   tierLabel,
 } from '../data/deviceSkill';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { showNotice, useDecisionFeedback } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -32,6 +34,9 @@ import { Touchable } from './Touchable';
 import { hitSlopFor } from './touchTarget';
 
 export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
+  const { rawLocale } = useI18n();
+  const deviceSkillCopyHere = deviceSkillCopy(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const decide = useDecideDeviceSkill(slug);
@@ -50,7 +55,7 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
       .mutateAsync({ proposalId: card.proposalId, ...decideBody(card, tiers, true) })
       .then((result) => {
         if (result.status !== 'ok') return feedback.onResult(result);
-        showNotice(`${DEVICE_SKILL_COPY.on}: ${card.name}.`);
+        showNotice(`${deviceSkillCopyHere.on}: ${card.name}.`);
       }, feedback.onError)
       .finally(() => setBusy(null));
   };
@@ -194,11 +199,11 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
       {view.open ? (
         <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.line, padding: 14, gap: 12 }}>
           <Text size={13} lh={1.4} color={theme.colors.mut}>
-            {DEVICE_SKILL_COPY.nothingChanges}
+            {deviceSkillCopyHere.nothingChanges}
           </Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button
-              label={DEVICE_SKILL_COPY.decline}
+              label={deviceSkillCopyHere.decline}
               variant="secondary"
               onPress={notNow}
               busy={busy === 'decline'}
@@ -206,7 +211,7 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
               style={{ flex: 1 }}
             />
             <Button
-              label={DEVICE_SKILL_COPY.switchOn}
+              label={deviceSkillCopyHere.switchOn}
               onPress={switchOn}
               busy={busy === 'on'}
               disabled={busy === 'decline'}

@@ -6,6 +6,7 @@
  * the phone's own. Pure; the screens are `screens/ChatRoomScreen.tsx`, `screens/SettledScreen.tsx` and the thread's
  * `screens/ThreadScreen.tsx`.
  */
+
 import {
   type AgentWords,
   type ChatRooms,
@@ -15,18 +16,23 @@ import {
   threadStage,
 } from '@whombat/client';
 import { type Message, type Principal, parseChatHref } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { ThreadWorkView } from './working';
 
 /** The phone's words beside `CHAT_WORDS` and the agent's (`chatPlaceholder`, `chatEmpty`, `lookingIntoIt`). */
-export const CHAT_COPY = {
-  failed: 'Chat didn’t load.',
-  feedbackFailed: 'Feedback didn’t load.',
-  settledFailed: 'The settled threads didn’t load.',
-  /** The ask sheet's button (“Ask about pve-02”): it starts a thread in Chat. */
-  askButton: 'Ask',
-  /** Under a thread's first message while the agent works on it: the mock's phone line (its face says who). */
-  working: 'Looking into it',
-} as const;
+export function chatCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    failed: t('chatRoom.chatCopy.failed'),
+    feedbackFailed: t('chatRoom.chatCopy.feedbackFailed'),
+    settledFailed: t('chatRoom.chatCopy.settledFailed'),
+    /** The ask sheet's button (“Ask about pve-02”): it starts a thread in Chat. */
+    askButton: t('chatRoom.chatCopy.askButton'),
+    /** Under a thread's first message while the agent works on it: the mock's phone line (its face says who). */
+    working: t('chatRoom.chatCopy.working'),
+  } as const;
+}
+export const CHAT_COPY = chatCopy();
 
 /**
  * Where a room's thread stands for its replies row (docs/decisions/chat-threads-cards.md), from its flags: the threads

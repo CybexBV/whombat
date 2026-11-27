@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LocaleTag } from '../i18n/schema.js';
 import { AccountId, BurrowId, PrincipalId } from '../ids.js';
 import { Email, Timestamp } from './common.js';
 import { AssistantPreferences } from './guides.js';
@@ -50,6 +51,8 @@ export const Preferences = z.object({
   theme: ThemePreference,
   /** IANA zone for times; null = burrow zone / device zone. */
   timeZone: z.string().min(1).nullable(),
+  /** BCP-47 locale for UI, server messages and the assistant (e.g. `en-GB`, `nl-NL`); absent/null = default English. */
+  locale: LocaleTag.nullable().optional(),
   /**
    * The agent's occasional suggestions to this person (assistant-guides.md AG-12). Absent = the defaults
    * (`DEFAULT_ASSISTANT_PREFERENCES`); `me.updatePreferences` replaces it whole.

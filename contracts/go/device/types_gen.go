@@ -418,8 +418,9 @@ type LinkWhombatsResponse struct {
 }
 
 type LinkMailSetRequest struct {
-	Offline       bool `json:"offline"`
-	Notifications bool `json:"notifications"`
+	Offline       bool    `json:"offline"`
+	Notifications bool    `json:"notifications"`
+	Locale        *string `json:"locale,omitempty"`
 }
 
 type LinkMailSetResponse struct {
@@ -434,6 +435,7 @@ type MailSendRequest struct {
 	Title   *string `json:"title,omitempty"`
 	Body    *string `json:"body,omitempty"`
 	Path    *string `json:"path,omitempty"`
+	Locale  *string `json:"locale,omitempty"`
 }
 
 type PushRegisterRequest struct {

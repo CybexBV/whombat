@@ -4,6 +4,7 @@
  * what it runs on) with the AI sign-ins (once, no polling), the box's screen (`desk.get`, AP-5860), and a managed
  * Whombat's status (`appliance.status`, read when the list shows and every five minutes for the dot).
  */
+
 import { useQuery } from '@tanstack/react-query';
 import { deskScreenLine, deskSectionShown } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
@@ -15,6 +16,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { connectionsLine } from '../data/connections';
 import { useTheAgentHere } from '../data/useAgent';
 import { useConnections } from '../data/useConnections';
+import { useI18n } from '../i18n';
 import { useManaged } from '../managed/context';
 import { overviewInput } from '../managed/thisWhombat';
 import { applianceStatusQuery } from '../managed/useApplianceStatus';
@@ -40,6 +42,7 @@ const FIVE_MINUTES = 5 * 60_000;
  * still work).
  */
 export function useApplianceLine(): ApplianceLine | null | undefined {
+  const { rawLocale } = useI18n();
   const managed = useManaged();
   const { mode, timeZone } = useBurrowBase();
   const status = useQuery({ ...applianceStatusQuery(managed), refetchInterval: FIVE_MINUTES });
@@ -53,10 +56,11 @@ export function useApplianceLine(): ApplianceLine | null | undefined {
         passkeys: null,
         app: Constants.expoConfig?.version ?? null,
         timeZone,
+        locale: rawLocale,
       }),
     );
     return managedApplianceLine(overview, updateReady(status.data));
-  }, [managed, mode, status.data, status.error, timeZone]);
+  }, [managed, mode, status.data, status.error, timeZone, rawLocale]);
 }
 
 /** The assistant's line from what the bootstrap and the AI sign-ins say. */
@@ -80,6 +84,7 @@ export function useSettingsTabDot(): 'ok' | 'warn' | 'bad' | null {
 
 /** The list's rows with their lines, as far as each part has answered. */
 export function useSettingsRows(): SettingsRowView[] {
+  const { rawLocale: locale } = useI18n();
   const { mode } = useBurrowBase();
   const { agent, ai } = useAssistantFacts();
   const appliance = useApplianceLine();
@@ -94,22 +99,25 @@ export function useSettingsRows(): SettingsRowView[] {
   // News and weather where the Whombat answers the place and the news.
   const news = placeNewsShown(useSessionProtocol());
   const screenLine = screens
-    ? screensRowLine(screens)
+    ? screensRowLine(screens, locale)
     : desk && deskSectionShown(desk)
-      ? deskScreenLine(desk.display)
+      ? deskScreenLine(desk.display, locale)
       : null;
   return useMemo(
     () =>
-      settingsRows({
-        mode,
-        agent,
-        ai,
-        appliance,
-        connections,
-        screen: screenLine === null ? null : { value: screenLine, tone: null },
-        screens: screens !== undefined,
-        news,
-      }),
-    [screenLine, screens, mode, agent, ai, appliance, connections, news],
+      settingsRows(
+        {
+          mode,
+          agent,
+          ai,
+          appliance,
+          connections,
+          screen: screenLine === null ? null : { value: screenLine, tone: null },
+          screens: screens !== undefined,
+          news,
+        },
+        locale,
+      ),
+    [screenLine, screens, mode, agent, ai, appliance, connections, news, locale],
   );
 }

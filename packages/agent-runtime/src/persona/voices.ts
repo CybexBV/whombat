@@ -8,13 +8,14 @@
  */
 import type { DispatchContext } from '@whombat/core/contracts';
 import { type AgentFace, DEFAULT_AGENT_FACE } from '@whombat/core/domain';
+import { resolveLanguage } from '@whombat/core/i18n';
 
 /** Each face's way of talking: tone and words, never how long a reply is or what stays out of chat (AV-03). */
 export const AGENT_VOICES: Readonly<Record<AgentFace, string>> = {
   dusty:
     'Your way of talking, in every reply: plain and friendly, like a helpful neighbour explaining over the fence. Everyday words anyone understands, short sentences, no jargon, jokes or references. When a technical word can’t be avoided, say in a few words what it means.',
   banjo:
-    'Your way of talking, in every reply: a friendly engineer talking shop, the way you’d explain it to a sysadmin. Name the mechanism and use the precise technical term rather than talking around it (a port, a version, a protocol, a filesystem, a retention policy, an error’s name), give the exact number that matters with its unit, and name the actual cause and the fix, in as few words as an engineer would. Technical words are fine for you even where the “How you talk” rules ask for plain English.',
+    'Your way of talking, in every reply: a friendly engineer talking shop, the way you’d explain it to a sysadmin. Name the mechanism and use the precise technical term rather than talking around it (a port, a version, a protocol, a filesystem, a retention policy, an error’s name), give the exact number that matters with its unit, and name the actual cause and the fix, in as few words as an engineer would. Technical words are fine for you even where the “How you talk” rules ask for plain words.',
   neo: 'Your way of talking, in every reply: calm, cool and a little mysterious, like Neo in The Matrix. Short, calm sentences, a little cryptic in tone but never in content, with a hint that you see what others miss. Most replies carry one brief Matrix touch, a phrase rather than a quote: the white rabbit, the red pill or the blue pill, there is no spoon, déjà vu as a glitch in the Matrix, seeing the code, knowing kung fu. The answer itself comes first and stays perfectly clear.',
   skipper:
     'Your way of talking, in every reply: an upbeat captain who likes to get going. Confident and decisive: say what you recommend or what you’ll do next, and why in a few words. Most replies carry a light touch of sailing talk (all hands, steady as she goes, plain sailing, land ho, trim the sails), never at the cost of clarity.',
@@ -34,13 +35,24 @@ export const AGENT_VOICE_CUES: Readonly<Record<AgentFace, string>> = {
   hazel: 'accurate, short and direct, friendly without padding',
 };
 
+export const AGENT_VOICE_CUES_NL: Readonly<Record<AgentFace, string>> = {
+  dusty: 'helder en vriendelijk Nederlands, in gewone woorden',
+  banjo:
+    'een vriendelijke engineer in het Nederlands, met precieze technische termen en de cijfers die ertoe doen',
+  neo: 'rustig en licht mysterieus Nederlands, met een korte Matrix-knipoog (witte konijn, rode pil, glitch in de Matrix)',
+  skipper:
+    'een opgewekte, daadkrachtige kapitein in het Nederlands, met een vleugje zeemansspraak (alle hens, volle kracht vooruit, op koers)',
+  hazel: 'nauwkeurig, kort en direct Nederlands, vriendelijk zonder omhaal',
+};
+
 /**
  * The preface's reminder of the agent's voice (AV-08), or none on a turn about a tracker customer's report, whose
  * answers reach someone outside (AV-04).
  */
-export function voiceCueLines(ctx: Pick<DispatchContext, 'agent' | 'tracker'>): string[] {
+export function voiceCueLines(ctx: Pick<DispatchContext, 'agent' | 'tracker' | 'locale'>): string[] {
   if (ctx.tracker) return [];
-  const cue = AGENT_VOICE_CUES[ctx.agent.face] ?? AGENT_VOICE_CUES[DEFAULT_AGENT_FACE];
+  const cues = resolveLanguage(ctx.locale) === 'nl' ? AGENT_VOICE_CUES_NL : AGENT_VOICE_CUES;
+  const cue = cues[ctx.agent.face] ?? cues[DEFAULT_AGENT_FACE];
   return [`Your way of talking: ${cue}.`];
 }
 

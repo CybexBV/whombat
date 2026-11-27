@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="whombat_widget_label">Whombat</string>
+  <string name="whombat_widget_description">Toont de laatste status van je Whombat en opent de app.</string>
+  <string name="whombat_widget_empty_box">Whombat</string>
+  <string name="whombat_widget_empty_status">Open Whombat</string>
+  <string name="whombat_widget_empty_as_of">Tik om de status te zien</string>
+  <string name="whombat_widget_preview_box">Thuis</string>
+  <string name="whombat_widget_preview_status">Alles in orde</string>
+  <string name="whombat_widget_preview_as_of">van 14:05</string>
+  <string name="whombat_channel_runs">Uitvoeringen bezig</string>
+  <string name="whombat_channel_runs_description">De voortgang van een uitvoering die je vroeg of volgt.</string>
+  <string name="whombat_channel_needs_you">Actie nodig</string>
+  <string name="whombat_channel_needs_you_description">Verzoeken die op je wachten, zoals een uitrol om goed te keuren.</string>
+  <string name="whombat_channel_updates">Vermeldingen en updates</string>
+  <string name="whombat_channel_updates_description">Vermeldingen en berichten van je assistent.</string>
+  <string name="whombat_notification_title">Whombat</string>
+  <string name="whombat_action_open_run">Open uitvoering</string>
+  <string name="whombat_action_details">Details</string>
+  <string name="whombat_action_review">Bekijken</string>
+  <string name="whombat_widget_as_of">van %1$s</string>
+  <string name="whombat_widget_as_of_yesterday">van gisteren %1$s</string>
+  <string name="whombat_push_message">Nieuw bericht</string>
+  <string name="whombat_push_mention">Je bent genoemd</string>
+  <string name="whombat_push_approval">Er wacht iets op jouw goedkeuring</string>
+  <string name="whombat_push_run">Een assistent heeft nieuws over een uitvoering</string>
+  <string name="whombat_push_update">Er is een update voor je Whombat</string>
+  <string name="whombat_push_backup">De back-ups van je Whombat vragen aandacht</string>
+  <string name="whombat_push_security">Een beveiligingswijziging op je Whombat</string>
+  <string name="whombat_push_generic">Whombat heeft je nodig</string>
+</resources>

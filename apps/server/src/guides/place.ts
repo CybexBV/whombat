@@ -3,6 +3,7 @@
  * and their DM with it in a burrow, the facts a guide's steps are built from, and posting the steps as the agent
  * inside a commit.
  */
+
 import {
   AssistantPreferences,
   DEFAULT_ASSISTANT_PREFERENCES,
@@ -23,6 +24,7 @@ import type { Db } from '../db/client';
 import { accounts, assistantStates, messages } from '../db/schema/index';
 import { postMessage } from '../domain/messages';
 import { personalDmId } from '../domain/personal-dm';
+import { accountLocale } from '../i18n/locale';
 import { ApiError } from '../lib/errors';
 import { type ConversationRow, loadConversationRow } from '../read/conversations';
 import { loadMessages } from '../read/messages';
@@ -117,6 +119,7 @@ export async function loadFacts(services: Services, db: Db, place: PersonalPlace
   return {
     personName: shortName(place.person),
     agentName: place.agent.name,
+    locale: await accountLocale(services, place.accountId).catch(() => undefined),
     google: {
       mode,
       enabled: mode !== 'off',

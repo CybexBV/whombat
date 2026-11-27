@@ -12,6 +12,7 @@ import {
 } from '@whombat/core/domain';
 import { keyLabel, type Tier } from '@whombat/core/keys';
 import { agentWords } from './agentName';
+import { clientTranslator } from './i18n/catalog';
 
 /** The three words. */
 export type PermissionWord = 'watch' | 'ask' | 'go';
@@ -21,6 +22,15 @@ export const PERMISSION_WORDS: Readonly<Record<PermissionWord, string>> = {
   ask: 'Ask me first',
   go: 'Go ahead',
 };
+
+export function permissionWords(locale?: string | null): Record<PermissionWord, string> {
+  const tr = clientTranslator(locale);
+  return {
+    watch: tr.t('permissions.word.watch'),
+    ask: tr.t('permissions.word.ask'),
+    go: tr.t('permissions.word.go'),
+  };
+}
 
 /** A key tier in the three words: Off is Just watch, Ask is Ask me first, On is Go ahead. */
 export const TIER_WORD: Readonly<Record<Tier, PermissionWord>> = { cannot: 'watch', ask: 'ask', can: 'go' };
@@ -59,25 +69,35 @@ export interface PermissionRow {
 }
 
 /** A server's row: watched only when none of its switches lets Whombat change anything there. */
-export function serverPermission(server: PermissionServer, agent: string): PermissionRow {
-  const N = agentWords(agent).Name;
+export function serverPermission(
+  server: PermissionServer,
+  agent: string,
+  locale?: string | null,
+): PermissionRow {
+  const tr = clientTranslator(locale);
+  const N = agentWords(agent, locale).Name;
   const rc = server.remoteControl;
   const watchOnly = !!rc && !rc.console && !rc.power && !rc.manage && !rc.hostShell;
   const word: PermissionWord = watchOnly ? 'watch' : ASKS_WORD[server.asksFirst ?? HOST_ASKS_FIRST_DEFAULT];
   const line =
     word === 'watch'
-      ? `${N} only looks at how it’s doing.`
+      ? tr.t('permissions.server.watch', { Name: N })
       : word === 'ask'
-        ? `${N} asks you before commands, restarts, updates and deleting.`
+        ? tr.t('permissions.server.ask', { Name: N })
         : server.hostsThisWhombat
-          ? `${N} goes ahead and tells you what it did. It always asks before restarting or updating ${server.name}, which runs this Whombat.`
-          : `${N} goes ahead and tells you what it did.`;
+          ? tr.t('permissions.server.goHostsThis', { Name: N, server: server.name })
+          : tr.t('permissions.server.go', { Name: N });
   return { key: `server:${server.id}`, title: server.name, word, line };
 }
 
 /** A connection's row (Look only or Manage, chosen when it was connected). */
-export function connectionPermission(conn: PermissionConnection, agent: string): PermissionRow {
-  const N = agentWords(agent).Name;
+export function connectionPermission(
+  conn: PermissionConnection,
+  agent: string,
+  locale?: string | null,
+): PermissionRow {
+  const tr = clientTranslator(locale);
+  const N = agentWords(agent, locale).Name;
   const level: ConnectionAccessLevel =
     conn.access && (CONNECTION_ACCESS_LEVELS as readonly string[]).includes(conn.access)
       ? conn.access
@@ -89,8 +109,8 @@ export function connectionPermission(conn: PermissionConnection, agent: string):
     word,
     line:
       word === 'watch'
-        ? `${N} looks and changes nothing.`
-        : `${N} makes changes. Deleting and anything risky still asks you first.`,
+        ? tr.t('permissions.connection.watch', { Name: N })
+        : tr.t('permissions.connection.go', { Name: N }),
   };
 }
 
@@ -130,34 +150,35 @@ export function keysSummary(
 }
 
 /** The page's words, the assistant by its name. */
-export function permissionsText(agent: string) {
-  const { Name: N } = agentWords(agent);
+export function permissionsText(agent: string, locale?: string | null) {
+  const tr = clientTranslator(locale);
+  const words = permissionWords(locale);
+  const { Name: N } = agentWords(agent, locale);
   return {
-    intro: `${N} learns what you’re happy with as you go: each time you answer “Always allow” or “Don’t ask again”, it shows here.`,
-    did: 'WHAT IT DID',
-    didTitle: `Everything ${N} did`,
-    didLine: 'What it changed for you, newest first. Undo works for a day.',
-    didButton: 'See it',
-    servers: 'SERVERS',
-    serversNone: 'No servers yet.',
-    connections: 'CONNECTIONS',
-    connectionsNone: 'Nothing connected yet.',
-    connectionsHow: 'Chosen when each one was connected. To change it, connect it again.',
-    signIn: `WHAT ${N.toUpperCase()} CAN SIGN IN TO`,
+    intro: tr.t('permissions.intro', { Name: N }),
+    did: tr.t('permissions.did'),
+    didTitle: tr.t('permissions.didTitle', { Name: N }),
+    didLine: tr.t('permissions.didLine'),
+    didButton: tr.t('permissions.didButton'),
+    servers: tr.t('permissions.servers'),
+    serversNone: tr.t('permissions.serversNone'),
+    connections: tr.t('permissions.connections'),
+    connectionsNone: tr.t('permissions.connectionsNone'),
+    connectionsHow: tr.t('permissions.connectionsHow'),
+    signIn: tr.t('permissions.signIn', { NAME: N.toUpperCase() }),
     signInLine: (n: number) =>
       n === 0
-        ? `${N} can’t use anything in your Vault yet.`
-        : `${N} can use ${n === 1 ? '1 sign-in' : `${n} sign-ins`} from your Vault.`,
-    signInButton: 'See them',
-    network: 'HOME NETWORK',
-    keys: 'KEYS',
-    keysLine: (word: PermissionWord) => `${PERMISSION_WORDS[word]}:`,
-    keysChange: 'Change them',
+        ? tr.t('permissions.signInNone', { Name: N })
+        : tr.tp('permissions.signInCount', n, { Name: N }),
+    signInButton: tr.t('permissions.signInButton'),
+    network: tr.t('permissions.network'),
+    keys: tr.t('permissions.keys'),
+    keysLine: (word: PermissionWord) => tr.t('permissions.keysLine', { word: words[word] }),
+    keysChange: tr.t('permissions.keysChange'),
     commands: (n: number) =>
-      n === 0 ? 'No commands always allowed.' : `${n === 1 ? '1 command' : `${n} commands`} always allowed.`,
-    /** The commands always allowed, folded under the keys until opened: its name and how many. */
-    commandsFold: 'Always allowed commands',
-    commandsCount: (n: number) => (n === 0 ? 'none yet' : String(n)),
-    serverLabel: (server: string) => `When ${N} wants to change something on ${server}`,
+      n === 0 ? tr.t('permissions.commandsNone') : tr.tp('permissions.commandsCount', n),
+    commandsFold: tr.t('permissions.commandsFold'),
+    commandsCount: (n: number) => (n === 0 ? tr.t('permissions.commandsCountNone') : String(n)),
+    serverLabel: (server: string) => tr.t('permissions.serverLabel', { Name: N, server }),
   };
 }

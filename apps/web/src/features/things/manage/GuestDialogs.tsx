@@ -11,6 +11,7 @@ import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume, HostChoices, HostGuest } from '@whombat/core/domain';
 import { useState } from 'react';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
 import styles from '../Things.module.css';
 import { Check, FormDialog, SelectField, TextField } from './fields';
 import { useManage } from './useManage';
@@ -52,7 +53,9 @@ const idError = (v: string) =>
 
 /** When a backup was made, for its dialogs (“Oct 16, 02:00”). */
 export function backupWhen(b: HostBackupVolume, timeZone?: string): string {
-  return b.created ? formatDayTime(Date.parse(b.created), timeZone) : (b.volume.split('/').pop() ?? b.volume);
+  return b.created
+    ? formatDayTime(Date.parse(b.created), timeZone, currentLocale())
+    : (b.volume.split('/').pop() ?? b.volume);
 }
 
 /* Back up now --------------------------------------------------------------------------------------- */
@@ -647,5 +650,5 @@ export function DeleteDialog({
 
 /** “Today 02:00” for a backup row. */
 export function backupMade(b: HostBackupVolume, now: number, timeZone?: string): string {
-  return b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone) : '';
+  return b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone, currentLocale()) : '';
 }

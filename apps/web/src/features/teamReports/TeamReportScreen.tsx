@@ -10,11 +10,11 @@
 import { useNavigate } from '@tanstack/react-router';
 import { WhombatLogo } from '@whombat/brand/react';
 import {
-  TEAM_REPORT_KIND_WORDS,
-  TEAM_REPORT_WORDS,
   type TeamReportEntry,
+  teamReportKindWords,
   teamReportMessageWhen,
   teamReportTimeline,
+  teamReportWords,
 } from '@whombat/client';
 import {
   teamReportErrorText,
@@ -28,12 +28,12 @@ import {
   type Bootstrap,
   TEAM_REPORT_MESSAGES_MAX,
   TEAM_REPORT_REPLY_MAX,
-  TEAM_REPORT_STATUS_WORDS,
   type TeamReport,
   type TeamReportAction,
   teamReportCanConfirmNow,
   teamReportNeedsYou,
   teamReportOpen,
+  teamReportStatusWords,
 } from '@whombat/core';
 import { Ellipsis, MessageSquareText } from 'lucide-react';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
@@ -41,6 +41,8 @@ import { useSearchUpdate } from '../../app/routing/navigation';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import { PersonAvatar } from '../messaging/PersonAvatar';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
@@ -60,6 +62,8 @@ export function TeamReportScreen({
   /** Just sent from the form: the page says so once. */
   sent?: boolean;
 }) {
+  const { tag: uiLocale } = useWebI18n();
+  const words = teamReportWords(uiLocale);
   const query = useTeamReport(burrow, reportId);
   const updateSearch = useSearchUpdate();
   // “Sent.” stays while the page is open; the address loses `?sent=1`, so a reload doesn't say it again.
@@ -74,23 +78,23 @@ export function TeamReportScreen({
   if (report)
     return <ReportPage burrow={burrow} report={report} earlier={query.earlier} justSent={justSent} />;
   return (
-    <PlacePage title={TEAM_REPORT_WORDS.title} back={<BackToReports />} screen="team-report">
+    <PlacePage title={words.title} back={<BackToReports />} screen="team-report">
       {!query.supported ? (
-        <PlaceState kind="empty" icon={MessageSquareText} title={TEAM_REPORT_WORDS.updateFirst} />
+        <PlaceState kind="empty" icon={MessageSquareText} title={words.updateFirst} />
       ) : query.error ? (
         missing ? (
-          <PlaceState kind="empty" icon={MessageSquareText} title={TEAM_REPORT_WORDS.notFound} />
+          <PlaceState kind="empty" icon={MessageSquareText} title={words.notFound} />
         ) : (
           <PlaceState
             kind="failed"
             icon={MessageSquareText}
-            title={TEAM_REPORT_WORDS.reportFailed}
+            title={words.reportFailed}
             onRetry={() => void query.refetch()}
             detail={errorDetail(query.error)}
           />
         )
       ) : (
-        <PlaceState kind="loading" icon={MessageSquareText} title={TEAM_REPORT_WORDS.loading} />
+        <PlaceState kind="loading" icon={MessageSquareText} title={words.loading} />
       )}
     </PlacePage>
   );
@@ -108,6 +112,9 @@ function ReportPage({
   earlier: number;
   justSent: boolean;
 }) {
+  const { t, tag: uiLocale } = useWebI18n();
+  const words = teamReportWords(uiLocale);
+  const TEAM_REPORT_STATUS_WORDS = useLocaleWords(teamReportStatusWords);
   const navigate = useNavigate();
   const toast = useToast();
   const act = useActTeamReport(burrow, report.id);
@@ -144,7 +151,7 @@ function ReportPage({
           <span aria-hidden="true">·</span>
           <span className={styles.kindWord}>
             <KindIcon kind={report.kind} size={14} />
-            {TEAM_REPORT_KIND_WORDS[report.kind]}
+            {teamReportKindWords(uiLocale)[report.kind]}
           </span>
           <span className={styles.status} data-needs-you={needsYou || undefined} data-report-status="">
             {TEAM_REPORT_STATUS_WORDS[report.status]}
@@ -154,30 +161,30 @@ function ReportPage({
     >
       {justSent ? (
         <p className={styles.sentNote} role="status" data-report-sent="">
-          {TEAM_REPORT_WORDS.sent}
+          {words.sent}
         </p>
       ) : null}
       <ReportTrack status={report.status} />
       {teamReportCanConfirmNow(report, Math.floor(now / 1000)) ? (
         <div className={styles.confirm} data-report-confirm="">
-          <p>{TEAM_REPORT_WORDS.confirmQuestion}</p>
+          <p>{words.confirmQuestion}</p>
           <Button variant="primary" disabled={act.isPending} onClick={() => void press('works')}>
-            {TEAM_REPORT_WORDS.works}
+            {words.works}
           </Button>
           <Button variant="secondary" disabled={act.isPending} onClick={() => void press('still_happening')}>
-            {TEAM_REPORT_WORDS.stillHappening}
+            {words.stillHappening}
           </Button>
         </div>
       ) : null}
       {earlier > 0 ? (
         <p className={styles.quiet} data-report-earlier="">
-          {TEAM_REPORT_WORDS.earlier}
+          {words.earlier}
         </p>
       ) : null}
       <Conversation burrow={burrow} report={report} earlier={earlier} />
       {teamReportOpen(report.status) ? (
         report.messages.length + earlier >= TEAM_REPORT_MESSAGES_MAX ? (
-          <p className={styles.quiet}>{TEAM_REPORT_WORDS.full}</p>
+          <p className={styles.quiet}>{words.full}</p>
         ) : (
           <ReplyBox burrow={burrow} reportId={report.id} />
         )
@@ -191,16 +198,16 @@ function ReportPage({
               setWithdrawProblem(null);
             }
           }}
-          kicker={TEAM_REPORT_WORDS.withdraw.toUpperCase()}
-          title="Withdraw this report?"
-          confirmLabel={TEAM_REPORT_WORDS.withdraw}
-          cancelLabel={TEAM_REPORT_WORDS.cancel}
+          kicker={words.withdraw.toUpperCase()}
+          title={t('teamReports.withdrawTitle')}
+          confirmLabel={words.withdraw}
+          cancelLabel={words.cancel}
           busy={act.isPending}
           error={withdrawProblem}
           onConfirm={() => {
             void press('withdraw').then((ok) => {
               if (!ok) return;
-              toast.show(TEAM_REPORT_WORDS.withdrawn);
+              toast.show(words.withdrawn);
               void navigate({ to: '/reports' });
             });
           }}
@@ -217,6 +224,7 @@ function ReportPage({
  * back to ⋯ (the dialog the choice opens gives it back there too).
  */
 function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
+  const words = useLocaleWords(teamReportWords);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -243,8 +251,8 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
         ref={button}
         type="button"
         className={styles.more}
-        aria-label={TEAM_REPORT_WORDS.more}
-        title={TEAM_REPORT_WORDS.more}
+        aria-label={words.more}
+        title={words.more}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -254,7 +262,7 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
         <Icon icon={Ellipsis} size={16} />
       </button>
       {open ? (
-        <div className={styles.menu} role="menu" id={menuId} aria-label={TEAM_REPORT_WORDS.more}>
+        <div className={styles.menu} role="menu" id={menuId} aria-label={words.more}>
           <button
             type="button"
             role="menuitem"
@@ -264,7 +272,7 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
               onWithdraw();
             }}
           >
-            {TEAM_REPORT_WORDS.withdraw}
+            {words.withdraw}
           </button>
         </div>
       ) : null}
@@ -274,15 +282,16 @@ function ReportMenu({ onWithdraw }: { onWithdraw: () => void }) {
 
 /** The conversation, oldest first, in Chat's rows. */
 function Conversation({ burrow, report, earlier }: { burrow: string; report: TeamReport; earlier: number }) {
+  const { t, tag: uiLocale } = useWebI18n();
   const { timeZone } = useBurrowContext(burrow);
   const me = useBootstrapSelect(burrow, selectMe);
   const now = useNow(60_000);
-  const entries = teamReportTimeline(report, earlier);
+  const entries = teamReportTimeline(report, earlier, uiLocale);
   return (
-    <ol className={styles.thread} aria-label="Conversation" data-report-thread="">
+    <ol className={styles.thread} aria-label={t('teamReports.conversation')} data-report-thread="">
       {entries.map((entry) => (
         <li key={entry.key}>
-          <Entry entry={entry} me={me} when={teamReportMessageWhen(entry.at, now, timeZone)} />
+          <Entry entry={entry} me={me} when={teamReportMessageWhen(entry.at, now, timeZone, uiLocale)} />
         </li>
       ))}
     </ol>
@@ -298,6 +307,7 @@ function Entry({
   me: Bootstrap['me'] | undefined;
   when: string;
 }) {
+  const words = useLocaleWords(teamReportWords);
   if (entry.kind === 'status')
     return (
       <p className={styles.statusLine} data-report-status-line="">
@@ -322,13 +332,13 @@ function Entry({
       )}
       <div className={styles.messageContent}>
         <div className={styles.messageMeta}>
-          <span className={styles.name}>{team ? TEAM_REPORT_WORDS.team : TEAM_REPORT_WORDS.you}</span>
+          <span className={styles.name}>{team ? words.team : words.you}</span>
           <span className={styles.messageTime}>{when}</span>
         </div>
         <p className={styles.text}>{entry.text}</p>
         {entry.kind === 'sent' && entry.expected.trim() ? (
           <div className={styles.expected}>
-            <span className={styles.expectedLabel}>{TEAM_REPORT_WORDS.expected}</span>
+            <span className={styles.expectedLabel}>{words.expected}</span>
             <p className={styles.text}>{entry.expected}</p>
           </div>
         ) : null}
@@ -339,6 +349,7 @@ function Entry({
 
 /** “Write to the Whombat Team”: the words stay when sending fails. */
 function ReplyBox({ burrow, reportId }: { burrow: string; reportId: string }) {
+  const words = useLocaleWords(teamReportWords);
   const reply = useReplyTeamReport(burrow, reportId);
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
@@ -358,14 +369,14 @@ function ReplyBox({ burrow, reportId }: { burrow: string; reportId: string }) {
   return (
     <form className={styles.reply} onSubmit={(e) => void send(e)} data-report-reply="">
       <label className={styles.srOnly} htmlFor={id}>
-        {TEAM_REPORT_WORDS.reply}
+        {words.reply}
       </label>
       <textarea
         id={id}
         className={styles.textarea}
         rows={3}
         maxLength={TEAM_REPORT_REPLY_MAX}
-        placeholder={TEAM_REPORT_WORDS.reply}
+        placeholder={words.reply}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -382,7 +393,7 @@ function ReplyBox({ burrow, reportId }: { burrow: string; reportId: string }) {
       ) : null}
       <div className={styles.replyActions}>
         <Button type="submit" variant="primary" disabled={!text.trim() || reply.isPending}>
-          {reply.isPending ? TEAM_REPORT_WORDS.sending : TEAM_REPORT_WORDS.replySend}
+          {reply.isPending ? words.sending : words.replySend}
         </Button>
       </div>
     </form>

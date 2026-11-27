@@ -5,9 +5,10 @@
  * account has none for it) and keeps the envelope at control, shares the print page, shares the file. A locked kit is
  * confirmed at once (`recovery.kit.confirm`); a printed or saved one after “I’ve saved the kit”, as before.
  */
+
 import {
   accountOf,
-  BACKUP_OPTIONS_TEXT,
+  backupOptionsText,
   type ControlApi,
   confirmationSignature,
   type KitBackup,
@@ -25,6 +26,7 @@ import {
 import { type ApplianceSession, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FileIcon, type LucideIcon, Printer, Square, SquareCheck, UserKey } from '../ui/icons';
@@ -39,11 +41,9 @@ import {
   kitPrintHtml,
   type KitWays as Ways,
 } from './backupOptions';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { phoneLabel } from './env';
 import { ErrorLine, Frame, Note } from './ui';
-
-const K = BACKUP_OPTIONS_TEXT.kit;
 
 /** Shares the kit's print page (an HTML file the share sheet hands to a browser or a printer app; AP-6857). */
 export interface KitPrinter {
@@ -69,6 +69,10 @@ export interface KitWaysProps {
 }
 
 export function KitWays(props: KitWaysProps) {
+  const { rawLocale } = useI18n();
+  const K = backupOptionsText(rawLocale).kit;
+  const managedCopyHere = managedCopy(rawLocale);
+
   const { session, control, platform, appliancePeerId } = props;
   const prf = !!platform?.prf && !!control;
   const [ways, setWays] = useState<Ways>(() => initialKitWays(prf));
@@ -114,6 +118,7 @@ export function KitWays(props: KitWaysProps) {
   const lock = async (kitTextNow: string, generation: number): Promise<boolean> => {
     if (!platform || !control) return false;
     const added = await setUpOnePasskey({
+      locale: rawLocale,
       session,
       control,
       platform,
@@ -150,7 +155,7 @@ export function KitWays(props: KitWaysProps) {
           setError(
             e instanceof PasskeyError && e.code === 'unsupported'
               ? K.noPrf
-              : (passkeyErrorText(e) ?? COPY.claim.errors.failed),
+              : (passkeyErrorText(e) ?? managedCopyHere.claim.errors.failed),
           );
           return;
         }
@@ -159,7 +164,12 @@ export function KitWays(props: KitWaysProps) {
         try {
           await props.printer.print(
             `whombat-recovery-kit-${props.device}.html`,
-            kitPrintHtml({ name: props.applianceName, kitText: t, qrPayload: kitQrPayload(t) }),
+            kitPrintHtml({
+              name: props.applianceName,
+              kitText: t,
+              qrPayload: kitQrPayload(t),
+              locale: rawLocale,
+            }),
           );
         } catch {
           setError(BACKUP_PHONE_TEXT.printFailed);
@@ -178,43 +188,47 @@ export function KitWays(props: KitWaysProps) {
       if (locked) await confirm();
       else setKept(true);
     } catch {
-      setError(COPY.claim.errors.failed);
+      setError(managedCopyHere.claim.errors.failed);
     } finally {
       setBusy(false);
     }
   };
 
-  const primary = kitPrimary(ways);
+  const primary = kitPrimary(ways, rawLocale);
   const back = props.onBack ? { back: { label: BACKUP_PHONE_TEXT.back, onPress: props.onBack } } : {};
 
   if (kept)
     return (
-      <Frame kicker={COPY.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
+      <Frame kicker={managedCopyHere.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
         <Note text={K.saved} />
         <ErrorLine text={error} />
         <Button
-          label={COPY.kit.confirm}
+          label={managedCopyHere.kit.confirm}
           size="lg"
           busy={busy}
           onPress={() => {
             setBusy(true);
             setError(null);
             confirm()
-              .catch(() => setError(COPY.claim.errors.failed))
+              .catch(() => setError(managedCopyHere.claim.errors.failed))
               .finally(() => setBusy(false));
           }}
         />
-        <Button label={COPY.kit.downloadAgain} variant="secondary" onPress={() => setKept(false)} />
+        <Button
+          label={managedCopyHere.kit.downloadAgain}
+          variant="secondary"
+          onPress={() => setKept(false)}
+        />
       </Frame>
     );
 
   return (
-    <Frame kicker={COPY.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
+    <Frame kicker={managedCopyHere.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
       <WaysCard ways={ways} prf={prf} onChange={setWays} />
       {ways.passkey && hasPasskey === false ? <Note text={K.noPasskey(props.applianceName)} /> : null}
       <ErrorLine text={error} />
       <Button
-        label={primary ?? BACKUP_OPTIONS_TEXT.dialog.save}
+        label={primary ?? backupOptionsText(rawLocale).dialog.save}
         size="lg"
         busy={busy || (!ready && !error)}
         disabled={!primary || !ready}
@@ -225,6 +239,8 @@ export function KitWays(props: KitWaysProps) {
 }
 
 function WaysCard({ ways, prf, onChange }: { ways: Ways; prf: boolean; onChange: (w: Ways) => void }) {
+  const { rawLocale } = useI18n();
+  const K = backupOptionsText(rawLocale).kit;
   const theme = useTheme();
   const rows: { key: keyof Ways; icon: LucideIcon; title: string; meta: string; tag?: string }[] = [
     ...(prf
@@ -234,7 +250,7 @@ function WaysCard({ ways, prf, onChange }: { ways: Ways; prf: boolean; onChange:
             icon: UserKey,
             title: K.passkey,
             meta: K.passkeyMeta,
-            tag: BACKUP_OPTIONS_TEXT.dialog.recommended,
+            tag: backupOptionsText(rawLocale).dialog.recommended,
           },
         ]
       : []),

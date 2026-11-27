@@ -287,4 +287,29 @@ describe('the calm glance now (DK-101…DK-124)', () => {
     expect(calmPreview(calm, off, 'busy', 'Home', NOW).calm.headline.tone).toBe('busy');
     expect(calmPreview(calm, off, 'wrong', 'Home', NOW).calm.hero?.server).toBe('pve-01');
   });
+
+  it('speaks the person’s language: now, while a scenario is tried, and in the preview', async () => {
+    const { sources } = fakeSources();
+    const input = await deskCalmInput(full(), new CalmReads(sources, 50), place, NOW);
+    const english = calmNow(input, show, 'everything', NOW);
+    const dutch = calmNow(input, show, 'everything', NOW, { locale: 'nl-NL' });
+    expect(english?.headline.text).toContain('wrong');
+    expect(dutch?.headline.text).toContain('mis');
+    expect(dutch?.headline.tone).toBe(english?.headline.tone);
+    // The scenario's own words too (the sample work).
+    const quiet = await deskCalmInput(
+      full({ everyLook: [], asks: [], askCount: 0, work: null, doing: null }),
+      new CalmReads(sources, 50),
+      place,
+      NOW,
+    );
+    const sample = { scenario: 'busy' as const, show, until: NOW.getTime() + 60_000 };
+    const trying = calmNow(quiet, show, 'everything', NOW, { sample, locale: 'nl-NL' });
+    expect(JSON.stringify(trying)).toContain('bijwerken');
+    expect(JSON.stringify(calmNow(quiet, show, 'everything', NOW, { sample }))).toContain('Updating');
+    const preview = calmPreview(quiet, show, 'busy', 'Home', NOW, 'nl-NL');
+    expect(preview.calm.headline.text).toContain('bezig');
+    expect(JSON.stringify(preview)).toContain('bijwerken');
+    expect(calmPreview(quiet, show, 'busy', 'Home', NOW).calm.headline.text).toContain('busy');
+  });
 });

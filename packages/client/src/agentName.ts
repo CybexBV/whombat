@@ -16,8 +16,14 @@ export function theAgentOf<P extends { kind: string }>(
   return principals?.find((p) => p.kind === 'agent') as AgentOf<P> | undefined;
 }
 
+import { clientTranslator } from './i18n/catalog';
+
 /** What the agent is called where its name isn't known yet (nothing loaded): never “Whombat”, the box. */
 export const AGENT_FALLBACK_NAME = 'your agent';
+
+export function agentFallbackName(locale?: string | null): string {
+  return clientTranslator(locale).t('agent.fallbackName');
+}
 
 /** The words that mean the agent, with its name. */
 export interface AgentWords {
@@ -51,23 +57,24 @@ export interface AgentWords {
   feedbackSub: string;
 }
 
-export function agentWords(name: string | null | undefined): AgentWords {
-  const n = name?.trim() || AGENT_FALLBACK_NAME;
+export function agentWords(name: string | null | undefined, locale?: string | null): AgentWords {
+  const tr = clientTranslator(locale);
+  const n = name?.trim() || tr.t('agent.fallbackName');
   const N = n.charAt(0).toUpperCase() + n.slice(1);
   return {
     name: n,
     Name: N,
-    ask: `Ask ${n}`,
-    askPlaceholder: `Ask ${n} to check, change or set up anything…`,
-    askShort: `Ask ${n}…`,
-    reply: `Reply to ${n}…`,
-    nameHint: `One word with a capital first letter. ${N} answers you in your chat and looks after your servers and connections.`,
-    renamed: (to) => `${N} is now called ${to}.`,
-    newFace: `${N} has a new face and way of talking.`,
-    chatSub: `You and ${n} · every question gets its own thread`,
-    chatPlaceholder: `Ask ${n} anything`,
-    chatEmpty: `Ask ${n} anything. Each question gets its own thread.`,
-    lookingIntoIt: `${N} is looking into it`,
-    feedbackSub: `Reports from your websites · ${N} looks into each one`,
+    ask: tr.t('agent.ask', { name: n }),
+    askPlaceholder: tr.t('agent.askPlaceholder', { name: n }),
+    askShort: tr.t('agent.askShort', { name: n }),
+    reply: tr.t('agent.reply', { name: n }),
+    nameHint: tr.t('agent.nameHint', { Name: N }),
+    renamed: (to) => tr.t('agent.renamed', { Name: N, to }),
+    newFace: tr.t('agent.newFace', { Name: N }),
+    chatSub: tr.t('agent.chatSub', { name: n }),
+    chatPlaceholder: tr.t('agent.chatPlaceholder', { name: n }),
+    chatEmpty: tr.t('agent.chatEmpty', { name: n }),
+    lookingIntoIt: tr.t('agent.lookingIntoIt', { Name: N }),
+    feedbackSub: tr.t('agent.feedbackSub', { Name: N }),
   };
 }

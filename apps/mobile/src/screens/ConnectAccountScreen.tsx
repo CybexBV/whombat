@@ -13,6 +13,7 @@
  * for that page follows the account (`connect/AccountWatch.tsx`), as a connection's Connection screen lists it.
  * The web's words (`ACCOUNT_TEXT`, `REAUTH_TEXT`, `IMAP_COPY`).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { imapAvailable, imapConnection, problemText, withBurrow } from '@whombat/client';
 import { ACCOUNT_TEXT, CONNECT_FORM_TEXT } from '@whombat/client/connections';
@@ -46,9 +47,10 @@ import {
   reconnectServices,
 } from '../data/accountConnect';
 import { useBurrow, useViewContext } from '../data/BurrowProvider';
-import { CONNECT_SCREEN_TEXT } from '../data/connectForm';
+import { connectScreenText } from '../data/connectForm';
 import { connectionLogo, connectionsWebPath } from '../data/connections';
 import { useWebUrl } from '../data/useWebUrl';
+import { useI18n, useMobileT } from '../i18n';
 import { holdPhoneConnect } from '../managed/connectReturn';
 import { useManaged } from '../managed/context';
 import { type AccountPage, connectErrorOf, isAccountPage } from '../navigation/connectionLinks';
@@ -71,6 +73,9 @@ import { showFailure, showNotice } from './feedback';
 type Props = NativeStackScreenProps<RootStackParamList, 'ConnectAccount'>;
 
 export function ConnectAccountScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
   const insets = useSafeAreaInsets();
   const { page, thingId } = route.params;
   const [back] = useState(() => route.params.back ?? backUnder(navigation.getState(), route.key));
@@ -89,7 +94,7 @@ export function ConnectAccountScreen({ route, navigation }: Props) {
     return (
       <Screen>
         <BackBar label={back} onPress={goBack} />
-        <ErrorState text={CONNECT_SCREEN_TEXT.unknown} />
+        <ErrorState text={connectScreenTextHere.unknown} />
       </Screen>
     );
   const header = <Head page={page} />;
@@ -168,6 +173,10 @@ function ProviderAccount({
   below: ReactNode;
   error: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrow();
   const { now, timeZone } = useViewContext();
@@ -191,9 +200,12 @@ function ProviderAccount({
       <Panel footer={null}>
         {header}
         {status.error ? (
-          <ErrorState text="Your connections didn’t load." onRetry={() => void status.refetch()} />
+          <ErrorState
+            text={tMobile('screens.your-connections-didnt-load')}
+            onRetry={() => void status.refetch()}
+          />
         ) : (
-          <SkeletonRows count={2} lines={2} label={CONNECT_SCREEN_TEXT.loading} />
+          <SkeletonRows count={2} lines={2} label={connectScreenTextHere.loading} />
         )}
       </Panel>
     );
@@ -212,7 +224,7 @@ function ProviderAccount({
     if (!managed) {
       const url = webUrl(connectionsWebPath(slug, provider));
       if (url) openOutside(url);
-      else setProblem(CONNECT_SCREEN_TEXT.demo);
+      else setProblem(connectScreenTextHere.demo);
       return;
     }
     holdPhoneConnect({ device: managed.applianceId });
@@ -223,7 +235,7 @@ function ProviderAccount({
         if (result.status === 'ok') openOutside(result.data.authorizeUrl);
       }
     } catch (err) {
-      setProblem(problemText(err, ACCOUNT_TEXT.couldNotStart(name)));
+      setProblem(problemText(err, ACCOUNT_TEXT.couldNotStart(name), rawLocale));
     }
   }
 
@@ -340,7 +352,7 @@ function ProviderAccount({
                     {check.isPending
                       ? ACCOUNT_TEXT.checking
                       : connection.checkedAt
-                        ? `Checked ${formatAgo(connection.checkedAt, now, timeZone)}`
+                        ? `Checked ${formatAgo(connection.checkedAt, now, timeZone, rawLocale)}`
                         : ACCOUNT_TEXT.notChecked}
                   </Text>
                   <Button
@@ -381,11 +393,12 @@ function ServicePicker({
   locked: readonly ConnectorService[];
   disabled: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const all = providerServices(provider);
   return (
     <View
-      accessibilityLabel="Services to connect"
+      accessibilityLabel={tMobile('screens.services-to-connect')}
       style={{
         borderRadius: 12,
         borderWidth: 1,
@@ -453,15 +466,22 @@ function ImapPage({
   bottomInset: number;
   onOpenProvider: (provider: 'google' | 'microsoft') => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const status = useConnectors({}, { retry: false });
   if (!status.data)
     return (
       <Panel footer={null}>
         {header}
         {status.error ? (
-          <ErrorState text="Your connections didn’t load." onRetry={() => void status.refetch()} />
+          <ErrorState
+            text={tMobile('screens.your-connections-didnt-load')}
+            onRetry={() => void status.refetch()}
+          />
         ) : (
-          <SkeletonRows count={2} lines={2} label={CONNECT_SCREEN_TEXT.loading} />
+          <SkeletonRows count={2} lines={2} label={connectScreenTextHere.loading} />
         )}
       </Panel>
     );
@@ -470,7 +490,7 @@ function ImapPage({
     return (
       <Panel footer={null}>
         {header}
-        <Note>{'Update this Whombat to connect other email.'}</Note>
+        <Note>{tMobile('screens.update-this-whombat-to-connect-other-email')}</Note>
       </Panel>
     );
   if (status.data.mode === 'off')
@@ -490,6 +510,9 @@ function ImapPage({
 /* GitHub and Website feedback ------------------------------------------------------------------------------------ */
 
 function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrow();
   const github = useGitHubStatus({ params: { burrow: slug } }, { retry: false });
@@ -501,7 +524,7 @@ function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) 
     <Panel footer={null}>
       {header}
       {!gh && !github.error ? (
-        <SkeletonRows count={1} lines={2} label={CONNECT_SCREEN_TEXT.loading} />
+        <SkeletonRows count={1} lines={2} label={connectScreenTextHere.loading} />
       ) : gh?.mode === 'off' ? (
         <Note>{BUILTIN_TEXT.github.off}</Note>
       ) : (
@@ -531,6 +554,9 @@ function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) 
 }
 
 function FeedbackPage({ header, below }: { header: ReactNode; below: ReactNode }) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrow();
   const list = useFeedbackIntegrations({ params: { burrow: slug } }, { retry: false });
@@ -539,7 +565,7 @@ function FeedbackPage({ header, below }: { header: ReactNode; below: ReactNode }
     <Panel footer={null}>
       {header}
       {!list.data && !list.error ? (
-        <SkeletonRows count={2} lines={1} label={CONNECT_SCREEN_TEXT.loading} />
+        <SkeletonRows count={2} lines={1} label={connectScreenTextHere.loading} />
       ) : items.length === 0 ? (
         <Note>{BUILTIN_TEXT.feedback.none}</Note>
       ) : (

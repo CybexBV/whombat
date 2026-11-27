@@ -52,6 +52,7 @@ import {
   useBlockCount,
   useEnv,
   useImage,
+  useScreenWords,
 } from './parts';
 import { METER_TONES, type OwnWidget, type WidgetType } from './specs';
 import type {
@@ -75,10 +76,9 @@ import type {
   ScreenCalm,
 } from './types';
 import { WeatherIcon } from './WeatherIcon';
+import { weatherAmountText } from './weather';
 import s from './widgets.module.css';
-import { clockText, dateText, fillWords, SCREEN_WORDS, weekdayText } from './words';
-
-const W = SCREEN_WORDS;
+import { clockText, dateText, fillWords, screenNumberText, screenWords, weekdayText } from './words';
 
 export interface WidgetViewProps {
   widget: Pick<DeskWidget, 'id' | 'type' | 'opts'> & { ref?: string | undefined };
@@ -143,10 +143,10 @@ function FitLine({
 /* Whombat's own ---------------------------------------------------------------------------------------------------- */
 
 function ClockBody({ w, h, pw, ph, now }: { w: number; h: number; pw: number; ph: number; now: number }) {
-  const { timeZone } = useEnv();
+  const { timeZone, locale } = useEnv();
   const form = clockForm(w, h);
   const size = clockSizes(form, pw, ph);
-  const time = clockText(now, timeZone);
+  const time = clockText(now, timeZone, locale);
   const at = time.indexOf(':');
   return (
     <div className={cx(s.ck, form === 'row' && s.ckRow)}>
@@ -164,7 +164,7 @@ function ClockBody({ w, h, pw, ph, now }: { w: number; h: number; pw: number; ph
       </div>
       {form !== 'time' && (
         <div className={s.ckDate} style={{ fontSize: size.date }}>
-          {dateText(now, timeZone)}
+          {dateText(now, timeZone, locale)}
         </div>
       )}
     </div>
@@ -200,18 +200,19 @@ function MomentMark({ m }: { m: DeskMoment }) {
 
 function NowBody({ calm, w, ph }: { calm: ScreenCalm | null | undefined; w: number; ph: number }) {
   const env = useEnv();
+  const words = screenWords(env.locale);
   const moments = calm?.moments ?? [];
   const { cols, rows, done } = nowForm(w, ph, moments.length);
   const shown = moments.slice(0, cols * rows);
   const n = calm?.doneCount ?? 0;
   const doneWords =
     done && n > 0
-      ? fillWords(n === 1 ? W.now.doneOne : W.now.doneMany, { assistant: env.assistant, n })
+      ? fillWords(n === 1 ? words.now.doneOne : words.now.doneMany, { assistant: env.assistant, n })
       : null;
   return (
     <div className={s.nw}>
       <div className={s.nwHead}>
-        <span className={s.lab}>{W.own.now.name}</span>
+        <span className={s.lab}>{words.own.now.name}</span>
         {doneWords &&
           (env.onDoneToday && !env.editing ? (
             <button type="button" className={cx(s.press, s.nwDone)} onClick={env.onDoneToday}>
@@ -222,7 +223,7 @@ function NowBody({ calm, w, ph }: { calm: ScreenCalm | null | undefined; w: numb
           ))}
       </div>
       {shown.length === 0 ? (
-        <div className={s.nwEmpty}>{W.now.empty}</div>
+        <div className={s.nwEmpty}>{words.now.empty}</div>
       ) : (
         <div
           className={s.nwCards}
@@ -255,16 +256,17 @@ function NowBody({ calm, w, ph }: { calm: ScreenCalm | null | undefined; w: numb
 
 function StripChip({ srv, tall, editing }: { srv: DeskStripServer; tall: boolean; editing: boolean }) {
   const env = useEnv();
-  const say = srv.work === 'done' ? W.strip.done : srv.work === 'next' ? W.strip.next : srv.say;
-  const words = say ?? (srv.state === 'off' ? W.strip.off : undefined);
+  const words = screenWords(env.locale);
+  const say = srv.work === 'done' ? words.strip.done : srv.work === 'next' ? words.strip.next : srv.say;
+  const status = say ?? (srv.state === 'off' ? words.strip.off : undefined);
   const inner = (
     <>
       <span className={s.chipHead}>
         <Mark mark={srv.mark} name={srv.name} size={19} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{srv.name}</span>
       </span>
-      {words ? (
-        <span className={s.chipSay}>{words}</span>
+      {status ? (
+        <span className={s.chipSay}>{status}</span>
       ) : (
         srv.spark &&
         srv.spark.length > 1 && (
@@ -298,6 +300,7 @@ function StripChip({ srv, tall, editing }: { srv: DeskStripServer; tall: boolean
 
 function StripBody({ calm, w, h }: { calm: ScreenCalm | null | undefined; w: number; h: number }) {
   const env = useEnv();
+  const words = screenWords(env.locale);
   if (!calm) return null;
   const total = calm.strip.length + calm.moreStrip;
   if (total === 0) return null;
@@ -305,7 +308,7 @@ function StripBody({ calm, w, h }: { calm: ScreenCalm | null | undefined; w: num
   const list = calm.strip.slice(0, shown);
   const extra = more + (shown - list.length);
   const slots = list.length + (extra > 0 ? 1 : 0);
-  const moreText = fillWords(W.strip.more, { n: extra });
+  const moreText = fillWords(words.strip.more, { n: extra });
   return (
     <div className={s.sp} style={{ gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))` }}>
       {list.map((srv) => (
@@ -324,7 +327,8 @@ function StripBody({ calm, w, h }: { calm: ScreenCalm | null | undefined; w: num
 }
 
 function WorkBody({ v, w, h, ph }: { v: DeskListView | undefined; w: number; h: number; ph: number }) {
-  const { assistant } = useEnv();
+  const { assistant, locale } = useEnv();
+  const words = screenWords(locale);
   const rows = v?.rows ?? [];
   const done = rows.filter((r) => r.tone === 'ok').length;
   const nowAt = rows.findIndex((r) => r.tone !== 'ok');
@@ -333,14 +337,14 @@ function WorkBody({ v, w, h, ph }: { v: DeskListView | undefined; w: number; h: 
       <Header
         mark={<Face size={24} />}
         name={assistant}
-        right={w >= 3 && rows.length > 0 ? fillWords(W.work.steps, { done, n: rows.length }) : undefined}
+        right={w >= 3 && rows.length > 0 ? fillWords(words.work.steps, { done, n: rows.length }) : undefined}
       />
       {v?.head ? (
         <div className={s.mid} style={{ whiteSpace: 'nowrap' }}>
           {v.head}
         </div>
       ) : (
-        rows.length === 0 && <div className={s.d}>{v?.empty ?? W.list.empty}</div>
+        rows.length === 0 && <div className={s.d}>{v?.empty ?? words.list.empty}</div>
       )}
       {v?.progress !== undefined && <Bar pct={v.progress} colour="face" />}
       {h >= 2 && rows.length > 0 && (
@@ -352,7 +356,7 @@ function WorkBody({ v, w, h, ph }: { v: DeskListView | undefined; w: number; h: 
               </span>
               <span className={s.rwL}>{r.title}</span>
               <span className={s.rwS}>
-                {r.meta ?? (r.tone === 'ok' ? '' : i === nowAt ? W.work.now : W.work.next)}
+                {r.meta ?? (r.tone === 'ok' ? '' : i === nowAt ? words.work.now : words.work.next)}
               </span>
             </div>
           ))}
@@ -363,13 +367,14 @@ function WorkBody({ v, w, h, ph }: { v: DeskListView | undefined; w: number; h: 
 }
 
 function ComingBody({ v, h, ph }: { v: DeskListView | undefined; h: number; ph: number }) {
+  const words = useScreenWords();
   const rows = v?.rows ?? [];
   const first = rows[0];
   return (
     <>
-      <Header mark={<IconTile name="cal" />} name={W.own.coming.name} />
+      <Header mark={<IconTile name="cal" />} name={words.own.coming.name} />
       {!first ? (
-        <div className={s.d}>{v?.empty ?? W.list.empty}</div>
+        <div className={s.d}>{v?.empty ?? words.list.empty}</div>
       ) : h === 1 ? (
         <>
           <div className={s.big} style={{ fontSize: 28 }}>
@@ -385,16 +390,19 @@ function ComingBody({ v, h, ph }: { v: DeskListView | undefined; h: number; ph: 
 }
 
 function DoneBody({ v, h, ph }: { v: DeskListView | undefined; h: number; ph: number }) {
-  const { assistant } = useEnv();
+  const { assistant, locale } = useEnv();
+  const words = screenWords(locale);
   const rows = v?.rows ?? [];
   const n = v?.count ?? rows.length;
   const title =
-    n === 0 ? W.own.done.name : fillWords(n === 1 ? W.now.doneOne : W.now.doneMany, { assistant, n });
+    n === 0
+      ? words.own.done.name
+      : fillWords(n === 1 ? words.now.doneOne : words.now.doneMany, { assistant, n });
   return (
     <>
       <Header mark={<IconTile name="check" />} name={title} />
       {rows.length === 0 ? (
-        <div className={s.d}>{v?.empty ?? W.done.empty}</div>
+        <div className={s.d}>{v?.empty ?? words.done.empty}</div>
       ) : h === 1 ? (
         <div className={s.mid} style={{ whiteSpace: 'nowrap' }}>
           {rows[0]?.title}
@@ -649,6 +657,7 @@ function RowMark({ r, size }: { r: DeskViewRow; size: number }) {
  * of how it is.
  */
 function MeterRows({ v, pw, ph }: { v: DeskListView; pw: number; ph: number }) {
+  const words = useScreenWords();
   const form = meterRowsForm(pw);
   // The padding, the header and the space under it.
   const used = 30 + 24 + 8;
@@ -657,7 +666,7 @@ function MeterRows({ v, pw, ph }: { v: DeskListView; pw: number; ph: number }) {
   const shown = v.rows.slice(0, fit.count);
   const keys = v.rows.some((r) => r.meters?.some((m) => m.key));
   const more = v.count !== undefined ? v.count : v.rows.length;
-  const right = v.head ?? (more > shown.length ? fillWords(W.list.count, { n: more }) : undefined);
+  const right = v.head ?? (more > shown.length ? fillWords(words.list.count, { n: more }) : undefined);
   return (
     <>
       <ViewHeader v={v} right={right} />
@@ -745,16 +754,17 @@ function MeterBlocks({ m }: { m: DeskViewMeter }) {
 }
 
 function ListBody({ v, w, h, pw, ph }: { v: DeskListView; w: number; h: number; pw: number; ph: number }) {
+  const words = useScreenWords();
   const form = listForm(h);
   if (form === 'rows' && v.rows.some((r) => r.meters?.length)) return <MeterRows v={v} pw={pw} ph={ph} />;
   const corner = headInCorner(v.head);
   const count =
-    v.count !== undefined && v.count > v.rows.length ? fillWords(W.list.count, { n: v.count }) : null;
+    v.count !== undefined && v.count > v.rows.length ? fillWords(words.list.count, { n: v.count }) : null;
   if (v.rows.length === 0 && !v.head)
     return (
       <>
         <ViewHeader v={v} />
-        <div className={s.empty}>{v.empty ?? W.list.empty}</div>
+        <div className={s.empty}>{v.empty ?? words.list.empty}</div>
       </>
     );
   if (form === 'line') {
@@ -806,7 +816,7 @@ function ListBody({ v, w, h, pw, ph }: { v: DeskListView; w: number; h: number; 
         </div>
       )}
       {v.rows.length === 0 ? (
-        <div className={s.empty}>{v.empty ?? W.list.empty}</div>
+        <div className={s.empty}>{v.empty ?? words.list.empty}</div>
       ) : timed ? (
         <TimeRows rows={v.rows} max={max} />
       ) : (
@@ -833,12 +843,13 @@ function PostersBody({
   pw: number;
   ph: number;
 }) {
+  const words = useScreenWords();
   const form = postersForm(v, w, h);
   if (v.items.length === 0)
     return (
       <>
         <ViewHeader v={v} />
-        <div className={s.empty}>{v.empty ?? W.list.empty}</div>
+        <div className={s.empty}>{v.empty ?? words.list.empty}</div>
       </>
     );
   if (form === 'count')
@@ -990,14 +1001,15 @@ function ChartBody({ v, h }: { v: DeskChartView; h: number }) {
 }
 
 function CameraBody({ v, h }: { v: DeskCameraView; h: number }) {
-  const { timeZone } = useEnv();
+  const { timeZone, locale } = useEnv();
+  const words = screenWords(locale);
   const url = useImage(v.locked ? undefined : v.image);
   if (v.locked)
     return (
       <div className={s.cam}>
         <div className={s.camLocked}>
           <span>{v.title}</span>
-          <span>{W.locked.hidden}</span>
+          <span>{words.locked.hidden}</span>
         </div>
       </div>
     );
@@ -1007,7 +1019,7 @@ function CameraBody({ v, h }: { v: DeskCameraView; h: number }) {
       <div className={s.camTop}>
         <Mark mark={v.mark} name={v.name ?? v.title} size={22} />
         <span>{v.title}</span>
-        {v.at && <span className={s.camTime}>{clockText(Date.parse(v.at), timeZone)}</span>}
+        {v.at && <span className={s.camTime}>{clockText(Date.parse(v.at), timeZone, locale)}</span>}
       </div>
       {h >= 2 && v.event && (
         <div className={s.camEvent}>
@@ -1024,7 +1036,8 @@ function CameraBody({ v, h }: { v: DeskCameraView; h: number }) {
  * no motion between them (the box draws in software). Editing shows the first and holds still.
  */
 function PhotoBody({ v, h }: { v: DeskPhotoView; h: number }) {
-  const { editing } = useEnv();
+  const { editing, locale } = useEnv();
+  const words = screenWords(locale);
   const [at, setAt] = useState(0);
   const n = v.items.length;
   useEffect(() => {
@@ -1041,7 +1054,7 @@ function PhotoBody({ v, h }: { v: DeskPhotoView; h: number }) {
       <div className={s.cam}>
         <div className={s.camLocked}>
           <span>{v.title}</span>
-          <span>{W.locked.hidden}</span>
+          <span>{words.locked.hidden}</span>
         </div>
       </div>
     );
@@ -1065,6 +1078,7 @@ function PhotoBody({ v, h }: { v: DeskPhotoView; h: number }) {
 
 /** A board: its tiles in a grid that fills the widget, each its tone's dot, its name and a short value. */
 function BoardBody({ v, w, pw, ph }: { v: DeskBoardView; w: number; pw: number; ph: number }) {
+  const words = useScreenWords();
   // A short head goes in the header's corner; a longer one over the tiles, or in the corner when the widget is one
   // cell high and wide enough, else not at all.
   const low = ph < 200;
@@ -1075,7 +1089,7 @@ function BoardBody({ v, w, pw, ph }: { v: DeskBoardView; w: number; pw: number; 
     return (
       <>
         <ViewHeader v={v} right={corner} />
-        <div className={s.empty}>{v.empty ?? W.list.empty}</div>
+        <div className={s.empty}>{v.empty ?? words.list.empty}</div>
       </>
     );
   // The padding, the header and its gap, and the line over the tiles take this much.
@@ -1107,7 +1121,7 @@ function BoardBody({ v, w, pw, ph }: { v: DeskBoardView; w: number; pw: number; 
           </div>
         ))}
         {form.more > 0 && (
-          <div className={cx(s.bt, s.btMore)}>{fillWords(W.strip.more, { n: form.more })}</div>
+          <div className={cx(s.bt, s.btMore)}>{fillWords(words.strip.more, { n: form.more })}</div>
         )}
       </div>
     </>
@@ -1127,6 +1141,8 @@ function ServerBody({
   pw: number;
   ph: number;
 }) {
+  const { locale } = useEnv();
+  const words = screenWords(locale);
   const down = !!v.problem || v.state === 'bad' || v.state === 'off';
   const form = serverForm(w, h, down);
   const header = (right?: ReactNode) => (
@@ -1138,7 +1154,7 @@ function ServerBody({
       <>
         {header(w >= 3 ? v.line : undefined)}
         <div className={cx(s.big, off ? s.cOff : s.cBad)} style={{ fontSize: 28 }}>
-          {v.problem?.text ?? capital(v.say ?? (off ? W.server.off : W.server.bad))}
+          {v.problem?.text ?? capital(v.say ?? (off ? words.server.off : words.server.bad))}
         </div>
         {(v.problem?.detail ?? v.line) && <div className={s.d}>{v.problem?.detail ?? v.line}</div>}
       </>
@@ -1156,22 +1172,22 @@ function ServerBody({
     return (
       <div className={cx(s.meters, tight && s.metersTight)}>
         <Meter
-          k={W.server.keys.cpu}
-          label={W.server.processor}
+          k={words.server.keys.cpu}
+          label={words.server.processor}
           pct={v.cpu}
           at={METER_TONES.cpu}
           count={count}
         />
         <Meter
-          k={W.server.keys.memory}
-          label={W.server.memory}
+          k={words.server.keys.memory}
+          label={words.server.memory}
           pct={v.memory}
           at={METER_TONES.memory}
           count={count}
         />
         <Meter
-          k={W.server.keys.disk}
-          label={W.server.disk}
+          k={words.server.keys.disk}
+          label={words.server.disk}
           pct={v.disk}
           at={METER_TONES.storage}
           count={count}
@@ -1180,16 +1196,16 @@ function ServerBody({
     );
   };
   const spark = v.spark && v.spark.length > 1 ? v.spark : null;
-  const range = W.server.ranges[v.range ?? '24h'];
+  const range = words.server.ranges[v.range ?? '24h'];
   if (form === 'figure')
     return (
       <>
         {header()}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
           <div className={s.big}>
-            {v.cpu ?? '–'}&nbsp;%
+            {v.cpu === undefined ? '–' : screenNumberText(v.cpu, locale)}&nbsp;%
             <div className={s.d} style={{ marginTop: 2 }}>
-              {W.server.cpu}
+              {words.server.cpu}
             </div>
           </div>
           <div style={{ flex: 1, height: 40, paddingBottom: 6, marginBottom: 14 }}>
@@ -1218,7 +1234,7 @@ function ServerBody({
             style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', marginTop: 16 }}
           >
             <div className={s.d} style={{ margin: '0 0 6px' }}>
-              {fillWords(W.server.chart, { range })}
+              {fillWords(words.server.chart, { range })}
             </div>
             <div className={s.chartBox}>
               <Line series={[{ points: spark, colour: 'var(--ok)' }]} fill minSpan={20} floor={0} />
@@ -1245,7 +1261,7 @@ function ServerBody({
         </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div className={s.d} style={{ margin: '0 0 6px' }}>
-            {fillWords(W.server.chart, { range })}
+            {fillWords(words.server.chart, { range })}
           </div>
           <div className={s.chartBox} style={{ maxHeight: ph - 30 - 44 - (tall ? 34 : 0) }}>
             {spark && (
@@ -1270,13 +1286,12 @@ function TextBody({ v }: { v: DeskTextView }) {
 
 /* The weather and the news ------------------------------------------------------------------------------------------ */
 
-/** A temperature as a person writes it: a true minus sign below zero (“−4°”), not a hyphen. */
-const minus = (t: number) => (t < 0 ? `\u2212${-t}` : `${t}`);
-const degrees = (t: number) => `${minus(t)}°`;
+const degrees = (t: number, locale?: string) => `${weatherAmountText(t, locale)}°`;
 
 /** The next hours as columns: “Now”, then each hour's time, its sign and its temperature (and its rain, with `rain`). */
 function WeatherHours({ v, inner, rain }: { v: DeskWeatherView; inner: number; rain?: boolean }) {
-  const { timeZone } = useEnv();
+  const { timeZone, locale } = useEnv();
+  const words = screenWords(locale);
   const picks = weatherHourPicks(v.hours.length, inner);
   return (
     <div className={s.wxHours} style={{ gridTemplateColumns: `repeat(${picks.length}, minmax(0, 1fr))` }}>
@@ -1287,13 +1302,15 @@ function WeatherHours({ v, inner, rain }: { v: DeskWeatherView; inner: number; r
         return (
           <div key={hour.at} className={s.wxHour}>
             <span className={s.wxAt}>
-              {n === 0 ? W.weather.now : clockText(Date.parse(hour.at), timeZone)}
+              {n === 0 ? words.weather.now : clockText(Date.parse(hour.at), timeZone, locale)}
             </span>
             <WeatherIcon symbol={hour.symbol} size={28} />
-            <b>{degrees(hour.temp)}</b>
+            <b>{degrees(hour.temp, locale)}</b>
             {rain && (
               <span className={s.wxWet}>
-                {wet ? fillWords(W.weather.rain, { mm: hour.rainMm ?? 0 }) : ''}
+                {wet
+                  ? fillWords(words.weather.rain, { mm: weatherAmountText(hour.rainMm ?? 0, locale) })
+                  : ''}
               </span>
             )}
           </div>
@@ -1305,6 +1322,8 @@ function WeatherHours({ v, inner, rain }: { v: DeskWeatherView; inner: number; r
 
 /** The days ahead as rows: the day, its sign, its rain, its lowest and highest on the week's scale. */
 function WeatherDays({ v, max, inner }: { v: DeskWeatherView; max: number; inner: number }) {
+  const { locale } = useEnv();
+  const words = screenWords(locale);
   // A narrow card leaves the rain out rather than squeeze it.
   const rain = inner >= 420;
   const days = v.days.slice(0, max);
@@ -1315,21 +1334,23 @@ function WeatherDays({ v, max, inner }: { v: DeskWeatherView; max: number; inner
     <div className={s.wxDays}>
       {days.map((d, i) => (
         <div key={d.date} className={cx(s.wxDay, !rain && s.wxDayDry)}>
-          <span className={s.wxDayName}>{i === 0 ? W.weather.today : weekdayText(d.date)}</span>
+          <span className={s.wxDayName}>{i === 0 ? words.weather.today : weekdayText(d.date, locale)}</span>
           <WeatherIcon symbol={d.symbol} size={26} />
           {rain && (
             <span className={s.wxWet}>
-              {d.rainMm !== undefined && d.rainMm >= 0.1 ? fillWords(W.weather.rain, { mm: d.rainMm }) : ''}
+              {d.rainMm !== undefined && d.rainMm >= 0.1
+                ? fillWords(words.weather.rain, { mm: weatherAmountText(d.rainMm, locale) })
+                : ''}
             </span>
           )}
-          <span className={s.wxLow}>{degrees(d.low)}</span>
+          <span className={s.wxLow}>{degrees(d.low, locale)}</span>
           <span className={s.wxRange} aria-hidden="true">
             <i
               className={s.wxSpan}
               style={{ left: `${((d.low - lo) / span) * 100}%`, right: `${((hi - d.high) / span) * 100}%` }}
             />
           </span>
-          <b className={s.wxHigh}>{degrees(d.high)}</b>
+          <b className={s.wxHigh}>{degrees(d.high, locale)}</b>
         </div>
       ))}
     </div>
@@ -1353,7 +1374,8 @@ function WeatherBody({
   pw: number;
   ph: number;
 }) {
-  const { timeZone } = useEnv();
+  const { timeZone, locale } = useEnv();
+  const words = screenWords(locale);
   const form = weatherForm(w, h);
   const now = v.now;
   const head = <Header mark={<IconTile name="weather" />} name={v.place ?? v.title} />;
@@ -1361,16 +1383,22 @@ function WeatherBody({
     return (
       <>
         {head}
-        <div className={s.empty}>{v.place ? W.weather.problem : W.weather.noPlace}</div>
+        <div className={s.empty}>{v.place ? words.weather.problem : words.weather.noPlace}</div>
       </>
     );
-  const temp = degrees(now.temp);
+  const temp = degrees(now.temp, locale);
   const today = v.today;
   const short = today
-    ? fillWords(W.weather.short, { high: minus(today.high), low: minus(today.low) })
+    ? fillWords(words.weather.short, {
+        high: weatherAmountText(today.high, locale),
+        low: weatherAmountText(today.low, locale),
+      })
     : undefined;
   const highLow = today
-    ? fillWords(W.weather.highLow, { high: minus(today.high), low: minus(today.low) })
+    ? fillWords(words.weather.highLow, {
+        high: weatherAmountText(today.high, locale),
+        low: weatherAmountText(today.low, locale),
+      })
     : undefined;
   const inner = pw - 36;
   const credit = weatherCredit(w, h) && <div className={s.wxCredit}>{v.credit}</div>;
@@ -1410,22 +1438,24 @@ function WeatherBody({
     );
   const feels = [
     now.feels !== undefined && now.feels !== now.temp
-      ? fillWords(W.weather.feels, { t: minus(now.feels) })
+      ? fillWords(words.weather.feels, { t: weatherAmountText(now.feels, locale) })
       : null,
     now.wind,
   ]
     .filter((x): x is string => !!x)
     .join(' · ');
   const chance =
-    today?.rainChance !== undefined ? fillWords(W.weather.rainChance, { n: today.rainChance }) : null;
+    today?.rainChance !== undefined
+      ? fillWords(words.weather.rainChance, { n: weatherAmountText(today.rainChance, locale) })
+      : null;
   const sun = v.sun?.polar
     ? v.sun.polar === 'day'
-      ? W.weather.polarDay
-      : W.weather.polarNight
+      ? words.weather.polarDay
+      : words.weather.polarNight
     : v.sun?.rise && v.sun.set
-      ? fillWords(W.weather.sun, {
-          rise: clockText(Date.parse(v.sun.rise), timeZone),
-          set: clockText(Date.parse(v.sun.set), timeZone),
+      ? fillWords(words.weather.sun, {
+          rise: clockText(Date.parse(v.sun.rise), timeZone, locale),
+          set: clockText(Date.parse(v.sun.set), timeZone, locale),
         })
       : null;
   if (form === 'block') {
@@ -1482,14 +1512,15 @@ function WeatherBody({
 
 /** The news (a list): each headline with its site and when, the first one alone when the widget is one cell high. */
 function NewsBody({ v, h, ph }: { v: DeskListView | undefined; h: number; ph: number }) {
+  const words = useScreenWords();
   const rows = v?.rows ?? [];
   const meta = (r: DeskViewRow) => [r.detail, r.time].filter(Boolean).join(' · ');
   const first = rows[0];
   return (
     <>
-      <Header mark={<IconTile name="news" />} name={v?.title ?? W.own.news.name} />
+      <Header mark={<IconTile name="news" />} name={v?.title ?? words.own.news.name} />
       {!first ? (
-        <div className={s.empty}>{v?.empty ?? W.news.empty}</div>
+        <div className={s.empty}>{v?.empty ?? words.news.empty}</div>
       ) : h === 1 ? (
         <>
           <div className={cx(s.mid, s.nwsOne)}>{first.title}</div>
@@ -1530,21 +1561,23 @@ function OwnOrViewHeader({ type, v }: { type: WidgetType; v: DeskWidgetView }) {
   return <ViewHeader v={v} />;
 }
 
-function ownName(type: OwnWidget, assistant: string): string {
-  return fillWords(W.own[type].name, { assistant });
-}
-
 /** The words a widget's button says: what it is. */
 export function widgetLabel(
   widget: Pick<DeskWidget, 'type'>,
   view: DeskWidgetView | undefined,
   assistant: string,
+  locale?: string | null,
 ): string {
   if (view) return view.name && view.name !== view.title ? `${view.name} · ${view.title}` : view.title;
-  return widget.type in W.own ? ownName(widget.type as OwnWidget, assistant) : widget.type;
+  const words = screenWords(locale);
+  const own = words.own[widget.type as OwnWidget];
+  return own
+    ? fillWords(own.name, { assistant })
+    : (words.widget[widget.type as keyof typeof words.widget] ?? widget.type);
 }
 
 function Body(props: WidgetViewProps) {
+  const words = useScreenWords();
   const { widget, view: v, calm, w, h, pw, ph } = props;
   // Whombat's own keep their sign and name over what they say instead.
   const head = v && <OwnOrViewHeader type={widget.type} v={v} />;
@@ -1563,7 +1596,7 @@ function Body(props: WidgetViewProps) {
     return (
       <>
         {head}
-        <div className={s.locked}>{W.locked.hidden}</div>
+        <div className={s.locked}>{words.locked.hidden}</div>
       </>
     );
   switch (widget.type) {
@@ -1604,7 +1637,7 @@ function Body(props: WidgetViewProps) {
       return v.items.length === 0 ? (
         <>
           <ViewHeader v={v} />
-          <div className={s.empty}>{v.empty ?? W.list.empty}</div>
+          <div className={s.empty}>{v.empty ?? words.list.empty}</div>
         </>
       ) : (
         <PhotoBody v={v} h={h} />
@@ -1621,7 +1654,7 @@ function useTouch(props: WidgetViewProps): { label: string; onPress: () => void 
   const env = useEnv();
   const { widget, view } = props;
   if (env.editing || props.big) return null;
-  const label = widgetLabel(widget, view, env.assistant);
+  const label = widgetLabel(widget, view, env.assistant, env.locale);
   if (widget.type === 'clock' || widget.type === 'now' || widget.type === 'strip') return null;
   if (widget.type === 'status') return env.onAttention ? { label, onPress: env.onAttention } : null;
   if (view?.locked) return env.onUnlock ? { label, onPress: env.onUnlock } : null;

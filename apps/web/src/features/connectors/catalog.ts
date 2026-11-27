@@ -8,13 +8,13 @@
 import { connectionReason, connectionState, type StateTone } from '@whombat/client/connections';
 import {
   CATALOG_CATEGORIES,
-  CATALOG_CATEGORY_LABELS,
   type CatalogCategory,
   type CatalogEntry,
   type CatalogEntryStatus,
   type ConnectionToolTier,
   type ConnectionToolView,
   type ConnectionView,
+  catalogCategoryLabels,
   catalogEntry,
   connectionHost,
 } from '@whombat/core/domain';
@@ -47,6 +47,7 @@ export {
 } from '@whombat/client/connections';
 
 import { addressReasonNote, addressReasonOf, CATALOG_REASON_TEXT } from '@whombat/client/connections';
+import { currentLocale } from '../../i18n/provider';
 
 /* The overview (CX-70) ------------------------------------------------------------------------- */
 
@@ -228,6 +229,7 @@ export function matchesWords(text: string, q: string): boolean {
 
 /** Whether a tile matches the search box: its name, line or category, any word in any order. */
 export function matchesSearch(entry: Pick<CatalogEntry, 'name' | 'description' | 'category'>, q: string) {
+  const CATALOG_CATEGORY_LABELS = catalogCategoryLabels(currentLocale());
   return matchesWords(`${entry.name} ${entry.description} ${CATALOG_CATEGORY_LABELS[entry.category]}`, q);
 }
 
@@ -235,6 +237,7 @@ export function matchesSearch(entry: Pick<CatalogEntry, 'name' | 'description' |
 export function groupByCategory<T extends { category: CatalogCategory }>(
   items: readonly T[],
 ): { category: CatalogCategory; label: string; items: T[] }[] {
+  const CATALOG_CATEGORY_LABELS = catalogCategoryLabels(currentLocale());
   return CATALOG_CATEGORIES.map((category) => ({
     category,
     label: CATALOG_CATEGORY_LABELS[category],

@@ -24,6 +24,7 @@ import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
 import type { EditCtx } from '../guest/EditDialog';
 import { Row } from '../guest/editParts';
 import { Card, Empty, ErrorLine } from '../parts';
@@ -119,7 +120,7 @@ export function IncusGuestBackups({
       title="Backups"
       meta={
         newest
-          ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(Date.parse(newest), Date.now(), timeZone)}`
+          ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(Date.parse(newest), Date.now(), timeZone, currentLocale())}`
           : undefined
       }
       link={
@@ -223,7 +224,9 @@ export function IncusBackupTable({
                   ) : null}
                 </td>
                 <td className={cx(styles.num, styles.dropXs)}>
-                  {b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone) : DASH}
+                  {b.created
+                    ? formatRelativeDay(Date.parse(b.created), now, timeZone, currentLocale())
+                    : DASH}
                 </td>
                 <td className={cx(styles.muted, styles.dropL)}>{expiryText(backupExpiresAt(b), now)}</td>
                 <td className={cx(styles.num, styles.dropXl)}>

@@ -3,10 +3,10 @@
  * (`claimPakeResponder`): right and wrong letters, a card, a man in the middle, backoff, and the words for each.
  */
 import { claimConfirmEqual, claimPakeResponder } from '@whombat/protocol/claim';
-import { claimSecretHash, normalizeClaimSecret } from '@whombat/protocol/session';
+import { claimSecretHash, LOCALE_MINOR, normalizeClaimSecret } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { OperationError } from '../session/managed-ops';
-import type { ApplianceSession, OperationResponse } from '../session/types';
+import type { ApplianceSession, OperationResponse, SessionInfo } from '../session/types';
 import {
   ClaimMismatchError,
   type ClaimRequest,
@@ -44,7 +44,13 @@ interface FakeBox {
  */
 function fakeSession(
   box: FakeBox,
-  opts: { seenClient?: string; seenAppliance?: string; lying?: boolean } = {},
+  opts: {
+    seenClient?: string;
+    seenAppliance?: string;
+    lying?: boolean;
+    protocol?: SessionInfo['protocol'];
+    onClaim?: (input: unknown) => void;
+  } = {},
 ): ApplianceSession {
   let begun: {
     claimId: string;
@@ -58,6 +64,7 @@ function fakeSession(
   });
   const session = {
     close() {},
+    state: () => ({ status: 'open', info: { protocol: opts.protocol } }),
     async invoke(op: string, input: unknown): Promise<OperationResponse> {
       box.calls.push(op);
       const i = input as Record<string, string>;
@@ -82,6 +89,7 @@ function fakeSession(
         return { status: 200, body: { share: r.share }, requestId: 'r' };
       }
       if (op === 'enroll.claim') {
+        opts.onClaim?.(input);
         if (!begun) return err(409, 'claim_begin_missing');
         const ok = claimConfirmEqual(begun.tags.client, i.confirm as string);
         if (!ok && !opts.lying) {
@@ -274,6 +282,25 @@ describe('claimAppliance', () => {
     });
     expect(starts[0]).toMatchObject({ method: 'card', device: DEVICE, terms: TERMS });
     expect(JSON.stringify(starts)).not.toContain(SECRET);
+  });
+
+  it.each([20, LOCALE_MINOR])('gates the claim locale on protocol 5.%i', async (minor) => {
+    const claims: unknown[] = [];
+    await claimAppliance({
+      control: control(() => {}),
+      orgId: 'org_1',
+      request: { method: 'code', device: DEVICE, letters: 'KXQM' },
+      openSession: async () =>
+        fakeSession(newBox(), { protocol: { major: 5, minor }, onClaim: (input) => claims.push(input) }),
+      terms: TERMS,
+      clientPeerId: CLIENT,
+      account: { name: 'Mara', email: 'mara@example.com' },
+      endpoint: { label: 'Chrome', platform: 'web' },
+      locale: 'nl-be',
+    });
+    expect(claims).toHaveLength(1);
+    if (minor === 20) expect(claims[0]).not.toHaveProperty('locale');
+    else expect(claims[0]).toHaveProperty('locale', 'nl-BE');
   });
 
   it('a box that isn’t nearby any more is told apart; control’s refusals have words', async () => {

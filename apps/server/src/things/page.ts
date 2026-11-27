@@ -43,6 +43,8 @@ import { connectorsOf } from '../connections/views';
 import { catalogConnections } from '../db/schema/index';
 import { DEVICE_CATALOG_ID, type DeviceSkillRow, skillById, skillOfConnection } from '../devices/store';
 import { listChanges } from '../home/changes';
+import { burrowLocale } from '../i18n/locale';
+import { localizeTree } from '../i18n/phrases';
 import { withUptime } from '../incidents/history';
 import { notFound } from '../lib/errors';
 import { liveResearches } from '../looks/research';
@@ -548,6 +550,22 @@ export function refreshOf(view: Pick<KindView, 'refreshS' | 'refreshing'>): numb
 
 /** `things.page`: the page of a thing the viewer may see, over `range` (a range it doesn't offer: 24 hours). */
 export async function thingPage(
+  services: Services,
+  viewer: ConnectionViewer,
+  value: string,
+  timeZone: string,
+  range: PageRange = DEFAULT_RANGE,
+): Promise<ThingPage> {
+  const page = await thingPageInEnglish(services, viewer, value, timeZone, range);
+  // Kinds write their pages in English; the person reads them in their own language.
+  return localizeTree(page, await burrowLocale(services, viewer.burrowId));
+}
+
+/**
+ * The page as the kinds write it, in English: for readers that take its words apart (the desk's widgets), which say
+ * the result in the person's language themselves.
+ */
+export async function thingPageInEnglish(
   services: Services,
   viewer: ConnectionViewer,
   value: string,

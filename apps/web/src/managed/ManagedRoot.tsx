@@ -20,7 +20,6 @@ import {
   type ApplianceRegistry,
   type ApplianceSummary,
   type ClaimRequest,
-  COPY,
   type ControlSession,
   claimAppliance,
   claimErrorText,
@@ -92,6 +91,9 @@ import { ThemeProvider } from '../app/theme';
 import { Button } from '../components/Button';
 import { AccountMobilePage, PhoneLinkPage, PublicMobilePage } from '../features/mobile';
 import { WHATS_NEW_MARKDOWN } from '../features/whatsNew/changelog';
+import { claimantLocale } from '../i18n/locale';
+import { COPY } from '../i18n/managed';
+import { useWebI18n, useWebLocaleControl, WebI18nProvider } from '../i18n/provider';
 import { LEGAL_PAGES, LegalPage } from '../legal/LegalPage';
 import { ApplianceApp } from './ApplianceApp';
 import { BringBackFlow } from './BringBack';
@@ -183,6 +185,8 @@ function enrollSession(env: ManagedEnvironment, target: Omit<ConnectTarget, 'cha
 }
 
 export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
+  // Reads the language so a change draws the sign-in and claim screens again without losing where they are.
+  useWebI18n();
   const [path, navigate] = useLocation();
   const [cloud, setCloud] = useState<ControlSession | null | 'loading'>('loading');
   const [key, setKey] = useState<EndpointKey | null | 'unsupported' | 'weakKey'>(null);
@@ -392,7 +396,8 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
   const legal = LEGAL_PAGES[url.pathname];
   if (legal) return <LegalPage text={legal} />;
   // What's new is public too: the phone opens it in the browser, and a link to it works for anyone.
-  if (whatsNewPage && url.pathname === WHATS_NEW_PATH) return <LegalPage text={WHATS_NEW_MARKDOWN} />;
+  if (whatsNewPage && url.pathname === WHATS_NEW_PATH)
+    return <LegalPage text={WHATS_NEW_MARKDOWN} governing={false} />;
   // A phone sign-in QR code opened in a browser (AP-526): public, and never redeemed here; its fragment stays on this
   // page (never a sign-in's `next`).
   if (url.pathname === PHONE_SIGNIN_PATH) return <PhoneLinkPage loadDownload={loadAndroid} />;
@@ -906,25 +911,36 @@ function SignedIn({
     );
   if (path === '/appliances/claim' || path === '/claim')
     return (
-      <ClaimFlow
-        env={env}
-        orgId={orgId}
-        keyPair={keyPair}
-        cloud={cloud}
-        found={foundNearby}
-        onClaimed={(device, name, peerId, accountId) => {
-          held.claimCard.clear();
-          // The claim is the one source that may replace a pin: CPace proved this identity (AP-63, AP-68).
-          registry.put(
-            { device, orgId, name, peerId, pinSource: 'claim', enrolled: true, kitPending: false, accountId },
-            { replacePin: true },
-          );
-          registry.setLastUsed(device);
-          // A new Whombat or one brought back (backup-options.md AP-6830); then Connect your AI and the Whombat. Where
-          // backups go is Needs you's proposal, not a step here, and there's no recovery kit at the claim (BX-01).
-          navigate(`/appliances/${device}/start`);
-        }}
-      />
+      <WebI18nProvider scope="visitor">
+        <ClaimFlow
+          env={env}
+          orgId={orgId}
+          keyPair={keyPair}
+          cloud={cloud}
+          found={foundNearby}
+          onClaimed={(device, name, peerId, accountId) => {
+            held.claimCard.clear();
+            // The claim is the one source that may replace a pin: CPace proved this identity (AP-63, AP-68).
+            registry.put(
+              {
+                device,
+                orgId,
+                name,
+                peerId,
+                pinSource: 'claim',
+                enrolled: true,
+                kitPending: false,
+                accountId,
+              },
+              { replacePin: true },
+            );
+            registry.setLastUsed(device);
+            // A new Whombat or one brought back (backup-options.md AP-6830); then Connect your AI and the Whombat. Where
+            // backups go is Needs you's proposal, not a step here, and there's no recovery kit at the claim (BX-01).
+            navigate(`/appliances/${device}/start`);
+          }}
+        />
+      </WebI18nProvider>
     );
   if (startMatch?.[1]) {
     const known = registry.get(decodeURIComponent(startMatch[1]));
@@ -1376,6 +1392,7 @@ function ClaimFlow({
   found: NearbyClaimStep | null;
   onClaimed: (device: string, name: string | null, peerId: string, accountId: string) => void;
 }) {
+  const localeControl = useWebLocaleControl();
   const [step, setStep] = useState<ClaimStep>(found ?? { kind: 'looking' });
   const handedOver = useRef(found);
   /** Bumped by “Look again”: asks `claims.nearby` once more. */
@@ -1424,6 +1441,9 @@ function ClaimFlow({
         clientPeerId: keyPair.peerId,
         account: { name: cloud.account.name ?? typedName, email: cloud.account.email },
         endpoint: { label: browserLabel(), platform: 'web' },
+        // The claimant's own language becomes the new account's, never one this browser kept for another box (a box
+        // that predates languages ignores it).
+        locale: claimantLocale(localeControl?.chosenLocale() ?? null),
       });
       // Only now, with the appliance's confirmation checked, is its PeerId pinned (CC-07).
       onClaimed(r.device, null, r.peerId, r.accountId);
@@ -1926,8 +1946,10 @@ function RecoverFlow({
 
 export function ManagedApp({ env }: { env: ManagedEnvironment }) {
   return (
-    <ThemeProvider>
-      <ManagedRoot env={env} />
-    </ThemeProvider>
+    <WebI18nProvider>
+      <ThemeProvider>
+        <ManagedRoot env={env} />
+      </ThemeProvider>
+    </WebI18nProvider>
   );
 }

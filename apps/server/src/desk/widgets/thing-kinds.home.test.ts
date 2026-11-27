@@ -4,9 +4,10 @@
  * cameras; UniFi's internet and devices; Pi-hole's and AdGuard's blocked today. Pure: the kinds' own builders, laid out
  * as a page, through the widgets' runtime.
  */
-import type { ThingControl } from '@whombat/core';
+import type { DeskWidgetRef, DeskWidgetSpec, ThingControl, ThingPage } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { CatalogConnectionRow } from '../../connections/types';
+import { localizeTree } from '../../i18n/phrases';
 import {
   type AccessSnapshot,
   accessData,
@@ -86,6 +87,7 @@ import { detectionOf, type KeptEvent } from '../../things/kinds/home/protect-eve
 import { emptySnapshot, haView, NO_POINTS } from '../../things/kinds/homeassistant';
 import { unifiDevice, unifiGateway, unifiView } from '../../things/kinds/unifi';
 import { homeWidgetPrivate } from './home';
+import { screenViews, viewPictures } from './resolve';
 import { as, groupOn, NOW, pageOf, panelOn, pictureRef, TZ, viewsOn } from './thing-testing';
 
 const row = (catalogId: string) =>
@@ -678,5 +680,76 @@ describe('Home Assistant in slots', () => {
       'Devices',
       'Automations',
     ]);
+  });
+});
+
+/** UniFi Access's page from its recorded answers, with today's openings (who came in by which door and how). */
+function accessPage(): ThingPage {
+  const rules = new Map(Object.entries(ACCESS_rules).map(([id, r]) => [id, accessData(r)]));
+  const s: AccessSnapshot = {
+    readAt: NOW,
+    doors: parseDoors(accessData(ACCESS_doors), rules).map((d, i) => (i < 2 ? { ...d, locked: false } : d)),
+    devices: parseAccessDevices(accessData(ACCESS_devices)),
+    openings: parseOpenings(accessData(ACCESS_logs)),
+    moreOpenings: false,
+    openingsTotal: 2,
+  };
+  const view = accessView(s, { now: NOW, timeZone: TZ, openSince: new Map() }, { row: row('unifi_access') });
+  return pageOf(view, { catalogId: 'unifi_access', name: 'UniFi Access' });
+}
+
+/** Every widget *Add a widget* offers for a page, placed on one screen and drawn locked in `locale`. */
+async function lockedScreen(page: ThingPage, locale: string) {
+  const group = await groupOn(page);
+  const specs: DeskWidgetSpec[] = group.items.map((item, i) => ({
+    id: `w_${i}`,
+    type: item.type,
+    ref: page.id as DeskWidgetRef,
+    opts: item.opts,
+  }));
+  const resolved = await viewsOn(page, specs);
+  return { specs, resolved, views: screenViews(specs, resolved, 'summary', undefined, locale) };
+}
+
+describe('a locked screen, in English and in Dutch', () => {
+  const pages = (page: ThingPage) => [
+    { how: 'English page', page },
+    // A page already said in Dutch must be kept off the same way: privacy never reads its words.
+    { how: 'Dutch page', page: localizeTree(page, 'nl-NL') },
+  ];
+
+  it('shows nobody who came in, no unlocked doors and no way in from UniFi Access', async () => {
+    const page = accessPage();
+    // The page itself does say them: the lock is what keeps them off.
+    expect(JSON.stringify(page)).toContain('Anna de Vries');
+    expect(JSON.stringify(page)).toContain('kept unlocked');
+    for (const { how, page: shown } of pages(page))
+      for (const locale of ['en-GB', 'nl-NL']) {
+        const { views, resolved, specs } = await lockedScreen(shown, locale);
+        expect(views.length, `${how} ${locale}`).toBe(resolved.size);
+        const said = JSON.stringify(views);
+        expect(said, `${how} ${locale}`).not.toMatch(/Anna|de Vries/);
+        expect(said, `${how} ${locale}`).not.toMatch(/kept unlocked|unlocked|ontgrendeld|niet op slot/i);
+        expect(said, `${how} ${locale}`).not.toMatch(/\b(card|PIN|phone wallet|remotely|kaart|pincode)\b/);
+        expect(said, `${how} ${locale}`).not.toMatch(/Main Door|A2 Door|Door 3855/);
+        // Every widget that shows a person or a door is locked, whatever words it has.
+        for (const panel of ['people', 'inventory', 'doors', 'today']) {
+          const spec = specs.find((x) => x.opts?.panel === panel && !x.opts.item);
+          expect(spec && resolved.get(spec.id)?.private, `${panel} ${how} ${locale}`).toBe(true);
+        }
+      }
+  });
+
+  it('shows nobody’s whereabouts, no lock and no camera from Home Assistant', async () => {
+    const page = haHousePage();
+    expect(JSON.stringify(page)).toMatch(/Anna/);
+    for (const { how, page: shown } of pages(page))
+      for (const locale of ['en-GB', 'nl-NL']) {
+        const { views } = await lockedScreen(shown, locale);
+        const said = JSON.stringify(views);
+        expect(said, `${how} ${locale}`).not.toMatch(/Anna|\bSam\b|\bWork\b/);
+        expect(said, `${how} ${locale}`).not.toMatch(/\b(Locked|Unlocked|Op slot|Niet op slot)\b/);
+        expect(viewPictures(views).size, `${how} ${locale}`).toBe(0);
+      }
   });
 });

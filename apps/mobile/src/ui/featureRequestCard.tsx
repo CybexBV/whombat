@@ -9,6 +9,7 @@
  * what was decided at once, and it folds into its line when the server re-sends it. Opened from its line it is the same
  * card with what was decided in place of the buttons, and “Hide card”.
  */
+
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
@@ -21,7 +22,7 @@ import {
 } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { useApiMutation } from '@whombat/client/react';
-import { api, FEATURE_REQUEST_WORDS, type FeatureDecisionChoice } from '@whombat/core';
+import { api, type FeatureDecisionChoice, featureRequestWords } from '@whombat/core';
 import { useRef, useState } from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -30,6 +31,7 @@ import {
   FEATURE_CARD_HINTS,
   featureRequestCardView,
 } from '../data/featureRequest';
+import { useI18n } from '../i18n';
 import { errorText, outcomeText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -54,6 +56,9 @@ export function FeatureRequestCardView({
   /** Opened from its line: “Hide card” returns the line. */
   collapse?: (() => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const featureRequestWordsHere = featureRequestWords(rawLocale);
+
   const theme = useTheme();
   const { slug, people } = useBurrowBase();
   const qc = useQueryClient();
@@ -68,7 +73,7 @@ export function FeatureRequestCardView({
   // What the server answered, until it re-sends the card (which then shows as its line).
   const [answered, setAnswered] = useState<CardView | null>(null);
   const shown = view.waiting ? (answered ?? view) : view;
-  const W = FEATURE_REQUEST_WORDS;
+  const W = featureRequestWordsHere;
 
   const send = (choice: FeatureDecisionChoice, text?: string) => {
     if (busy) return;

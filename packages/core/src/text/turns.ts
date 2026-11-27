@@ -5,15 +5,11 @@
  */
 import type { TurnFailureCode } from '../domain/dispatch.js';
 import { TURN_FAILURE_REASON_MAX } from '../domain/dispatch.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { type DateInput, formatClock } from './time.js';
 import { formatResetTime } from './usage.js';
 
-/** The provider a turn ran on, as people know it (`codex` is ChatGPT, CT-1450). */
-const PROVIDER_NAMES: Record<string, string> = {
-  claude: 'Claude',
-  codex: 'ChatGPT',
-  local: 'the custom AI model',
-};
+const KNOWN_PROVIDERS = new Set(['claude', 'codex', 'local']);
 
 export interface TurnFailureTextOptions {
   /** The agent's provider (`claude`, `codex`, …); unnamed when absent or unknown. */
@@ -23,6 +19,8 @@ export interface TurnFailureTextOptions {
   /** For the reset time: now and the reader's zone (the burrow's when the message is for everyone). */
   now?: DateInput;
   timeZone?: string;
+  /** The reader's language (English when absent). */
+  locale?: string | null;
 }
 
 /**
@@ -30,69 +28,83 @@ export interface TurnFailureTextOptions {
  * then press Try again.” At most `TURN_FAILURE_REASON_MAX` characters.
  */
 export function turnFailureText(code: TurnFailureCode, options: TurnFailureTextOptions = {}): string {
-  const name = options.provider ? PROVIDER_NAMES[options.provider] : undefined;
-  const provider = name ?? 'the AI provider';
+  const tr = coreTranslator(options.locale);
+  const known = options.provider && KNOWN_PROVIDERS.has(options.provider) ? options.provider : null;
+  const name = known ? tr.t(`turn.provider.${known as 'claude' | 'codex' | 'local'}`) : undefined;
+  const provider = name ?? tr.t('turn.provider.unknown');
   let text: string;
   switch (code) {
     case 'signin':
-      text = `I couldn’t start because ${provider} isn’t set up or signed in for this. Sign in under Settings → AI sign-in, then press Try again.`;
+      text = tr.t('turn.signin', { provider });
       break;
     case 'usage_limit': {
-      const limit = name && options.provider !== 'local' ? `the ${name} usage limit` : 'the usage limit';
+      const limit =
+        name && options.provider !== 'local' ? tr.t('turn.namedLimit', { name }) : tr.t('turn.limit');
       if (options.resetsAt && options.timeZone) {
-        const at = formatResetTime(options.resetsAt, options.now ?? new Date(), options.timeZone);
-        const when = /^\d{2}:\d{2}$/.test(at) ? `at ${at}` : at;
-        text = `I stopped because ${limit} was reached. It resets ${when}; press Try again after that.`;
-      } else text = `I stopped because ${limit} was reached. Press Try again once it resets.`;
+        const at = formatResetTime(
+          options.resetsAt,
+          options.now ?? new Date(),
+          options.timeZone,
+          options.locale,
+        );
+        const when = /^\d{2}:\d{2}$/.test(at) ? tr.t('turn.atTime', { time: at }) : at;
+        text = tr.t('turn.usageLimitWhen', { limit, when });
+      } else text = tr.t('turn.usageLimit', { limit });
       break;
     }
     case 'provider':
-      text = `I stopped because ${provider} returned an error or isn’t available right now. Press Try again in a few minutes.`;
+      text = tr.t('turn.provider', { provider });
       break;
     case 'refused':
-      text =
-        'The model wouldn’t answer this one. Try rewording your request, or switch models for this chat, then send it again.';
-      break;
     case 'sandbox':
-      text =
-        'I couldn’t get started. Press Try again; if it keeps happening, restarting your Whombat usually fixes it.';
-      break;
     case 'timeout':
-      text = 'This took too long, so I stopped. Press Try again, or ask for a smaller piece.';
-      break;
     case 'runner':
-      text = 'I was interrupted before I could finish. Press Try again.';
-      break;
     case 'workspace':
-      text =
-        'I couldn’t open the code project. Press Try again; if it keeps failing, check GitHub under Settings → Connections.';
+      text = tr.t(`turn.${code}`);
       break;
     default:
-      text = 'Something went wrong on my side, so I stopped. Press Try again.';
+      text = tr.t('turn.internal');
   }
   return text.length > TURN_FAILURE_REASON_MAX ? `${text.slice(0, TURN_FAILURE_REASON_MAX - 1)}…` : text;
 }
 
+const TURN_FAILURE_CODES: readonly TurnFailureCode[] = [
+  'signin',
+  'usage_limit',
+  'provider',
+  'refused',
+  'sandbox',
+  'timeout',
+  'runner',
+  'workspace',
+  'internal',
+];
+
+/** The Work view's and the card's short state per code, in a locale. */
+export function turnFailureLabels(locale?: string | null): Record<TurnFailureCode, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(TURN_FAILURE_CODES.map((c) => [c, tr.t(`turn.label.${c}`)])) as Record<
+    TurnFailureCode,
+    string
+  >;
+}
+
 /** The Work view's and the card's short state per code (mono, uppercase like the other pills). */
-export const TURN_FAILURE_LABELS: Record<TurnFailureCode, string> = {
-  signin: 'NOT SIGNED IN',
-  usage_limit: 'USAGE LIMIT',
-  provider: 'AI SERVICE PROBLEM',
-  refused: 'MODEL DECLINED',
-  sandbox: 'COULDN’T START',
-  timeout: 'TOOK TOO LONG',
-  runner: 'INTERRUPTED',
-  workspace: 'PROJECT PROBLEM',
-  internal: 'FAILED',
-};
+export const TURN_FAILURE_LABELS: Record<TurnFailureCode, string> = turnFailureLabels('en');
 
 /** The card's button, and what it says once pressed (by anyone). */
 export const TURN_RETRY_LABEL = 'Try again';
 export const TURN_RETRIED_LABEL = 'Tried again';
 
+/** The retry button's words in a locale. */
+export function turnRetryLabel(locale?: string | null): string {
+  return coreTranslator(locale).t('turn.retry');
+}
+
 /** “Tried again · 14:32”: the card's state after a retry, in the reader's zone. */
-export function turnRetriedText(retriedAt: DateInput, timeZone: string): string {
-  return `${TURN_RETRIED_LABEL} · ${formatClock(retriedAt, timeZone)}`;
+export function turnRetriedText(retriedAt: DateInput, timeZone: string, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return tr.t('turn.retriedAt', { label: tr.t('turn.retried'), time: formatClock(retriedAt, timeZone) });
 }
 
 /* Stop a turn (0.55, CT-295, Whombat RF-01) ------------------------------------------------------------------- */
@@ -100,9 +112,14 @@ export function turnRetriedText(retriedAt: DateInput, timeZone: string): string 
 /** The button on “{name} is thinking”, in the profile pane's RIGHT NOW and on a Work item (`stop_turn`). */
 export const TURN_STOP_LABEL = 'Stop';
 
+/** The stop button's words in a locale. */
+export function turnStopLabel(locale?: string | null): string {
+  return coreTranslator(locale).t('turn.stop');
+}
+
 /** `DispatchSummary.reason` of a turn a person stopped: “Stopped by Mara”. */
-export function turnStoppedText(name: string): string {
-  return `Stopped by ${name}`;
+export function turnStoppedText(name: string, locale?: string | null): string {
+  return coreTranslator(locale).t('turn.stoppedBy', { name });
 }
 
 /** `dispatches.cancel` on a run's turn answers 409 with this: a run is paused, not stopped (the run line has Pause). */
@@ -111,5 +128,6 @@ export const TURN_STOP_RUN_REFUSAL = 'Pause the run instead.';
 /**
  * `DispatchSummary.reason` of a follow-up dispatch whose message was added to the agent's running turn instead
  * (steering, 0.55, CT-305): the queued turn is `cancelled` with this reason once the runner delivered the message.
+ * Stored and compared as is, so it stays English.
  */
 export const TURN_MERGED_REASON = 'Answered in the running turn';

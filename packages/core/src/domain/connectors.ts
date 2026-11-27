@@ -3,7 +3,9 @@
  * account once, for their Whombat account, and the agent uses it in turns for them (Whombat one-agent.md OA-10). The vocabulary is
  * provider-neutral (tools and keys are named by service); Google is the first provider and an adapter.
  */
+
 import { z } from 'zod';
+import { coreTree, coreWords } from '../i18n/catalog.js';
 import { ConnectionId } from '../ids.js';
 import { Email, Timestamp } from './common.js';
 
@@ -24,45 +26,63 @@ export const CONNECTOR_SERVICES = ['mail', 'calendar', 'files', 'docs', 'sheets'
 export const ConnectorService = z.enum(CONNECTOR_SERVICES);
 export type ConnectorService = z.infer<typeof ConnectorService>;
 
-export const CONNECTOR_PROVIDER_LABELS: Record<ConnectorProvider, string> = {
-  google: 'Google',
-  microsoft: 'Microsoft 365',
-  imap: 'Email (IMAP)',
-};
+const CONNECTOR_PROVIDER_LABELS_KEYS = ['google', 'microsoft', 'imap'] as const;
+
+/** `CONNECTOR_PROVIDER_LABELS` in a locale. */
+export function connectorProviderLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof CONNECTOR_PROVIDER_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'connector.provider', CONNECTOR_PROVIDER_LABELS_KEYS);
+}
+
+export const CONNECTOR_PROVIDER_LABELS: Record<ConnectorProvider, string> = connectorProviderLabels('en');
+
+const SERVICE_LABELS_KEYS = ['mail', 'calendar', 'files', 'docs', 'sheets', 'contacts'] as const;
 
 /** Provider-neutral service names. */
-export const SERVICE_LABELS: Record<ConnectorService, string> = {
-  mail: 'Mail',
-  calendar: 'Calendar',
-  files: 'Drive',
-  docs: 'Docs',
-  sheets: 'Sheets',
-  contacts: 'Contacts',
-};
+export function serviceLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof SERVICE_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'connector.service', SERVICE_LABELS_KEYS);
+}
+
+export const SERVICE_LABELS: Record<ConnectorService, string> = serviceLabels('en');
+
+const PROVIDER_SERVICE_LABELS_SHAPE = {
+  microsoft: {
+    mail: 0,
+    calendar: 0,
+    files: 0,
+    docs: 0,
+    sheets: 0,
+    contacts: 0,
+  },
+  google: {
+    mail: 0,
+    calendar: 0,
+    files: 0,
+    docs: 0,
+    sheets: 0,
+    contacts: 0,
+  },
+} as const;
 
 /**
  * What each service is called on a provider: Gmail, Google Calendar, … An IMAP account has only mail and the neutral
- * names (0.97, CT-480).
+ * names.
  */
-export const PROVIDER_SERVICE_LABELS: Record<ConnectorProvider, Record<ConnectorService, string>> = {
-  imap: SERVICE_LABELS,
-  microsoft: {
-    mail: 'Outlook Mail',
-    calendar: 'Outlook Calendar',
-    files: 'OneDrive',
-    docs: 'Word',
-    sheets: 'Excel',
-    contacts: 'Outlook Contacts',
-  },
-  google: {
-    mail: 'Gmail',
-    calendar: 'Google Calendar',
-    files: 'Google Drive',
-    docs: 'Google Docs',
-    sheets: 'Google Sheets',
-    contacts: 'Google Contacts',
-  },
-};
+export function providerServiceLabels(locale?: string | null) {
+  const words = coreTree(locale, 'connector.providerService', PROVIDER_SERVICE_LABELS_SHAPE);
+  return {
+    ...words,
+    imap: SERVICE_LABELS,
+  };
+}
+
+export const PROVIDER_SERVICE_LABELS: Record<
+  ConnectorProvider,
+  Record<ConnectorService, string>
+> = providerServiceLabels('en');
 
 /**
  * The services each provider can offer (0.97, CT-480; CM-19), in service order: Google all six, Microsoft 365 the four

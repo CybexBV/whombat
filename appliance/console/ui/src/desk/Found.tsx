@@ -5,12 +5,14 @@
  * tiles the one-line strip (frame 3). Connecting happens on the computer (DF-01); the screen only shows and offers
  * Not now (DF-04), which works locked too. Cards that arrive while the page watches fade in once (DF-10).
  */
+
 import { isBrandMark } from '@whombat/brand';
 import { BrandMark } from '@whombat/brand/react';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { useT } from '../i18n/react';
 import type { DeskFound, DeskFoundItem } from '../lib/desk';
-import { FOUND, fill, foundHead } from '../lib/deskCopy';
+import { fill, foundCopy, foundHead } from '../lib/deskCopy';
 import { FIT } from '../lib/deskFit';
 import styles from './desk.module.css';
 import { FOUND_MARKS } from './foundMarks';
@@ -59,6 +61,9 @@ function Connect({ words, appUrl }: { words: { before: string; after: string }; 
 }
 
 function NotNow({ onDismiss, className }: { onDismiss: () => void; className?: string }) {
+  const t = useT();
+  const FOUND = foundCopy(t);
+
   return (
     <button
       type="button"
@@ -120,6 +125,9 @@ function Place() {
  * them while the first scan looks), then where to connect them and Not now once it's done.
  */
 export function FoundPanel({ found, appUrl, now, latest, onDismiss, rows }: FoundProps & { rows: number }) {
+  const t = useT();
+  const FOUND = foundCopy(t);
+
   const looking = found.progress !== null;
   const places = rows * FIT.perRow;
   const items = found.items.slice(0, places);
@@ -132,7 +140,7 @@ export function FoundPanel({ found, appUrl, now, latest, onDismiss, rows }: Foun
         </span>
         <b className={styles.foundTitle}>{FOUND.title}</b>
         <div className={styles.spacer} />
-        <span className={styles.foundMeta}>{foundHead(found, now)}</span>
+        <span className={styles.foundMeta}>{foundHead(found, now, t)}</span>
         {looking && (
           <span className={styles.foundProgress} aria-hidden="true">
             <i style={{ width: `${share * 100}%` }} />
@@ -223,6 +231,9 @@ export function FoundStrip({
   onDismiss,
   alone,
 }: FoundProps & { alone: boolean }) {
+  const t = useT();
+  const FOUND = foundCopy(t);
+
   const looking = found.progress !== null;
   const { room, probe, fit } = useChipFit(found.items.length, found.count);
   const shown = found.items.slice(0, fit);
@@ -246,7 +257,7 @@ export function FoundStrip({
         <span className={styles.stripMore}>{fill(FOUND.stripMore, { k: found.count })}</span>
       </div>
       {looking ? (
-        <span className={styles.stripGo}>{foundHead(found, now)}</span>
+        <span className={styles.stripGo}>{foundHead(found, now, t)}</span>
       ) : (
         <>
           {appUrl && (

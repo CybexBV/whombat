@@ -13,8 +13,10 @@
  */
 import type { DiscoveredService } from '@whombat/core';
 import type { LiveProvider } from '@whombat/core/domain';
+import { formatLocaleList } from '@whombat/core/i18n';
 import { theAgentOf } from '../agentName';
 import type { WhombatClient } from '../http/client';
+import { clientTranslator } from '../i18n/catalog';
 import { CLIENT_NAMES } from '../signins/copy';
 import { type ClientsList, clientUsable, type SignInsList } from '../signins/model';
 
@@ -22,8 +24,11 @@ export const CLAIM_STEPS = ['claim', 'ai'] as const;
 export type ClaimStepName = (typeof CLAIM_STEPS)[number];
 
 /** “CLAIM · STEP 2 OF 2”. */
-export function claimStepKicker(step: ClaimStepName): string {
-  return `CLAIM · STEP ${CLAIM_STEPS.indexOf(step) + 1} OF ${CLAIM_STEPS.length}`;
+export function claimStepKicker(step: ClaimStepName, locale?: string | null): string {
+  return clientTranslator(locale).t('claim.stepKicker', {
+    step: CLAIM_STEPS.indexOf(step) + 1,
+    total: CLAIM_STEPS.length,
+  });
 }
 
 /** The providers Connect your AI offers, in its order: the one that needs nothing installed first. */
@@ -57,31 +62,35 @@ export function connectAiStep(input: {
   return 'ask';
 }
 
-/** “ChatGPT”, “ChatGPT and Claude Code”. */
-function names(providers: readonly LiveProvider[]): string {
-  const all = providers.map((p) => CLIENT_NAMES[p]);
-  return all.length <= 1 ? (all[0] ?? '') : `${all.slice(0, -1).join(', ')} and ${all.at(-1)}`;
+/** “ChatGPT”, “ChatGPT and Claude Code” / “ChatGPT en Claude Code”. */
+function names(providers: readonly LiveProvider[], locale?: string | null): string {
+  return formatLocaleList(
+    providers.map((p) => CLIENT_NAMES[p]),
+    locale,
+    'conjunction',
+  );
 }
 
-export const CONNECT_AI_TEXT = {
-  kicker: claimStepKicker('ai'),
-  title: 'Connect your AI',
-  sub: (assistant: string) =>
-    `${assistant} works on your own ChatGPT or Claude subscription. Sign in to one now; you can add the other later.`,
-  tip: 'You sign in on OpenAI’s or Anthropic’s own page. Whombat never sees your password.',
-  checking: 'Checking your AI sign-ins…',
-  ready: (providers: readonly LiveProvider[], assistant: string) =>
-    `Signed in to ${names(providers)}. ${assistant} is ready.`,
-  /** The one way on until an AI is signed in, as on Set up your AI. */
-  later: 'Skip for now',
-  continue: 'Continue',
-  /** The phone opens the providers' pages in its in-app browser and comes back to the step. */
-  phone: {
-    deviceHint:
-      'Copy the code, then sign in to ChatGPT on OpenAI’s page and enter it there. Close the page to come back.',
-    consoleHint: 'Approve on claude.ai, copy the code it shows, then close the page and paste it here.',
-  },
-} as const;
+export function connectAiText(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    kicker: claimStepKicker('ai', locale),
+    title: tr.t('connectAi.title'),
+    sub: (assistant: string) => tr.t('connectAi.sub', { assistant }),
+    tip: tr.t('connectAi.tip'),
+    checking: tr.t('connectAi.checking'),
+    ready: (providers: readonly LiveProvider[], assistant: string) =>
+      tr.t('connectAi.ready', { providers: names(providers, locale), assistant }),
+    later: tr.t('connectAi.later'),
+    continue: tr.t('connectAi.continue'),
+    phone: {
+      deviceHint: tr.t('connectAi.phone.deviceHint'),
+      consoleHint: tr.t('connectAi.phone.consoleHint'),
+    },
+  };
+}
+
+export const CONNECT_AI_TEXT = connectAiText();
 
 /** What the network scan found so far, and whether it is still looking (then ask again: more may come). */
 export interface ClaimFound {

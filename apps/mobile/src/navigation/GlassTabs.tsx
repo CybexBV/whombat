@@ -34,7 +34,8 @@ import {
   type TabsScreenAppearanceIOS,
   type TabsScreenItemStateAppearanceIOS,
 } from 'react-native-screens';
-import { TAB_WORDS, type Tab } from '../data/shell';
+import { type Tab, tabWords } from '../data/shell';
+import { useI18n } from '../i18n';
 import { useTheme } from '../theme/theme';
 import { GlassBarRoomContext } from './panes';
 import { systemBadgeValue, systemTabLabel, TAB_SYMBOLS } from './systemTabs';
@@ -137,6 +138,8 @@ function GlassBar({
 }) {
   const theme = useTheme();
   const badges = useBadges();
+  const { rawLocale } = useI18n();
+  const labels = tabWords(rawLocale);
   const appearance = useMemo(() => badgeAppearance(theme.colors.btn, theme.colors.btnfg), [theme]);
   // The last selection iOS confirmed; a request from the app is based on it.
   const [provenance, setProvenance] = useState(0);
@@ -171,9 +174,9 @@ function GlassBar({
           <Tabs.Screen
             key={route.key}
             screenKey={route.key}
-            title={TAB_WORDS[name]}
+            title={labels[name]}
             badgeValue={systemBadgeValue(badge)}
-            tabBarItemAccessibilityLabel={systemTabLabel(TAB_WORDS[name], badge)}
+            tabBarItemAccessibilityLabel={systemTabLabel(labels[name], badge, rawLocale)}
             nativeContainerStyle={{ backgroundColor: theme.colors.bg }}
             // Tapping the open tab again does nothing, as with our bar: Chat would jump to its first message.
             specialEffects={{ repeatedTabSelection: { popToRoot: false, scrollToTop: false } }}

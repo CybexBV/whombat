@@ -4,10 +4,10 @@
  * each tile says to TalkBack, and the phone's own words for the editor (the shared ones are `DESK_SCREENS_TEXT`). Pure.
  */
 import {
-  DESK_SCREENS_TEXT,
   type DeskCatalogItem,
   type DeskWidget,
   type DeskWidgetView,
+  deskScreensText,
   fillDeskWords,
   gridText,
   ownWidgetName,
@@ -130,8 +130,9 @@ export function tileLabel(
   view: (Pick<DeskWidgetView, 'title' | 'name' | 'mark'> & { kind?: string }) | undefined,
   known: KnownWidget | undefined,
   assistant: string,
+  locale?: string | null,
 ): TileLabel {
-  const own = ownWidgetName(w.type, assistant);
+  const own = ownWidgetName(w.type, assistant, locale);
   if (own) return { name: own, of: null, mark: null };
   const kind = view?.kind ?? known?.view;
   const drawn = kind ? { view: kind } : {};
@@ -162,9 +163,13 @@ export function tileLabel(
 }
 
 /** What TalkBack reads for a tile: “Now playing, Plex, 4 by 2, column 5, row 1”. */
-export function tileSpoken(label: TileLabel, w: Pick<DeskWidget, 'x' | 'y' | 'w' | 'h'>): string {
+export function tileSpoken(
+  label: TileLabel,
+  w: Pick<DeskWidget, 'x' | 'y' | 'w' | 'h'>,
+  locale?: string | null,
+): string {
   const name = label.of ? `${label.name}, ${label.of}` : label.name;
-  return fillDeskWords(DESK_SCREENS_TEXT.editor.widgetLabel, {
+  return fillDeskWords(deskScreensText(locale).editor.widgetLabel, {
     name,
     w: w.w,
     h: w.h,
@@ -179,10 +184,13 @@ export function tileWhere(w: Pick<DeskWidget, 'x' | 'y' | 'w' | 'h'>): string {
 }
 
 /** “From 2 × 1 to 6 × 3. It shows more as it grows.” */
-export function sizesLine(size: { min: readonly [number, number]; max: readonly [number, number] }): string {
-  return fillDeskWords(DESK_SCREENS_TEXT.editor.sizes, {
-    min: gridText(size.min[0], size.min[1]),
-    max: gridText(size.max[0], size.max[1]),
+export function sizesLine(
+  size: { min: readonly [number, number]; max: readonly [number, number] },
+  locale?: string | null,
+): string {
+  return fillDeskWords(deskScreensText(locale).editor.sizes, {
+    min: gridText(size.min[0], size.min[1], locale),
+    max: gridText(size.max[0], size.max[1], locale),
   });
 }
 

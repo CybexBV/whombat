@@ -12,12 +12,14 @@ import {
 } from '@whombat/client/hosts';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostServerDetail, HostTask } from '@whombat/core/domain';
+import { useWebI18n } from '../../../i18n/provider';
 import { Card, Empty, ErrorLine, StateCell } from '../parts';
 import styles from '../Things.module.css';
 import { showTask } from '../tasks/taskTracker';
 import { libvirtGuests } from './LibvirtBackups';
 
 export function LibvirtActivity({ burrow, detail }: { burrow: string; detail: HostServerDetail }) {
+  const { tag: uiLocale } = useWebI18n();
   const lv = detail.libvirt;
   const serverId = detail.server.id;
   const manage = detail.server.remoteControl.manage === true;
@@ -106,8 +108,8 @@ export function LibvirtActivity({ burrow, detail }: { burrow: string; detail: Ho
                         tone={taskStatusTone(t.status)}
                         text={
                           t.status === 'running'
-                            ? `Running since ${formatAgoIso(t.started, now)}`
-                            : `${TASK_STATUS_WORDS[t.status]} ${t.ended ? formatAgoIso(t.ended, now) : ''}`.trim()
+                            ? `Running since ${formatAgoIso(t.started, now, uiLocale)}`
+                            : `${TASK_STATUS_WORDS[t.status]} ${t.ended ? formatAgoIso(t.ended, now, uiLocale) : ''}`.trim()
                         }
                       />
                     </small>

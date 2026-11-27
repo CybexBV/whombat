@@ -13,7 +13,11 @@ import { toActor } from '../read/principals';
 import type { Services } from '../services';
 
 export interface TellOptions {
-  /** Says nothing when the assistant said the same words in this DM this recently (and the room wasn't cleared since). */
+  /**
+   * Says nothing when the assistant said exactly these words in this DM this recently. Only remote help's visit line
+   * asks for it, and its words are the same in every language today; a caller whose words follow the person's
+   * language must give each language's words the same key before it relies on this.
+   */
   unlessSaidWithinMs?: number | null;
 }
 

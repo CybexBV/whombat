@@ -8,12 +8,12 @@ import {
 } from '@whombat/client';
 import { useChangeWindow } from '@whombat/client/react';
 import {
-  APPROVAL_CARD_WORDS,
   type ApprovalAnswerKey,
   type ApprovalView,
   approvalAnswer,
   approvalAnswerChoices,
   approvalCardFacts,
+  approvalCardWords,
   type NameInfo,
 } from '@whombat/core/approvals';
 import type { Approval } from '@whombat/core/domain';
@@ -24,6 +24,8 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Skeleton } from '../../components/ListState';
 import { ModalClose, ModalTitle } from '../../components/Modal';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { AutomationAvatar } from '../messaging/PrincipalAvatar';
 import { AskCard } from './AskCard';
 import { AskDetails } from './AskDetails';
@@ -76,6 +78,7 @@ export function AskSheet({
   /** An automation asks (AP-997): its mark and “AN AUTOMATION IS ASKING”. */
   asker?: AutomationAsker | null;
 }) {
+  const APPROVAL_CARD_WORDS = useLocaleWords(approvalCardWords);
   const quiet = useChangeWindow(burrow);
   // The assistant's draft report (team-reports.md) goes now or not at all, and Edit opens the form with it.
   const draftId = teamReportDraftOf(approval);
@@ -88,7 +91,9 @@ export function AskSheet({
   const mayHaveGoneThrough = useUnknownAnswer(burrow, approval.number);
   const check = useAskToCheck(burrow, view.title);
   const choices =
-    view.canApprove && view.canDecline && !refreshFailed ? approvalAnswerChoices(draftId === null) : [];
+    view.canApprove && view.canDecline && !refreshFailed
+      ? approvalAnswerChoices(draftId === null, currentLocale())
+      : [];
   return (
     <div className={styles.sheet} data-screen="approval" data-phase={view.phase}>
       <SheetHead />
@@ -132,6 +137,7 @@ export function AskSheet({
 
 /** A read that went wrong: what happened, what shows, and Try again (it only reads). */
 function ReadProblem({ title, body, onRetry }: { title: string; body: string; onRetry: () => void }) {
+  const APPROVAL_CARD_WORDS = useLocaleWords(approvalCardWords);
   return (
     <section className={styles.problem} role="status">
       <h3 className={styles.problemTitle}>{title}</h3>
@@ -158,6 +164,7 @@ export function AskSheetState({
   /** A note that replaces the words (an app too old for this Whombat). */
   children?: ReactNode;
 }) {
+  const APPROVAL_CARD_WORDS = useLocaleWords(approvalCardWords);
   const W = APPROVAL_CARD_WORDS;
   return (
     <div className={styles.sheet} data-screen="approval" aria-busy={state === 'loading' || undefined}>

@@ -15,34 +15,46 @@ import {
   scheduleActions,
 } from '@whombat/core';
 import type { DotTone } from '../../components/StatusDot';
+import { liveT } from '../../i18n/live';
+import { currentLocale, type WebMessageKey, webTranslator } from '../../i18n/provider';
 
 /**
  * A run's status and its colour. Red says something doesn't work now, so a failed run, or one that needs a look, is
  * `warn`: it happened, and the automation isn't broken for it. A finished run's page says how it went
  * (`automationRunLabel`: “Finished · worked”).
  */
-export const RUN_STATUS: Record<AutomationRunStatus, { label: string; tone: DotTone }> = {
-  queued: { label: 'Queued', tone: 'mut' },
-  running: { label: 'Running', tone: 'brand' },
-  waiting: { label: 'Waiting', tone: 'warn' },
-  paused: { label: 'Paused', tone: 'warn' },
-  succeeded: { label: 'Done', tone: 'ok' },
-  failed: { label: 'Failed', tone: 'warn' },
-  cancelled: { label: 'Stopped', tone: 'mut' },
-  skipped: { label: 'Skipped', tone: 'mut' },
-  needs_review: { label: 'Needs you', tone: 'warn' },
+/** A label read in the page's language when it is shown, beside its fixed colour. */
+function liveLabel(key: WebMessageKey, tone: DotTone): { readonly label: string; tone: DotTone } {
+  return {
+    get label() {
+      return liveT(key);
+    },
+    tone,
+  };
+}
+
+export const RUN_STATUS: Record<AutomationRunStatus, { readonly label: string; tone: DotTone }> = {
+  queued: liveLabel('automations.status.queued', 'mut'),
+  running: liveLabel('automations.status.running', 'brand'),
+  waiting: liveLabel('automations.status.waiting', 'warn'),
+  paused: liveLabel('automations.status.paused', 'warn'),
+  succeeded: liveLabel('automations.status.done', 'ok'),
+  failed: liveLabel('automations.status.failed', 'warn'),
+  cancelled: liveLabel('automations.status.stopped', 'mut'),
+  skipped: liveLabel('automations.status.skipped', 'mut'),
+  needs_review: liveLabel('automations.status.needsYou', 'warn'),
 };
 
-export const STEP_STATE: Record<AutomationStepState, { label: string; tone: DotTone }> = {
-  pending: { label: 'Not yet', tone: 'mut' },
-  running: { label: 'Running', tone: 'brand' },
-  waiting: { label: 'Waiting', tone: 'warn' },
-  succeeded: { label: 'Done', tone: 'ok' },
-  failed: { label: 'Failed', tone: 'bad' },
-  skipped: { label: 'Skipped', tone: 'mut' },
-  cancelled: { label: 'Stopped', tone: 'mut' },
-  blocked: { label: 'Blocked', tone: 'bad' },
-  uncertain: { label: 'Uncertain', tone: 'bad' },
+export const STEP_STATE: Record<AutomationStepState, { readonly label: string; tone: DotTone }> = {
+  pending: liveLabel('automations.status.notYet', 'mut'),
+  running: liveLabel('automations.status.running', 'brand'),
+  waiting: liveLabel('automations.status.waiting', 'warn'),
+  succeeded: liveLabel('automations.status.done', 'ok'),
+  failed: liveLabel('automations.status.failed', 'bad'),
+  skipped: liveLabel('automations.status.skipped', 'mut'),
+  cancelled: liveLabel('automations.status.stopped', 'mut'),
+  blocked: liveLabel('automations.status.blocked', 'bad'),
+  uncertain: liveLabel('automations.status.uncertain', 'bad'),
 };
 
 export function runActive(status: AutomationRunStatus): boolean {
@@ -53,11 +65,16 @@ export function runActive(status: AutomationRunStatus): boolean {
 
 /** “Next run 09:00” today, “Next run Mon 09:00” this week, “Next run 3 Nov” later (AP-1084). */
 export function nextRunWords(nextRunAt: string, now: Date, timeZone: string): string {
+  const { t } = webTranslator(currentLocale());
   const days = -daysAgo(nextRunAt, now, timeZone);
   const clock = formatClock(nextRunAt, timeZone);
-  if (days <= 0) return `Next run ${clock}`;
-  if (days < 7) return `Next run ${formatShortWeekday(nextRunAt, timeZone)} ${clock}`;
-  return `Next run ${formatDate(nextRunAt, timeZone, { now })}`;
+  if (days <= 0) return t('automations.nextRun', { when: clock });
+  if (days < 7) {
+    return t('automations.nextRun', {
+      when: `${formatShortWeekday(nextRunAt, timeZone, currentLocale())} ${clock}`,
+    });
+  }
+  return t('automations.nextRun', { when: formatDate(nextRunAt, timeZone, { now }, currentLocale()) });
 }
 
 /* The overview (docs/app/decisions/automation-chat.md) --------------------------------------------------------------- */

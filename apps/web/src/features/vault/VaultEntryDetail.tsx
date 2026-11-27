@@ -21,9 +21,9 @@ import {
 import { useTheAgent, useVaultEntry, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import {
-  VAULT_COPY,
   type VaultEntryDetail,
   vaultCheckLine,
+  vaultCopy,
   vaultEntryShapeProblems,
   vaultRotateNotice,
   vaultSecretLine,
@@ -38,6 +38,8 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import { DangerFold } from '../settings/DangerFold';
 import { AgentAccess } from './AgentAccess';
@@ -267,6 +269,8 @@ function About({ burrow, entry }: EntryProps) {
 
 /** “Set · replaced 2 days ago” and Replace, a write-only input (VT-04, VT-71). */
 function Secret({ burrow, entry }: EntryProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const viewer = useBurrowViewer(burrow);
   const setSecret = useVaultWrite(api.vault.setSecret, burrow);
@@ -375,7 +379,9 @@ function Secret({ burrow, entry }: EntryProps) {
         </form>
       ) : (
         <div className={styles.line}>
-          <span className={styles.lineText}>{vaultSecretLine(entry, Date.now(), viewer.timeZone)}</span>
+          <span className={styles.lineText}>
+            {vaultSecretLine(entry, Date.now(), viewer.timeZone, uiLocale)}
+          </span>
           <Button
             variant="secondary"
             size="sm"
@@ -567,6 +573,8 @@ function MoveToConnections({ entry }: { entry: VaultEntryDetail }) {
 
 /** The address, how it signs in, the last check and “Check again” (VT-44). */
 function Connection({ burrow, entry }: EntryProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
+  const { tag: uiLocale } = useWebI18n();
   const viewer = useBurrowViewer(burrow);
   const check = useVaultWrite(api.vault.check, burrow);
   const [problem, setProblem] = useState<string | null>(null);
@@ -583,7 +591,9 @@ function Connection({ burrow, entry }: EntryProps) {
           data-tone={entry.check.status === 'failing' ? 'bad' : undefined}
           aria-live="polite"
         >
-          {check.isPending ? VAULT_TEXT.checking : vaultCheckLine(entry.check, Date.now(), viewer.timeZone)}
+          {check.isPending
+            ? VAULT_TEXT.checking
+            : vaultCheckLine(entry.check, Date.now(), viewer.timeZone, uiLocale)}
         </span>
         <Button
           variant="secondary"
@@ -615,6 +625,7 @@ function Connection({ burrow, entry }: EntryProps) {
  * as. Nothing tests it from here: the agent signs in with it in its browser, in your chats (HE-42).
  */
 function LoginConnection({ entry }: EntryProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const auth = entry.auth?.type === 'form' ? entry.auth : null;
   return (
     <div className={styles.block}>
@@ -629,6 +640,7 @@ function LoginConnection({ entry }: EntryProps) {
 
 /** An MCP server's tools, on or off; a new or changed tool is off with “New” until you decide (VT-44). */
 function Tools({ burrow, entry }: EntryProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const setTool = useVaultWrite(api.vault.setTool, burrow);
   const [problem, setProblem] = useState<string | null>(null);
   return (
@@ -679,6 +691,7 @@ function ToolRow(props: {
   pending: boolean;
   onChange: (enabled: boolean) => void;
 }) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const id = useId();
   return (
     <li className={styles.row}>
@@ -715,6 +728,7 @@ function ToolRow(props: {
 
 /** The entry's history (VT-52, VT-53): agent · what · when · outcome. */
 function RecentUse({ burrow, entry }: EntryProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const viewer = useBurrowViewer(burrow);
   const names = (id: string) => (viewer.principal(id) ? { shortName: viewer.shortName(id) } : undefined);
   return (
@@ -760,6 +774,7 @@ function removeRotateText(agentName: string, entry: Pick<VaultEntryDetail, 'name
 }
 
 function Remove({ burrow, entry, onRemoved }: EntryProps & { onRemoved: () => void }) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const toast = useToast();
   const words = useVaultWords(burrow);
   const { words: agent } = useTheAgent(burrow);

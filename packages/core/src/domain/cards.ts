@@ -3,7 +3,9 @@
  * embed the live object so a card renders without extra requests and realtime updates can patch it.
  * In storage a message holds a `StoredCard` where those three are references.
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { ApprovalId, DispatchId, PlanId, PrincipalId, RunId } from '../ids.js';
 import { Approval } from './approval.js';
 import { AutomationPlanCard, StoredAutomationPlanCard } from './automation-plan.js';
@@ -51,11 +53,16 @@ export type Receipt = z.infer<typeof Receipt>;
 export const ResearchVerdict = z.enum(['pick', 'no', 'maybe']);
 export type ResearchVerdict = z.infer<typeof ResearchVerdict>;
 
-export const RESEARCH_VERDICT_LABELS: Record<ResearchVerdict, string> = {
-  pick: 'Pick',
-  no: 'No',
-  maybe: 'Maybe',
-};
+const RESEARCH_VERDICT_LABELS_KEYS = ['pick', 'no', 'maybe'] as const;
+
+/** `RESEARCH_VERDICT_LABELS` in a locale. */
+export function researchVerdictLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof RESEARCH_VERDICT_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'research.verdict', RESEARCH_VERDICT_LABELS_KEYS);
+}
+
+export const RESEARCH_VERDICT_LABELS: Record<ResearchVerdict, string> = researchVerdictLabels('en');
 
 export const DiffLineKind = z.enum(['context', 'add', 'del']);
 export type DiffLineKind = z.infer<typeof DiffLineKind>;

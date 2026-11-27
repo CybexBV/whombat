@@ -9,11 +9,12 @@
  * opens its sheet with every button (with two pages, its page on the right); what the assistant is on opens its thread;
  * a heads-up its place. Live through `home.changed`; pull to refresh.
  */
+
 import type { NeedsYouButton, NeedsYouGlyph, NeedsYouListGroupView, NeedsYouListRow } from '@whombat/client';
-import { NEEDS_YOU_WORDS, needsYouApprovalCard, needsYouListView, TEAM_REPORT_WORDS } from '@whombat/client';
+import { needsYouApprovalCard, needsYouWords, TEAM_REPORT_WORDS } from '@whombat/client';
 import { useHomeOverview, useStartChat } from '@whombat/client/react';
 import type { NeedsYouItem } from '@whombat/core';
-import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
+import { approvalCardWords } from '@whombat/core/approvals';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, RefreshControl, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
@@ -22,8 +23,9 @@ import { inboxMoreMenu } from '../data/nativeMenu';
 import {
   approvalRowDoors,
   groupHeading,
-  NEEDS_YOU_TAB,
+  needsYouTab,
   type PhoneRowInline,
+  phoneInboxList,
   phoneRowActions,
   phoneRowHint,
   phoneRowInline,
@@ -32,6 +34,7 @@ import {
   swipeEdgeLabel,
 } from '../data/needsYou';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { navigateTo, openHref, useAppNavigation } from '../navigation/hooks';
 import { isBeside, useBeside, usePaneRole } from '../navigation/panes';
 import { Text } from '../theme/Text';
@@ -82,14 +85,19 @@ const GLYPHS: Record<NeedsYouGlyph, LucideIcon> = {
 };
 
 export function NeedsYouScreen() {
+  const { rawLocale } = useI18n();
+  const needsYouTabHere = needsYouTab(rawLocale);
+
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
   const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const words = useAgentWords();
   const home = useHomeOverview({ params: { burrow: slug } });
   const view = useMemo(
-    () => (home.data ? needsYouListView(home.data, { now, timeZone, assistant: words.name }) : null),
-    [home.data, now, timeZone, words.name],
+    () => (home.data ? phoneInboxList(home.data, { now, timeZone, assistant: words.name }, rawLocale) : null),
+    [home.data, now, timeZone, words.name, rawLocale],
   );
   const navigation = useAppNavigation();
   const list = usePaneRole() === 'list';
@@ -104,13 +112,13 @@ export function NeedsYouScreen() {
   // The list couldn't be read: ask the assistant why, in a new chat (never an answer or a retry of anything).
   const askWhy = async () => {
     const result = await start
-      .mutateAsync({ text: NEEDS_YOU_WORDS.readFailedAsk })
+      .mutateAsync({ text: needsYouWordsHere.readFailedAsk })
       .catch((error: unknown) => {
         feedback.onError(error);
         return null;
       });
     if (!result) return;
-    if (result.status === 'ok') navigateTo(navigation, startedChatRoute(result.data, NEEDS_YOU_TAB.title));
+    if (result.status === 'ok') navigateTo(navigation, startedChatRoute(result.data, needsYouTabHere.title));
     else feedback.onResult(result);
   };
   // Every row's id in the order they show, for where focus goes once one settles.
@@ -137,7 +145,7 @@ export function NeedsYouScreen() {
   const listed = view?.groups.filter((g) => g.key !== 'settled') ?? [];
   return (
     <Screen>
-      <TabTop title={NEEDS_YOU_TAB.title} />
+      <TabTop title={needsYouTabHere.title} />
       <ScrollView
         onScrollBeginDrag={closeSwipeRows}
         contentContainerStyle={{ paddingBottom: settled ? 18 : 18 + bottomRoom }}
@@ -154,32 +162,32 @@ export function NeedsYouScreen() {
       >
         <View style={{ paddingHorizontal: 16, paddingTop: 10, gap: 16 }}>
           {home.isPending ? (
-            <View accessibilityLabel={NEEDS_YOU_WORDS.loading} style={{ gap: 4 }}>
+            <View accessibilityLabel={needsYouWordsHere.loading} style={{ gap: 4 }}>
               <Text size={15.5} color={theme.colors.ink2} style={{ paddingHorizontal: 4 }}>
-                {NEEDS_YOU_WORDS.loading}
+                {needsYouWordsHere.loading}
               </Text>
-              <SkeletonRows count={4} lines={2} label={NEEDS_YOU_WORDS.loading} />
+              <SkeletonRows count={4} lines={2} label={needsYouWordsHere.loading} />
             </View>
           ) : !view ? (
             // A first read that failed: never an empty list or a new broken thing.
             <ReadState
               problem
-              title={NEEDS_YOU_WORDS.readFailed}
-              body={NEEDS_YOU_WORDS.noSaved}
-              action={{ label: NEEDS_YOU_WORDS.retry, onPress: () => void home.refetch() }}
+              title={needsYouWordsHere.readFailed}
+              body={needsYouWordsHere.noSaved}
+              action={{ label: needsYouWordsHere.retry, onPress: () => void home.refetch() }}
               second={{
-                label: NEEDS_YOU_WORDS.ask(words),
+                label: needsYouWordsHere.ask(words),
                 onPress: () => void askWhy(),
                 busy: start.isPending,
               }}
-              detail={{ label: NEEDS_YOU_WORDS.moreDetail, text: readErrorText(home.error) }}
+              detail={{ label: needsYouWordsHere.moreDetail, text: readErrorText(home.error) }}
             />
           ) : view.empty ? (
             <ReadState
-              title={NEEDS_YOU_WORDS.empty}
-              body={NEEDS_YOU_WORDS.emptyBody}
+              title={needsYouWordsHere.empty}
+              body={needsYouWordsHere.emptyBody}
               action={{
-                label: NEEDS_YOU_WORDS.backToChat,
+                label: needsYouWordsHere.backToChat,
                 onPress: () => navigation.navigate('Tabs', { screen: 'ChatRoom' }),
               }}
             />
@@ -187,9 +195,9 @@ export function NeedsYouScreen() {
             <>
               {/* A refresh that failed keeps the saved list, in its order, under the note. */}
               {home.error && !home.isRefetching ? (
-                <ReadNotice title={NEEDS_YOU_WORDS.refreshFailed} body={NEEDS_YOU_WORDS.saved}>
+                <ReadNotice title={needsYouWordsHere.refreshFailed} body={needsYouWordsHere.saved}>
                   <Button
-                    label={NEEDS_YOU_WORDS.retry}
+                    label={needsYouWordsHere.retry}
                     variant="secondary"
                     onPress={() => void home.refetch()}
                     style={{ alignSelf: 'flex-start', minHeight: TARGET }}
@@ -200,7 +208,7 @@ export function NeedsYouScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 }}>
                   <Check size={18} color={theme.colors.ok} strokeWidth={2} />
                   <Text size={15} color={theme.colors.ink2} style={{ flex: 1 }}>
-                    {NEEDS_YOU_WORDS.nothing}
+                    {needsYouWordsHere.nothing}
                   </Text>
                 </View>
               ) : null}
@@ -239,7 +247,7 @@ export function NeedsYouScreen() {
         <MenuSheet
           spec={menuFor ? inboxMoreMenu(menuFor.buttons, menuFor.row.title) : null}
           visible={menuFor !== null}
-          label={NEEDS_YOU_TAB.moreLabel}
+          label={needsYouTabHere.moreLabel}
           onClose={() => setMenuFor(null)}
           onPick={(id) => void (menuFor && act(menuFor.row, id))}
         />
@@ -265,6 +273,9 @@ function SettledBar({
   onAct: (row: NeedsYouListRow, id: string) => Promise<void>;
   onMenu: (row: NeedsYouListRow, buttons: NeedsYouButton[]) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
   const theme = useTheme();
   const beside = useBeside();
   const { height } = useWindowDimensions();
@@ -283,7 +294,7 @@ function SettledBar({
             color={theme.colors.mut}
             style={{ paddingHorizontal: 20, paddingTop: 12 }}
           >
-            {NEEDS_YOU_WORDS.noneSettled}
+            {needsYouWordsHere.noneSettled}
           </Text>
         ) : (
           <ScrollView
@@ -430,6 +441,9 @@ function Row({
   /** Opens the More sheet with these buttons, where iOS's own menu isn't. */
   onMenu: (buttons: NeedsYouButton[]) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
   const theme = useTheme();
   const says = row.says;
   const opens = phoneRowOpens(row);
@@ -550,7 +564,7 @@ function Row({
       {...(hasNativeMenu || !held.length ? null : { onLongPress: () => onMenu(held) })}
       feedback="wash"
       accessibilityRole="button"
-      accessibilityHint={phoneRowHint(opens, row.group)}
+      accessibilityHint={phoneRowHint(opens, row.group, rawLocale)}
       accessibilityState={selected ? { selected } : undefined}
       style={style}
       {...a11y}
@@ -581,14 +595,14 @@ function Row({
   const { edge, more } = swipe;
   if (edge)
     trailing.push({
-      label: swipeEdgeLabel(edge),
+      label: swipeEdgeLabel(edge, rawLocale),
       icon: edge.kind === 'back' ? Undo2 : Check,
       leaves: true,
       run: () => press(edge.id),
     });
   if (more.length)
     trailing.push({
-      label: NEEDS_YOU_WORDS.more,
+      label: needsYouWordsHere.more,
       icon: Ellipsis,
       tone: 'neutral',
       run: () => onMenu(more),
@@ -671,15 +685,18 @@ function MoreButton({
   onPick: (id: string) => void;
   onMenu: (buttons: NeedsYouButton[]) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
   const theme = useTheme();
-  const label = NEEDS_YOU_WORDS.moreFor(title);
+  const label = needsYouWordsHere.moreFor(title);
   const face = (
     <View
       style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: TARGET, paddingHorizontal: 10 }}
     >
       <Ellipsis size={16} color={theme.colors.ink2} strokeWidth={1.9} />
       <Text size={14} color={theme.colors.ink2}>
-        {NEEDS_YOU_WORDS.more}
+        {needsYouWordsHere.more}
       </Text>
     </View>
   );
@@ -726,6 +743,14 @@ function ApprovalRow({
   onPress: (id: string) => void;
   onMenu: (buttons: NeedsYouButton[]) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const approvalCardWordsHere = approvalCardWords(rawLocale);
+
+  const needsYouTabHere = needsYouTab(rawLocale);
+
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { timeZone } = useBurrowBase();
@@ -770,11 +795,11 @@ function ApprovalRow({
               {line}
             </Text>
           ))}
-          <ApprovalFact label={APPROVAL_CARD_WORDS.permission}>{card.permission}</ApprovalFact>
+          <ApprovalFact label={approvalCardWordsHere.permission}>{card.permission}</ApprovalFact>
           {card.tonight ? <TonightBox tonight={card.tonight} /> : null}
         </View>
         <View
-          accessibilityLabel={APPROVAL_CARD_WORDS.answersLabel}
+          accessibilityLabel={approvalCardWordsHere.answersLabel}
           style={{
             gap: 10,
             borderTopWidth: 1,
@@ -798,16 +823,16 @@ function ApprovalRow({
           ))}
           {doors.approvalNumber ? (
             <Button
-              label={NEEDS_YOU_WORDS.openApproval}
+              label={needsYouWordsHere.openApproval}
               variant="secondary"
               size="lg"
               wrap
               disabled={busy !== null}
-              accessibilityHint="Shows all of it, where you can send it"
+              accessibilityHint={tMobile('screens.shows-all-of-it-where-you-can-send')}
               onPress={() =>
                 navigation.navigate('Approval', {
                   number: doors.approvalNumber as number,
-                  back: NEEDS_YOU_TAB.title,
+                  back: needsYouTabHere.title,
                 })
               }
             />
@@ -819,11 +844,11 @@ function ApprovalRow({
               size="lg"
               wrap
               disabled={busy !== null}
-              accessibilityHint="Opens the report form with this draft"
+              accessibilityHint={tMobile('screens.opens-the-report-form-with-this-draft')}
               onPress={() =>
                 navigation.navigate('TeamReportNew', {
                   draftId: doors.draftId as string,
-                  back: NEEDS_YOU_TAB.title,
+                  back: needsYouTabHere.title,
                 })
               }
             />

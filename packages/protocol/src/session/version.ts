@@ -8,6 +8,7 @@
  * differ freely: a newer minor only adds (CT-14), and an op a box doesn't have yet is `unknown_op`. There are no
  * feature lists, API levels or windows.
  */
+import { coreTranslator } from '@whombat/core/i18n';
 import { z } from 'zod';
 import { SESSION_MAX_CAPABILITIES } from '../limits.js';
 
@@ -89,9 +90,16 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * and `LooksAheadCheckItem.inboxItemId`; Whombat looks-ahead.md); minor 18 adds `t3Review.maxRounds` (1–3 review
  * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
  * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
- * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md).
+ * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
+ * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 20 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
+
+/**
+ * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim
+ * requests). Clients omit `locale` from strict claim bodies when talking to an older box.
+ */
+export const LOCALE_MINOR = 21;
 
 /**
  * Session protocol minor (major 5) with more news: up to `NEWS_SOURCES_MAX` sources (an older app takes twelve),
@@ -261,3 +269,9 @@ export const VERSION_REFUSAL_COPY = {
   client: 'Update the app to use this Whombat.',
   appliance: 'This Whombat needs an update to work with this app.',
 } as const;
+
+/** `VERSION_REFUSAL_COPY` in the person's language (English when the locale is absent or unknown). */
+export function versionRefusalCopy(locale?: string | null): { client: string; appliance: string } {
+  const tr = coreTranslator(locale);
+  return { client: tr.t('version.refusal.client'), appliance: tr.t('version.refusal.appliance') };
+}

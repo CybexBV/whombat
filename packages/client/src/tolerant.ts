@@ -15,6 +15,7 @@ import {
   REALTIME_EVENT_TOPICS,
   type RealtimeEvent,
   RealtimeEvent as RealtimeEventSchema,
+  resolveLanguage,
 } from '@whombat/core';
 import { decodeTolerant, type SkippedItem } from '@whombat/protocol/session';
 import type { z } from 'zod';
@@ -22,24 +23,54 @@ import type { z } from 'zod';
 /** What a screen shows for something only a newer app can show. */
 export const NEEDS_NEWER_APP = 'This needs a newer version of the app.';
 
+export function needsNewerAppText(locale?: string | null): string {
+  return resolveLanguage(locale) === 'nl'
+    ? 'Hiervoor heb je een nieuwere versie van de app nodig.'
+    : NEEDS_NEWER_APP;
+}
+
 /** A screen whose answer a security view reads strictly didn't match (AP-266): the way out. */
 export const SCREEN_NEEDS_NEWER_APP =
   'This needs a newer version of the app. Reload to get the newest version.';
 
+export function screenNeedsNewerAppText(locale?: string | null): string {
+  return resolveLanguage(locale) === 'nl'
+    ? 'Hiervoor heb je een nieuwere versie van de app nodig. Herlaad om de nieuwste versie te openen.'
+    : SCREEN_NEEDS_NEWER_APP;
+}
+
 /** “1 item needs a newer version of the app.”, “3 items need …” (AP-266). */
-export function itemsNeedNewerApp(n: number): string {
+export function itemsNeedNewerApp(n: number, locale?: string | null): string {
+  if (resolveLanguage(locale) === 'nl') {
+    return n === 1
+      ? 'Voor 1 item heb je een nieuwere versie van de app nodig.'
+      : `Voor ${n} items heb je een nieuwere versie van de app nodig.`;
+  }
   return n === 1 ? '1 item needs a newer version of the app.' : `${n} items need a newer version of the app.`;
 }
 
 /** Part of what's on screen didn't match strictly (AP-266). */
 export const PART_NEEDS_NEWER_APP = 'Part of this page needs a newer version of the app.';
 
+export function partNeedsNewerAppText(locale?: string | null): string {
+  return resolveLanguage(locale) === 'nl'
+    ? 'Voor een deel van deze pagina heb je een nieuwere versie van de app nodig.'
+    : PART_NEEDS_NEWER_APP;
+}
+
 /** The card a message gets in place of one of a kind this app doesn't know. */
-export const UNSUPPORTED_CARD = { kind: 'pill', text: NEEDS_NEWER_APP, tone: 'neutral' } as const;
+export const UNSUPPORTED_CARD = {
+  kind: 'pill',
+  text: NEEDS_NEWER_APP,
+  tone: 'neutral',
+  unsupported: true,
+} as const;
 
 /** Whether a card is the placeholder of one this app doesn't know. */
-export function isUnsupportedCard(card: { kind: string; text?: unknown } | null | undefined): boolean {
-  return card?.kind === 'pill' && card.text === NEEDS_NEWER_APP;
+export function isUnsupportedCard(
+  card: { kind: string; text?: unknown; unsupported?: unknown } | null | undefined,
+): boolean {
+  return card?.kind === 'pill' && (card.unsupported === true || card.text === NEEDS_NEWER_APP);
 }
 
 /**

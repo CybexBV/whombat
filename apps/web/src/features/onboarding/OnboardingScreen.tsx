@@ -41,6 +41,7 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Input } from '../../components/Input';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import { LiveAgentFace } from '../agent/LiveAgentFace';
 import { agentNameProblem } from '../agent/settings/ProfileTab';
 import faceStyles from '../agent/settings/ProfileTab.module.css';
@@ -173,7 +174,7 @@ export function OnboardingScreen({
     : [];
   const kicker = boxPage
     ? BOX_SETUP_TEXT.stepLabel(claimSteps.length, claimSteps.length + 1)
-    : onboardingStepLabel(step, ONBOARDING_STEP_COUNT);
+    : onboardingStepLabel(step, ONBOARDING_STEP_COUNT, currentLocale());
   const savedName = saved.name;
   const savedFace = saved.face;
   const shownName = (agentName ?? savedName).trim() || savedName;
@@ -277,7 +278,7 @@ export function OnboardingScreen({
       return;
     }
     if (result.status === 'ok') {
-      toast.show(welcomeToast(burrowName, shownName));
+      toast.show(welcomeToast(burrowName, shownName, currentLocale()));
       onDone?.(result.data.burrow.slug);
     }
   }
@@ -574,7 +575,7 @@ export function OnboardingScreen({
               <span />
             ) : (
               <Button variant="secondary" size="xl" padY={12} onClick={handleBack}>
-                {onboardingBackLabel(step)}
+                {onboardingBackLabel(step, currentLocale())}
               </Button>
             )}
             <span className={styles.footerEnd}>
@@ -598,7 +599,7 @@ export function OnboardingScreen({
                   disabled={nextDisabled}
                   onClick={handleNext}
                 >
-                  {onboardingNextLabel(step, lastStep, burrowName)}
+                  {onboardingNextLabel(step, lastStep, burrowName, currentLocale())}
                 </Button>
               )}
             </span>

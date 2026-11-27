@@ -15,6 +15,7 @@
  * Once connected, “{label} connected.” and the connection's page replaces this one (PC-10). Secrets live in this
  * screen's state only: never in params, the saved place or the cache.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   accessChoices,
@@ -75,9 +76,9 @@ import { type ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrow } from '../data/BurrowProvider';
 import {
-  CONNECT_SCREEN_TEXT,
   catalogConnectErrorText,
   connectGate,
+  connectScreenText,
   elsewhereWay,
   fixButtons,
   keptChallenge,
@@ -93,6 +94,7 @@ import {
 import { connectionLogo, connectionsWebPath } from '../data/connections';
 import { useAgentWords } from '../data/useAgent';
 import { useWebUrl } from '../data/useWebUrl';
+import { useI18n } from '../i18n';
 import { holdPhoneConnect } from '../managed/connectReturn';
 import { useManaged } from '../managed/context';
 import { OFFER_LINK } from '../managed/useReach';
@@ -134,6 +136,9 @@ import { showNotice } from './feedback';
 type Props = NativeStackScreenProps<RootStackParamList, 'Connect'>;
 
 export function ConnectScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
   const insets = useSafeAreaInsets();
   const { slug } = useBurrow();
   const { catalogId } = route.params;
@@ -158,7 +163,7 @@ export function ConnectScreen({ route, navigation }: Props) {
     return (
       <Screen>
         <BackBar label={back} onPress={goBack} />
-        <ErrorState text={CONNECT_SCREEN_TEXT.unknown} />
+        <ErrorState text={connectScreenTextHere.unknown} />
       </Screen>
     );
 
@@ -198,7 +203,7 @@ export function ConnectScreen({ route, navigation }: Props) {
         {!list.data && !list.error ? (
           <Panel footer={null}>
             <Header entry={entry} />
-            <SkeletonRows count={3} lines={2} label={CONNECT_SCREEN_TEXT.loading} />
+            <SkeletonRows count={3} lines={2} label={connectScreenTextHere.loading} />
           </Panel>
         ) : gate ? (
           <Panel footer={null}>
@@ -252,19 +257,22 @@ export function ConnectScreen({ route, navigation }: Props) {
 
 /** The logo and “Connect {Name}”, the entry's line and its documentation. */
 function Header({ entry }: { entry: CatalogEntry }) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
   const theme = useTheme();
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <ConnectionLogo logo={connectionLogo(entry.id, entry.name)} />
-        <Title>{CONNECT_SCREEN_TEXT.title(entry.name)}</Title>
+        <Title>{connectScreenTextHere.title(entry.name)}</Title>
       </View>
       <Text size={14} lh={1.45} color={theme.colors.ink2}>
         {entry.description}
       </Text>
       {entry.docsUrl ? (
         <TextLink
-          label={CONNECT_SCREEN_TEXT.documentation}
+          label={connectScreenTextHere.documentation}
           external
           onPress={() => openOutside(entry.docsUrl)}
         />
@@ -299,6 +307,9 @@ function ConnectForm({
   bottomInset: number;
   onConnected: (connectionId: string, label: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectScreenTextHere = connectScreenText(rawLocale);
+
   const theme = useTheme();
   const managed = useManaged();
   const webUrl = useWebUrl();
@@ -520,7 +531,7 @@ function ConnectForm({
         // A self-hosted Whombat: its web page, where the sign-in starts and comes back (its cookie route; PC-05).
         openOutside(webUrl(connectionsWebPath(slug, entry.id)));
       } else if (way === 'none' || !managed) {
-        setProblem({ ...NO_PROBLEM, message: CONNECT_SCREEN_TEXT.demo });
+        setProblem({ ...NO_PROBLEM, message: connectScreenTextHere.demo });
       } else if (method.kind === 'ha_oauth' || method.kind === 'mcp_oauth' || method.kind === 'app_oauth') {
         const target = connectReturnTo(entry.id, slug, returnTo);
         holdPhoneConnect({ device: managed.applianceId, flow: 'connection' });
@@ -799,8 +810,8 @@ function ConnectForm({
           method={method}
           fields={fields}
           access={asksAccess(choice) ? access : 'manage'}
-          pasteLabel={CONNECT_SCREEN_TEXT.paste(entry.name)}
-          openLabel={CONNECT_SCREEN_TEXT.open(entry.name)}
+          pasteLabel={connectScreenTextHere.paste(entry.name)}
+          openLabel={connectScreenTextHere.open(entry.name)}
           onPaste={(text) => fill(method, text)}
         />
       ) : null}
@@ -870,7 +881,7 @@ function ConnectForm({
           />
           {!method.steps.length && method.kind === 'token' && resolveTokenUrl(entry, fields) ? (
             <TextLink
-              label={CONNECT_SCREEN_TEXT.open(entry.name)}
+              label={connectScreenTextHere.open(entry.name)}
               external
               onPress={() => openOutside(resolveTokenUrl(entry, fields))}
             />
@@ -883,7 +894,7 @@ function ConnectForm({
         <Note>{CONNECT_FORM_TEXT.serviceLoginPhone(entry.name)}</Note>
       ) : null}
       {method.kind === 'ha_oauth' ? <Note>{CONNECT_FORM_TEXT.homeAssistant}</Note> : null}
-      {elsewhere && way === 'web' ? <Note>{CONNECT_SCREEN_TEXT.onTheWeb}</Note> : null}
+      {elsewhere && way === 'web' ? <Note>{connectScreenTextHere.onTheWeb}</Note> : null}
       {levelNote ? <Note>{levelNote}</Note> : null}
     </View>
   );

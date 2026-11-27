@@ -124,6 +124,19 @@
   flex: 1;
 }
 
+.languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.languages button[aria-pressed="true"] {
+  border-color: var(--ink);
+}
+
 .note {
   max-width: 34em;
   margin: 0;

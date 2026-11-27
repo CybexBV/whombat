@@ -8,6 +8,7 @@
  * above its steps, read live from its tracker, with Reply and Set status for people who may (report-trackers.md TA-14,
  * TA-15).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { automationRunLabel, automationTrackerWords } from '@whombat/client';
 import { useApiMutation, useAutomationRun } from '@whombat/client/react';
@@ -17,17 +18,18 @@ import { type ReactNode, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  AUTOMATION_DELETE_TEXT,
-  RUN_STATUS_COPY,
+  automationDeleteText,
   type RunStepAssessment,
   type RunStepView,
   runActive,
+  runStatusCopy,
   runStepsView,
   type SkippedStepsView,
   SUGGESTS_A_CHANGE,
   TECHNICAL_DETAILS,
 } from '../data/automations';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -44,6 +46,11 @@ import { TrackerItemSection, useTrackerItem } from './TrackerItem';
 type Props = NativeStackScreenProps<RootStackParamList, 'AutomationRun'>;
 
 export function AutomationRunScreen({ route, navigation }: Props) {
+  const { rawLocale, tClient } = useI18n();
+  const automationDeleteTextHere = automationDeleteText(rawLocale);
+  const runStatusCopyHere = runStatusCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug } = useBurrowBase();
@@ -68,16 +75,20 @@ export function AutomationRunScreen({ route, navigation }: Props) {
           if (text) Alert.alert(text.title, text.body);
           else void query.refetch();
         },
-        onError: (err) => Alert.alert('That didn’t work', errorText(err)),
+        onError: (err) => Alert.alert(tMobile('screens.that-didnt-work'), errorText(err)),
         onSettled: () => setBusy(null),
       },
     );
   };
   const confirmCancel = () =>
-    Alert.alert('Stop this run?', 'Any agent working for it stops too. Steps already done stay done.', [
-      { text: 'Keep going', style: 'cancel' },
-      { text: 'Stop it', style: 'destructive', onPress: () => control('cancel') },
-    ]);
+    Alert.alert(
+      tMobile('screens.stop-this-run'),
+      tMobile('screens.any-agent-working-for-it-stops-too-steps'),
+      [
+        { text: 'Keep going', style: 'cancel' },
+        { text: 'Stop it', style: 'destructive', onPress: () => control('cancel') },
+      ],
+    );
 
   const data = query.data;
   const run = data?.run;
@@ -85,15 +96,15 @@ export function AutomationRunScreen({ route, navigation }: Props) {
   const reportRun = run?.trigger.kind === 'tracker' ? run.id : null;
   const report = useTrackerItem(reportRun ? { params: { burrow: slug, runId: reportRun } } : null);
   const words = automationTrackerWords(data?.automation);
-  const status = run ? RUN_STATUS_COPY[run.status] : null;
-  const steps = run ? runStepsView(run, words) : null;
+  const status = run ? runStatusCopyHere[run.status] : null;
+  const steps = run ? runStepsView(run, words, rawLocale) : null;
   // The route's number is the run's: a request opened from a step comes back to “Run #12”.
   const openApproval = (approval: number) =>
     navigation.navigate('Approval', { number: approval, back: `Run #${number}` });
 
   return (
     <Screen>
-      <BackBar label={back ?? 'Automations'} onPress={goBack} />
+      <BackBar label={back ?? tMobile('screens.automations')} onPress={goBack} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: bottomPadding(36, insets.bottom, 16) }}
@@ -110,9 +121,9 @@ export function AutomationRunScreen({ route, navigation }: Props) {
         }
       >
         {query.isPending ? (
-          <SkeletonRows count={4} label="Loading the run" />
+          <SkeletonRows count={4} label={tMobile('screens.loading-the-run')} />
         ) : !run || !status || !steps ? (
-          <ErrorState text="This run didn’t load." onRetry={() => void query.refetch()} />
+          <ErrorState text={tMobile('screens.this-run-didnt-load')} onRetry={() => void query.refetch()} />
         ) : (
           <>
             <View style={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 14, gap: 6 }}>
@@ -140,7 +151,7 @@ export function AutomationRunScreen({ route, navigation }: Props) {
               ) : null}
               {data.automation.deletedAt ? (
                 <Text size={14} lh={1.42} color={theme.colors.mut}>
-                  {AUTOMATION_DELETE_TEXT.deleted}
+                  {automationDeleteTextHere.deleted}
                 </Text>
               ) : null}
             </View>
@@ -148,7 +159,7 @@ export function AutomationRunScreen({ route, navigation }: Props) {
               <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingBottom: 14 }}>
                 {run.status === 'paused' ? (
                   <Button
-                    label="Resume"
+                    label={tMobile('screens.resume')}
                     variant="secondary"
                     busy={busy === 'resume'}
                     onPress={() => control('resume')}
@@ -156,7 +167,7 @@ export function AutomationRunScreen({ route, navigation }: Props) {
                   />
                 ) : run.status !== 'needs_review' ? (
                   <Button
-                    label="Pause"
+                    label={tMobile('screens.pause')}
                     variant="secondary"
                     busy={busy === 'pause'}
                     onPress={() => control('pause')}
@@ -164,7 +175,7 @@ export function AutomationRunScreen({ route, navigation }: Props) {
                   />
                 ) : null}
                 <Button
-                  label="Cancel"
+                  label={tClient('reports.cancel')}
                   variant="secondary"
                   busy={busy === 'cancel'}
                   onPress={confirmCancel}
@@ -175,7 +186,7 @@ export function AutomationRunScreen({ route, navigation }: Props) {
             {reportRun ? (
               <TrackerItemSection query={report} burrow={slug} runId={reportRun} words={words} />
             ) : null}
-            <Section title="STEPS">
+            <Section title={tMobile('screens.steps')}>
               {steps.steps.map((s) => (
                 <StepRow key={s.key} step={s} onOpenApproval={openApproval} />
               ))}
@@ -243,6 +254,7 @@ function AssessedStepRow({
   onPress: (() => void) | null;
   children?: ReactNode;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const content = (
@@ -337,7 +349,9 @@ function AssessedStepRow({
             onPress={() => setOpen((o) => !o)}
             feedback="wash"
             accessibilityLabel={TECHNICAL_DETAILS}
-            accessibilityHint={open ? 'Hides them' : 'Shows what was checked'}
+            accessibilityHint={
+              open ? tMobile('screens.hides-them') : tMobile('screens.shows-what-was-checked')
+            }
             accessibilityState={{ expanded: open }}
             ringRadius={10}
             style={{
@@ -388,6 +402,7 @@ function SkippedSteps({
   fold: SkippedStepsView;
   onOpenApproval: (number: number) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   return (
@@ -396,7 +411,7 @@ function SkippedSteps({
         onPress={() => setOpen((o) => !o)}
         feedback="wash"
         accessibilityLabel={fold.label}
-        accessibilityHint={open ? 'Hides them' : 'Shows them'}
+        accessibilityHint={open ? tMobile('screens.hides-them') : tMobile('screens.shows-them')}
         accessibilityState={{ expanded: open }}
         style={{
           minHeight: 44,

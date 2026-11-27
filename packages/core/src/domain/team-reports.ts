@@ -7,7 +7,9 @@
  * words a person reads. Pure. The device ops carry these shapes as base64url JSON (`TeamPayload` in
  * `@whombat/control-contracts`), so the free text never has to fit the cross-language string patterns.
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 
 /** A report's id at control (`tr_` and 20 url-safe characters); its `number` is what people say (“#12”). */
 export const TeamReportId = z.string().regex(/^tr_[A-Za-z0-9_-]{20}$/);
@@ -179,20 +181,29 @@ export function teamReportNeedsYou(status: TeamReportStatus): boolean {
   return status === 'needs_information' || status === 'available';
 }
 
+const TEAM_REPORT_STATUS_WORDS_KEYS = [
+  'new',
+  'investigating',
+  'needs_information',
+  'planned',
+  'in_progress',
+  'awaiting_release',
+  'available',
+  'confirmed',
+  'closed',
+  'not_planned',
+  'duplicate',
+] as const;
+
 /** The person's words for a status. */
-export const TEAM_REPORT_STATUS_WORDS: Readonly<Record<TeamReportStatus, string>> = {
-  new: 'Received',
-  investigating: 'Looking into it',
-  needs_information: 'Needs your reply',
-  planned: 'Planned',
-  in_progress: 'Being fixed',
-  awaiting_release: 'Fixed, coming in an update',
-  available: 'Fix available',
-  confirmed: 'Works now',
-  closed: 'Closed',
-  not_planned: 'Not planned',
-  duplicate: 'Already reported',
-};
+export function teamReportStatusWords(
+  locale?: string | null,
+): Readonly<Record<(typeof TEAM_REPORT_STATUS_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'teamReport.status', TEAM_REPORT_STATUS_WORDS_KEYS);
+}
+
+export const TEAM_REPORT_STATUS_WORDS: Readonly<Record<TeamReportStatus, string>> =
+  teamReportStatusWords('en');
 
 /** The four steps a report goes through, as the track on its page shows them. */
 export const TEAM_REPORT_STAGES = ['Received', 'Looking into it', 'Being fixed', 'Fixed'] as const;

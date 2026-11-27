@@ -8,6 +8,7 @@
 export * from './attention';
 export * from './forms';
 export * from './grid';
+export { resolveScreenLanguage, screenFormatLocale } from './i18n/catalog';
 export * from './pager';
 export * from './specs';
 export * from './times';

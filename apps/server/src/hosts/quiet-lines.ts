@@ -17,10 +17,12 @@ import {
   hostHintCheck,
   hostHintNature,
   hostNoticeSubjectId,
+  hostWatchCheckWords,
   type NoticeQuiet,
   type NoticeSubject,
   quietWordsOf,
 } from '@whombat/core';
+import { tServer } from '../i18n/catalog';
 import { applyQuiet, type QuietRow } from '../things/quiet/apply';
 import { notWatched } from '../things/quiet/defaults';
 import type { GlanceNotice } from '../things/quiet/glance';
@@ -28,6 +30,7 @@ import { shortHash } from '../things/quiet/items';
 import { NO_QUIET, type ThingQuiet } from '../things/quiet/store';
 import type { NoticeIgnore, NoticeNature } from '../things/quiet/types';
 import type { WindowLike as QuietWindowLike } from '../things/quiet/windows';
+import { englishOf } from './localize';
 
 /** The rule of the alert that says a server stopped reporting. */
 export const HEARTBEAT_RULE = 'agent.heartbeat_missing';
@@ -69,11 +72,12 @@ function subjectOf(c: HostWatchCheck, entity: string | undefined): NoticeSubject
  * “ · ” is said about them all (`incus.no_snapshots`: “web, db · no backup in 30 days either”).
  */
 export function hintGuestNames(detail: string): string[] | null {
+  // A list said in a language joins its last name with a word (“web, dns en db”, “web and db”).
   const names = (detail.split(' · ')[0] ?? '')
-    .split(', ')
+    .split(/, | en /)
     .map((n) => n.replace(/\s*\([^)]*\)$/, '').trim())
     .filter(Boolean);
-  return names.includes('…') ? null : names;
+  return names.includes('…') || names.some((n) => n.endsWith('…')) ? null : names;
 }
 
 /** Hints that list items: “until another one” is a different set of them (QN-03, QN-11). */
@@ -99,8 +103,9 @@ const COUNTS = new Set([
 ]);
 
 /** The first whole number of a text (“12 updates waiting” → 12; “A process …” → 1). */
-function countOf(text: string): number {
-  const m = /\d+/.exec(text.replace(/[,.](?=\d{3}\b)/g, ''));
+export function countOf(text: string): number {
+  // Thousands are grouped with a comma in English and a dot (or a narrow space) in Dutch: “1,204” and “1.204”.
+  const m = /\d+/.exec(text.replace(/(?<=\d)[,.\u00a0\u202f](?=\d{3}\b)/g, ''));
   return m ? Number(m[0]) : 1;
 }
 
@@ -115,12 +120,14 @@ export function hintEpisode(
   guests?: readonly string[],
 ): { episode?: string; band?: number } {
   if (c.lifts !== 'newer') return {};
-  if (COUNTS.has(h.kind)) return { band: countOf(h.title) };
+  // The hub's English when its words were said in another language: an Ignore outlasts a change of language.
+  const en = englishOf(h) ?? h;
+  if (COUNTS.has(h.kind)) return { band: countOf(en.title) };
   if (LISTS.has(h.kind)) {
-    const names = guests?.length ? [...guests] : hintGuestNames(h.detail);
+    const names = guests?.length ? [...guests] : hintGuestNames(en.detail);
     if (names?.length) return { episode: shortHash(names) };
   }
-  return { episode: shortHash([h.title, h.detail]) };
+  return { episode: shortHash([en.title, en.detail]) };
 }
 
 /* Lines ------------------------------------------------------------------------------------------------------------ */
@@ -144,7 +151,7 @@ export function asksAttention(a: Pick<HostAlert, 'state' | 'attention'>): boolea
   return a.state === 'open' && a.attention;
 }
 
-export function alertLine(a: HostAlert): ServerLine {
+export function alertLine(a: HostAlert, locale?: string | null): ServerLine {
   const c = hostAlertCheck(a.rule);
   const subject = subjectOf(c, a.entity);
   return {
@@ -152,13 +159,13 @@ export function alertLine(a: HostAlert): ServerLine {
     ...(subject ? { subject } : {}),
     tone: a.severity === 'critical' ? 'bad' : 'warn',
     nature: c.nature,
-    title: a.title.slice(0, 120) || 'Alert',
+    title: a.title.slice(0, 120) || tServer(locale, 'home.hosts.alert'),
     ignore: { lifts: c.lifts, words: c.words },
     alert: a,
   };
 }
 
-export function hintLine(h: HostHint, guests?: readonly string[]): ServerLine {
+export function hintLine(h: HostHint, guests?: readonly string[], locale?: string | null): ServerLine {
   const c = hostHintCheck(h.kind);
   const subject = subjectOf(c, hintEntity(h));
   return {
@@ -166,7 +173,7 @@ export function hintLine(h: HostHint, guests?: readonly string[]): ServerLine {
     ...(subject ? { subject } : {}),
     tone: h.severity === 'warning' ? 'warn' : 'info',
     nature: hostHintNature(c, h.severity),
-    title: h.title.slice(0, 120) || 'Worth a look',
+    title: h.title.slice(0, 120) || tServer(locale, 'home.hosts.worthALook'),
     ignore: { lifts: c.lifts, words: c.words },
     ...hintEpisode(c, h, guests),
     hint: h,
@@ -189,8 +196,14 @@ export function hubBy(by: string | null | undefined): { id: string; name: string
  */
 export function alertQuiet(
   a: HostAlert,
-  ctx: { now: Date; names: ReadonlyMap<string, string>; untilWords: (until: Date) => string },
+  ctx: {
+    now: Date;
+    names: ReadonlyMap<string, string>;
+    untilWords: (until: Date) => string;
+    locale?: string | null;
+  },
 ): NoticeQuiet | undefined {
+  const locale = ctx.locale;
   if (a.state !== 'open' || a.attention) return undefined;
   const ack = a.acknowledged;
   if (ack) {
@@ -200,7 +213,8 @@ export function alertQuiet(
     const name = person ? (ctx.names.get(person.id) ?? null) : null;
     const words = snoozed
       ? ctx.untilWords(until)
-      : quietWordsOf(hostAlertCheck(a.rule).words) || 'until it changes';
+      : quietWordsOf(hostWatchCheckWords(hostAlertCheck(a.rule), locale).words) ||
+        tServer(locale, 'hosts.quiet.untilChanges');
     return {
       state: snoozed ? 'snoozed' : 'ignored',
       words: words.slice(0, 60),
@@ -209,11 +223,13 @@ export function alertQuiet(
       at: ack.at,
     };
   }
-  if (a.muted) return { state: 'ignored', words: 'while it’s in maintenance', at: a.openedAt };
+  if (a.muted) return { state: 'ignored', words: tServer(locale, 'hosts.quiet.maintenance'), at: a.openedAt };
   if (a.suppressedBy)
     return {
       state: 'ignored',
-      words: `while ${hostEntityName(a.suppressedBy).slice(0, 40)} is offline`,
+      words: tServer(locale, 'hosts.quiet.parentOffline', {
+        name: hostEntityName(a.suppressedBy).slice(0, 40),
+      }).slice(0, 60),
       at: a.openedAt,
     };
   return undefined;
@@ -249,7 +265,12 @@ export function heldAlertQuiet(
 export function markAlertQuiet(
   a: HostAlert,
   window: Pick<QuietWindowLike, 'startsAt' | 'endsAt' | 'byId'> | null | undefined,
-  ctx: { now: Date; names: ReadonlyMap<string, string>; untilWords: (until: Date) => string },
+  ctx: {
+    now: Date;
+    names: ReadonlyMap<string, string>;
+    untilWords: (until: Date) => string;
+    locale?: string | null;
+  },
 ): void {
   const held = heldAlertQuiet(a, window, ctx);
   if (held) {
@@ -346,7 +367,7 @@ export function serverVerdict(input: {
   const own = input.alerts.filter((a) => a.serverId === card.id && a.state === 'open');
   const attention = own.filter(asksAttention);
   const lines: ServerLine[] = [
-    ...attention.map(alertLine).sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'bad' ? -1 : 1)),
+    ...attention.map((a) => alertLine(a)).sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'bad' ? -1 : 1)),
   ];
   if (input.hints?.length)
     for (const h of markHints(
@@ -399,19 +420,23 @@ export function serverVerdict(input: {
 }
 
 /** The question the desk sends when someone asks the assistant to look into a server's line (QN-20). */
-export function lineQuestion(line: Pick<ServerLine, 'title'>, serverName: string): string {
+export function lineQuestion(
+  line: Pick<ServerLine, 'title'>,
+  serverName: string,
+  locale?: string | null,
+): string {
   const title = line.title.replace(/[.\s]+$/, '');
-  return `${title} on ${serverName}. Can you look into it?`.slice(0, 300);
+  return tServer(locale, 'hosts.lineQuestion', { title, server: serverName }).slice(0, 300);
 }
 
 /** The notice a desk look of a server carries: its worst line's check, item, kind and Ignore words (QN-20). */
-export function noticeOfLine(line: ServerLine, serverName: string): GlanceNotice {
+export function noticeOfLine(line: ServerLine, serverName: string, locale?: string | null): GlanceNotice {
   return {
     check: line.check,
     ...(line.subject ? { subject: line.subject.id } : {}),
     nature: line.nature,
     ignoreWords: line.ignore.words,
-    ...(line.nature === 'problem' ? { question: lineQuestion(line, serverName) } : {}),
+    ...(line.nature === 'problem' ? { question: lineQuestion(line, serverName, locale) } : {}),
   };
 }
 
@@ -434,10 +459,10 @@ export function verdictOf(row: HostServer): ServerVerdict | undefined {
  * a look only with one. None for a fine server, for an offline one whose “offline” alert is quiet or switched off, and
  * for a row not read through `HostsService.fleet()`.
  */
-export function serverNotice(row: HostServer): GlanceNotice | undefined {
+export function serverNotice(row: HostServer, locale?: string | null): GlanceNotice | undefined {
   const v = VERDICTS.get(row);
   if (!v?.dot || !v.worst || v.worst.nature === 'fyi') return undefined;
-  return noticeOfLine(v.worst, row.name);
+  return noticeOfLine(v.worst, row.name, locale);
 }
 
 /** Every line behind a server row that isn't fine, worst first (none as for `serverNotice`). */

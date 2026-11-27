@@ -5,12 +5,14 @@
  * it to its new name). Delete is the shared `DeleteSheet`. Each says in plain words what happens; what runs as an
  * Incus task says when it starts and when it ends.
  */
+
 import { BACKUP_KEEP_DAYS, backupNameError, incusBackupName, incusBackupParams } from '@whombat/client/hosts';
 import { incusNewNameError, libvirtNameError, stoppedCheck } from '@whombat/client/hosts/mobile';
 import { useHostGuests, useHostManageRead } from '@whombat/client/hosts/react';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useMobileT } from '../../i18n';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
 import type { SheetBase } from './GuestSheets';
@@ -36,6 +38,7 @@ function useTakenNames(serverId: string): string[] {
 
 /** Back up now: a name, how long it is kept, and whether its snapshots come too. */
 export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { clock } = useBurrowBase();
   const [name, setName] = useState(() => incusBackupName(clock().getTime()));
   const [keep, setKeep] = useState('7');
@@ -48,7 +51,7 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Back up ${guest.name} now`}
-      body="The backup stays on the server. It runs there; you can leave this screen."
+      body={tMobile('screens.the-backup-stays-on-the-server-it-runs')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -78,7 +81,7 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
     >
       <View style={{ gap: 16, marginTop: 16 }}>
         <FormField
-          label="Name"
+          label={tMobile('screens.name')}
           value={name}
           onChangeText={setName}
           error={name.trim() ? bad : null}
@@ -86,8 +89,17 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <Choices label="Keep it for" options={BACKUP_KEEP_DAYS} value={keep} onChange={setKeep} />
-        <SwitchLine label="With its snapshots" value={withSnapshots} onChange={setWithSnapshots} />
+        <Choices
+          label={tMobile('screens.keep-it-for')}
+          options={BACKUP_KEEP_DAYS}
+          value={keep}
+          onChange={setKeep}
+        />
+        <SwitchLine
+          label={tMobile('screens.with-its-snapshots')}
+          value={withSnapshots}
+          onChange={setWithSnapshots}
+        />
       </View>
     </OneSheet>
   );
@@ -95,6 +107,7 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Copy: a full copy under a new name, on a pool; it starts switched off. */
 export function CopySheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const taken = useTakenNames(serverId);
   const choices = useHostManageRead(
@@ -113,7 +126,7 @@ export function CopySheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Copy ${guest.name}`}
-      body="A full copy with its own disks, in the same project. The copy starts switched off."
+      body={tMobile('screens.a-full-copy-with-its-own-disks-in')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -141,7 +154,7 @@ export function CopySheet({ serverId, guest, onClose }: SheetBase) {
     >
       <View style={{ gap: 16, marginTop: 16 }}>
         <FormField
-          label="Name"
+          label={tMobile('screens.name')}
           value={name}
           onChangeText={setName}
           error={name.trim() ? nameError : null}
@@ -151,13 +164,17 @@ export function CopySheet({ serverId, guest, onClose }: SheetBase) {
         />
         {pools.length ? (
           <Choices
-            label="On the pool"
+            label={tMobile('screens.on-the-pool')}
             options={[{ value: '', label: 'Same as now' }, ...pools.map((p) => ({ value: p, label: p }))]}
             value={pool}
             onChange={setPool}
           />
         ) : null}
-        <SwitchLine label="With its snapshots" value={withSnapshots} onChange={setWithSnapshots} />
+        <SwitchLine
+          label={tMobile('screens.with-its-snapshots')}
+          value={withSnapshots}
+          onChange={setWithSnapshots}
+        />
       </View>
     </OneSheet>
   );
@@ -174,6 +191,7 @@ export function RenameSheet({
   onClose,
   onRenamed,
 }: SheetBase & { platform?: 'incus' | 'libvirt'; onRenamed: (id: string, name: string) => void }) {
+  const { t: tMobile } = useMobileT();
   const taken = useTakenNames(serverId);
   const [name, setName] = useState(guest.name);
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +203,7 @@ export function RenameSheet({
       visible
       onClose={() => !busy && onClose()}
       title={`Rename ${guest.name}`}
-      body="Its snapshots and backups go with it."
+      body={tMobile('screens.its-snapshots-and-backups-go-with-it')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -212,7 +230,7 @@ export function RenameSheet({
     >
       <View style={{ marginTop: 16 }}>
         <FormField
-          label="New name"
+          label={tMobile('screens.new-name')}
           value={name}
           onChangeText={setName}
           error={name.trim() && name.trim() !== guest.name ? nameError : null}

@@ -9,6 +9,7 @@
  * under the live line (desk-display-android.md AP-3059). Words and numbers come from the shared model
  * (`@whombat/client` `host/`) and the contracts' copy; the button's are `THIS_WHOMBAT_TEXT`'s.
  */
+
 import {
   HOST_CPU_SCALE,
   type HostPollState,
@@ -28,8 +29,8 @@ import {
   hostTiles,
   hostTimeTicks,
 } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
-import { HOST_RANGE_LABELS, HOST_STATUS_COPY } from '@whombat/core/text';
+import { thisWhombatText } from '@whombat/client/managed';
+import { hostRangeLabels, hostStatusCopy } from '@whombat/core/text';
 import type { HostMetrics, HostMetricsRange } from '@whombat/protocol/session';
 import { type ReactNode, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -49,6 +50,7 @@ import {
   speedMeasured,
   stepMeasured,
 } from '../data/hostStatus';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BatteryLow, BatteryMedium, Plug } from '../ui/icons';
@@ -84,6 +86,9 @@ export function HostStatusView({
   state: HostPollState;
   onRange: (range: HostMetricsRange) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const hostStatusCopyHere = hostStatusCopy(rawLocale);
+
   const theme = useTheme();
   const kind = hostSectionKind(state);
   const [chart, setChart] = useState<HostChartKey>('processor');
@@ -96,7 +101,7 @@ export function HostStatusView({
   return (
     <View style={{ gap: 10 }}>
       <View style={{ gap: 2 }}>
-        <SectionLabel>{HOST_STATUS_COPY.title.toUpperCase()}</SectionLabel>
+        <SectionLabel>{hostStatusCopyHere.title.toUpperCase()}</SectionLabel>
         {kind === 'box' || kind === 'loading' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 6 }}>
             <View
@@ -111,7 +116,7 @@ export function HostStatusView({
               }}
             />
             <Text size={13.5} color={theme.colors.mut}>
-              {HOST_STATUS_COPY.live}
+              {hostStatusCopyHere.live}
             </Text>
           </View>
         ) : null}
@@ -124,7 +129,7 @@ export function HostStatusView({
             options={HOST_RANGE_OPTIONS}
             value={state.range}
             onChange={onRange}
-            label={HOST_STATUS_COPY.rangeGroup}
+            label={hostStatusCopyHere.rangeGroup}
           />
           <View style={{ gap: 10, opacity: state.loading && state.metrics ? 0.55 : 1 }}>
             {state.metrics ? <Tiles metrics={state.metrics} /> : <TileSkeletons />}
@@ -150,7 +155,7 @@ export function HostStatusView({
         </>
       ) : (
         <Text size={14} lh={1.45} color={theme.colors.ink2} style={{ paddingHorizontal: 6 }}>
-          {HOST_STATUS_COPY.unavailable}
+          {hostStatusCopyHere.unavailable}
         </Text>
       )}
     </View>
@@ -186,8 +191,9 @@ function PowerLine({ metrics }: { metrics: HostMetrics }) {
 
 /** “Show charts” / “Hide charts” under the tiles (AP-1245): a link-style 44dp button that says whether they're open. */
 function ChartsToggle({ open, onPress }: { open: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
-  const label = open ? THIS_WHOMBAT_TEXT.hideCharts : THIS_WHOMBAT_TEXT.showCharts;
+  const label = open ? thisWhombatText(rawLocale).hideCharts : thisWhombatText(rawLocale).showCharts;
   return (
     <Touchable
       accessibilityRole="button"
@@ -293,18 +299,21 @@ function Tile({
 
 /** Processor and Memory, then Disk and Today (BS-10, BS-12). */
 function Tiles({ metrics }: { metrics: HostMetrics }) {
+  const { rawLocale } = useI18n();
+  const hostStatusCopyHere = hostStatusCopy(rawLocale);
+
   const t = hostTiles(metrics);
   return (
     <View style={{ gap: 10 }}>
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Tile
-          label={HOST_STATUS_COPY.processor}
+          label={hostStatusCopyHere.processor}
           value={t.processor.value}
           line={t.processor.line}
           spark={t.processor.spark}
         />
         <Tile
-          label={HOST_STATUS_COPY.memory}
+          label={hostStatusCopyHere.memory}
           value={t.memory.value}
           unit={t.memory.unit}
           meter={t.memory.pct}
@@ -313,14 +322,14 @@ function Tiles({ metrics }: { metrics: HostMetrics }) {
       </View>
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Tile
-          label={HOST_STATUS_COPY.disk}
+          label={hostStatusCopyHere.disk}
           value={t.disk.value}
           unit={t.disk.unit}
           meter={t.disk.pct}
           line={t.disk.line}
         />
         <Tile
-          label={HOST_STATUS_COPY.today}
+          label={hostStatusCopyHere.today}
           value={t.today.value}
           unit={t.today.unit}
           line={t.today.line}
@@ -333,6 +342,7 @@ function Tiles({ metrics }: { metrics: HostMetrics }) {
 
 /** Before the first answer: the tiles' frames, quiet. */
 function TileSkeletons() {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const tile = (key: string) => (
     <View key={key} style={[cardStyle(theme), { flex: 1, padding: 14, gap: 10 }]}>
@@ -342,7 +352,7 @@ function TileSkeletons() {
     </View>
   );
   return (
-    <View style={{ gap: 10 }} accessibilityLabel="Loading">
+    <View style={{ gap: 10 }} accessibilityLabel={tMobile('managed.loading')}>
       <View style={{ flexDirection: 'row', gap: 10 }}>{['a', 'b'].map(tile)}</View>
       <View style={{ flexDirection: 'row', gap: 10 }}>{['c', 'd'].map(tile)}</View>
     </View>
@@ -405,18 +415,21 @@ function usePickedDay<R extends { date: string }>(rows: readonly R[]) {
 
 /** Data per day: 14 days, received and sent stacked. */
 function DaysCard({ metrics }: { metrics: HostMetrics }) {
+  const { rawLocale } = useI18n();
+  const hostStatusCopyHere = hostStatusCopy(rawLocale);
+
   const rows = hostDayRows(metrics.days);
   const scale = hostDayScale(rows);
   const { picked, shown, pick, step } = usePickedDay(rows);
   const row = rows[shown];
   const readout = row ? dayReadout(row) : null;
   return (
-    <StatusCard title={HOST_STATUS_COPY.perDay} hint={HOST_STATUS_COPY.perDayHint}>
+    <StatusCard title={hostStatusCopyHere.perDay} hint={hostStatusCopyHere.perDayHint}>
       <Legend
         box
         items={[
-          { swatch: 'chart1', label: HOST_STATUS_COPY.received },
-          { swatch: 'chart2', label: HOST_STATUS_COPY.sent },
+          { swatch: 'chart1', label: hostStatusCopyHere.received },
+          { swatch: 'chart2', label: hostStatusCopyHere.sent },
         ]}
       />
       <Readout readout={readout} />
@@ -428,7 +441,7 @@ function DaysCard({ metrics }: { metrics: HostMetrics }) {
         tickLabel={(v) => hostDayTick(v, scale.max)}
         axis={rows.map((r) => r.axis)}
         height={140}
-        label={chartLabel(HOST_STATUS_COPY.perDay, HOST_STATUS_COPY.perDayHint)}
+        label={chartLabel(hostStatusCopyHere.perDay, hostStatusCopyHere.perDayHint)}
         readout={readout}
         selected={picked}
         onPick={pick}
@@ -443,6 +456,10 @@ function DaysCard({ metrics }: { metrics: HostMetrics }) {
  * a poll moving the points along leaves it where it was; a finger on a gap picks the nearest measured point.
  */
 function LineCard({ chart, metrics }: { chart: 'processor' | 'network'; metrics: HostMetrics }) {
+  const { rawLocale } = useI18n();
+  const hostRangeLabelsHere = hostRangeLabels(rawLocale);
+  const hostStatusCopyHere = hostStatusCopy(rawLocale);
+
   const theme = useTheme();
   const [at, setAt] = useState<number | null>(null);
   const range: HostMetricsRange = metrics.series.range;
@@ -463,17 +480,17 @@ function LineCard({ chart, metrics }: { chart: 'processor' | 'network'; metrics:
   const scale = processor ? HOST_CPU_SCALE : hostSpeedScale(points);
   const peak = processor ? hostPeak(metrics.series) : null;
   const note = hostMeasuringNote(metrics);
-  const title = processor ? HOST_STATUS_COPY.processor : HOST_STATUS_COPY.networkSpeed;
+  const title = processor ? hostStatusCopyHere.processor : hostStatusCopyHere.networkSpeed;
   return (
     <StatusCard
       title={title}
-      hint={processor ? HOST_STATUS_COPY.processorHint(metrics.now.cores) : HOST_STATUS_COPY.networkHint}
+      hint={processor ? hostStatusCopyHere.processorHint(metrics.now.cores) : hostStatusCopyHere.networkHint}
     >
       {processor ? null : (
         <Legend
           items={[
-            { swatch: 'chart1', label: HOST_STATUS_COPY.download },
-            { swatch: 'chart2', label: HOST_STATUS_COPY.upload },
+            { swatch: 'chart1', label: hostStatusCopyHere.download },
+            { swatch: 'chart2', label: hostStatusCopyHere.upload },
           ]}
         />
       )}
@@ -494,12 +511,12 @@ function LineCard({ chart, metrics }: { chart: 'processor' | 'network'; metrics:
         height={processor ? 150 : 140}
         label={chartLabel(
           title,
-          HOST_RANGE_LABELS[range],
+          hostRangeLabelsHere[range],
           peak
-            ? HOST_STATUS_COPY.peak(peak.pct, peak.at, zone)
+            ? hostStatusCopyHere.peak(peak.pct, peak.at, zone)
             : processor
               ? null
-              : HOST_STATUS_COPY.networkHint,
+              : hostStatusCopyHere.networkHint,
         )}
         readout={readout}
         selected={picked}
@@ -530,13 +547,16 @@ function toneColor(theme: Theme, tone: HostDiskTone): string {
 
 /** The data disk's parts as a bar and a legend with sizes, then the system and backup disks (BS-10). */
 function DiskCard({ metrics }: { metrics: HostMetrics }) {
+  const { rawLocale } = useI18n();
+  const hostStatusCopyHere = hostStatusCopy(rawLocale);
+
   const theme = useTheme();
   const data = metrics.disks.data;
   const known = data.parts !== null;
   const rows = hostDiskRows(data);
   const text = hostDiskText(metrics.disks);
   return (
-    <StatusCard title={HOST_STATUS_COPY.disk} hint={null}>
+    <StatusCard title={hostStatusCopyHere.disk} hint={null}>
       <Text size={12.5} lh={1.4} color={theme.colors.mut} style={{ marginTop: 2 }}>
         {text.used}
       </Text>

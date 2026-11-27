@@ -8,7 +8,16 @@
  */
 import type { MarkLike } from '@whombat/brand';
 import type { HomeOverview, NeedsYouItem, ThingStatus, ThingSummary, Widget } from '@whombat/core';
-import { daysAgo, formatDate, formatShortWeekday, formatWeekday, toDate } from '@whombat/core/text';
+import { formatLocaleOf } from '@whombat/core/i18n';
+import {
+  daysAgo,
+  formatDate,
+  formatShortWeekday,
+  formatWeekday,
+  toDate,
+  zonedParts,
+} from '@whombat/core/text';
+import { clientTranslator } from '../i18n/catalog';
 import { type NeedsYouRow, needsYouRows } from './needsYou';
 import { type StatusLevel, thingStatusView } from './statusLevel';
 import {
@@ -17,6 +26,7 @@ import {
   type ThingGlyph,
   thingGlyph,
   thingMark,
+  thingStatusLabels,
   thingTileTitle,
 } from './things';
 
@@ -27,25 +37,58 @@ export type HomeInput = Pick<HomeOverview, 'summary' | 'needsYou' | 'things' | '
 
 /* Your things ------------------------------------------------------------------------------------------------------ */
 
+function locWeekday(at: string, timeZone: string, style: 'long' | 'short', locale?: string | null): string {
+  if (!locale) return style === 'long' ? formatWeekday(at, timeZone) : formatShortWeekday(at, timeZone);
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), { weekday: style, timeZone })
+    .format(toDate(at))
+    .replace(/\.$/, '');
+}
+
+function locDate(at: string, now: Date | number, timeZone: string, locale?: string | null): string {
+  if (!locale) return formatDate(at, timeZone, { now: toDate(now) });
+  const d = toDate(at);
+  const sameYear = zonedParts(d, timeZone).year === zonedParts(now, timeZone).year;
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone,
+  })
+    .format(d)
+    .replace(/\.$/, '');
+}
+
 /**
  * When a connection was last used, as part of its line (HR-23): “used today”, “used yesterday”, “used Friday” this
  * week, else “used 3 Oct”. A time ahead of `now` (a clock that runs early) counts as today.
  */
-export function usedPhrase(usedAt: string, now: Date | number, timeZone: string): string {
+export function usedPhrase(
+  usedAt: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   const days = daysAgo(usedAt, now, timeZone);
-  if (days <= 0) return 'used today';
-  if (days === 1) return 'used yesterday';
-  if (days < 7) return `used ${formatWeekday(usedAt, timeZone)}`;
-  return `used ${formatDate(usedAt, timeZone, { now: toDate(now) })}`;
+  if (days <= 0) return tr.t('sections.usedToday');
+  if (days === 1) return tr.t('sections.usedYesterday');
+  if (days < 7) return tr.t('sections.usedWhen', { when: locWeekday(usedAt, timeZone, 'long', locale) });
+  return tr.t('sections.usedWhen', { when: locDate(usedAt, now, timeZone, locale) });
 }
 
 /** The web table's LAST USED (AP-2272): “today”, “yesterday”, “Fri” this week, else “3 Oct”. */
-export function usedShort(usedAt: string, now: Date | number, timeZone: string): string {
+export function usedShort(
+  usedAt: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   const days = daysAgo(usedAt, now, timeZone);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return formatShortWeekday(usedAt, timeZone);
-  return formatDate(usedAt, timeZone, { now: toDate(now) });
+  if (days <= 0) return tr.t('sections.today');
+  if (days === 1) return tr.t('sections.yesterday');
+  if (days < 7) return locWeekday(usedAt, timeZone, 'short', locale);
+  return locDate(usedAt, now, timeZone, locale);
 }
 
 /**
@@ -56,14 +99,18 @@ export function connectedLine(
   thing: Pick<ThingSummary, 'status' | 'usedAt'>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): string {
-  const state = connectedState(thing.status);
-  return thing.usedAt ? `${state} · ${usedPhrase(thing.usedAt, now, timeZone)}` : state;
+  const state = connectedState(thing.status, locale);
+  return thing.usedAt ? `${state} · ${usedPhrase(thing.usedAt, now, timeZone, locale)}` : state;
 }
 
 /** “Connected” for a thing that is fine (or not checked yet), else what is wrong with it. */
-function connectedState(status: ThingStatus): string {
-  return status === 'ok' || status === 'unknown' ? 'Connected' : THING_STATUS_LABELS[status];
+function connectedState(status: ThingStatus, locale?: string | null): string {
+  const labels = locale ? thingStatusLabels(locale) : THING_STATUS_LABELS;
+  return status === 'ok' || status === 'unknown'
+    ? clientTranslator(locale).t('statusLevel.connected')
+    : labels[status];
 }
 
 /**
@@ -167,23 +214,27 @@ export function homeThingRows(
   things: readonly ThingSummary[],
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): HomeThingRow[] {
+  const labels = locale ? thingStatusLabels(locale) : THING_STATUS_LABELS;
   const listed = listedThings(things).filter((t) => t.kind !== 'server');
   const ordered = [
     ...listed.filter((t) => t.facts.length > 0),
     ...listed.filter((t) => t.facts.length === 0),
   ];
   return ordered.map((t) => {
-    const title = thingTileTitle(t);
+    const title = thingTileTitle(t, locale);
     const subtitle = [title === t.name ? null : title, t.line ?? null].filter(Boolean).join(' · ') || null;
     const figures = t.facts.slice(0, HOME_THING_FIGURES).map((f) => ({
       label: f.label,
       value: f.unit ? `${f.value} ${f.unit}` : f.value,
       note: f.note ?? null,
     }));
-    const state = t.status === 'ok' || t.status === 'unknown' ? null : THING_STATUS_LABELS[t.status];
-    const used = t.usedAt ? usedShort(t.usedAt, now, timeZone) : null;
-    const said = figures.length ? figures.map(thingFigurePhrase) : [connectedState(t.status).toLowerCase()];
+    const state = t.status === 'ok' || t.status === 'unknown' ? null : labels[t.status];
+    const used = t.usedAt ? usedShort(t.usedAt, now, timeZone, locale) : null;
+    const said = figures.length
+      ? figures.map(thingFigurePhrase)
+      : [connectedState(t.status, locale).toLowerCase()];
     return {
       id: t.id,
       name: t.name,
@@ -191,24 +242,26 @@ export function homeThingRows(
       state,
       tone: THING_TONES[t.status],
       figures,
-      plain: state ? '—' : connectedState(t.status),
+      plain: state ? '—' : connectedState(t.status, locale),
       used,
       line: figures.length
         ? (subtitle ?? '')
         : state
-          ? [subtitle, t.usedAt ? usedPhrase(t.usedAt, now, timeZone) : null].filter(Boolean).join(' · ')
-          : connectedLine(t, now, timeZone),
+          ? [subtitle, t.usedAt ? usedPhrase(t.usedAt, now, timeZone, locale) : null]
+              .filter(Boolean)
+              .join(' · ')
+          : connectedLine(t, now, timeZone, locale),
       glyph: thingGlyph(t),
       mark: thingMark(t),
       status: t.status,
       href: t.href,
-      ...thingStatusView(t),
+      ...thingStatusView(t, locale),
       notAnswering: notAnswering(t, now),
       label: [
         t.name,
         figures.length ? state?.toLowerCase() : null,
         ...said,
-        t.usedAt ? usedPhrase(t.usedAt, now, timeZone) : null,
+        t.usedAt ? usedPhrase(t.usedAt, now, timeZone, locale) : null,
       ]
         .filter(Boolean)
         .join(', '),
@@ -253,6 +306,7 @@ export interface HomeSectionsOptions {
   servers: boolean;
   /** The viewer may add a connection: Your things offers “Add a connection”. */
   canAddConnection: boolean;
+  locale?: string | null | undefined;
 }
 
 /**
@@ -261,20 +315,20 @@ export interface HomeSectionsOptions {
  * there are any.
  */
 export function homeSections(overview: HomeInput, options: HomeSectionsOptions): HomeSection[] {
-  const { now, timeZone } = options;
+  const { now, timeZone, locale } = options;
   const sections: HomeSection[] = [];
   if (overview.needsYou.length > 0) {
     sections.push({
       kind: 'needsYou',
       count: Math.max(overview.summary.needsYou, overview.needsYou.length),
       items: [...overview.needsYou],
-      rows: needsYouRows(overview.needsYou, now, timeZone),
+      rows: needsYouRows(overview.needsYou, now, timeZone, undefined, locale),
     });
   }
   if (options.servers) {
     sections.push({ kind: 'servers', servers: overview.things.filter((t) => t.kind === 'server') });
   }
-  const things = homeThingRows(overview.things, now, timeZone);
+  const things = homeThingRows(overview.things, now, timeZone, locale);
   if (things.length > 0 || options.canAddConnection) {
     sections.push({ kind: 'things', rows: things, add: options.canAddConnection });
   }

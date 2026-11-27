@@ -6,9 +6,11 @@
  * before, and the quiet lines under it when fast replies or the model asked for didn't happen. Words come in from
  * `@whombat/client`'s `chat/runtime.ts` and `data/chatRuntime.ts`.
  */
+
 import type { ChatProvider } from '@whombat/core';
 import { View } from 'react-native';
 import { switchedParts } from '../data/chatRuntime';
+import { useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -73,6 +75,7 @@ export function RanOnMark({
   label: string;
   text: string;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
@@ -81,7 +84,7 @@ export function RanOnMark({
       ringRadius={6}
       accessibilityRole="button"
       accessibilityLabel={text}
-      accessibilityHint="Says what answered"
+      accessibilityHint={tMobile('ui.says-what-answered')}
       hitSlop={hitSlopFor(20)}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 20 }}
     >

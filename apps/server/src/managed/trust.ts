@@ -39,7 +39,7 @@
  * Every change is a signed appliance audit event in the same transaction.
  */
 import { randomBytes, randomInt } from 'node:crypto';
-import { newId } from '@whombat/core';
+import { DEFAULT_PREFERENCES, newId, normalizeLocaleTag } from '@whombat/core';
 import {
   CLAIM_FAILURE_WINDOW_S,
   CLAIM_WINDOW_WRONG_PER_KEY,
@@ -86,6 +86,7 @@ import {
   principals,
   screens,
 } from '../db/schema/index';
+import { configuredBoxLocale, notifyLocaleChanged } from '../i18n/locale';
 import { errorForLog, withoutValues } from '../lib/db-errors';
 import { ApiError, conflict, forbidden, notFound } from '../lib/errors';
 import { safeEqual, sha256 } from '../lib/secrets';
@@ -566,10 +567,19 @@ export class TrustService {
       deviceReady: state.claimDeviceId !== null,
       retryAt: state.claimConsumedAt ? null : await this.claimBackoff(this.now()),
     };
-    // Claimed: the file carries the burrows from its first `claimed` write on (CT-116).
-    if (status.claimed) await this.refreshConsoleBurrows();
+    // Claimed: the file carries the burrows and owner's language from its first `claimed` write on (CT-116).
+    if (status.claimed) {
+      await this.refreshConsoleBurrows();
+      await this.refreshConsoleLocale();
+    }
     this.ceremony.setStatus(status);
     return status;
+  }
+
+  /** Reads the owner's language preference and hands it to the console file. */
+  async refreshConsoleLocale(): Promise<void> {
+    const locale = await configuredBoxLocale(this.services);
+    this.ceremony.setLocale(locale);
   }
 
   private burrowsGeneration = 0;
@@ -714,6 +724,7 @@ export class TrustService {
       confirm: string;
       account: { name: string; email: string };
       endpoint: { label: string; platform: EndpointPlatform };
+      locale?: string | undefined;
     },
   ) {
     this.refuseOnCommunity();
@@ -748,9 +759,9 @@ export class TrustService {
       }
       return begin;
     });
-    const { endpointId } = await this.commitClaim(identity, input, input.method);
+    const { endpointId, accountId, locale } = await this.commitClaim(identity, input, input.method);
     return {
-      ...(await this.afterClaim(endpointId, begin.attemptId)),
+      ...(await this.afterClaim(endpointId, begin.attemptId, accountId, locale)),
       confirm: begin.tags.appliance,
     };
   }
@@ -873,11 +884,13 @@ export class TrustService {
       claimId: string;
       account: { name: string; email: string };
       endpoint: { label: string; platform: EndpointPlatform };
+      locale?: string | undefined;
     },
     method: string,
     abandoned: () => boolean = () => false,
-  ): Promise<{ endpointId: string }> {
+  ): Promise<{ endpointId: string; accountId: string; locale: string | null }> {
     const now = this.now();
+    const initialLocale = normalizeLocaleTag(input.locale);
     return (
       this.services.pipeline
         .transactAccount(async (tx) => {
@@ -895,7 +908,13 @@ export class TrustService {
           const email = input.account.email.trim().toLowerCase();
           const [account] = await tx
             .insert(accounts)
-            .values({ id: newId('account'), email, name: input.account.name, createdAt: now })
+            .values({
+              id: newId('account'),
+              email,
+              name: input.account.name,
+              ...(initialLocale ? { preferences: { ...DEFAULT_PREFERENCES, locale: initialLocale } } : {}),
+              createdAt: now,
+            })
             .onConflictDoNothing({ target: accounts.email })
             .returning();
           if (!account)
@@ -932,7 +951,7 @@ export class TrustService {
             at: now,
           });
           if (abandoned()) throw new VerdictWaitError('write the claim');
-          return { endpointId };
+          return { endpointId, accountId: account.id, locale: initialLocale };
         })
         // A statement that fails here carries the person's name and email: they stop here, out of every log.
         .catch((err) => {
@@ -945,7 +964,13 @@ export class TrustService {
    * After a claim was written: its attempt is marked, the failure counters go, the console says the appliance is set
    * up, the claim link is used up. A commercial box then reports the claim to control; a community box has none.
    */
-  private async afterClaim(endpointId: string, attemptId: number) {
+  private async afterClaim(
+    endpointId: string,
+    attemptId: number,
+    accountId?: string,
+    locale: string | null = null,
+  ) {
+    if (accountId && locale) notifyLocaleChanged(this.services, accountId, locale);
     await this.db
       .update(applianceClaimAttempts)
       .set({ ok: 1 })
@@ -1218,6 +1243,7 @@ export class TrustService {
       confirm?: string | undefined;
       account: { name: string; email: string };
       endpoint: { label: string; platform: EndpointPlatform };
+      locale?: string | undefined;
     },
   ) {
     this.requireLocalClaim(session?.transport);
@@ -1255,12 +1281,14 @@ export class TrustService {
       } catch (err) {
         if (gaveUp)
           void written
-            .then(({ endpointId }) => this.afterClaim(endpointId, proof.attemptId))
+            .then(({ endpointId, accountId, locale }) =>
+              this.afterClaim(endpointId, proof.attemptId, accountId, locale),
+            )
             .catch(() => undefined);
         throw err;
       }
     });
-    return this.afterClaim(done.endpointId, done.attemptId);
+    return this.afterClaim(done.endpointId, done.attemptId, done.accountId, done.locale);
   }
 
   /** Whether a session's proof is the one for `claimId`, in time, and for the letters showing now. */

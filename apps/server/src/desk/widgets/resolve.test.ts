@@ -1,5 +1,6 @@
 import { type DeskWidgetSpec, DeskWidgetView, NEWS_WORDS, WEATHER_WORDS, type Widget } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
+import { notifyLocaleChanged } from '../../i18n/locale';
 import type { PrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
 import { parseMetForecast } from '../../weather/forecast';
@@ -198,6 +199,29 @@ describe('resolving a screen’s widgets (DK-142, DK-148)', () => {
     await r.idle();
     const again = await r.resolve(ctx(), one, facts, 0);
     expect(again.get('w_fig')?.view.kind).toBe('list');
+  });
+
+  it('forgets what it kept as soon as the person’s language changes', async () => {
+    const t = fakeThings();
+    t.fail(true);
+    const own = { clock: () => new Date(now) } as unknown as Services;
+    const r = new WidgetResolver(own, () => t.things);
+    const one = [SPECS[4] as DeskWidgetSpec];
+    const dutch = await r.resolve({ ...ctx(), services: own, locale: 'nl-NL' }, one, facts, 1_000);
+    const failed = dutch.get('w_fig')?.view;
+    expect(failed?.kind === 'text' && failed.body).toContain('Ik kan');
+    // Back to English: the Dutch words aren't kept, the widget is read again at once.
+    notifyLocaleChanged(own, 'acc_1', 'en');
+    const english = { ...ctx(), services: own, locale: 'en-GB' };
+    expect((await r.resolve(english, one, facts, 0)).get('w_fig')).toBeUndefined();
+    expect(t.calls).toHaveLength(2);
+    await r.idle();
+    const again = (await r.resolve(english, one, facts, 0)).get('w_fig')?.view;
+    expect(again?.kind === 'text' && again.body).toContain('I can’t');
+    // Once closed, it no longer follows the language.
+    r.close();
+    notifyLocaleChanged(own, 'acc_1', 'nl-NL');
+    expect((await r.resolve(english, one, facts, 0)).get('w_fig')?.view.kind).toBe('text');
   });
 
   it('has no server view until it knows the server, then says when it’s gone', async () => {

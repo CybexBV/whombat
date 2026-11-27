@@ -4,8 +4,8 @@
  * to approve (approval #N).”). Pure.
  */
 import {
-  AGENT_FALLBACK_NAME,
   ApiError,
+  agentFallbackName,
   type CommitResult,
   InvalidRequestError,
   NetworkError,
@@ -19,6 +19,7 @@ import type {
   FeedbackSeverity,
 } from '@whombat/core/domain';
 import { plural } from '@whombat/core/text';
+import { currentLocale } from '../../i18n/provider';
 
 export const FEEDBACK_TEXT = {
   intro:
@@ -204,7 +205,7 @@ export function intakeLabel(i: Pick<FeedbackIntegration, 'intake'>): string {
 /** `assesses`: whether the agent can assess reports now (`assessorProblem`, one-agent.md AP-4935). */
 export function assessmentLabel(
   i: Pick<FeedbackIntegration, 'assessment'>,
-  words: Pick<FeedbackWords, 'noAgent'> = feedbackWords(AGENT_FALLBACK_NAME),
+  words: Pick<FeedbackWords, 'noAgent'> = feedbackWords(agentFallbackName(currentLocale())),
   assesses = true,
 ): string {
   if (!assesses) return words.noAgent;
@@ -308,7 +309,7 @@ export function errorText(err: unknown, words: ErrorWords = {}): string {
     if (err.status === 501 || err.code === 'not_implemented')
       return words.notAvailable ?? 'This Whombat can’t do that yet.';
     if (err.status === 404 && words.notFound) return words.notFound;
-    return problemText(err, 'Something went wrong. Nothing changed.');
+    return problemText(err, 'Something went wrong. Nothing changed.', currentLocale());
   }
   if (err instanceof InvalidRequestError) return 'Check the highlighted fields.';
   if (err instanceof NetworkError) return 'Couldn’t reach Whombat. Nothing changed, try again.';

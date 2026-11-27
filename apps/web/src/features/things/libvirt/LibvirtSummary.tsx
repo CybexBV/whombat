@@ -26,6 +26,7 @@ import { Info } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import type { EditCtx } from '../guest/EditDialog';
 import { Figures, HintLine, History } from '../guest/GuestSummary';
 import { TextKeyDialog } from '../guest/OptionsTab';
@@ -116,7 +117,7 @@ export function LibvirtSummary({
     facts.push({
       id: 'backup',
       k: 'Last backup',
-      v: `${formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone)} · ${ok ? 'went fine' : g.lastBackup.result}`,
+      v: `${formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone, currentLocale())} · ${ok ? 'went fine' : g.lastBackup.result}`,
       tone: ok ? 'ok' : 'bad',
     });
   } else if (cfg) facts.push({ id: 'backup', k: 'Last backup', v: 'None yet' });

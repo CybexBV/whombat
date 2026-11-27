@@ -16,11 +16,12 @@ import {
   type WatchCheckView,
 } from '@whombat/client';
 import { type QuietActions, useThingWatch } from '@whombat/client/react';
-import { type NoticeSubject, QUIET_WORDS, type ThingWatchCheck } from '@whombat/core';
+import { type NoticeSubject, quietWords, type ThingWatchCheck } from '@whombat/core';
 import { type ReactNode, useId } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
 import { SkeletonRows } from '../../../components/ListState';
 import { Toggle } from '../../../components/Toggle';
+import { useLocaleWords } from '../../../i18n/words';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
 import { Card } from '../parts';
 import { useLimitSheet } from './ChangeLimit';
@@ -28,6 +29,7 @@ import styles from './Quiet.module.css';
 import { useThingQuiet } from './useQuiet';
 
 export function WatchSettings({ burrow, thing }: { burrow: string; thing: string }) {
+  const QUIET_WORDS = useLocaleWords(quietWords);
   const { timeZone } = useBurrowContext(burrow);
   const now = useNow(60_000);
   const q = useThingWatch({ params: { burrow, thing } }, { retry: false });
@@ -93,6 +95,7 @@ function WatchRow({
   /** Change the limit, for the whole server or one item; none for who may not. */
   onLimit: ((check: ThingWatchCheck, subject?: NoticeSubject) => void) | null;
 }) {
+  const QUIET_WORDS = useLocaleWords(quietWords);
   const id = useId();
   const busy = actions?.busy({ check: row.check }) ?? false;
   const limit = check && row.on ? limitLine(check) : null;

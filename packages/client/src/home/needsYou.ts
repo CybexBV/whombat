@@ -131,6 +131,7 @@ export function needsYouRows(
   now: Date | number,
   timeZone: string,
   assistant?: string,
+  locale?: string | null,
 ): NeedsYouRow[] {
   return items.map((item) => {
     const research = assistant ? needsYouResearch(item, assistant) : null;
@@ -140,7 +141,7 @@ export function needsYouRows(
       glyph: needsYouGlyph(item),
       tone: item.severity,
       ...needsYouResearchWords(item, research),
-      when: needsYouWhen(item.at, now, timeZone),
+      when: needsYouWhen(item.at, now, timeZone, locale),
       actions: research ? needsYouResearchActions(item, research.view) : needsYouActions(item),
       research,
     };

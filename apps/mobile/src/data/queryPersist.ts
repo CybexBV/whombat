@@ -16,6 +16,7 @@
  */
 import { type DehydratedState, dehydrate, hydrate, type Query, type QueryClient } from '@tanstack/query-core';
 import { isOptimisticMessage, parseKey } from '@whombat/client/query';
+import { DEFAULT_LOCALE } from '@whombat/core/i18n';
 import type { SecureBox } from './secureBox';
 import { shortAge } from './syncLog';
 
@@ -67,6 +68,7 @@ export interface PersistedQueries {
   /** The account scope (`scopeKey`) the data belongs to; null before the session said. */
   account: string | null;
   state: DehydratedState;
+  locale?: string;
 }
 
 /**
@@ -201,6 +203,7 @@ function snapshot(
   account: string | null,
   now: number,
   opened: ReadonlyMap<string, number>,
+  locale?: string,
 ): { json: string | null; conversations: Set<string> } {
   const kept = keptConversations(qc.getQueryCache().getAll().filter(shouldPersistQuery), opened);
   const state = dehydrate(qc, {
@@ -236,7 +239,10 @@ function snapshot(
     };
   });
   // The copy around its reads: `{"v":1,…,"state":{"mutations":[],"queries":[` … `]}}`.
-  const meta = JSON.stringify({ v: 1, savedAt: now, account } satisfies Omit<PersistedQueries, 'state'>);
+  const meta = JSON.stringify({ v: 1, savedAt: now, account, ...(locale && { locale }) } satisfies Omit<
+    PersistedQueries,
+    'state'
+  >);
   const head = `${meta.slice(0, -1)},"state":{"mutations":${JSON.stringify(state.mutations)},"queries":[`;
   const tail = ']}}';
   let size = parts.reduce((n, p) => n + p.json.length + 1, head.length + tail.length);
@@ -276,6 +282,7 @@ export interface QueryPersister {
   start(): () => void;
   /** Saves now (going to the background). */
   flush(): Promise<void>;
+  setLocale(locale: string): void;
 }
 
 export function createQueryPersister(input: {
@@ -285,6 +292,7 @@ export function createQueryPersister(input: {
   scope: string;
   /** The account scope now (`scopeKey` of the session's scope); null while it isn't known. */
   account: () => string | null;
+  initialLocale?: Promise<string | null>;
   now?: () => number;
   throttleMs?: number;
   /** Notes what was read back at start (this phone's sync log). */
@@ -295,6 +303,12 @@ export function createQueryPersister(input: {
   const throttleMs = input.throttleMs ?? SAVE_EVERY_MS;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
+  let locale: string | undefined;
+  let diskWork = Promise.resolve();
+  const write = (work: () => Promise<void>) => {
+    diskWork = diskWork.then(work).catch(() => {});
+    return diskWork;
+  };
   // Each kept read's data as last saved (or restored), by query hash: a refetch that brought the same answer keeps
   // the same data (structural sharing), so only a real change makes the copy out of date.
   let saved = new Map<string, unknown>();
@@ -321,12 +335,14 @@ export function createQueryPersister(input: {
     const account = input.account();
     if (!account) return;
     dirty = false;
-    const { json, conversations } = snapshot(qc, account, now(), opened);
+    const { json, conversations } = snapshot(qc, account, now(), opened, locale);
     remember();
     keptLast = conversations;
     // Too large to keep: the copy on the phone goes too, else every start opens with it however old it gets.
-    if (json) await box.saveJson(scope, QUERY_CACHE_NAME, json).catch(() => {});
-    else await box.remove(scope, QUERY_CACHE_NAME).catch(() => {});
+    await write(async () => {
+      if (json) await box.saveJson(scope, QUERY_CACHE_NAME, json);
+      else await box.remove(scope, QUERY_CACHE_NAME);
+    });
   };
   const later = () => {
     timer ??= setTimeout(() => void save(), throttleMs);
@@ -334,12 +350,17 @@ export function createQueryPersister(input: {
 
   return {
     async restore() {
-      const loaded = await box.load<PersistedQueries>(scope, QUERY_CACHE_NAME).catch(() => null);
+      const [loaded, cachedLocale] = await Promise.all([
+        box.load<PersistedQueries>(scope, QUERY_CACHE_NAME).catch(() => null),
+        input.initialLocale,
+      ]);
+      if (locale === undefined && input.initialLocale) locale = cachedLocale ?? DEFAULT_LOCALE;
       const saved = usableSnapshot(loaded, now());
       if (!saved) {
         if (loaded) input.log?.('copy not read back: too old or of another format');
         return null;
       }
+      if ((saved.locale ?? DEFAULT_LOCALE) !== (locale ?? DEFAULT_LOCALE)) return null;
       // Read back after the first screen (it lost the race against its timeout): a read that was answered or failed
       // meanwhile keeps its answer or its error. The copy over an error would look like an answer, and nothing would
       // ask again. A read still on its way gets the copy until its answer comes.
@@ -391,6 +412,12 @@ export function createQueryPersister(input: {
         if (timer) clearTimeout(timer);
         timer = null;
       };
+    },
+    setLocale(next) {
+      if ((locale ?? DEFAULT_LOCALE) === next) return;
+      locale = next;
+      dirty = true;
+      void write(() => box.remove(scope, QUERY_CACHE_NAME));
     },
     async flush() {
       if (timer) clearTimeout(timer);

@@ -13,14 +13,12 @@
  * From the app's Backups (`later`): `resume` opens where a restore stands (finishing it, trying again); `replace` brings
  * one back on a Whombat that started fresh, after saying what's on it now is set aside (`backup.adopt` with `replace`).
  */
-import { AGENT_FALLBACK_NAME, createClient } from '@whombat/client';
+import { agentFallbackName, createClient } from '@whombat/client';
 import {
   accountKitsToBringBack,
-  BACKUP_OPTIONS_TEXT,
   type BringBackKit,
   backupToBringBack,
   bringBackName,
-  COPY,
   type ControlApi,
   capital,
   kitFromScan,
@@ -57,6 +55,10 @@ import { cx } from '../components/cx';
 import { Icon } from '../components/Icon';
 import { Tag } from '../components/Tag';
 import { backupErrorText } from '../features/settings/BackupDestination';
+import { BACKUP_OPTIONS_TEXT } from '../i18n/clientWords';
+import { COPY } from '../i18n/managed';
+import { currentLocale } from '../i18n/provider';
+import { useLocaleWords } from '../i18n/words';
 import styles from './bringBack.module.css';
 import {
   type BringBackStep,
@@ -128,6 +130,7 @@ export function BringBackFlow({
   onList,
   pollMs = RESTORE_POLL_MS,
 }: BringBackProps) {
+  const AGENT_FALLBACK_NAME = useLocaleWords(agentFallbackName);
   const [step, setStep] = useState<BringBackStep | null>(null);
   const [kits, setKits] = useState<BringBackKit[] | null>(null);
   const [looking, setLooking] = useState<Looking>('idle');
@@ -222,7 +225,7 @@ export function BringBackFlow({
 
   const kit = kits?.[0] ?? null;
   // The old Whombat's own name, else “your Whombat” (never its device id).
-  const name = bringBackName(oldName ?? kit?.whombatName);
+  const name = bringBackName(oldName ?? kit?.whombatName, currentLocale());
   const here = thisName ?? 'this Whombat';
 
   const adopt = useCallback(
@@ -378,7 +381,10 @@ export function BringBackFlow({
         </div>
         {kit ? (
           <p className={styles.note} data-found="">
-            {B.found(bringBackName(kit.whombatName), longDate(kit.createdAt))}
+            {B.found(
+              bringBackName(kit.whombatName, currentLocale()),
+              longDate(kit.createdAt, currentLocale()),
+            )}
           </p>
         ) : null}
         <Button
@@ -457,7 +463,7 @@ export function BringBackFlow({
       B.workingTitle(name),
       B.workingLead,
       <>
-        <Steps steps={restoreSteps(awayState(state, reachable), reachable, place)} />
+        <Steps steps={restoreSteps(awayState(state, reachable), reachable, place, currentLocale())} />
         {!reachable ? (
           <p className={styles.hint} role="status">
             {B.reconnecting}
@@ -629,8 +635,8 @@ function KitSource({
             </span>
             <span className={styles.choiceMeta}>
               {kit.from === 'network'
-                ? B.foundNear(longDate(kit.createdAt))
-                : B.savedOn(longDate(kit.createdAt))}
+                ? B.foundNear(longDate(kit.createdAt, currentLocale()))
+                : B.savedOn(longDate(kit.createdAt, currentLocale()))}
             </span>
           </span>
         </div>
@@ -836,7 +842,7 @@ function OldWhombat({
           ) : null}
           {B.oldGone}
         </h2>
-        <p className={styles.answerMeta}>{oldWhombatMeta(answer, newPassword)}</p>
+        <p className={styles.answerMeta}>{oldWhombatMeta(answer, newPassword, currentLocale())}</p>
         <div className={styles.answerActions}>
           <Button
             variant={answer === 'gone' ? 'primary' : 'secondary'}
@@ -916,6 +922,7 @@ function PasskeyForThis({
           name: passkeyName(browserLabel()),
         }
       : null,
+    currentLocale(),
   );
   const armed = tap?.view?.phase === 'ready';
   return (

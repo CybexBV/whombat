@@ -11,7 +11,8 @@
 
 import { createSign } from 'node:crypto';
 import { connect, constants } from 'node:http2';
-import { IOS_LIVE_ACTIVITY_ATTRIBUTES, liveActivityAttributes } from '@whombat/core';
+import { IOS_LIVE_ACTIVITY_ATTRIBUTES, liveActivityAttributes, type PushPayload } from '@whombat/core';
+import { guardPreview, previewOffWords } from './preview-off';
 import type { PushOutcome, PushTransport } from './types';
 
 function base64url(input: string | Buffer): string {
@@ -53,12 +54,18 @@ export function buildApnsPayload(payload: {
   /** Alerts: the burrow slug and inbox row, so the app opens the screen and marks the row read. */
   burrow?: string;
   notificationId?: string | null;
+  /**
+   * False when the recipient turned previews off: the app shows its own generic words in its own language, and the
+   * alert itself carries only the generic title and line (for `kind`), never the words it was handed.
+   */
+  preview?: boolean;
+  kind?: PushPayload['kind'];
   event?: 'start' | 'update' | 'end';
   contentState?: unknown;
   attributesType?: string;
   attributes?: unknown;
 }) {
-  if (payload.event) {
+  if (payload.event && payload.preview !== false) {
     const now = Math.floor(Date.now() / 1000);
     return {
       aps: {
@@ -78,11 +85,16 @@ export function buildApnsPayload(payload: {
       path: payload.path,
     };
   }
+  const alert =
+    payload.preview === false
+      ? previewOffWords(payload.kind, payload.body)
+      : { title: payload.title, body: payload.body };
   return {
-    aps: { alert: { title: payload.title, body: payload.body }, 'mutable-content': 1 },
+    aps: { alert, 'mutable-content': 1 },
     path: payload.path,
     ...(payload.burrow ? { burrow: payload.burrow } : {}),
     ...(payload.notificationId ? { notificationId: payload.notificationId } : {}),
+    ...(payload.preview === false ? { preview: false } : {}),
   };
 }
 
@@ -116,21 +128,22 @@ export const sendApns: PushTransport = async (config, log, device, payload) => {
   const privateKey = APNS_PRIVATE_KEY.includes('\\n')
     ? APNS_PRIVATE_KEY.replaceAll('\\n', '\n')
     : APNS_PRIVATE_KEY;
+  const safe = guardPreview(payload);
   const host = config.APNS_ENV === 'production' ? 'api.push.apple.com' : 'api.sandbox.push.apple.com';
-  const topic = apnsTopic(APNS_BUNDLE_ID, !!payload.liveActivity);
+  const topic = apnsTopic(APNS_BUNDLE_ID, !!safe.liveActivity);
   const body = JSON.stringify(
-    payload.liveActivity
+    safe.liveActivity
       ? buildApnsPayload({
-          title: payload.liveActivity.display.title,
-          body: payload.liveActivity.display.text,
-          path: payload.path,
-          event: payload.liveActivity.event,
+          title: safe.liveActivity.display.title,
+          body: safe.liveActivity.display.text,
+          path: safe.path,
+          event: safe.liveActivity.event,
           // The widget renders the display (`WhombatLiveAttributes.ContentState` in the app's Swift code).
-          contentState: payload.liveActivity.display,
+          contentState: safe.liveActivity.display,
           attributesType: IOS_LIVE_ACTIVITY_ATTRIBUTES,
-          attributes: liveActivityAttributes(payload.liveActivity.activity, payload.burrow),
+          attributes: liveActivityAttributes(safe.liveActivity.activity, safe.burrow),
         })
-      : buildApnsPayload(payload),
+      : buildApnsPayload(safe),
   );
   let outcome: PushOutcome;
   const session = connect(`https://${host}`);
@@ -143,7 +156,7 @@ export const sendApns: PushTransport = async (config, log, device, payload) => {
         [constants.HTTP2_HEADER_PATH]: `/3/device/${device.token}`,
         authorization: `bearer ${jwt}`,
         'apns-topic': topic,
-        'apns-push-type': payload.liveActivity ? 'liveactivity' : 'alert',
+        'apns-push-type': safe.liveActivity ? 'liveactivity' : 'alert',
         'apns-priority': '10',
       });
       let status = 0;

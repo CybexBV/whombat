@@ -93,16 +93,69 @@ func (s *ServerState) Attention(now time.Time) []rules.Alert {
 // StatusNote is the short reason next to the status: for a warning, the
 // note of the most severe alert that asks for attention.
 func (s *ServerState) StatusNote(now time.Time) *string {
-	switch s.Status(now) {
+	note, _, _ := s.statusNote(s.Status(now), now)
+	return note
+}
+
+func (s *ServerState) statusNote(status string, now time.Time) (*string, string, map[string]any) {
+	switch status {
 	case rules.StatusOffline:
 		if s.LastSeen.IsZero() {
-			return ptr("never connected")
+			return ptr("never connected"), "never_connected", nil
 		}
-		return ptr("not checking in")
+		return ptr("not checking in"), "not_checking_in", nil
 	case rules.StatusWarning:
-		return strp(rules.StatusNote(s.Attention(now)))
+		if a, ok := rules.Banner(s.Attention(now)); ok {
+			code, params := alertStatusNote(a)
+			return strp(a.StatusNote), code, params
+		}
 	}
-	return nil
+	return nil, "", nil
+}
+
+var statusNoteCodes = map[string]string{
+	rules.RuleHeartbeatMissing:  "not_checking_in",
+	rules.RuleTempHigh:          "temperature",
+	rules.RuleTempCritical:      "temperature",
+	rules.RuleWearHigh:          "disk_wear",
+	rules.RuleWearCritical:      "disk_wear",
+	rules.RuleSpaceHigh:         "disk_space",
+	rules.RuleOvercommit:        "too_few_processors",
+	rules.RuleMemAssigned:       "memory_assigned",
+	rules.RuleSMARTFailing:      "disk_failing",
+	rules.RuleSMARTErrors:       "disk_errors",
+	rules.RulePoolDegraded:      "pool_degraded",
+	rules.RulePoolErrors:        "pool_errors",
+	rules.RuleRAIDDegraded:      "raid_degraded",
+	rules.RuleReadOnlyFS:        "readonly_fs",
+	rules.RuleInodesHigh:        "inodes_high",
+	rules.RuleQuorumLost:        "quorum_lost",
+	rules.RuleBackupFailed:      "backup_failed",
+	rules.RuleReplication:       "replication",
+	rules.RuleCeph:              "ceph",
+	rules.RuleTimeUnsynced:      "time_unsynced",
+	rules.RuleUPSOnBattery:      "ups_battery",
+	rules.RuleLinkDown:          "link_down",
+	rules.RuleFanFailed:         "fan_failed",
+	rules.RuleOOM:               "oom",
+	rules.RuleRestartLoop:       "restart_loop",
+	rules.RuleGuestStopped:      "guest_stopped",
+	rules.RuleDiskFullSoon:      "disk_full_soon",
+	rules.HubRuleDeniedRequests: "denied_requests",
+	rules.HubRuleCheckDown:      "check_down",
+	rules.HubRuleCheckCert:      "certificate",
+}
+
+// The rule and entity are available even for alerts saved before codes were stored.
+func alertStatusNote(a rules.Alert) (string, map[string]any) {
+	if a.StatusNote == "" {
+		return "", nil
+	}
+	code := statusNoteCodes[a.Rule]
+	if code == "temperature" {
+		return code, map[string]any{"sensor": a.Entity, "shortName": rules.SensorShortName(a.Entity)}
+	}
+	return code, nil
 }
 
 // AllGroup is the pseudo group of the group control.
@@ -230,8 +283,10 @@ func BuildHypervisor(r *proto.Report) *Hypervisor {
 func BuildFleetServer(s *ServerState, now time.Time) FleetServer {
 	r := s.Report
 	status := s.Status(now)
+	note, noteCode, noteParams := s.statusNote(status, now)
 	fs := FleetServer{
-		ID: s.ID, Hostname: s.Hostname, Group: s.Group, Status: status, StatusNote: s.StatusNote(now),
+		ID: s.ID, Hostname: s.Hostname, Group: s.Group, Status: status, StatusNote: note,
+		StatusNoteCode: noteCode, StatusNoteParams: noteParams,
 		LastSeen: T(s.LastSeen), DetailView: DetailView(r), OSFamily: OSFamily(r), AgentConnected: s.Connected, Via: s.Via, OpenAlerts: len(s.Open),
 		ConsoleOn: s.RCConsole && r != nil && r.Policy.Console, HostsThisWhombat: HostsThisWhombat(r),
 	}
@@ -276,7 +331,9 @@ func BuildAlert(a rules.Alert) Alert { return BuildAlertFor(a, nil, time.Now()) 
 // is in maintenance, suppressed while the host it runs on is offline.
 // Attention is what the badge counts: open and none of those.
 func BuildAlertFor(a rules.Alert, s *ServerState, now time.Time) Alert {
+	noteCode, noteParams := alertStatusNote(a)
 	out := Alert{ID: a.ID, Server: a.Server, Severity: a.Severity, Title: a.Title, Detail: a.Detail,
+		Code: a.Code, Params: a.Params, StatusNoteCode: noteCode, StatusNoteParams: noteParams,
 		OpenedAt: Time(a.OpenedAt), Rule: a.Rule, Entity: a.Entity, Key: a.Key, State: a.State, Link: strp(a.Link)}
 	if out.Key == "" {
 		out.Key = a.Rule + ":" + a.Entity
@@ -557,6 +614,9 @@ type ServerListItem struct {
 	HostsThisWhombat bool `json:"hosts_this_whombat,omitempty"`
 	// BackupPlace (backupplace.go): null from agents that don't report it.
 	BackupPlace *BackupPlace `json:"backup_place"`
+
+	StatusNoteCode   string         `json:"status_note_code,omitempty"`
+	StatusNoteParams map[string]any `json:"status_note_params,omitempty"`
 }
 
 // BuildServerList builds GET /servers.
@@ -566,6 +626,7 @@ func BuildServerList(states []*ServerState, now time.Time) []ServerListItem {
 		fs := BuildFleetServer(s, now)
 		out = append(out, ServerListItem{ID: fs.ID, Hostname: fs.Hostname, Group: fs.Group, Status: fs.Status,
 			StatusNote: fs.StatusNote, OS: fs.OS, DetailView: fs.DetailView, OSFamily: fs.OSFamily, LastSeen: fs.LastSeen,
+			StatusNoteCode: fs.StatusNoteCode, StatusNoteParams: fs.StatusNoteParams,
 			AgentConnected: fs.AgentConnected, OpenAlerts: fs.OpenAlerts, HostsThisWhombat: fs.HostsThisWhombat,
 			BackupPlace: BuildBackupPlace(s.Report)})
 	}

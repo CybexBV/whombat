@@ -717,6 +717,7 @@ export const reportAhead = defineCommand({
           kind: 'agent_update',
           actorId: row.agentId,
           where: 'Direct',
+          direct: true,
           text: noticeText,
           link: { type: 'external', url: needsYouItemHref(`ahead:${row.id}`) },
           createdAt: ctx.now,

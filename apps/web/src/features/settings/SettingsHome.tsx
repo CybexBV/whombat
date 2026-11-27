@@ -15,13 +15,10 @@ import { useFaceMotionSetting } from '@whombat/avatars/live';
 import {
   agentGroupParts,
   hasLooksAhead,
-  SETTINGS_HOME_TEXT,
   type SettingsHomeGroup,
   settingsHomeRows,
   THEME_CHOICES,
-  THEME_WORDS,
 } from '@whombat/client';
-import { DESK_TEXT } from '@whombat/client/desk';
 import { whombatOverview } from '@whombat/client/managed';
 import { placeNewsShown, usePreferences, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
@@ -47,6 +44,9 @@ import { cx } from '../../components/cx';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
 import { Toggle } from '../../components/Toggle';
+import { DESK_TEXT } from '../../i18n/clientWords';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
+import { useSettingsHomeText, useThemeWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { useDeskUnlockHere } from '../desk/useDeskHere';
 import { useApplianceStatus } from './ManagedTabs';
@@ -77,9 +77,9 @@ const GROUP_SEARCH: Record<SettingsHomeGroup, Record<string, string>> = {
   advanced: { tab: 'advanced' },
 };
 
-const THEMES = THEME_CHOICES.map((value) => ({ value, label: THEME_WORDS.choices[value] }));
-
 export function SettingsHome({ burrow }: { burrow: string }) {
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
+  const { tag: uiLocale } = useWebI18n();
   const { words } = useTheAgent(burrow);
   const { managed } = useAppServices();
   const prefs = usePreferences({}, { staleTime: 0 });
@@ -88,7 +88,7 @@ export function SettingsHome({ burrow }: { burrow: string }) {
   const protocol = useSessionProtocol();
   const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(protocol) });
   const news = placeNewsShown(protocol);
-  const rows = settingsHomeRows(words.name, you, agentParts).filter(
+  const rows = settingsHomeRows(words.name, you, agentParts, uiLocale).filter(
     (r) => (r.key !== 'screens' || screen.shown) && (r.key !== 'news' || news),
   );
   const needs = useApplianceNeeds(burrow, words.name);
@@ -243,6 +243,7 @@ function useApplianceNeeds(burrow: string, agent: string): { known: boolean; ite
       passkeys,
       access: null,
       agent,
+      locale: currentLocale(),
     });
     const desk: NeedsItem[] = asking ? [{ key: 'desk', dot: 'warn', title: DESK_TEXT.unlock.title }] : [];
     return {
@@ -254,6 +255,7 @@ function useApplianceNeeds(burrow: string, agent: string): { known: boolean; ite
 
 /** The first thing that needs you, in its dot's colour, and how many more. */
 function NeedsLine({ items }: { items: readonly NeedsItem[] }) {
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const first = items[0];
   if (!first) return null;
   return (
@@ -295,6 +297,7 @@ function useSignedInPhones(burrow: string): { known: boolean; names: string[] } 
  * (which can't scan its own code) getting the app there or signing in another phone.
  */
 function PhoneAppLine({ qr, phones }: { qr: boolean; phones: readonly string[] }): ReactNode {
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const t = SETTINGS_HOME_TEXT.phoneApp;
   if (phones.length > 0) return <>{t.signedIn(phones)}</>;
   if (!qr) return <>{t.line(false)}</>;
@@ -311,6 +314,8 @@ function PhoneAppLine({ qr, phones }: { qr: boolean; phones: readonly string[] }
  * open), kept on this device and in your account like the account menu's.
  */
 function ThemeRow() {
+  const THEME_WORDS = useThemeWords();
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const { choice, setChoice } = useTheme();
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -337,7 +342,7 @@ function ThemeRow() {
             label={SETTINGS_HOME_TEXT.theme.title}
             value={choice}
             onChange={setChoice}
-            options={THEMES}
+            options={THEME_CHOICES.map((value) => ({ value, label: THEME_WORDS.choices[value] }))}
           />
         </div>
       ) : null}
@@ -345,24 +350,20 @@ function ThemeRow() {
   );
 }
 
-const MOVING_FACES = {
-  title: 'Moving faces',
-  line: 'Faces blink and show what your agents are doing.',
-};
-
 /**
  * Moving faces: this device's switch for the agents' live faces. Off, or with the system's reduce motion, a face still
  * changes its expression but nothing moves. The whole row switches it.
  */
 function MovingFacesRow() {
+  const { t } = useWebI18n();
   const [on, setOn] = useFaceMotionSetting();
   const id = useId();
   return (
     <label className={p.row} htmlFor={id} data-settings-row="moving-faces">
       <PlaceRowBody
         icon={Smile}
-        name={MOVING_FACES.title}
-        line={MOVING_FACES.line}
+        name={t('settings.movingFaces.title')}
+        line={t('settings.movingFaces.line')}
         nameId={`${id}-name`}
         lineId={`${id}-line`}
         end={

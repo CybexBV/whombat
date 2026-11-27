@@ -16,6 +16,7 @@ import {
   planStepRemovable,
   stepGoesAhead,
 } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 /** Screen-reader words for the markers (the state label next to each row says the rest). */
 export const MARKER_LABEL: Record<PlanStepState, string> = {
@@ -123,7 +124,7 @@ export function planErrorText(error: unknown): string {
       return 'This step has started, so it can’t be removed. Cancel it instead.';
     if (error.status === 404) return 'This plan isn’t here any more, or it’s in a room you’re not in.';
     if (error.code === 'forbidden') return 'You can’t change this plan.';
-    return problemText(error, 'That didn’t go through. Try again.');
+    return problemText(error, 'That didn’t go through. Try again.', currentLocale());
   }
   return 'Couldn’t reach your Whombat. Try again.';
 }

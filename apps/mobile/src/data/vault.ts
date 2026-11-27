@@ -51,6 +51,7 @@ import {
   vaultSshServerTarget,
   vaultUseRow,
 } from '@whombat/core/vault';
+import { mobileTranslator } from '../i18n/translate';
 import type { ViewContext } from './people';
 
 export interface VaultStatus {
@@ -87,8 +88,8 @@ export interface VaultEntryRow {
  * What saving from chat does, under the intro (VS-08, core's `vaultSavedIntro`; AP-4040): only where the Whombat does it
  * (`vault.self_serve`), as on the web (AP-4009).
  */
-export function vaultSavedIntroFor(agent: string, selfServe: boolean): string | null {
-  return selfServe ? vaultSavedIntro(agent) : null;
+export function vaultSavedIntroFor(agent: string, selfServe: boolean, locale?: string): string | null {
+  return selfServe ? vaultSavedIntro(agent, locale) : null;
 }
 
 /**
@@ -96,22 +97,29 @@ export function vaultSavedIntroFor(agent: string, selfServe: boolean): string | 
  * usual about the agent: nothing while the entry is on for it, “off for Neo” when switched Off. An old `secret` entry
  * says that nothing uses it.
  */
-export function vaultMetaFor(entry: VaultEntry, agent: string): string {
-  return entry.agentOn ? bareMeta(entry) : vaultEntryMeta(entry, agent);
+export function vaultMetaFor(entry: VaultEntry, agent: string, locale?: string): string {
+  return entry.agentOn ? bareMeta(entry, locale) : vaultEntryMeta(entry, agent, locale);
 }
 
 /** Core's meta line without whether it is on for the agent: the entry screen's row says that (AP-4036). */
 function bareMeta(
   entry: Pick<VaultEntry, 'kind' | 'auth' | 'url' | 'agentOn'> & { serverCount?: number },
+  locale?: string,
 ): string {
-  const meta = vaultEntryMeta(entry, '');
+  const meta = vaultEntryMeta(entry, '', locale);
   return entry.kind === 'secret' ? meta : meta.slice(0, meta.lastIndexOf(' · '));
 }
 
-export function vaultEntryRow(entry: VaultEntry, now: Date, timeZone: string, agent: string): VaultEntryRow {
-  const meta = vaultMetaFor(entry, agent);
+export function vaultEntryRow(
+  entry: VaultEntry,
+  now: Date,
+  timeZone: string,
+  agent: string,
+  locale?: string,
+): VaultEntryRow {
+  const meta = vaultMetaFor(entry, agent, locale);
   const status = vaultStatus(entry.check.status);
-  const lastUsed = vaultLastUsedText(entry.lastUsedAt, now, timeZone);
+  const lastUsed = vaultLastUsedText(entry.lastUsedAt, now, timeZone, locale);
   return {
     id: entry.id,
     name: entry.name,
@@ -128,8 +136,9 @@ export function vaultEntryRows(
   now: Date,
   timeZone: string,
   agent: string,
+  locale?: string,
 ): VaultEntryRow[] {
-  return entries.map((e) => vaultEntryRow(e, now, timeZone, agent));
+  return entries.map((e) => vaultEntryRow(e, now, timeZone, agent, locale));
 }
 
 /* HOME NETWORK ----------------------------------------------------------------------------------- */
@@ -185,12 +194,16 @@ export function signsInText(auth: VaultAuth): string {
 export const VAULT_SECRET_UNUSED = 'Nothing uses this any more. You can remove it.';
 
 /** Remove from Vault on the phone, for an old `secret` entry only (AP-4157): the web's words, no keys to lose. */
-export const VAULT_REMOVE_COPY = {
-  action: VAULT_COPY.remove,
-  confirm: (name: string) => `Remove “${name}”?`,
-  confirmBody: 'The audit log keeps that it was used.',
-  removed: (name: string) => `Removed “${name}” from your Vault.`,
-} as const;
+export function vaultRemoveCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    action: VAULT_COPY.remove,
+    confirm: (name: string) => t('vault.vaultRemoveCopy.confirm', { name }),
+    confirmBody: t('vault.vaultRemoveCopy.confirmBody'),
+    removed: (name: string) => t('vault.vaultRemoveCopy.removed', { name }),
+  } as const;
+}
+export const VAULT_REMOVE_COPY = vaultRemoveCopy();
 
 export interface VaultToolRow {
   name: string;
@@ -236,11 +249,15 @@ export interface VaultAgentAccessRow {
 }
 
 /** The env variable's sheet (AP-5281): the phone's words around `VAULT_KEYS_COPY`'s. */
-export const VAULT_ENV_TEXT = {
-  change: 'Change',
-  changeHint: 'Changes the name of the environment variable',
-  save: 'Save',
-} as const;
+export function vaultEnvText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    change: t('vault.vaultEnvText.change'),
+    changeHint: t('vault.vaultEnvText.changeHint'),
+    save: t('vault.vaultEnvText.save'),
+  } as const;
+}
+export const VAULT_ENV_TEXT = vaultEnvText();
 
 /** A typed variable name as `vault.setKeyEnvName` takes it (the contract's own check), or why not. */
 export function vaultEnvNameCheck(

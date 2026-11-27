@@ -2111,6 +2111,28 @@ is away, one question, and a last step that finishes the same passkey setup for 
 from the Inbox's Finish and Try again, and stays offered while a Whombat started fresh (`replace`). The backup file is
 Move to another Whombat ([backup-v2.md](docs/app/decisions/backup-v2.md)).
 
+## Languages (i18n)
+
+Whombat renders in English (`en-GB`, default) and Dutch (`nl-NL`), using a zero-dependency catalog-free runtime in
+`@whombat/core/i18n` (`createTranslator`, CLDR plurals, `{var}` interpolation, `Intl` formatters and a `pseudo` QA
+mode) and `@whombat/client/i18n/react` (`I18nProvider`, `renderRichTemplate`). Each owning package keeps its own
+declarative `EN` and `NL` catalog (`packages/core`, `packages/client`, `packages/screen`, `apps/server`, `apps/web`,
+`apps/mobile`, `apps/widget` and `appliance/console/ui`), validated for key, placeholder, plural and source-hash parity
+by `scripts/i18n/check.ts` and exportable to PO/JSON via `scripts/i18n/po.ts`.
+
+The box's active language lives in one preference, `accounts.preferences.locale`, synced to clients, the console/desk
+state (`ConsoleState.locale`, `DeskPaired.locale`), claim flows (session protocol minor 21, `LOCALE_MINOR`), and Control
+mail settings (`link.mail.set`, `mail.send`). Public and visitor surfaces (installer, pre-claim, `/s/shr_*` shared
+threads and `apps/widget`) resolve from explicit choice, `data-lang`/`<html lang>` and browser preferences instead of
+the box owner's locale. The server renders `ThingPage` dashboards, Home/Inbox lines, emails, pushes and desk views in
+the owner's locale (keeping `ThingWidgets` caches keyed by locale and locked-screen privacy driven by explicit metadata
+rather than translated text), passes per-turn language cues to Hermes while keeping `SOUL.md`, tool schemas, signed
+audit envelopes and stored automation definitions canonical, and filters Dutch search stopwords on Dutch burrows.
+The web app lazy-loads its Dutch catalog chunk; Android retains `["en", "nl"]` resources and localizes native
+notifications/widgets alongside iOS `InfoPlist.strings` and WidgetKit views; `hosts/internal/{rules,hub}` attaches
+structured `code` and `params` to alerts, banners and hints without modifying the signed remote agents
+([i18n.md](docs/decisions/i18n.md)).
+
 ## Local environment (development)
 
 - Node 24, pnpm 12, Postgres 17 on port 55432 and Mailpit (SMTP 51025, UI 58025); exact steps and the rules for

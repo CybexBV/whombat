@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import './app/fonts/fonts.css';
 import './app/global.css';
 import { App } from './app/App';
+import { WebI18nProvider } from './i18n/provider';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
@@ -52,7 +53,9 @@ async function start(target: HTMLElement) {
   const env = await loadBoxEnvironment();
   createRoot(target).render(
     <StrictMode>
-      <BoxRoot env={env} />
+      <WebI18nProvider>
+        <BoxRoot env={env} />
+      </WebI18nProvider>
     </StrictMode>,
   );
 }

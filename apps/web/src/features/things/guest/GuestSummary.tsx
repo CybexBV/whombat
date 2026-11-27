@@ -22,7 +22,7 @@ import {
   formatTooltipTime,
   type GuestHintView,
   guestHints,
-  HOST_RANGE_WORDS,
+  hostRangeWords,
   isOn,
   keyOrder,
   manageablePlatform,
@@ -40,6 +40,8 @@ import { TimeChart, type TimeSeries } from '../../../components/charts';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { useBackupJobs } from '../manage/BackupJobs';
 import { Card, Dot, Empty } from '../parts';
 import { useThingSearch } from '../search';
@@ -248,6 +250,7 @@ export function HintLine({
 }
 
 export function Figures({ guest: g, on }: { guest: HostGuestDetail; on: boolean }) {
+  const { tag: uiLocale } = useWebI18n();
   return (
     <section className={styles.card} aria-label="At a glance">
       <div className={cx(styles.kpis, styles.kpis4)}>
@@ -272,7 +275,7 @@ export function Figures({ guest: g, on }: { guest: HostGuestDetail; on: boolean 
         </div>
         <div className={styles.kpi}>
           <span>Up</span>
-          <b>{on && g.uptimeS != null ? formatDuration(g.uptimeS) : DASH}</b>
+          <b>{on && g.uptimeS != null ? formatDuration(g.uptimeS, uiLocale) : DASH}</b>
           <span>{on ? 'since its last start' : (g.lastExit ?? 'switched off')}</span>
         </div>
       </div>
@@ -298,6 +301,7 @@ export function History({
   guest: HostGuestDetail;
   timeZone?: string;
 }) {
+  const HOST_RANGE_WORDS = useLocaleWords(hostRangeWords);
   const [range, setRange] = useState<HostSeriesRange>('24h');
   const m = useHostGuestMetrics({
     params: { burrow, serverId, guestId: g.id },
@@ -328,7 +332,9 @@ export function History({
           ticks={Number.isInteger(max / 2) || max < 10 ? [0, max / 2, max] : [0, max]}
           tickLabel={(v) => formatNum(v)}
           timeTicks={timeTicks(d.timestamps, d.range, timeZone)}
-          pointLabel={(i) => formatTooltipTime(d.range, Date.parse(d.timestamps[i] ?? ''), timeZone)}
+          pointLabel={(i) =>
+            formatTooltipTime(d.range, Date.parse(d.timestamps[i] ?? ''), timeZone, currentLocale())
+          }
           formatValue={format}
         />
       </div>
@@ -459,7 +465,7 @@ function Details({
     facts.push({
       id: 'backup',
       k: 'Last backup',
-      v: `${formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone)} · ${ok ? 'went fine' : g.lastBackup.result}`,
+      v: `${formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone, currentLocale())} · ${ok ? 'went fine' : g.lastBackup.result}`,
       tone: ok ? (old ? 'warn' : 'ok') : 'bad',
     });
   } else if (g.platform === 'pve') facts.push({ id: 'backup', k: 'Last backup', v: 'None yet' });

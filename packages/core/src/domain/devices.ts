@@ -5,7 +5,9 @@
  * the reading and writing. The owner chooses each action's tier and limits on the `device_skill` card; nothing changes
  * on the device until they press Switch on. Limits live with the owner's choice, never in the profile.
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { DeviceSkillProposalId } from '../ids.js';
 import { Count, JsonObject, Timestamp } from './common.js';
 import { ConnectionToolTier } from './connections-catalog.js';
@@ -133,12 +135,16 @@ export const MODBUS_DEFAULT_UNIT_ID = 1;
 export const DeviceActionChoice = z.object({ tier: ConnectionToolTier, limits: ToolArgLimit.optional() });
 export type DeviceActionChoice = z.infer<typeof DeviceActionChoice>;
 
+const DEVICE_TIER_LABELS_KEYS = ['off', 'ask', 'can'] as const;
+
 /** The card's tier labels (mock 3): Off · Ask me · Allowed. */
-export const DEVICE_TIER_LABELS: Record<ConnectionToolTier, string> = {
-  off: 'Off',
-  ask: 'Ask me',
-  can: 'Allowed',
-};
+export function deviceTierLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof DEVICE_TIER_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'device.tier', DEVICE_TIER_LABELS_KEYS);
+}
+
+export const DEVICE_TIER_LABELS: Record<ConnectionToolTier, string> = deviceTierLabels('en');
 
 /* The card ---------------------------------------------------------------------------------------- */
 
@@ -186,13 +192,21 @@ export const DeviceSkillCard = z.object({
 });
 export type DeviceSkillCard = z.infer<typeof DeviceSkillCard>;
 
+const DEVICE_SKILL_COPY_KEYS = [
+  'canRead',
+  'canChange',
+  'switchOn',
+  'decline',
+  'on',
+  'declined',
+  'nothingChanges',
+] as const;
+
 /** The card's words (mock 3). */
-export const DEVICE_SKILL_COPY = {
-  canRead: 'What Whombat can read',
-  canChange: 'What Whombat may change',
-  switchOn: 'Switch on',
-  decline: 'Not now',
-  on: 'Switched on',
-  declined: 'Not switched on',
-  nothingChanges: 'Nothing changes on the device until you switch it on.',
-} as const;
+export function deviceSkillCopy(
+  locale?: string | null,
+): Readonly<Record<(typeof DEVICE_SKILL_COPY_KEYS)[number], string>> {
+  return coreWords(locale, 'device.skill', DEVICE_SKILL_COPY_KEYS);
+}
+
+export const DEVICE_SKILL_COPY = deviceSkillCopy('en');

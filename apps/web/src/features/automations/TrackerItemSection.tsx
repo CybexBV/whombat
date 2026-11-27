@@ -25,6 +25,7 @@ import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import { ImageLightbox, LightboxImage } from '../messaging/MessageAttachments';
 import styles from './Automations.module.css';
 import { useTrackerItem } from './hooks';
@@ -111,7 +112,7 @@ export function TrackerItemSection({
                 <dt>{TRACKER_TEXT.reporter}</dt>
                 <dd>{reporterLine(report.reporter)}</dd>
                 <dt>{TRACKER_TEXT.filed}</dt>
-                <dd>{formatRecent(report.createdAt, now, timeZone)}</dd>
+                <dd>{formatRecent(report.createdAt, now, timeZone, currentLocale())}</dd>
                 {report.fix && (
                   <>
                     <dt>{TRACKER_TEXT.fix}</dt>
@@ -164,7 +165,7 @@ export function TrackerItemSection({
                     <li key={i}>
                       <span className={styles.reportMessageMeta}>
                         <span className={styles.reportAuthor}>{authorLabel(m.author, report.words)}</span> ·{' '}
-                        {formatRecent(m.at, now, timeZone)}
+                        {formatRecent(m.at, now, timeZone, currentLocale())}
                       </span>
                       <p className={styles.reportText}>{m.body}</p>
                     </li>

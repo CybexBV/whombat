@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"rackoon/internal/proto"
 	"rackoon/internal/rules"
 )
 
@@ -94,6 +95,48 @@ func TestAlertEntityAndKey(t *testing.T) {
 	for _, al := range BuildFleet(fixtureStates(t), "All", asOf, 0, "0.14.2").Alerts {
 		if al.Entity == "" || al.Key != al.Rule+":"+al.Entity {
 			t.Errorf("fleet alert %+v", al)
+		}
+	}
+}
+
+func TestAlertAndStatusNoteTranslationData(t *testing.T) {
+	now := asOf
+	r := &proto.Report{Sensors: []proto.Sensor{{ID: proto.SensorCPU, Label: "CPU package", TempC: 82, LimitC: 85}}}
+	c := rules.HostConditions(r)[0]
+	a := rules.Alert{ID: "al_hot", Server: "s", Rule: c.Rule, Entity: c.Entity, Severity: c.Severity,
+		Text: c.Render(rules.TempHighFor), StatusNote: c.StatusNote, State: rules.AlertOpen, OpenedAt: now}
+	st := &ServerState{ID: "s", Report: r, LastSeen: now, Open: []rules.Alert{a}}
+
+	alert := roundTrip(t, BuildAlertFor(a, st, now))
+	detail := roundTrip(t, BuildDetail(st, now, DetailInput{Range: "24h"}))
+	banner := detail["banner"].(map[string]any)
+	for _, out := range []map[string]any{alert, banner} {
+		params, _ := out["params"].(map[string]any)
+		if out["code"] != rules.RuleTempHigh || params["tempC"] != 82.0 || params["heldSeconds"] != 600.0 {
+			t.Errorf("alert translation data: %v", out)
+		}
+	}
+	if alert["title"] != a.Title || banner["title"] != a.BannerTitle || banner["detail"] != a.BannerDetail {
+		t.Errorf("English alert or banner changed")
+	}
+	for _, out := range []map[string]any{alert, banner, detail["server"].(map[string]any),
+		roundTrip(t, BuildFleetServer(st, now)), roundTrip(t, BuildServerList([]*ServerState{st}, now)[0])} {
+		params, _ := out["status_note_params"].(map[string]any)
+		if out["status_note_code"] != "temperature" || params["sensor"] != proto.SensorCPU || params["shortName"] != "CPU" {
+			t.Errorf("status note translation data: %v", out)
+		}
+	}
+	st.Open[0].Text = rules.Text{}
+	if card := BuildFleetServer(st, now); card.StatusNoteCode != "temperature" || *card.StatusNote != "CPU temperature" {
+		t.Errorf("legacy status note: %+v", card)
+	}
+	st.LastSeen = time.Time{}
+	if card := BuildFleetServer(st, now); card.StatusNoteCode != "never_connected" || card.StatusNoteParams != nil {
+		t.Errorf("offline status note: %+v", card)
+	}
+	for _, rule := range rules.ServerRules {
+		if statusNoteCodes[rule] == "" {
+			t.Errorf("%s has no status note code", rule)
 		}
 	}
 }

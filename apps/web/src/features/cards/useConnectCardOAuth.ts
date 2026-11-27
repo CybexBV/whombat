@@ -5,6 +5,7 @@ import { api } from '@whombat/core/contracts';
 import type { GuideConnectOAuth } from '@whombat/core/domain';
 import { useState } from 'react';
 import { useManaged } from '../../app/providers';
+import { useWebI18n } from '../../i18n/provider';
 import { connectProblem } from '../connectors/catalog';
 
 export interface UseConnectCardOAuth {
@@ -22,6 +23,7 @@ export function useConnectCardOAuth(
   oauth: GuideConnectOAuth | undefined,
   leave: (url: string) => void = (url) => window.location.assign(url),
 ): UseConnectCardOAuth {
+  const { tag: uiLocale } = useWebI18n();
   const startOAuth = useConnectionWrite(api.connections.startOAuth, burrow);
   const managed = useManaged();
   const [problem, setProblem] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function useConnectCardOAuth(
       setLeaving(true);
       leave(result.data.authorizeUrl);
     } catch (err) {
-      const licence = licenceRefusalText(err);
+      const licence = licenceRefusalText(err, uiLocale);
       if (licence) setProblem(licence);
       else setProblem(connectProblem(err).message ?? CONNECT_FORM_TEXT.cantStart);
     }

@@ -14,13 +14,14 @@ import {
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostTask } from '@whombat/core/domain';
 import { cx } from '../../../components/cx';
+import { useWebI18n } from '../../../i18n/provider';
 import { Card, Empty, ErrorLine, StateCell } from '../parts';
 import styles from '../Things.module.css';
 import { showTask } from '../tasks/taskTracker';
-
 import type { GuestTabProps } from './tabProps';
 
 export function TasksTab({ burrow, serverId, guest, timeZone }: GuestTabProps) {
+  const { tag: uiLocale } = useWebI18n();
   const platform = guest.platform === 'incus' || guest.platform === 'libvirt' ? guest.platform : 'pve';
   const q = useHostManageRead(
     { params: { burrow, serverId }, query: { op: 'task.list', guestId: guest.id, platform } },
@@ -88,10 +89,10 @@ export function TasksTab({ burrow, serverId, guest, timeZone }: GuestTabProps) {
                 </td>
                 <td className={cx(styles.kind, styles.dropM)}>{t.user ?? DASH}</td>
                 <td className={cx(styles.num, styles.dropXs)}>
-                  {formatRelativeDay(Date.parse(t.started), now, timeZone)}
+                  {formatRelativeDay(Date.parse(t.started), now, timeZone, uiLocale)}
                 </td>
                 <td className={cx(styles.num, styles.dropS)}>
-                  {formatDuration(taskSeconds(t.started, t.ended, now))}
+                  {formatDuration(taskSeconds(t.started, t.ended, now), uiLocale)}
                 </td>
               </tr>
             ))}

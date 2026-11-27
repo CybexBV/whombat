@@ -52,6 +52,7 @@ func libvirtHints(r *proto.Report, open []Alert, now time.Time) []Hint {
 				sev = HintWarning
 			}
 			out = append(out, Hint{Kind: HintLibvirtPoolFull, Severity: sev, Entity: "libvirt-pool:" + pl.Name, Link: LinkStorage,
+				Code: HintLibvirtPoolFull, Params: map[string]any{"name": pl.Name, "pct": pct, "freeGB": float64(pl.AvailBytes) / GB},
 				Title:  fmt.Sprintf("Storage “%s” %s%% full", pl.Name, pct0(pct)),
 				Detail: FormatStorageGB(float64(pl.AvailBytes)/1e9) + " free"})
 		}
@@ -78,6 +79,7 @@ func libvirtHints(r *proto.Report, open []Alert, now time.Time) []Hint {
 	}
 	if n := len(names); n > 0 {
 		h := Hint{Kind: HintLibvirtNoBackup, Severity: HintInfo, Entity: proto.PlatformLibvirt, Link: LinkGuests,
+			Code: HintLibvirtNoBackup, Params: map[string]any{"count": n, "names": firstN(names, UnhealthyNames)},
 			Title: plural(int64(n), "machine has", "machines have") + " no recent backup"}
 		if n == 1 {
 			h.Entity, h.Title = proto.PlatformLibvirt+":"+ids[0], names[0]+" has no recent backup"
@@ -88,6 +90,7 @@ func libvirtHints(r *proto.Report, open []Alert, now time.Time) []Hint {
 		}
 		if n == 1 {
 			h.Detail = "No backup or snapshot in the last 30 days"
+			h.Params["days"] = int(LibvirtNoBackupAge / (24 * time.Hour))
 		}
 		out = append(out, h)
 	}

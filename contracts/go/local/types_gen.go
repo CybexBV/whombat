@@ -252,6 +252,7 @@ type ConsoleState struct {
 	SignIn       *ConsoleSignIn    `json:"signIn,omitempty"`
 	Alert        *ConsoleAlert     `json:"alert,omitempty"`
 	Reach        *ConsoleReach     `json:"reach,omitempty"`
+	Locale       *string           `json:"locale,omitempty"`
 }
 
 type FactsRequest struct {
@@ -1551,6 +1552,7 @@ type DeskPaired struct {
 	Person     DeskPerson     `json:"person"`
 	Assistant  DeskAssistant  `json:"assistant"`
 	TimeZone   string         `json:"timeZone"`
+	Locale     *string        `json:"locale,omitempty"`
 	LockedView DeskLockedView `json:"lockedView"`
 	Night      DeskNight      `json:"night"`
 	Quiet      bool           `json:"quiet"`

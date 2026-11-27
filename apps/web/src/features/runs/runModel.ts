@@ -18,6 +18,7 @@ import {
   type RunStatus,
   type RunStep,
 } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 /** Why a live run needs a person (CT-197, AP-597), and the controls a run offers (AP-711): shared with the phone. */
 export { type RunControls, runAttention, runControls } from '@whombat/client';
@@ -132,8 +133,8 @@ export function runNotice(run: Run, names: NoticeNames): RunNotice | null {
  * collapses and the 8px gap stands in for it. The page does the same to stay pixel-identical.
  */
 export function runKicker(run: Run, agentName: string, timeZone: string): [string, string] {
-  const label = formatRunLabel(run.status);
-  const full = formatRunKicker(run.status, agentName, run.startedAt, timeZone);
+  const label = formatRunLabel(run.status, currentLocale());
+  const full = formatRunKicker(run.status, agentName, run.startedAt, timeZone, currentLocale());
   return [label, full.slice(label.length)];
 }
 
@@ -146,7 +147,7 @@ export interface TestsView {
 export function testsView(tests: Run['tests']): TestsView | null {
   if (!tests) return null;
   return {
-    text: formatTestsPassing(tests),
+    text: formatTestsPassing(tests, currentLocale()),
     tone: tests.total > 0 && tests.passed === tests.total ? 'ok' : 'warn',
   };
 }

@@ -1,6 +1,6 @@
 /**
  * The small parts every widget is drawn from: the screen's context (the assistant's name, the time zone, the host's
- * picture loader and face), marks, the header, bars and meters, the SVG lines over time, pictures.
+ * language, picture loader and face), marks, the header, bars and meters, the SVG lines over time, pictures.
  */
 import { isBrandMark, WORDMARKS } from '@whombat/brand';
 import { BrandMark } from '@whombat/brand/react';
@@ -17,6 +17,7 @@ import {
 import { blocksIn } from './forms';
 import type { DeskImage, DeskViewTone } from './types';
 import s from './widgets.module.css';
+import { screenNumberText, screenWords } from './words';
 
 /* The screen's context ------------------------------------------------------------------------------------------- */
 
@@ -24,6 +25,7 @@ import s from './widgets.module.css';
 export interface ScreenEnv {
   assistant: string;
   timeZone?: string | undefined;
+  locale?: string | undefined;
   /** A picture a view names, as an object URL the host owns (it may cache it; the screen never revokes it). */
   loadImage?: ((image: DeskImage) => Promise<string>) | undefined;
   /** The assistant's face at `size` px; a lettered circle when absent. */
@@ -46,6 +48,7 @@ export interface ScreenEnv {
 const EnvContext = createContext<ScreenEnv>({ assistant: 'Dusty', editing: false });
 export const EnvProvider = EnvContext.Provider;
 export const useEnv = () => useContext(EnvContext);
+export const useScreenWords = () => screenWords(useEnv().locale);
 
 /* Colours by tone ------------------------------------------------------------------------------------------------ */
 
@@ -226,11 +229,17 @@ export function Bar({
   thin?: boolean;
   className?: string;
 }) {
+  const { locale } = useEnv();
   const p = Math.max(0, Math.min(100, pct));
   const ref = useRef<HTMLSpanElement>(null);
   const count = useBlockCount(ref);
   return (
-    <span ref={ref} className={cx(s.bar, thin && s.thin, className)} role="img" aria-label={`${p} %`}>
+    <span
+      ref={ref}
+      className={cx(s.bar, thin && s.thin, className)}
+      role="img"
+      aria-label={`${screenNumberText(p, locale)} %`}
+    >
       <Blocks pct={p} tone={colour ?? 'ok'} count={count} />
     </span>
   );
@@ -288,8 +297,9 @@ export function Meter({
   at: { warn: number; bad: number };
   count?: number;
 }) {
+  const { locale } = useEnv();
   const p = Math.max(0, Math.min(100, pct ?? 0));
-  const text = pct === undefined ? '–' : `${p} %`;
+  const text = pct === undefined ? '–' : `${screenNumberText(p, locale)} %`;
   return (
     <div className={s.meter} role="img" aria-label={`${label} ${text}`}>
       <span className={s.meterKey}>{k}</span>

@@ -7,6 +7,7 @@
  * pills and fast row). What T3 Code runs is asked for when the sheet opens. Every word and rule is `@whombat/client`'s
  * (`delegationAi.ts`), shared with the web.
  */
+
 import {
   DELEGATION_AI_WORDS,
   type DelegationAiDraft,
@@ -19,6 +20,7 @@ import type { CouncilProviderOption, DelegationAi, DelegationModelsResponse } fr
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { delegationAiModelRows } from '../data/delegation';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
@@ -59,13 +61,15 @@ export function DelegationAiSheet(props: DelegationAiSheetProps) {
 }
 
 function AiMenu({ title, subtitle, first, current, models, error, onClose, onDone }: DelegationAiSheetProps) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const [draft, setDraft] = useState<DelegationAiDraft>(() => delegationAiDraft(current));
   const options = models?.options ?? null;
   const menu = options ? delegationAiMenu(options, draft, current) : null;
   const quiet = !models
     ? error
-      ? problemText(error, DELEGATION_AI_WORDS.t3.unreachable)
+      ? problemText(error, DELEGATION_AI_WORDS.t3.unreachable, rawLocale)
       : DELEGATION_AI_WORDS.loading
     : options
       ? null

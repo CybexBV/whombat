@@ -3,14 +3,16 @@
  * the item the headline names. About a server, a connection or a device the assistant takes on everything there and
  * its thread opens; else, or on an older Whombat, the question goes to the thing's own thread.
  */
-import { NEEDS_YOU_WORDS, needsYouListIntent, startedChatPath, threadToOpen } from '@whombat/client';
+import { needsYouListIntent, startedChatPath, threadToOpen } from '@whombat/client';
 import { useHandleLook, useStartChat, useTheAgent } from '@whombat/client/react';
 import type { ChatSubject, NeedsYouItem } from '@whombat/core';
 import { useRef, useState } from 'react';
 import { useNavigateHref } from '../../app/routing/navigation';
 import { useToast } from '../../components/Toast';
+import { useNeedsYouWords } from '../../i18n/words';
 
 export function useHandleIt(burrow: string, timeZone: string) {
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
   const toast = useToast();
   const navigateHref = useNavigateHref();
   const { words } = useTheAgent(burrow);

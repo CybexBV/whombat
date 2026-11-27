@@ -10,10 +10,12 @@ import { api } from '@whombat/core';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { WhombatLive } from '../../modules/whombat-live';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { useManaged } from '../managed/context';
 import { createStatusWidgetSync, statusWidgetPayload, statusWidgetSourceFor } from './statusWidget';
 
 export function StatusWidgetBridge() {
+  const { rawLocale } = useI18n();
   const { slug, timeZone, clock, currentBootstrap } = useBurrowBase();
   const managed = useManaged();
   const { queries } = useWhombat();
@@ -42,9 +44,10 @@ export function StatusWidgetBridge() {
       burrowName,
       source,
       timeZone,
+      locale: rawLocale,
       now: clock(),
     });
-  }, [overview, applianceId, applianceName, burrowName, source, timeZone, clock]);
+  }, [overview, applianceId, applianceName, burrowName, source, timeZone, clock, rawLocale]);
 
   useEffect(() => {
     const s = getSync();

@@ -14,6 +14,11 @@
  * as `PUSH_TEXT` in `@whombat/client/managed`, checked by `sw.test.ts`). Notifications with the same `tag` (a thread,
  * an approval; else the ref) replace each other quietly; `clear` closes the one with that tag and shows nothing. A
  * click opens `/?push=<kind>&ref=<ref>`, which the app resolves through its session.
+ *
+ * A push says whether it carries a preview (`preview: false` or `generic: true` means it doesn't); older pushes are
+ * recognised by control's fixed text. The lines without a preview are in the person's language: the page registers the
+ * worker as `/sw.js?lang=nl` and sends `{type: 'locale', lang}` when it changes, which the worker keeps in its own
+ * cache (a worker has no `localStorage`).
  */
 
 const GENERIC_TEXT = {
@@ -27,16 +32,91 @@ const GENERIC_TEXT = {
   generic: 'Whombat needs you',
 };
 
+const GENERIC_TEXT_NL = {
+  message: 'Nieuw bericht',
+  mention: 'Je bent genoemd',
+  approval: 'Er wacht iets op jouw goedkeuring',
+  run: 'Een assistent heeft nieuws over een uitvoering',
+  update: 'Er is een update voor je Whombat',
+  backup: 'De back-ups van je Whombat vragen aandacht',
+  security: 'Een beveiligingswijziging op je Whombat',
+  generic: 'Whombat heeft je nodig',
+};
+
+/** The lines per language; a language without its own lines falls back to English. */
+const GENERIC_BY_LANG = { en: GENERIC_TEXT, nl: GENERIC_TEXT_NL };
+
+function linesFor(language) {
+  return Object.hasOwn(GENERIC_BY_LANG, language) ? GENERIC_BY_LANG[language] : GENERIC_TEXT;
+}
+
 /** Control's text when the appliance sent no preview (control `GENERIC_ALERT`). */
 const CONTROL_GENERIC = { title: 'Whombat', body: 'Whombat needs you' };
 
+/** Where the worker keeps the page's language between starts. */
+const LOCALE_CACHE = 'whombat-sw-locale';
+const LOCALE_ENTRY = '/__whombat-locale';
+
+function cleanLanguage(value) {
+  if (typeof value !== 'string') return null;
+  const primary = value.trim().toLowerCase().split(/[-_]/)[0];
+  return Object.hasOwn(GENERIC_BY_LANG, primary) ? primary : null;
+}
+
+/** The language from the worker's own address (`/sw.js?lang=nl`). */
+function scriptLanguage() {
+  try {
+    return cleanLanguage(new URL(self.location.href).searchParams.get('lang'));
+  } catch {
+    return null;
+  }
+}
+
+let knownLanguage = null;
+
+async function storedLanguage() {
+  try {
+    if (typeof caches === 'undefined') return null;
+    const cache = await caches.open(LOCALE_CACHE);
+    const hit = await cache.match(LOCALE_ENTRY);
+    return hit ? cleanLanguage(await hit.text()) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function rememberLanguage(language) {
+  knownLanguage = language;
+  try {
+    if (typeof caches === 'undefined') return;
+    const cache = await caches.open(LOCALE_CACHE);
+    await cache.put(LOCALE_ENTRY, new Response(language));
+  } catch {
+    // The address still carries it.
+  }
+}
+
+/** The language for lines without a preview: what the page said last, else the worker's address, else English. */
+async function currentLanguage() {
+  if (knownLanguage) return knownLanguage;
+  const language = (await storedLanguage()) || scriptLanguage() || 'en';
+  knownLanguage = language;
+  return language;
+}
+
+/** Whether a push carries no preview: its own flag, else control's fixed text from before the flag. */
+function withoutPreview(payload, title, body) {
+  if (payload.preview === false || payload.generic === true) return true;
+  return !title || (title === CONTROL_GENERIC.title && body === CONTROL_GENERIC.body);
+}
+
 /** What a managed push says: its preview, else “Whombat” and the kind's line. */
-function managedText(payload, kind) {
+function managedText(payload, kind, language) {
+  const lines = linesFor(language);
   const title = typeof payload.title === 'string' ? payload.title : '';
   const body = typeof payload.body === 'string' ? payload.body : '';
-  const generic = !title || (title === CONTROL_GENERIC.title && body === CONTROL_GENERIC.body);
-  if (generic) return { title: 'Whombat', body: GENERIC_TEXT[kind] };
-  return { title, body: body || GENERIC_TEXT[kind] };
+  if (withoutPreview(payload, title, body)) return { title: 'Whombat', body: lines[kind] };
+  return { title, body: body || lines[kind] };
 }
 
 async function showManaged(payload) {
@@ -46,12 +126,45 @@ async function showManaged(payload) {
     return;
   }
   const kind = Object.hasOwn(GENERIC_TEXT, payload.kind) ? payload.kind : 'generic';
-  const text = managedText(payload, kind);
+  const text = managedText(payload, kind, await currentLanguage());
   await self.registration.showNotification(text.title, {
     body: text.body,
     tag,
     renotify: false,
     data: { path: `/?push=${encodeURIComponent(kind)}&ref=${encodeURIComponent(payload.ref)}` },
+    icon: '/icon-192.png',
+    badge: '/badge-96.png',
+  });
+}
+
+/**
+ * The line a box's own push (one with a `path`) shows when it carries no preview, by its kind: the same grouping as the
+ * box's own previews and the Android app.
+ */
+const ROUTED_KIND = {
+  needs_you: 'approval',
+  approval_updated: 'approval',
+  mention: 'mention',
+  reply: 'message',
+  direct: 'message',
+  agent_update: 'message',
+  run_progress: 'run',
+};
+
+/** A box's own push: its title and body, unless it says it carries no preview, then “Whombat” and the kind's line. */
+async function showRouted(payload) {
+  let title = payload.title || 'Whombat';
+  let body = payload.body || '';
+  if (payload.preview === false || payload.generic === true) {
+    const lines = linesFor(await currentLanguage());
+    const kind = Object.hasOwn(ROUTED_KIND, payload.kind) ? ROUTED_KIND[payload.kind] : 'generic';
+    title = 'Whombat';
+    body = lines[kind];
+  }
+  await self.registration.showNotification(title, {
+    body,
+    tag: payload.notificationId || payload.path || undefined,
+    data: { path: payload.path || '/' },
     icon: '/icon-192.png',
     badge: '/badge-96.png',
   });
@@ -69,16 +182,16 @@ self.addEventListener('push', (event) => {
     event.waitUntil(showManaged(payload));
     return;
   }
-  const title = payload.title || 'Whombat';
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body: payload.body || '',
-      tag: payload.notificationId || payload.path || undefined,
-      data: { path: payload.path || '/' },
-      icon: '/icon-192.png',
-      badge: '/badge-96.png',
-    }),
-  );
+  event.waitUntil(showRouted(payload));
+});
+
+self.addEventListener('message', (event) => {
+  const data = event.data;
+  if (data?.type !== 'locale') return;
+  const language = cleanLanguage(data.lang);
+  if (!language) return;
+  const done = rememberLanguage(language);
+  if (typeof event.waitUntil === 'function') event.waitUntil(done);
 });
 
 self.addEventListener('notificationclick', (event) => {

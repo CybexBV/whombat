@@ -3,12 +3,14 @@
  * task's row draw them: each screen's name, its picture at full width with its own aspect ratio (a tap opens the image
  * viewer), how to read it and its numbered notes.
  */
+
 import type { Attachment } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import type { CardPicture } from '../data/cardPictures';
 import type { FileAccess } from '../data/fileAccess';
 import type { MessageFileActions } from '../data/useFiles';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { AttachmentImage, ImageViewer } from './attachments';
@@ -26,6 +28,7 @@ function Picture({
   access: FileAccess | null;
   onOpen: (a: Attachment) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const a = picture.attachment;
   const box = { width: '100%' as const, aspectRatio: picture.aspect, borderRadius: theme.radii.buttonLarge };
@@ -38,7 +41,7 @@ function Picture({
         <Touchable
           onPress={() => onOpen(a)}
           accessibilityLabel={picture.label}
-          accessibilityHint="Opens the image"
+          accessibilityHint={tMobile('ui.opens-the-image')}
           feedback="fade"
           ringRadius={theme.radii.buttonLarge}
           style={{

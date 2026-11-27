@@ -5,7 +5,6 @@
  * picks, “Bring back” brings them back — only adding — and a line says how it went; Close closes the backup.
  */
 import {
-  BACKUP_LOOK_TEXT,
   lookCategoryName,
   lookCategoryRows,
   lookDoneLine,
@@ -25,6 +24,8 @@ import { Input } from '../../components/Input';
 import { SkeletonRows } from '../../components/ListState';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { BACKUP_LOOK_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { backupErrorText } from './BackupDestination';
 import styles from './BringBack.module.css';
 import { backupWhen } from './backupOptionsModel';
@@ -63,7 +64,7 @@ function BringBackFlow({
   const stage = lookStage(look);
   const lookId = look?.lookId ?? null;
   const items = useBackupLookItems(session, stage === 'ready' ? lookId : null, category, query);
-  const done = look?.bring && !bring.isPending ? lookDoneLine(look.bring) : null;
+  const done = look?.bring && !bring.isPending ? lookDoneLine(look.bring, currentLocale()) : null;
   const finishedAt = look?.bring?.finishedAt ?? null;
   const [shown, setShown] = useState(false);
   // Each bring-back's line replaces the list until the person asks to bring back more.
@@ -71,7 +72,7 @@ function BringBackFlow({
     if (finishedAt) setShown(true);
   }, [finishedAt]);
 
-  const problem = error ? backupErrorText(error) : lookProblemText(look);
+  const problem = error ? backupErrorText(error) : lookProblemText(look, currentLocale());
   return (
     <div className={styles.flow} data-bring-back={checkpoint.id}>
       <div className={styles.head}>
@@ -133,7 +134,7 @@ function BringBackFlow({
             <p className={styles.note}>{T.empty}</p>
           ) : (
             <ul className={styles.list} aria-label={T.inIt}>
-              {lookCategoryRows(categories).map((c) => (
+              {lookCategoryRows(categories, currentLocale()).map((c) => (
                 <li key={c.id}>
                   <button
                     type="button"
@@ -171,12 +172,12 @@ function BringBackFlow({
           >
             {T.inIt}
           </Button>
-          <SectionLabel as="h3">{lookCategoryName(category)}</SectionLabel>
+          <SectionLabel as="h3">{lookCategoryName(category, currentLocale())}</SectionLabel>
           <Input
             type="search"
             value={query}
-            placeholder={T.search(lookCategoryName(category))}
-            aria-label={T.search(lookCategoryName(category))}
+            placeholder={T.search(lookCategoryName(category, currentLocale()))}
+            aria-label={T.search(lookCategoryName(category, currentLocale()))}
             onChange={(e) => setQuery(e.target.value)}
           />
           {items.loading ? (
@@ -184,9 +185,9 @@ function BringBackFlow({
           ) : items.items.length === 0 ? (
             <p className={styles.note}>{query.trim() ? T.noMatch : T.empty}</p>
           ) : (
-            <ul className={styles.list} aria-label={lookCategoryName(category)}>
+            <ul className={styles.list} aria-label={lookCategoryName(category, currentLocale())}>
               {items.items.map((item) => {
-                const meta = lookItemMeta(item);
+                const meta = lookItemMeta(item, undefined, currentLocale());
                 return (
                   <li key={item.id}>
                     <label className={styles.item} data-look-item={item.id}>

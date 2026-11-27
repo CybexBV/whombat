@@ -8,16 +8,18 @@
  * only ever replaced, never shown. Then what the Vault never shows, what saving from chat does where the Whombat does it
  * (VS-08; AP-4040) and the home network list, read-only. Loading, empty and failed reads each have a card of their own.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { VAULT_ROW_TEXT, vaultEntryTag, vaultRowLine } from '@whombat/client';
+import { vaultEntryTag } from '@whombat/client';
 import { useVault, useVaultNetworks } from '@whombat/client/react';
-import { VAULT_COPY } from '@whombat/core/vault';
+import { vaultCopy } from '@whombat/core/vault';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
-import { PLACE_WORDS } from '../data/places';
 import { useAgentWords } from '../data/useAgent';
 import { vaultEntryRows, vaultNetworkRows, vaultSavedIntroFor } from '../data/vault';
+import { phoneVaultRowLine, vaultRowText } from '../data/vaultCopy';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -33,6 +35,10 @@ import { AddToVaultSheet } from './AddToVaultSheet';
 type Props = NativeStackScreenProps<RootStackParamList, 'Vault'>;
 
 export function VaultScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const copy = vaultCopy(rawLocale);
+  const rowCopy = vaultRowText(rawLocale);
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -42,14 +48,14 @@ export function VaultScreen({ navigation, route }: Props) {
   // The agent by name (less-is-more.md AP-1822).
   const words = useAgentWords();
   const agent = words.Name;
-  const savedIntro = vaultSavedIntroFor(words.name, true);
+  const savedIntro = vaultSavedIntroFor(words.name, true, rawLocale);
   // Each entry says whether it is on for the agent (`agentOn`, AP-4992): no keys to read.
   const rows = useMemo(
     () =>
-      vaultEntryRows(query.data?.entries ?? [], now, timeZone, agent).map((row, i) => {
+      vaultEntryRows(query.data?.entries ?? [], now, timeZone, agent, rawLocale).map((row, i) => {
         const entry = query.data?.entries[i];
         const line = entry
-          ? vaultRowLine(entry, { now, timeZone, agent: words.name })
+          ? phoneVaultRowLine(entry, { now, timeZone, agent: words.name, locale: rawLocale })
           : { text: row.meta, failing: false };
         // Kept in step with 1Password: its tag after the name, read with it.
         const tag = entry ? vaultEntryTag(entry) : null;
@@ -60,7 +66,7 @@ export function VaultScreen({ navigation, route }: Props) {
           accessibilityLabel: `${tag ? `${row.name}, ${tag}` : row.name}, ${line.text}. ${row.meta}`,
         };
       }),
-    [query.data, now, timeZone, agent, words.name],
+    [query.data, now, timeZone, agent, words.name, rawLocale],
   );
   const networkRows = useMemo(() => vaultNetworkRows(networks.data?.networks ?? []), [networks.data]);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
@@ -69,9 +75,9 @@ export function VaultScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <BackBar
-        label={route.params?.back ?? 'Back'}
+        label={route.params?.back ?? tMobile('managed.back')}
         onPress={goBack}
-        right={<PlacesButton current="vault" here={PLACE_WORDS.vault} />}
+        right={<PlacesButton current="vault" here={copy.title} />}
       />
       <AddToVaultSheet
         visible={adding}
@@ -79,7 +85,7 @@ export function VaultScreen({ navigation, route }: Props) {
         networks={networks.data?.networks ?? []}
         onAdded={(entry) => {
           setAdding(false);
-          navigation.navigate('VaultEntry', { entryId: entry.id, title: entry.name, back: VAULT_COPY.title });
+          navigation.navigate('VaultEntry', { entryId: entry.id, title: entry.name, back: copy.title });
         }}
       />
       <ScrollView
@@ -98,11 +104,11 @@ export function VaultScreen({ navigation, route }: Props) {
           />
         }
       >
-        <PlaceTitle title={VAULT_COPY.title} intro={VAULT_ROW_TEXT.intro(words.name)} />
+        <PlaceTitle title={copy.title} intro={rowCopy.intro(words.name)} />
         {/* Add to Vault on a line of its own, so it never collides with the title at large text. */}
         {query.data ? (
           <Button
-            label={VAULT_COPY.add}
+            label={copy.add}
             size="lg"
             wrap
             disabled={!query.data.canAdd}
@@ -113,20 +119,15 @@ export function VaultScreen({ navigation, route }: Props) {
           <PlaceState
             kind="failed"
             icon={Lock}
-            title={VAULT_ROW_TEXT.failedTitle}
-            line={VAULT_ROW_TEXT.failedLine}
-            retryLabel={VAULT_ROW_TEXT.retry}
+            title={rowCopy.failedTitle}
+            line={rowCopy.failedLine}
+            retryLabel={rowCopy.retry}
             onRetry={() => void query.refetch()}
           />
         ) : !query.data ? (
-          <PlaceState kind="loading" icon={Lock} title={VAULT_ROW_TEXT.loading} />
+          <PlaceState kind="loading" icon={Lock} title={rowCopy.loading} />
         ) : rows.length === 0 ? (
-          <PlaceState
-            kind="empty"
-            icon={Lock}
-            title={VAULT_ROW_TEXT.emptyTitle}
-            line={VAULT_COPY.noEntries}
-          />
+          <PlaceState kind="empty" icon={Lock} title={rowCopy.emptyTitle} line={copy.noEntries} />
         ) : (
           <PlaceCard>
             {rows.map((r, i) => (
@@ -143,7 +144,7 @@ export function VaultScreen({ navigation, route }: Props) {
                   navigation.navigate('VaultEntry', {
                     entryId: r.id,
                     title: r.name,
-                    back: VAULT_COPY.title,
+                    back: copy.title,
                   })
                 }
               />
@@ -152,7 +153,7 @@ export function VaultScreen({ navigation, route }: Props) {
         )}
         <View style={{ gap: 8 }}>
           <Text size={13.5} lh={1.45} color={theme.colors.ink2}>
-            {VAULT_ROW_TEXT.closed}
+            {rowCopy.closed}
           </Text>
           {/* What saving from chat does, where the Whombat does it (VS-08; AP-4040). */}
           {savedIntro ? (
@@ -164,10 +165,10 @@ export function VaultScreen({ navigation, route }: Props) {
         {networks.data ? (
           // The grouped list brings its own 16 of side: the card lines up with the page's.
           <View style={{ marginHorizontal: -16 }}>
-            <Section title={VAULT_COPY.homeNetwork}>
-              <CardNote>{VAULT_COPY.homeNetworkIntro}</CardNote>
+            <Section title={copy.homeNetwork}>
+              <CardNote>{copy.homeNetworkIntro}</CardNote>
               {networkRows.length === 0 ? (
-                <CardNote>{VAULT_COPY.noNetworks}</CardNote>
+                <CardNote>{copy.noNetworks}</CardNote>
               ) : (
                 networkRows.map((n) => (
                   <ListRow

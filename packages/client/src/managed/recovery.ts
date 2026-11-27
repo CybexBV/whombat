@@ -16,6 +16,8 @@ import {
 } from '@whombat/protocol/session';
 import type { z } from 'zod';
 import { NeedsNewerAppError } from '../http/errors';
+import { clientTree } from '../i18n/catalog';
+import { KIT_BACKUP_WORDS } from '../i18n/messages/recovery';
 import { type KitBackup, OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import { isPeerId } from './pin';
@@ -62,14 +64,13 @@ export interface KitBackupGap {
   gap: 'newer_app' | 'incomplete' | 'unreachable';
 }
 
-export const KIT_BACKUP_TEXT = {
-  newer_app:
-    'This version of the app can’t write all of your Whombat’s backup details into the kit, so the kit leaves them out. Update the app, then save a new kit.',
-  incomplete:
-    'Your Whombat didn’t hand over everything its backups need, so the kit leaves them out. Save a new kit later.',
-  unreachable:
-    'Couldn’t get your Whombat’s backup details, so the kit leaves them out. Save a new kit later.',
-} as const;
+/** The kit's own words: always English, whatever the screen speaks, so every kit reads the same. */
+export const KIT_BACKUP_TEXT = KIT_BACKUP_WORDS.tree;
+
+/** Why the kit left its backup section out, for the screen, in a locale (English when none is given). */
+export function kitBackupText(locale?: string | null): Record<KitBackupGap['gap'], string> {
+  return clientTree(locale, KIT_BACKUP_WORDS);
+}
 
 /** What each kind needs to reach the repository without the appliance (appliance `kit.Material.Validate`). */
 export function kitBackupComplete(b: KitBackup): boolean {

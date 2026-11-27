@@ -1,13 +1,10 @@
-import {
-  APPROVAL_CARD_WORDS,
-  type ApprovalTonightView,
-  type ApprovalUnmetView,
-} from '@whombat/core/approvals';
+import { type ApprovalTonightView, type ApprovalUnmetView, approvalCardWords } from '@whombat/core/approvals';
 import { ChevronRight } from 'lucide-react';
 import { type MouseEvent, type ReactNode, useId } from 'react';
 import { Button, ButtonLink } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useLocaleWords } from '../../i18n/words';
 import styles from './AskCard.module.css';
 
 /** The facts the card shows before its answers (core's `approvalCardFacts`, client's `needsYouApprovalCard`). */
@@ -102,6 +99,7 @@ export function AskCard({
   className,
   data,
 }: AskCardProps) {
+  const APPROVAL_CARD_WORDS = useLocaleWords(approvalCardWords);
   const headingId = useId();
   const Heading = level === 3 ? 'h3' : 'h2';
   const W = APPROVAL_CARD_WORDS;

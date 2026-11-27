@@ -9,7 +9,10 @@
  * - **The agent's notes**: one text you write (Settings → Agent → Notes); Whombat puts it in your profile's
  *   `whombat.md`, never in the profiles of outsiders' turns (OP-17).
  */
+
 import { z } from 'zod';
+import { coreTranslator, coreWords } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { Count, Timestamp } from './common.js';
 
 /* Your memory ------------------------------------------------------------------------------------------------------ */
@@ -122,53 +125,68 @@ export type AgentNotes = z.infer<typeof AgentNotes>;
 
 const thousands = (n: number) => n.toLocaleString('en-US');
 
+const MEMORY_COPY_KEYS = [
+  'title',
+  'intro',
+  'memory',
+  'memoryHint',
+  'user',
+  'userHint',
+  'empty',
+  'edit',
+  'save',
+  'cancel',
+  'clear',
+  'clearQuestion',
+  'cleared',
+  'full',
+  'changed',
+] as const;
+
 /**
  * Settings → Memory (Whombat concise-replies.md: no file names). `{agent}` is the agent's name (`memoryCopy` fills it
  * in). Shared by web and Android.
  */
-export const MEMORY_COPY = {
-  title: 'What {agent} remembers',
-  intro: '{agent} uses this when it works for you.',
-  memory: 'What {agent} remembers about working with you',
-  memoryHint: 'What it learned while working with you: how you work, your setup, what went well.',
-  user: 'About you',
-  userHint: 'Who you are and how you like things done.',
-  empty: 'Nothing yet. {agent} adds what it learns as you work together.',
-  edit: 'Edit',
-  save: 'Save',
-  cancel: 'Cancel',
-  clear: 'Forget everything',
-  clearQuestion: 'Forget everything {agent} remembers about you?',
-  cleared: '{agent} no longer remembers anything about you.',
-  full: 'Full. Shorten or remove something to add more.',
-  changed: '{agent} changed this while you were editing. Look again, then save.',
-} as const;
-
-/** `MEMORY_COPY` with the agent's name filled in. */
-export function memoryCopy(agentName: string): { -readonly [K in keyof typeof MEMORY_COPY]: string } {
-  return fill(MEMORY_COPY, agentName);
+export function memoryWords(
+  locale?: string | null,
+): Readonly<Record<(typeof MEMORY_COPY_KEYS)[number], string>> {
+  return coreWords(locale, 'memory', MEMORY_COPY_KEYS);
 }
+
+export const MEMORY_COPY = memoryWords('en');
+
+/** `MEMORY_COPY` with the agent's name filled in, in a locale. */
+export function memoryCopy(
+  agentName: string,
+  locale?: string | null,
+): { -readonly [K in keyof typeof MEMORY_COPY]: string } {
+  return fill(locale ? memoryWords(locale) : MEMORY_COPY, agentName);
+}
+
+const NOTES_COPY_KEYS = ['tab', 'title', 'intro', 'placeholder', 'empty', 'edit', 'save', 'cancel'] as const;
 
 /** The agent's notes (Settings → Agent → Notes). `{agent}` is the agent's name (`notesCopy`). */
-export const NOTES_COPY = {
-  tab: 'Notes',
-  title: 'NOTES',
-  intro: 'What {agent} should know in every chat: how things are set up, what to keep in mind.',
-  placeholder: 'Backups run at 2:00. Ask before restarting the NAS.',
-  empty: 'No notes yet.',
-  edit: 'Edit',
-  save: 'Save',
-  cancel: 'Cancel',
-} as const;
-
-/** `NOTES_COPY` with the agent's name filled in. */
-export function notesCopy(agentName: string): { -readonly [K in keyof typeof NOTES_COPY]: string } {
-  return fill(NOTES_COPY, agentName);
+export function notesWords(
+  locale?: string | null,
+): Readonly<Record<(typeof NOTES_COPY_KEYS)[number], string>> {
+  return coreWords(locale, 'notes', NOTES_COPY_KEYS);
 }
 
-/** “1,240 of 2,200 characters” (a file's or the notes' usage line). */
-export function memoryUsageText(used: number, limit: number): string {
-  return `${thousands(used)} of ${thousands(limit)} characters`;
+export const NOTES_COPY = notesWords('en');
+
+/** `NOTES_COPY` with the agent's name filled in, in a locale. */
+export function notesCopy(
+  agentName: string,
+  locale?: string | null,
+): { -readonly [K in keyof typeof NOTES_COPY]: string } {
+  return fill(locale ? notesWords(locale) : NOTES_COPY, agentName);
+}
+
+/** “1,240 of 2,200 characters” (a file's or the notes' usage line); “1.240 van 2.200 tekens” in Dutch. */
+export function memoryUsageText(used: number, limit: number, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  const n = (x: number) => formatLocaleNumber(x, tr.locale);
+  return tr.t('memory.usage', { used: n(used), limit: n(limit) });
 }
 
 function fill<T extends Record<string, string>>(

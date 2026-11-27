@@ -4,6 +4,7 @@
  * the phone maps the same addresses. `where` names the place as people read it, `{assistant}` standing for the
  * assistant's name.
  */
+import { resolveLanguage } from '@whombat/core/i18n';
 
 export interface SettingsPage {
   /** “Settings → This Whombat → Backups”. */
@@ -186,9 +187,145 @@ export const SETTINGS_PAGES = {
 export type SettingsPageId = keyof typeof SETTINGS_PAGES;
 export const SETTINGS_PAGE_IDS = Object.keys(SETTINGS_PAGES) as SettingsPageId[];
 
-/** A page's words with the assistant's name in them. */
-export function pageWords(id: SettingsPageId, assistant: string): SettingsPage {
-  const p: SettingsPage = SETTINGS_PAGES[id];
+export const SETTINGS_PAGES_NL: Record<SettingsPageId, Pick<SettingsPage, 'where' | 'about'>> = {
+  'you.profile': {
+    where: 'Instellingen → Jij → Profiel',
+    about: 'je naam, functie, foto, taal en hoe Chat afgeronde gesprekken afhandelt',
+  },
+  'you.notifications': {
+    where: 'Instellingen → Jij → Meldingen',
+    about: 'waar Whombat je over tipt, via pushmelding en e-mail',
+  },
+  'you.devices': {
+    where: 'Instellingen → Jij → Apparaten',
+    about: 'de ingelogde telefoons en computers, en je passkeys',
+  },
+  'you.prompts': {
+    where: 'Instellingen → Jij → Prompts',
+    about: 'je opgeslagen prompts om opnieuw te gebruiken via / in Chat',
+  },
+  'agent.profile': {
+    where: 'Instellingen → {assistant} → Naam en uiterlijk',
+    about: 'de naam, het uiterlijk en de stem van {assistant}',
+  },
+  'agent.ai': {
+    where: 'Instellingen → {assistant} → AI-login',
+    about: 'waar {assistant} op draait, en je Claude- en ChatGPT-logins',
+  },
+  'agent.memory': {
+    where: 'Instellingen → {assistant} → Geheugen',
+    about: 'wat {assistant} over je onthoudt, en de notities die bij elke chat worden gelezen',
+  },
+  'agent.may': {
+    where: 'Instellingen → {assistant} → Wat {assistant} mag doen',
+    about: 'alle rechten: servers, koppelingen, de Kluis, het lokale netwerk en risicovolle sleutels',
+  },
+  'agent.ahead': {
+    where: 'Instellingen → {assistant} → Vooruitkijken',
+    about:
+      'of {assistant} je aankomende afspraken en binnenkomende mail controleert, welke agenda’s, waar op te letten, recente controles en wat niet meer gecontroleerd wordt',
+  },
+  'agent.council': {
+    where: 'Instellingen → {assistant} → Raad',
+    about: 'de raden die {assistant} kan raadplegen: welke AI’s meedoen, welk model en welke inspanning',
+  },
+  connections: {
+    where: 'Instellingen → Koppelingen',
+    about: 'je accounts (Google, Microsoft, e-mail), apps en diensten, en wat daar actie nodig heeft',
+  },
+  overview: {
+    where: 'Overzicht',
+    about:
+      'elke server en dienst met een eigen pagina: hoe het gaat, wat Whombat in de gaten houdt en instellingen',
+  },
+  'appliance.overview': {
+    where: 'Instellingen → Deze Whombat → Overzicht',
+    about: 'hoe het met de box gaat, netwerk en Wi-Fi, Tailscale, Bluetooth, spraaktypen en e-mail',
+  },
+  'appliance.backups': {
+    where: 'Instellingen → Deze Whombat → Back-ups',
+    about: 'waar de box back-ups maakt, wanneer, en back-upbestanden',
+  },
+  'appliance.screen': {
+    where: 'Instellingen → Deze Whombat → Scherm',
+    about: 'het scherm van de box en andere schermen: wat ze tonen, vergrendeling, nachtstand en Praten',
+  },
+  'appliance.about': {
+    where: 'Instellingen → Deze Whombat → Over',
+    about: 'versies en updates, wanneer updates mogen draaien, hulp op afstand en licentie',
+  },
+  news: {
+    where: 'Instellingen → Nieuws en weer',
+    about:
+      'waar deze Whombat staat (voor weer en lokaal nieuws), en de nieuwsbronnen die hij leest: aan en uit, volgorde, suggesties en eigen bronnen',
+  },
+  'advanced.model': {
+    where: 'Instellingen → Geavanceerd → Model en inspanning',
+    about: 'het hoofd- en achtergrondmodel dat {assistant} gebruikt en hoe grondig er wordt nagedacht',
+  },
+  'advanced.ai': {
+    where: 'Instellingen → Geavanceerd → AI op deze Whombat',
+    about:
+      'de AI-programma’s, de AI-gateway, een eigen AI-model (OpenAI-compatibel over https of lokaal op je netwerk) en zoeken op internet (Brave Search)',
+  },
+  'advanced.spend': {
+    where: 'Instellingen → Geavanceerd → Kosten',
+    about: 'wat de AI kost, per dag en per week',
+  },
+  'advanced.keys': {
+    where: 'Instellingen → {assistant} → Wat {assistant} mag doen → Sleutels',
+    about: 'elke sleutel die {assistant} heeft en welke commando’s altijd mogen draaien',
+  },
+  'advanced.network': {
+    where: 'Instellingen → {assistant} → Wat {assistant} mag doen → Lokaal netwerk',
+    about: 'of {assistant} bij je lokale netwerk mag en welke thuisnetwerken toegestaan zijn',
+  },
+  'advanced.running': {
+    where: 'Instellingen → Geavanceerd → Actief',
+    about: 'wat {assistant} op de box laat draaien',
+  },
+  'advanced.schedules': {
+    where: 'Automatiseringen',
+    about: 'wat {assistant} volgens schema doet, onder Alleen melden',
+  },
+  'advanced.skills': {
+    where: 'Instellingen → Geavanceerd → Skills',
+    about: 'de skills van {assistant}: aan en uit, en meer uit de hub',
+  },
+  'advanced.github': {
+    where: 'Instellingen → Koppelingen → GitHub',
+    about: 'GitHub en de repositories waar {assistant} in werkt',
+  },
+  'advanced.feedback': {
+    where: 'Instellingen → Koppelingen → Website-feedback',
+    about: 'websites die feedback naar deze Whombat sturen',
+  },
+  'advanced.audit': {
+    where: 'Instellingen → Geavanceerd → Logboek en sleutels',
+    about: 'het ondertekende logboek van alles wat hier is gebeurd',
+  },
+  'advanced.diagnostics': {
+    where: 'Instellingen → Geavanceerd → Diagnose',
+    about: 'diagnosebundels voor ondersteuning',
+  },
+  vault: {
+    where: 'Kluis',
+    about: 'waar {assistant} kan inloggen: wachtwoorden, sleutels en servers',
+  },
+  automations: {
+    where: 'Automatiseringen',
+    about: 'de automatiseringen, hun runs, en aan- en uitzetten',
+  },
+  inbox: {
+    where: 'Inbox',
+    about: 'actie nodig, later en afgehandeld',
+  },
+};
+
+/** A page's words with the assistant's name in them, in the requested language. */
+export function pageWords(id: SettingsPageId, assistant: string, locale?: string | null): SettingsPage {
+  const base: SettingsPage = SETTINGS_PAGES[id];
+  const localized = resolveLanguage(locale) === 'nl' ? SETTINGS_PAGES_NL[id] : base;
   const fill = (s: string) => s.replaceAll('{assistant}', assistant);
-  return { where: fill(p.where), path: p.path, about: fill(p.about) };
+  return { where: fill(localized.where), path: base.path, about: fill(localized.about) };
 }

@@ -49,6 +49,7 @@ import { File } from 'expo-file-system';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { Card, Row } from '../managed/ui';
 import { errorText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -107,12 +108,14 @@ export function SettingsNewsScreen() {
 /* Place ------------------------------------------------------------------------------------------------------------ */
 
 function PlaceCard({ slug, place }: { slug: string; place: Place | null }) {
+  const { rawLocale } = useI18n();
+
   const [open, setOpen] = useState(false);
   return (
     <Card label={P.title.toUpperCase()}>
       <Row
         first
-        title={placeRowText(place)}
+        title={placeRowText(place, rawLocale)}
         body={P.about}
         action={
           <Button
@@ -129,6 +132,8 @@ function PlaceCard({ slug, place }: { slug: string; place: Place | null }) {
 }
 
 function PlaceChange({ slug, place, onDone }: { slug: string; place: Place | null; onDone: () => void }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const find = useFindPlace(slug);
   const set = useSetPlace(slug);
@@ -157,7 +162,7 @@ function PlaceChange({ slug, place, onDone }: { slug: string; place: Place | nul
     const input = next ? (({ guessed: _guessed, ...rest }) => rest)(next) : null;
     set.mutate(input, {
       onSuccess: (burrow) => {
-        showNotice(placeSavedText(burrow.place));
+        showNotice(placeSavedText(burrow.place, rawLocale));
         onDone();
       },
       onError: (e) => setProblem(errorText(e)),
@@ -191,7 +196,7 @@ function PlaceChange({ slug, place, onDone }: { slug: string; place: Place | nul
               key={`${p.name}:${p.lat}:${p.lon}`}
               feedback="wash"
               disabled={busy}
-              accessibilityLabel={`${placeLabel(p)}, ${placeResultMeta(p)}`}
+              accessibilityLabel={`${placeLabel(p)}, ${placeResultMeta(p, rawLocale)}`}
               onPress={() => keep(p)}
               style={{
                 minHeight: 48,
@@ -206,7 +211,7 @@ function PlaceChange({ slug, place, onDone }: { slug: string; place: Place | nul
                 {placeLabel(p)}
               </Text>
               <Text size={13} color={theme.colors.mut}>
-                {placeResultMeta(p)}
+                {placeResultMeta(p, rawLocale)}
               </Text>
             </Touchable>
           ))}
@@ -235,6 +240,8 @@ function NewsCards({ slug, more }: { slug: string; more: boolean }) {
 type FindPart = 'suggested' | 'own' | 'import';
 
 function NewsParts({ slug, view, more }: { slug: string; view: NewsSourcesView; more: boolean }) {
+  const { rawLocale } = useI18n();
+
   const set = useSetNewsSources(slug);
   const [problem, setProblem] = useState<string | null>(null);
   const max = newsMax(more);
@@ -249,7 +256,7 @@ function NewsParts({ slug, view, more }: { slug: string; view: NewsSourcesView; 
     });
   };
   const turnOn = (site: { id: string; name: string }) =>
-    change(newsIdsWith(view, site.id), newsAddedText(site.name));
+    change(newsIdsWith(view, site.id), newsAddedText(site.name, rawLocale));
   const parts: { key: FindPart; label: string }[] = [
     { key: 'suggested', label: N.tabSuggested },
     { key: 'own', label: N.tabOwn },
@@ -563,6 +570,8 @@ function BrowseCard({
   busy: boolean;
   onAdd: (site: NewsBrowseSite) => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const [country, setCountry] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -578,12 +587,12 @@ function BrowseCard({
   const countries = useMemo(
     () =>
       (data?.countries ?? [])
-        .map((c) => ({ code: c.code, name: countryName(c.code) }))
+        .map((c) => ({ code: c.code, name: countryName(c.code, undefined, rawLocale) }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [data],
+    [data, rawLocale],
   );
   if (!data) return browse.error ? <FormMessage text={errorText(browse.error)} /> : null;
-  const shownName = data.country ? countryName(data.country) : '';
+  const shownName = data.country ? countryName(data.country, undefined, rawLocale) : '';
   return (
     <Card>
       {countries.length > 0 ? (
@@ -720,7 +729,9 @@ function SuggestedCard({
   busy: boolean;
   onAdd: (site: { id: string; name: string }) => void;
 }) {
-  const title = newsSuggestedTitle(view.place);
+  const { rawLocale } = useI18n();
+
+  const title = newsSuggestedTitle(view.place, rawLocale);
   if (!title || view.suggestions.length === 0) return null;
   return (
     <Card label={title.toUpperCase()}>
@@ -733,7 +744,7 @@ function SuggestedCard({
           line={
             s.near !== 'country' && view.place?.regionName
               ? view.place.regionName
-              : countryName(view.place?.country ?? '')
+              : countryName(view.place?.country ?? '', undefined, rawLocale)
           }
           end={<AddOrOn name={s.name} on={false} disabled={busy || !room} onAdd={() => onAdd(s)} />}
         />
@@ -745,6 +756,8 @@ function SuggestedCard({
 /* Find more: your own and import ----------------------------------------------------------------------------------- */
 
 function AddOwnCard({ slug, full, max }: { slug: string; full: boolean; max: number }) {
+  const { rawLocale } = useI18n();
+
   const add = useAddNewsSite(slug);
   const [url, setUrl] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -754,7 +767,7 @@ function AddOwnCard({ slug, full, max }: { slug: string; full: boolean; max: num
     add.mutate(url.trim(), {
       onSuccess: (result) => {
         setUrl('');
-        showNotice(newsAddedText(result.added.name));
+        showNotice(newsAddedText(result.added.name, rawLocale));
       },
       onError: (e) => setFieldError(fieldProblem(e, 'url') ?? N.unreachable),
     });

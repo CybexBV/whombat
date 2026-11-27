@@ -4,6 +4,7 @@
  * (`data/richPreview.ts`: the frame's CSP as the page's first element, no storage, files, windows or navigation).
  * Also the code block every rich message uses (language label, Copy, the README's code colours).
  */
+
 import { type DiagramTheme, mermaidDocumentWith, mermaidScriptElement } from '@whombat/client';
 import { htmlTitle } from '@whombat/core';
 import { fontFamilies, pageThemeCss } from '@whombat/tokens';
@@ -23,6 +24,7 @@ import {
   pageHeight,
   withPreviewPolicy,
 } from '../data/richPreview';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { copyToClipboard } from './clipboard';
@@ -39,6 +41,7 @@ import { hitSlopFor } from './touchTarget';
  * on the code surface. Copy puts the code on the clipboard and says “Copied” for two seconds (MX-04, the web's AP-322).
  */
 export function CodeBlockView({ label, text }: { label: string | null; text: string }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -61,11 +64,11 @@ export function CodeBlockView({ label, text }: { label: string | null; text: str
         }}
       >
         <Text size={11} mono color={theme.code.command} numberOfLines={1} style={{ flexShrink: 1 }}>
-          {label?.trim() || 'Code'}
+          {label?.trim() || tMobile('ui.code')}
         </Text>
         <Touchable
           onPress={() => void copyToClipboard(text, COPIED_TEXT.code).then((ok) => ok && setCopied(true))}
-          accessibilityLabel={copied ? 'Copied' : 'Copy the code'}
+          accessibilityLabel={copied ? tMobile('ui.copied') : tMobile('ui.copy-the-code')}
           feedback="fade"
           ringRadius={8}
           hitSlop={hitSlopFor(32)}
@@ -80,7 +83,7 @@ export function CodeBlockView({ label, text }: { label: string | null; text: str
         >
           <CopyIcon size={14} color={theme.code.command} strokeWidth={1.75} />
           <Text size={11} mono color={theme.code.command}>
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? tMobile('ui.copied') : tMobile('ui.copy')}
           </Text>
         </Touchable>
       </View>
@@ -298,6 +301,7 @@ function PreviewCard({
   /** More actions (an attachment's share). */
   actions?: ReactNode;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [showSource, setShowSource] = useState(false);
   const [open, setOpen] = useState(false);
@@ -337,10 +341,10 @@ function PreviewCard({
             </Text>
           ) : null}
         </View>
-        <HeaderButton icon={Maximize2} label="Open full screen" onPress={() => setOpen(true)} />
+        <HeaderButton icon={Maximize2} label={tMobile('ui.open-full-screen')} onPress={() => setOpen(true)} />
         <HeaderButton
           icon={Code2}
-          label="View source"
+          label={tMobile('ui.view-source')}
           selected={showSource}
           onPress={() => setShowSource((s) => !s)}
         />
@@ -373,6 +377,7 @@ function FullScreenPage({
   title: string;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -381,7 +386,7 @@ function FullScreenPage({
       >
         <Touchable
           onPress={onClose}
-          accessibilityLabel="Close full screen"
+          accessibilityLabel={tMobile('ui.close-full-screen')}
           feedback="wash"
           ringRadius={22}
           style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}

@@ -10,6 +10,7 @@
  * (`whombat://connections?tab=servers`) scrolls to its section. Live through `home.changed` and the `hosts` topic; pull
  * to refresh sorts the servers (and, never arranged, the tiles) worst first again.
  */
+
 import { type NavigationProp, type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import {
   ARRANGE_WORDS,
@@ -23,13 +24,13 @@ import {
   layoutNow,
   moveTileBy,
   OVERVIEW_STARTING_TOP,
-  OVERVIEW_WORDS,
   type OverviewTile,
   overviewHeadline,
   overviewSectionForTab,
   overviewSections,
   overviewShows,
   overviewTiles,
+  overviewWords,
   rangeOfTile,
   readingsMoment,
   readState,
@@ -49,11 +50,12 @@ import type { HomeOverview, OverviewLayout, OverviewLayoutPin } from '@whombat/c
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, type LayoutChangeEvent, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { CONNECTIONS_COPY, jumpOffset, overviewChips } from '../data/home';
+import { connectionsCopy, jumpOffset, overviewChips } from '../data/home';
 import { pinMovePosition } from '../data/overviewArranged';
 import { phoneThingGlyph } from '../data/thingLook';
 import { useAgentWords } from '../data/useAgent';
 import { useStatusOrder } from '../data/useStatusOrder';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import type { TabParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -84,6 +86,11 @@ const tileId = (t: OverviewTile) => t.row.id;
 const tileLevel = (t: OverviewTile) => t.row.level;
 
 export function HomeScreen() {
+  const { rawLocale } = useI18n();
+  const connectionsCopyHere = connectionsCopy(rawLocale);
+
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
@@ -144,8 +151,8 @@ export function HomeScreen() {
     [sections, pins.shown],
   );
   const views = useMemo(
-    () => overviewSections(shownSections, fleet.data?.servers ?? null),
-    [shownSections, fleet.data?.servers],
+    () => overviewSections(shownSections, fleet.data?.servers ?? null, rawLocale),
+    [shownSections, fleet.data?.servers, rawLocale],
   );
   const chips = useMemo(() => overviewChips(views), [views]);
   const pageViews = useMemo(
@@ -263,14 +270,34 @@ export function HomeScreen() {
     const only = sections.length === 1 ? sections[0] : null;
     if (only?.kind === 'panels') {
       const lastAt = Math.max(
-        ...only.widgets.map((w) => widgetChart(w, timeZone).lastAt ?? Number.NEGATIVE_INFINITY),
+        ...only.widgets.map(
+          (w) => widgetChart(w, timeZone, undefined, rawLocale).lastAt ?? Number.NEGATIVE_INFINITY,
+        ),
       );
       return Number.isFinite(lastAt)
-        ? { title: OVERVIEW_WORDS.savedFrom(readingsMoment(lastAt, timeZone)), body: OVERVIEW_WORDS.keepLast }
-        : { title: OVERVIEW_WORDS.savedUnknown, body: OVERVIEW_WORDS.keepLast };
+        ? {
+            title: overviewWordsHere.savedFrom(readingsMoment(lastAt, timeZone, rawLocale)),
+            body: overviewWordsHere.keepLast,
+          }
+        : { title: overviewWordsHere.savedUnknown, body: overviewWordsHere.keepLast };
     }
-    return { title: OVERVIEW_WORDS.couldntRefresh(CONNECTIONS_COPY.title), body: OVERVIEW_WORDS.savedEach };
-  }, [state, data, sections, timeZone]);
+    return {
+      title: overviewWordsHere.couldntRefresh(connectionsCopyHere.title),
+      body: overviewWordsHere.savedEach,
+    };
+  }, [
+    state,
+    data,
+    sections,
+    timeZone,
+    overviewWordsHere.keepLast,
+    overviewWordsHere.savedFrom,
+    connectionsCopyHere.title,
+    overviewWordsHere.savedUnknown,
+    overviewWordsHere.savedEach,
+    overviewWordsHere.couldntRefresh,
+    rawLocale,
+  ]);
 
   // Where each section sits in the list, for the jump chips and an old `?tab=` address.
   const scroller = useRef<ScrollView>(null);
@@ -304,7 +331,7 @@ export function HomeScreen() {
   return (
     <Screen>
       <TabTop
-        title={CONNECTIONS_COPY.title}
+        title={connectionsCopyHere.title}
         right={
           canArrange ? (
             <ArrangeToggle
@@ -342,11 +369,11 @@ export function HomeScreen() {
         ) : null}
         {arranging ? <ArrangeBar failed={failed} /> : null}
         {state === 'loading' ? (
-          <CardSkeletons label={OVERVIEW_WORDS.loading(CONNECTIONS_COPY.title)} tiles={4} />
+          <CardSkeletons label={overviewWordsHere.loading(connectionsCopyHere.title)} tiles={4} />
         ) : state === 'failed' || !data || !headline ? (
           <ReadNote
-            title={OVERVIEW_WORDS.couldntRead(CONNECTIONS_COPY.title)}
-            body={OVERVIEW_WORDS.noSaved}
+            title={overviewWordsHere.couldntRead(connectionsCopyHere.title)}
+            body={overviewWordsHere.noSaved}
             onRetry={refresh}
             error={home.error}
           />
@@ -372,7 +399,7 @@ export function HomeScreen() {
               onGear={(index) => setTarget({ kind: 'figure', index })}
             />
             <TodayCard overview={data} onAll={toInbox} />
-            {sections.length === 0 ? <QuietText>{CONNECTIONS_COPY.empty(assistant)}</QuietText> : null}
+            {sections.length === 0 ? <QuietText>{connectionsCopyHere.empty(assistant)}</QuietText> : null}
             {pageViews.map((view) => {
               const section = shownSections.find((s) => s.kind === SECTION_KIND[view.key]);
               if (!section) return null;
@@ -438,10 +465,16 @@ const SECTION_KIND = { servers: 'servers', services: 'things', pinned: 'panels' 
  * (the item's page), on a line of its own, and the rest follows under it.
  */
 function StatusLine({ overview }: { overview: HomeOverview }) {
+  const { rawLocale } = useI18n();
+  const connectionsCopyHere = connectionsCopy(rawLocale);
+
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { timeZone } = useBurrowBase();
-  const status = useMemo(() => homeStatus(overview, { timeZone }), [overview, timeZone]);
+  const status = useMemo(
+    () => homeStatus(overview, { locale: rawLocale, timeZone }),
+    [overview, timeZone, rawLocale],
+  );
   const { parts, tone, itemId } = status;
   const strongColor = tone === 'bad' ? theme.colors.bad : theme.colors.warnText;
   const lead = parts[0];
@@ -454,12 +487,12 @@ function StatusLine({ overview }: { overview: HomeOverview }) {
     return (
       <View>
         <Touchable
-          onPress={() => navigation.navigate('NeedsYouItem', { itemId, back: CONNECTIONS_COPY.title })}
+          onPress={() => navigation.navigate('NeedsYouItem', { itemId, back: connectionsCopyHere.title })}
           feedback="fade"
           ringRadius={8}
           accessibilityRole="link"
           accessibilityLabel={lead.text}
-          accessibilityHint={CONNECTIONS_COPY.opensInbox}
+          accessibilityHint={connectionsCopyHere.opensInbox}
           style={{ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginVertical: -8 }}
         >
           <Text size={15} lh={1.45} weight={600} color={strongColor}>

@@ -3,6 +3,7 @@
  * where it is and whether it is kept. A backup opens its sheet: Restore as a new guest (a new id, start it or not),
  * Restore over this guest (asked; only while it is switched off), and Keep it until I remove it / Stop keeping it.
  */
+
 import { formatRelativeDay } from '@whombat/client/hosts';
 import { backupRows, newIdCheck } from '@whombat/client/hosts/mobile';
 import { useHostManageRead } from '@whombat/client/hosts/react';
@@ -10,6 +11,7 @@ import type { HostBackupVolume, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n, useMobileT } from '../../i18n';
 import { BigButton, OneCard, OneRow } from '../../ui/assistant';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
@@ -36,6 +38,7 @@ export function GuestBackups({
   canChange: boolean;
   onBackUp: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const q = useHostManageRead(
     { params: { burrow: slug, serverId }, query: { op: 'backup.list', guestId: guest.id, platform: 'pve' } },
     { retry: false },
@@ -44,13 +47,15 @@ export function GuestBackups({
   const rows = q.data?.op === 'backup.list' ? backupRows(q.data.items, now, timeZone) : [];
   return (
     <>
-      {canChange ? <BigButton label="Back up now" variant="secondary" onPress={onBackUp} /> : null}
+      {canChange ? (
+        <BigButton label={tMobile('screens.back-up-now')} variant="secondary" onPress={onBackUp} />
+      ) : null}
       {q.isPending ? (
-        <SkeletonRows count={3} lines={2} label="Loading the backups" />
+        <SkeletonRows count={3} lines={2} label={tMobile('screens.loading-the-backups')} />
       ) : q.isError ? (
-        <ErrorState text="The backups didn’t load." onRetry={() => void q.refetch()} />
+        <ErrorState text={tMobile('screens.the-backups-didnt-load')} onRetry={() => void q.refetch()} />
       ) : (
-        <OneCard label="Backups">
+        <OneCard label={tMobile('screens.backups')}>
           {rows.length ? (
             rows.map((r) => (
               <OneRow
@@ -69,7 +74,7 @@ export function GuestBackups({
               />
             ))
           ) : (
-            <CardQuiet>No backups of this guest yet.</CardQuiet>
+            <CardQuiet>{tMobile('screens.no-backups-of-this-guest-yet')}</CardQuiet>
           )}
         </OneCard>
       )}
@@ -99,10 +104,13 @@ function BackupSheet({
   onOpen: (o: Open) => void;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const { slug, clock, timeZone } = useBurrowBase();
   const b = open.backup;
   const when = b.created
-    ? formatRelativeDay(Date.parse(b.created), clock().getTime(), timeZone)
+    ? formatRelativeDay(Date.parse(b.created), clock().getTime(), timeZone, rawLocale)
     : 'this backup';
   const { send, busy } = useManageChange(serverId);
   const [error, setError] = useState<string | null>(null);
@@ -200,7 +208,7 @@ function BackupSheet({
       visible
       onClose={() => !busy && onClose()}
       title={`Restore ${guest.name} from ${when}`}
-      body="A new guest is made from the backup; the original stays as it is."
+      body={tMobile('screens.a-new-guest-is-made-from-the-backup')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -222,7 +230,7 @@ function BackupSheet({
     >
       <View style={{ gap: 14, marginTop: 16 }}>
         <FormField
-          label="New ID"
+          label={tMobile('screens.new-id')}
           value={newId}
           onChangeText={setNewId}
           placeholder={next ? String(next) : undefined}
@@ -231,7 +239,7 @@ function BackupSheet({
           mono
           keyboardType="number-pad"
         />
-        <SwitchLine label="Start it afterwards" value={start} onChange={setStart} />
+        <SwitchLine label={tMobile('screens.start-it-afterwards')} value={start} onChange={setStart} />
       </View>
     </OneSheet>
   );

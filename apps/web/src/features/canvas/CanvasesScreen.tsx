@@ -7,6 +7,7 @@ import { formatUpdated } from '@whombat/core/text';
 import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { EmptyNote, ErrorNote, SkeletonRows } from '../../components/ListState';
+import { useWebI18n } from '../../i18n/provider';
 import { PersonAvatar } from '../messaging/PersonAvatar';
 import styles from './CanvasesScreen.module.css';
 import { NewCanvasDialog } from './NewCanvasDialog';
@@ -22,6 +23,7 @@ export interface CanvasesScreenProps {
  * and a time attached to them".
  */
 export function CanvasesScreen({ burrow }: CanvasesScreenProps) {
+  const { tag: uiLocale } = useWebI18n();
   const { data, error, refetch } = useCanvases({ params: { burrow } });
   const burrowQuery = useBurrow({ params: { burrow } });
   const { byId: principals } = usePrincipals(burrow);
@@ -117,7 +119,7 @@ export function CanvasesScreen({ burrow }: CanvasesScreenProps) {
                   ))}
                 </span>
                 <span className={styles.updated}>
-                  updated {formatUpdated(canvas.updatedAt, now, timeZone)}
+                  updated {formatUpdated(canvas.updatedAt, now, timeZone, uiLocale)}
                 </span>
               </Link>
             );

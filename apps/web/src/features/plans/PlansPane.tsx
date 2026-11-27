@@ -8,6 +8,7 @@ import { Button, IconButton } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { EmptyNote, ErrorNote, SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
+import { useWebI18n } from '../../i18n/provider';
 import { roomRepo } from '../branch/prLinks';
 import { CreatePlanModal } from './CreatePlanModal';
 import styles from './Plans.module.css';
@@ -54,6 +55,7 @@ function headline(plan: Plan) {
  * “Make a plan” at the top. Works on an unseeded burrow: an empty state with the way to make one.
  */
 export function PlansPane({ burrow, onClose }: { burrow: string; onClose: () => void }) {
+  const { tag: uiLocale } = useWebI18n();
   const conversation = useCurrentConversation(burrow);
   const updateSearch = useSearchUpdate();
   const [making, setMaking] = useState(false);
@@ -110,7 +112,7 @@ export function PlansPane({ burrow, onClose }: { burrow: string; onClose: () => 
                       <span className={styles.planRowTitle}>{plan.title}</span>
                       <span className={styles.planRowMeta}>
                         {progressText(plan)}
-                        {plan.due ? ` · ${formatDue(plan.due)}` : ''}
+                        {plan.due ? ` · ${formatDue(plan.due, uiLocale)}` : ''}
                       </span>
                       {next && (
                         <span className={styles.planRowNext}>

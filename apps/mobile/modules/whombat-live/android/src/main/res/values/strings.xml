@@ -8,4 +8,24 @@
   <string name="whombat_widget_preview_box">Home</string>
   <string name="whombat_widget_preview_status">All good</string>
   <string name="whombat_widget_preview_as_of">as of 14:05</string>
+  <string name="whombat_channel_runs">Runs in progress</string>
+  <string name="whombat_channel_runs_description">An agent’s run you asked for or follow, with its progress.</string>
+  <string name="whombat_channel_needs_you">Needs you</string>
+  <string name="whombat_channel_needs_you_description">Requests that wait for a person, like a deploy to approve.</string>
+  <string name="whombat_channel_updates">Mentions and agent updates</string>
+  <string name="whombat_channel_updates_description">Mentions and what agents tell you.</string>
+  <string name="whombat_notification_title">Whombat</string>
+  <string name="whombat_action_open_run">Open run</string>
+  <string name="whombat_action_details">Details</string>
+  <string name="whombat_action_review">Review</string>
+  <string name="whombat_widget_as_of">as of %1$s</string>
+  <string name="whombat_widget_as_of_yesterday">as of yesterday %1$s</string>
+  <string name="whombat_push_message">New message</string>
+  <string name="whombat_push_mention">You were mentioned</string>
+  <string name="whombat_push_approval">Something is waiting for your approval</string>
+  <string name="whombat_push_run">An agent has news about a run</string>
+  <string name="whombat_push_update">Your Whombat has an update</string>
+  <string name="whombat_push_backup">Your Whombat’s backups need a look</string>
+  <string name="whombat_push_security">A security change on your Whombat</string>
+  <string name="whombat_push_generic">Whombat needs you</string>
 </resources>

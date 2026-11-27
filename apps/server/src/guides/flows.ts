@@ -33,6 +33,8 @@ export interface GuideFacts {
   /** The person's first name (“Mara”). */
   personName: string;
   agentName: string;
+  /** The person's locale (`en-GB`, `nl-NL`): what the guides' cards are written in. */
+  locale?: string;
   google: {
     mode: GoogleMode;
     /** Connecting works here at all (not `WHOMBAT_GOOGLE=off`). */

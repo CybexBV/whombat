@@ -591,7 +591,7 @@ func TestFleetAndDetailHints(t *testing.T) {
 			t.Errorf("alerted sensor hinted: %+v", h)
 		}
 	}
-	if b, _ := json.Marshal(f.Hints[0]); string(b) != `{"server":"obsidian","id":"guests.unhealthy:docker","kind":"guests.unhealthy","severity":"warning","entity":"docker","title":"1 app isn’t working properly","detail":"pihole","link":"#guests"}` {
+	if b, _ := json.Marshal(f.Hints[0]); string(b) != `{"server":"obsidian","id":"guests.unhealthy:docker","kind":"guests.unhealthy","severity":"warning","entity":"docker","title":"1 app isn’t working properly","detail":"pihole","link":"#guests","code":"guests.unhealthy","params":{"count":1,"names":["pihole"]}}` {
 		t.Errorf("hint json = %s", b)
 	}
 	// Group selection; a group of quiet or offline servers has an empty list.

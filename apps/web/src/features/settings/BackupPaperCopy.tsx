@@ -4,7 +4,7 @@
  * asks for nothing old; once printed or saved the Whombat is told (`confirmPaperCopy`), and it counts as a way back. The
  * print is the kit's print sheet with the paper copy's words, which only paper shows.
  */
-import { BACKUP_OPTIONS_TEXT, confirmPaperCopy, longDate, paperCopyText } from '@whombat/client/managed';
+import { confirmPaperCopy, paperCopyText } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
@@ -12,11 +12,11 @@ import { flushSync } from 'react-dom';
 import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
+import { dayLongMonth } from '../../i18n/dates';
+import { useWebI18n } from '../../i18n/provider';
 import { saveBlob } from '../../lib/saveBlob';
 import { KitPrintSheet } from '../../managed/KitScreen';
 import styles from './BackupOverview.module.css';
-
-const P = BACKUP_OPTIONS_TEXT.paper;
 
 /** The paper copy's row: what it is, when one was saved, Print it and Save as a file. A Whombat's only. */
 export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onSaved: () => void }) {
@@ -24,6 +24,7 @@ export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onS
   const [sheet, setSheet] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t, tag } = useWebI18n();
   if (!managed) return null;
   const name = managed.applianceName ?? managed.applianceId;
   const make = async (way: 'print' | 'file') => {
@@ -44,7 +45,7 @@ export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onS
       await confirmPaperCopy(session, material);
       onSaved();
     } catch {
-      setError(P.failed);
+      setError(t('paper.failed'));
     } finally {
       setBusy(false);
     }
@@ -55,8 +56,10 @@ export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onS
         <Icon icon={FileText} size={18} />
       </span>
       <div className={styles.needsMain}>
-        <span className={styles.needsTitle}>{P.title}</span>
-        <span className={styles.needsMeta}>{paperAt ? P.saved(longDate(paperAt)) : P.meta}</span>
+        <span className={styles.needsTitle}>{t('paper.title')}</span>
+        <span className={styles.needsMeta}>
+          {paperAt ? t('paper.saved', { date: dayLongMonth(paperAt, tag) }) : t('paper.meta')}
+        </span>
         {error ? (
           <span className={styles.needsError} role="alert">
             {error}
@@ -65,13 +68,13 @@ export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onS
       </div>
       <div className={styles.needsActions}>
         <Button variant="secondary" size="sm" disabled={busy} onClick={() => void make('print')}>
-          {busy ? P.making : P.print}
+          {busy ? t('paper.making') : t('paper.print')}
         </Button>
         <Button variant="link" size="sm" disabled={busy} onClick={() => void make('file')}>
-          {P.file}
+          {t('paper.file')}
         </Button>
       </div>
-      {sheet ? <KitPrintSheet name={name} kitText={sheet} words={P} /> : null}
+      {sheet ? <KitPrintSheet name={name} kitText={sheet} kind="paper" /> : null}
     </div>
   );
 }

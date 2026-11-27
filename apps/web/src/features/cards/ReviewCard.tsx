@@ -1,6 +1,7 @@
 import { diffLinePrefix, type ReviewCard as ReviewCardData } from '@whombat/core/domain';
 import { formatReviewLabel, segmentInlineCode } from '@whombat/core/text';
 import { cx } from '../../components/cx';
+import { useWebI18n } from '../../i18n/provider';
 import styles from './Card.module.css';
 import review from './ReviewCard.module.css';
 
@@ -12,11 +13,14 @@ export interface ReviewCardProps {
 
 /** Review card: `REVIEW · N CHANGES REQUESTED` in bad, file:line, the diff block and numbered comments. */
 export function ReviewCard({ card }: ReviewCardProps) {
+  const { tag: uiLocale } = useWebI18n();
   const where = card.line === null ? card.file : `${card.file}:${card.line}`;
   return (
     <section className={cx(styles.card, review.card)} aria-label={`Review of ${where}`} data-card="review">
       <div className={styles.header}>
-        <span className={cx(styles.label, styles.toneBad)}>{formatReviewLabel(card.changesRequested)}</span>
+        <span className={cx(styles.label, styles.toneBad)}>
+          {formatReviewLabel(card.changesRequested, uiLocale)}
+        </span>
         <span className={styles.metaMono}>{where}</span>
       </div>
       {card.diff.length > 0 && (

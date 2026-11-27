@@ -39,6 +39,7 @@ import {
   topics,
 } from '@whombat/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { currentLocale } from '../../i18n/provider';
 import type { TypingLine } from './MessageList';
 import {
   historyMessages,
@@ -143,10 +144,10 @@ export function useTypingLines(
       const at = (nowMs: number) => {
         const entry = agentNowFor(agentNow, t.principalId, threadRootId, nowMs);
         // Without the clock: measured at the action's own start, the label leaves it out.
-        const label = workingLabel(name, entry, nowMs);
+        const label = workingLabel(name, entry, nowMs, currentLocale());
         return {
           label,
-          spoken: entry ? workingLabel(name, entry, entry.since) : label,
+          spoken: entry ? workingLabel(name, entry, entry.since, currentLocale()) : label,
           state: workingFaceState(entry),
         };
       };
@@ -342,7 +343,7 @@ function outcomeNotice(
 
 function errorNotice(err: unknown, fallback: string): string {
   // The appliance's subscription ended, or the plan's limit is reached (LC-14).
-  const licence = licenceRefusalText(err);
+  const licence = licenceRefusalText(err, currentLocale());
   if (licence) return licence;
   if (err instanceof ApiError) {
     if (err.status === 404 || err.status === 501) return 'That isn’t available here yet.';

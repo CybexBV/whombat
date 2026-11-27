@@ -88,6 +88,34 @@ describe('the last-seen burrow (AP-717)', () => {
     });
   });
 
+  it('discards a saved copy in an old language and restores after it has been replaced', async () => {
+    const box = createSecureBox(memoryBoxDeps(defaultCrypto as unknown as BoxCrypto));
+    const scope = 'managed:org/dev';
+    const qc = seeded();
+    const persister = createQueryPersister({ qc, box, scope, account: () => 'account' });
+    await persister.restore();
+    await persister.flush();
+
+    const otherLanguage = new QueryClient();
+    const restoreDutch = createQueryPersister({
+      qc: otherLanguage,
+      box,
+      scope,
+      account: () => 'account',
+      initialLocale: Promise.resolve('nl-NL'),
+    });
+    expect(await restoreDutch.restore()).toBeNull();
+    expect(otherLanguage.getQueryCache().getAll()).toHaveLength(0);
+
+    persister.setLocale('nl-NL');
+    qc.removeQueries({ queryKey: key('notifications.inbox') });
+    qc.setQueryData(key('home.overview'), { text: 'Alles in orde' });
+    await persister.flush();
+    expect(await restoreDutch.restore()).toBe('account');
+    expect(otherLanguage.getQueryData(key('notifications.inbox'))).toBeUndefined();
+    expect(otherLanguage.getQueryData(key('home.overview'))).toEqual({ text: 'Alles in orde' });
+  });
+
   it('shows no copy older than a week, or of another format', () => {
     const snap = snapshotQueries(seeded(), 'acc', 0);
     expect(usableSnapshot(snap, MAX_AGE_MS - 1)).toBe(snap);

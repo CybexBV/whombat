@@ -31,6 +31,7 @@ import {
   widgets,
 } from '../../db/schema/index';
 import { replaceAvatar } from '../../files/avatars';
+import { reloadAccountLocale } from '../../i18n/locale';
 import { localModelKeyOf, sealLocalModelKey } from '../../local-model/store';
 import { loadPrincipalRow, toPerson } from '../../read/principals';
 import { sealWebSearchKey, webSearchKeyOf } from '../../web-search/store';
@@ -262,9 +263,24 @@ async function widget(run: RestoreRun, r: BackupWidgetRecord): Promise<RecordOut
 }
 
 const isDefaultPreferences = (p: Record<string, unknown>) =>
-  Object.keys(p).every((k) => k === 'theme' || k === 'timeZone') &&
+  Object.keys(p).every((k) => k === 'theme' || k === 'timeZone' || k === 'locale') &&
   (p.theme ?? 'system') === 'system' &&
-  (p.timeZone ?? null) === null;
+  (p.timeZone ?? null) === null &&
+  (p.locale ?? null) === null;
+
+/** Parses backed-up preferences safely so a malformed/unsupported future locale tag never discards the rest. */
+function parseRestoredPreferences(raw: unknown): Preferences | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const direct = Preferences.safeParse(raw);
+  if (direct.success) return direct.data;
+  const record = raw as Record<string, unknown>;
+  if ('locale' in record) {
+    const { locale: _dropped, ...rest } = record;
+    const withoutLocale = Preferences.safeParse(rest);
+    if (withoutLocale.success) return withoutLocale.data;
+  }
+  return null;
+}
 
 /**
  * The person's preferences and photo (BF-20, BF-S18), back to the person restoring. What nobody chose here — preferences as a
@@ -275,8 +291,7 @@ async function accountProfile(run: RestoreRun, r: BackupAccountProfileRecord): P
   if (!run.restorer.accountId) return 'detail';
   const [account] = await run.db.select().from(accounts).where(eq(accounts.id, run.restorer.accountId));
   if (!account) return 'detail';
-  const prefs = r.preferences ? Preferences.safeParse(r.preferences) : null;
-  const wantedPrefs = prefs?.success ? prefs.data : null;
+  const wantedPrefs = r.preferences ? parseRestoredPreferences(r.preferences) : null;
   const prefsDiffer = !!wantedPrefs && canonicalJson(account.preferences) !== canonicalJson(wantedPrefs);
   const photo =
     r.photo?.width &&
@@ -288,8 +303,15 @@ async function accountProfile(run: RestoreRun, r: BackupAccountProfileRecord): P
   const photoDiffers = !!photo && account.avatar?.sha256 !== photo.sha256;
   if ((!prefsDiffer && !photoDiffers) || run.dry) return 'detail';
   const setPrefs = async () => {
-    if (wantedPrefs)
-      await run.tx.update(accounts).set({ preferences: wantedPrefs }).where(eq(accounts.id, account.id));
+    if (!wantedPrefs) return;
+    await run.tx.update(accounts).set({ preferences: wantedPrefs }).where(eq(accounts.id, account.id));
+    // Once the restore is in: what was kept of the old language goes, from what the database has then (a record
+    // rolled back leaves the language as it was).
+    const services = run.services;
+    const accountId = account.id;
+    run.ctx.after(async () => {
+      await reloadAccountLocale(services, accountId);
+    });
   };
   const setPhoto = async () => {
     const path = photo ? run.blobPath(photo.sha256) : null;

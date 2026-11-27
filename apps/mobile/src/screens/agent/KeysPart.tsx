@@ -7,6 +7,7 @@
  * always here).
  * `showKey` (`?key=`, a skill's “Turn on …” link) opens All keys when it is there and scrolls to the row, marked.
  */
+
 import { ApiError, permissionsText } from '@whombat/client';
 import {
   useCommandAllowances,
@@ -34,6 +35,7 @@ import {
   settingsSavedText,
 } from '../../data/agentSettings';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { CardLine, RowButtons } from '../../ui/facts';
@@ -81,6 +83,8 @@ export function KeysPart({
   onDirtyChange,
   showKey,
 }: PartProps & { showKey?: string | undefined }) {
+  const { rawLocale, tClient } = useI18n();
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const host = useHostInfo({ params: { burrow: slug } }, { retry: false });
@@ -133,7 +137,7 @@ export function KeysPart({
       },
     );
   };
-  const words = permissionsText(agent.name);
+  const words = permissionsText(agent.name, rawLocale);
   const commandsCount = commands ? words.commandsCount(commands.length) : '…';
   // What was allowed for good on a command card: rarely looked at, so folded under the keys until opened.
   const commandsFold = (
@@ -224,7 +228,7 @@ export function KeysPart({
     <>
       <PartScroll refreshing={false} onRefresh={refresh} scrollRef={scroll}>
         <View onLayout={(e) => (sectionY.current = e.nativeEvent.layout.y)}>
-          <Section title="KEYS">
+          <Section title={tClient('permissions.keys')}>
             {view.rows.map((r) => (
               <View
                 key={r.row}

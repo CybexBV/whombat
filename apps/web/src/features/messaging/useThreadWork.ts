@@ -4,6 +4,7 @@ import { cachedMe, queryKeys, type TypingEntry } from '@whombat/client/query';
 import { useHandoffs, useRuns } from '@whombat/client/react';
 import type { Handoff, Run } from '@whombat/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useWebI18n } from '../../i18n/provider';
 
 const NO_RUNS: readonly Run[] = [];
 const NO_HANDOFFS: readonly Handoff[] = [];
@@ -20,6 +21,7 @@ export function useThreadWork(
   burrow: string,
   conversationId: string | undefined,
 ): (rootId: string) => ThreadWork | null {
+  const { tag: uiLocale } = useWebI18n();
   const qc = useQueryClient();
   const { data: runs } = useRuns(conversationId ? { params: { burrow }, query: { status: 'live' } } : null, {
     retry: false,
@@ -54,7 +56,7 @@ export function useThreadWork(
     return map;
   }, [handoffs]);
   return useCallback(
-    (rootId: string) => threadWork(rootId, live, thinking, byRoot.get(rootId) ?? NO_HANDOFFS),
-    [live, thinking, byRoot],
+    (rootId: string) => threadWork(rootId, live, thinking, byRoot.get(rootId) ?? NO_HANDOFFS, uiLocale),
+    [live, thinking, byRoot, uiLocale],
   );
 }

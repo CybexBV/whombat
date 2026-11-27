@@ -28,8 +28,9 @@ import { chatTabCount } from '../data/chatRoom';
 import { badgeText, tabBadgeLabel } from '../data/inbox';
 import { needsYouTabBadge } from '../data/needsYou';
 import type { ScreenShape } from '../data/screenShape';
-import { TAB_WORDS } from '../data/shell';
-import { SETTINGS_TEXT } from '../settings/list';
+import { tabWords } from '../data/shell';
+import { useI18n } from '../i18n';
+import { settingsText } from '../settings/list';
 import { useSettingsTabDot } from '../settings/useSettingsFacts';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -48,15 +49,15 @@ import type { TabParamList } from './routes';
 import type { TabBadge } from './systemTabs';
 import { tabBarFit } from './tabBarFit';
 
-type TabSpec = { name: keyof TabParamList; label: string; icon: LucideIcon };
+type TabSpec = { name: keyof TabParamList; icon: LucideIcon };
 
 /** The bar's tabs (`data/shell.ts` `TABS`), with their icons. */
 const TAB_SPECS: readonly TabSpec[] = [
-  { name: 'ChatRoom', label: TAB_WORDS.ChatRoom, icon: MessageCircle },
-  { name: 'NeedsYou', label: TAB_WORDS.NeedsYou, icon: Inbox },
-  { name: 'Dashboard', label: TAB_WORDS.Dashboard, icon: LayoutGrid },
-  { name: 'Automations', label: TAB_WORDS.Automations, icon: Zap },
-  { name: 'Settings', label: TAB_WORDS.Settings, icon: SettingsIcon },
+  { name: 'ChatRoom', icon: MessageCircle },
+  { name: 'NeedsYou', icon: Inbox },
+  { name: 'Dashboard', icon: LayoutGrid },
+  { name: 'Automations', icon: Zap },
+  { name: 'Settings', icon: SettingsIcon },
 ];
 
 /** What the Needs you badge needs of Home's overview: the bar draws again only when it changes. */
@@ -71,6 +72,9 @@ const chatCountOf = (list: ChatsListResponse) => chatTabCount(chatRoomsOf(list.c
  * covers the tabs (TanStack Query's own hook, not a screen's): the app icon's count follows Needs you.
  */
 export function useBadges(): Partial<Record<keyof TabParamList, TabBadge>> {
+  const { rawLocale } = useI18n();
+  const settingsTextHere = settingsText(rawLocale);
+
   const { slug } = useBurrowBase();
   const { queries } = useWhombat();
   const params = { params: { burrow: slug } };
@@ -99,11 +103,11 @@ export function useBadges(): Partial<Record<keyof TabParamList, TabBadge>> {
             count: 0,
             dot: true,
             tone: settings,
-            spoken: settings === 'ok' ? SETTINGS_TEXT.updateReady : SETTINGS_TEXT.needsYou,
+            spoken: settings === 'ok' ? settingsTextHere.updateReady : settingsTextHere.needsYou,
           }
         : { count: 0, dot: false },
     }),
-    [needsYou, tone, chatCount, settings],
+    [needsYou, tone, chatCount, settings, settingsTextHere.updateReady, settingsTextHere.needsYou],
   );
 }
 
@@ -174,6 +178,8 @@ export function SideBar({
   active: keyof TabParamList;
   onSelect: (tab: keyof TabParamList) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const labels = tabWords(rawLocale);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const badges = useBadges();
@@ -215,8 +221,8 @@ export function SideBar({
                 accessibilityState={{ selected }}
                 accessibilityLabel={
                   badge?.dot && badge.spoken
-                    ? `${tab.label}, ${badge.spoken}`
-                    : tabBadgeLabel(tab.label, badge?.count ?? 0, badge?.dot)
+                    ? `${labels[tab.name]}, ${badge.spoken}`
+                    : tabBadgeLabel(labels[tab.name], badge?.count ?? 0, badge?.dot, rawLocale)
                 }
                 feedback="fade"
                 ringRadius={12}
@@ -243,7 +249,7 @@ export function SideBar({
                   minimumFontScale={0.6}
                   maxFontSizeMultiplier={1.6}
                 >
-                  {tab.label}
+                  {labels[tab.name]}
                 </Text>
               </Touchable>
             );
@@ -259,6 +265,8 @@ function Bar({
   navigation,
   badges,
 }: BottomTabBarProps & { badges: Partial<Record<keyof TabParamList, TabBadge>> }) {
+  const { rawLocale } = useI18n();
+  const labels = tabWords(rawLocale);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -291,8 +299,8 @@ function Bar({
             accessibilityState={{ selected }}
             accessibilityLabel={
               badge?.dot && badge.spoken
-                ? `${tab.label}, ${badge.spoken}`
-                : tabBadgeLabel(tab.label, badge?.count ?? 0, badge?.dot)
+                ? `${labels[tab.name]}, ${badge.spoken}`
+                : tabBadgeLabel(labels[tab.name], badge?.count ?? 0, badge?.dot, rawLocale)
             }
             feedback="fade"
             ringRadius={12}
@@ -322,7 +330,7 @@ function Bar({
               adjustsFontSizeToFit
               minimumFontScale={0.6}
             >
-              {tab.label}
+              {labels[tab.name]}
             </Text>
           </Touchable>
         );

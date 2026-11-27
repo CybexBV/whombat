@@ -1,6 +1,7 @@
-import { type Principal, shortNameOf, TURN_STOP_LABEL } from '@whombat/core';
+import { type Principal, shortNameOf, turnStopLabel } from '@whombat/core';
 import type { ReactNode } from 'react';
 import { Button } from '../../components/Button';
+import { useLocaleWords } from '../../i18n/words';
 import type { TypingLine } from './MessageList';
 import listStyles from './MessageList.module.css';
 import { useCanStop, useStopTurn } from './useStopTurn';
@@ -20,6 +21,7 @@ export function StopTurnButton({
   onStop: () => void;
   className?: string;
 }) {
+  const TURN_STOP_LABEL = useLocaleWords(turnStopLabel);
   const name = agent ? shortNameOf(agent) : 'the agent';
   return (
     <Button

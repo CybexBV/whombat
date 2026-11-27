@@ -4,10 +4,12 @@
  * the instances without a snapshot schedule, each opening its Snapshots. What Incus is and its storage pools are on the
  * Summary (`serverDashboard`, dashboards-mobile.md AP-2130).
  */
+
 import { backupGuestName, incusBackupRows, noScheduleGuests } from '@whombat/client/hosts/mobile';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume, HostGuest, HostHint } from '@whombat/core';
 import { useState } from 'react';
+import { useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
@@ -34,6 +36,7 @@ export function IncusServerBackups({
   canChange: boolean;
   onOpenGuest: (g: HostGuest, tab: 'snapshots' | 'backups') => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const list = useHostManageRead(
     { params: { burrow: slug, serverId }, query: { op: 'backup.list', platform: 'incus' } },
@@ -50,7 +53,7 @@ export function IncusServerBackups({
   return (
     <>
       {unscheduled.length ? (
-        <OneCard label="No snapshot schedule">
+        <OneCard label={tMobile('screens.no-snapshot-schedule')}>
           {unscheduled.map((g, i) => (
             <OneRow
               key={g.id}
@@ -61,18 +64,18 @@ export function IncusServerBackups({
               line="No schedule and no backup in 30 days"
               chevron
               label={`${g.name}: no snapshot schedule and no backup in 30 days`}
-              hint="Opens its snapshots to set a schedule"
+              hint={tMobile('screens.opens-its-snapshots-to-set-a-schedule')}
               onPress={() => onOpenGuest(g, 'snapshots')}
             />
           ))}
         </OneCard>
       ) : null}
       {list.isPending ? (
-        <SkeletonRows count={4} lines={2} label="Loading the backups" />
+        <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-backups')} />
       ) : list.isError ? (
-        <ErrorState text="The backups didn’t load." onRetry={() => void list.refetch()} />
+        <ErrorState text={tMobile('screens.the-backups-didnt-load')} onRetry={() => void list.refetch()} />
       ) : (
-        <OneCard label="Latest backups">
+        <OneCard label={tMobile('screens.latest-backups')}>
           {rows.length ? (
             rows.map((r) => (
               <OneRow
@@ -86,12 +89,12 @@ export function IncusServerBackups({
               />
             ))
           ) : (
-            <CardQuiet>No backups yet.</CardQuiet>
+            <CardQuiet>{tMobile('screens.no-backups-yet')}</CardQuiet>
           )}
         </OneCard>
       )}
       <Text size={13} lh={1.45} color={theme.colors.mut}>
-        Back up an instance from its own page.
+        {tMobile('screens.back-up-an-instance-from-its-own-page')}
       </Text>
       {open ? (
         <IncusBackupSheet

@@ -6,17 +6,13 @@
  * Only on a Whombat with `hosts.agent_updates`. Saved at once, with a note.
  */
 
-import {
-  AGENT_UPDATE_WORDS,
-  agentSettingsView,
-  commitOutcomeText,
-  hostErrorInfo,
-} from '@whombat/client/hosts';
+import { agentSettingsView, agentUpdateWords, commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import { useHostAgentSettings, useHostsChange, useHostsStatus } from '@whombat/client/hosts/react';
-import { MANAGED_TEXT } from '@whombat/client/managed';
+import { managedText } from '@whombat/client/managed';
 import { api } from '@whombat/core';
 import { Alert, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n, useMobileT } from '../i18n';
 import { Card } from '../managed/ui';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -35,21 +31,25 @@ function useAgentSettings() {
 
 /** The switch's row, inside a card; null where it doesn't show. */
 export function AgentUpdatesSwitchRow({ first = false }: { first?: boolean }) {
+  const { rawLocale } = useI18n();
+  const agentUpdateWordsHere = agentUpdateWords(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug, settings } = useAgentSettings();
   const change = useHostsChange(api.hosts.updateAgentSettings);
   if (!settings) return null;
-  const v = agentSettingsView(settings);
-  const failed = (text: string) => Alert.alert('That didn’t go through', text);
+  const v = agentSettingsView(settings, rawLocale);
+  const failed = (text: string) => Alert.alert(tMobile('managed.that-didnt-go-through'), text);
   const save = (autoUpdate: boolean) =>
     change.mutate(
       { params: { burrow: slug }, body: { autoUpdate } },
       {
         onSuccess: (r) =>
           r.status === 'ok'
-            ? showNotice(AGENT_UPDATE_WORDS.switched(autoUpdate))
-            : failed(commitOutcomeText(r) ?? ''),
-        onError: (error) => failed(hostErrorInfo(error).message),
+            ? showNotice(agentUpdateWordsHere.switched(autoUpdate))
+            : failed(commitOutcomeText(r, rawLocale) ?? ''),
+        onError: (error) => failed(hostErrorInfo(error, rawLocale).message),
       },
     );
   const meta = v.meta;
@@ -91,10 +91,11 @@ export function AgentUpdatesSwitchRow({ first = false }: { first?: boolean }) {
 
 /** UPDATES with the switch alone (This Whombat of a self-hosted server or the demo world). */
 export function AgentUpdatesSwitchCard() {
+  const { rawLocale } = useI18n();
   const { settings } = useAgentSettings();
   if (!settings) return null;
   return (
-    <Card label={MANAGED_TEXT.updates}>
+    <Card label={managedText(rawLocale).updates}>
       <AgentUpdatesSwitchRow first />
     </Card>
   );

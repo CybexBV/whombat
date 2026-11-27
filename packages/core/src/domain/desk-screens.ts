@@ -14,7 +14,9 @@
  * The shapes are here, not in the desk socket's contract, because the session carries them too (Settings' editor and a
  * screen elsewhere).
  */
+
 import { z } from 'zod';
+import { coreTree, type WordTree } from '../i18n/catalog.js';
 import { DeskShow } from './desk-glance.js';
 import { displayLine as line } from './display-text.js';
 import { LOOK_FIX_LABEL_MAX, LookResearchState } from './look-research.js';
@@ -791,37 +793,98 @@ export const DESK_SCREEN_UNLOCK_IDLE_S = 120;
 
 /* Words ---------------------------------------------------------------------------------------------------------- */
 
-/** Words the runtime and Settings use for screens; the screen's own are `@whombat/screen`'s (kept equal by a test). */
-export const DESK_SCREEN_WORDS = {
-  firstPage: 'Overview',
-  newPage: 'Page {n}',
-  box: 'This Whombat’s screen',
-  output: 'Monitor on this Whombat',
-  device: 'Screen',
+const DESK_SCREEN_WORDS_SHAPE = {
+  firstPage: 0,
+  newPage: 0,
+  box: 0,
+  output: 0,
+  device: 0,
   own: {
-    clock: { name: 'Clock', line: 'The time and the date' },
-    status: { name: 'How things are', line: 'One sentence: all fine, or what’s wrong' },
-    now: { name: 'What’s going on', line: 'Up to three things happening now' },
-    strip: { name: 'Servers', line: 'Every server in a row, in words when one isn’t fine' },
-    work: { name: '{assistant}’s work', line: 'What {assistant} is doing and how far along' },
-    coming: { name: 'Coming up', line: 'Automations and backups in the next hours' },
-    done: { name: 'Done today', line: 'What {assistant} finished today' },
-    weather: { name: 'Weather', line: 'Today and the days ahead, where this Whombat is' },
-    news: { name: 'News', line: 'Headlines from the news sites you chose' },
+    clock: {
+      name: 0,
+      line: 0,
+    },
+    status: {
+      name: 0,
+      line: 0,
+    },
+    now: {
+      name: 0,
+      line: 0,
+    },
+    strip: {
+      name: 0,
+      line: 0,
+    },
+    work: {
+      name: 0,
+      line: 0,
+    },
+    coming: {
+      name: 0,
+      line: 0,
+    },
+    done: {
+      name: 0,
+      line: 0,
+    },
+    weather: {
+      name: 0,
+      line: 0,
+    },
+    news: {
+      name: 0,
+      line: 0,
+    },
   },
   groups: {
-    own: 'Whombat and {assistant}',
-    servers: 'Servers',
-    widgets: 'Made by {assistant}',
-    accounts: 'Your accounts',
+    own: 0,
+    servers: 0,
+    widgets: 0,
+    accounts: 0,
   },
-  figures: { name: 'Figures', line: 'Its main figures' },
-  server: { line: 'Processor, memory and disk, with a chart when it’s wide' },
-  popups: { all: 'Questions and problems', problems: 'Problems only', none: 'Nothing' },
-  sizes: { smaller: 'Smaller', normal: 'Normal', larger: 'Larger' },
-  turns: { touch: 'When touched', '30s': 'Every 30 s', '60s': 'Every minute' },
-  pill: { one: '1 thing needs you', many: '{n} things need you' },
-  locked: { ask: '{assistant} has a question', hidden: 'Unlock to see it' },
-  doorbell: { big: 'Show it big', off: 'Don’t' },
-  spotlight: { doorbell: 'Someone’s at the door' },
+  figures: {
+    name: 0,
+    line: 0,
+  },
+  server: {
+    line: 0,
+  },
+  popups: {
+    all: 0,
+    problems: 0,
+    none: 0,
+  },
+  sizes: {
+    smaller: 0,
+    normal: 0,
+    larger: 0,
+  },
+  turns: {
+    touch: 0,
+    '30s': 0,
+    '60s': 0,
+  },
+  pill: {
+    one: 0,
+    many: 0,
+  },
+  locked: {
+    ask: 0,
+    hidden: 0,
+  },
+  doorbell: {
+    big: 0,
+    off: 0,
+  },
+  spotlight: {
+    doorbell: 0,
+  },
 } as const;
+
+/** Words the runtime and Settings use for screens; the screen's own are `@whombat/screen`'s (kept equal by a test). */
+export function deskScreenWords(locale?: string | null): WordTree<typeof DESK_SCREEN_WORDS_SHAPE> {
+  return coreTree(locale, 'desk.screens', DESK_SCREEN_WORDS_SHAPE);
+}
+
+export const DESK_SCREEN_WORDS = deskScreenWords('en');

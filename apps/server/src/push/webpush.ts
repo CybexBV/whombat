@@ -8,6 +8,7 @@
 import webPush from 'web-push';
 import type { Config } from '../config';
 import { checkOutboundUrl, OutboundError, type OutboundPolicy, outboundRequest } from '../lib/outbound';
+import { guardPreview } from './preview-off';
 import type { PushOutcome, PushTransport } from './types';
 
 /** The push services browsers subscribe with (Chrome/Edge/Opera, Firefox, Safari, Windows). */
@@ -66,9 +67,10 @@ export const sendWebPush: PushTransport = async (config, log, device, payload) =
     return 'prune';
   }
   const subscription = { endpoint: device.token, keys: device.webPush };
+  const safePayload = guardPreview(payload);
   let outcome: PushOutcome;
   try {
-    const details = webPush.generateRequestDetails(subscription, JSON.stringify(payload), {
+    const details = webPush.generateRequestDetails(subscription, JSON.stringify(safePayload), {
       vapidDetails: {
         subject: config.VAPID_SUBJECT,
         publicKey: config.VAPID_PUBLIC_KEY,

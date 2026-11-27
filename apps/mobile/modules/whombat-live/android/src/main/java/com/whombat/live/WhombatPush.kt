@@ -12,7 +12,8 @@ import org.json.JSONObject
  * - otherwise an inbox notification (needs you, mention, agent update) that opens its screen.
  *
  * A managed Whombat's push has no `payload`: control sends the FCM data `kind`, `ref` and, when there is one, the
- * preview (`title`, `body`), the notification's `tag` and `clear` (`ManagedPush`).
+ * preview (`title`, `body`), the notification's `tag` and `clear` (`ManagedPush`). An explicit `preview: false`
+ * takes precedence over the preview text in either format.
  *
  * The debug build's `DebugPushReceiver` calls the same entry point, so pushes can be tested with adb
  * without Firebase.
@@ -35,7 +36,7 @@ object WhombatPush {
       return true
     }
     return try {
-      handlePayload(context, JSONObject(raw))
+      handlePayload(context, JSONObject(raw), data["preview"])
       true
     } catch (e: Exception) {
       Log.w(TAG, "Ignoring a malformed push: ${e.message}")
@@ -43,10 +44,10 @@ object WhombatPush {
     }
   }
 
-  fun handlePayload(context: Context, payload: JSONObject) {
+  fun handlePayload(context: Context, payload: JSONObject, dataPreview: String? = null) {
     val burrow = payload.optString("burrow")
     val live = payload.optJSONObject("liveActivity")
-    if (live != null) {
+    if (live != null && !hidesPreview(payload, dataPreview)) {
       val displayJson = live.optJSONObject("display") ?: return
       val display = LiveDisplay.fromJson(displayJson, burrow)
       when (live.optString("event")) {
@@ -56,18 +57,37 @@ object WhombatPush {
       WhombatLiveModule.emitPush(payload.toString())
       return
     }
+    val words by lazy { LiveLocale.localized(context) }
+    val (title, body) = inboxText(payload, dataPreview) { words.getString(it) }
     LiveNotifications.showInbox(
       context,
       kind = payload.optString("kind"),
-      title = payload.optString("title"),
-      body = payload.optString("body"),
+      title = title,
+      body = body,
       path = payload.optString("path"),
       burrow = burrow,
       notificationId = if (payload.isNull("notificationId")) null else payload.optString("notificationId"),
     )
     WhombatLiveModule.emitPush(payload.toString())
   }
+
+  internal fun inboxText(payload: JSONObject, dataPreview: String?, getString: (Int) -> String): Pair<String, String> {
+    if (!hidesPreview(payload, dataPreview)) return payload.optString("title") to payload.optString("body")
+    val kind = when (payload.optString("kind")) {
+      "needs_you", "approval_updated" -> "approval"
+      "mention" -> "mention"
+      "agent_update", "direct", "reply" -> "message"
+      "run_progress" -> "run"
+      else -> "generic"
+    }
+    return getString(R.string.whombat_notification_title) to getString(LiveNotifications.GENERIC_TEXT.getValue(kind))
+  }
+
+  private fun hidesPreview(payload: JSONObject, dataPreview: String?): Boolean =
+    hidesPreview(payload.opt("preview")) || hidesPreview(dataPreview)
 }
+
+private fun hidesPreview(value: Any?): Boolean = value == false || value == "false" || value == "0"
 
 /**
  * A managed Whombat's push as control sends it (CT-286, control CL-120; every value a string): `kind` (generic, a
@@ -88,11 +108,12 @@ data class ManagedPush(
     fun from(data: Map<String, String>): ManagedPush? {
       val kind = data["kind"] ?: return null
       val ref = data["ref"] ?: return null
+      val hidden = hidesPreview(data["preview"])
       return ManagedPush(
         kind = kind,
         ref = ref,
-        title = data["title"]?.ifBlank { null },
-        body = data["body"]?.ifBlank { null },
+        title = if (hidden) null else data["title"]?.ifBlank { null },
+        body = if (hidden) null else data["body"]?.ifBlank { null },
         tag = data["tag"]?.ifEmpty { null } ?: ref,
         clear = data["clear"] == "1" || data["clear"] == "true",
       )

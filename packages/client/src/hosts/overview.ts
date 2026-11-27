@@ -6,10 +6,11 @@
  * the web draws rows (or cards on a narrow page), the phone cards; `now` and the time zone come in as arguments.
  */
 import type { MarkLike } from '@whombat/brand';
-import { HOST_STATUS_LABELS, type HostServer, type HostServerStatus } from '@whombat/core/domain';
+import { type HostServer, type HostServerStatus, hostStatusLabels } from '@whombat/core/domain';
 import { type StatusLevel, serverStatusLevel } from '../home/statusLevel';
-import { OVERVIEW_WORDS } from '../home/tabs';
+import { overviewWords } from '../home/tabs';
 import { readingTime } from '../home/time';
+import { clientTranslator } from '../i18n/catalog';
 import { DASH, formatAgoIso, formatPct, formatTemp, formatUptimeShort } from './format';
 import { ALL_GUESTS_HREF, serverHref, serverRow } from './model';
 import type { HostTone } from './thresholds';
@@ -225,27 +226,31 @@ export function overviewServerRow(
   now: number,
   timeZone: string,
   parent: Pick<HostServer, 'id' | 'name'> | null = null,
+  locale?: string | null,
 ): OverviewServerRow {
-  const r = serverRow(s);
+  const tr = clientTranslator(locale);
+  const overview = overviewWords(locale);
+  const statuses = hostStatusLabels(locale);
+  const r = serverRow(s, locale);
   const offline = r.offline;
   const notWorking = s.status === 'bad';
   const words = !notWorking && !offline;
-  const f = serverFigures(s);
+  const f = serverFigures(s, locale);
   const [cpuTile, memTile, diskTile, tempTile] = serverTiles(s);
   const home = serverHref(s.id);
-  const col = OVERVIEW_WORDS.columns;
+  const col = overview.columns;
 
   const pill: OverviewServerPill | null = offline
     ? { word: r.statusLabel, tone: 'mut' }
     : r.tone === 'ok'
       ? null
       : { word: r.statusLabel, tone: r.tone };
-  const statusWord = pill?.word ?? HOST_STATUS_LABELS.ok;
+  const statusWord = pill?.word ?? statuses.ok;
 
   // Processor
   const cpuValue = offline ? DASH : formatPct(f.cpu);
-  const cpuWord = words && f.cpu != null ? processorWords(f.cpu) : null;
-  const avg = !offline && f.avg != null ? `avg ${formatPct(f.avg)}` : null;
+  const cpuWord = words && f.cpu != null ? processorWords(f.cpu, locale) : null;
+  const avg = !offline && f.avg != null ? tr.t('hosts.overview.avg', { pct: formatPct(f.avg) }) : null;
   const points = offline ? [] : s.cpu24h.filter(finite).map((v) => Math.max(0, v));
   const cpu: OverviewCpuCell = {
     label: col.cpu,
@@ -257,11 +262,11 @@ export function overviewServerRow(
     tone: offline ? 'ok' : toCellTone(cpuTile?.tone ?? 'ok'),
     spoken: spokenText(
       cpuValue === DASH
-        ? 'Processor not known'
+        ? tr.t('hosts.overview.unknown', { name: tr.t('hosts.overview.processor') })
         : [
-            `Processor ${cpuValue}`,
+            `${tr.t('hosts.overview.processor')} ${cpuValue}`,
             cpuWord?.toLowerCase(),
-            avg ? `24 hour average ${formatPct(f.avg)}` : null,
+            avg ? tr.t('hosts.overview.average24h', { pct: formatPct(f.avg) }) : null,
           ]
             .filter(Boolean)
             .join(', '),
@@ -273,13 +278,13 @@ export function overviewServerRow(
     name: string,
     pct: number | null,
     sub: string,
-    wordOf: (pct: number) => string,
+    wordOf: (pct: number, locale?: string | null) => string,
     tile: { href: string; tone: HostTone } | undefined,
     search: string,
   ): OverviewAmountCell => {
     const known = !offline && pct != null;
     const value = known ? formatPct(pct) : DASH;
-    const word = words && known ? wordOf(pct) : null;
+    const word = words && known ? wordOf(pct, locale) : null;
     const shown = offline ? '' : sub;
     return {
       label,
@@ -291,16 +296,20 @@ export function overviewServerRow(
       tone: known ? toCellTone(tile?.tone ?? 'ok') : 'ok',
       spoken: spokenText(
         known
-          ? [`${name} ${value}`, word?.toLowerCase(), shown ? `${shown} in use` : null]
+          ? [
+              `${name} ${value}`,
+              word?.toLowerCase(),
+              shown ? tr.t('hosts.overview.inUse', { amount: shown }) : null,
+            ]
               .filter(Boolean)
               .join(', ')
-          : `${name} not known`,
+          : tr.t('hosts.overview.unknown', { name }),
       ),
     };
   };
   const memory = amount(
     col.memory,
-    'Memory',
+    col.memory,
     f.memPct,
     f.memAmount,
     memoryFullWords,
@@ -309,7 +318,7 @@ export function overviewServerRow(
   );
   const storage = amount(
     col.storage,
-    'Storage',
+    col.storage,
     f.diskPct,
     f.diskAmount,
     spaceWords,
@@ -319,7 +328,7 @@ export function overviewServerRow(
 
   // Temperature
   const tempHref = tempTile?.href ?? figureHref(s.id, 'chart=hottest');
-  const limitText = f.limit != null ? `limit ${formatTemp(f.limit)}` : '';
+  const limitText = f.limit != null ? tr.t('hosts.overview.limit', { temp: formatTemp(f.limit) }) : '';
   const temp: OverviewTempCell = offline
     ? {
         label: col.temp,
@@ -329,18 +338,18 @@ export function overviewServerRow(
         share: null,
         noSensor: false,
         tone: 'ok',
-        spoken: 'Temperature not known',
+        spoken: tr.t('hosts.overview.unknown', { name: col.temp }),
       }
     : s.temperature == null || f.maxC == null
       ? {
           label: col.temp,
           href: tempHref,
-          value: OVERVIEW_WORDS.noSensorValue,
-          sub: OVERVIEW_WORDS.noSensor,
+          value: overview.noSensorValue,
+          sub: overview.noSensor,
           share: null,
           noSensor: true,
           tone: 'ok',
-          spoken: 'Temperature, no sensor',
+          spoken: `${col.temp}, ${overview.noSensor.toLowerCase()}`,
         }
       : {
           label: col.temp,
@@ -351,7 +360,7 @@ export function overviewServerRow(
           noSensor: false,
           tone: toCellTone(tempTile?.tone ?? 'ok'),
           spoken: spokenText(
-            [`Temperature ${formatTemp(f.maxC)}`, 'the hottest sensor', limitText || null]
+            [`${col.temp} ${formatTemp(f.maxC)}`, tr.t('hosts.overview.hottest'), limitText || null]
               .filter(Boolean)
               .join(', '),
           ),
@@ -359,30 +368,34 @@ export function overviewServerRow(
 
   // Running
   const unhealthy = s.guests.reduce((a, g) => a + (g.unhealthy ?? 0), 0);
-  const kind = serverGuestWord(s);
+  const kind = tr.t(`hosts.overview.noun.${serverGuestWord(s)}`);
   const total = r.guestsTotal;
   const dots = runningDots(r.guestsRunning, total, unhealthy);
   const unwell = Math.min(unhealthy, r.guestsRunning);
   const nothing = total === 0;
+  const unwellWords = unwell > 0 ? tr.t('hosts.overview.unwell', { count: unwell }) : null;
   const running: OverviewRunningCell = {
     label: col.running,
     href: `${home}?tab=guests`,
-    count: nothing ? '' : `${r.guestsRunning} of ${total}`,
-    word: nothing ? OVERVIEW_WORDS.nothingRunning : unwell > 0 ? `${unwell} unwell` : kind,
+    count: nothing ? '' : tr.t('hosts.overview.of', { a: r.guestsRunning, b: total }),
+    word: nothing ? overview.nothingRunning : (unwellWords ?? kind),
     nothing,
     dots,
     tone: unwell > 0 ? 'warn' : 'ok',
     spoken: nothing
-      ? 'Nothing running'
-      : [`${r.guestsRunning} of ${total} ${kind} running`, unwell > 0 ? `${unwell} unwell` : null]
+      ? overview.nothingRunning
+      : [tr.t('hosts.overview.guestsRunning', { running: r.guestsRunning, total, noun: kind }), unwellWords]
           .filter(Boolean)
           .join(', '),
   };
 
   // When it was read
-  const read = readingTime(s.lastSeen, now, timeZone);
+  const read = readingTime(s.lastSeen, now, timeZone, locale);
   const at = s.lastSeen ? Date.parse(s.lastSeen) : Number.NaN;
-  const seen = offline && s.lastSeen ? `Last seen ${formatAgoIso(s.lastSeen, now)}` : null;
+  const seen =
+    offline && s.lastSeen
+      ? tr.t('hosts.overview.lastSeen', { ago: formatAgoIso(s.lastSeen, now, locale) })
+      : null;
   const stale = seen
     ? null
     : !read.known
@@ -395,17 +408,24 @@ export function overviewServerRow(
 
   // A child names its parent where its uptime was: what runs where matters more on Overview than for how long.
   const osLine = parent
-    ? [serverOsLine({ ...s, uptimeS: null }), `on ${parent.name}`].filter(Boolean).join(' · ')
-    : serverOsLine(s);
+    ? [
+        serverOsLine({ ...s, uptimeS: null }, locale),
+        tr.t('hosts.overview.onParent', { parent: parent.name }),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : serverOsLine(s, locale);
 
   const label = spokenText(
     [
       r.name,
       statusWord.toLowerCase(),
-      parent ? `on ${parent.name}` : null,
+      parent ? tr.t('hosts.overview.onParent', { parent: parent.name }) : null,
       ...(offline ? [] : [cpu.spoken, memory.spoken, storage.spoken, temp.spoken]),
       running.spoken,
-      !offline && s.uptimeS != null ? `up ${formatUptimeShort(s.uptimeS)}` : null,
+      !offline && s.uptimeS != null
+        ? tr.t('hosts.overview.uptime', { when: formatUptimeShort(s.uptimeS, locale) })
+        : null,
       seen?.toLowerCase() ?? (s.status === 'pending' ? null : read.exact.toLowerCase()),
     ]
       .filter(Boolean)
@@ -445,9 +465,10 @@ export function overviewServerRows(
   servers: readonly HostServer[],
   now: number,
   timeZone: string,
+  locale?: string | null,
 ): OverviewServerRow[] {
   return overviewServerOrder(servers).map(({ server, parent }) =>
-    overviewServerRow(server, now, timeZone, parent),
+    overviewServerRow(server, now, timeZone, parent, locale),
   );
 }
 
@@ -456,17 +477,18 @@ export function overviewServerRows(
  * A server that needs a look still runs; offline and waiting ones are counted apart. The noun follows what the servers
  * run: machines, apps (Docker only), or both. Empty without servers.
  */
-export function overviewServersLine(servers: readonly HostServer[]): string {
+export function overviewServersLine(servers: readonly HostServer[], locale?: string | null): string {
   if (!servers.length) return '';
+  const tr = clientTranslator(locale);
   const count = (...st: HostServerStatus[]) => servers.filter((s) => st.includes(s.status)).length;
   const up = count('ok', 'warn');
   const parts: string[] = [];
-  if (up === servers.length) parts.push('All running');
+  if (up === servers.length) parts.push(tr.t('hosts.overview.allRunning'));
   else {
-    if (up) parts.push(`${up} running`);
-    if (count('bad')) parts.push(`${count('bad')} not working`);
-    if (count('offline')) parts.push(`${count('offline')} offline`);
-    if (count('pending')) parts.push(`${count('pending')} waiting`);
+    if (up) parts.push(tr.t('hosts.overview.running', { count: up }));
+    if (count('bad')) parts.push(tr.t('hosts.overview.notWorking', { count: count('bad') }));
+    if (count('offline')) parts.push(tr.t('hosts.overview.offline', { count: count('offline') }));
+    if (count('pending')) parts.push(tr.t('hosts.overview.waiting', { count: count('pending') }));
   }
   let running = 0;
   let total = 0;
@@ -482,8 +504,14 @@ export function overviewServersLine(servers: readonly HostServer[]): string {
       }
     }
   if (total) {
-    const noun = machines && apps ? 'machines and apps' : apps ? 'apps' : 'machines';
-    parts.push(`${running} of ${total} ${noun} running`);
+    const noun = tr.t(
+      machines && apps
+        ? 'hosts.overview.noun.both'
+        : apps
+          ? 'hosts.overview.noun.apps'
+          : 'hosts.overview.noun.machines',
+    );
+    parts.push(tr.t('hosts.overview.guestsRunning', { running, total, noun }));
   }
   return parts.join(' · ');
 }

@@ -10,9 +10,7 @@
  * nothing new. The rows, words and actions are `@whombat/client`'s, so the phone says the same.
  */
 import {
-  ACCOUNTS_TEXT,
   BACKUP_PLACE_DEADLINE_MS,
-  BACKUP_PLACES_TEXT,
   type BackupPlaceAction,
   type BackupPlaceRow,
   backupPlaceRows,
@@ -36,6 +34,8 @@ import { Button, ButtonLink } from '../../components/Button';
 import { copyText } from '../../components/CopyButton';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { ACCOUNTS_TEXT, BACKUP_PLACES_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { ProviderLogo } from '../connectors/ConnectionsOverview';
 import bd from './BackupDestination.module.css';
 import bp from './BackupPlaces.module.css';
@@ -66,7 +66,7 @@ export function backupPlaceHref(action: BackupPlaceAction): string | null {
 export function CurrentPlaceRow() {
   const { session } = useAppServices();
   const places = useBackupPlaces(session);
-  const line = currentPlaceLine(places.data);
+  const line = currentPlaceLine(places.data, currentLocale());
   if (!line) return null;
   return (
     <div className={styles.row} data-backup-place="current">
@@ -112,7 +112,7 @@ export function BackupPlacesSection({ onChanged, onKit }: { onChanged?: () => vo
     alive.current = controller;
     return () => controller.abort();
   }, []);
-  const rows = backupPlaceRows(places.data);
+  const rows = backupPlaceRows(places.data, currentLocale());
   if (rows.length === 0) return null;
   const placeOf = (id: string): BackupPlace | null => places.data?.places.find((p) => p.id === id) ?? null;
 
@@ -139,15 +139,15 @@ export function BackupPlacesSection({ onChanged, onKit }: { onChanged?: () => vo
       const result = check
         ? await sessionOps.backupPlaceCheck(session, input, options)
         : await sessionOps.backupUsePlace(session, input, options);
-      note(row.id, placeSetNotes(result));
+      note(row.id, placeSetNotes({ ...result, locale: currentLocale() }));
       setKitNeeded(true);
       await reload();
       onChanged?.();
       return true;
     } catch (error) {
-      const needed = move ? null : moveNeeded(error);
+      const needed = move ? null : moveNeeded(error, currentLocale());
       if (needed) setAsking({ row, from: needed.from, byHand: check, ...(location ? { location } : {}) });
-      else note(row.id, placeErrorText(error), true);
+      else note(row.id, placeErrorText(error, currentLocale()), true);
       return false;
     } finally {
       setWorking(null);
@@ -168,11 +168,16 @@ export function BackupPlacesSection({ onChanged, onKit }: { onChanged?: () => vo
         { placeId: row.id, location, ...(change.move ? { move: true } : {}) },
         { deadlineMs: BACKUP_PLACE_DEADLINE_MS },
       );
-      note(row.id, change.move ? placeSetNotes(result) : W.moved(result.locationName ?? change.where));
+      note(
+        row.id,
+        change.move
+          ? placeSetNotes({ ...result, locale: currentLocale() })
+          : W.moved(result.locationName ?? change.where),
+      );
       // A NAS starts a new repository there, which a new recovery kit needs.
       if (change.move) setKitNeeded(true);
     } catch (error) {
-      if (change.move || !placeMoveMayRun(error)) note(row.id, placeErrorText(error), true);
+      if (change.move || !placeMoveMayRun(error)) note(row.id, placeErrorText(error, currentLocale()), true);
       else {
         const signal = alive.current.signal;
         const there = await waitForPlaceLocation(() => sessionOps.backupPlaces(session), row.id, location, {
@@ -190,14 +195,14 @@ export function BackupPlacesSection({ onChanged, onKit }: { onChanged?: () => vo
 
   /** Asked first when another place keeps the backups (BPL-06). */
   const backUpAt = (row: BackupPlaceRow, location?: string) => {
-    const from = moveFromPlace(places.data, row.id);
+    const from = moveFromPlace(places.data, row.id, currentLocale());
     if (from) setAsking({ row, from, byHand: false, ...(location ? { location } : {}) });
     else void use(row, false, false, location);
   };
 
   /** Where on it first, when it has more than one location (BPL-13). */
   const backUpHere = (row: BackupPlaceRow) => {
-    if (placeLocations(placeOf(row.id))) setChoosing({ row, mode: 'use' });
+    if (placeLocations(placeOf(row.id), currentLocale())) setChoosing({ row, mode: 'use' });
     else backUpAt(row);
   };
 
@@ -207,7 +212,7 @@ export function BackupPlacesSection({ onChanged, onKit }: { onChanged?: () => vo
     setChoosing(null);
     if (mode === 'use') return backUpAt(row, location);
     const place = placeOf(row.id);
-    const change = place ? placeLocationChange(place, location) : null;
+    const change = place ? placeLocationChange(place, location, currentLocale()) : null;
     if (change) setChanging({ row, location, change });
   };
 
@@ -317,7 +322,7 @@ export function BackupPlacesSection({ onChanged, onKit }: { onChanged?: () => vo
           error={notes[byHand.id]?.error ? notes[byHand.id]?.text : null}
           onClose={() => setByHand(null)}
           onCheck={async () => {
-            const move = moveFromPlace(places.data, byHand.id);
+            const move = moveFromPlace(places.data, byHand.id, currentLocale());
             if (move) {
               setByHand(null);
               setAsking({ row: byHand, from: move, byHand: true });
@@ -429,7 +434,7 @@ function WhereDialog({
   onChoose: (location: string) => void;
 }) {
   const group = useId();
-  const asked = placeLocations(place);
+  const asked = placeLocations(place, currentLocale());
   const [picked, setPicked] = useState(asked?.selected ?? '');
   if (!asked) return null;
   const current = asked.rows.find((r) => r.current)?.id ?? null;

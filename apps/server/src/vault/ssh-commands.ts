@@ -30,6 +30,8 @@ import { and, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ApplyContext, defineCommand } from '../commit/types';
 import { vaultEntries, vaultSshServers } from '../db/schema/index';
+import { tServer } from '../i18n/catalog';
+import { burrowLocale } from '../i18n/locale';
 import { forbidden, notFound } from '../lib/errors';
 import { shortName } from '../read/principals';
 import {
@@ -467,8 +469,12 @@ export const setVaultKeyServers = defineCommand({
 /* A changed host key met by an agent (VT-S05) ------------------------------------------------------------- */
 
 /** What the person is told when the agent's connection met a changed host key (no entry or server name, VT-D24). */
-export const SSH_HOST_KEY_CHANGED_DM =
-  'Whombat refused to connect an agent to one of the servers of your SSH keys: its host key changed. In the Vault the server shows “This server’s host key changed.” Check it there before agents use it again.';
+export function sshHostKeyChangedText(locale?: string | null): string {
+  return tServer(locale, 'chat.sshHostKeyChanged');
+}
+
+/** The same words in English. */
+export const SSH_HOST_KEY_CHANGED_DM = sshHostKeyChangedText('en');
 
 /**
  * An agent's connection met another host key than the pinned one (VT-S05): Whombat didn't sign in; the server reads
@@ -522,7 +528,7 @@ export const sshHostKeyChanged = defineCommand({
       ms: input.ms,
       bytes: null,
     });
-    if (fresh) await tellPerson(ctx, SSH_HOST_KEY_CHANGED_DM);
+    if (fresh) await tellPerson(ctx, sshHostKeyChangedText(await burrowLocale(ctx.services, ctx.burrow.id)));
     publishVaultUpdated(ctx, entry.ownerId, entry.id);
     return { eventId };
   },

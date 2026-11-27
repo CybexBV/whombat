@@ -5,31 +5,37 @@
  * `overviewTiles` (`@whombat/client`); the server cards' rows are `overviewServerRows`. What needs the person is the
  * Inbox's (`data/needsYou.ts`). Pure; the screen is `screens/HomeScreen.tsx` (the `Dashboard` route).
  */
+
 import { type AgentWords, CONNECTIONS_TAB_WORDS, type OverviewSectionView } from '@whombat/client';
 import { catalogEntry, type ThingSummary } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { OVERVIEW_TITLE } from './shell';
 
 /* Words ------------------------------------------------------------------------------------------------------------- */
 
 /** Overview's words (CN-01…CN-03; AP-2553; sidebar-tabs.md). */
-export const CONNECTIONS_COPY = {
-  title: OVERVIEW_TITLE,
-  needsYou: 'Inbox',
-  /** Everything connected that isn't a server (sidebar-tabs.md; the web's tab). */
-  services: CONNECTIONS_TAB_WORDS.services,
-  failed: `${OVERVIEW_TITLE} didn’t load.`,
-  loading: 'Loading your connections',
-  opensSheet: 'Shows what you can do',
-  opens: 'Opens its page',
-  /** The headline's red sentence when it names an Inbox item. */
-  opensInbox: 'Opens it in the Inbox',
-  /** A Needs you item's page, once the item has left Needs you. */
-  needsYouGone: 'This doesn’t need you any more.',
-  addConnection: 'Add a connection',
-  addConnectionLine: 'A service, a device or an account',
-  empty: (w: Pick<AgentWords, 'name'>) =>
-    `Nothing here yet. Ask ${w.name} to add a server, a connection or a device.`,
-} as const;
+export function connectionsCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    title: OVERVIEW_TITLE,
+    needsYou: t('home.connectionsCopy.needsYou'),
+    /** Everything connected that isn't a server (sidebar-tabs.md; the web's tab). */
+    services: CONNECTIONS_TAB_WORDS.services,
+    failed: `${OVERVIEW_TITLE} didn’t load.`,
+    loading: t('home.connectionsCopy.loading'),
+    opensSheet: t('home.connectionsCopy.opensSheet'),
+    opens: t('home.connectionsCopy.opens'),
+    /** The headline's red sentence when it names an Inbox item. */
+    opensInbox: t('home.connectionsCopy.opensInbox'),
+    /** A Needs you item's page, once the item has left Needs you. */
+    needsYouGone: t('home.connectionsCopy.needsYouGone'),
+    addConnection: t('home.connectionsCopy.addConnection'),
+    addConnectionLine: t('home.connectionsCopy.addConnectionLine'),
+    empty: (w: Pick<AgentWords, 'name'>) =>
+      `Nothing here yet. Ask ${w.name} to add a server, a connection or a device.`,
+  } as const;
+}
+export const CONNECTIONS_COPY = connectionsCopy();
 
 /* Sections and jump chips --------------------------------------------------------------------------------------- */
 

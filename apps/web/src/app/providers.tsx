@@ -3,6 +3,7 @@ import type { Edition } from '@whombat/protocol/session';
 import { createContext, type ReactNode, useContext, useMemo, useSyncExternalStore } from 'react';
 import { ToastProvider } from '../components/Toast';
 import { AttachmentSourceProvider } from '../features/messaging/attachmentSource';
+import { LanguageBoundary, WebI18nProvider } from '../i18n/provider';
 import type { AppServices } from './services';
 import { ThemeProvider } from './theme';
 
@@ -49,7 +50,7 @@ export function useAppServices(): AppServices {
 }
 
 /**
- * App-wide providers: data (`@whombat/client` + TanStack Query), theme and toasts. The socket is
+ * App-wide providers: data (`@whombat/client` + TanStack Query), language, theme and toasts. The socket is
  * opened by the burrow shell once it knows which burrow to connect to (`connect={false}` here).
  */
 export function Providers({ services, children }: { services: AppServices; children: ReactNode }) {
@@ -62,19 +63,23 @@ export function Providers({ services, children }: { services: AppServices; child
   );
   return (
     <AppServicesContext.Provider value={services}>
-      <WhombatClientProvider
-        client={services.client}
-        realtime={services.realtime}
-        queryClient={services.queryClient}
-        connect={false}
-        commands={services.managed ? services.commands : null}
-      >
-        <AttachmentSourceProvider value={attachmentSource}>
-          <ThemeProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </ThemeProvider>
-        </AttachmentSourceProvider>
-      </WhombatClientProvider>
+      <WebI18nProvider boxId={services.managed?.applianceId ?? null} queryClient={services.queryClient}>
+        <WhombatClientProvider
+          client={services.client}
+          realtime={services.realtime}
+          queryClient={services.queryClient}
+          connect={false}
+          commands={services.managed ? services.commands : null}
+        >
+          <AttachmentSourceProvider value={attachmentSource}>
+            <ThemeProvider>
+              <ToastProvider>
+                <LanguageBoundary>{children}</LanguageBoundary>
+              </ToastProvider>
+            </ThemeProvider>
+          </AttachmentSourceProvider>
+        </WhombatClientProvider>
+      </WebI18nProvider>
     </AppServicesContext.Provider>
   );
 }

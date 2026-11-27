@@ -25,6 +25,7 @@ import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
 import { GuestKindIcon } from '../GuestName';
 import { Check, FormDialog, SelectField, TextField } from '../manage/fields';
 import { useManage } from '../manage/useManage';
@@ -146,10 +147,14 @@ export function IncusImagesTab({
                   </td>
                   <td className={cx(styles.num, styles.dropS)}>{formatBytesBinary(i.sizeBytes)}</td>
                   <td className={cx(styles.num, styles.dropL)}>
-                    {i.uploadedAt ? formatRelativeDay(Date.parse(i.uploadedAt), now, timeZone) : DASH}
+                    {i.uploadedAt
+                      ? formatRelativeDay(Date.parse(i.uploadedAt), now, timeZone, currentLocale())
+                      : DASH}
                   </td>
                   <td className={cx(styles.num, styles.dropM)}>
-                    {i.lastUsedAt ? formatRelativeDay(Date.parse(i.lastUsedAt), now, timeZone) : 'Never'}
+                    {i.lastUsedAt
+                      ? formatRelativeDay(Date.parse(i.lastUsedAt), now, timeZone, currentLocale())
+                      : 'Never'}
                   </td>
                   <td>
                     {canChange ? (

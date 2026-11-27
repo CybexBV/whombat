@@ -1,10 +1,10 @@
-import { PLACES_WORDS } from '@whombat/client';
 import { useRealtimeStatus } from '@whombat/client/react';
 import { X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { IconButton } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Skeleton, SkeletonRows } from '../../components/ListState';
+import { PLACES_WORDS } from '../../i18n/shared';
 import styles from './ShellLayout.module.css';
 
 export interface ShellLayoutProps {

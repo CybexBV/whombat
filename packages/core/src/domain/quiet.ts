@@ -15,7 +15,9 @@
  *
  * Everything here is optional on the wire: absent where it doesn't apply.
  */
+
 import { z } from 'zod';
+import { coreTree, type WordTree } from '../i18n/catalog.js';
 import { PrincipalId } from '../ids.js';
 import { Timestamp } from './common.js';
 
@@ -160,47 +162,57 @@ export function noticeNature(n: {
   return n.link?.kind === 'ask' ? 'problem' : 'you';
 }
 
+const QUIET_WORDS_SHAPE = {
+  /** The ⋯ button's label. */
+  menu: 0,
+  ignore: 0,
+  snooze: 0,
+  stop: 0,
+  stopThis: 0,
+  ignored: 0,
+  snoozed: 0,
+  /** A line quieted by someone Whombat can't name (the hosts service's own acknowledgement). */
+  ignoredBare: 0,
+  snoozedBare: 0,
+  undo: 0,
+  toastIgnored: 0,
+  toastSnoozed: 0,
+  toastStopped: 0,
+  toastWatched: 0,
+  watchTitle: 0,
+  watchNot: 0,
+  always: 0,
+  watchEmpty: 0,
+  natures: {
+    problem: 0,
+    you: 0,
+    fyi: 0,
+  } satisfies Record<NoticeNature, 0>,
+  /** Keep quiet for a while: the ⋯ item, its choices, the page's line and its button. */
+  keepQuiet: 0,
+  keepQuietHour: 0,
+  keepQuietTonight: 0,
+  keepQuietMorning: 0,
+  keepQuietPick: 0,
+  keepQuietNote: 0,
+  keptUntil: 0,
+  endNow: 0,
+  toastKept: 0,
+  toastEnded: 0,
+  /** A thing down because of something else: “Not answering while pve-02 is down”. */
+  notAnswering: 0,
+} as const;
+
 /**
- * The words of Ignore, Remind me tomorrow and Stop watching (QN-10…QN-15), on the web and the phone alike. Holes:
+ * The words of Ignore, Remind me tomorrow and Stop watching, on the web and the phone alike. Holes:
  * `{title}` the line's title, `{name}` an item's or a person's name, `{words}` a quiet line's words (lower case).
  * `fillQuietWords` fills them; `quietLine` and `stopWatchingLabel` give the composed lines.
  */
-export const QUIET_WORDS = {
-  /** The ⋯ button's label. */
-  menu: 'More for {title}',
-  ignore: 'Ignore',
-  snooze: 'Remind me tomorrow',
-  stop: 'Stop watching {name}',
-  stopThis: 'Stop watching this',
-  ignored: 'Ignored by {name} {words}',
-  snoozed: 'Snoozed by {name} {words}',
-  /** A line quieted by someone Whombat can't name (the hosts service's own acknowledgement). */
-  ignoredBare: 'Ignored {words}',
-  snoozedBare: 'Snoozed {words}',
-  undo: 'Undo',
-  toastIgnored: 'Ignored. You’ll hear if it changes.',
-  toastSnoozed: 'I’ll remind you tomorrow.',
-  toastStopped: 'Whombat stopped watching {name}.',
-  toastWatched: 'Whombat watches {name} now.',
-  watchTitle: 'What Whombat watches',
-  watchNot: 'Not for:',
-  always: 'always',
-  watchEmpty: 'Nothing to watch here yet.',
-  natures: { problem: 'Problem', you: 'Only you', fyi: 'Heads-up' } satisfies Record<NoticeNature, string>,
-  /** Keep quiet for a while: the ⋯ item, its choices, the page's line and its button. */
-  keepQuiet: 'Keep quiet for a while',
-  keepQuietHour: 'For an hour',
-  keepQuietTonight: 'Until tonight',
-  keepQuietMorning: 'Until tomorrow morning',
-  keepQuietPick: 'Until a time you pick',
-  keepQuietNote: 'Note (optional)',
-  keptUntil: 'Quiet until {time}',
-  endNow: 'End now',
-  toastKept: 'Quiet until {time}.',
-  toastEnded: 'Whombat watches {name} again.',
-  /** A thing down because of something else: “Not answering while pve-02 is down”. */
-  notAnswering: 'Not answering {words}',
-} as const;
+export function quietWords(locale?: string | null): WordTree<typeof QUIET_WORDS_SHAPE> {
+  return coreTree(locale, 'quiet', QUIET_WORDS_SHAPE);
+}
+
+export const QUIET_WORDS = quietWords('en');
 
 /** Fills `{hole}`s of a quiet word; a hole without a value stays as it is. */
 export function fillQuietWords(template: string, values: Readonly<Record<string, string>>): string {

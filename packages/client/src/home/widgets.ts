@@ -6,6 +6,7 @@
  */
 import type { Widget } from '@whombat/core';
 import { formatAgo, formatClock, toDate, zonedParts } from '@whombat/core/text';
+import { clientTranslator } from '../i18n/catalog';
 
 export interface WidgetLine {
   key: string;
@@ -69,32 +70,51 @@ export function valueAxis(values: readonly number[]): { min: number; max: number
 }
 
 /** “every minute”, “every 5 minutes”, “every hour”, “every 2 hours”, “every day”. */
-export function refreshPhrase(seconds: number): string {
+export function refreshPhrase(seconds: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   if (seconds >= 86_400 && seconds % 86_400 === 0) {
-    const d = seconds / 86_400;
-    return d === 1 ? 'every day' : `every ${d} days`;
+    return tr.tp('widget.refresh.day', seconds / 86_400);
   }
   if (seconds >= 3600 && seconds % 3600 === 0) {
-    const h = seconds / 3600;
-    return h === 1 ? 'every hour' : `every ${h} hours`;
+    return tr.tp('widget.refresh.hour', seconds / 3600);
   }
-  const m = Math.max(1, Math.round(seconds / 60));
-  return m === 1 ? 'every minute' : `every ${m} minutes`;
+  return tr.tp('widget.refresh.minute', Math.max(1, Math.round(seconds / 60)));
 }
 
 /** The line under a widget: where it came from and that it refreshes without the AI (ONE-09). */
-export function widgetFooter(widget: Pick<Widget, 'fromConversationId' | 'refreshSec'>): string {
-  const from = widget.fromConversationId ? 'You pinned this from a conversation.' : 'You pinned this.';
-  return `${from} It updates ${refreshPhrase(widget.refreshSec)} without asking the AI.`;
+export function widgetFooter(
+  widget: Pick<Widget, 'fromConversationId' | 'refreshSec'>,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
+  const every = refreshPhrase(widget.refreshSec, locale);
+  return tr.t(widget.fromConversationId ? 'widget.footerFromChat' : 'widget.footer', { every });
 }
 
 /**
  * The last point's own time: “5 min ago · 14:00”, “just now · 14:00”, or the clock alone without `now`. Never “Now”:
  * a point read five minutes ago isn't now, and after a failed refresh it gets older.
  */
-export function lastPointLabel(t: number, timeZone: string, now?: Date | number): string {
+export function lastPointLabel(
+  t: number,
+  timeZone: string,
+  now?: Date | number,
+  locale?: string | null,
+): string {
   const clock = formatClock(t, timeZone);
-  return now === undefined ? clock : `${formatAgo(t, now, timeZone)} · ${clock}`;
+  if (now === undefined) return clock;
+  if (!locale) return `${formatAgo(t, now, timeZone)} · ${clock}`;
+  const tr = clientTranslator(locale);
+  const sec = Math.max(0, Math.round((toDate(now).getTime() - t) / 1000));
+  const ago =
+    sec < 60
+      ? tr.t('managed.ago.justNow')
+      : sec < 3600
+        ? tr.t('hosts.ago.min', { n: Math.floor(sec / 60) })
+        : sec < 86_400
+          ? tr.t('hosts.ago.h', { n: Math.floor(sec / 3600) })
+          : tr.t('hosts.ago.d', { n: Math.floor(sec / 86_400) });
+  return `${ago} · ${clock}`;
 }
 
 /**
@@ -106,9 +126,12 @@ export function widgetTimeTicks(
   times: readonly number[],
   timeZone: string,
   now?: Date | number,
+  locale?: string | null,
 ): { index: number; label: string }[] {
   if (times.length < 2)
-    return times.length ? [{ index: 0, label: lastPointLabel(times[0] as number, timeZone, now) }] : [];
+    return times.length
+      ? [{ index: 0, label: lastPointLabel(times[0] as number, timeZone, now, locale) }]
+      : [];
   const first = times[0] as number;
   const last = times[times.length - 1] as number;
   const span = last - first;
@@ -123,7 +146,7 @@ export function widgetTimeTicks(
     if (last - t < span / 6) continue;
     out.push({ index: nearestIndex(times, t), label: formatClock(t, timeZone) });
   }
-  out.push({ index: times.length - 1, label: lastPointLabel(last, timeZone, now) });
+  out.push({ index: times.length - 1, label: lastPointLabel(last, timeZone, now, locale) });
   return out;
 }
 
@@ -137,7 +160,12 @@ function nearestIndex(times: readonly number[], t: number): number {
 const DEGREES = /^°[CF]?$/;
 
 /** The model of a line widget for its card; `now` lets the last point say how old it is (“5 min ago · 14:00”). */
-export function widgetChart(widget: Widget, timeZone: string, now?: Date | number): WidgetChartModel {
+export function widgetChart(
+  widget: Widget,
+  timeZone: string,
+  now?: Date | number,
+  locale?: string | null,
+): WidgetChartModel {
   const times = widget.points.map((p) => toDate(p.t).getTime());
   const lines: WidgetLine[] = widget.series.map((s) => {
     const values = widget.points.map((p) => {
@@ -162,10 +190,10 @@ export function widgetChart(widget: Widget, timeZone: string, now?: Date | numbe
     times,
     ...axis,
     tickLabel: (v) => (degrees ? `${v}°` : String(v)),
-    timeTicks: widgetTimeTicks(times, timeZone, now),
+    timeTicks: widgetTimeTicks(times, timeZone, now, locale),
     lastAt: times.length ? (times[times.length - 1] as number) : null,
     pointLabel: (i) => (times[i] === undefined ? '' : formatClock(times[i] as number, timeZone)),
-    footer: widgetFooter(widget),
+    footer: widgetFooter(widget, locale),
     empty: all.length === 0,
   };
 }

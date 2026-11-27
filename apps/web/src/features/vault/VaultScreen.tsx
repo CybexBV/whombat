@@ -2,9 +2,10 @@ import { Link } from '@tanstack/react-router';
 import { VAULT_ROW_TEXT } from '@whombat/client';
 import { useTheAgent, useVault } from '@whombat/client/react';
 import { VAULT_LIMIT_MESSAGES } from '@whombat/core/contracts';
-import { VAULT_COPY } from '@whombat/core/vault';
+import { vaultCopy } from '@whombat/core/vault';
 import { LOCAL_NETWORK_ANCHOR } from '../../app/routing/search';
 import { Button } from '../../components/Button';
+import { useLocaleWords } from '../../i18n/words';
 import { PlacePage, placeStyles as place } from '../settings/Place';
 import { VAULT_TEXT } from './copy';
 import { useVaultWords } from './useVaultWords';
@@ -29,6 +30,7 @@ export interface VaultScreenProps {
  * to the home network ranges, under the local network switch on What the assistant may do.
  */
 export function VaultScreen({ burrow, entry, onEntryChange, adding, onAddingChange }: VaultScreenProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const words = useVaultWords(burrow);
   const agent = useTheAgent(burrow).words.name;
   const { data } = useVault({ params: { burrow } });

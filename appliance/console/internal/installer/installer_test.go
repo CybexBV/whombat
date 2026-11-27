@@ -360,6 +360,28 @@ func (hs *harness) do(method, path, body string) (int, map[string]any) {
 	return w.Code, out
 }
 
+func TestInstallerLocale(t *testing.T) {
+	h := newHarness(t, newFake())
+	if _, st := h.do(http.MethodGet, "/api/state", ""); st["locale"] != nil {
+		t.Fatalf("initial locale: %v", st["locale"])
+	}
+	for _, tc := range []struct{ choice, want string }{{"nl", "nl-NL"}, {"en-GB", "en-GB"}} {
+		code, body := h.do(http.MethodPost, "/api/locale", `{"locale":"`+tc.choice+`"}`)
+		if code != http.StatusOK || body["locale"] != tc.want {
+			t.Fatalf("set locale: %d %v", code, body)
+		}
+		if _, st := h.do(http.MethodGet, "/api/state", ""); st["locale"] != tc.want {
+			t.Fatalf("stored locale: %v, want %s", st["locale"], tc.want)
+		}
+	}
+	if code, _ := h.do(http.MethodPost, "/api/locale", `{"locale":"invalid"}`); code != http.StatusBadRequest {
+		t.Fatalf("invalid locale: %d", code)
+	}
+	if st := h.preflight(t); st.Locale != "en-GB" {
+		t.Fatalf("locale after preflight: %q", st.Locale)
+	}
+}
+
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	end := time.Now().Add(5 * time.Second)

@@ -3,8 +3,15 @@
  * when a window crosses 80 % or 95 % or its limit was hit. Times are the reader's clock in their time zone (24-hour,
  * like the rest of the product). A percentage is the number, a no-break space and `%` (“85 %”).
  */
-import type { SubscriptionUsage, UsageAlertLevel, UsageProvider, UsageWindow } from '../domain/usage.js';
+import type {
+  SubscriptionUsage,
+  UsageAlertLevel,
+  UsageProvider,
+  UsageWindow,
+  UsageWindowKind,
+} from '../domain/usage.js';
 import { sortUsageWindows, USAGE_WINDOW_LABELS } from '../domain/usage.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { type DateInput, daysAgo, formatClock, formatDate, formatShortWeekday, toDate } from './time.js';
 
 /** The no-break space between a number and `%`. */
@@ -21,53 +28,90 @@ export function formatUsagePct(pct: number | null | undefined): string {
 }
 
 /** `2 h 10 min`, `45 min`, `3 d 4 h`, `2 h` — a span in whole minutes, rounded up (never “0 min”). */
-export function formatUsageSpan(ms: number): string {
+export function formatUsageSpan(ms: number, locale?: string | null): string {
+  const tr = coreTranslator(locale);
   const minutes = Math.max(1, Math.ceil(ms / 60_000));
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return tr.t('usage.minutes', { m: minutes });
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     const m = minutes % 60;
-    return m === 0 ? `${hours} h` : `${hours} h ${m} min`;
+    return m === 0 ? tr.t('usage.hours', { h: hours }) : tr.t('usage.hoursMinutes', { h: hours, m });
   }
   const days = Math.floor(hours / 24);
   const h = hours % 24;
-  return h === 0 ? `${days} d` : `${days} d ${h} h`;
+  return h === 0 ? tr.t('usage.days', { d: days }) : tr.t('usage.daysHours', { d: days, h });
 }
 
 /** `resets in 2 h 10 min`; `resets now` once the time has passed; `` when unknown. */
-export function formatResetsIn(resetsAt: DateInput | null, now: DateInput): string {
+export function formatResetsIn(resetsAt: DateInput | null, now: DateInput, locale?: string | null): string {
   if (resetsAt === null) return '';
+  const tr = coreTranslator(locale);
   const ms = toDate(resetsAt).getTime() - toDate(now).getTime();
-  return ms <= 0 ? 'resets now' : `resets in ${formatUsageSpan(ms)}`;
+  return ms <= 0 ? tr.t('usage.resetsNow') : tr.t('usage.resetsIn', { span: formatUsageSpan(ms, locale) });
 }
 
 /** `16:00` today, `Thu 09:00` within the week, else `3 Oct` — when a window resets, in the reader's zone. */
-export function formatResetTime(resetsAt: DateInput, now: DateInput, timeZone: string): string {
+export function formatResetTime(
+  resetsAt: DateInput,
+  now: DateInput,
+  timeZone: string,
+  locale?: string | null,
+): string {
   const diff = -daysAgo(resetsAt, now, timeZone);
   if (diff <= 0) return formatClock(resetsAt, timeZone);
-  if (diff < 7) return `${formatShortWeekday(resetsAt, timeZone)} ${formatClock(resetsAt, timeZone)}`;
-  return formatDate(resetsAt, timeZone, { now });
+  if (diff < 7) return `${formatShortWeekday(resetsAt, timeZone, locale)} ${formatClock(resetsAt, timeZone)}`;
+  return formatDate(resetsAt, timeZone, { now }, locale);
 }
 
 /** `as of 14:32` today, `as of 28 Sep, 14:32` before; `not read yet` when never observed. */
-export function formatAsOf(observedAt: DateInput | null, now: DateInput, timeZone: string): string {
-  if (observedAt === null) return 'not read yet';
+export function formatAsOf(
+  observedAt: DateInput | null,
+  now: DateInput,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  if (observedAt === null) return tr.t('usage.notRead');
   const clock = formatClock(observedAt, timeZone);
   return daysAgo(observedAt, now, timeZone) === 0
-    ? `as of ${clock}`
-    : `as of ${formatDate(observedAt, timeZone, { now })}, ${clock}`;
+    ? tr.t('usage.asOf', { clock })
+    : tr.t('usage.asOfDate', { date: formatDate(observedAt, timeZone, { now }, locale), clock });
+}
+
+/** An API-key sign-in's line instead of meters, in a locale. */
+export function usagePayAsYouGo(locale?: string | null): string {
+  return coreTranslator(locale).t('usage.payAsYouGo');
 }
 
 /** An API-key sign-in's line instead of meters. */
-export const USAGE_PAY_AS_YOU_GO = 'Pay as you go — see Spend';
+export const USAGE_PAY_AS_YOU_GO = usagePayAsYouGo('en');
+
+/** A usage window's name in a locale (`5-hour`, `5-uurs`). */
+export function usageWindowLabel(kind: UsageWindowKind, locale?: string | null): string {
+  return coreTranslator(locale).t(`usage.window.${kind}`);
+}
+
+/** The window's own label in the locale: a known English label maps to its translation, the provider's words stay. */
+function localWindowLabel(label: string, locale?: string | null): string {
+  if (coreTranslator(locale).language === 'en') return label;
+  for (const [kind, english] of Object.entries(USAGE_WINDOW_LABELS)) {
+    if (english === label) return usageWindowLabel(kind as UsageWindowKind, locale);
+  }
+  return label;
+}
 
 /** A window's line under its meter: `5-hour · 85 % · resets in 2 h 10 min`. */
 export function formatUsageWindowLine(
   w: Pick<UsageWindow, 'label' | 'usedPct' | 'resetsAt' | 'status'>,
   now: DateInput,
+  locale?: string | null,
 ): string {
-  const parts = [w.label, w.status === 'limited' ? 'limit reached' : formatUsagePct(w.usedPct)];
-  const resets = formatResetsIn(w.resetsAt, now);
+  const tr = coreTranslator(locale);
+  const parts = [
+    localWindowLabel(w.label, locale),
+    w.status === 'limited' ? tr.t('usage.limitReached') : formatUsagePct(w.usedPct),
+  ];
+  const resets = formatResetsIn(w.resetsAt, now, locale);
   if (resets) parts.push(resets);
   return parts.join(' · ');
 }
@@ -90,35 +134,44 @@ export function usageAlertText(input: {
   forOwner: boolean;
   now: DateInput;
   timeZone: string;
+  locale?: string | null;
 }): string {
-  const { level, provider, window: w, personName, forOwner, now, timeZone } = input;
-  const whose = forOwner ? 'Your' : `${personName}’s`;
-  const what = `${whose} ${USAGE_PROVIDER_LABELS[provider]} subscription`;
-  const label = USAGE_WINDOW_LABELS[w.kind] === 'Usage' ? 'usage' : USAGE_WINDOW_LABELS[w.kind];
-  const limit = label === 'usage' ? 'its usage limit' : `its ${label} limit`;
+  const { level, provider, window: w, personName, forOwner, now, timeZone, locale } = input;
+  const tr = coreTranslator(locale);
+  const providerName = USAGE_PROVIDER_LABELS[provider];
+  const what = forOwner
+    ? tr.t('usage.yourSub', { provider: providerName })
+    : tr.t('usage.theirSub', { person: personName, provider: providerName });
+  const limit =
+    w.kind === 'other' || USAGE_WINDOW_LABELS[w.kind] === 'Usage'
+      ? tr.t('usage.itsUsageLimit')
+      : tr.t('usage.itsLimit', { label: usageWindowLabel(w.kind, locale) });
   let resets = '';
   if (w.resetsAt !== null) {
-    const at = formatResetTime(w.resetsAt, now, timeZone);
-    resets = /^\d/.test(at) && at.includes(':') ? `, resets at ${at}` : `, resets ${at}`;
+    const at = formatResetTime(w.resetsAt, now, timeZone, locale);
+    resets =
+      /^\d/.test(at) && at.includes(':') ? tr.t('usage.resetsAt', { at }) : tr.t('usage.resetsOn', { at });
   }
   if (level === 'limited') {
-    const wait = forOwner ? ' Turns on it wait until then.' : '';
-    return `${what} hit ${limit}${resets}.${w.resetsAt !== null ? wait : ''}`;
+    const wait = forOwner && w.resetsAt !== null ? tr.t('usage.waitUntil') : '';
+    return tr.t('usage.hit', { what, limit, resets, wait });
   }
   const pct = formatUsagePct(w.usedPct ?? level);
-  return `${what} is at ${pct} of ${limit}${resets}.`;
+  return tr.t('usage.at', { what, pct, limit, resets });
 }
 
 /** Plain summary of a snapshot for places without meters (notifications, the assistant's answers). */
 export function usageSummaryText(
   sub: Pick<SubscriptionUsage, 'provider' | 'kind' | 'windows' | 'connected'>,
   now: DateInput,
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
   const name = `${USAGE_PROVIDER_LABELS[sub.provider]}`;
-  if (!sub.connected) return `${name} · not signed in`;
-  if (sub.kind === 'api_key') return `${name} · ${USAGE_PAY_AS_YOU_GO}`;
-  if (sub.windows.length === 0) return `${name} · no usage read yet`;
+  if (!sub.connected) return tr.t('usage.notSignedIn', { name });
+  if (sub.kind === 'api_key') return `${name} · ${usagePayAsYouGo(locale)}`;
+  if (sub.windows.length === 0) return tr.t('usage.noUsage', { name });
   return `${name} · ${sortUsageWindows(sub.windows)
-    .map((w) => formatUsageWindowLine(w, now))
+    .map((w) => formatUsageWindowLine(w, now, locale))
     .join(' · ')}`;
 }

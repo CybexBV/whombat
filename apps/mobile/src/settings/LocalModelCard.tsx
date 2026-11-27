@@ -7,6 +7,7 @@
  * (optional, never shown again) with the contracts' hints — and Test and Save (Cancel while changing). Every rule is
  * `@whombat/client`'s `localModel.ts`, shared with the web.
  */
+
 import {
   LOCAL_MODEL_FIELDS,
   LOCAL_MODEL_TEXT,
@@ -24,10 +25,11 @@ import {
   localModelTestBody,
 } from '@whombat/client';
 import { useClearLocalModel, useSetLocalModel, useTestLocalModel } from '@whombat/client/react';
-import { LOCAL_MODEL_COPY, type LocalModelCheck, type LocalModelView } from '@whombat/core';
+import { type LocalModelCheck, type LocalModelView, localModelCopy } from '@whombat/core';
 import { type ReactNode, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { errorText, outcomeText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -111,22 +113,25 @@ function Card({ children }: { children: ReactNode }) {
 
 /** The card's head: the dot (what the last test found) and the section's name, then its one sentence. */
 function Head({ tone, status }: { tone: LocalModelTone; status: string }) {
+  const { rawLocale } = useI18n();
+  const localModelCopyHere = localModelCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <>
       <View
         accessible
         accessibilityRole="header"
-        accessibilityLabel={`${LOCAL_MODEL_COPY.title}. ${status}`}
+        accessibilityLabel={`${localModelCopyHere.title}. ${status}`}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
       >
         <StatusDot color={toneColor(theme, tone)} label={status} />
         <Text size={15.5} weight={600}>
-          {LOCAL_MODEL_COPY.title}
+          {localModelCopyHere.title}
         </Text>
       </View>
       <Text size={13} lh={1.45} color={theme.colors.mut}>
-        {LOCAL_MODEL_COPY.hint}
+        {localModelCopyHere.hint}
       </Text>
     </>
   );
@@ -143,6 +148,9 @@ function Saved({
   notice?: string | null;
   onChange: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const localModelCopyHere = localModelCopy(rawLocale);
+
   const theme = useTheme();
   const test = useTestLocalModel(slug);
   const clear = useClearLocalModel(slug);
@@ -162,10 +170,10 @@ function Saved({
     );
   };
   const remove = () =>
-    Alert.alert(LOCAL_MODEL_COPY.removeTitle, LOCAL_MODEL_COPY.removeBody, [
+    Alert.alert(localModelCopyHere.removeTitle, localModelCopyHere.removeBody, [
       { text: LOCAL_MODEL_TEXT.cancel, style: 'cancel' },
       {
-        text: LOCAL_MODEL_COPY.remove,
+        text: localModelCopyHere.remove,
         style: 'destructive',
         onPress: () => {
           setProblem(null);
@@ -177,7 +185,7 @@ function Saved({
                 if (refused) return setProblem(refused);
                 if (r.status === 'ok' && r.data.burrow.localModel != null)
                   return setProblem(LOCAL_MODEL_TEXT.failed);
-                showNotice(LOCAL_MODEL_COPY.removed);
+                showNotice(localModelCopyHere.removed);
               },
               onError: (e) => setProblem(errorText(e)),
             },
@@ -207,7 +215,7 @@ function Saved({
       <FormMessage text={problem ?? notice ?? null} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
-          label={LOCAL_MODEL_COPY.checkAgain}
+          label={localModelCopyHere.checkAgain}
           variant="secondary"
           busy={test.isPending}
           disabled={busy}
@@ -222,11 +230,11 @@ function Saved({
           style={GROW}
         />
         <Button
-          label={LOCAL_MODEL_COPY.remove}
+          label={localModelCopyHere.remove}
           variant="secondary"
           busy={clear.isPending}
           disabled={busy}
-          accessibilityLabel={`${LOCAL_MODEL_COPY.remove} ${row.name}`}
+          accessibilityLabel={`${localModelCopyHere.remove} ${row.name}`}
           onPress={remove}
           style={GROW}
         />
@@ -256,6 +264,9 @@ function Form({
   onMismatch: (message: string) => void;
   onDone: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const localModelCopyHere = localModelCopy(rawLocale);
+
   const theme = useTheme();
   const set = useSetLocalModel(slug);
   const test = useTestLocalModel(slug);
@@ -303,7 +314,7 @@ function Form({
             onMismatch(LOCAL_MODEL_TEXT.failed);
             return;
           }
-          showNotice(LOCAL_MODEL_COPY.saved);
+          showNotice(localModelCopyHere.saved);
           onDone();
         },
         onError: (e) => setProblem(errorText(e)),
@@ -330,7 +341,7 @@ function Form({
             value={draft[field]}
             onChangeText={(value) => edit(field, value)}
             error={tried ? (problems[field] ?? null) : null}
-            hint={field === 'apiKey' ? (keyKept ? LOCAL_MODEL_COPY.apiKeySaved : null) : hint}
+            hint={field === 'apiKey' ? (keyKept ? localModelCopyHere.apiKeySaved : null) : hint}
             mono={input.mono}
             secret={input.secret}
             editable={!busy}
@@ -366,7 +377,7 @@ function Form({
           />
         ) : null}
         <Button
-          label={LOCAL_MODEL_COPY.test}
+          label={localModelCopyHere.test}
           variant="secondary"
           busy={test.isPending}
           disabled={busy}
@@ -374,7 +385,7 @@ function Form({
           style={GROW}
         />
         <Button
-          label={LOCAL_MODEL_COPY.save}
+          label={localModelCopyHere.save}
           busy={set.isPending}
           disabled={busy}
           onPress={save}

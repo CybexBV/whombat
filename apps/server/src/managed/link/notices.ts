@@ -9,7 +9,8 @@ import type { NeedsYouItem } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { applianceState, burrows } from '../../db/schema/index';
 import { homeAudience, publishHomeChanged } from '../../home/notify';
-import { registerNeedsYouSource, type SourceCtx } from '../../home/registry';
+import { registerNeedsYouSource, type SourceCtx, sourceLocale } from '../../home/registry';
+import { type ServerMessageKey, tServer } from '../../i18n/catalog';
 import { loadPrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
 import { checkStartsOn, registerChecks } from '../../things/quiet/defaults';
@@ -30,27 +31,30 @@ export const REACH_HREF = '/settings?tab=appliance&section=about';
 /** Where the backup details' paper copy is checked. */
 export const BACKUP_DETAILS_HREF = '/settings?tab=appliance&section=backups';
 
-/** The words, one place each (CLAUDE.md: short and plain; push-words.md for the push). */
-export const LINK_WORDS = {
-  graceTitle: 'Whombat Link is ending',
-  graceBody: (date: string) =>
-    `Whombat Link stops on ${date}. Turn on Tailscale so you can still reach your Whombat from away, and check you have the paper copy of your backup details.`,
-  graceTailscale: 'Turn on Tailscale',
-  graceBackup: 'Backup details',
-  endedTitle: 'Whombat Link has ended',
-  // Every client shows this as it is, the iPhone app included, and an iPhone app names no price, sign-up or place to
-  // buy: the e-mail, the box's screen and the account site say how to subscribe again.
-  endedBody:
-    'Your Whombat still works at home, and your data, agents, automations and backups are all still here. To reach it from away, turn on Tailscale.',
-  endedOpen: 'Turn on Tailscale',
-  pushTitle: 'Whombat Link is ending',
-  pushBody: (date: string) =>
-    `It stops on ${date}. Turn on Tailscale and check the paper copy of your backup details.`,
-} as const;
+/** The words in a locale, one place each (CLAUDE.md: short and plain; push-words.md for the push). */
+export function linkWords(locale?: string | null) {
+  const t = (key: ServerMessageKey, vars?: Record<string, string>) => tServer(locale, key, vars);
+  return {
+    graceTitle: t('managed.link.graceTitle'),
+    graceBody: (date: string) => t('managed.link.graceBody', { date }),
+    graceTailscale: t('managed.link.graceTailscale'),
+    graceBackup: t('managed.link.graceBackup'),
+    endedTitle: t('managed.link.endedTitle'),
+    // Every client shows this as it is, the iPhone app included, and an iPhone app names no price, sign-up or place to
+    // buy: the e-mail, the box's screen and the account site say how to subscribe again.
+    endedBody: t('managed.link.endedBody'),
+    endedOpen: t('managed.link.endedOpen'),
+    pushTitle: t('managed.link.pushTitle'),
+    pushBody: (date: string) => t('managed.link.pushBody', { date }),
+  };
+}
+
+export const LINK_WORDS = linkWords(null);
 
 /** The items for Link now (pure). */
-export function linkItems(view: LinkView): NeedsYouItem[] {
+export function linkItems(view: LinkView, locale?: string | null): NeedsYouItem[] {
   if (!view.enabled || view.assumed) return [];
+  const words = linkWords(locale);
   const link = view.link;
   if (link.state === 'grace' && checkStartsOn('link.grace')) {
     const ends = link.graceEndsAt ?? link.since;
@@ -61,14 +65,14 @@ export function linkItems(view: LinkView): NeedsYouItem[] {
         kind: 'alert',
         severity: 'warn',
         nature: 'you',
-        title: LINK_WORDS.graceTitle,
-        body: LINK_WORDS.graceBody(dayText(ends)),
+        title: words.graceTitle,
+        body: words.graceBody(dayText(ends, locale)),
         at: link.since,
         actions: [
-          { id: 'open', label: LINK_WORDS.graceTailscale, style: 'primary', kind: 'open', href: REACH_HREF },
+          { id: 'open', label: words.graceTailscale, style: 'primary', kind: 'open', href: REACH_HREF },
           {
             id: 'backup',
-            label: LINK_WORDS.graceBackup,
+            label: words.graceBackup,
             style: 'secondary',
             kind: 'open',
             href: BACKUP_DETAILS_HREF,
@@ -86,12 +90,10 @@ export function linkItems(view: LinkView): NeedsYouItem[] {
         kind: 'alert',
         severity: 'warn',
         nature: 'you',
-        title: LINK_WORDS.endedTitle,
-        body: LINK_WORDS.endedBody,
+        title: words.endedTitle,
+        body: words.endedBody,
         at: link.since,
-        actions: [
-          { id: 'open', label: LINK_WORDS.endedOpen, style: 'primary', kind: 'open', href: REACH_HREF },
-        ],
+        actions: [{ id: 'open', label: words.endedOpen, style: 'primary', kind: 'open', href: REACH_HREF }],
         href: REACH_HREF,
       },
     ];
@@ -105,7 +107,7 @@ export function registerLinkSource(link: () => LinkService | null): void {
     if (!service) return [];
     const person = ctx.reads?.person ?? (await loadPrincipalRow(ctx.db, ctx.personId));
     if (person?.kind !== 'person') return [];
-    return linkItems(service.view());
+    return linkItems(service.view(), await sourceLocale(ctx));
   });
 }
 
@@ -145,6 +147,10 @@ export function followLinkNotices(
         title: LINK_WORDS.pushTitle,
         body: LINK_WORDS.pushBody(date),
         path: REACH_HREF,
+        words: (locale) => {
+          const w = linkWords(locale);
+          return { title: w.pushTitle, body: w.pushBody(dayText(ends, locale)) };
+        },
       });
     })().catch((err) => services.log.warn({ err: String(err) }, 'link: the notice wasn’t given'));
   });

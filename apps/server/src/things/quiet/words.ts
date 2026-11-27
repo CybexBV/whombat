@@ -5,6 +5,7 @@
  */
 import { localParts, quietWordsOf } from '@whombat/core';
 import { SNOOZE_HOUR, tomorrowAt } from '../../home/time';
+import { isEnglish, tServer } from '../../i18n/catalog';
 
 /** Remind me tomorrow (QN-12): 09:00 tomorrow in the burrow's zone, as Home's snoozes. */
 export function snoozeUntil(now: Date, timeZone: string): Date {
@@ -14,20 +15,27 @@ export function snoozeUntil(now: Date, timeZone: string): Date {
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** “Until it’s back online.” → “until it’s back online” (after “Ignored by John”; the contract's `quietWordsOf`). */
-export function lowerWords(words: string | null | undefined): string {
+export function lowerWords(words: string | null | undefined, locale?: string | null): string {
   const w = quietWordsOf((words ?? '').trim());
-  return w ? clip(w, 60) : 'until it changes';
+  return w ? clip(w, 60) : tServer(locale, 'hosts.quiet.untilChanges');
 }
 
 const WEEKDAY = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' });
+const WEEKDAY_NL = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', timeZone: 'UTC' });
 
-/** “until 09:00” today, “until tomorrow 09:00”, else “until Thu 09:00”, in the zone. */
-export function untilWords(until: Date, now: Date, timeZone: string): string {
+/** “until 09:00” today, “until tomorrow 09:00”, else “until Thu 09:00”, in the zone (and in `locale`). */
+export function untilWords(until: Date, now: Date, timeZone: string, locale?: string | null): string {
   const at = localParts(until.getTime(), timeZone);
   const today = localParts(now.getTime(), timeZone);
   const hm = `${String(at.hour).padStart(2, '0')}:${String(at.minute).padStart(2, '0')}`;
   const day = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day);
   const days = Math.round((day(at) - day(today)) / 86_400_000);
+  if (!isEnglish(locale)) {
+    if (days <= 0) return tServer(locale, 'things.quiet.untilTime', { time: hm });
+    if (days === 1) return tServer(locale, 'things.quiet.untilTomorrow', { time: hm });
+    const weekday = WEEKDAY_NL.format(new Date(day(at))).replace(/\.$/, '');
+    return tServer(locale, 'things.quiet.untilDay', { day: weekday, time: hm });
+  }
   if (days <= 0) return `until ${hm}`;
   if (days === 1) return `until tomorrow ${hm}`;
   return `until ${WEEKDAY.format(new Date(day(at)))} ${hm}`;

@@ -10,7 +10,6 @@ import {
   boxSetupAiKicker,
   boxSetupSteps,
   CONNECT_AI_PROVIDERS,
-  CONNECT_AI_TEXT,
   connectAiStep,
   readyProviders,
 } from '@whombat/client/managed';
@@ -20,13 +19,12 @@ import type { LiveProvider } from '@whombat/core/domain';
 import { useEffect, useRef, useState } from 'react';
 import { AuthLayout } from '../../app/auth/AuthLayout';
 import { Button } from '../../components/Button';
+import { useConnectAiText } from '../../i18n/words';
 import aiStyles from '../ai/ai.module.css';
 import { ClientRow } from '../ai/ClientRow';
 import { SignInRow, type SignInRowProps } from '../ai/SignIn';
 import { useAiRefresh, useClientsStatus, useSignInsStatus } from '../ai/useAi';
 import styles from './ConnectAiScreen.module.css';
-
-const T = CONNECT_AI_TEXT;
 
 export interface ConnectAiScreenProps {
   /** The Whombat's burrow (its assistant's name). */
@@ -43,6 +41,7 @@ export interface ConnectAiScreenProps {
 }
 
 export function ConnectAiScreen({ burrow, onDone, terminal, afterBoxSetup }: ConnectAiScreenProps) {
+  const T = useConnectAiText();
   const signIns = useSignInsStatus();
   const clients = useClientsStatus();
   const refresh = useAiRefresh();

@@ -12,19 +12,21 @@
  * AP-2731). On Local, MODEL's sheet also takes another model by its name (AP-5001), and EFFORT and FAST REPLIES don't
  * show (it has neither).
  */
+
 import { gatewayRunsOn, localModelOf, modelRuntimeSaved, problemText, providerModels } from '@whombat/client';
 import { useAgentSetup, useSessionProtocol, useSetAgentModel } from '@whombat/client/react';
 import {
   type AgentModelRuntimeUpdate,
   type AgentProfile,
-  CHAT_RUNTIME_COPY,
-  MODEL_EFFORT_COPY,
+  chatRuntimeCopy,
+  modelEffortCopy,
 } from '@whombat/core';
 import { BACKGROUND_MODEL_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { type ModelEffortChoice, modelEffortView, runsOnModel, signInLine } from '../data/runsOn';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ListRow } from '../ui/ListRow';
@@ -43,6 +45,11 @@ function Note({ children }: { children: string }) {
 }
 
 export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; onChanged: () => void }) {
+  const { rawLocale } = useI18n();
+  const chatRuntimeCopyHere = chatRuntimeCopy(rawLocale);
+  const modelEffortCopyHere = modelEffortCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
   // Where the Whombat says which providers are ready (`host.agents`); hidden where it doesn't answer.
@@ -68,13 +75,13 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   // Its turns run on your own sign-in (OP-09).
   const signIn = signInLine(agent.runtime);
   const signInSection = signIn ? (
-    <Section title="SIGN-IN">
+    <Section title={tMobile('screens.sign-in')}>
       <ListRow title={signIn.title} body={signIn.note} bodyLines={4} />
     </Section>
   ) : null;
   const bare = (
     <>
-      {gatewayRow ? <Section title="RUNS ON">{gatewayRow}</Section> : null}
+      {gatewayRow ? <Section title={tMobile('screens.runs-on')}>{gatewayRow}</Section> : null}
       {signInSection}
     </>
   );
@@ -130,13 +137,13 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             )
           ) {
             onChanged();
-            then.refused(MODEL_EFFORT_COPY.notSaved);
+            then.refused(modelEffortCopyHere.notSaved);
             return;
           }
           then.done();
           onChanged();
         },
-        onError: (e) => then.refused(problemText(e)),
+        onError: (e) => then.refused(problemText(e, undefined, rawLocale)),
       },
     );
 
@@ -165,7 +172,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   const editable = !update.isPending;
   return (
     <>
-      <Section title="RUNS ON">
+      <Section title={tMobile('screens.runs-on')}>
         {gatewayRow}
         {model.options.map((o) => (
           <ListRow
@@ -176,7 +183,12 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             body={o.selected ? (choices?.summary ?? null) : null}
             trailing={
               o.selected ? (
-                <Text size={15} weight={600} color={theme.colors.ok} accessibilityLabel="Current">
+                <Text
+                  size={15}
+                  weight={600}
+                  color={theme.colors.ok}
+                  accessibilityLabel={tMobile('screens.current')}
+                >
                   ✓
                 </Text>
               ) : null
@@ -189,7 +201,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
         {error ? <Note>{error}</Note> : null}
       </Section>
       {choices ? (
-        <Section title={MODEL_EFFORT_COPY.modelSection}>
+        <Section title={modelEffortCopyHere.modelSection}>
           <ListRow
             title={choices.model.label}
             body={choices.model.description}
@@ -201,7 +213,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
         </Section>
       ) : null}
       {choices?.backgroundModel ? (
-        <Section title={MODEL_EFFORT_COPY.backgroundModelSection}>
+        <Section title={modelEffortCopyHere.backgroundModelSection}>
           <ListRow
             title={choices.backgroundModel.label}
             body={choices.backgroundModel.hint}
@@ -213,7 +225,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
         </Section>
       ) : null}
       {choices?.effort ? (
-        <Section title={MODEL_EFFORT_COPY.effortSection}>
+        <Section title={modelEffortCopyHere.effortSection}>
           <ListRow
             title={choices.effort.label}
             body={choices.effort.hint}
@@ -224,7 +236,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
         </Section>
       ) : null}
       {fast ? (
-        <Section title={CHAT_RUNTIME_COPY.fast.toUpperCase()}>
+        <Section title={chatRuntimeCopyHere.fast.toUpperCase()}>
           <ListRow
             title={fast.label}
             body={fast.hint}
@@ -252,10 +264,10 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
           title={
             sheet
               ? picking === 'model'
-                ? MODEL_EFFORT_COPY.modelSection
+                ? modelEffortCopyHere.modelSection
                 : picking === 'backgroundModel'
-                  ? MODEL_EFFORT_COPY.backgroundModelSection
-                  : MODEL_EFFORT_COPY.effortSection
+                  ? modelEffortCopyHere.backgroundModelSection
+                  : modelEffortCopyHere.effortSection
               : null
           }
           label={
@@ -270,7 +282,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             picking === 'effort'
               ? choices.fixedHint
               : picking === 'backgroundModel'
-                ? MODEL_EFFORT_COPY.backgroundModelHint
+                ? modelEffortCopyHere.backgroundModelHint
                 : null
           }
           another={picking === 'model' ? choices.another : null}

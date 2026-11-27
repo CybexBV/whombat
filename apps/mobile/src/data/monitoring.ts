@@ -5,6 +5,7 @@
  * the facts, and the words a screen reader hears. Pure; the screens are `screens/thing/Monitoring.tsx`,
  * `ThingPageScreen` and `ServerScreen`.
  */
+
 import {
   holdSaysBadge,
   holdView,
@@ -17,27 +18,32 @@ import {
 } from '@whombat/client';
 import type { ThingPage, ThingWatchCheck } from '@whombat/core';
 import { zonedParts } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
 import { RENAME_COPY } from './rename';
 
-export const MONITORING_COPY = {
-  keepQuiet: KEEP_QUIET_WORDS.menu,
-  endNow: KEEP_QUIET_WORDS.endNow,
-  endNowHint: 'Whombat watches it again',
-  /** Pick a time's two parts. */
-  day: 'Day',
-  time: 'Time',
-  today: 'Today',
-  tomorrow: 'Tomorrow',
-  /** The cause's link under the state: “Open downloads”, and what it opens. */
-  openCauseHint: 'Opens what it depends on',
-  history: 'What happened',
-  historyLoading: 'Loading what happened',
-  changeLimit: LIMIT_WORDS.menu,
-  changeLimitHint: (name: string) => `Changes when Whombat warns about “${name}”`,
-  /** The ⋯ of a page with nothing else in it. */
-  more: (name: string) => `More for ${name}`,
-} as const;
+export function monitoringCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    keepQuiet: KEEP_QUIET_WORDS.menu,
+    endNow: KEEP_QUIET_WORDS.endNow,
+    endNowHint: t('monitoring.monitoringCopy.endNowHint'),
+    /** Pick a time's two parts. */
+    day: t('monitoring.monitoringCopy.day'),
+    time: t('monitoring.monitoringCopy.time'),
+    today: t('monitoring.monitoringCopy.today'),
+    tomorrow: t('monitoring.monitoringCopy.tomorrow'),
+    /** The cause's link under the state: “Open downloads”, and what it opens. */
+    openCauseHint: t('monitoring.monitoringCopy.openCauseHint'),
+    history: t('monitoring.monitoringCopy.history'),
+    historyLoading: t('monitoring.monitoringCopy.historyLoading'),
+    changeLimit: LIMIT_WORDS.menu,
+    changeLimitHint: (name: string) => t('monitoring.monitoringCopy.changeLimitHint', { name }),
+    /** The ⋯ of a page with nothing else in it. */
+    more: (name: string) => t('monitoring.monitoringCopy.more', { name }),
+  } as const;
+}
+export const MONITORING_COPY = monitoringCopy();
 
 /** One of Pick a time's days: its date (`2026-09-23`) and its words (“Today”, “Tomorrow”, “Fri 25”). */
 export interface PickDay {

@@ -1,10 +1,9 @@
 import { Link } from '@tanstack/react-router';
 import {
-  ARRANGE_WORDS,
   addTile,
   arrangePins,
   arrangeTiles,
-  CHAT_WORDS,
+  arrangeWords,
   type ConnectionsTab,
   type HomeSlot,
   homeGreeting,
@@ -15,12 +14,10 @@ import {
   layoutNow,
   moveTileBy,
   moveTileTo,
-  NEEDS_YOU_WORDS,
-  OVERVIEW_PAGE_WORDS,
   OVERVIEW_STARTING_TOP,
-  OVERVIEW_WORDS,
   type OverviewSectionView,
   overviewHeadline,
+  overviewPageWords,
   overviewSectionAnchor,
   overviewSectionForTab,
   overviewSections,
@@ -41,6 +38,7 @@ import {
   viewFace,
 } from '@whombat/client';
 import { EVERYTHING_RUNNING_HREF, isHostsUnavailable } from '@whombat/client/hosts';
+import { tClient } from '@whombat/client/i18n';
 import {
   useArrangeOverview,
   useHomeOverview,
@@ -49,12 +47,16 @@ import {
   useTheAgent,
 } from '@whombat/client/react';
 import type { OverviewLayout } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
 import { Check, ChevronRight, Plus, Settings } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { INBOX_PATH } from '../../app/shell/location';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { StatusMark } from '../../components/StatusMark';
+import { useWebI18n } from '../../i18n/provider';
+import { CHAT_WORDS } from '../../i18n/shared';
+import { useLocaleWords, useNeedsYouWords, useOverviewWords } from '../../i18n/words';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
 import { AddServerDialog } from '../things/AddServer';
 import { AppLink } from '../things/parts';
@@ -132,6 +134,11 @@ function Section({
  * `hosts:<burrowId>` and the shell's own writes.
  */
 export function HomeScreen({ burrow }: HomeScreenProps) {
+  const NEEDS_YOU_WORDS = useNeedsYouWords();
+  const OVERVIEW_WORDS = useOverviewWords();
+  const { t, tag: uiLocale } = useWebI18n();
+  const arrangement = useLocaleWords(arrangeWords);
+  const pageWords = useLocaleWords(overviewPageWords);
   const { me, timeZone } = useBurrowContext(burrow);
   const now = useNow(30_000);
   const { data, error, refetch, isFetching } = useHomeOverview({ params: { burrow } });
@@ -147,14 +154,20 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
   const repointing = !adding && search.repoint === '1';
   // Every person may add a connection of their own; a shared one asks for a manager on its page (CX-03).
   const canAdd = me?.kind === 'person';
-  const headline = data ? overviewHeadline(data, { timeZone }) : null;
-  const status = headline?.kind === 'status' ? headline.status : data ? homeStatus(data, { timeZone }) : null;
+  const headline = data ? overviewHeadline(data, { timeZone, locale: uiLocale }) : null;
+  const status =
+    headline?.kind === 'status'
+      ? headline.status
+      : data
+        ? homeStatus(data, { timeZone, locale: uiLocale })
+        : null;
   // The Inbox item the headline names, for its link and *Look into it*.
   const headlineItem = (status?.itemId && data?.needsYou.find((i) => i.id === status.itemId)) || null;
   const handleIt = useHandleIt(burrow, timeZone);
   const sections = useMemo(
-    () => (data ? homeSections(data, { now, timeZone, servers, canAddConnection: canAdd }) : []),
-    [data, now, timeZone, servers, canAdd],
+    () =>
+      data ? homeSections(data, { now, timeZone, servers, canAddConnection: canAdd, locale: uiLocale }) : [],
+    [data, now, timeZone, servers, canAdd, uiLocale],
   );
   const pinned = useMemo(
     () => homeWebSlots(sections).filter((s): s is Extract<HomeSlot, { panel: unknown }> => 'panel' in s),
@@ -162,7 +175,10 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
   );
   const things = homeSection(sections, 'things');
   const thingRows = things?.rows ?? [];
-  const views = useMemo(() => overviewSections(sections, hosts.servers), [sections, hosts.servers]);
+  const views = useMemo(
+    () => overviewSections(sections, hosts.servers, uiLocale),
+    [sections, hosts.servers, uiLocale],
+  );
   const view = (key: ConnectionsTab) => views.find((v) => v.key === key) ?? null;
   // A section with nothing in it isn't drawn; Connections stays for whoever may add one (its link is in its heading).
   // Connections come before Servers (overview-arranged.md OVA-07).
@@ -170,8 +186,8 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
     .filter((v) => v.key !== 'services' || v.count > 0 || canAdd)
     .sort((a, b) => SECTION_ORDER.indexOf(a.key) - SECTION_ORDER.indexOf(b.key));
   const tiles = useMemo(
-    () => (data ? overviewTiles(thingRows, data.things, now, timeZone, agent?.name ?? null) : []),
-    [data, thingRows, now, timeZone, agent?.name],
+    () => (data ? overviewTiles(thingRows, data.things, now, timeZone, agent?.name ?? null, uiLocale) : []),
+    [data, thingRows, now, timeZone, agent?.name, uiLocale],
   );
   // Nothing connected, no servers, nothing pinned: one card and one step instead of empty sections (first-day.md).
   const empty = !!data && !homeSection(sections, 'servers') && thingRows.length === 0 && pinned.length === 0;
@@ -211,9 +227,9 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
     const next = edit(layoutNow(arranged, thingRows));
     arrange.mutate(next, {
       onSuccess: (r) => {
-        if (r.status !== 'ok') setProblem(ARRANGE_WORDS.couldntSave);
+        if (r.status !== 'ok') setProblem(arrangement.couldntSave);
       },
-      onError: () => setProblem(ARRANGE_WORDS.couldntSave),
+      onError: () => setProblem(arrangement.couldntSave),
     });
   };
   const stopArranging = () => {
@@ -238,7 +254,7 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
         if ('own' in t)
           return {
             key: `own:${t.own}`,
-            face: ownFace(t.own, data, thingRows, hosts.servers ?? null, agent?.name ?? null),
+            face: ownFace(t.own, data, thingRows, hosts.servers ?? null, agent?.name ?? null, uiLocale),
           };
         const row = rowOf(t.thing);
         const v = tileViews?.get(showId(t));
@@ -262,8 +278,8 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
   const moveTile = (thing: string, by: -1 | 1) => save((l) => moveTileBy(l, thing, by));
   const linkProps = useThingLinkProps(burrow);
   const day = useMemo(
-    () => (data ? todayMoments(data, now, timeZone, agent?.name ?? null) : null),
-    [data, now, timeZone, agent?.name],
+    () => (data ? todayMoments(data, now, timeZone, agent?.name ?? null, uiLocale) : null),
+    [data, now, timeZone, agent?.name, uiLocale],
   );
 
   // An old `?tab=` address (the tabs before) scrolls to its section once, when it is there.
@@ -287,24 +303,28 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
         {headline.title}
       </Link>
     ) : tone === 'ok' ? (
-      OVERVIEW_PAGE_WORDS.fine
+      pageWords.fine
     ) : (
       (strong ?? statusWords).replace(/\.$/, '')
     );
   const serverCount = hosts.servers?.length ?? 0;
+  const calmPrefix = `${tClient(uiLocale, 'home.allGood')}.`;
+  const pulseDetails = statusWords.startsWith(calmPrefix)
+    ? statusWords.slice(calmPrefix.length)
+    : statusWords;
   const pulseBody =
     headline?.kind === 'broken'
       ? headline.detail || null
       : tone === 'ok'
-        ? `${OVERVIEW_PAGE_WORDS.watching(words.Name, serverCount, tileSet.shown.length + tileSet.removed.length)} ${statusWords.replace(/^All good\.\s*/, '')}`.trim()
+        ? `${pageWords.watching(words.Name, serverCount, tileSet.shown.length + tileSet.removed.length)} ${pulseDetails.trimStart()}`.trim()
         : strong
           ? statusWords.slice(statusWords.indexOf(strong) + strong.length).trim() || null
           : null;
   const greeting = data
     ? [
-        homeGreeting(me?.name ?? null, now, timeZone),
-        formatDay(now, timeZone),
-        OVERVIEW_PAGE_WORDS.read(readAgo(data.generatedAt, now)),
+        homeGreeting(me?.name ?? null, now, timeZone, uiLocale),
+        formatDay(now, timeZone, uiLocale),
+        pageWords.read(readAgo(data.generatedAt, now, uiLocale)),
       ].join(' · ')
     : '';
 
@@ -343,12 +363,12 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
               type="button"
               className={a.arrange}
               aria-pressed={editing}
-              aria-label={editing ? ARRANGE_WORDS.doneLabel : ARRANGE_WORDS.arrangeLabel}
+              aria-label={editing ? arrangement.doneLabel : arrangement.arrangeLabel}
               onClick={() => (editing ? stopArranging() : setEditing(true))}
               data-arrange="toggle"
             >
               <Icon icon={editing ? Check : Settings} size={16} />
-              <span>{editing ? ARRANGE_WORDS.done : ARRANGE_WORDS.arrange}</span>
+              <span>{editing ? arrangement.done : arrangement.arrange}</span>
             </button>
           ) : null}
         </header>
@@ -356,8 +376,8 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
           {editing ? (
             <div className={a.editbar} role="status">
               <span>
-                <b>{ARRANGE_WORDS.barTitle}</b> <span className={a.onWide}>{ARRANGE_WORDS.barBody}</span>
-                <span className={a.onPhone}>{ARRANGE_WORDS.barBodyPhone}</span>
+                <b>{arrangement.barTitle}</b> <span className={a.onWide}>{arrangement.barBody}</span>
+                <span className={a.onPhone}>{arrangement.barBodyPhone}</span>
               </span>
               {problem ? <span className={a.problem}>{problem}</span> : null}
             </div>
@@ -459,7 +479,7 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
                       onDrop={(thing, onto) => save((l) => moveTileTo(l, thing, onto))}
                     />
                   ) : (
-                    <p className={o.note}>Nothing connected yet.</p>
+                    <p className={o.note}>{t('overview.nothingConnected')}</p>
                   )}
                 </Section>
               ) : null}
@@ -510,7 +530,7 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
                           <button
                             type="button"
                             className={a.gear}
-                            aria-label={ARRANGE_WORDS.changePin(slot.panel.title)}
+                            aria-label={arrangement.changePin(slot.panel.title)}
                             onClick={() => setPanel({ kind: 'pin', id: slot.id })}
                           >
                             <Icon icon={Settings} size={17} />
@@ -594,8 +614,8 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
 const SECTION_ORDER: readonly ConnectionsTab[] = ['services', 'servers', 'pinned'];
 
 /** “Tuesday 24 November”. */
-function formatDay(now: number, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+function formatDay(now: number, timeZone: string, locale?: string): string {
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), {
     timeZone,
     weekday: 'long',
     day: 'numeric',

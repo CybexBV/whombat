@@ -32,6 +32,7 @@ import {
   type TrailStep,
   type WidgetContext,
 } from '../shared/protocol';
+import { browserLanguage, supportedVisitorLanguage } from '../shared/visitor-language';
 import { WIDGET_VERSION } from '../version';
 import { FALLBACK_STYLES, loaderCss } from './styles';
 
@@ -53,6 +54,19 @@ const WARN = '[Whombat Feedback]';
 export const FRAME_SANDBOX =
   'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox';
 
+const EN = {
+  loading: 'Loading…',
+  unavailable: 'Feedback is unavailable right now.',
+  close: 'Close',
+  title: '{label} form',
+};
+const NL = {
+  loading: 'Laden…',
+  unavailable: 'Je kunt nu geen feedback geven.',
+  close: 'Sluiten',
+  title: 'Formulier voor {label}',
+};
+
 export interface LoaderOptions {
   site: string;
   /**
@@ -68,6 +82,8 @@ export interface LoaderOptions {
   position: 'bottom-right' | 'bottom-left';
   launcher: 'floating' | 'custom';
   label: string;
+  lang: string;
+  forwardLang: boolean;
   /** Record the navigation trail (`data-trail` isn't `off`). */
   trail: boolean;
 }
@@ -109,7 +125,11 @@ export function findScript(doc: Document): HTMLScriptElement | null {
 }
 
 /** The options of a loader `<script>`, or the reason it stays inert. */
-export function readOptions(script: HTMLScriptElement | null): LoaderOptions | string {
+export function readOptions(
+  script: HTMLScriptElement | null,
+  doc = script?.ownerDocument,
+  navigator = doc?.defaultView?.navigator,
+): LoaderOptions | string {
   if (!script) return 'its <script> tag wasn’t found.';
   let url: URL;
   try {
@@ -125,6 +145,9 @@ export function readOptions(script: HTMLScriptElement | null): LoaderOptions | s
   const prefix = at > 0 ? url.pathname.slice(0, at) : '';
   const theme = script.getAttribute(ATTRS.theme);
   const label = cleanText(script.getAttribute(ATTRS.label) ?? '', 40);
+  const explicit = script.getAttribute(ATTRS.lang);
+  const page = supportedVisitorLanguage(doc?.documentElement.lang);
+  const lang = supportedVisitorLanguage(explicit) ?? page ?? (navigator ? browserLanguage(navigator) : 'en');
   return {
     site,
     key: SITE_KEY.test(key) ? key : null,
@@ -134,6 +157,9 @@ export function readOptions(script: HTMLScriptElement | null): LoaderOptions | s
     position: script.getAttribute(ATTRS.position) === 'bottom-left' ? 'bottom-left' : 'bottom-right',
     launcher: script.getAttribute(ATTRS.launcher) === 'custom' ? 'custom' : 'floating',
     label: label || 'Feedback',
+    lang,
+    // The frame makes its own browser fallback, so pass English when the script or page chose it.
+    forwardLang: !/^en(-|$)/.test(lang) || explicit !== null || page !== undefined,
     trail: script.getAttribute(ATTRS.trail) !== 'off',
   };
 }
@@ -251,7 +277,7 @@ export function install(
   }
   const doc = win.document;
   const instance = randomToken();
-  const parsed = readOptions(script);
+  const parsed = readOptions(script, doc, win.navigator);
   if (typeof parsed === 'string') {
     warnOnce('inert', `the widget is off: ${parsed}`);
     const api = inertApi('the widget isn’t configured on this page.');
@@ -259,6 +285,8 @@ export function install(
     return { api, options: null, instance, shadow: () => null, host: () => null, frame: () => null };
   }
   const options = parsed;
+  const dutch = /^nl(-|$)/.test(options.lang);
+  const words = dutch ? NL : EN;
 
   let destroyed = false;
   let open = false;
@@ -455,6 +483,7 @@ export function install(
     if (host || destroyed) return;
     const body = doc.body ?? doc.documentElement;
     host = doc.createElement('whombat-feedback');
+    host.lang = dutch ? 'nl' : 'en';
     // Keep the page's CSS off our host element (CSSOM: allowed under a strict style-src).
     host.style.setProperty('all', 'initial', 'important');
     host.style.setProperty('display', 'block', 'important');
@@ -495,7 +524,7 @@ export function install(
     panel.dataset.state = 'loading';
     const status = doc.createElement('p');
     status.className = 'status';
-    status.textContent = 'Loading…';
+    status.textContent = words.loading;
     const notice = doc.createElement('div');
     notice.className = 'notice';
     notice.setAttribute('role', 'dialog');
@@ -507,11 +536,11 @@ export function install(
     const text = doc.createElement('p');
     text.id = 'wb-notice-text';
     text.setAttribute('role', 'status');
-    text.textContent = 'Feedback is unavailable right now.';
+    text.textContent = words.unavailable;
     closeButton = doc.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'close';
-    closeButton.textContent = 'Close';
+    closeButton.textContent = words.close;
     closeButton.addEventListener('click', () => api.close());
     notice.append(title, text, closeButton);
     panel.addEventListener('keydown', (event) => {
@@ -542,11 +571,11 @@ export function install(
     mount();
     if (iframe || !panel) return;
     iframe = doc.createElement('iframe');
-    // Without a key the URL is exactly the direct widget's (a self-hosted Whombat's frame never sees `key`).
     const key = options.key ? `&key=${encodeURIComponent(options.key)}` : '';
-    const query = `site=${encodeURIComponent(options.site)}&parent=${encodeURIComponent(win.location.origin)}&theme=${options.theme}${key}`;
+    const lang = options.forwardLang ? `&lang=${encodeURIComponent(options.lang)}` : '';
+    const query = `site=${encodeURIComponent(options.site)}&parent=${encodeURIComponent(win.location.origin)}&theme=${options.theme}${key}${lang}`;
     iframe.src = `${options.base}frame.html?${query}#instance=${instance}`;
-    iframe.title = `${options.label} form`;
+    iframe.title = words.title.replace('{label}', () => options.label);
     iframe.setAttribute('allow', '');
     iframe.setAttribute('sandbox', FRAME_SANDBOX);
     iframe.setAttribute('referrerpolicy', 'no-referrer');

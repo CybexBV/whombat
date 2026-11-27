@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { CHAT_WORDS } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { useApiMutation, useTheAgent } from '@whombat/client/react';
 import { api, type ChatRoom } from '@whombat/core';
 import { useState } from 'react';
 import { useToast } from '../../components/Toast';
+import { CHAT_WORDS } from '../../i18n/shared';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import { outcomeText, refusalText } from '../conversations/refusal';
 import { clearChatWords } from './clearWords';

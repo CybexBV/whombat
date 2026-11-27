@@ -4,6 +4,9 @@
  * the words are fixed sentences: nothing from the person's data, so they may go out as a preview like a message's.
  * Someone who turned “Show message text in notifications” off gets the phone's generic line for `security` instead.
  */
+import { fillRemoteHelpWords, remoteHelpWords } from '@whombat/core';
+import { isEnglish, type ServerMessageKey, tServer } from '../i18n/catalog';
+import { localizePhrase } from '../i18n/phrases';
 import type { PushTarget } from './push';
 
 /** A security notice: the two lines the phone shows and the page a tap opens (under the hosted app's origin). */
@@ -11,70 +14,82 @@ export interface SecurityNotice {
   title: string;
   body: string;
   path: string;
+  /** The same two lines in another language; without it the lines are said through the phrasebook. */
+  words?: (locale: string) => { title: string; body: string };
 }
 
 const THIS_WHOMBAT = '/settings?tab=appliance';
 const DEVICES = '/settings?tab=appliance&section=devices';
 const ABOUT = '/settings?tab=appliance&section=about';
 
+type FixedNotice =
+  | 'passkeyEnrolled'
+  | 'screenEnrolled'
+  | 'screenBackoff'
+  | 'recoveryStarted'
+  | 'recoveryRotating'
+  | 'recoveryRegistered'
+  | 'recoveryRotated'
+  | 'ownAddressForeign'
+  | 'remoteHelpLockedOut'
+  | 'restoreDone';
+
+/** A notice in fixed words from the catalog: English as it always was, other languages from the same keys. */
+function fixed(name: FixedNotice, path: string): SecurityNotice {
+  const title = `managed.security.${name}.title` as ServerMessageKey;
+  const body = `managed.security.${name}.body` as ServerMessageKey;
+  return {
+    title: tServer(null, title),
+    body: tServer(null, body),
+    path,
+    words: (locale) => ({ title: tServer(locale, title), body: tServer(locale, body) }),
+  };
+}
+
 export const SECURITY_NOTICES = {
-  passkeyEnrolled: {
-    title: 'A new device signed in',
-    body: 'A device signed in to your Whombat with your passkey. If it wasn’t you, remove it in Settings.',
-    path: DEVICES,
-  },
-  screenEnrolled: {
-    title: 'A device signed in at the screen',
-    body: 'Someone typed the letters from your Whombat’s screen and a device is in. If it wasn’t you, remove it in Settings.',
-    path: DEVICES,
-  },
-  screenBackoff: {
-    title: 'Wrong letters at the screen',
-    body: 'Someone typed the wrong sign-in letters on your Whombat a few times. It now makes them wait between tries.',
-    path: DEVICES,
-  },
-  recoveryStarted: {
-    title: 'Recovery kit being made',
-    body: 'Someone started making a recovery kit for your Whombat. If it wasn’t you, look in Settings.',
-    path: THIS_WHOMBAT,
-  },
-  recoveryRotating: {
-    title: 'Recovery kit being replaced',
-    body: 'Someone started replacing your Whombat’s recovery kit. If it wasn’t you, look in Settings.',
-    path: THIS_WHOMBAT,
-  },
-  recoveryRegistered: {
-    title: 'Recovery kit saved',
-    body: 'Your Whombat has a recovery kit now. Keep it somewhere safe.',
-    path: THIS_WHOMBAT,
-  },
-  recoveryRotated: {
-    title: 'New recovery kit',
-    body: 'Your Whombat has a new recovery kit. The old one doesn’t work any more.',
-    path: THIS_WHOMBAT,
-  },
-  ownAddressForeign: {
-    title: 'A certificate you didn’t ask for',
-    body: 'Someone got a certificate for your Whombat’s address that it didn’t ask for. Until you know why, use the phone app or your home network.',
-    path: ABOUT,
-  },
-  remoteHelpLockedOut: {
-    title: 'Remote help turned off',
-    body: 'Remote help turned itself off after 5 wrong help codes.',
-    path: ABOUT,
-  },
+  passkeyEnrolled: fixed('passkeyEnrolled', DEVICES),
+  screenEnrolled: fixed('screenEnrolled', DEVICES),
+  screenBackoff: fixed('screenBackoff', DEVICES),
+  recoveryStarted: fixed('recoveryStarted', THIS_WHOMBAT),
+  recoveryRotating: fixed('recoveryRotating', THIS_WHOMBAT),
+  recoveryRegistered: fixed('recoveryRegistered', THIS_WHOMBAT),
+  recoveryRotated: fixed('recoveryRotated', THIS_WHOMBAT),
+  ownAddressForeign: fixed('ownAddressForeign', ABOUT),
+  remoteHelpLockedOut: fixed('remoteHelpLockedOut', ABOUT),
 } as const satisfies Record<string, SecurityNotice>;
 
 /** A bring back is done and the box waits for the person's one answer (a `backup` push, sent in quarantine). */
-export const RESTORE_DONE_NOTICE: SecurityNotice = {
-  title: 'Your Whombat is back',
-  body: 'Open it to finish.',
-  path: '/settings?tab=appliance&section=backups&finish=restore',
-};
+export const RESTORE_DONE_NOTICE: SecurityNotice = fixed(
+  'restoreDone',
+  '/settings?tab=appliance&section=backups&finish=restore',
+);
 
-/** A remote help visit, for a person without a Chat to say it in (`remoteHelpVisitText` is the body). */
-export function remoteHelpVisitNotice(body: string): SecurityNotice {
-  return { title: 'Support is looking at your Whombat', body, path: ABOUT };
+/**
+ * A remote help visit, for a person without a Chat to say it in (`remoteHelpVisitText` is the body); `who` names the
+ * visitor so the body can be said again in another language.
+ */
+export function remoteHelpVisitNotice(body: string, who?: string): SecurityNotice {
+  return {
+    title: tServer(null, 'managed.security.remoteHelpVisit.title'),
+    body,
+    path: ABOUT,
+    words: (locale) => ({
+      title: tServer(locale, 'managed.security.remoteHelpVisit.title'),
+      body:
+        who === undefined
+          ? localizePhrase(body, locale)
+          : fillRemoteHelpWords(remoteHelpWords(locale).messages.visit, { who }),
+    }),
+  };
+}
+
+/** A notice's two lines in a locale: its own words when it has them, else through the phrasebook. */
+export function noticeIn(notice: SecurityNotice, locale: string | null | undefined): SecurityNotice {
+  if (!locale || isEnglish(locale)) return notice;
+  const said = notice.words
+    ? notice.words(locale)
+    : { title: localizePhrase(notice.title, locale), body: localizePhrase(notice.body, locale) };
+  return { ...notice, ...said };
 }
 
 interface Sent {

@@ -18,6 +18,7 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { useToast } from '../../../components/Toast';
+import { currentLocale } from '../../../i18n/provider';
 import things from '../Things.module.css';
 import styles from './ThingPage.module.css';
 
@@ -54,7 +55,7 @@ export function RunsOnDialog({
       toast.show(said(result.data.runsOn?.name ?? null));
       onClose();
     } catch (err) {
-      setProblem(hostErrorInfo(err).message);
+      setProblem(hostErrorInfo(err, currentLocale()).message);
     }
   };
   const row = (

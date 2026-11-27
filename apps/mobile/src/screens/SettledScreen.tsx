@@ -8,6 +8,7 @@
  * gets the menu's choices as the row's actions. Live on the room (`useChatThreads`), and an Open again changes it at once
  * (`useThreadSettle`). At its foot, when threads settle by themselves (Whombat chat-inbox.md CIB-09).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CHAT_WORDS, SETTLE_WORDS, SETTLED_PAGE, threadIconFields, threadRows } from '@whombat/client';
 import { useChatRooms, useChatThreads } from '@whombat/client/react';
@@ -15,13 +16,14 @@ import type { ChatThread, ConversationLink } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrow, useNow } from '../data/BurrowProvider';
-import { CHAT_COPY, phoneThreadRows } from '../data/chatRoom';
+import { chatCopy, phoneThreadRows } from '../data/chatRoom';
 import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, parseSettledPick, settledThreadMenu } from '../data/nativeMenu';
 import { chatPreferencesOf, SETTLE_COPY, settledRowLine, settledShelf } from '../data/threadSettle';
 import { useAgentWords } from '../data/useAgent';
 import { useSettleThread } from '../data/useThreadSettle';
 import { useWebUrl } from '../data/useWebUrl';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { QuietChoiceRow } from '../settings/ChatSettleSection';
 import { Text } from '../theme/Text';
@@ -46,6 +48,10 @@ interface ListRow {
 }
 
 export function SettledScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const chatCopyHere = chatCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const room = route.params?.room ?? 'chat';
@@ -135,10 +141,10 @@ export function SettledScreen({ route, navigation }: Props) {
       >
         {shelf.isLoading ? (
           <View style={{ paddingHorizontal: 18, paddingTop: 14 }}>
-            <SkeletonRows count={6} lines={2} label="Loading the settled threads" />
+            <SkeletonRows count={6} lines={2} label={tMobile('screens.loading-the-settled-threads')} />
           </View>
         ) : shelf.error && rows.length === 0 ? (
-          <ErrorState text={CHAT_COPY.settledFailed} onRetry={shelf.refetch} />
+          <ErrorState text={chatCopyHere.settledFailed} onRetry={shelf.refetch} />
         ) : rows.length === 0 ? (
           <View style={{ paddingHorizontal: 18, paddingTop: 14 }}>
             <QuietText>{SETTLE_WORDS.noneSettled}</QuietText>

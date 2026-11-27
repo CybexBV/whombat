@@ -5,9 +5,8 @@
  * verified”) with the button to what it was about. Core holds the rules and the words (`groupAuditByDay`, `auditPill`,
  * `auditFields`, `auditLinkLabel`); this reads a route's filters and builds the rows. Pure.
  */
+
 import {
-  AUDIT_ACTOR_LABELS,
-  AUDIT_KIND_FILTER_LABELS,
   AUDIT_KIND_FILTERS,
   type AuditActorFilter,
   AuditActorFilter as AuditActorFilterSchema,
@@ -17,7 +16,9 @@ import {
   type AuditKindFilter,
   AuditKindFilter as AuditKindFilterSchema,
   type AuditTone,
+  auditActorLabels,
   auditFields,
+  auditKindFilterLabels,
   auditLinkLabel,
   auditMeta,
   auditPill,
@@ -28,7 +29,9 @@ import {
   type SystemKind,
   shortNameOf,
 } from '@whombat/core';
+import { coreTranslator } from '@whombat/core/i18n';
 import { vaultAuditDetailText } from '@whombat/core/vault';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * The tag beside one of Whombat's own signers (Whombat one-agent.md OA-17; AP-4994): an automation's, GitHub's mirror,
@@ -66,18 +69,23 @@ export function auditFilters(params: Record<string, unknown> | undefined): Audit
   };
 }
 
-export const AUDIT_ACTOR_OPTIONS: readonly { value: AuditActorFilter; label: string }[] =
-  AuditActorFilterSchema.options.map((value) => ({ value, label: AUDIT_ACTOR_LABELS[value] }));
+export function auditActorOptions(locale?: string): readonly { value: AuditActorFilter; label: string }[] {
+  const labels = auditActorLabels(locale);
+  return AuditActorFilterSchema.options.map((value) => ({ value, label: labels[value] }));
+}
+export const AUDIT_ACTOR_OPTIONS = auditActorOptions();
 
 /** The kind chips: Vault only once the log holds a Vault event, or while it's chosen (the web's AP-117 rule). */
 export function auditKindChips(
   kind: AuditKindFilter,
   counts: Partial<AuditCounts> | undefined,
+  locale?: string,
 ): { value: AuditKindFilter; label: string; count: number; active: boolean }[] {
+  const labels = auditKindFilterLabels(locale);
   return AUDIT_KIND_FILTERS.filter((value) => value !== 'vault' || kind === 'vault' || !!counts?.vault).map(
     (value) => ({
       value,
-      label: AUDIT_KIND_FILTER_LABELS[value],
+      label: labels[value],
       count: counts?.[value] ?? 0,
       active: kind === value,
     }),
@@ -89,6 +97,7 @@ export function auditContext(
   principals: readonly Principal[],
   now: Date | string,
   timeZone: string,
+  locale?: string,
 ): AuditDisplayContext {
   const byId = new Map(principals.map((p) => [p.id, p]));
   return {
@@ -100,6 +109,7 @@ export function auditContext(
     },
     now,
     timeZone,
+    ...(locale && { locale }),
   };
 }
 
@@ -131,11 +141,14 @@ export function auditRow(
   actor: Principal | undefined,
 ): AuditRowModel {
   const info = ctx.principal(event.actorId);
-  const name = info?.name ?? 'Someone';
+  const unknown = coreTranslator(ctx.locale).t('audit.someone');
+  const name = info?.name ?? unknown;
   const tag =
     actor?.kind === 'system'
-      ? SYSTEM_AUDIT_TAGS[actor.system]
-      : auditTag(info ?? { kind: 'person', name: 'Someone', shortName: 'Someone' });
+      ? actor.system === 'automation'
+        ? mobileTranslator(ctx.locale).t('audit.automation')
+        : SYSTEM_AUDIT_TAGS[actor.system]
+      : auditTag(info ?? { kind: 'person', name: unknown, shortName: unknown }, ctx.locale);
   const pill = auditPill(event, ctx);
   // A Vault event reads which entry and what was done (vault.md VT-52); anything else the signed text.
   const text = vaultAuditDetailText(event) ?? event.text ?? '';
@@ -166,7 +179,15 @@ export function auditDetail(event: AuditEvent, ctx: AuditDisplayContext): AuditD
   const ref = event.ref;
   return {
     fields: auditFields(event, ctx),
-    link: ref ? { ref, label: auditLinkLabel(ref, { approvalPending: pill?.tone === 'warn' }) } : null,
+    link: ref
+      ? {
+          ref,
+          label: auditLinkLabel(ref, {
+            approvalPending: pill?.tone === 'warn',
+            ...(ctx.locale && { locale: ctx.locale }),
+          }),
+        }
+      : null,
   };
 }
 
@@ -180,10 +201,14 @@ export function auditRouteParams(f: AuditFilters): Partial<Record<keyof AuditFil
   };
 }
 
-export const AUDIT_TEXT = {
-  title: 'Audit log',
-  loadFailed: 'Couldn’t load the audit log. Try again in a moment.',
-  empty: 'Nothing in the log matches these filters.',
-  loadMore: 'Load more',
-  loading: 'Loading…',
-} as const;
+export function auditText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    title: t('audit.auditText.title'),
+    loadFailed: t('audit.auditText.loadFailed'),
+    empty: t('audit.auditText.empty'),
+    loadMore: t('audit.auditText.loadMore'),
+    loading: t('audit.auditText.loading'),
+  } as const;
+}
+export const AUDIT_TEXT = auditText();

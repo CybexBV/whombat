@@ -5,6 +5,7 @@
  * word are the shared client's (`screen-signin.ts`, `COPY.screen`); this is the phone's look of them (the managed
  * journeys' `Frame`, 44dp targets, the keyboard in capitals with Android's one-time-code autofill).
  */
+
 import {
   formatScreenLettersInput,
   type ScreenSignInDeps,
@@ -16,6 +17,7 @@ import {
 import type { ApplianceSession } from '@whombat/client/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, View } from 'react-native';
+import { useMobileT } from '../i18n';
 import { Screen } from '../ui/headers';
 import { Button, Loading } from '../ui/primitives';
 import { COPY } from './copy';
@@ -102,9 +104,10 @@ function ScreenLettersScreen({
 
 /** A stop the machine can't get past here (too old, no screen, not the box on the screen): what happened, and Back. */
 function ScreenStoppedScreen({ error, onBack }: { error: string; onBack: () => void }) {
+  const { t: tMobile } = useMobileT();
   return (
     <Frame kicker={T.kicker} title={T.title} sub={error}>
-      <Button label="Back" size="lg" onPress={onBack} />
+      <Button label={tMobile('managed.back')} size="lg" onPress={onBack} />
     </Frame>
   );
 }

@@ -14,6 +14,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import settings from '../settings/SettingsScreen.module.css';
 import { FEEDBACK_TEXT, lastChangedLine, stepCounter } from './copy';
 import styles from './Feedback.module.css';
@@ -596,7 +597,11 @@ function EditIntegration({
 
   const timeZone = boot?.preferences.timeZone ?? boot?.burrow.timeZone ?? 'UTC';
   const by = boot?.principals.find((p) => p.id === i.updatedById)?.name ?? i.updatedById;
-  const changed = lastChangedLine(formatDate(i.updatedAt, timeZone, { now: Date.now() }), by, i.revision);
+  const changed = lastChangedLine(
+    formatDate(i.updatedAt, timeZone, { now: Date.now() }, currentLocale()),
+    by,
+    i.revision,
+  );
 
   async function save() {
     const result = await f.submit();

@@ -30,9 +30,10 @@ const (
 
 // Screen is a validated state, ready to render.
 type Screen struct {
-	State string
-	Code  string // claimable only, display form LL-NNNN-LL
-	URL   string // without the scheme, e.g. dev.whombat.com/claim
+	Locale string // used by the graphical console
+	State  string
+	Code   string // claimable only, display form LL-NNNN-LL
+	URL    string // without the scheme, e.g. dev.whombat.com/claim
 	// ClaimHref is the claim link as a phone opens it (“https://…”), for the graphical console's QR code: "" unless the
 	// file's url is https, as a plain-HTTP address opens nothing a phone could use.
 	ClaimHref string
@@ -115,6 +116,9 @@ func Parse(data []byte) (Screen, error) {
 		return Screen{}, err
 	}
 	sc := Screen{State: string(st.State)}
+	if st.Locale != nil {
+		sc.Locale = *st.Locale
+	}
 	if sc.URL, err = displayURL(st.URL); err != nil {
 		return Screen{}, err
 	}
@@ -175,7 +179,7 @@ func (s Screen) fallback(raw string) (tailnet, app string) {
 // the sign-in panel (BX-06), the alert (contracts 4.3; a kind from a newer runtime is outside this contract's enum),
 // the reach (contracts 4.4; likewise a newer Link state) and the claim's second address (fallbackUrl). A runtime that
 // gets one wrong never blanks the console or hides its claim code.
-var decorationMembers = []string{"signIn", "burrows", "alert", "reach", "fallbackUrl"}
+var decorationMembers = []string{"signIn", "burrows", "alert", "reach", "fallbackUrl", "locale"}
 
 // decorations is every set of decorationMembers to drop, fewest first (nil: drop nothing), so a file loses no more than
 // it must.

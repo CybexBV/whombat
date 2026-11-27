@@ -5,6 +5,7 @@
  * old address and keeping the phone's copy of the address in step. Pure, apart from the checker's timer; the web and
  * the phone show the same words.
  */
+import { interpolate, resolveLanguage } from '@whombat/core/i18n';
 import { ownAddressNameProblem } from '@whombat/core/own-address';
 import {
   OWN_ADDRESS_ZONE_CERTIFICATES,
@@ -14,6 +15,8 @@ import {
   ownAddressZoneOf,
 } from '@whombat/protocol';
 import { parseLocalLink } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { OWN_NAME_WORDS } from '../i18n/messages/ownName';
 import { OperationError, type OwnAddressSummary } from '../session/managed-ops';
 
 /** The zone new names get; the field shows it after the name. Control's answer names the real host. */
@@ -22,62 +25,22 @@ export const OWN_NAME_ZONE = OWN_ADDRESS_ZONES.prod;
 /** The last day Cloudflare's own certificates for `*.whombat.app` are valid (the later of the two). */
 const ZONE_CERTIFICATES_END = Math.max(...OWN_ADDRESS_ZONE_CERTIFICATES.map((c) => Date.parse(c.notAfter)));
 
-export const OWN_NAME_TEXT = {
-  /** The account site's confirm step. */
-  row: 'Web address',
-  random: (example: string) => `A random name, like ${example}`,
-  randomExample: `maple-otter-river.${OWN_NAME_ZONE}`,
-  choose: 'Choose your own',
-  useRandom: 'Use a random name',
-  /** The field's label (`[ name ].whombat.app`). */
-  label: 'Name',
-  placeholder: 'home',
-  checking: 'Checking…',
-  free: (host: string) => `${host} is free.`,
-  /** This box had the name before: it may have it back. */
-  yours: (host: string) => `${host} was this Whombat’s. You can have it back.`,
-  current: 'That’s its address now.',
-  taken: 'That name is taken.',
-  reserved: 'That name isn’t available.',
-  invalid: 'Use 3 to 32 lower-case letters, digits and single hyphens, starting with a letter.',
-  failed: 'Couldn’t check that name. Try again in a moment.',
-  /** Wherever a person types a name. */
-  privacy: 'Anyone can see this name, so leave out anything private.',
-  /** Settings → This Whombat → ADDRESS. */
-  change: 'Change',
-  changeTitle: 'Change your Whombat’s address',
-  explain:
-    'Your Whombat answers at both addresses for 30 days. Then each browser and phone needs a passkey for the new address.',
-  changeAddress: 'Change address',
-  changing: 'Changing…',
-  cancel: 'Cancel',
-  changed: (host: string) => `Your Whombat’s address is now ${host}.`,
-  leaving: (date: string) => `Old address · works until ${date}`,
-  cloudflare:
-    'Until 16 February 2027, Cloudflare, which runs whombat.app’s DNS, also holds a certificate for this address.',
-  errors: {
-    label_invalid: 'Use 3 to 32 lower-case letters, digits and single hyphens, starting with a letter.',
-    label_reserved: 'That name isn’t available.',
-    label_taken: 'That name is taken.',
-    rename_limit: 'You can change the address 3 times a year.',
-    link_off: 'Turn on Whombat Link to change your Whombat’s address.',
-    own_address_off: 'Turn on Whombat Link to change your Whombat’s address.',
-    own_address_unavailable: 'This Whombat can’t change its address yet. Update it, then try again.',
-    control_unreachable: 'Whombat’s service didn’t answer. Try again in a moment.',
-    rate_limited: 'Too many tries. Wait a few minutes, then try again.',
-    failed: 'That didn’t work. Try again.',
-  },
-  /** The box's page at its old address. */
-  moved: (host: string, date: string) =>
-    `Your Whombat moved to ${host}. This address stops working on ${date}.`,
-  go: 'Go to the new address',
-  going: 'Opening…',
-  /** The passkeys section at the new address while this device's passkeys are all for the old one. */
-  passkeyNew: 'Add a passkey for your new address',
-  passkeyHere: 'Add a passkey for this address',
-} as const;
+/** The own address's words, in a locale (English when none is given). */
+export function ownNameText(locale?: string | null) {
+  const w = clientTree(locale, OWN_NAME_WORDS);
+  return {
+    ...w,
+    random: (example: string) => interpolate(w.random, { example }),
+    randomExample: interpolate(w.randomExample, { zone: OWN_NAME_ZONE }),
+    free: (host: string) => interpolate(w.free, { host }),
+    yours: (host: string) => interpolate(w.yours, { host }),
+    changed: (host: string) => interpolate(w.changed, { host }),
+    leaving: (date: string) => interpolate(w.leaving, { date }),
+    moved: (host: string, date: string) => interpolate(w.moved, { host, date }),
+  };
+}
 
-const T = OWN_NAME_TEXT;
+export const OWN_NAME_TEXT = ownNameText('en');
 
 /** A typed name as it is checked: trimmed and lower case (the field takes nothing else). */
 export function ownNameCandidate(typed: string): string {
@@ -115,7 +78,9 @@ export function ownNameLocal(typed: string, current?: string | null): OwnNameChe
 export function ownNameLine(
   check: OwnNameCheck,
   zone: string = OWN_NAME_ZONE,
+  locale?: string | null,
 ): { text: string; tone: 'ok' | 'bad' | 'mut' } | null {
+  const T = ownNameText(locale);
   switch (check.kind) {
     case 'idle':
       return null;
@@ -186,7 +151,8 @@ export function createOwnNameChecker(input: {
 }
 
 /** A refused rename in plain words (`error.details.code`). */
-export function ownAddressRenameErrorText(error: unknown): string {
+export function ownAddressRenameErrorText(error: unknown, locale?: string | null): string {
+  const T = ownNameText(locale);
   if (!(error instanceof OperationError)) return T.errors.failed;
   const reason = (error.details as { code?: unknown } | undefined)?.code ?? error.code;
   if (reason === 'unknown_op') return T.errors.own_address_unavailable;
@@ -196,8 +162,8 @@ export function ownAddressRenameErrorText(error: unknown): string {
 }
 
 /** “23 December”: the day an old address stops, always within the next month or so. */
-export function ownAddressDay(iso: string, timeZone?: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+export function ownAddressDay(iso: string, timeZone?: string, locale?: string | null): string {
+  return new Intl.DateTimeFormat(resolveLanguage(locale) === 'nl' ? 'nl-NL' : 'en-GB', {
     day: 'numeric',
     month: 'long',
     ...(timeZone && { timeZone }),
@@ -209,19 +175,28 @@ export function ownAddressLeavingView(
   own: Pick<OwnAddressSummary, 'leaving'>,
   now: number = Date.now(),
   timeZone?: string,
+  locale?: string | null,
 ): { host: string; url: string; line: string } | null {
   const l = own.leaving;
   if (!l || Date.parse(l.until) <= now) return null;
-  return { host: l.host, url: l.url, line: T.leaving(ownAddressDay(l.until, timeZone)) };
+  return {
+    host: l.host,
+    url: l.url,
+    line: ownNameText(locale).leaving(ownAddressDay(l.until, timeZone, locale)),
+  };
 }
 
 /**
  * The line about Cloudflare's certificates for `*.whombat.app`: while the host is right under `whombat.app` (they don't
  * cover `<name>.box.whombat.app`) and they are still valid.
  */
-export function ownAddressCloudflareLine(host: string, now: number = Date.now()): string | null {
+export function ownAddressCloudflareLine(
+  host: string,
+  now: number = Date.now(),
+  locale?: string | null,
+): string | null {
   return ownAddressZoneOf(host) === OWN_ADDRESS_ZONES.prod && now < ZONE_CERTIFICATES_END
-    ? T.cloudflare
+    ? ownNameText(locale).cloudflare
     : null;
 }
 
@@ -234,10 +209,15 @@ export function ownAddressMovedView(
   pageHost: string | null,
   now: number = Date.now(),
   timeZone?: string,
+  locale?: string | null,
 ): { host: string; url: string; text: string } | null {
   const l = own?.leaving;
   if (!own || !l || !pageHost || pageHost !== l.host || Date.parse(l.until) <= now) return null;
-  return { host: own.host, url: own.url, text: T.moved(own.host, ownAddressDay(l.until, timeZone)) };
+  return {
+    host: own.host,
+    url: own.url,
+    text: ownNameText(locale).moved(own.host, ownAddressDay(l.until, timeZone, locale)),
+  };
 }
 
 /**

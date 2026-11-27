@@ -5,6 +5,7 @@
  * (`ShelfCard`) —, and Inventory's counts as tiles two by two — rows with the count on the right in a wide page's half
  * (`CountsCard`). The words, tags and order are `data/serviceSlots.ts`'s; colours only from the theme.
  */
+
 import { handleTheseView, KEEP_QUIET_WORDS, noticeGroups, thingImageInitial } from '@whombat/client';
 import type { ThingPagePanel, ThingTone } from '@whombat/core';
 import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
@@ -17,8 +18,8 @@ import {
 } from 'react-native';
 import { HumanAvatar } from '../../avatars/Avatars';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { DASHBOARD_COPY } from '../../data/dashboard';
-import { MONITORING_COPY } from '../../data/monitoring';
+import { dashboardCopy } from '../../data/dashboard';
+import { monitoringCopy } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
 import { type GalleryItemView, galleryItems, rowsOf, SERVICE_COPY } from '../../data/servicePanels';
 import {
@@ -45,10 +46,11 @@ import {
   type LinkRun,
   type NoticeRowView,
   noticeRows,
-  QUIET_LINE_COPY,
-  THING_PAGE_COPY,
+  quietLineCopy,
+  thingPageCopy,
 } from '../../data/thingPage';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { Meter } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -115,6 +117,9 @@ function ToneTag({ text, tone }: { text: string; tone: ThingTone | null }) {
  * more”; the lines quiet with the whole thing under their own “Show N on hold”. Nothing at all when it has no line.
  */
 export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
+  const dashboardCopyHere = dashboardCopy(rawLocale);
+
   const theme = useTheme();
   const quiet = ctx.quiet ?? null;
   const agent = useAgentWords();
@@ -177,7 +182,7 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
         ))}
         {more || open ? (
           <StripFold
-            label={open ? DASHBOARD_COPY.showFewer : DASHBOARD_COPY.showMore(more)}
+            label={open ? dashboardCopyHere.showFewer : dashboardCopyHere.showMore(more)}
             onPress={() => setOpen(!open)}
           />
         ) : null}
@@ -326,6 +331,11 @@ function StripLine({
   ctx: PanelContext;
   onMenu: ((row: NoticeRowView) => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+  const quietLineCopyHere = quietLineCopy(rawLocale);
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   const toneColor = useToneColor();
   const quiet = ctx.quiet ?? null;
@@ -439,7 +449,7 @@ function StripLine({
           feedback="wash"
           ringRadius={22}
           accessibilityLabel={row.menu.label}
-          accessibilityHint={QUIET_LINE_COPY.menuHint}
+          accessibilityHint={quietLineCopyHere.menuHint}
           style={MENU_DOT}
         >
           <Ellipsis size={18} color={theme.colors.mut} strokeWidth={1.8} />
@@ -451,12 +461,12 @@ function StripLine({
           disabled={quiet.busy(undo)}
           feedback="fade"
           ringRadius={10}
-          accessibilityLabel={QUIET_LINE_COPY.undoLabel(row.title)}
-          accessibilityHint={QUIET_LINE_COPY.undoHint}
+          accessibilityLabel={quietLineCopyHere.undoLabel(row.title)}
+          accessibilityHint={quietLineCopyHere.undoHint}
           style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
         >
           <Text size={13} weight={600} color={theme.colors.brand}>
-            {THING_PAGE_COPY.undo}
+            {thingPageCopyHere.undo}
           </Text>
         </Touchable>
       ) : null}
@@ -466,12 +476,12 @@ function StripLine({
           disabled={endQuiet.busy}
           feedback="fade"
           ringRadius={10}
-          accessibilityLabel={`${MONITORING_COPY.endNow}: ${row.title}`}
-          accessibilityHint={MONITORING_COPY.endNowHint}
+          accessibilityLabel={`${monitoringCopyHere.endNow}: ${row.title}`}
+          accessibilityHint={monitoringCopyHere.endNowHint}
           style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
         >
           <Text size={13} weight={600} color={theme.colors.brand}>
-            {MONITORING_COPY.endNow}
+            {monitoringCopyHere.endNow}
           </Text>
         </Touchable>
       ) : null}

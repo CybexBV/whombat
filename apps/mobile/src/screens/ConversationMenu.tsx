@@ -7,15 +7,17 @@
  * (Whombat one-agent.md OA-04; app one-agent.md AP-4981). On iPhone the button opens the same as iOS's own menu, the
  * notification levels one level down (ios-native.md).
  */
-import { FILES_COPY } from '@whombat/client';
+
 import type { ConversationKind, NotifyLevel } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { filesCopy } from '../data/filesCopy';
 import { type ConversationMenuLink, conversationMenu, parseConversationPick } from '../data/nativeMenu';
 import { notifyBody, notifyOptions } from '../data/notify';
 import { useSetNotify } from '../data/useEssentials';
 import { useFilesSpace } from '../data/useFiles';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Check, Ellipsis, Folder, ListChecks, type LucideIcon, Pin } from '../ui/icons';
@@ -111,6 +113,9 @@ export function ConversationMenu({
 
 /** What the menu holds, as a sheet or iOS's own: a notification level to pick, and the links. */
 function useConversationMenu(conversation: MenuConversation, { onPins, onPlans, onFiles }: MenuLinks) {
+  const { rawLocale } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
   const { slug } = useBurrowBase();
   const feedback = useDecisionFeedback();
   const files = useFilesSpace();
@@ -124,7 +129,7 @@ function useConversationMenu(conversation: MenuConversation, { onPins, onPlans, 
   const links: (ConversationMenuLink & { icon: LucideIcon; onPress: () => void })[] = [
     { key: 'pins', label: 'Pinned messages', icon: Pin, onPress: onPins },
     { key: 'plans', label: 'Plans', icon: ListChecks, onPress: onPlans },
-    ...(files ? [{ key: 'files' as const, label: FILES_COPY.title, icon: Folder, onPress: onFiles }] : []),
+    ...(files ? [{ key: 'files' as const, label: filesCopyHere.title, icon: Folder, onPress: onFiles }] : []),
   ];
   return { pick, links };
 }
@@ -139,11 +144,13 @@ export function ConversationMenuSheet({
   onClose: () => void;
   conversation: MenuConversation;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { pick, links } = useConversationMenu(conversation, menuLinks);
   return (
-    <Sheet visible={visible} onClose={onClose} label="Conversation options">
-      <View accessibilityRole="radiogroup" accessibilityLabel="Notifications">
+    <Sheet visible={visible} onClose={onClose} label={tMobile('screens.conversation-options')}>
+      <View accessibilityRole="radiogroup" accessibilityLabel={tClient('settings.you.notifications')}>
         <Text
           size={11}
           weight={500}
@@ -153,7 +160,7 @@ export function ConversationMenuSheet({
           accessibilityRole="header"
           style={{ paddingHorizontal: 22, paddingTop: 4, paddingBottom: 8 }}
         >
-          NOTIFICATIONS
+          {tMobile('screens.notifications')}
         </Text>
         {notifyOptions(conversation).map((o) => (
           <Touchable
@@ -217,7 +224,7 @@ export function ConversationMenuSheet({
         );
       })}
       <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
-        <Button label="Done" variant="secondary" onPress={onClose} />
+        <Button label={tClient('schedules.end.done')} variant="secondary" onPress={onClose} />
       </View>
     </Sheet>
   );

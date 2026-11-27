@@ -148,7 +148,7 @@ struct ActionsView: View {
           // Every button opens the activity's screen; `approve` (Review) opens the approval, where the person approves.
           if let url = state.url {
             Link(destination: url) {
-              Text(action == "approve" ? "Review" : action == "details" ? "Details" : "Open run")
+              Text(state.actionLabel(action))
                 .font(.system(size: 15, weight: action == "approve" ? .semibold : .medium))
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .foregroundStyle(action == "approve" ? Palette.btnfg : Palette.ink)

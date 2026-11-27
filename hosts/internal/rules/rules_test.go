@@ -306,6 +306,16 @@ func TestHeartbeatCondition(t *testing.T) {
 	if txt.Title != "Whombat’s helper isn’t checking in" || txt.Detail != "Nothing heard from it for 11 h 47 m" || c.Severity != SevCritical {
 		t.Errorf("heartbeat = %+v %s", txt, c.Severity)
 	}
+	if txt.Code != "agent.heartbeat_missing.elapsed" || txt.Params["heldSeconds"] != int64(11*3600+47*60) {
+		t.Errorf("elapsed translation data = %q %v", txt.Code, txt.Params)
+	}
+	first, ok := HeartbeatCondition(time.Time{}, now)
+	if !ok {
+		t.Fatal("a server that has never checked in should have an alert")
+	}
+	if txt := first.Render(0); txt.Code != "agent.heartbeat_missing.never" || len(txt.Params) != 0 {
+		t.Errorf("never translation data = %q %v", txt.Code, txt.Params)
+	}
 }
 
 func TestDiskSpaceAndAllocationRules(t *testing.T) {

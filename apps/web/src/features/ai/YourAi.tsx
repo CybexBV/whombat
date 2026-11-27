@@ -49,6 +49,7 @@ import { Icon } from '../../components/Icon';
 import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
+import { currentLocale } from '../../i18n/provider';
 import {
   ProviderReadiness,
   ProviderRow,
@@ -239,7 +240,7 @@ function YourSignInRow({
         : null;
   const stale =
     metered?.observedAt && isUsageStale(metered.observedAt, new Date(now))
-      ? INLINE_USAGE_TEXT.asOf(formatAsOf(metered.observedAt, now, timeZone))
+      ? INLINE_USAGE_TEXT.asOf(formatAsOf(metered.observedAt, now, timeZone, currentLocale()))
       : null;
   return (
     <SignInRow

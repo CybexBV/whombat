@@ -13,8 +13,6 @@
  */
 import {
   DESK_PIN_MAX,
-  DESK_TEXT,
-  DESK_WORDS,
   type DeskApi,
   type DeskCameraWakeView,
   type DeskLockAgainView,
@@ -34,13 +32,16 @@ import {
   deskSectionShown,
   deskSectionView,
   deskSwitchView,
+  deskText,
   formatDeskPinInput,
 } from '@whombat/client/desk';
 import { type DeskActions, useDesk, useDeskClock, useDeskListen } from '@whombat/client/desk/react';
+import { deskWords } from '@whombat/core/domain';
 import { type ReactNode, useState } from 'react';
 import { Alert, ScrollView, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -55,13 +56,21 @@ import { LettersField } from './screens';
 import { Card, ErrorLine, Field, LinkRow } from './ui';
 
 /** Something didn't go through: why, in the shared words. */
-const failed = (error: unknown) => Alert.alert('That didn’t go through', deskErrorText(error));
+export function useDeskFailure() {
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
+  return (error: unknown) => Alert.alert(t('managed.that-didnt-go-through'), deskErrorText(error, rawLocale));
+}
 
 /** The section's view of the screen now: the Whombat's times are real ones (the demo world's desk too). */
 function useDeskView(screen: DeskScreen) {
+  const { rawLocale } = useI18n();
   const { timeZone } = useBurrowBase();
   const assistant = useAgentWords().name;
-  return { view: deskSectionView(screen, { assistant, timeZone, now: Date.now() }), assistant };
+  return {
+    view: deskSectionView(screen, { locale: rawLocale, assistant, timeZone, now: Date.now() }),
+    assistant,
+  };
 }
 
 /**
@@ -69,13 +78,14 @@ function useDeskView(screen: DeskScreen) {
  * under it; where the box has a screen or one is paired. The unlock request stays on the Overview's top.
  */
 export function DeskSettingsRow({ api, onOpen }: { api: DeskApi | null; onOpen: () => void }) {
+  const { rawLocale } = useI18n();
   const desk = useDesk(api);
   const screen = desk.data;
   if (!api || !screen || !deskSectionShown(screen)) return null;
-  const line = deskSwitchView(screen).line;
-  const title = DESK_WORDS.settings.openScreen;
+  const line = deskSwitchView(screen, rawLocale).line;
+  const title = deskWords(rawLocale).settings.openScreen;
   return (
-    <Card label={DESK_TEXT.section}>
+    <Card label={deskText(rawLocale).section}>
       <LinkRow first title={title} meta={line} label={`${title}, ${line}`} onPress={onOpen} />
     </Card>
   );
@@ -86,6 +96,9 @@ export function DeskSettingsRow({ api, onOpen }: { api: DeskApi | null; onOpen: 
  * means (off while paired asks first); unpaired, one row and Pair the screen; paired, since when.
  */
 export function DeskSwitchCard({ screen, actions }: { screen: DeskScreen; actions: DeskActions }) {
+  const { rawLocale } = useI18n();
+  const { offDialog, dialog, pair } = deskText(rawLocale);
+  const failed = useDeskFailure();
   const { view } = useDeskView(screen);
   const [pairing, setPairing] = useState(false);
   // Pair the screen: its letters show now (or still do), then the sheet.
@@ -98,12 +111,12 @@ export function DeskSwitchCard({ screen, actions }: { screen: DeskScreen; action
   const setOn = (on: boolean) => {
     const p = screen.paired;
     if (on || !p) return void actions.setScreen(on).catch(failed);
-    Alert.alert(DESK_TEXT.offDialog.title, DESK_TEXT.offDialog.lead(p.hasPin !== false), [
-      { text: DESK_TEXT.dialog.cancel, style: 'cancel' },
+    Alert.alert(offDialog.title, offDialog.lead(p.hasPin !== false), [
+      { text: dialog.cancel, style: 'cancel' },
       {
-        text: DESK_TEXT.offDialog.submit,
+        text: offDialog.submit,
         style: 'destructive',
-        onPress: () => actions.setScreen(false).then(() => showNotice(DESK_TEXT.offDialog.done), failed),
+        onPress: () => actions.setScreen(false).then(() => showNotice(offDialog.done), failed),
       },
     ]);
   };
@@ -114,7 +127,7 @@ export function DeskSwitchCard({ screen, actions }: { screen: DeskScreen; action
         <Part>
           <Head title={view.unpaired.title} meta={view.unpaired.meta} />
           <Buttons>
-            <Button label={DESK_TEXT.pair} variant="secondary" onPress={startPairing} />
+            <Button label={pair} variant="secondary" onPress={startPairing} />
           </Buttons>
         </Part>
       ) : null}
@@ -130,6 +143,7 @@ export function DeskSwitchCard({ screen, actions }: { screen: DeskScreen; action
 
 /** Lock and PIN (AP-5864): the PIN with Change PIN (Choose a PIN while there is none), While locked it shows, Lock again. */
 export function DeskLockCard({ screen, actions }: { screen: DeskScreen; actions: DeskActions }) {
+  const failed = useDeskFailure();
   const { view } = useDeskView(screen);
   const [pinOpen, setPinOpen] = useState(false);
   const mine = view.mine;
@@ -151,6 +165,7 @@ export function DeskLockCard({ screen, actions }: { screen: DeskScreen; actions:
 
 /** Night (AP-5864): quiet hours with From and to and At night, and Use the camera to see when you’re here. */
 export function DeskNightCard({ screen, actions }: { screen: DeskScreen; actions: DeskActions }) {
+  const failed = useDeskFailure();
   const { view } = useDeskView(screen);
   if (!view.mine) return null;
   return (
@@ -176,6 +191,7 @@ export function DeskTalkCard({
   screen: DeskScreen;
   actions: DeskActions;
 }) {
+  const failed = useDeskFailure();
   const { view, assistant } = useDeskView(screen);
   const mine = view.mine;
   if (!mine) return null;
@@ -270,17 +286,18 @@ function SwitchPart({ view, onChange }: { view: DeskSwitchView; onChange: (on: b
 
 type Mine = NonNullable<DeskSectionView['mine']>;
 type Save = (patch: Parameters<DeskActions['update']>[0]) => void;
-const saver =
-  (actions: DeskActions): Save =>
-  (patch) =>
-    void actions.update(patch).catch(failed);
+function useDeskSave(actions: DeskActions): Save {
+  const failed = useDeskFailure();
+  return (patch) => void actions.update(patch).catch(failed);
+}
 
 /** The PIN: Change PIN beside it, or, with none yet (DK-18), the one thing to do, filled, under its sentence. */
 function PinPart({ mine, onChangePin, first }: { mine: Mine; onChangePin: () => void; first?: boolean }) {
+  const { rawLocale } = useI18n();
   return mine.pin.has ? (
     <Part first={first}>
       <Head
-        title={DESK_TEXT.pin}
+        title={deskText(rawLocale).pin}
         meta={mine.pin.meta}
         end={
           <Button
@@ -294,7 +311,7 @@ function PinPart({ mine, onChangePin, first }: { mine: Mine; onChangePin: () => 
     </Part>
   ) : (
     <Part first={first}>
-      <Head title={DESK_TEXT.pin} meta={mine.pin.meta} />
+      <Head title={deskText(rawLocale).pin} meta={mine.pin.meta} />
       <Buttons>
         <Button label={mine.pin.action} onPress={onChangePin} style={{ paddingHorizontal: 16 }} />
       </Buttons>
@@ -304,16 +321,17 @@ function PinPart({ mine, onChangePin, first }: { mine: Mine; onChangePin: () => 
 
 /** While locked it shows, and the chosen one's hint. */
 function LockedPart({ mine, actions }: { mine: Mine; actions: DeskActions }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
-  const save = saver(actions);
+  const save = useDeskSave(actions);
   return (
     <Part>
-      <Head title={DESK_TEXT.lockedShows} />
+      <Head title={deskText(rawLocale).lockedShows} />
       <Segmented
         options={mine.lockedOptions}
         value={mine.lockedView}
         onChange={(lockedView) => save({ lockedView })}
-        label={DESK_TEXT.lockedShows}
+        label={deskText(rawLocale).lockedShows}
       />
       <Text size={13} lh={1.4} color={theme.colors.mut}>
         {mine.lockedHint}
@@ -324,20 +342,21 @@ function LockedPart({ mine, actions }: { mine: Mine; actions: DeskActions }) {
 
 /** Quiet hours: From and to in the Whombat's time zone, and At night, while they're on. */
 function QuietPart({ mine, actions, first }: { mine: Mine; actions: DeskActions; first?: boolean }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
-  const save = saver(actions);
+  const save = useDeskSave(actions);
   const quiet = mine.quietHours;
   return (
     <Part first={first}>
       <Head
-        title={DESK_TEXT.quietHours}
+        title={deskText(rawLocale).quietHours}
         meta={mine.quietMeta}
         end={
           <Switch
             value={quiet.enabled}
             onValueChange={(enabled) => save({ quietHours: { ...quiet, enabled } })}
-            accessibilityLabel={DESK_TEXT.quietHours}
+            accessibilityLabel={deskText(rawLocale).quietHours}
             accessibilityHint={mine.quietMeta}
             accessibilityRole="switch"
             {...switchColors(theme, quiet.enabled)}
@@ -349,28 +368,28 @@ function QuietPart({ mine, actions, first }: { mine: Mine; actions: DeskActions;
         <>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
             <ClockField
-              label={DESK_TEXT.from}
+              label={deskText(rawLocale).from}
               value={quiet.start}
               onChange={(start) => save({ quietHours: { ...quiet, start } })}
             />
             <ClockField
-              label={DESK_TEXT.to}
+              label={deskText(rawLocale).to}
               value={quiet.end}
               onChange={(end) => save({ quietHours: { ...quiet, end } })}
             />
           </View>
           <Text size={12.5} lh={1.4} color={theme.colors.mut}>
-            {DESK_TEXT.inZone(timeZone)}
+            {deskText(rawLocale).inZone(timeZone)}
           </Text>
           <View style={{ gap: 8, paddingTop: 2 }}>
             <Text size={13} weight={500} color={theme.colors.ink2}>
-              {DESK_TEXT.atNight}
+              {deskText(rawLocale).atNight}
             </Text>
             <Segmented
               options={mine.nightOptions}
               value={mine.night}
               onChange={(night) => save({ night })}
-              label={DESK_TEXT.atNight}
+              label={deskText(rawLocale).atNight}
             />
           </View>
         </>
@@ -382,7 +401,7 @@ function QuietPart({ mine, actions, first }: { mine: Mine; actions: DeskActions;
 /** Talk to {assistant}: off and greyed where the machine can't hear. */
 function TalkPart({ mine, actions }: { mine: Mine; actions: DeskActions }) {
   const theme = useTheme();
-  const save = saver(actions);
+  const save = useDeskSave(actions);
   return (
     <Part first>
       <Head
@@ -422,6 +441,7 @@ function VoicePart({
   assistant: string;
   onChoose: (voice: DeskVoice) => void;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const player = useVoicePlayer();
   const listen = useDeskListen(api, { assistant, play: player.play, onFailed: showNotice });
@@ -442,7 +462,7 @@ function VoicePart({
         {view.options.map((o, i) => {
           const selected = o.value === view.value;
           const playing = listen.playing === o.value;
-          const action = playing ? DESK_TEXT.playing : DESK_TEXT.listen;
+          const action = playing ? deskText(rawLocale).playing : deskText(rawLocale).listen;
           return (
             <View
               key={o.value}
@@ -620,7 +640,8 @@ function PairSheet({
   actions: DeskActions;
   onClose: () => void;
 }) {
-  const D = DESK_TEXT.dialog;
+  const { rawLocale } = useI18n();
+  const D = deskText(rawLocale).dialog;
   const [letters, setLetters] = useState('');
   const [pin, setPin] = useState('');
   const [pinAgain, setPinAgain] = useState('');
@@ -640,10 +661,12 @@ function PairSheet({
   const newLetters = () => {
     setProblem(null);
     setLetters('');
-    actions.startPairing().catch((error) => setProblem({ letters: false, text: deskErrorText(error) }));
+    actions
+      .startPairing()
+      .catch((error) => setProblem({ letters: false, text: deskErrorText(error, rawLocale) }));
   };
   const pair = async () => {
-    const wrong = deskPairProblem({ letters, pin, pinAgain });
+    const wrong = deskPairProblem({ letters, pin, pinAgain }, rawLocale);
     if (wrong) return setProblem({ letters: wrong.field === 'letters', text: wrong.text });
     setProblem(null);
     setBusy(true);
@@ -652,7 +675,7 @@ function PairSheet({
       showNotice(D.done);
       close();
     } catch (error) {
-      setProblem({ letters: deskLettersRefused(error), text: deskErrorText(error) });
+      setProblem({ letters: deskLettersRefused(error), text: deskErrorText(error, rawLocale) });
       if (deskNeedsNewLetters(error)) setLetters('');
     } finally {
       setBusy(false);
@@ -704,7 +727,8 @@ function PinSheet({
   first: boolean;
   onClose: () => void;
 }) {
-  const P = first ? DESK_TEXT.firstPinDialog : DESK_TEXT.pinDialog;
+  const { rawLocale } = useI18n();
+  const P = first ? deskText(rawLocale).firstPinDialog : deskText(rawLocale).pinDialog;
   const [pin, setPin] = useState('');
   const [pinAgain, setPinAgain] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
@@ -716,7 +740,7 @@ function PinSheet({
     onClose();
   };
   const save = async () => {
-    const wrong = deskPinProblem(pin, pinAgain);
+    const wrong = deskPinProblem(pin, pinAgain, rawLocale);
     if (wrong) return setProblem(wrong.text);
     setProblem(null);
     setBusy(true);
@@ -725,20 +749,20 @@ function PinSheet({
       showNotice(P.done);
       close();
     } catch (error) {
-      setProblem(deskErrorText(error));
+      setProblem(deskErrorText(error, rawLocale));
     } finally {
       setBusy(false);
     }
   };
   return (
-    <Sheet visible={visible} onClose={close} label={P.title} closeLabel={DESK_TEXT.dialog.cancel}>
+    <Sheet visible={visible} onClose={close} label={P.title} closeLabel={deskText(rawLocale).dialog.cancel}>
       <SheetForm title={P.title} lead={P.lead}>
-        <PinField label={DESK_TEXT.dialog.pin} value={pin} onChange={setPin} />
-        <PinField label={DESK_TEXT.dialog.pinAgain} value={pinAgain} onChange={setPinAgain} />
+        <PinField label={deskText(rawLocale).dialog.pin} value={pin} onChange={setPin} />
+        <PinField label={deskText(rawLocale).dialog.pinAgain} value={pinAgain} onChange={setPinAgain} />
         <ErrorLine text={problem} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            label={DESK_TEXT.dialog.cancel}
+            label={deskText(rawLocale).dialog.cancel}
             variant="secondary"
             disabled={busy}
             onPress={close}

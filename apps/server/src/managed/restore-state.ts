@@ -10,6 +10,7 @@ import {
   BackupRestoreReason,
   BackupRestoreState,
 } from '@whombat/protocol/session';
+import { hasServerMessage, isEnglish, tServer } from '../i18n/catalog';
 import { type BackupPort, READ } from './backup-port';
 
 /** The service's answer as the app reads it; null when it isn't one. */
@@ -30,4 +31,17 @@ export function restoreStateOf(body: unknown): BackupRestoreState | null {
 export async function readRestoreState(port: BackupPort): Promise<BackupRestoreState | null> {
   const res = await port.call('GET', '/v1/quarantine', undefined, READ).catch(() => null);
   return res?.status === 200 ? restoreStateOf(res.body) : null;
+}
+
+/**
+ * A failed restore's sentence in a locale. The backup service writes its sentence in English and names why it failed
+ * by a code; other languages say the code's words, and a code this runtime doesn't know keeps the service's sentence.
+ */
+export function restoreStateIn<T extends BackupRestoreState | null>(
+  state: T,
+  locale: string | null | undefined,
+): T {
+  if (!state || isEnglish(locale) || !state.error || !state.reason) return state;
+  const key = `managed.backup.reason.${state.reason}`;
+  return hasServerMessage(key) ? { ...state, error: tServer(locale, key) } : state;
 }

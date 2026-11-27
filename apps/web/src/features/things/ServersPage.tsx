@@ -7,6 +7,7 @@
 import { fleetLine, isHostsUnavailable } from '@whombat/client/hosts';
 import { useHostsFleet, useHostsLive, useHostsStatus } from '@whombat/client/hosts/react';
 import { CONNECTIONS_HREF } from '@whombat/core';
+import { useWebI18n } from '../../i18n/provider';
 import { useBurrowContext } from '../messaging/useRoom';
 import { Crumb } from './dashboard/PageHead';
 import { FleetGuests } from './FleetGuests';
@@ -14,6 +15,7 @@ import { Card, ErrorLine, Skeleton } from './parts';
 import styles from './Things.module.css';
 
 export function ServersPage({ burrow }: { burrow: string }) {
+  const { t } = useWebI18n();
   const { bootstrap } = useBurrowContext(burrow);
   useHostsLive(bootstrap?.burrow.id);
   const status = useHostsStatus({ params: { burrow } }, { retry: false });
@@ -21,30 +23,29 @@ export function ServersPage({ burrow }: { burrow: string }) {
   const fleet = useHostsFleet(present ? { params: { burrow }, query: {} } : null);
   const servers = fleet.data?.servers ?? [];
   let body: React.ReactNode;
-  if (status.data && !present)
-    body = <p className={styles.dialogBody}>Servers aren’t set up on this Whombat.</p>;
+  if (status.data && !present) body = <p className={styles.dialogBody}>{t('servers.page.notSetUp')}</p>;
   else if (
     isHostsUnavailable(status.error) ||
     isHostsUnavailable(fleet.error) ||
     status.data?.healthy === false
   )
-    body = <p className={styles.dialogBody}>Servers aren’t reachable right now. Whombat keeps trying.</p>;
+    body = <p className={styles.dialogBody}>{t('servers.page.unreachable')}</p>;
   else if (fleet.error) body = <ErrorLine error={fleet.error} onRetry={() => void fleet.refetch()} />;
   else if (!fleet.data) body = <Skeleton height={240} />;
   else if (!servers.length)
     body = (
       <Card>
-        <p className={styles.empty}>No servers yet.</p>
+        <p className={styles.empty}>{t('servers.page.none')}</p>
       </Card>
     );
   else body = <FleetGuests burrow={burrow} servers={servers} />;
   return (
     <div className={styles.screen} data-screen="servers">
       <div className={styles.scroll}>
-        <main className={styles.page} aria-label="Everything running on your servers">
-          <Crumb href={CONNECTIONS_HREF} label="Connections" />
+        <main className={styles.page} aria-label={t('servers.page.title')}>
+          <Crumb href={CONNECTIONS_HREF} label={t('sidebar.connections')} />
           <div className={styles.head}>
-            <h1 className={styles.titleSans}>Everything running on your servers</h1>
+            <h1 className={styles.titleSans}>{t('servers.page.title')}</h1>
           </div>
           {servers.length ? <div className={styles.facts}>{fleetLine(servers)}</div> : null}
           {body}

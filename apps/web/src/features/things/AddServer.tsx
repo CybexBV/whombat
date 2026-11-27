@@ -46,12 +46,12 @@ import {
 import { useVault, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import {
-  HOST_CONTROL_LEVEL_WORDS,
   HOST_CONTROL_LEVELS,
   type HostControlLevel,
   type HostEnrollment,
   type HostInstall,
   type HostPendingEnrollment,
+  hostControlLevelWords,
 } from '@whombat/core/domain';
 import { Check as CheckIcon, ChevronRight, X } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -64,12 +64,15 @@ import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { Tabs } from '../../components/Tabs';
 import { useToast } from '../../components/Toast';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import s from './AddServer.module.css';
 import { Check, SelectField, TextField } from './manage/fields';
 import { useChangeRunner } from './parts';
 import styles from './Things.module.css';
 
 export function AddServerDialog({ burrow, onClose }: { burrow: string; onClose: () => void }) {
+  const { tag: uiLocale } = useWebI18n();
   const status = useHostsStatus({ params: { burrow } });
   const absent = status.data && !status.data.present;
   const refusal = absent
@@ -77,7 +80,7 @@ export function AddServerDialog({ burrow, onClose }: { burrow: string; onClose: 
     : status.error
       ? isHostsUnavailable(status.error)
         ? 'Servers aren’t reachable right now.'
-        : hostErrorInfo(status.error).message
+        : hostErrorInfo(status.error, uiLocale).message
       : null;
   if (refusal || !status.data)
     return (
@@ -103,6 +106,8 @@ export function AddServerDialog({ burrow, onClose }: { burrow: string; onClose: 
 type Way = 'signin' | 'command';
 
 function AddServer({ burrow, onClose }: { burrow: string; onClose: () => void }) {
+  const HOST_CONTROL_LEVEL_WORDS = useLocaleWords(hostControlLevelWords);
+  const { tag: uiLocale } = useWebI18n();
   const raw = useRouterState({ select: (st) => st.location.search }) as Record<string, unknown>;
   // What the dialog opened with (the assistant's card, SI-10); later changes to the address don't refill the form.
   const [prefill] = useState(() => addServerPrefill(raw));
@@ -138,7 +143,7 @@ function AddServer({ burrow, onClose }: { burrow: string; onClose: () => void })
         <Progress
           burrow={burrow}
           view={view}
-          lost={followed.error && !followed.data ? hostErrorInfo(followed.error).message : null}
+          lost={followed.error && !followed.data ? hostErrorInfo(followed.error, uiLocale).message : null}
           onHide={close}
           onClose={onClose}
           onRetry={() => {
@@ -266,9 +271,9 @@ function SignInOnce({
     try {
       const r = await start.mutateAsync({ params: { burrow }, body: installBody(g, control) });
       if (r.status === 'ok') onStarted(r.data);
-      else setRefusal(commitOutcomeText(r));
+      else setRefusal(commitOutcomeText(r, currentLocale()));
     } catch (err) {
-      const info = hostErrorInfo(err);
+      const info = hostErrorInfo(err, currentLocale());
       const fields: SignInErrors = {};
       for (const k of ['address', 'username', 'name'] as const)
         if (info.fields[k]) fields[k] = info.fields[k];
@@ -618,11 +623,11 @@ function RunCommand({
       .current({ params: { burrow }, body: { control } })
       .then((r) => {
         if (r.status === 'ok') onMadeRef.current(control, r.data);
-        else setError(commitOutcomeText(r));
+        else setError(commitOutcomeText(r, currentLocale()));
       })
       .catch((err: unknown) => {
         asked.current.delete(control);
-        setError(hostErrorInfo(err).message);
+        setError(hostErrorInfo(err, currentLocale()).message);
       });
   }, [burrow, control, enrollment]);
   // Pre-approved: once the command has run, the server is added; the list says which (its frame, else every 10 s).
@@ -691,6 +696,7 @@ function WaitingForYou({ burrow, items }: { burrow: string; items: readonly Host
 }
 
 function PendingRow({ burrow, enrollment: e }: { burrow: string; enrollment: HostPendingEnrollment }) {
+  const { tag: uiLocale } = useWebI18n();
   const approve = useHostsChange(api.hosts.approveEnrollment);
   const reject = useHostsChange(api.hosts.rejectEnrollment);
   const { run, busy } = useChangeRunner();
@@ -712,7 +718,9 @@ function PendingRow({ burrow, enrollment: e }: { burrow: string; enrollment: Hos
           onChange={(ev) => setName(ev.target.value)}
         />
         <small className={styles.muted}>
-          {e.requestedAt ? `Asked ${formatAgo((Date.now() - Date.parse(e.requestedAt)) / 1000)}` : ''}
+          {e.requestedAt
+            ? `Asked ${formatAgo((Date.now() - Date.parse(e.requestedAt)) / 1000, uiLocale)}`
+            : ''}
         </small>
       </div>
       <span style={{ display: 'inline-flex', gap: 8, marginBottom: 22 }}>

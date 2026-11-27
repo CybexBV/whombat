@@ -5,17 +5,16 @@
  */
 import { Switch, View } from 'react-native';
 import { useFaceMotionSetting } from '../avatars/faceMotionSetting';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Smile } from '../ui/icons';
 import { switchColors } from '../ui/switchColors';
 
-export const FACE_MOTION_TEXT = {
-  title: 'Moving faces',
-  line: 'Faces blink and show what your agents are doing.',
-} as const;
-
 export function FaceMotionRow({ first = false }: { first?: boolean }) {
+  const { t } = useMobileT();
+  const title = t('settings.movingFaces.title');
+  const line = t('settings.movingFaces.line');
   const theme = useTheme();
   const [on, setOn] = useFaceMotionSetting();
   return (
@@ -36,17 +35,17 @@ export function FaceMotionRow({ first = false }: { first?: boolean }) {
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Text size={16} weight={600}>
-          {FACE_MOTION_TEXT.title}
+          {title}
         </Text>
         <Text size={13.5} lh={1.4} color={theme.colors.ink2}>
-          {FACE_MOTION_TEXT.line}
+          {line}
         </Text>
       </View>
       <Switch
         value={on}
         onValueChange={setOn}
-        accessibilityLabel={FACE_MOTION_TEXT.title}
-        accessibilityHint={FACE_MOTION_TEXT.line}
+        accessibilityLabel={title}
+        accessibilityHint={line}
         accessibilityRole="switch"
         {...switchColors(theme, on)}
         style={{ minHeight: 44 }}

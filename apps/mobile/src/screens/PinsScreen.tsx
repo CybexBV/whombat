@@ -4,6 +4,7 @@
  * a reply opens its thread at the reply; on a top-level message it goes back to the conversation, at the message
  * (MX-03). Unpin is on the message's own long-press menu.
  */
+
 import { CommonActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { usePins } from '@whombat/client/react';
@@ -12,6 +13,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { PrincipalAvatar } from '../avatars/Avatars';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { pinnedMessageOpen } from '../data/chatScroll';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { useTheme } from '../theme/theme';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
@@ -30,6 +32,9 @@ function pinnedText(m: Message): string {
 }
 
 export function PinsScreen({ route, navigation }: Props) {
+  const { rawLocale, tClient } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, people } = useBurrowBase();
@@ -67,21 +72,24 @@ export function PinsScreen({ route, navigation }: Props) {
           />
         }
       >
-        <LargeTitle title="Pinned" />
+        <LargeTitle title={tClient('overview.tab.pinned')} />
         <View style={{ height: 10 }} />
         {pins.isPending ? (
-          <SkeletonRows count={4} avatarSize={44} label="Loading pinned messages" />
+          <SkeletonRows count={4} avatarSize={44} label={tMobile('screens.loading-pinned-messages')} />
         ) : pins.error && !pins.data ? (
-          <ErrorState text="Pinned messages didn’t load." onRetry={() => void pins.refetch()} />
+          <ErrorState
+            text={tMobile('screens.pinned-messages-didnt-load')}
+            onRetry={() => void pins.refetch()}
+          />
         ) : messages.length === 0 ? (
-          <QuietText>Nothing is pinned here yet. Long-press a message and pick Pin.</QuietText>
+          <QuietText>{tMobile('screens.nothing-is-pinned-here-yet-long-press-a')}</QuietText>
         ) : (
           <Section title={`PINNED · ${messages.length}`}>
             {messages.map((m) => {
               const name = people.name(m.authorId);
               const text = pinnedText(m);
               const pinnedBy = m.pinnedById ? people.name(m.pinnedById) : null;
-              const when = m.pinnedAt ? formatRecent(m.pinnedAt, ctx.now, ctx.timeZone) : null;
+              const when = m.pinnedAt ? formatRecent(m.pinnedAt, ctx.now, ctx.timeZone, rawLocale) : null;
               const meta = [pinnedBy ? `pinned by ${pinnedBy}` : null, when].filter(Boolean).join(' · ');
               return (
                 <ListRow
@@ -89,7 +97,7 @@ export function PinsScreen({ route, navigation }: Props) {
                   leading={<PrincipalAvatar principal={people.get(m.authorId)} size={44} />}
                   title={name}
                   meta={meta}
-                  trailing={formatRecent(m.createdAt, ctx.now, ctx.timeZone)}
+                  trailing={formatRecent(m.createdAt, ctx.now, ctx.timeZone, rawLocale)}
                   body={text}
                   accessibilityLabel={`${name}: ${text}. ${meta}`}
                   onPress={() => open(m)}

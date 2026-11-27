@@ -5,6 +5,7 @@
  * `keys.merge_deploy`), asking first, and Branch room. Live through `pr.updated` on the room's topic; pull to refresh.
  * Opened from a run (its PR number), a run card and the branch room.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
 import { mergeErrorText, mergeOutcomeText } from '@whombat/client';
@@ -18,6 +19,7 @@ import { PrincipalAvatar } from '../avatars/Avatars';
 import { useBurrow } from '../data/BurrowProvider';
 import { mergeConfirm, pullRequestModel } from '../data/pullRequest';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { branchRoomFor, type RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -48,6 +50,9 @@ function CheckMark({ passed }: { passed: boolean }) {
 }
 
 export function PullRequestScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
@@ -70,11 +75,14 @@ export function PullRequestScreen({ route, navigation }: Props) {
       <Screen>
         <BackBar label={back} onPress={goBack} />
         {notFound ? (
-          <ErrorState text="There’s no pull request with this number here." />
+          <ErrorState text={tMobile('screens.theres-no-pull-request-with-this-number-here')} />
         ) : query.error ? (
-          <ErrorState text="This pull request didn’t load." onRetry={() => void query.refetch()} />
+          <ErrorState
+            text={tMobile('screens.this-pull-request-didnt-load')}
+            onRetry={() => void query.refetch()}
+          />
         ) : (
-          <SkeletonRows count={6} lines={1} label="Loading the pull request" />
+          <SkeletonRows count={6} lines={1} label={tMobile('screens.loading-the-pull-request')} />
         )}
       </Screen>
     );
@@ -98,7 +106,7 @@ export function PullRequestScreen({ route, navigation }: Props) {
           if (result.status === 'ok')
             qc.setQueryData(queryKeys.prs.get({ params, query: repoQuery }), result.data);
           void qc.invalidateQueries({ queryKey: queryKeys.scope('conversations.bootstrap') });
-          showNotice(mergeToast(number));
+          showNotice(mergeToast(number, rawLocale));
         },
         onError: (error) => {
           setMergeError(mergeErrorText(error));
@@ -147,9 +155,9 @@ export function PullRequestScreen({ route, navigation }: Props) {
         </View>
 
         <View>
-          <Section title="CHECKS">
+          <Section title={tMobile('screens.checks')}>
             {model.checks.length === 0 ? (
-              <QuietText>No checks on this branch.</QuietText>
+              <QuietText>{tMobile('screens.no-checks-on-this-branch')}</QuietText>
             ) : (
               model.checks.map((c) => (
                 <View
@@ -177,9 +185,9 @@ export function PullRequestScreen({ route, navigation }: Props) {
               ))
             )}
           </Section>
-          <Section title="REVIEWERS">
+          <Section title={tMobile('screens.reviewers')}>
             {model.reviewers.length === 0 ? (
-              <QuietText>No reviewers yet.</QuietText>
+              <QuietText>{tMobile('screens.no-reviewers-yet')}</QuietText>
             ) : (
               model.reviewers.map((r) => (
                 <ListRow
@@ -198,7 +206,7 @@ export function PullRequestScreen({ route, navigation }: Props) {
           </Section>
           <Section title={`FILES CHANGED · ${model.diff.toUpperCase()}`}>
             {model.files.length === 0 ? (
-              <QuietText>No files changed.</QuietText>
+              <QuietText>{tMobile('screens.no-files-changed')}</QuietText>
             ) : (
               model.files.map((f) => (
                 <ListRow
@@ -248,7 +256,7 @@ export function PullRequestScreen({ route, navigation }: Props) {
         ) : null}
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button
-            label="Branch room"
+            label={tMobile('screens.branch-room')}
             variant="secondary"
             size="lg"
             onPress={() => navigation.navigate('Conversation', { conversationId: detail.pr.conversationId })}
@@ -278,10 +286,11 @@ export function PullRequestScreen({ route, navigation }: Props) {
  * into main, which the phone's room didn't have.
  */
 export function PullRequestBar({ number, repo, back }: { number: number; repo?: string; back: string }) {
+  const { t: tMobile } = useMobileT();
   const navigation = useAppNavigation();
   return (
     <ListRow
-      title="Pull request"
+      title={tMobile('screens.pull-request')}
       meta={`#${number} · checks · files changed · merge`}
       trailing="›"
       onPress={() => navigation.navigate('PullRequest', { number, back, ...(repo ? { repo } : {}) })}

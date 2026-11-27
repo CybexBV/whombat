@@ -39,12 +39,12 @@ const fetchMock: FetchLike = async (url, init) => {
   return json(next.status, next.body ?? {});
 };
 
-async function start(cfg: unknown = CONFIG): Promise<FrameApp> {
+async function start(cfg: unknown = CONFIG, lang?: string): Promise<FrameApp> {
   config = cfg;
   const bridge: FrameBridge = { post: (m) => posted.push(m), close() {} };
   const root = document.createElement('div');
   document.body.append(root);
-  app = new FrameApp({ params, bridge, fetch: fetchMock, baseUrl: BASE, root });
+  app = new FrameApp({ params, bridge, fetch: fetchMock, baseUrl: BASE, root, lang });
   await app.load();
   return app;
 }
@@ -67,8 +67,92 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn();
 });
 afterEach(() => {
+  document.documentElement.removeAttribute('lang');
+  document.title = '';
   document.body.replaceChildren();
   vi.restoreAllMocks();
+});
+
+describe('visitor copy', () => {
+  it.each([
+    {
+      lang: 'en',
+      title: /^Feedback$/,
+      heading: /Send feedback/,
+      close: 'Close',
+      error: /Check the highlighted/,
+      receipt: /received your report/,
+    },
+    {
+      lang: 'nl',
+      title: /^Feedbackformulier$/,
+      heading: /Feedback geven/,
+      close: 'Sluiten',
+      error: /gemarkeerde veld/,
+      receipt: /melding ontvangen/,
+    },
+    {
+      lang: 'pseudo',
+      title: /^\[Ƒéé/,
+      heading: /^\[Ŝéñ/,
+      close: '[Çļöŝé~~]',
+      error: /^\[Çĥéçķ/,
+      receipt: /^\[Ţĥàñķŝ/,
+    },
+  ])('sets the document language and renders form, validation and receipt in $lang', async (example) => {
+    await start(CONFIG, example.lang);
+    expect(document.documentElement.lang).toBe(example.lang);
+    expect(document.title).toMatch(example.title);
+    expect($('#wb-title').textContent).toMatch(example.heading);
+    expect($('.head button').getAttribute('aria-label')).toBe(example.close);
+    expect($('.eyebrow').textContent).toBe(CONFIG.productLabel);
+
+    expect(await app.submit()).toBeNull();
+    expect($('.alert p').textContent).toMatch(example.error);
+    expect($('#wb-description').getAttribute('aria-invalid')).toBe('true');
+    type('#wb-description', 'The cart stays empty.');
+    await app.submit();
+    expect($('.receipt-title').textContent).toMatch(example.receipt);
+    expect($('#wb-reference').textContent).toBe(RECEIPT.reference);
+    expect($('[aria-live]').textContent).toContain(RECEIPT.reference);
+    expect(reports[0]?.body.description).toBe('The cart stays empty.');
+  });
+
+  it('localizes attachment limits, image warnings, plurals and rate limits for Dutch visitors', async () => {
+    await start({ ...CONFIG, attachments: { ...CONFIG.attachments, maxBytes: 1.5 * 1024 * 1024 } }, 'nl-NL');
+    expect(document.documentElement.lang).toBe('nl-NL');
+    expect($('#wb-attachments-hint').textContent).toMatch(/PNG of JPEG · maximaal 2 · 1,5 MB/);
+    expect($('.file-actions button').textContent).toBe('Schermafbeeldingen toevoegen');
+    app.addChosen([new File(['image'], 'checkout.png', { type: 'text/plain' })]);
+    expect($('#wb-attachments-error').textContent).toMatch(/“checkout\.png” is geen PNG/);
+
+    type('#wb-email', 'bad-email');
+    await app.submit();
+    expect($('.alert p').textContent).toMatch(/2 gemarkeerde velden/);
+    expect($('#wb-email-error').textContent).toMatch(/e-mailadres/);
+    type('#wb-description', 'De winkelwagen blijft leeg.');
+    type('#wb-email', '');
+    for (const [retryAfter, text] of [
+      [20, /een minuut/],
+      [150, /3 minuten/],
+    ] as const) {
+      answers.push({ status: 429, body: { error: { retryAfter } } });
+      expect(await app.submit()).toMatchObject({ kind: 'rate_limited' });
+      expect($('.alert p').textContent).toMatch(text);
+    }
+  });
+
+  it('uses the singular add button when the site allows one screenshot', async () => {
+    await start({ ...CONFIG, attachments: { ...CONFIG.attachments, max: 1 } }, 'nl');
+    expect($('.file-actions button').textContent).toBe('Schermafbeelding toevoegen');
+  });
+
+  it('localizes unavailability before any site config loads', async () => {
+    await start(null, 'nl');
+    expect(document.title).toBe('Feedbackformulier');
+    expect($('.notice').textContent).toMatch(/geen feedback/);
+    expect($('.foot button').textContent).toBe('Sluiten');
+  });
 });
 
 describe('loading', () => {

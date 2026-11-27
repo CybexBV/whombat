@@ -1496,6 +1496,11 @@ func TestDeniedRequestsRaiseHubAlert(t *testing.T) {
 	if len(open) != 1 || open[0]["server"] != "" || open[0]["rule"] != RuleDeniedRequests {
 		t.Fatalf("hub alert %v", open)
 	}
+	params, _ := open[0]["params"].(map[string]any)
+	if open[0]["code"] != RuleDeniedRequests || open[0]["status_note_code"] != "denied_requests" ||
+		params["user"] != "mallory" || params["count"] != float64(deniedAlertThreshold) {
+		t.Errorf("hub alert translation data: %v", open)
+	}
 	var f map[string]any
 	admin.json(http.MethodGet, "/api/v1/fleet", nil, 200, &f)
 	if len(f["alerts"].([]any)) != 1 {
@@ -1690,6 +1695,11 @@ func TestChecks(t *testing.T) {
 	if a == nil || a["title"] != "Nightly backup is down" || a["detail"] != "The job exited with code 3" {
 		t.Fatalf("down alert %v", a)
 	}
+	params, _ := a["params"].(map[string]any)
+	if a["code"] != "check.down.heartbeat_exit" || a["status_note_code"] != "check_down" ||
+		params["name"] != "Nightly backup" || params["exitCode"] != 3.0 {
+		t.Errorf("heartbeat exit translation data: %v", a)
+	}
 	anon.req(http.MethodGet, path, nil, nil)
 	e.h.evaluateCheckAlerts(ctx)
 	if a := alertOf(RuleCheckDown); a != nil {
@@ -1704,6 +1714,12 @@ func TestChecks(t *testing.T) {
 	e.h.evaluateCheckAlerts(ctx)
 	if a := alertOf(RuleCheckDown); a == nil || !strings.HasPrefix(a["detail"].(string), "No ping for 2") {
 		t.Fatalf("overdue alert %v", a)
+	} else {
+		params, _ := a["params"].(map[string]any)
+		held, _ := params["heldSeconds"].(float64)
+		if a["code"] != "check.down.heartbeat_elapsed" || held < 7200 || held >= 7260 {
+			t.Errorf("overdue translation data: %v", a)
+		}
 	}
 	// Viewers see checks but not the ping URL, and cannot change them.
 	e.addUser("vera", store.RoleViewer, adminPW)

@@ -24,6 +24,7 @@ import {
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume, HostChoices, HostGuest } from '@whombat/core/domain';
 import { useState } from 'react';
+import { currentLocale } from '../../../i18n/provider';
 import { Check, FormDialog, SelectField, TextField } from '../manage/fields';
 import { useManage } from '../manage/useManage';
 import styles from '../Things.module.css';
@@ -56,7 +57,7 @@ const poolLabel = (s: HostChoices['storages'][number]) =>
 
 /** “Oct 16, 03:00” for a backup's dialogs. */
 export function incusBackupWhen(b: HostBackupVolume, timeZone?: string): string {
-  return b.created ? formatDayTime(Date.parse(b.created), timeZone) : b.volume;
+  return b.created ? formatDayTime(Date.parse(b.created), timeZone, currentLocale()) : b.volume;
 }
 
 /* Back up now ------------------------------------------------------------------------------------------- */

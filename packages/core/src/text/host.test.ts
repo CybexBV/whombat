@@ -26,7 +26,7 @@ describe('formatBytes', () => {
 
 describe('formatMbits', () => {
   it('one decimal below 10', () => {
-    expect([0, 20_000, 400_000, 3_240_000, 48_400_000].map(formatMbits)).toEqual([
+    expect([0, 20_000, 400_000, 3_240_000, 48_400_000].map((b) => formatMbits(b))).toEqual([
       '0',
       '<0.1',
       '0.4',

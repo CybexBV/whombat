@@ -40,7 +40,6 @@ import {
   linkPlanTone,
   linkPriceLine,
   linkYearly,
-  OWN_NAME_TEXT,
   type OwnNameCheck,
   ownClaimPrefillHash,
   ownNameChosen,
@@ -61,6 +60,7 @@ import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { StatusDot } from '../components/StatusDot';
+import { OWN_NAME_TEXT } from '../i18n/clientWords';
 import styles from './managed.module.css';
 import { OwnNameField } from './OwnNameField';
 import nameStyles from './OwnNameField.module.css';

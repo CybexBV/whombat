@@ -7,15 +7,16 @@
  * the version, a box with a screen and its machine (a Whombat's is its Overview, `Whombat`). The assistant's page is
  * `AgentSettingsScreen`, Advanced's `AdvancedScreens`. The AI sign-in's old page opens the assistant's.
  */
+
 import { type RouteProp, StackActions, useRoute } from '@react-navigation/native';
 import {
   type HostMetricsLoader,
   type HostSpend,
   PROMPT_WORDS,
-  SETTINGS_GROUP_TEXT,
+  settingsGroupText,
   TEAM_REPORT_WORDS,
 } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
+import { thisWhombatText } from '@whombat/client/managed';
 import { useTeamReportsEntry } from '@whombat/client/react';
 import type { HostMetrics } from '@whombat/protocol/session';
 import { type ReactNode, useCallback, useEffect } from 'react';
@@ -27,9 +28,10 @@ import { hostMetricsFixture } from '../fixtures/host';
 import { demoMachine, isMachineDemoState } from '../fixtures/machine';
 import { demoRemoteHelp, isRemoteHelpDemoState } from '../fixtures/remoteHelp';
 import { demoVoice, isVoiceDemoWorld } from '../fixtures/voice';
+import { useI18n, useMobileT } from '../i18n';
 import { BluetoothSection } from '../managed/BluetoothSection';
 import { useManaged } from '../managed/context';
-import { COPY as MANAGED_COPY } from '../managed/copy';
+import { managedCopy } from '../managed/copy';
 import { DeskSettingsRow } from '../managed/DeskSection';
 import { DeskUnlockCard } from '../managed/DeskUnlockCard';
 import { HardwareSection } from '../managed/HardwareSection';
@@ -58,7 +60,8 @@ import { useVoiceApi } from '../voice/useVoiceApi';
 import { AgentUpdatesSwitchCard } from './AgentUpdatesSwitch';
 import { ChatSettleSection } from './ChatSettleSection';
 import { youPartsHere } from './groups';
-import { SETTINGS_TEXT } from './list';
+import { LanguageSection } from './LanguageSection';
+import { settingsText } from './list';
 import { NotificationsSection } from './NotificationsSection';
 import { ProfileRow } from './ProfileRow';
 import { VersionCard } from './VersionCard';
@@ -71,19 +74,22 @@ export function SettingsPage({
   title,
   children,
   scrollEnabled = true,
-  back = SETTINGS_TEXT.title,
+  back,
 }: {
   title: string;
   children: ReactNode;
   scrollEnabled?: boolean;
   back?: string;
 }) {
+  const { rawLocale } = useI18n();
+  const settingsTextHere = settingsText(rawLocale);
+
   const bottomRoom = useBottomRoom();
   const navigation = useAppNavigation();
   return (
     <Screen>
       <BackBar
-        label={back}
+        label={back ?? settingsTextHere.title}
         onPress={() =>
           navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs', { screen: 'Settings' })
         }
@@ -127,23 +133,29 @@ const LINKS_LINE = 'Links to copies of your threads, and stopping them';
  * and on a Whombat a row to Devices. What the assistant remembers is its own page's (Memory).
  */
 export function SettingsProfileScreen() {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
+  const settingsGroupTextHere = settingsGroupText(rawLocale);
+
   const { bootstrap, mode, slug } = useBurrow();
   const managed = useManaged();
   const navigation = useAppNavigation();
   const theme = useTheme();
   const prompts = usePrompts();
   const parts = youPartsHere({ mode, prompts: prompts.shown });
-  const devices = SETTINGS_GROUP_TEXT.you.devices;
+  const devices = settingsGroupTextHere.you.devices;
   // Reports to the Whombat Team (team-reports.md): only where one can be sent or the person has some.
   const reports = useTeamReportsEntry(slug);
   return (
-    <SettingsPage title={SETTINGS_GROUP_TEXT.groups('').you}>
+    <SettingsPage title={settingsGroupTextHere.groups('').you}>
       <ProfileRow me={bootstrap.me} demo={mode === 'fixtures'} />
+      <LanguageSection />
       {parts.includes('notifications') ? <NotificationsSection /> : null}
       {managed && parts.includes('notifications') ? (
         <NotificationsRow
           push={managed.push}
-          label={MANAGED_COPY.notifications.onThisPhone}
+          label={managedCopyHere.notifications.onThisPhone}
           community={managed.community}
         />
       ) : null}
@@ -178,11 +190,11 @@ export function SettingsProfileScreen() {
           }}
         >
           <ListRow
-            title={SETTINGS_GROUP_TEXT.you.links}
+            title={settingsGroupTextHere.you.links}
             body={LINKS_LINE}
             trailing="›"
             onPress={() => navigation.navigate('SharedLinks')}
-            accessibilityLabel={`${SETTINGS_GROUP_TEXT.you.links}. ${LINKS_LINE}`}
+            accessibilityLabel={`${settingsGroupTextHere.you.links}. ${LINKS_LINE}`}
           />
         </View>
       ) : null}
@@ -197,11 +209,11 @@ export function SettingsProfileScreen() {
           }}
         >
           <ListRow
-            title={SETTINGS_GROUP_TEXT.you.prompts}
+            title={settingsGroupTextHere.you.prompts}
             body={PROMPT_WORDS.intro}
             trailing="›"
             onPress={() => navigation.navigate('SettingsPrompts')}
-            accessibilityLabel={`${SETTINGS_GROUP_TEXT.you.prompts}. ${PROMPT_WORDS.intro}`}
+            accessibilityLabel={`${settingsGroupTextHere.you.prompts}. ${PROMPT_WORDS.intro}`}
           />
         </View>
       ) : null}
@@ -219,7 +231,7 @@ export function SettingsProfileScreen() {
             title={TEAM_REPORT_WORDS.entry}
             body={TEAM_REPORT_WORDS.intro}
             trailing="›"
-            onPress={() => navigation.navigate('TeamReports', { back: SETTINGS_GROUP_TEXT.groups('').you })}
+            onPress={() => navigation.navigate('TeamReports', { back: settingsGroupTextHere.groups('').you })}
             accessibilityLabel={`${TEAM_REPORT_WORDS.entry}. ${TEAM_REPORT_WORDS.intro}`}
           />
         </View>
@@ -253,6 +265,10 @@ export function SettingsAiScreen() {
  * over in another state.
  */
 export function SettingsWhombatScreen() {
+  const { rawLocale } = useI18n();
+  const settingsTextHere = settingsText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const navigation = useAppNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsWhombat'>>();
@@ -284,7 +300,7 @@ export function SettingsWhombatScreen() {
     if (demo && isRemoteHelpDemoState(helpState)) demoRemoteHelp({ me: bootstrap.me }).reset(helpState);
   }, [demo, helpState, bootstrap.me]);
   return (
-    <SettingsPage title={SETTINGS_TEXT.rows.appliance}>
+    <SettingsPage title={settingsTextHere.rows.appliance}>
       <DeskUnlockCard api={desk} />
       <View style={{ gap: 2 }}>
         <SectionLabel>BURROW</SectionLabel>
@@ -293,9 +309,9 @@ export function SettingsWhombatScreen() {
         </Text>
       </View>
       <View style={{ gap: 2 }}>
-        <SectionLabel>SERVER</SectionLabel>
+        <SectionLabel>{tMobile('settings.server')}</SectionLabel>
         <Text size={15} color={theme.colors.ink2} style={{ paddingHorizontal: 6 }}>
-          Demo world on this phone. Nothing leaves the app.
+          {tMobile('settings.demo-world-on-this-phone-nothing-leaves-the')}
         </Text>
       </View>
       {demo ? <DemoHostStatus /> : null}
@@ -304,8 +320,8 @@ export function SettingsWhombatScreen() {
         <ManagedCard>
           <LinkRow
             first
-            title={THIS_WHOMBAT_TEXT.parts.backups}
-            label={THIS_WHOMBAT_TEXT.parts.backups}
+            title={thisWhombatText(rawLocale).parts.backups}
+            label={thisWhombatText(rawLocale).parts.backups}
             onPress={() => navigation.navigate('WhombatBackups')}
           />
         </ManagedCard>

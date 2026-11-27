@@ -5,10 +5,13 @@
  * it: behind the panel the screen is only a picture, and keys and touches go no further than waking it. The one thing
  * the scenes see of it is `WakeContext` (`ui/hooks.ts`): while the code shows, `useLastInput` says the screen is in use.
  */
+
 import { type ReactNode, useEffect, useRef } from 'react';
+import { useT } from '../i18n/react';
 import type { ClaimState } from '../lib/api';
 import { minutesLeft } from '../lib/console';
-import { WORD } from '../lib/copy';
+import { wordCopy } from '../lib/copy';
+
 import { groupLetters, liveSignIn, type SignIn, signInTitleSize } from '../lib/signIn';
 import { useNow, WakeContext } from '../ui/hooks';
 import styles from './signin.module.css';
@@ -54,6 +57,9 @@ export function SignInLayer({
 
 /** NEW DEVICE, whose device it is, the letters large, what to do and how long they last (BX-06, verbatim). */
 export function SignInPanel({ signIn, now }: { signIn: SignIn; now: number }) {
+  const t = useT();
+  const WORD = wordCopy(t);
+
   const title = WORD.signInTitle(signIn.name);
   return (
     <div className={styles.layer}>

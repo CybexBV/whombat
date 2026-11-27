@@ -1,6 +1,7 @@
 import { AVATAR_FACES, type AvatarFace } from '@whombat/avatars';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { FACTS } from '../facts';
+import { useT } from '../i18n/react';
 import type { ClaimState, ReachLink, StartProblem } from '../lib/api';
 import type { Client } from '../lib/client';
 import {
@@ -18,7 +19,8 @@ import {
   type ReachNote,
   startWords,
 } from '../lib/console';
-import { CONSOLE, GUIDE_LABEL, SAY, WORD } from '../lib/copy';
+import { consoleCopy, guideLabelCopy, sayCopy, wordCopy } from '../lib/copy';
+
 import { FACT_EVERY_MS, FactRotation } from '../lib/facts';
 import { Bubble, fill } from '../ui/Bubble';
 import { Button } from '../ui/Button';
@@ -30,6 +32,10 @@ import styles from './console.module.css';
 
 /** Starting and waiting: Hazel waking up in her burrow; while starting, why the first start can't finish (CG-409). */
 export function Waking({ scene, start }: { scene: 'starting' | 'waiting'; start?: StartProblem }) {
+  const t = useT();
+  const SAY = sayCopy(t);
+  const WORD = wordCopy(t);
+
   const waiting = scene === 'waiting';
   if (!waiting && start) {
     return (
@@ -39,7 +45,7 @@ export function Waking({ scene, start }: { scene: 'starting' | 'waiting'; start?
         dots={false}
         hint={
           <>
-            <p className={styles.wakingHint}>{startWords(start)}</p>
+            <p className={styles.wakingHint}>{startWords(start, t)}</p>
             <p className={styles.wakingHint}>{WORD.startRetry}</p>
           </>
         }
@@ -74,6 +80,9 @@ function WakingScene({
   hint?: ReactNode;
   dots?: boolean;
 }) {
+  const t = useT();
+  const GUIDE_LABEL = guideLabelCopy(t);
+
   return (
     <div className={styles.waking}>
       <div className={styles.wakingScene}>
@@ -107,6 +116,11 @@ export function LinkStarting({
   now: number;
   inApp?: { address: string; letters: string } | null;
 }) {
+  const t = useT();
+  const SAY = sayCopy(t);
+  const WORD = wordCopy(t);
+  const CONSOLE = consoleCopy(t);
+
   if (screen === 'waiting') {
     return (
       <WakingScene
@@ -190,6 +204,9 @@ function OpenHead({
 
 /** A QR code with what to do with it under it. */
 function ScanQr({ rows, size, url }: { rows: string[]; size: number; url: string }) {
+  const t = useT();
+  const CONSOLE = consoleCopy(t);
+
   return (
     <figure className={styles.scan}>
       <Qr rows={rows} size={size} label={CONSOLE.qr(url)} />
@@ -214,6 +231,9 @@ function Sign({
   wait?: boolean;
   className?: string;
 }) {
+  const t = useT();
+  const GUIDE_LABEL = guideLabelCopy(t);
+
   return (
     <div className={`${styles.signScene} ${className}`}>
       <Burrow face="hazel" size={150} label={GUIDE_LABEL} className={styles.signLeft}>
@@ -246,6 +266,10 @@ function Sign({
  * under it is the second step.
  */
 export function ReachNotes({ notes }: { notes: ReachNote[] }) {
+  const t = useT();
+  const CONSOLE = consoleCopy(t);
+  const WORD = wordCopy(t);
+
   if (notes.length === 0) return null;
   return (
     <ul className={styles.notes} aria-label={CONSOLE.notes}>
@@ -296,6 +320,12 @@ export function Claimable({
   client?: Client;
   refresh?: () => void;
 }) {
+  const t = useT();
+  const WORD = wordCopy(t);
+  const GUIDE_LABEL = guideLabelCopy(t);
+  const CONSOLE = consoleCopy(t);
+  const SAY = sayCopy(t);
+
   if (!backoff && nowhereToType(claim)) {
     // No address a person can open yet (plain HTTP serves no page) and none for the app: no code, as there is nowhere
     // to type it.
@@ -355,6 +385,9 @@ export function Claimable({
 
 /** “Claim this Whombat”, as the second step after Tailscale's when the note above is the first. */
 function ClaimTitle({ claim }: { claim: ClaimState }) {
+  const t = useT();
+  const WORD = wordCopy(t);
+
   return (
     <>
       {claim.second && <span className={styles.step}>{WORD.stepTwo}</span>}
@@ -368,6 +401,9 @@ function ClaimTitle({ claim }: { claim: ClaimState }) {
  * it busy, so the screen also names one they can't reach. The text console's words.
  */
 function ClaimElse({ claim }: { claim: ClaimState }) {
+  const t = useT();
+  const WORD = wordCopy(t);
+
   if (noAddress(claim)) return null;
   if (claim.fallbackTailnet)
     return (
@@ -387,6 +423,9 @@ function ClaimElse({ claim }: { claim: ClaimState }) {
  * others on the network used up the tries. A button for a finger or a mouse, and the N key as on the text console.
  */
 function NewLetters({ client, refresh }: { client: Client; refresh?: (() => void) | undefined }) {
+  const t = useT();
+  const CONSOLE = consoleCopy(t);
+
   const [busy, setBusy] = useState(false);
   const asking = useRef(false);
   const ask = useRef(() => {});
@@ -465,10 +504,14 @@ const FAMILY_SIZE: Record<AvatarFace, number> = {
  * (Link's grace or end, Tailscale, CG-404) the fact makes room for the note.
  */
 export function Claimed({ claim, noted = false }: { claim: ClaimState; noted?: boolean }) {
+  const t = useT();
+  const WORD = wordCopy(t);
+  const CONSOLE = consoleCopy(t);
+
   const { index, visible } = useFact();
   const fact = FACTS[index];
   const name = claim.burrows?.first ?? null;
-  const more = claim.burrows ? moreBurrows(claim.burrows.more) : null;
+  const more = claim.burrows ? moreBurrows(claim.burrows.more, t) : null;
   return (
     <div className={styles.claimed}>
       <div className={styles.claimedText}>
@@ -490,7 +533,7 @@ export function Claimed({ claim, noted = false }: { claim: ClaimState; noted?: b
       {fact && !noted && (
         <figure className={styles.fact} style={{ opacity: visible ? 1 : 0 }} aria-live="polite">
           <figcaption className={styles.factKicker}>{CONSOLE.factKicker}</figcaption>
-          <blockquote className={styles.factText}>{fact.text}</blockquote>
+          <blockquote className={styles.factText}>{t(fact.key)}</blockquote>
         </figure>
       )}
       <div className={styles.family} aria-hidden="true">
@@ -504,6 +547,11 @@ export function Claimed({ claim, noted = false }: { claim: ClaimState; noted?: b
 
 /** The moment of the claim: confetti and Hazel, a few seconds (CG-07). */
 export function Celebration({ claim }: { claim: ClaimState }) {
+  const t = useT();
+  const SAY = sayCopy(t);
+  const GUIDE_LABEL = guideLabelCopy(t);
+  const CONSOLE = consoleCopy(t);
+
   return (
     <div className={styles.celebration} role="status">
       <Confetti />

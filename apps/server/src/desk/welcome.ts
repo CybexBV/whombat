@@ -17,6 +17,7 @@ import {
   type DeskCalmView,
   type DeskDigest,
   type DeskDigestItem,
+  deskWords,
   fillDeskWords,
 } from '@whombat/core';
 import { screenText } from './glance';
@@ -29,9 +30,13 @@ export interface LookChange {
   key: string;
   icon: 'down' | 'up' | 'look';
   text: string;
+  /** Which words said it and of what, so the digest can say it again in the person's language. */
+  said?: { word: ChangeWord; name: string };
   server?: string;
   at: number;
 }
+
+type ChangeWord = 'down' | 'trouble' | 'look' | 'up';
 
 /** A night away and then some, and never more than this many changes. */
 export const LOOK_LOG_KEEP_MS = 24 * 3_600_000;
@@ -41,13 +46,19 @@ const RANK: Record<DeskLook['state'], number> = { down: 0, bad: 1, look: 2 };
 
 type Seen = Pick<DeskLook, 'key' | 'name' | 'state' | 'server'>;
 
+/** A change's words: English when it's seen, said again in the person's language when the digest is made. */
+function changeText(word: ChangeWord, name: string, locale?: string | null): string {
+  const w = (locale ? deskWords(locale) : DESK_WORDS).calm.welcome;
+  return screenText(fillDeskWords(w[word], { name }), 120);
+}
+
 function changeOf(look: Seen, at: number): LookChange {
-  const w = DESK_WORDS.calm.welcome;
-  const words = look.state === 'down' ? w.down : look.state === 'bad' ? w.trouble : w.look;
+  const word: ChangeWord = look.state === 'down' ? 'down' : look.state === 'bad' ? 'trouble' : 'look';
   return {
     key: look.key,
     icon: look.state === 'look' ? 'look' : 'down',
-    text: screenText(fillDeskWords(words, { name: look.name }), 120),
+    text: changeText(word, look.name),
+    said: { word, name: look.name },
     ...(look.server ? { server: look.server } : {}),
     at,
   };
@@ -86,7 +97,8 @@ export class DeskLookLog {
       this.#changes.push({
         key,
         icon: 'up',
-        text: screenText(fillDeskWords(DESK_WORDS.calm.welcome.up, { name: before.name }), 120),
+        text: changeText('up', before.name),
+        said: { word: 'up', name: before.name },
         ...(before.server ? { server: before.server } : {}),
         at,
       });
@@ -125,6 +137,8 @@ export interface WelcomeFacts {
   recent: readonly { text: string; at: string }[];
   /** What changed since `from` (`DeskLookLog.changesSince`). */
   changes: (from: number) => readonly LookChange[];
+  /** The person's language; English without one. */
+  locale?: string | null;
 }
 
 /** Rows of what changed at most, so a busy morning's done things don't push them out. */
@@ -138,7 +152,7 @@ const iso = (at: number | string) => new Date(at).toISOString();
  * what went down, came back or got worse. At most `DESK_DIGEST_ITEMS`.
  */
 export function welcomeItems(facts: WelcomeFacts, from: number, view: DeskCalmView): DeskDigestItem[] {
-  const w = DESK_WORDS.calm.welcome;
+  const w = (facts.locale ? deskWords(facts.locale) : DESK_WORDS).calm.welcome;
   const a = { assistant: facts.assistant };
   const items: DeskDigestItem[] = [];
   const first = facts.asks[0];
@@ -169,7 +183,7 @@ export function welcomeItems(facts: WelcomeFacts, from: number, view: DeskCalmVi
   for (const c of changes)
     items.push({
       icon: c.icon,
-      text: c.text,
+      text: c.said && facts.locale ? changeText(c.said.word, c.said.name, facts.locale) : c.text,
       at: iso(c.at),
       // A look that went has no card to open; its server still has its screen.
       ...(c.icon !== 'up' ? { look: screenText(c.key, 120) } : {}),

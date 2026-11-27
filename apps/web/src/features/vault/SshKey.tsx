@@ -21,6 +21,7 @@ import { CopyButton } from '../../components/CopyButton';
 import { Modal, ModalClose, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import { SshImportFields } from './AddToVaultModal';
@@ -34,7 +35,7 @@ type EntryProps = { burrow: string; entry: VaultEntryDetail };
 /** “ED25519 · made by Whombat · added 5 days ago”. */
 export function sshKeyMeta(entry: VaultEntryDetail, now: number, timeZone: string): string | null {
   if (entry.auth?.type !== 'ssh_key') return null;
-  const when = vaultSecretLine(entry, now, timeZone).replace(/^Set · /, '');
+  const when = vaultSecretLine(entry, now, timeZone, currentLocale()).replace(/^Set · /, '');
   return [VAULT_SSH_KEY_TYPE_LABELS[entry.auth.keyType], VAULT_TEXT.ssh.origin[entry.auth.origin], when].join(
     ' · ',
   );

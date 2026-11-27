@@ -2,7 +2,9 @@
  * The Whombat's one agent (Whombat one-agent.md OA-01, OA-08): its name and face, its status, and the model and
  * provider its turns run on. There are no roles, no hiring and no other agents; the agent is created with the Whombat.
  */
+
 import { z } from 'zod';
+import { coreTranslator } from '../i18n/catalog.js';
 import { AgentEffort, modelFast, type ProviderModel } from './models.js';
 
 /* Name and face (OA-08) ------------------------------------------------------------------------------------------ */
@@ -90,11 +92,19 @@ export const AgentStatus = z.enum(AGENT_STATUSES);
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
 /** Status copy: the agent page uses `label`, the sidebar row uses `short` (empty for idle). */
-export const AGENT_STATUS_COPY: Record<AgentStatus, { label: string; short: string }> = {
-  working: { label: 'Working', short: 'working' },
-  waiting: { label: 'Waiting', short: 'waiting' },
-  idle: { label: 'Idle', short: '' },
-};
+/** An agent's status pill and its short word, in a locale (idle has no short word). */
+export function agentStatusCopy(
+  locale?: string | null,
+): Record<AgentStatus, { label: string; short: string }> {
+  const tr = coreTranslator(locale);
+  return {
+    working: { label: tr.t('agent.status.working'), short: tr.t('agent.status.workingShort') },
+    waiting: { label: tr.t('agent.status.waiting'), short: tr.t('agent.status.waitingShort') },
+    idle: { label: tr.t('agent.status.idle'), short: '' },
+  };
+}
+
+export const AGENT_STATUS_COPY: Record<AgentStatus, { label: string; short: string }> = agentStatusCopy('en');
 
 /**
  * What answers the agent's turns (Whombat hermes-engine.md HE-32): every turn runs on Hermes's own loop. `claude` is

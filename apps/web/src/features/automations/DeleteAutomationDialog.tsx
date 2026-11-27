@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import styles from './Automations.module.css';
 
 export interface DeleteTarget {
@@ -53,7 +54,7 @@ export function DeleteAutomationDialog({
           close();
           onDeleted?.(target);
         },
-        onError: (err) => setError(problemText(err)),
+        onError: (err) => setError(problemText(err, undefined, currentLocale())),
       },
     );
   };

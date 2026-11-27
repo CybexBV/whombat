@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coreTranslator, coreWords } from '../../i18n/catalog.js';
 import { Handle, JsonObject, JsonValue } from '../common.js';
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -31,16 +32,25 @@ export const CatalogCategory = z.enum(CATALOG_CATEGORIES);
 
 export type CatalogCategory = z.infer<typeof CatalogCategory>;
 
-export const CATALOG_CATEGORY_LABELS: Record<CatalogCategory, string> = {
-  accounts: 'Accounts',
-  productivity: 'Productivity',
-  files: 'Files',
-  home: 'Home',
-  business: 'Business',
-  developer: 'Developer',
-  infrastructure: 'Infrastructure',
-  custom: 'Custom',
-};
+const CATALOG_CATEGORY_LABELS_KEYS = [
+  'accounts',
+  'productivity',
+  'files',
+  'home',
+  'business',
+  'developer',
+  'infrastructure',
+  'custom',
+] as const;
+
+/** `CATALOG_CATEGORY_LABELS` in a locale. */
+export function catalogCategoryLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof CATALOG_CATEGORY_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'connection.category', CATALOG_CATEGORY_LABELS_KEYS);
+}
+
+export const CATALOG_CATEGORY_LABELS: Record<CatalogCategory, string> = catalogCategoryLabels('en');
 
 /** What a tool does to the service (CX-18): reads, or changes something. Unknown is `write`. */
 export const CONNECTION_TOOL_ACCESS = ['read', 'write'] as const;
@@ -56,18 +66,28 @@ export const ConnectionToolTier = z.enum(CONNECTION_TOOL_TIERS);
 
 export type ConnectionToolTier = z.infer<typeof ConnectionToolTier>;
 
+const CONNECTION_TOOL_TIER_LABELS_KEYS = ['can', 'ask', 'off'] as const;
+
 /** The segment labels of a tool's tier (CX-72), in display order Allowed · Asks · Off. */
-export const CONNECTION_TOOL_TIER_LABELS: Record<ConnectionToolTier, string> = {
-  can: 'Allowed',
-  ask: 'Asks',
-  off: 'Off',
-};
+export function connectionToolTierLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof CONNECTION_TOOL_TIER_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'connection.tier', CONNECTION_TOOL_TIER_LABELS_KEYS);
+}
+
+export const CONNECTION_TOOL_TIER_LABELS: Record<ConnectionToolTier, string> = connectionToolTierLabels('en');
 
 /** The mark on a tool the catalog's `sensitive` rules make ask whatever its tier (CX-31). */
 export const ALWAYS_ASKS_LABEL = 'Always asks';
 
 /** The mark on a tool whose definition is new or changed since the last check (CX-18). */
 export const NEW_TOOL_LABEL = 'New';
+
+/** A tool's marks (`ALWAYS_ASKS_LABEL`, `NEW_TOOL_LABEL`) in a locale. */
+export function connectionToolMarks(locale?: string | null): { alwaysAsks: string; isNew: string } {
+  const tr = coreTranslator(locale);
+  return { alwaysAsks: tr.t('connection.alwaysAsks'), isNew: tr.t('connection.newTool') };
+}
 
 /**
  * The default tier of a tool of this access (CX-18): Allowed. A person connected the service for agents to use it;
@@ -418,16 +438,32 @@ export const ConnectionAccessLevel = z.enum(CONNECTION_ACCESS_LEVELS);
 
 export type ConnectionAccessLevel = z.infer<typeof ConnectionAccessLevel>;
 
-export const CONNECTION_ACCESS_LABELS: Record<ConnectionAccessLevel, string> = {
-  read: 'Look only',
-  manage: 'Manage',
-};
+const CONNECTION_ACCESS_LABELS_KEYS = ['read', 'manage'] as const;
+
+/** `CONNECTION_ACCESS_LABELS` in a locale. */
+export function connectionAccessLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof CONNECTION_ACCESS_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'connection.access', CONNECTION_ACCESS_LABELS_KEYS);
+}
+
+export const CONNECTION_ACCESS_LABELS: Record<ConnectionAccessLevel, string> = connectionAccessLabels('en');
+
+/** What each level means when an entry doesn't say, said of `agent` (the assistant's name), in a locale. */
+export function connectionAccessLines(
+  agent: string,
+  locale?: string | null,
+): Record<ConnectionAccessLevel, string> {
+  const tr = coreTranslator(locale);
+  return {
+    read: tr.t('connection.accessLine.read', { agent }),
+    manage: tr.t('connection.accessLine.manage', { agent }),
+  };
+}
 
 /** What each level means when an entry doesn't say (CT-314). */
-export const CONNECTION_ACCESS_DEFAULTS: Record<ConnectionAccessLevel, string> = {
-  read: 'The agent can see everything the account can, and change nothing.',
-  manage: 'The agent can also make changes. Deleting and anything risky still asks you first.',
-};
+export const CONNECTION_ACCESS_DEFAULTS: Record<ConnectionAccessLevel, string> =
+  connectionAccessLines('The agent');
 
 /** A value the person copies into the service while making a token (CT-314): a label and the value (a template). */
 export const CatalogStepValue = z.object({

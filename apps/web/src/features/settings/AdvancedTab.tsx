@@ -1,12 +1,5 @@
 import { createLink, Link } from '@tanstack/react-router';
-import {
-  type AdvancedPart,
-  type AdvancedRow,
-  type AdvancedSection,
-  advancedRowsHere,
-  SETTINGS_GROUP_TEXT,
-} from '@whombat/client';
-import { MANAGED_TEXT } from '@whombat/client/managed';
+import { type AdvancedPart, type AdvancedRow, type AdvancedSection, advancedRowsHere } from '@whombat/client';
 import { useBootstrap, useHostInfo, useTheAgent } from '@whombat/client/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
@@ -15,6 +8,9 @@ import { ButtonLink } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { SectionLabel } from '../../components/SectionLabel';
+import { MANAGED_TEXT } from '../../i18n/clientWords';
+import { useWebI18n } from '../../i18n/provider';
+import { useSettingsGroupText } from '../../i18n/words';
 import { AgentProfilePart } from '../agent/settings/AgentTab';
 import { ModelTab } from '../agent/settings/ModelTab';
 import { ServicesTab } from '../agent/settings/ServicesTab';
@@ -44,13 +40,19 @@ export interface AdvancedTabProps {
  * may do, GitHub and Website feedback in Connections, its schedules in Automations, Spend in Usage.
  */
 export function AdvancedTab({ burrow, part }: AdvancedTabProps) {
+  const SETTINGS_GROUP_TEXT = useSettingsGroupText();
+  const { tag: uiLocale } = useWebI18n();
   const { words } = useTheAgent(burrow);
   const { managed } = useAppServices();
   const host = useHostInfo({ params: { burrow } });
-  const rows = advancedRowsHere(words.name, {
-    managed: managed !== null,
-    services: host.data ? !!host.data.services : undefined,
-  });
+  const rows = advancedRowsHere(
+    words.name,
+    {
+      managed: managed !== null,
+      services: host.data ? !!host.data.services : undefined,
+    },
+    uiLocale,
+  );
   const row = part ? rows.find((r) => r.key === part) : undefined;
   // Usage isn't offered anywhere on the web; its page still opens at its address for an old link.
   if (!row) return <AdvancedList rows={rows.filter((r) => r.key !== 'spend')} agent={words.name} />;
@@ -71,6 +73,7 @@ export function AdvancedTab({ burrow, part }: AdvancedTabProps) {
 
 /** The list: a fold per group, a row per page (title, its line, a chevron). */
 function AdvancedList({ rows, agent }: { rows: readonly AdvancedRow[]; agent: string }) {
+  const SETTINGS_GROUP_TEXT = useSettingsGroupText();
   const ids = useId();
   const labels = SETTINGS_GROUP_TEXT.advanced.sections(agent);
   return (

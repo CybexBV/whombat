@@ -2,13 +2,7 @@ import { replaceEqualDeep } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BrandMark } from '@whombat/brand/react';
 import type { ThemeChoice, ThingRenameTarget, ThingRow } from '@whombat/client';
-import {
-  SETTINGS_HOME_TEXT,
-  TEAM_REPORT_WORDS,
-  THEME_CHOICES,
-  THEME_WORDS,
-  thingRenameTarget,
-} from '@whombat/client';
+import { THEME_CHOICES, teamReportWords, thingRenameTarget } from '@whombat/client';
 import { useRenameThing, useTeamReportsEntry } from '@whombat/client/react';
 import {
   ChevronRight,
@@ -43,6 +37,8 @@ import { PersonAvatar } from '../../features/messaging/PersonAvatar';
 import { useWhombatVersions } from '../../features/settings/version';
 import { type ThingLinkProps, useThingLinkProps } from '../../features/things/prefetch';
 import { THING_ICONS } from '../../features/things/thingIcons';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords, useSettingsHomeText, useThemeWords } from '../../i18n/words';
 import { useNavigateHref } from '../routing/navigation';
 import { useTheme } from '../theme';
 import { AccountMenuVersion } from './AccountMenuVersion';
@@ -88,6 +84,7 @@ export interface AssistantSidebarProps {
  * Memoized: the shell renders on every realtime event, the sidebar only when what it shows changes.
  */
 export const AssistantSidebar = memo(function AssistantSidebar({ model, onSignOut }: AssistantSidebarProps) {
+  const { t, tag: uiLocale } = useWebI18n();
   const ids = useId();
   const lists = useSidebarList();
   // A service's page is read while the pointer rests on its row (page-speed.md AP-2660).
@@ -104,12 +101,12 @@ export const AssistantSidebar = memo(function AssistantSidebar({ model, onSignOu
     if (!target) return undefined;
     return (event: MouseEvent<HTMLAnchorElement>) =>
       menu.open(event, `thing:${row.id}`, row.name, [
-        { label: 'Open', onSelect: () => navigate(row.href) },
-        { label: 'Rename', onSelect: () => things.start(row.id) },
+        { label: t('sidebar.open'), onSelect: () => navigate(row.href) },
+        { label: t('sidebar.rename'), onSelect: () => things.start(row.id) },
       ]);
   };
   const onMenu = (row: AssistantNavRow) => {
-    const entries = navMenu(row, model);
+    const entries = navMenu(row, model, uiLocale);
     // Nothing to offer: no menu, and the sidebar holds back the browser's (AP-4501).
     if (!entries.length) return undefined;
     return (event: MouseEvent<HTMLAnchorElement>) =>
@@ -133,7 +130,7 @@ export const AssistantSidebar = memo(function AssistantSidebar({ model, onSignOu
       );
   };
   return (
-    <aside className={styles.side} aria-label="Sidebar" onContextMenu={noBrowserMenu}>
+    <aside className={styles.side} aria-label={t('sidebar.label')} onContextMenu={noBrowserMenu}>
       <WhombatSwitcher burrowName={model.burrowName} />
 
       <div className={styles.lists}>
@@ -177,7 +174,7 @@ export const AssistantSidebar = memo(function AssistantSidebar({ model, onSignOu
 
         <ThingLists
           id={`${ids}-lists`}
-          view={sidebarLists(model, lists.list)}
+          view={sidebarLists(model, lists.list, uiLocale)}
           onPick={lists.pick}
           linkProps={linkProps}
           onMenu={onThingMenu}
@@ -189,7 +186,7 @@ export const AssistantSidebar = memo(function AssistantSidebar({ model, onSignOu
           <section aria-labelledby={`${ids}-chats`}>
             <div className={styles.label}>
               <h2 id={`${ids}-chats`} className={styles.labelText}>
-                Conversations
+                {t('sidebar.conversations')}
               </h2>
             </div>
             {model.chats.map((c) => (
@@ -206,7 +203,7 @@ export const AssistantSidebar = memo(function AssistantSidebar({ model, onSignOu
                 {c.unread > 0 && !c.selected ? (
                   <span className={styles.unread}>
                     {c.unread}
-                    <span className={styles.srOnly}> unread</span>
+                    <span className={styles.srOnly}> {t('sidebar.unread')}</span>
                   </span>
                 ) : null}
               </Link>
@@ -267,6 +264,7 @@ function ThingLists({
   rename: ThingRenaming;
   menuOpen: string | null;
 }) {
+  const { t } = useWebI18n();
   const link = (t: ThingRow) => (
     <ThingLink
       key={t.id}
@@ -294,7 +292,7 @@ function ThingLists({
   return (
     <section
       aria-labelledby={tabbed ? undefined : `${id}-head`}
-      aria-label={tabbed ? 'Servers and connections' : undefined}
+      aria-label={tabbed ? t('place.overview.line') : undefined}
       data-section={view.open}
     >
       {tabbed ? (
@@ -344,7 +342,9 @@ function ThingLists({
       {view.carried.length > 0 && (
         <section
           className={styles.carried}
-          aria-label={`Also in ${view.tabs.find((t) => t.key !== view.open)?.label ?? ''}`}
+          aria-label={t('sidebar.alsoIn', {
+            tab: view.tabs.find((tab) => tab.key !== view.open)?.label ?? '',
+          })}
           data-carried=""
         >
           {view.carried.map(link)}
@@ -372,6 +372,7 @@ function ThingLink({
   menuOpen: boolean;
   rename: ThingRenaming;
 }) {
+  const { t: translate } = useWebI18n();
   const icon = t.mark ? (
     <span className={styles.thingIcon}>
       <BrandMark mark={t.mark} size={15} />
@@ -387,8 +388,8 @@ function ThingLink({
         <InlineRename
           value={target.name}
           maxLength={target.max}
-          label={`Rename ${t.name}`}
-          hint={target.kind === 'server' ? 'Leave it empty to use its id again.' : undefined}
+          label={translate('sidebar.renameThing', { name: t.name })}
+          hint={target.kind === 'server' ? translate('sidebar.renameServerHint') : undefined}
           onSave={(typed) => rename.save(target, typed)}
           onClose={rename.stop}
         />
@@ -470,12 +471,6 @@ function useThingRename(burrow: string): ThingRenaming {
 }
 
 /** The account menu's words (the mock's “Account menu” section); the theme's and the update's are shared. */
-const ACCOUNT_MENU_TEXT = {
-  profile: 'Your profile',
-  phoneApp: 'Get the phone app',
-  signOut: 'Sign out',
-} as const;
-
 const THEME_ICONS: Record<ThemeChoice, LucideIcon> = { light: Sun, dark: Moon, system: Monitor };
 
 /** Settings' shortcut as the person's keyboard writes it: “⌘ ,” on a Mac, “Ctrl ,” elsewhere. */
@@ -490,6 +485,9 @@ function settingsShortcut(): string {
  * whether an update waits. Their other settings (notifications, devices, shared links, prompts) are in Settings → You.
  */
 function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () => void }) {
+  const { t } = useWebI18n();
+  const reports = useLocaleWords(teamReportWords);
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const { me } = model;
@@ -529,7 +527,7 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
             <PersonAvatar avatarUrl={me.avatarUrl} initials={me.initials} tone={me.tone} size={36} />
             <span className={styles.whoText}>
               <b>{me.name}</b>
-              <span>{ACCOUNT_MENU_TEXT.profile}</span>
+              <span>{t('account.profile')}</span>
             </span>
             <Icon icon={ChevronRight} size={16} className={styles.whoChevron} />
           </Link>
@@ -551,18 +549,18 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
           <hr className={styles.menuDivider} />
           <Link to="/settings" search={{ tab: 'phone' } as never} className={styles.menuItem} onClick={close}>
             <Icon icon={Smartphone} size={16} className={styles.menuIcon} />
-            {ACCOUNT_MENU_TEXT.phoneApp}
+            {t('account.phoneApp')}
           </Link>
           {/* Reports to the Whombat Team: only where one can be sent or some exist. */}
           {teamReports ? (
             <Link to="/reports" className={styles.menuItem} onClick={close} data-account-reports="">
               <Icon icon={MessageSquare} size={16} className={styles.menuIcon} />
-              {TEAM_REPORT_WORDS.entry}
+              {reports.entry}
             </Link>
           ) : null}
           <button type="button" className={styles.menuItem} onClick={onSignOut}>
             <Icon icon={LogOut} size={16} className={styles.menuIcon} />
-            {ACCOUNT_MENU_TEXT.signOut}
+            {t('account.signOut')}
           </button>
           <hr className={styles.menuDivider} />
           <AccountMenuVersion versions={versions} onNavigate={close} />
@@ -573,8 +571,8 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
         className={styles.user}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={`Account, ${me.name}`}
-        title="Account"
+        aria-label={`${t('account.label')}, ${me.name}`}
+        title={t('account.label')}
         data-me=""
         onPointerEnter={() => setNear(true)}
         onFocus={() => setNear(true)}
@@ -594,6 +592,7 @@ function Me({ model, onSignOut }: { model: AssistantSidebarModel; onSignOut: () 
  * follows the computer's own setting. Each choice is kept on this device and in the person's account.
  */
 function ThemeChoices() {
+  const THEME_WORDS = useThemeWords();
   const { choice, setChoice } = useTheme();
   return (
     <SegmentedControl

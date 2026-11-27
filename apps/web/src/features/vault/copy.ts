@@ -11,6 +11,7 @@ import {
   vaultEntryLabel,
   vaultSavedIntro,
 } from '@whombat/core/vault';
+import { currentLocale } from '../../i18n/provider';
 
 export const VAULT_TEXT = {
   loadFailed: 'Couldn’t load your Vault. Try again in a moment.',
@@ -242,7 +243,7 @@ export function vaultWords(agent: string): VaultWords {
   return {
     // Core's `VAULT_COPY.intro` with the agent by its name: an entry reaches it in its commands (CT-1240, CT-1532).
     intro: `What ${a} can sign in to when it works for you.`,
-    savedIntro: vaultSavedIntro(a),
+    savedIntro: vaultSavedIntro(a, currentLocale()),
     descriptionLabel: `What should ${a} know?`,
     descriptionPlaceholder: `What it’s for, and what ${a} may and may not do with it.`,
     noDescription: `No note for ${a} yet.`,
@@ -264,7 +265,7 @@ export function vaultEntryLine(
   entry: { kind: VaultEntryKind; auth: Pick<VaultAuth, 'type'> | null; agentOn: boolean },
   words: Pick<VaultWords, 'holders'>,
 ): string {
-  const label = vaultEntryLabel(entry);
+  const label = vaultEntryLabel(entry, currentLocale());
   if (entry.kind === 'secret') return `${label} · nothing uses it`;
   const holders = words.holders(entry.agentOn);
   return holders ? `${label} · ${holders}` : label;

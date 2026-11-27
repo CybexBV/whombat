@@ -17,7 +17,8 @@ import {
   type HostAlert,
   type HostServer,
 } from '@whombat/core';
-import { SERVER_SHOW_WORDS, type ServerShow, serverShow } from '@whombat/screen';
+import { type ServerShow, serverShow, serverShowWords } from '@whombat/screen';
+import { type ServerMessageKey, tServer } from '../../i18n/catalog';
 import { screenText, tempTone } from '../glance';
 import { deskServerPage, downsample, type ServerParts } from '../server-page';
 import type { DeskServer } from '../shapes';
@@ -45,33 +46,42 @@ export const SERVER_PARTS_KEEP_MS: Readonly<Record<DeskServerRange, number>> = {
   '7d': 120_000,
 };
 
-export const SERVER_PART_WORDS = {
-  /** *Add a widget*'s names and lines, and each view's title. */
-  ...SERVER_SHOW_WORDS,
-  ranges: { '1h': 'Last hour', '24h': 'Last 24 hours', '7d': 'Last 7 days' },
-  cores: 'of {n} cores',
-  load: 'load {n}',
-  memoryOf: '{used} of {total}',
-  memoryAvg: 'Avg {avg} %',
-  used: '{used} of {total} used',
-  running: '{n} running',
-  runningOff: '{n} running · {off} off',
-  in: 'In',
-  out: 'Out',
-  hottest: 'Hottest',
-  hotFrom: 'hot from {n} °C',
-  vm: 'VM',
-  container: 'Container',
-  stopped: 'off',
-  paused: 'paused',
-  off: 'It’s switched off.',
-  failed: 'I can’t read {name} right now.',
-  noNetwork: 'It doesn’t say what goes in and out.',
-  noStorage: 'It doesn’t say how full its disks are.',
-  noGuests: 'Nothing runs on it.',
-  noTemp: 'It doesn’t report its temperature.',
-  noAlerts: 'Nothing’s wrong with it right now.',
-} as const;
+/** A server's parts' words in a locale: *Add a widget*'s names and lines, each view's title and what it says. */
+export function serverPartWords(locale?: string | null) {
+  const t = (key: ServerMessageKey) => tServer(locale, key);
+  return {
+    ...serverShowWords(locale),
+    ranges: {
+      '1h': t('desk.serverPart.ranges.1h'),
+      '24h': t('desk.serverPart.ranges.24h'),
+      '7d': t('desk.serverPart.ranges.7d'),
+    } satisfies Record<DeskServerRange, string>,
+    cores: t('desk.serverPart.cores'),
+    load: t('desk.serverPart.load'),
+    memoryOf: t('desk.serverPart.memoryOf'),
+    memoryAvg: t('desk.serverPart.memoryAvg'),
+    used: t('desk.serverPart.used'),
+    running: t('desk.serverPart.running'),
+    runningOff: t('desk.serverPart.runningOff'),
+    in: t('desk.serverPart.in'),
+    out: t('desk.serverPart.out'),
+    hottest: t('desk.serverPart.hottest'),
+    hotFrom: t('desk.serverPart.hotFrom'),
+    vm: t('desk.serverPart.vm'),
+    container: t('desk.serverPart.container'),
+    stopped: t('desk.serverPart.stopped'),
+    paused: t('desk.serverPart.paused'),
+    off: t('desk.serverPart.off'),
+    failed: t('desk.serverPart.failed'),
+    noNetwork: t('desk.serverPart.noNetwork'),
+    noStorage: t('desk.serverPart.noStorage'),
+    noGuests: t('desk.serverPart.noGuests'),
+    noTemp: t('desk.serverPart.noTemp'),
+    noAlerts: t('desk.serverPart.noAlerts'),
+  };
+}
+
+export const SERVER_PART_WORDS = serverPartWords('en');
 
 /** What a server widget reads for its part: its own range for a chart, else the shortest. */
 export function serverPartRange(show: ServerPart, opts: Readonly<Record<string, string>>): DeskServerRange {
@@ -157,9 +167,11 @@ export function serverPartView(input: {
   unreachable?: boolean;
   /** The last read of its parts failed. */
   failed?: boolean;
+  /** The person's language; English without one. */
+  locale?: string | null;
 }): Resolved | null {
   const { id, show, card, row, parts, range, now } = input;
-  const W = SERVER_PART_WORDS;
+  const W = input.locale ? serverPartWords(input.locale) : SERVER_PART_WORDS;
   if (!card?.id) {
     const gone = serverView({ ...input, line: null, card: undefined, row: undefined });
     return {

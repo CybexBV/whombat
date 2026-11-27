@@ -15,27 +15,12 @@ import {
   type BackupSetPolicyInput,
 } from '@whombat/protocol/session';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const LONG_MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+import { dayLongMonth, dayShortMonth, weekdayName } from '../../i18n/dates';
+import { currentLocale, webTranslator } from '../../i18n/provider';
 
-/** “3 Nov” (local). */
-export function dayMonth(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+/** “3 Nov” (local), in the page's language. */
+export function dayMonth(iso: string, tag = currentLocale()): string {
+  return dayShortMonth(iso, tag);
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -43,18 +28,19 @@ const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 /** A backup's title: “Today, 03:00”, “Yesterday, 21:00”, “Sunday, 03:00” within a week, else “25 October, 03:00”. */
-export function backupWhen(iso: string, now = new Date()): string {
+export function backupWhen(iso: string, now = new Date(), tag = currentLocale()): string {
+  const { t } = webTranslator(tag);
   const d = new Date(iso);
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const y = new Date(now);
   y.setDate(y.getDate() - 1);
   const day = sameDay(d, now)
-    ? 'Today'
+    ? t('backups.today')
     : sameDay(d, y)
-      ? 'Yesterday'
+      ? t('backups.yesterday')
       : now.getTime() - d.getTime() < 6 * 86_400_000
-        ? DAYS[d.getDay()]
-        : `${d.getDate()} ${LONG_MONTHS[d.getMonth()]}`;
+        ? weekdayName(d.getDay(), tag)
+        : dayLongMonth(d, tag);
   return `${day}, ${time}`;
 }
 

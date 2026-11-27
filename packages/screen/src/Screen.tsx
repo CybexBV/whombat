@@ -21,15 +21,16 @@ import { type AttentionActions, AttentionModal, LockIcon } from './AttentionModa
 import { edgeTone, MODAL_CLOSED, type ModalState, modalView, pill } from './attention';
 import { bigSize, PAGE_NAMES_MIN, type PagesAt, pagesAt, SPOTLIGHT_S, spotAt } from './forms';
 import { BAR, cellRect, GAP, type Grid, PAD, type Placed, pageOn, screenGrid } from './grid';
+import { screenFormatLocale } from './i18n/catalog';
 import { type Pager, pagerGo, pagerProgress, pagerStart, pagerTick, pagerTouch } from './pager';
-import { cx, EnvProvider, type ScreenEnv } from './parts';
+import { cx, EnvProvider, type ScreenEnv, useScreenWords } from './parts';
 import st from './screen.module.css';
 import { sizeOf } from './specs';
 import { everyPage, rotationNow } from './times';
 import type { DeskGrid, DeskImage, DeskSpotlight, DeskWidget, DeskWidgetView, ScreenCalm } from './types';
 import { WidgetView } from './WidgetView';
 import ws from './widgets.module.css';
-import { clockText, dateText, fillWords, SCREEN_WORDS } from './words';
+import { clockText, dateText, fillWords, screenWords } from './words';
 
 export interface ScreenProps extends AttentionActions {
   /** The screen's size in logical pixels: it decides the grid (with the layout's Size). */
@@ -46,6 +47,7 @@ export interface ScreenProps extends AttentionActions {
   /** The assistant's name (“Dusty”). */
   assistant: string;
   timeZone?: string | undefined;
+  locale?: string | undefined;
   /** The time (ms): the clock, the turning, “since 14:30 · 4 min”. The host ticks it (every second or so). */
   now: number;
   /** The chips on the right of the top bar (`<ScreenChip>`): the box's network, battery and lock, or *Online*. */
@@ -209,7 +211,8 @@ function useLatest<T>(value: T) {
 }
 
 export function Screen(props: ScreenProps) {
-  const { grid: state, now, editing = false } = props;
+  const { grid: state, now, timeZone, locale, editing = false } = props;
+  const words = screenWords(locale);
   const layout = state.layout;
   const g = useMemo(
     () => screenGrid(props.width, props.height, layout.size),
@@ -222,8 +225,8 @@ export function Screen(props: ScreenProps) {
   /* Pages (DK-133), only those whose time it is; the editor and a host that decides show them all */
   const controlled = props.page !== undefined;
   const rotation = useMemo(
-    () => (controlled || editing ? everyPage(pages.length) : rotationNow(pages, now, props.timeZone)),
-    [controlled, editing, pages, now, props.timeZone],
+    () => (controlled || editing ? everyPage(pages.length) : rotationNow(pages, now, timeZone)),
+    [controlled, editing, pages, now, timeZone],
   );
   const [pager, setPager] = useState<Pager>(() => pagerStart(now, rotation));
   const page = Math.min(controlled ? (props.page ?? 0) : pager.page, pages.length - 1);
@@ -283,7 +286,7 @@ export function Screen(props: ScreenProps) {
       ? state.spotlight
       : null;
 
-  const pillView = pill(state.attention);
+  const pillView = pill(state.attention, locale);
   const edge = edgeTone(state.attention);
   // The modal waits while the moment lasts: the door first.
   const modalOpen = !editing && !props.onlyTime && !spotlight && modalView(state.attention, away, modal).open;
@@ -322,7 +325,8 @@ export function Screen(props: ScreenProps) {
   const env = useMemo<ScreenEnv>(
     () => ({
       assistant: props.assistant,
-      timeZone: props.timeZone,
+      timeZone,
+      locale,
       loadImage: has.load ? (image) => latest.current.loadImage?.(image) ?? Promise.reject() : undefined,
       renderFace: has.face ? (size) => latest.current.renderFace?.(size) : undefined,
       editing,
@@ -335,7 +339,8 @@ export function Screen(props: ScreenProps) {
     }),
     [
       props.assistant,
-      props.timeZone,
+      timeZone,
+      locale,
       editing,
       has.load,
       has.face,
@@ -436,6 +441,7 @@ export function Screen(props: ScreenProps) {
       <div
         className={st.screen}
         data-theme="dark"
+        lang={locale ? screenFormatLocale(locale) : undefined}
         data-screen={state.screen}
         data-editing={editing || undefined}
         style={{ width: g.width, height: g.height, transform: `scale(${g.zoom * scale})` }}
@@ -481,11 +487,11 @@ export function Screen(props: ScreenProps) {
               <div className={cx(st.spot, spotPlace === 'after' && st.spotAfter)} ref={spotRef}>
                 <span className={st.spotWords} role="status">
                   <i aria-hidden="true" />
-                  {SCREEN_WORDS.spotlight[spotlight.reason]}
+                  {words.spotlight[spotlight.reason]}
                 </span>
                 <button type="button" className={cx(st.back, st.spotBack, st.focus)} onClick={back}>
                   <span aria-hidden="true">‹</span>
-                  {SCREEN_WORDS.back}
+                  {words.back}
                 </button>
               </div>
             ) : bigWidget && !editing ? (
@@ -495,7 +501,7 @@ export function Screen(props: ScreenProps) {
                 onClick={back}
               >
                 <span aria-hidden="true">‹</span>
-                {SCREEN_WORDS.back}
+                {words.back}
               </button>
             ) : (
               turning.length > 1 && (
@@ -505,7 +511,7 @@ export function Screen(props: ScreenProps) {
                     (at === 'after' || at === 'dotsAfter') && st.pagesAfter,
                     dots && st.dots,
                   )}
-                  aria-label={SCREEN_WORDS.pages}
+                  aria-label={words.pages}
                 >
                   {turning.map((i, k) => {
                     const p = pages[i];
@@ -519,7 +525,7 @@ export function Screen(props: ScreenProps) {
                         aria-current={i === page ? 'page' : undefined}
                         aria-label={
                           dots
-                            ? fillWords(SCREEN_WORDS.page, { name: p.name, i: k + 1, n: turning.length })
+                            ? fillWords(words.page, { name: p.name, i: k + 1, n: turning.length })
                             : undefined
                         }
                         style={
@@ -542,8 +548,8 @@ export function Screen(props: ScreenProps) {
           </header>
           {props.onlyTime ? (
             <div className={st.onlyTime}>
-              <div className={st.onlyTimeClock}>{clockText(now, props.timeZone)}</div>
-              <div className={st.onlyTimeDate}>{dateText(now, props.timeZone)}</div>
+              <div className={st.onlyTimeClock}>{clockText(now, timeZone, locale)}</div>
+              <div className={st.onlyTimeDate}>{dateText(now, timeZone, locale)}</div>
             </div>
           ) : (
             <div className={st.grid}>
@@ -563,14 +569,14 @@ export function Screen(props: ScreenProps) {
                 ))}
               {editing && shown.length === 0 && (
                 <div className={st.empty}>
-                  <span>{SCREEN_WORDS.editing.empty}</span>
-                  <span>{SCREEN_WORDS.editing.emptyMore}</span>
+                  <span>{words.editing.empty}</span>
+                  <span>{words.editing.emptyMore}</span>
                 </div>
               )}
               {props.overlay}
             </div>
           )}
-          {tryingS > 0 && <div className={st.trying}>{fillWords(SCREEN_WORDS.trying, { s: tryingS })}</div>}
+          {tryingS > 0 && <div className={st.trying}>{fillWords(words.trying, { s: tryingS })}</div>}
           {spotlight ? (
             <>
               <BigWidget
@@ -643,13 +649,14 @@ function BigWidget({
   now: number;
   onBack: () => void;
 }) {
+  const words = useScreenWords();
   const { w, h } = bigSize(sizeOf(widget, view?.kind).max, g);
   const r = cellRect(g, { x: 0, y: 0, w, h });
   const left = PAD + ((g.cols - w) * (g.cw + GAP)) / 2;
   const top = BAR + ((g.rows - h) * (g.ch + GAP)) / 2;
   return (
     <>
-      <button type="button" className={st.ov} aria-label={SCREEN_WORDS.back} tabIndex={-1} onClick={onBack} />
+      <button type="button" className={st.ov} aria-label={words.back} tabIndex={-1} onClick={onBack} />
       <WidgetView
         widget={widget}
         view={view}
@@ -717,6 +724,7 @@ export function WidgetPreview({
   screen = { width: 1280, height: 800 },
   assistant,
   timeZone,
+  locale,
   now,
   loadImage,
   renderFace,
@@ -730,6 +738,7 @@ export function WidgetPreview({
   screen?: { width: number; height: number };
   assistant: string;
   timeZone?: string | undefined;
+  locale?: string | undefined;
   now?: number | undefined;
   loadImage?: ((image: DeskImage) => Promise<string>) | undefined;
   renderFace?: ((size: number) => ReactNode) | undefined;
@@ -738,14 +747,15 @@ export function WidgetPreview({
   const r = cellRect(g, { x: 0, y: 0, w, h });
   const s = width / r.width;
   const env = useMemo<ScreenEnv>(
-    () => ({ assistant, timeZone, loadImage, renderFace, editing: true }),
-    [assistant, timeZone, loadImage, renderFace],
+    () => ({ assistant, timeZone, locale, loadImage, renderFace, editing: true }),
+    [assistant, timeZone, locale, loadImage, renderFace],
   );
   return (
     <div className={st.frame} style={{ width, height: r.height * s }}>
       <div
         className={st.screen}
         data-theme="dark"
+        lang={locale ? screenFormatLocale(locale) : undefined}
         style={{ width: r.width, height: r.height, transform: `scale(${s})`, background: 'transparent' }}
       >
         <EnvProvider value={env}>

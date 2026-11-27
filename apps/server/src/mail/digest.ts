@@ -5,6 +5,7 @@
  * never during Do not disturb or quiet hours, each item once. A box without SMTP has no mail: the capability is false
  * and the worker never starts.
  */
+
 import {
   type BootstrapCapabilities,
   EMAIL_DAILY_AT,
@@ -19,10 +20,13 @@ import {
   zonedInstant,
   zonedParts,
 } from '@whombat/core';
+import type { MessageVars } from '@whombat/core/i18n';
 import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { webOrigin } from '../commands/burrows';
 import { accounts, burrows, notifications, principals } from '../db/schema/index';
 import { zoneOf } from '../domain/notify';
+import { type ServerMessageKey, tpServer, tServer } from '../i18n/catalog';
+import { accountLocale } from '../i18n/locale';
 import { linkEmailOf } from '../managed/link/mail';
 import type { PushSender } from '../push/sender';
 import { shortName } from '../read/principals';
@@ -98,16 +102,17 @@ export interface DigestItem {
 }
 
 /** One line saying what happened: “Joris mentioned you in #billing-v2”. */
-export function digestLine(item: DigestItem): string {
+export function digestLine(item: DigestItem, locale?: string | null): string {
+  const vars = { actor: item.actorName, where: item.where };
   switch (item.kind) {
     case 'needs_you':
-      return `Needs you · ${item.where}`;
+      return tServer(locale, 'mail.digest.needsYou', vars);
     case 'mention':
-      return `${item.actorName} mentioned you in ${item.where}`;
+      return tServer(locale, 'mail.digest.mention', vars);
     case 'reply':
-      return `${item.actorName} replied in ${item.where}`;
+      return tServer(locale, 'mail.digest.reply', vars);
     case 'agent_update':
-      return item.toYou ? `${item.actorName} wrote to you` : `${item.actorName} wrote in ${item.where}`;
+      return tServer(locale, item.toYou ? 'mail.digest.wroteToYou' : 'mail.digest.wroteIn', vars);
   }
 }
 
@@ -124,50 +129,55 @@ export function renderDigest(input: {
   cadence: 'hourly' | 'daily';
   openUrl: string;
   settingsUrl: string;
+  /** The reader's locale; absent: English. */
+  locale?: string | null;
 }): { subject: string; text: string; html: string } {
+  const locale = input.locale;
+  const t = (key: ServerMessageKey, vars?: MessageVars) => tServer(locale, key, vars);
+  const line = (item: DigestItem) => digestLine(item, locale);
   const listed = input.items.slice(0, EMAIL_ITEMS_MAX);
   const more = input.items.length - listed.length;
   const first = input.items[0];
+  const count = input.items.length;
   const subject =
-    input.items.length === 1 && first
-      ? digestLine(first)
-      : `${input.items.length} things waiting for you in Whombat`;
-  const lines = [`Hi ${input.name},`, '', 'While you were away:', ''];
+    count === 1 && first ? line(first) : tpServer(locale, 'mail.digest.subjectMany', count, { n: count });
+  const lines = [t('mail.digest.hi', { name: input.name }), '', t('mail.digest.whileAway'), ''];
   for (const item of listed) {
-    lines.push(`· ${digestLine(item)}`);
+    lines.push(`· ${line(item)}`);
     const quote = quoteOf(item.text);
     if (quote) lines.push(`  ${quote}`);
     lines.push(`  ${item.url}`, '');
   }
-  if (more > 0) lines.push(`…and ${more} more in your inbox.`, '');
+  if (more > 0) lines.push(t('mail.digest.more', { n: more }), '');
+  const cadence = t(input.cadence === 'daily' ? 'mail.digest.daily' : 'mail.digest.hourly');
   lines.push(
-    `Open Whombat: ${input.openUrl}`,
+    t('mail.digest.openLine', { url: input.openUrl }),
     '',
-    `You get this ${input.cadence === 'daily' ? 'once a day' : 'at most once an hour'} when something waits for you. Change it or turn it off in Settings → Notifications:`,
+    t('mail.digest.youGetThisText', { cadence }),
     input.settingsUrl,
     '',
   );
-  const cadence = input.cadence === 'daily' ? 'once a day' : 'at most once an hour';
   const html = renderEmailHtml({
-    label: 'Notifications',
-    preheader: first ? digestLine(first) : undefined,
+    label: t('mail.digest.label'),
+    preheader: first ? line(first) : undefined,
     title:
-      input.items.length === 1
-        ? 'Something is waiting for you'
-        : `${input.items.length} things are waiting for you`,
+      count === 1
+        ? t('mail.digest.titleOne')
+        : tpServer(locale, 'mail.digest.titleMany', count, { n: count }),
     blocks: [
-      `Hi ${input.name}, while you were away:`,
-      { items: listed.map((i) => ({ title: digestLine(i), quote: quoteOf(i.text), href: i.url })) },
-      ...(more > 0 ? [{ note: `…and ${more} more in your inbox.` }] : []),
-      { button: { href: input.openUrl, label: 'Open Whombat' } },
+      t('mail.digest.hiWhileAway', { name: input.name }),
+      { items: listed.map((i) => ({ title: line(i), quote: quoteOf(i.text), href: i.url })) },
+      ...(more > 0 ? [{ note: t('mail.digest.more', { n: more }) }] : []),
+      { button: { href: input.openUrl, label: t('mail.digest.open') } },
     ],
     footer: [
       {
-        text: `You get this ${cadence} when something waits for you.`,
-        link: { href: input.settingsUrl, label: 'Change it or turn it off in Settings → Notifications' },
+        text: t('mail.digest.youGetThis', { cadence }),
+        link: { href: input.settingsUrl, label: t('mail.digest.change') },
       },
     ],
-    sender: sentBy(input.openUrl),
+    sender: sentBy(input.openUrl, locale),
+    locale,
   });
   return { subject, text: lines.join('\n'), html };
 }
@@ -337,13 +347,14 @@ export class EmailDigest {
       return claimed.length;
     }
     const chosen = list.filter((c) => claimed.includes(c.id));
+    const locale = await accountLocale(services, accountId).catch(() => null);
     const actors = await services.db
       .select()
       .from(principals)
       .where(inArray(principals.id, [...new Set(chosen.map((c) => c.actorId))]));
     const actorName = (id: string) => {
       const row = actors.find((a) => a.id === id);
-      return row ? shortName(row) : 'Someone';
+      return row ? shortName(row) : tServer(locale, 'mail.digest.someone');
     };
     const origin = webOrigin(services);
     const items: DigestItem[] = chosen.map((c) => {
@@ -359,6 +370,7 @@ export class EmailDigest {
     });
     const name = (account.name || account.email.split('@')[0] || 'there').split(/\s+/)[0] ?? 'there';
     const { subject, text, html } = renderDigest({
+      locale,
       name,
       items,
       cadence: prefs.email === 'daily' ? 'daily' : 'hourly',

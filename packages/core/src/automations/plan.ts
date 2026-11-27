@@ -12,12 +12,7 @@ import type {
   AutomationTrigger,
   RecipeFix,
 } from '../domain/automation.js';
-import {
-  GITHUB_EVENT_LABELS,
-  GITHUB_PR_EVENTS,
-  STEP_KIND_LABELS,
-  STEP_TEXT_MAX,
-} from '../domain/automation.js';
+import { GITHUB_PR_EVENTS, STEP_KIND_LABELS, STEP_TEXT_MAX } from '../domain/automation.js';
 import type {
   AutomationPlanChange,
   AutomationPlanLine,
@@ -27,11 +22,21 @@ import type {
   AutomationPlanState,
   AutomationPlanView,
 } from '../domain/automation-plan.js';
+import {
+  type CoreMessageKey,
+  type CoreTranslator,
+  coreTranslator,
+  coreWords,
+  hasCoreMessage,
+  tCore,
+} from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { findMyTriggerDetail, findMyWhenText } from './findmy.js';
 import { mailTriggerDetail, mailWhenText } from './mail.js';
-import { RECIPE_FIX_IMPORTANCE, recipeOf, trackerItemNoun, UNKNOWN_TRACKER_CONNECTION } from './recipes.js';
+import { recipeOf } from './recipes.js';
 import { describeSchedule } from './schedule.js';
 import { thingWhenText } from './thing.js';
+import { trackerItemKind } from './validate.js';
 
 export interface PlanNames {
   /** The agent's name: the label of what it does (“DUSTY”). */
@@ -40,6 +45,8 @@ export interface PlanNames {
   conversationTitle: (id: string) => string | undefined;
   /** A tracker connection's label: “Acme Desk dev”. */
   connectionLabel?: (id: string) => string | undefined;
+  /** The viewer's locale tag (`en-GB`, `nl-NL`); null or absent is English. The stored definition stays English. */
+  locale?: string | null;
 }
 
 const LINE_MAX = 300;
@@ -70,24 +77,28 @@ export function plainTemplate(text: string): string {
   });
 }
 
-function minutes(m: number): string {
-  if (m % 1440 === 0) return m === 1440 ? 'a day' : `${m / 1440} days`;
-  if (m % 60 === 0) return m === 60 ? 'an hour' : `${m / 60} hours`;
-  return m === 1 ? 'a minute' : `${m} minutes`;
+function minutes(tr: CoreTranslator, m: number): string {
+  if (m % 1440 === 0) return m === 1440 ? tr.t('plan.span.day') : tr.t('plan.span.days', { n: m / 1440 });
+  if (m % 60 === 0) return m === 60 ? tr.t('plan.span.hour') : tr.t('plan.span.hours', { n: m / 60 });
+  return m === 1 ? tr.t('plan.span.minute') : tr.t('plan.span.minutes', { n: m });
 }
 
 /* The keys a plan gives --------------------------------------------------------------------------------------- */
 
-/** Every key an automation's steps can use, with what the card says when it asks first. */
-const ASK_TEXT: Record<AutomationKey, string> = {
-  'pr.open': 'Before it opens a pull request',
-  'pr.comment': 'Before it comments on GitHub',
-  merge: 'Before it merges a pull request',
-  'merge.main': 'Before it merges a pull request',
-  'report.update': 'Before it writes back to the tracker',
-  'report.reply': 'Before it replies to a customer',
-  'messages.external': 'Before it calls out',
-};
+/** What the card says when a key an automation's steps can use asks first. */
+function askText(tr: CoreTranslator, key: AutomationKey): string {
+  return tr.t(`plan.ask.key.${key}`);
+}
+
+/** The tag to hand on to other words: the translator's locale, or the pseudo locale while testing. */
+function tagOf(tr: CoreTranslator): string {
+  return tr.language === 'pseudo' ? 'pseudo' : tr.locale;
+}
+
+/** The translator a view is drawn with: the viewer's locale, else English. */
+function translatorOf(names: { locale?: string | null }, locale?: string | null): CoreTranslator {
+  return coreTranslator(locale ?? names.locale);
+}
 
 /** The keys a step needs to do what it does, with what each is limited to. */
 function stepKeys(step: AutomationStep): { keyId: AutomationKey; repo?: string; connection?: string }[] {
@@ -145,56 +156,71 @@ export function definitionGrants(
 
 /* Sections ----------------------------------------------------------------------------------------------------- */
 
-function whenLine(t: AutomationTrigger, names: PlanNames): AutomationPlanLine {
-  const room = (id: string) => names.conversationTitle(id) ?? 'a room';
-  const connection = (id: string) => names.connectionLabel?.(id) ?? UNKNOWN_TRACKER_CONNECTION;
+function whenLine(t: AutomationTrigger, names: PlanNames, tr: CoreTranslator): AutomationPlanLine {
+  const locale = tagOf(tr);
+  const room = (id: string) => names.conversationTitle(id) ?? tr.t('plan.aRoom');
+  const connection = (id: string) => names.connectionLabel?.(id) ?? tr.t('recipe.tracker.unknown');
   switch (t.kind) {
     case 'message_posted': {
-      const words = t.contains.length ? ` with ${t.contains.map((w) => `“${w}”`).join(' or ')}` : '';
+      const words = t.contains.length
+        ? tr.t('plan.when.message.words', {
+            words: t.contains.map((w) => `“${w}”`).join(tr.t('plan.orJoin')),
+          })
+        : '';
       const detail = [
-        t.includeReplies ? 'Thread replies count too' : null,
-        t.includeAgents ? `${names.agent}’s own messages count too` : null,
+        t.includeReplies ? tr.t('plan.when.replies') : null,
+        t.includeAgents ? tr.t('plan.when.agents', { agent: names.agent }) : null,
       ].filter((d): d is string => !!d);
-      return line(`A message${words} in ${room(t.conversationId)}`, detail.join(' · ') || null);
+      return line(
+        tr.t('plan.when.message', { words, room: room(t.conversationId) }),
+        detail.join(' · ') || null,
+      );
     }
     case 'reaction_added':
-      return line(`Someone reacts with ${t.value} in ${room(t.conversationId)}`);
+      return line(tr.t('plan.when.reaction', { value: t.value, room: room(t.conversationId) }));
     case 'schedule':
-      return line(describeSchedule(t.schedule, t.timeZone));
+      return line(describeSchedule(t.schedule, t.timeZone, locale));
     case 'github': {
       const label =
         t.event === 'checks_completed' && t.checksState === 'failed'
-          ? 'Checks fail on a pull request'
+          ? tr.t('plan.when.github.checksFailed')
           : t.event === 'checks_completed' && t.checksState === 'passed'
-            ? 'Checks pass on a pull request'
-            : GITHUB_EVENT_LABELS[t.event];
+            ? tr.t('plan.when.github.checksPassed')
+            : tr.t(`plan.when.github.${t.event}`);
       const pr = GITHUB_PR_EVENTS.includes(t.event);
       const detail = [
-        t.bots === false ? 'Not from bots' : null,
-        pr && t.drafts === false ? 'Not draft pull requests' : null,
-        t.branch ? `Branch ${t.branch}` : null,
+        t.bots === false ? tr.t('plan.when.notBots') : null,
+        pr && t.drafts === false ? tr.t('plan.when.notDrafts') : null,
+        t.branch ? tr.t('plan.when.branch', { branch: t.branch }) : null,
       ].filter((d): d is string => !!d);
-      return line(`${label} on ${t.repo}`, detail.join(' · ') || null);
+      return line(tr.t('plan.when.github', { label, repo: t.repo }), detail.join(' · ') || null);
     }
     case 'tracker':
       return t.event === 'reporter_replied'
-        ? line(`A customer writes back in ${connection(t.connectionId)}`)
-        : line(`A new ${trackerItemNoun(t.itemKinds)} in ${connection(t.connectionId)}`);
+        ? line(tr.t('plan.when.trackerReplied', { connection: connection(t.connectionId) }))
+        : line(
+            tr.t(`plan.when.tracker.${trackerItemKind(t.itemKinds)}`, {
+              connection: connection(t.connectionId),
+            }),
+          );
     case 'mail': {
       const mailbox = names.connectionLabel?.(t.connectionId);
-      return line(mailWhenText(t, mailbox), mailTriggerDetail(mailbox));
+      return line(mailWhenText(t, mailbox, locale), mailTriggerDetail(mailbox, locale));
     }
     case 'thing':
-      return line(thingWhenText(t));
+      return line(thingWhenText(t, locale));
     case 'findmy':
-      return line(findMyWhenText(t), findMyTriggerDetail(names.connectionLabel?.(t.connectionId)));
+      return line(
+        findMyWhenText(t, locale),
+        findMyTriggerDetail(names.connectionLabel?.(t.connectionId), locale),
+      );
     case 'webhook':
-      return line('Someone calls its webhook');
+      return line(tr.t('plan.when.webhook'));
     case 'manual':
-      return line('Only when you start it');
+      return line(tr.t('plan.when.manual'));
     default:
       // A start of a kind this Whombat no longer knows (an old plan's card, an earlier version): said plainly.
-      return line(UNKNOWN_START);
+      return line(tr.t('plan.unknownStart'));
   }
 }
 
@@ -202,131 +228,149 @@ function whenLine(t: AutomationTrigger, names: PlanNames): AutomationPlanLine {
 export const UNKNOWN_START = 'Something this Whombat no longer knows';
 
 /** What an agent step does beyond its words: the code it reads or changes, and what it reports. */
-function agentFacts(step: Extract<AutomationStep, { kind: 'dispatch_agent' }>): string[] {
+function agentFacts(step: Extract<AutomationStep, { kind: 'dispatch_agent' }>, tr: CoreTranslator): string[] {
   const facts: string[] = [];
   const w = step.workspace;
   if (w?.access === 'write')
-    facts.push(`Changes the code of ${w.repo} on its own branch ${plainTemplate(w.branch ?? '')}`.trim());
-  else if (w?.pullRequest) facts.push(`Reads the pull request’s code on ${w.repo}`);
-  else if (w?.branch) facts.push(`Reads ${plainTemplate(w.branch)} of ${w.repo}`);
-  else if (w) facts.push(`Reads the code of ${w.repo}`);
-  if (step.assessment) facts.push('Says what it is, how important it is and how big a fix would be');
-  if (step.verdict) facts.push('Says whether it’s ready');
+    facts.push(tr.t('plan.fact.changes', { repo: w.repo, branch: plainTemplate(w.branch ?? '') }).trim());
+  else if (w?.pullRequest) facts.push(tr.t('plan.fact.readsPr', { repo: w.repo }));
+  else if (w?.branch)
+    facts.push(tr.t('plan.fact.readsBranch', { branch: plainTemplate(w.branch), repo: w.repo }));
+  else if (w) facts.push(tr.t('plan.fact.reads', { repo: w.repo }));
+  if (step.assessment) facts.push(tr.t('plan.fact.assessment'));
+  if (step.verdict) facts.push(tr.t('plan.fact.verdict'));
   return facts;
 }
 
-function doesLine(step: AutomationStep, names: PlanNames): AutomationPlanLine | null {
-  const room = (c: string) => (c === 'run' ? null : (names.conversationTitle(c) ?? 'another room'));
+function doesLine(step: AutomationStep, names: PlanNames, tr: CoreTranslator): AutomationPlanLine | null {
+  const room = (c: string) => (c === 'run' ? null : (names.conversationTitle(c) ?? tr.t('plan.anotherRoom')));
   switch (step.kind) {
     case 'dispatch_agent': {
-      const facts = agentFacts(step);
+      const facts = agentFacts(step, tr);
       return line(step.name ?? firstLine(plainTemplate(step.prompt)), facts.join(' · ') || null);
     }
     case 'post_message': {
       const where = room(step.conversation);
       return line(
-        step.name ?? `Posts a message${where ? ` in ${where}` : ''}`,
+        step.name ?? (where ? tr.t('plan.does.postIn', { room: where }) : tr.t('plan.does.post')),
         firstLine(plainTemplate(step.text)),
       );
     }
     case 'wait':
-      return line(step.name ?? `Waits ${minutes(step.minutes)}`);
+      return line(step.name ?? tr.t('plan.does.wait', { span: minutes(tr, step.minutes) }));
     // A check named as a question (“Did the review approve it?”) is a gate between steps, not work the person reads.
     case 'condition':
       return step.name?.trim().endsWith('?')
         ? null
-        : line(step.name ?? 'Goes on only when a check holds', step.name ? null : step.if);
+        : line(step.name ?? tr.t('plan.does.condition'), step.name ? null : step.if);
     default:
       return null;
   }
 }
 
 /** Where its runs go in Chat: a thread per item, under the message, or a new one each time. */
-function threadLine(definition: AutomationDefinition, names: PlanNames): string {
-  const room = names.conversationTitle(definition.conversationId) ?? 'Chat';
+function threadLine(definition: AutomationDefinition, names: PlanNames, tr: CoreTranslator): string {
+  const room = names.conversationTitle(definition.conversationId) ?? tr.t('plan.chat');
   const kinds = new Set(definition.triggers.map((t) => t.kind));
   const github = definition.triggers.filter((t) => t.kind === 'github');
+  const per = (item: CoreMessageKey) => tr.t('plan.thread.per', { item: tr.t(item), room });
   if (github.length && kinds.size === 1) {
     const issues = github.some((t) => t.event === 'issue_opened');
     const prs = github.some((t) => t.event !== 'issue_opened' && t.event !== 'branch_pushed');
-    const item = issues && prs ? 'issue or pull request' : issues ? 'issue' : prs ? 'pull request' : 'push';
-    return `One thread per ${item} in ${room}`;
+    return per(
+      issues && prs
+        ? 'plan.item.issueOrPr'
+        : issues
+          ? 'plan.item.issue'
+          : prs
+            ? 'plan.item.pr'
+            : 'plan.item.push',
+    );
   }
-  if (kinds.has('tracker') && kinds.size === 1) return `One thread per report in ${room}`;
-  if (kinds.has('mail') && kinds.size === 1) return `One thread per email in ${room}`;
+  if (kinds.has('tracker') && kinds.size === 1) return per('plan.item.report');
+  if (kinds.has('mail') && kinds.size === 1) return per('plan.item.email');
   if ([...kinds].every((k) => k === 'message_posted' || k === 'reaction_added'))
-    return 'In a thread under the message';
-  return `A thread in ${room} each time it runs`;
+    return tr.t('plan.thread.underMessage');
+  return tr.t('plan.thread.eachRun', { room });
 }
 
-function postsLines(definition: AutomationDefinition, names: PlanNames): AutomationPlanLine[] {
-  const connection = (id: string) => names.connectionLabel?.(id) ?? UNKNOWN_TRACKER_CONNECTION;
+/** The host of a URL a step calls. Core has no URL class (it stays free of platform APIs): what follows the scheme. */
+function hostOf(url: string): string {
+  return /^https?:\/\/([^/?#]+)/i.exec(url)?.[1] ?? url;
+}
+
+function postsLines(
+  definition: AutomationDefinition,
+  names: PlanNames,
+  tr: CoreTranslator,
+): AutomationPlanLine[] {
+  const connection = (id: string) => names.connectionLabel?.(id) ?? tr.t('recipe.tracker.unknown');
   const outside: AutomationPlanLine[] = [];
   const merges = definition.steps.some((s) => s.kind === 'merge_pull_request');
   for (const step of definition.steps)
     switch (step.kind) {
       case 'github_comment':
-        outside.push(line(`Comments on GitHub on ${step.repo}`));
+        outside.push(line(tr.t('plan.posts.comment', { repo: step.repo })));
         break;
       case 'open_pull_request':
         // Without a merge step the pull request waits for the person, which the card says.
         outside.push(
           line(
-            `Opens a pull request on ${step.repo}`,
-            `From ${plainTemplate(step.branch)}${merges ? '' : ' · You merge it'}`,
+            tr.t('plan.posts.openPr', { repo: step.repo }),
+            [
+              tr.t('plan.posts.from', { branch: plainTemplate(step.branch) }),
+              ...(merges ? [] : [tr.t('plan.posts.youMerge')]),
+            ].join(' · '),
           ),
         );
         break;
       case 'merge_pull_request':
-        outside.push(line(`Merges the pull request once its checks pass`, step.repo));
+        outside.push(line(tr.t('plan.posts.merge'), step.repo));
         break;
       case 'tracker_update':
-        outside.push(line(`Writes its assessment back to ${connection(step.connectionId)}`));
+        outside.push(line(tr.t('plan.posts.writesBack', { connection: connection(step.connectionId) })));
         break;
       case 'tracker_reply':
-        outside.push(line(`Replies to the customer in ${connection(step.connectionId)}`));
+        outside.push(line(tr.t('plan.posts.replies', { connection: connection(step.connectionId) })));
         break;
       case 'connection_actions':
-        outside.push(line('Runs proposed actions on your connections', 'After you approve them'));
+        outside.push(line(tr.t('plan.posts.actions'), tr.t('plan.posts.actionsDetail')));
         break;
-      case 'http_callback': {
-        // Core has no URL class (it stays free of platform APIs): the host is what follows the scheme.
-        const host = /^https?:\/\/([^/?#]+)/i.exec(step.url)?.[1] ?? step.url;
-        outside.push(line(`Calls ${host}`));
+      case 'http_callback':
+        outside.push(line(tr.t('plan.posts.calls', { host: hostOf(step.url) })));
         break;
-      }
     }
-  return [line(threadLine(definition, names), outside.length ? null : 'Nothing outside Whombat'), ...outside];
+  return [
+    line(threadLine(definition, names, tr), outside.length ? null : tr.t('plan.posts.nothingOutside')),
+    ...outside,
+  ];
 }
 
 /** What a feature request's card asks (3.12, TA-45), in words a person reads before it runs. */
-function decisionLine(step: Extract<AutomationStep, { kind: 'tracker_decision' }>): AutomationPlanLine {
-  return line(
-    'About each feature request, with its value from 1 to 10',
-    step.build
-      ? 'Approve, approve and build, decline or ask the customer'
-      : 'Approve, decline or ask the customer',
-  );
+function decisionLine(
+  step: Extract<AutomationStep, { kind: 'tracker_decision' }>,
+  tr: CoreTranslator,
+): AutomationPlanLine {
+  return line(tr.t('plan.decision'), step.build ? tr.t('plan.decision.build') : tr.t('plan.decision.plain'));
 }
 
 /** What an approval step asks, in words a person reads before it runs. */
 function approvalLine(
   step: Extract<AutomationStep, { kind: 'request_approval' }>,
   fix: Pick<RecipeFix, 'mode' | 'minImportance'> | undefined,
+  tr: CoreTranslator,
   tracker = false,
 ): AutomationPlanLine {
   if (fix && step.id === 'approve') {
-    if (fix.mode === 'ask') return line('Before it fixes or changes anything');
+    if (fix.mode === 'ask') return line(tr.t('plan.ask.fixAsk'));
     // A tracker report's fix doesn't depend on who filed it (report-trackers.md TA-38): only on how important the bug
     // is.
     if (tracker) {
-      const bugs = RECIPE_FIX_IMPORTANCE.find((i) => i.id === fix.minImportance)?.bugs ?? 'bugs';
-      return line('Before any other change it suggests', `It fixes ${bugs} on its own`);
+      const key = `plan.bugs.${fix.minImportance}`;
+      const bugs = hasCoreMessage(key) ? tr.t(key) : tr.t('plan.bugs.low');
+      return line(tr.t('plan.ask.trackerOther'), tr.t('plan.ask.trackerFixes', { bugs }));
     }
-    return line(
-      'Before a fix it isn’t sure about',
-      'It fixes on its own only when it’s sure, the fix is small and someone with access opened the issue',
-    );
+    return line(tr.t('plan.ask.unsure'), tr.t('plan.ask.unsureDetail'));
   }
   const title = plainTemplate(step.title);
   // A title that is mostly what fills in at run time says nothing yet: the step's name does.
@@ -339,43 +383,46 @@ function asksLines(
   definition: AutomationDefinition,
   grants: readonly AutomationGrant[],
   outside: boolean,
+  tr: CoreTranslator,
 ): AutomationPlanLine[] {
   const lines: AutomationPlanLine[] = [];
   const recipe = recipeOf(definition);
   for (const step of definition.steps) {
     if (step.kind === 'request_approval')
-      lines.push(approvalLine(step, recipe?.fix, recipe?.when.kind === 'tracker'));
+      lines.push(approvalLine(step, recipe?.fix, tr, recipe?.when.kind === 'tracker'));
     // A feature request is the person's to decide (3.12, TA-44, TA-45).
-    if (step.kind === 'tracker_decision') lines.push(decisionLine(step));
+    if (step.kind === 'tracker_decision') lines.push(decisionLine(step, tr));
     if (step.kind === 'connection_actions')
-      lines.push(line('Before it changes anything in your connections', 'Always asks you on a card first'));
+      lines.push(line(tr.t('plan.ask.connections'), tr.t('plan.ask.connectionsDetail')));
   }
   const said = new Set<string>();
   for (const g of grants) {
-    const text = ASK_TEXT[g.keyId];
+    const text = askText(tr, g.keyId);
     if (g.tier !== 'ask' || said.has(text)) continue;
     said.add(text);
     lines.push(line(text));
   }
   if (lines.length) return lines;
-  return [line(outside ? 'Nothing: it does all of this on its own' : 'Nothing: it only reads and tells you')];
+  return [line(outside ? tr.t('plan.ask.nothingOutside') : tr.t('plan.ask.nothingReads'))];
 }
 
-function limitsLines(definition: AutomationDefinition): AutomationPlanLine[] {
+function limitsLines(definition: AutomationDefinition, tr: CoreTranslator): AutomationPlanLine[] {
   const l = definition.limits;
-  const lines = [line(`At most ${l.maxRunsPerDay} ${l.maxRunsPerDay === 1 ? 'run' : 'runs'} a day`)];
+  const lines = [line(tr.tp('plan.limit.runs', l.maxRunsPerDay))];
   const fix = recipeOf(definition)?.fix;
-  if (fix) lines.push(line(`At most ${fix.maxPerDay} ${fix.maxPerDay === 1 ? 'fix' : 'fixes'} a day`));
-  if (l.maxTokensPerDay)
-    lines.push(line(`At most ${l.maxTokensPerDay.toLocaleString('en-US')} tokens a day`));
+  if (fix) lines.push(line(tr.tp('plan.limit.fixes', fix.maxPerDay)));
+  if (l.maxTokensPerDay) {
+    const tokens = formatLocaleNumber(l.maxTokensPerDay, tr.locale);
+    lines.push(line(tr.t('plan.limit.tokens', { tokens })));
+  }
   return lines;
 }
 
-const LABELS: Record<Exclude<AutomationPlanSectionId, 'does'>, string> = {
-  when: 'WHEN',
-  asks: 'ASKS YOU',
-  posts: 'POSTS',
-  limits: 'LIMIT',
+const LABEL_KEYS: Record<Exclude<AutomationPlanSectionId, 'does'>, CoreMessageKey> = {
+  when: 'plan.section.when',
+  asks: 'plan.section.asks',
+  posts: 'plan.section.posts',
+  limits: 'plan.section.limits',
 };
 
 /**
@@ -386,18 +433,27 @@ export function planSections(
   definition: AutomationDefinition,
   grants: readonly AutomationGrant[],
   names: PlanNames,
+  locale?: string | null,
 ): AutomationPlanSection[] {
-  const does = definition.steps.flatMap((s) => doesLine(s, names) ?? []);
-  const posts = postsLines(definition, names);
+  const tr = translatorOf(names, locale);
+  const label = (id: keyof typeof LABEL_KEYS) => tr.t(LABEL_KEYS[id]);
+  const does = definition.steps.flatMap((s) => doesLine(s, names, tr) ?? []);
+  const posts = postsLines(definition, names, tr);
   const outside = posts.length > 1;
   const sections: AutomationPlanSection[] = [
-    { id: 'when', label: LABELS.when, lines: definition.triggers.map((t) => whenLine(t, names)) },
+    { id: 'when', label: label('when'), lines: definition.triggers.map((t) => whenLine(t, names, tr)) },
     ...(does.length
-      ? [{ id: 'does' as const, label: clip(names.agent.toUpperCase(), 40) || 'DOES', lines: does }]
+      ? [
+          {
+            id: 'does' as const,
+            label: clip(names.agent.toUpperCase(), 40) || tr.t('plan.section.does'),
+            lines: does,
+          },
+        ]
       : []),
-    { id: 'asks', label: LABELS.asks, lines: asksLines(definition, grants, outside) },
-    { id: 'posts', label: LABELS.posts, lines: posts },
-    { id: 'limits', label: LABELS.limits, lines: limitsLines(definition) },
+    { id: 'asks', label: label('asks'), lines: asksLines(definition, grants, outside, tr) },
+    { id: 'posts', label: label('posts'), lines: posts },
+    { id: 'limits', label: label('limits'), lines: limitsLines(definition, tr) },
   ];
   const once = (lines: AutomationPlanLine[]) =>
     lines.filter((l, i) => lines.findIndex((o) => o.text === l.text && o.detail === l.detail) === i);
@@ -441,7 +497,9 @@ export function planChanges(
   before: { sections: readonly AutomationPlanSection[]; prompts: readonly AutomationPlanPrompt[] },
   after: { sections: readonly AutomationPlanSection[]; prompts: readonly AutomationPlanPrompt[] },
   agent: string,
+  locale?: string | null,
 ): AutomationPlanChange[] {
+  const tr = coreTranslator(locale);
   const flat = (sections: readonly AutomationPlanSection[]) =>
     sections.flatMap((s) => s.lines.map((l) => ({ section: s.id, line: l, key: lineKey(s.id, l) })));
   const old = flat(before.sections);
@@ -464,15 +522,15 @@ export function planChanges(
       changes.push({
         change: 'changed',
         section: 'does',
-        text: clip(`What ${agent} is asked in “${p.step}”`),
+        text: clip(tr.t('plan.change.prompt', { agent, step: p.step })),
       });
   }
   return changes.slice(0, 60);
 }
 
 /** The words of a plan's card for a list of what it says (a notification, search, an older app): “Plan: “Name””. */
-export function planCardText(name: string, change: boolean): string {
-  return change ? `A change to “${name}”` : `Plan: “${name}”`;
+export function planCardText(name: string, change: boolean, locale?: string | null): string {
+  return tCore(locale, change ? 'plan.card.change' : 'plan.card.new', { name });
 }
 
 /** What “Talk about it” and an older app read of a plan's state, in a few words. */
@@ -483,6 +541,11 @@ export const AUTOMATION_PLAN_STATE_LABELS = {
   replaced: 'Replaced by a newer plan',
   gone: 'Deleted',
 } as const;
+
+/** `AUTOMATION_PLAN_STATE_LABELS` in a locale. */
+export function automationPlanStateLabels(locale?: string | null): Record<AutomationPlanState, string> {
+  return coreWords(locale, 'plan.state', ['waiting', 'accepted', 'declined', 'replaced', 'gone']);
+}
 
 /** What the runtime knows of a plan to show its card (`automationPlanView`). */
 export interface PlanFacts {
@@ -503,17 +566,23 @@ export interface PlanFacts {
 }
 
 /** A plan as its card shows it: the sections, and for a change what differs from the live version. */
-export function automationPlanView(facts: PlanFacts, names: PlanNames): AutomationPlanView {
-  const sections = planSections(facts.definition, facts.grants, names);
+export function automationPlanView(
+  facts: PlanFacts,
+  names: PlanNames,
+  locale?: string | null,
+): AutomationPlanView {
+  const tag = locale ?? names.locale;
+  const sections = planSections(facts.definition, facts.grants, names, tag);
   const prompts = planPrompts(facts.definition);
   const changes = facts.base
     ? planChanges(
         {
-          sections: planSections(facts.base.definition, facts.base.grants, names),
+          sections: planSections(facts.base.definition, facts.base.grants, names, tag),
           prompts: planPrompts(facts.base.definition),
         },
         { sections, prompts },
         names.agent,
+        tag,
       )
     : [];
   return {
@@ -536,10 +605,8 @@ export function automationPlanView(facts: PlanFacts, names: PlanNames): Automati
 }
 
 /** The agent's line above a plan's card when it gives none. */
-export function planMessageText(change: boolean): string {
-  return change
-    ? 'Here’s the change. The current version keeps running until you say yes.'
-    : 'Here’s how I’d set it up. Turn it on when it looks right, or tell me what to change.';
+export function planMessageText(change: boolean, locale?: string | null): string {
+  return tCore(locale, change ? 'plan.message.change' : 'plan.message.new');
 }
 
 /** Why a plan can't be turned on or set aside any more. */
@@ -550,9 +617,21 @@ export const AUTOMATION_PLAN_DECIDED_TEXT: Record<Exclude<AutomationPlanState, '
   gone: 'This automation was deleted.',
 };
 
+/** `AUTOMATION_PLAN_DECIDED_TEXT` in a locale. */
+export function automationPlanDecidedText(
+  locale?: string | null,
+): Record<Exclude<AutomationPlanState, 'waiting'>, string> {
+  return coreWords(locale, 'plan.decided', ['accepted', 'declined', 'replaced', 'gone']);
+}
+
 /** What a turn that can't change automations hears: an automation's own run, or what strangers sent. */
 export const AUTOMATION_PLAN_NOT_HERE =
   'Automations change only when the person asks in their Chat, not from inside an automation or what someone else sent.';
+
+/** `AUTOMATION_PLAN_NOT_HERE` in a locale. */
+export function automationPlanNotHere(locale?: string | null): string {
+  return tCore(locale, 'plan.notHere');
+}
 
 /* What happens, step by step ---------------------------------------------------------------------------------- */
 
@@ -605,47 +684,49 @@ export function automationFlow(
   definition: AutomationDefinition,
   grants: readonly AutomationGrant[],
   names: PlanNames,
+  locale?: string | null,
 ): AutomationFlowItem[] {
+  const tr = translatorOf(names, locale);
   // A mark names the place: a tracker connection the viewer can't see is just “the tracker”.
-  const connection = (id: string) => names.connectionLabel?.(id) ?? 'the tracker';
+  const connection = (id: string) => names.connectionLabel?.(id) ?? tr.t('plan.theTracker');
   const recipe = recipeOf(definition);
   const merges = definition.steps.some((s) => s.kind === 'merge_pull_request');
   const asks = (step: AutomationStep) =>
     stepKeys(step).some((k) => grants.some((g) => g.keyId === k.keyId && g.tier === 'ask'));
-  const asking: AutomationFlowMark = { label: 'Asks you first', tone: 'plain' };
+  const asking: AutomationFlowMark = { label: tr.t('flow.mark.asks'), tone: 'plain' };
   const titleOf = (step: AutomationStep): string => {
     switch (step.kind) {
       case 'dispatch_agent':
         return clip(step.name ?? firstLine(plainTemplate(step.prompt)), 120);
       case 'request_approval':
-        return 'Asks you first';
+        return tr.t('flow.title.approval');
       case 'open_pull_request':
-        return `Opens a pull request on ${step.repo}`;
+        return tr.t('plan.posts.openPr', { repo: step.repo });
       case 'merge_pull_request':
-        return 'Merges it once its checks pass';
+        return tr.t('flow.title.merge');
       case 'github_comment':
-        return 'Comments on GitHub';
+        return tr.t('flow.title.comment');
       case 'tracker_update':
-        return 'Writes the assessment back to the report';
+        return tr.t('flow.title.writesBack');
       case 'tracker_reply':
-        return 'Replies to the customer';
+        return tr.t('flow.title.reply');
       case 'tracker_decision':
-        return 'Asks you about a feature request';
+        return tr.t('flow.title.decision');
       case 'connection_actions':
-        return 'Runs approved actions';
+        return tr.t('flow.title.actions');
       default:
-        return doesLine(step, names)?.text ?? step.name ?? STEP_KIND_LABELS[step.kind];
+        return doesLine(step, names, tr)?.text ?? step.name ?? tr.t(`plan.stepKind.${step.kind}`);
     }
   };
-  const [first, ...others] = definition.triggers.map((t) => whenLine(t, names));
+  const [first, ...others] = definition.triggers.map((t) => whenLine(t, names, tr));
   const items: AutomationFlowItem[] = [
     {
       kind: 'when',
-      text: first?.text ?? 'Only when you start it',
+      text: first?.text ?? tr.t('plan.when.manual'),
       details: [
         ...(first?.detail ? [first.detail] : []),
-        ...others.map((l) => `Or ${lowerFirst(l.text)}`),
-        threadLine(definition, names),
+        ...others.map((l) => tr.t('flow.or', { text: lowerFirst(l.text) })),
+        threadLine(definition, names, tr),
       ],
     },
   ];
@@ -656,8 +737,9 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'agent',
-          details: agentFacts(step).map(stop),
-          marks: step.workspace?.access === 'write' ? [{ label: 'Changes code', tone: 'changes' }] : [],
+          details: agentFacts(step, tr).map(stop),
+          marks:
+            step.workspace?.access === 'write' ? [{ label: tr.t('flow.mark.changes'), tone: 'changes' }] : [],
         });
         break;
       case 'post_message': {
@@ -671,14 +753,14 @@ export function automationFlow(
         break;
       }
       case 'request_approval': {
-        const what = approvalLine(step, recipe?.fix, recipe?.when.kind === 'tracker');
+        const what = approvalLine(step, recipe?.fix, tr, recipe?.when.kind === 'tracker');
         items.push({
           ...base,
           icon: 'ask',
           details: [
             stop(what.text),
             ...(what.detail ? [stop(what.detail)] : []),
-            ...(step.onDecline === 'stop' ? ['A no stops it here.'] : []),
+            ...(step.onDecline === 'stop' ? [tr.t('flow.declineStops')] : []),
           ],
           marks: [],
         });
@@ -688,13 +770,15 @@ export function automationFlow(
         items.push({ ...base, icon: 'wait', details: [], marks: [] });
         break;
       case 'condition': {
-        const question = stop(step.name ?? 'It checks a condition');
+        const question = stop(step.name ?? tr.t('flow.checkCondition'));
         const skipTo = step.else === 'stop' ? null : step.else.skipTo;
         const target = skipTo ? definition.steps.find((s) => s.id === skipTo) : undefined;
         items.push({
           kind: 'gate',
           id: step.id,
-          text: `${question} ${target ? `If not, it goes on at “${titleOf(target)}”.` : 'If not, it stops here.'}`,
+          text: target
+            ? tr.t('flow.gate.skipTo', { question, title: titleOf(target) })
+            : tr.t('flow.gate.stop', { question }),
         });
         break;
       }
@@ -702,7 +786,10 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'pull_request',
-          details: [stop(`From ${plainTemplate(step.branch)}`), ...(merges ? [] : ['You merge it.'])],
+          details: [
+            stop(tr.t('plan.posts.from', { branch: plainTemplate(step.branch) })),
+            ...(merges ? [] : [tr.t('flow.youMerge')]),
+          ],
           marks: [{ label: 'GitHub', tone: 'plain' }, ...(asks(step) ? [asking] : [])],
         });
         break;
@@ -710,15 +797,15 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'merge',
-          details: [`${step.repo}. If its checks fail or someone changes it, it waits for you.`],
-          marks: [asks(step) ? asking : { label: 'Merges by itself', tone: 'merges' }],
+          details: [tr.t('flow.mergeDetail', { repo: step.repo })],
+          marks: [asks(step) ? asking : { label: tr.t('flow.mark.merges'), tone: 'merges' }],
         });
         break;
       case 'github_comment':
         items.push({
           ...base,
           icon: 'comment',
-          details: [`On ${step.repo}.`],
+          details: [tr.t('flow.onRepo', { repo: step.repo })],
           marks: [{ label: 'GitHub', tone: 'plain' }, ...(asks(step) ? [asking] : [])],
         });
         break;
@@ -734,7 +821,7 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'reply',
-          details: [step.decision ? 'What you decided.' : 'When it has something to say to them.'],
+          details: [step.decision ? tr.t('flow.reply.decided') : tr.t('flow.reply.something')],
           marks: [{ label: connection(step.connectionId), tone: 'plain' }, ...(asks(step) ? [asking] : [])],
         });
         break;
@@ -742,7 +829,7 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'ask',
-          details: [stop(decisionLine(step).text), stop(decisionLine(step).detail ?? '')],
+          details: [stop(decisionLine(step, tr).text), stop(decisionLine(step, tr).detail ?? '')],
           marks: [],
         });
         break;
@@ -750,16 +837,16 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'ask',
-          details: ['Only after you approve them on a card.'],
+          details: [tr.t('flow.actionsDetail')],
           marks: [asking],
         });
         break;
       case 'http_callback': {
-        const host = /^https?:\/\/([^/?#]+)/i.exec(step.url)?.[1] ?? step.url;
+        const host = hostOf(step.url);
         items.push({
           ...base,
           icon: 'call',
-          title: `Calls ${host}`,
+          title: tr.t('plan.posts.calls', { host }),
           details: [],
           marks: [{ label: host, tone: 'changes' }],
         });

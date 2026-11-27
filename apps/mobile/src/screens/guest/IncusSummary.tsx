@@ -4,6 +4,7 @@
  * and no recent backup → Set a schedule; libvirt: no recent backup → Back it up), SNAPSHOTS with an Incus schedule in
  * words and Change, and BACKUPS with the last one and Back up now.
  */
+
 import { formatRelativeDay } from '@whombat/client/hosts';
 import {
   hintGuest,
@@ -16,6 +17,7 @@ import {
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostGuestConfig, HostGuestDetail, HostHint } from '@whombat/core';
 import { View } from 'react-native';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { BigButton, Dot, OneCard } from '../../ui/assistant';
@@ -51,6 +53,9 @@ export function IncusSummary({
   canBackUp: boolean;
   onWayOut: (to: IncusWayOut) => void;
 }) {
+  const { rawLocale, tClient } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const list = useHostManageRead(
     g.manageable
@@ -71,7 +76,7 @@ export function IncusSummary({
   return (
     <>
       {mine.length ? (
-        <OneCard label="Needs a look">
+        <OneCard label={tClient('thing.status.warn')}>
           {mine.map((h, i) => {
             const out = wayOutOf(h.kind);
             return (
@@ -113,15 +118,15 @@ export function IncusSummary({
         </OneCard>
       ) : null}
       {config && platform === 'incus' ? (
-        <OneCard label="Snapshots">
+        <OneCard label={tMobile('screens.snapshots')}>
           <SettingLine
             first
-            label="Schedule"
+            label={tClient('automations.source.schedule')}
             value={schedule.text}
             action={
               canChange ? (
                 <RowAction
-                  label="Change"
+                  label={tMobile('screens.change')}
                   spoken="Change the snapshot schedule"
                   onPress={() => onWayOut('schedule')}
                 />
@@ -131,24 +136,28 @@ export function IncusSummary({
         </OneCard>
       ) : null}
       {g.manageable ? (
-        <OneCard label="Backups">
+        <OneCard label={tMobile('screens.backups')}>
           <SettingLine
             first
-            label="Last backup"
+            label={tMobile('screens.last-backup')}
             value={
               last
                 ? last.title
                 : list.isPending
                   ? '…'
                   : g.lastBackup
-                    ? formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone)
+                    ? formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone, rawLocale)
                     : 'None yet'
             }
             sub={last?.line ?? null}
           />
           {canBackUp ? (
             <View style={{ padding: 14, paddingTop: 4 }}>
-              <BigButton label="Back up now" variant="secondary" onPress={() => onWayOut('back_up')} />
+              <BigButton
+                label={tMobile('screens.back-up-now')}
+                variant="secondary"
+                onPress={() => onWayOut('back_up')}
+              />
             </View>
           ) : null}
         </OneCard>

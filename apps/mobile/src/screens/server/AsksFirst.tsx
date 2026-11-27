@@ -6,6 +6,7 @@
  * `hosts.asks`: the parent shows it where `serverAsksRow` gives a row. What the assistant may do lists the same choice
  * per server (`useAsksFirstChoice`).
  */
+
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import { useHostsChange } from '@whombat/client/hosts/react';
 import { api, HOST_ASKS_FIRST_DEFAULT, type HostAsksFirst } from '@whombat/core';
@@ -13,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { serverAsksChange, serverAsksRow } from '../../data/serverAsks';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -28,6 +30,9 @@ export function useAsksFirstChoice(
   serverName: string,
   asksFirst: HostAsksFirst | null | undefined,
 ): { value: HostAsksFirst; choose: (to: HostAsksFirst) => void } {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const change = useHostsChange(api.hosts.updateServer);
   // The choice shows at once while it saves, until the server's page has it (no flicker back while it refetches).
@@ -43,14 +48,14 @@ export function useAsksFirstChoice(
       { params: { burrow: slug, serverId }, body: { asksFirst: to } },
       {
         onSuccess: (result) => {
-          const text = commitOutcomeText(result);
+          const text = commitOutcomeText(result, rawLocale);
           if (!text) return showNotice(toast);
           setSaving(null);
-          Alert.alert('Not yet', text);
+          Alert.alert(tMobile('screens.not-yet'), text);
         },
         onError: (error) => {
           setSaving(null);
-          Alert.alert('That didn’t go through', hostErrorInfo(error).message);
+          Alert.alert(tMobile('managed.that-didnt-go-through'), hostErrorInfo(error, rawLocale).message);
         },
       },
     );

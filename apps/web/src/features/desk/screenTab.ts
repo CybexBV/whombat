@@ -4,7 +4,6 @@
  * Whombat's name for the screen's top bar. Pure, so it is tested without a page.
  */
 import {
-  DESK_WORDS,
   type DeskPreviewScenario,
   type DeskScreen,
   DeskSetNameInput,
@@ -12,6 +11,8 @@ import {
   deskSectionShown,
   fillDeskWords,
 } from '@whombat/client/desk';
+import { deskWords } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 /** The parts under the switch, in their order. */
 export const SCREEN_PARTS = ['shows', 'lock', 'night', 'talk'] as const;
@@ -113,6 +114,7 @@ export function sameOrder(a: readonly string[], b: readonly string[]): boolean {
 
 /** A scenario's name: “Now”, “Something’s wrong”, “Neo at work”. */
 export function scenarioName(scenario: DeskPreviewScenario, assistant: string): string {
+  const DESK_WORDS = deskWords(currentLocale());
   return fillDeskWords(DESK_WORDS.settings.scenarios[scenario], { assistant });
 }
 

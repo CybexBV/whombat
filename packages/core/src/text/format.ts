@@ -1,5 +1,7 @@
 /** Number and stat formatting with the mock's typography (real minus sign, middle dot, Dutch euros). */
 
+import { coreTranslator } from '../i18n/catalog.js';
+
 /** U+2212 MINUS SIGN, used in diff stats. */
 export const MINUS = '−';
 /** U+00B7 MIDDLE DOT separator. */
@@ -16,9 +18,14 @@ export function formatDeletions(n: number): string {
 }
 
 /** `+214 −12`, with `· 6 files` when `files` is given. */
-export function formatDiffStat(stat: { add: number; del: number; files?: number }): string {
+export function formatDiffStat(
+  stat: { add: number; del: number; files?: number },
+  locale?: string | null,
+): string {
   const base = `${formatAdditions(stat.add)} ${formatDeletions(stat.del)}`;
-  return stat.files === undefined ? base : `${base} · ${plural(stat.files, 'file')}`;
+  return stat.files === undefined
+    ? base
+    : `${base} · ${coreTranslator(locale).tp('format.files', stat.files)}`;
 }
 
 /** Scale for the files table mini bars: at least 140 lines (the mock's scale), or the largest file. */
@@ -35,24 +42,24 @@ export function diffBarWidths(
   return { add: Math.round((file.add / s) * 100), del: Math.round((file.del / s) * 100) };
 }
 
-/** `1 file`, `6 files`, `5 replies` (pass the plural for irregular words). */
+/** `1 file`, `6 files`, `5 replies` (pass the plural for irregular words). English only: localized counts use the catalog. */
 export function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
 /** Thread link: `5 replies`. */
-export function formatReplies(n: number): string {
-  return plural(n, 'reply', 'replies');
+export function formatReplies(n: number, locale?: string | null): string {
+  return coreTranslator(locale).tp('format.replies', n);
 }
 
 /** `41 of 41` */
-export function formatOf(passed: number, total: number): string {
-  return `${passed} of ${total}`;
+export function formatOf(passed: number, total: number, locale?: string | null): string {
+  return coreTranslator(locale).t('format.of', { passed, total });
 }
 
 /** Run card / live log header: `38 of 41 passing`. */
-export function formatTestsPassing(tests: { passed: number; total: number }): string {
-  return `${formatOf(tests.passed, tests.total)} passing`;
+export function formatTestsPassing(tests: { passed: number; total: number }, locale?: string | null): string {
+  return coreTranslator(locale).t('format.passing', { of: formatOf(tests.passed, tests.total, locale) });
 }
 
 /**

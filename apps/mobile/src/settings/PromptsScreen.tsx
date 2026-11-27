@@ -6,6 +6,7 @@
  * says it needs an update (You shows no row to here then; a link still can). Bringing them back changes the list in
  * place, with a light tap.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { PROMPT_WORDS } from '@whombat/client';
 import { useMemo } from 'react';
@@ -14,6 +15,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { councilActionProblem } from '../data/council';
 import { canRestorePrompts, promptListLine } from '../data/prompts';
 import { usePrompts, usePromptWrites } from '../data/usePrompts';
+import { useMobileT } from '../i18n';
 import { Card, LinkRow, Note, Row } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { showFailure } from '../screens/feedback';
@@ -27,6 +29,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 type Props = NativeStackScreenProps<RootStackParamList, 'SettingsPrompts'>;
 
 export function PromptsScreen({ navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { clock, slug } = useBurrowBase();
   const bottomRoom = useBottomRoom();
@@ -36,7 +39,7 @@ export function PromptsScreen({ navigation }: Props) {
   const day = now.toDateString();
   // biome-ignore lint/correctness/useExhaustiveDependencies: the lines change with the day (“Ran today”), read from the clock then
   const lines = useMemo(() => here.prompts?.map((p) => promptListLine(p, now)) ?? null, [here.prompts, day]);
-  const back = <BackBar label="Back" onPress={() => navigation.goBack()} />;
+  const back = <BackBar label={tMobile('managed.back')} onPress={() => navigation.goBack()} />;
   if (!here.prompts)
     return (
       <Screen>

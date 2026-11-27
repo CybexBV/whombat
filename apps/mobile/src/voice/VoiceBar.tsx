@@ -4,9 +4,11 @@
  * · Done (filled, as Send) — then “Turning speech into text…” while the box works. Every target reaches 44dp with its
  * slop; TalkBack and VoiceOver hear the phase once, not every second. Every word is `VOICE_TEXT`'s.
  */
-import { recordingLabel, VOICE_LEVELS, VOICE_TEXT } from '@whombat/client/voice';
+import { fillVoiceWords, formatRecordingTime, VOICE_LEVELS } from '@whombat/client/voice';
 import type { VoiceTypingView } from '@whombat/client/voice/react';
+import { voiceWords } from '@whombat/core/domain';
 import { View } from 'react-native';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Check, Mic, X } from '../ui/icons';
@@ -16,13 +18,15 @@ import { hitSlopFor } from '../ui/touchTarget';
 /** The mic: records, or says why it can't. None while voice typing is off here. */
 export function MicButton({ voice, disabled }: { voice: VoiceTypingView; disabled?: boolean }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const words = voiceWords(rawLocale);
   if (voice.mic === 'hidden') return null;
   return (
     <Touchable
       onPress={voice.start}
       disabled={disabled}
-      accessibilityLabel={VOICE_TEXT.composer.dictate}
-      accessibilityHint={voice.mic === 'not_ready' ? VOICE_TEXT.errors.not_ready : undefined}
+      accessibilityLabel={words.composer.dictate}
+      accessibilityHint={voice.mic === 'not_ready' ? words.errors.not_ready : undefined}
       feedback="wash"
       ringRadius={16}
       hitSlop={hitSlopFor(32)}
@@ -42,18 +46,21 @@ export function MicButton({ voice, disabled }: { voice: VoiceTypingView; disable
 /** The recording bar, in place of the pill's row. */
 export function VoiceBar({ voice }: { voice: VoiceTypingView }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
+  const words = voiceWords(rawLocale);
   const phase = voice.state.phase;
   const said =
     phase === 'transcribing'
-      ? VOICE_TEXT.composer.transcribing
+      ? words.composer.transcribing
       : phase === 'preparing'
-        ? VOICE_TEXT.composer.preparing
-        : VOICE_TEXT.recordingNow;
+        ? words.composer.preparing
+        : t('voice.recordingNow');
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }}>
       <Touchable
         onPress={voice.cancel}
-        accessibilityLabel={VOICE_TEXT.composer.cancel}
+        accessibilityLabel={words.composer.cancel}
         feedback="wash"
         ringRadius={16}
         hitSlop={hitSlopFor(32)}
@@ -76,7 +83,7 @@ export function VoiceBar({ voice }: { voice: VoiceTypingView }) {
       >
         {phase === 'transcribing' ? (
           <Text size={14} color={theme.colors.mut} numberOfLines={1} style={{ flex: 1 }}>
-            {VOICE_TEXT.composer.transcribing}
+            {words.composer.transcribing}
           </Text>
         ) : (
           <>
@@ -86,7 +93,9 @@ export function VoiceBar({ voice }: { voice: VoiceTypingView }) {
                 <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: theme.colors.bad }} />
               ) : null}
               <Text size={13} color={theme.colors.mut} style={{ fontVariant: ['tabular-nums'] }}>
-                {phase === 'recording' ? recordingLabel(voice.seconds) : VOICE_TEXT.composer.preparing}
+                {phase === 'recording'
+                  ? fillVoiceWords(words.composer.recording, { time: formatRecordingTime(voice.seconds) })
+                  : words.composer.preparing}
               </Text>
             </View>
           </>
@@ -96,7 +105,7 @@ export function VoiceBar({ voice }: { voice: VoiceTypingView }) {
         <Touchable
           onPress={voice.stop}
           disabled={phase !== 'recording'}
-          accessibilityLabel={VOICE_TEXT.composer.done}
+          accessibilityLabel={words.composer.done}
           accessibilityState={{ disabled: phase !== 'recording' }}
           ringRadius={16}
           hitSlop={hitSlopFor(32)}

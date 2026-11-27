@@ -2,6 +2,7 @@ import { WhombatAvatar } from '@whombat/avatars/react';
 import { WhombatLogo } from '@whombat/brand/react';
 import type { ReactNode } from 'react';
 import ob from '../../features/onboarding/OnboardingScreen.module.css';
+import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import styles from './AuthLayout.module.css';
 
 /** A step of a setup this page is part of, in the aside, as onboarding shows them. */
@@ -73,6 +74,7 @@ export function AuthLayout({ kicker, title, sub, tip, steps, children }: AuthLay
             {sub && <p className={styles.sub}>{sub}</p>}
           </div>
           {children}
+          <LanguageSwitch onlyWhenAsked />
         </div>
       </main>
     </div>

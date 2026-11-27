@@ -18,7 +18,6 @@
  */
 import {
   DESK_PHOTO_EVERY_S,
-  DESK_SCREEN_WORDS,
   DESK_VIEW_PHOTOS_MAX,
   DESK_VIEW_POINTS_MAX,
   DESK_VIEW_ROWS_MAX,
@@ -36,6 +35,7 @@ import {
   type DeskWidgetRef,
   type DeskWidgetView,
   type DeskWidgetViewKind,
+  deskScreenWords,
   deskText,
   type ThingControl,
   type ThingGalleryItem,
@@ -153,6 +153,8 @@ export interface BoardHint {
 export interface PanelsAt {
   now: Date;
   timeZone: string;
+  /** The screen's language, for the words the screen says itself (*Figures*). */
+  locale?: string;
 }
 
 export interface KindHints {
@@ -319,11 +321,15 @@ export function headFigures(page: ThingPage, hints?: Pick<KindHints, 'rowFigures
   return head?.items ?? slotFigures(panels, hints?.rowFigures);
 }
 
-/** A figure's key from a title: “TV Shows” → `tv-shows`. */
-const keyOf = (title: string) =>
-  `f-${title
+/**
+ * A count line's figure key: the one its kind gave it, else one made from the line's id (`tank` → `f-tank`). Never from
+ * its title, so what a kind marks private or leads with is found the same whatever language the page is in.
+ */
+const figureKeyOf = (i: ThingPageItem) =>
+  i.figure?.key ??
+  `f-${i.id
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/[^a-z0-9_]+/g, '-')
     .replace(/^-|-$/g, '')}`.slice(0, 40);
 
 /** A line's colour on a desk: amber or red from the line itself or its count (a 92 % full pool stays amber). */
@@ -352,6 +358,8 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
           value: `${Math.round(i.progress * 100)} %`,
           ...(sub ? { sub: sub.slice(0, 80) } : {}),
           ...(tone ? { tone } : {}),
+          // A row about someone (who watches it, who asked for it) says what they're doing now.
+          ...(i.person ? { private: true } : {}),
         });
       }
     else if (p.kind === 'gallery' && p.look === 'rows')
@@ -360,6 +368,8 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
         label: p.title.slice(0, 30),
         value: String(p.total ?? p.items.length),
         ...(p.meta ? { sub: p.meta.slice(0, 80) } : {}),
+        // How many people are at it now, and its line may name them.
+        ...(p.items.some((i) => !!i.person) ? { private: true } : {}),
       });
   for (const p of panels)
     if (p.kind === 'list' && !p.look && p.place === 'chart')
@@ -368,11 +378,12 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
           const sub = i.figure.note ?? i.detail;
           const tone = lineTone(i);
           out.push({
-            key: i.id.slice(0, 40),
+            key: (i.figure.key ?? i.id).slice(0, 40),
             label: i.title.slice(0, 30),
             value: i.figure.value,
             ...(sub ? { sub: sub.slice(0, 80) } : {}),
             ...(tone ? { tone } : {}),
+            ...(i.private ? { private: true } : {}),
           });
         }
   for (const p of panels)
@@ -381,11 +392,12 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
         if (i.figure) {
           const tone = lineTone(i);
           out.push({
-            key: keyOf(i.title),
+            key: figureKeyOf(i),
             label: i.title.slice(0, 30),
             value: i.figure.value,
             ...(i.figure.note ? { sub: i.figure.note.slice(0, 80) } : {}),
             ...(tone ? { tone } : {}),
+            ...(i.private ? { private: true } : {}),
           });
         }
   return out.slice(0, 6);
@@ -504,16 +516,60 @@ export function panelItems(p: Panel): PanelItem[] {
 /** Controls that open, lock or watch the house: a locked screen leaves them out (DK-138), and what the kind adds. */
 const GUARDED = new Set<ThingControl['icon']>(['lock', 'alarm', 'door', 'camera']);
 export const guardsHouse = (p: Panel, item?: string, guards?: KindHints['guards']): boolean => {
-  const guarded = (c: ThingControl) => GUARDED.has(c.icon) || !!guards?.(c);
+  const guarded = (c: ThingControl) => !!c.private || GUARDED.has(c.icon) || !!guards?.(c);
   return (
     p.kind === 'controls' &&
     p.groups.some((g) =>
       g.items.some((c) =>
-        item === undefined ? !isCameraControl(c) && guarded(c) : c.id === item && guarded(c),
+        item === undefined ? !!c.private || (!isCameraControl(c) && guarded(c)) : c.id === item && guarded(c),
       ),
     )
   );
 };
+
+/**
+ * Whether a panel shows what its kind marked private at the source, whatever words it has: a line or figure marked
+ * `private`, a bar that is a person, a picture whose poster says who it is about, a control that opens, locks or watches
+ * the house. A locked screen leaves such a widget out, in every language. A picture's person tag counts only where the
+ * panel's poster shows it (`showsWho`): a desk says it nowhere else.
+ */
+export function panelPrivate(
+  p: Panel,
+  item?: string,
+  guards?: KindHints['guards'],
+  showsWho = false,
+): boolean {
+  // Every kind is named, so a new one makes its author decide here whether a locked screen may show it.
+  switch (p.kind) {
+    case 'kpis':
+      return p.items.some((k) => !!k.private);
+    case 'list':
+      return p.items.some((i) => !!i.private);
+    case 'bars':
+      return p.items.some((b) => !!b.person);
+    case 'gallery':
+      return showsWho && p.items.some((i) => !!i.person);
+    case 'controls':
+      return guardsHouse(p, item, guards);
+    // These carry no privacy mark of their own: a kind that shows something private in one says so in its hints.
+    case 'chart':
+    case 'notices':
+    case 'table':
+    case 'settings':
+    case 'facts':
+    case 'text':
+      return false;
+    // About Whombat itself, never a widget (`NOT_WIDGETS`).
+    case 'access':
+    case 'changes':
+    case 'widgets':
+      return false;
+    default: {
+      const _exhaustive: never = p;
+      return _exhaustive;
+    }
+  }
+}
 
 /** The head figures its *Figures* widget shows, its lead first; a version number only when there is nothing else. */
 export function shownFigures(kpis: readonly ThingPageKpi[], lead?: string): ThingPageKpi[] {
@@ -529,7 +585,7 @@ export function shownFigures(kpis: readonly ThingPageKpi[], lead?: string): Thin
 export function figuresPrivate(hints: KindHints, kpis: readonly ThingPageKpi[]): boolean {
   if (hints.private) return true;
   const secret = hints.privateFigures ?? [];
-  return shownFigures(kpis, hints.figure).some((k) => secret.includes(k.key));
+  return shownFigures(kpis, hints.figure).some((k) => !!k.private || secret.includes(k.key));
 }
 
 /* Add a widget ----------------------------------------------------------------------------------------------------- */
@@ -586,14 +642,13 @@ export function catalogItems(
   const out: DeskCatalogItem[] = [];
   const base = { ref: thing, ...(mark ? { mark } : {}) };
   const head = headFigures(page, hints);
+  const figureWords = deskScreenWords(at?.locale).figures;
   out.push({
     type: 'figures',
     ...base,
     opts: {},
-    name: DESK_SCREEN_WORDS.figures.name,
-    line:
-      words(andList(shownFigures(head, hints.figure).map((k) => k.label)), 120) ||
-      DESK_SCREEN_WORDS.figures.line,
+    name: figureWords.name,
+    line: words(andList(shownFigures(head, hints.figure).map((k) => k.label)), 120) || figureWords.line,
     view: 'figures',
     ...(figuresPrivate(hints, head) ? { private: true } : {}),
   });
@@ -611,7 +666,7 @@ export function catalogItems(
     !!hints.private ||
     !!panelHint(hints, p.id)?.private ||
     view === 'camera' ||
-    guardsHouse(p, item, hints.guards);
+    panelPrivate(p, item, hints.guards, !!panelHint(hints, p.id)?.poster);
   for (const [i, p] of panels.entries()) {
     const hint = panelHint(hints, p.id);
     const view = screenViewOf(p, hint);

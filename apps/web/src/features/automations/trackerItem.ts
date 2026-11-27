@@ -10,8 +10,6 @@
 import { DECISION_WAITING, trackerItemText } from '@whombat/client';
 import {
   type AutomationRun,
-  TRACKER_ASSESSMENT_LABELS,
-  TRACKER_PRIORITY_LABELS,
   TRACKER_REPLY_MAX,
   TRACKER_STATUS_LABELS,
   type TrackerFixView,
@@ -19,8 +17,11 @@ import {
   type TrackerItemView,
   TrackerUpdateStatus,
   type TrackerWords,
+  trackerAssessmentLabels,
+  trackerPriorityLabels,
   trackerStatusLabel,
 } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 /** The report's own words; the lines that name the tracker are `trackerItemText`'s. */
 export const TRACKER_TEXT = {
@@ -76,6 +77,8 @@ export function reportPlace(r: Pick<TrackerItemView, 'connection' | 'organizatio
 export function reportTags(
   r: Pick<TrackerItemView, 'type' | 'status' | 'priority' | 'assessment'>,
 ): string[] {
+  const TRACKER_PRIORITY_LABELS = trackerPriorityLabels(currentLocale());
+  const TRACKER_ASSESSMENT_LABELS = trackerAssessmentLabels(currentLocale());
   const label = (labels: Readonly<Record<string, string>>, value: string) =>
     labels[value] ?? environmentLabel(value);
   return [

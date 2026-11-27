@@ -1,6 +1,7 @@
 import type { UsageWindow } from '@whombat/core/domain';
 import { formatUsageWindowLine } from '@whombat/core/text';
 import { cx } from '../../components/cx';
+import { useWebI18n } from '../../i18n/provider';
 import { meterTone, meterValue } from './model';
 import styles from './Usage.module.css';
 
@@ -20,6 +21,7 @@ export interface UsageBarProps {
  * limited. The words beside it carry the state as well; the color only repeats it.
  */
 export function UsageBar({ window: w, label, now, size = 'md', className }: UsageBarProps) {
+  const { tag: uiLocale } = useWebI18n();
   const value = meterValue(w);
   return (
     // biome-ignore lint/a11y/useSemanticElements: a native <meter> can't be styled the same in every browser with tokens
@@ -29,7 +31,7 @@ export function UsageBar({ window: w, label, now, size = 'md', className }: Usag
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(value)}
-      aria-valuetext={formatUsageWindowLine(w, now)}
+      aria-valuetext={formatUsageWindowLine(w, now, uiLocale)}
       className={cx(styles.track, size === 'sm' && styles.trackSm, className)}
       data-tone={meterTone(w)}
     >

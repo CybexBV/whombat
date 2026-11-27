@@ -8,6 +8,7 @@
  * Remind me tomorrow, Stop watching this; Bring it back on Later and Settled. A button runs with a spinner on it; a
  * decision takes the item out at once and puts it back if refused.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,7 +17,6 @@ import {
   atText,
   handedOverThread,
   lookFixOutcomeText,
-  NEEDS_YOU_WORDS,
   type NeedsYouButton,
   type NeedsYouIntent,
   needsYouButtonGoes,
@@ -25,6 +25,7 @@ import {
   needsYouListItems,
   needsYouListRow,
   needsYouSettledText,
+  needsYouWords,
   ONEPASSWORD_APP_TEXT,
   onePasswordAnsweredText,
   onePasswordSetChanged,
@@ -53,13 +54,13 @@ import {
 } from '@whombat/client/react';
 import {
   type AheadNamedSource,
+  aheadWords,
   type ChatSubject,
   type HomeOverview,
   type HomeRef,
-  LOOKS_AHEAD_WORDS,
   type NeedsYouItem,
 } from '@whombat/core';
-import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
+import { approvalCardWords } from '@whombat/core/approvals';
 import { api } from '@whombat/core/contracts';
 import { formatClock } from '@whombat/core/text';
 import { isBackupPasskeyHref } from '@whombat/protocol/session';
@@ -68,9 +69,16 @@ import { Alert, Linking, TextInput, View } from 'react-native';
 import { answerMayHaveGoneThrough } from '../data/approval';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { startedChatRoute, threadRoute } from '../data/chatRoom';
-import { NEEDS_YOU_TAB, type PhoneSheetButton, phoneSheet, sheetOffersButtons } from '../data/needsYou';
+import {
+  needsYouTab,
+  type PhoneSheetButton,
+  phoneInboxRow,
+  phoneSheet,
+  sheetOffersButtons,
+} from '../data/needsYou';
 import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { useBackupPasskeyTap } from '../managed/backupPasskey';
 import { navigateTo, openHref, useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList, Route } from '../navigation/routes';
@@ -107,6 +115,11 @@ function useLeaveHome(): (ref: HomeRef) => () => void {
  * answer (Whombat onepassword-sync.md); resolves true when the sheet may close.
  */
 function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Promise<boolean> {
+  const { rawLocale } = useI18n();
+  const approvalCardWordsHere = approvalCardWords(rawLocale);
+
+  const needsYouTabHere = needsYouTab(rawLocale);
+
   const { slug, timeZone } = useBurrowBase();
   const qc = useQueryClient();
   const feedback = useDecisionFeedback();
@@ -119,16 +132,16 @@ function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Prom
   const answerRemovals = useOnePasswordWrite(api.connections.onePasswordRemovals, slug);
   // “Your answer may have gone through”, and only asking the assistant to check (command-safety.md).
   const mayHaveGoneThrough = (title: string) =>
-    Alert.alert(APPROVAL_CARD_WORDS.unknown, APPROVAL_CARD_WORDS.unknownBody, [
-      { text: APPROVAL_CARD_WORDS.close, style: 'cancel' },
+    Alert.alert(approvalCardWordsHere.unknown, approvalCardWordsHere.unknownBody, [
+      { text: approvalCardWordsHere.close, style: 'cancel' },
       {
-        text: APPROVAL_CARD_WORDS.check(words.name),
+        text: approvalCardWordsHere.check(words.name),
         onPress: () =>
           void start
-            .mutateAsync({ text: APPROVAL_CARD_WORDS.checkText(title) })
+            .mutateAsync({ text: approvalCardWordsHere.checkText(title) })
             .then((result) => {
               if (result.status === 'ok')
-                navigateTo(navigation, startedChatRoute(result.data, NEEDS_YOU_TAB.title));
+                navigateTo(navigation, startedChatRoute(result.data, needsYouTabHere.title));
               else feedback.onResult(result);
             })
             .catch((error: unknown) => feedback.onError(error)),
@@ -259,6 +272,12 @@ export function useNeedsYouSettle(): (item: NeedsYouItem) => Promise<boolean> {
 export function useNeedsYouPress(
   open?: (route: Route) => void,
 ): (item: NeedsYouItem, button: NeedsYouButton) => Promise<boolean> {
+  const { rawLocale } = useI18n();
+  const needsYouTabHere = needsYouTab(rawLocale);
+
+  const needsYouWordsHere = needsYouWords(rawLocale);
+  const aheadWordsHere = aheadWords(rawLocale);
+
   const { slug, timeZone, clock } = useBurrowBase();
   const navigation = useAppNavigation();
   const feedback = useDecisionFeedback();
@@ -282,7 +301,7 @@ export function useNeedsYouPress(
   const show = (route: Route) => (open ? open(route) : navigateTo(navigation, route));
   // Handed over: the thread the work happens in (backup-places.md BPL-15); true when it opened.
   const showThread = (href: string | null): boolean => {
-    const route = threadRoute(threadToOpen(href), NEEDS_YOU_TAB.title);
+    const route = threadRoute(threadToOpen(href), needsYouTabHere.title);
     if (route) show(route);
     return route !== null;
   };
@@ -293,7 +312,7 @@ export function useNeedsYouPress(
       feedback.onResult(result);
       return false;
     }
-    show(startedChatRoute(result.data, NEEDS_YOU_TAB.title));
+    show(startedChatRoute(result.data, needsYouTabHere.title));
     return true;
   };
   return async (item, button) => {
@@ -327,8 +346,8 @@ export function useNeedsYouPress(
           }
           if (outcome === 'ask') return ask(intent.text, intent.subject);
           if (outcome === 'ok' && showThread(thread)) return true;
-          if (outcome === 'ok') showNotice(NEEDS_YOU_WORDS.handling(words));
-          else showFailure(NEEDS_YOU_WORDS.failed);
+          if (outcome === 'ok') showNotice(needsYouWordsHere.handling(words));
+          else showFailure(needsYouWordsHere.failed);
           return outcome === 'ok';
         }
         case 'talk': {
@@ -338,7 +357,7 @@ export function useNeedsYouPress(
               feedback.onResult(result);
               return false;
             }
-            show(startedChatRoute(result.data, NEEDS_YOU_TAB.title));
+            show(startedChatRoute(result.data, needsYouTabHere.title));
             return true;
           } catch (error) {
             // An older Whombat, or an item that just left: the question in the thing's thread instead.
@@ -355,7 +374,7 @@ export function useNeedsYouPress(
             return result.complete;
           }
           // A thread (Talk once it looked into it) opens as the others do: in the item's place, after its sheet.
-          const thread = threadRoute(intent.href, NEEDS_YOU_TAB.title);
+          const thread = threadRoute(intent.href, needsYouTabHere.title);
           if (thread) show(thread);
           else openHref(intent.href);
           return true;
@@ -370,7 +389,7 @@ export function useNeedsYouPress(
             feedback.onResult(result);
             return false;
           }
-          showNotice(`I’ll remind you ${atText(intent.until, now, timeZone)}.`);
+          showNotice(`I’ll remind you ${atText(intent.until, now, timeZone, rawLocale)}.`);
           return true;
         }
         case 'back': {
@@ -379,7 +398,7 @@ export function useNeedsYouPress(
             feedback.onResult(result);
             return false;
           }
-          showNotice(NEEDS_YOU_WORDS.backDone);
+          showNotice(needsYouWordsHere.backDone);
           return true;
         }
         case 'aheadPromote': {
@@ -392,7 +411,7 @@ export function useNeedsYouPress(
             feedback.onResult(result);
             return false;
           }
-          show(startedChatRoute(result.data, NEEDS_YOU_TAB.title));
+          show(startedChatRoute(result.data, needsYouTabHere.title));
           return true;
         }
         case 'aheadFeedback': {
@@ -406,11 +425,11 @@ export function useNeedsYouPress(
           }
           haptic('success');
           if (intent.verdict === 'not_useful') {
-            showNotice(LOOKS_AHEAD_WORDS.markedNotUseful);
+            showNotice(aheadWordsHere.markedNotUseful);
           } else if (result.data.stopped === 'matter') {
-            showNotice(LOOKS_AHEAD_WORDS.stoppedMatterToast);
+            showNotice(aheadWordsHere.stoppedMatterToast);
           } else {
-            showToast(LOOKS_AHEAD_WORDS.stoppedKindToast(intent.kind), {
+            showToast(aheadWordsHere.stoppedKindToast(intent.kind), {
               undo: () =>
                 void updateLooksAhead.mutateAsync({ kind: intent.kind, on: true }).then(
                   (back) => {
@@ -431,7 +450,7 @@ export function useNeedsYouPress(
             return false;
           }
           haptic('approve');
-          showToast(NEEDS_YOU_WORDS.stopped(watch.name), {
+          showToast(needsYouWordsHere.stopped(watch.name), {
             undo: () =>
               void stopWatching.mutateAsync({ ref: item.ref, watch, watched: true }).then(
                 (back) => {
@@ -478,6 +497,11 @@ type ItemProps = NativeStackScreenProps<RootStackParamList, 'NeedsYouItem'>;
  * close it once done.
  */
 export function NeedsYouItemScreen({ route, navigation }: ItemProps) {
+  const { rawLocale } = useI18n();
+  const needsYouTabHere = needsYouTab(rawLocale);
+
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
   const { slug } = useBurrowBase();
   const home = useHomeOverview({ params: { burrow: slug } });
   const found = home.data
@@ -497,15 +521,15 @@ export function NeedsYouItemScreen({ route, navigation }: ItemProps) {
     },
   );
   return (
-    <OneCardPage back={route.params.back ?? NEEDS_YOU_TAB.title} onBack={close}>
+    <OneCardPage back={route.params.back ?? needsYouTabHere.title} onBack={close}>
       {card && (found || card.busy) ? (
         <OneCardBody {...card} />
       ) : home.isPending ? (
-        <SkeletonRows count={2} lines={2} label={NEEDS_YOU_TAB.loading} />
+        <SkeletonRows count={2} lines={2} label={needsYouTabHere.loading} />
       ) : !home.data ? (
-        <ErrorState text={NEEDS_YOU_TAB.failed} onRetry={() => void home.refetch()} />
+        <ErrorState text={needsYouTabHere.failed} onRetry={() => void home.refetch()} />
       ) : (
-        <QuietText>{NEEDS_YOU_WORDS.gone}</QuietText>
+        <QuietText>{needsYouWordsHere.gone}</QuietText>
       )}
     </OneCardPage>
   );
@@ -520,6 +544,14 @@ function useNeedsYouCard(
   open: ((route: Route) => void) | undefined,
   onDone: (button: PhoneSheetButton) => void,
 ): OneCardContent | null {
+  const { rawLocale } = useI18n();
+  const approvalCardWordsHere = approvalCardWords(rawLocale);
+
+  const needsYouTabHere = needsYouTab(rawLocale);
+
+  const needsYouWordsHere = needsYouWords(rawLocale);
+  const aheadWordsHere = aheadWords(rawLocale);
+
   const theme = useTheme();
   const { slug, timeZone, clock } = useBurrowBase();
   const navigation = useAppNavigation();
@@ -538,7 +570,12 @@ function useNeedsYouCard(
     assistant: words.name,
     things: home.data?.things ?? [],
   });
-  const view = phoneSheet(row, words, { now: clock().getTime(), timeZone });
+  const now = clock().getTime();
+  const view = phoneSheet(phoneInboxRow(row, words, now, timeZone, rawLocale), words, {
+    now,
+    timeZone,
+    locale: rawLocale,
+  });
   const isPasskey = (b: PhoneSheetButton) => {
     const target =
       b.button.kind === 'see' ? item.href : b.button.action?.kind === 'open' ? b.button.action.href : null;
@@ -562,7 +599,7 @@ function useNeedsYouCard(
         return;
       }
       setReplyDraft('');
-      const route = startedChatRoute(result.data, NEEDS_YOU_TAB.title);
+      const route = startedChatRoute(result.data, needsYouTabHere.title);
       if (open) open(route);
       else navigateTo(navigation, route);
     } catch (error) {
@@ -580,7 +617,7 @@ function useNeedsYouCard(
     // An approval's card facts before its answers: the permission and the exact moment Yes, tonight means.
     children: view.approval ? (
       <View style={{ gap: 14, marginTop: 12 }}>
-        <ApprovalFact label={APPROVAL_CARD_WORDS.permission}>{view.approval.permission}</ApprovalFact>
+        <ApprovalFact label={approvalCardWordsHere.permission}>{view.approval.permission}</ApprovalFact>
         {view.approval.tonight ? <TonightBox tonight={view.approval.tonight} /> : null}
       </View>
     ) : item.kind === 'ahead' && item.ahead ? (
@@ -591,12 +628,12 @@ function useNeedsYouCard(
             <TextInput
               value={replyDraft}
               onChangeText={setReplyDraft}
-              placeholder={LOOKS_AHEAD_WORDS.replyPlaceholder(words.name)}
+              placeholder={aheadWordsHere.replyPlaceholder(words.name)}
               placeholderTextColor={theme.colors.mut}
               editable={busy === null}
               returnKeyType="send"
               onSubmitEditing={() => void sendAheadReply()}
-              accessibilityLabel={LOOKS_AHEAD_WORDS.replyPlaceholder(words.name)}
+              accessibilityLabel={aheadWordsHere.replyPlaceholder(words.name)}
               style={{
                 flex: 1,
                 minHeight: 44,
@@ -616,7 +653,7 @@ function useNeedsYouCard(
               feedback="wash"
               ringRadius={theme.radii.button}
               accessibilityRole="button"
-              accessibilityLabel={LOOKS_AHEAD_WORDS.sendReply}
+              accessibilityLabel={aheadWordsHere.sendReply}
               style={{
                 width: 44,
                 height: 44,
@@ -653,7 +690,7 @@ function useNeedsYouCard(
       </>
     ) : null,
     busy,
-    note: !offers ? NEEDS_YOU_WORDS.gone : passkeyHere && passkey?.note ? passkey.note : view.note,
+    note: !offers ? needsYouWordsHere.gone : passkeyHere && passkey?.note ? passkey.note : view.note,
     linksInRow: view.linksInRow,
     buttons: (offers ? view.buttons : []).map((b) => ({
       id: b.id,

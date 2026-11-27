@@ -77,6 +77,8 @@ export function screenGrid(input: {
   views: DeskWidgetView[];
   calm: DeskCalmInput | null;
   view: DeskCalmView;
+  /** The person's language for what needs them; English without one. */
+  locale?: string | null;
   warn?: (message: string, err: unknown) => void;
 }): DeskGrid | null {
   const { record, calm, view } = input;
@@ -84,7 +86,7 @@ export function screenGrid(input: {
     screen: record.id,
     layout: input.layout,
     views: input.views,
-    attention: calm ? deskAttentionFor(calm, record.show, view, record.popups) : NO_ATTENTION,
+    attention: calm ? deskAttentionFor(calm, record.show, view, record.popups, input.locale) : NO_ATTENTION,
     popups: record.popups,
     ...(input.trying !== null ? { trying: { until: new Date(input.trying).toISOString() } } : {}),
     ...(input.spotlight ? { spotlight: input.spotlight } : {}),

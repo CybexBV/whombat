@@ -22,12 +22,12 @@ import {
 import { useSessionProtocol } from '@whombat/client/react';
 import { thingHref } from '@whombat/core';
 import {
-  CATALOG_CATEGORY_LABELS,
   type CatalogCategory,
-  CONNECTION_ACCESS_LABELS,
   type ConnectorProvider,
   type ConnectorsStatus,
+  catalogCategoryLabels,
   catalogEntry,
+  connectionAccessLabels,
   FOUND_SERVER_ID,
 } from '@whombat/core/domain';
 import { ACCOUNT_PAGES_MINOR, protocolAtLeast } from '@whombat/protocol/session';
@@ -41,6 +41,8 @@ import { Input } from '../../components/Input';
 import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { AppLink } from '../files/AppLink';
 import { GitHubMark } from '../settings/GitHubMark';
 import settings from '../settings/SettingsScreen.module.css';
@@ -243,6 +245,7 @@ export function haveRows(
   catalogRows: readonly CatalogRow[],
   accountPages = false,
 ): HaveRow[] {
+  const CONNECTION_ACCESS_LABELS = connectionAccessLabels(currentLocale());
   const rows: HaveRow[] = [];
   for (const entry of entries) {
     const conn = entry.connected;
@@ -589,6 +592,7 @@ function AddConnection({
   autoFocus?: boolean;
   initial?: Show;
 }) {
+  const CATALOG_CATEGORY_LABELS = useLocaleWords(catalogCategoryLabels);
   const [query, setQuery] = useState('');
   const [show, setShow] = useState<Show>(initial);
   const searchId = useId();

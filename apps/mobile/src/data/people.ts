@@ -60,6 +60,7 @@ export interface ViewContext {
   viewer: Decider;
   now: Date;
   timeZone: string;
+  locale?: string;
 }
 
 /**
@@ -81,6 +82,7 @@ export function approvalContext(
     viewer: ctx.viewer,
     now: ctx.now,
     timeZone: ctx.timeZone,
+    ...(ctx.locale && { locale: ctx.locale }),
     where,
   };
 }

@@ -16,6 +16,7 @@ import { useHereHref, useNavigateHref, useSearchUpdate } from '../../app/routing
 import type { BranchTab } from '../../app/routing/search';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import { NotifyButton } from '../conversations/NotifyButton';
 import { ConversationHeader } from '../messaging/ConversationHeader';
 import { ConversationRoom, RoomStatus } from '../messaging/ConversationRoom';
@@ -65,6 +66,7 @@ export function BranchRoomScreen(props: BranchRoomScreenProps) {
 }
 
 function BranchRoom({ burrow, number, repo, tab, file, onTabChange }: BranchRoomScreenProps) {
+  const { tag: uiLocale } = useWebI18n();
   const repoQuery = repo ? { repo } : {};
   const pr = usePullRequest({ params: { burrow, number }, query: repoQuery });
   const here = useHereHref();
@@ -106,7 +108,7 @@ function BranchRoom({ burrow, number, repo, tab, file, onTabChange }: BranchRoom
       if (result.status === 'ok') {
         qc.setQueryData(queryKeys.prs.get({ params: { burrow, number }, query: repoQuery }), result.data);
         void qc.invalidateQueries({ queryKey: queryKeys.scope('conversations.bootstrap') });
-        toast.show(mergeToast(number));
+        toast.show(mergeToast(number, uiLocale));
       } else if (result.status === 'blocked') {
         setMergeError(`Blocked: merging needs the “${result.keyNeeded.label}” key.`);
       } else {
@@ -134,7 +136,7 @@ function BranchRoom({ burrow, number, repo, tab, file, onTabChange }: BranchRoom
         screen="branch"
         kind="branch"
         label={c.title}
-        placeholder={composerPlaceholder({ kind: 'branch', prNumber: number })}
+        placeholder={composerPlaceholder({ kind: 'branch', prNumber: number }, uiLocale)}
         scrollId={PANEL_ID}
         composer={!fileOpen}
         header={
@@ -187,7 +189,7 @@ function BranchRoom({ burrow, number, repo, tab, file, onTabChange }: BranchRoom
           ) : (
             <FilesTable
               files={detail.pr.files}
-              note={filesNote(author ? shortNameOf(author) : 'the author')}
+              note={filesNote(author ? shortNameOf(author) : 'the author', uiLocale)}
               fileHref={(path: string) => here({ tab: 'files', file: path })}
               onNavigate={(href: string) => navigateHref(href)}
             />

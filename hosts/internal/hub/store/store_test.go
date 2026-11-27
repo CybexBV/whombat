@@ -351,10 +351,22 @@ func TestEnrollmentSingleUse(t *testing.T) {
 }
 
 func TestAlertsRoundTrip(t *testing.T) {
-	s := openTest(t)
+	path := filepath.Join(t.TempDir(), "hub.db")
+	openHub := func() *Store {
+		t.Helper()
+		s, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { s.Close() })
+		return s
+	}
+	s := openHub()
 	now := time.Now().Truncate(time.Millisecond).UTC()
 	a := rules.Alert{ID: "al_1", Server: "basalt", Key: "disk.wear_high:nvme1n1", Rule: rules.RuleWearHigh, Entity: "nvme1n1",
-		Severity: "warning", Text: rules.Text{Title: "nvme1n1 wear at 78%", Detail: "936 of 1,200 TBW written"},
+		Severity: "warning", Text: rules.Text{Title: "nvme1n1 wear at 78%", Detail: "936 of 1,200 TBW written", Code: "disk.wear_high.tbw",
+			Params: map[string]any{"device": "nvme1n1", "pct": 78.1, "ratedTbw": 1200.0, "customLimit": false,
+				"count": 2, "exactCount": int64(9007199254740993), "names": []string{"one", "two"}}},
 		State: rules.AlertOpen, OpenedAt: now}
 	if err := s.InsertAlert(ctx, a); err != nil {
 		t.Fatal(err)
@@ -365,14 +377,69 @@ func TestAlertsRoundTrip(t *testing.T) {
 	if err := s.InsertAlert(ctx, b); err == nil {
 		t.Error("duplicate open key accepted")
 	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s = openHub()
+	open, err := s.ListAlerts(ctx, rules.AlertOpen, 0)
+	if err != nil || len(open) != 1 || !a.Text.Equal(open[0].Text) {
+		t.Fatalf("reopened alerts = %+v, err = %v", open, err)
+	}
+	if open[0].Params["exactCount"] != int64(9007199254740993) {
+		t.Fatalf("large integer lost precision: %v", open[0].Params)
+	}
 	r := now.Add(time.Minute)
 	a.State, a.ResolvedAt = rules.AlertResolved, &r
+	a.Code = "disk.wear_high.written"
+	a.Params = map[string]any{"device": "nvme1n1", "pct": 79.4, "writtenTb": 950.0}
 	if err := s.UpdateAlert(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := s.ListAlerts(ctx, "", 0)
-	if len(all) != 1 || all[0].State != rules.AlertResolved || !all[0].ResolvedAt.Equal(r) || all[0].Title != a.Title {
-		t.Errorf("alerts = %+v", all)
+	all, err := s.QueryAlerts(ctx, AlertFilter{State: rules.AlertResolved})
+	if err != nil || len(all) != 1 || all[0].State != rules.AlertResolved || !all[0].ResolvedAt.Equal(r) || !all[0].Text.Equal(a.Text) {
+		t.Errorf("alerts = %+v, err = %v", all, err)
+	}
+}
+
+func TestMalformedAlertParamsKeepEnglishText(t *testing.T) {
+	s := openTest(t)
+	a := rules.Alert{
+		ID: "al_1", Server: "server-1", Key: "disk.wear_high:nvme1n1", Rule: rules.RuleWearHigh,
+		Entity: "nvme1n1", Severity: "warning", State: rules.AlertOpen, OpenedAt: time.Now(), StatusNote: "disk wear",
+		Text: rules.Text{
+			Title: "nvme1n1 wear at 78%", Detail: "936 of 1,200 TBW written",
+			Code: "disk.wear_high.tbw", Params: map[string]any{"pct": 78},
+		},
+	}
+	if err := s.InsertAlert(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	b := a
+	b.ID, b.Key, b.Entity = "al_2", "disk.wear_high:nvme2n1", "nvme2n1"
+	if err := s.InsertAlert(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	check := func(alerts []rules.Alert, err error) {
+		t.Helper()
+		if err != nil || len(alerts) != 2 {
+			t.Fatalf("alerts = %+v, err = %v", alerts, err)
+		}
+		for _, alert := range alerts {
+			if alert.ID == a.ID {
+				if alert.Params != nil || alert.Code != "" || alert.Title != a.Title || alert.Detail != a.Detail || alert.StatusNote != a.StatusNote {
+					t.Errorf("corrupted alert did not keep its English text: %+v", alert)
+				}
+			} else if !alert.Text.Equal(b.Text) {
+				t.Errorf("valid alert lost its text or params: %+v", alert)
+			}
+		}
+	}
+	for _, raw := range []string{`{"pct":`, `{"pct":78} trailing data`} {
+		if _, err := s.w.ExecContext(ctx, `UPDATE alerts SET params = ? WHERE id = ?`, raw, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		check(s.ListAlerts(ctx, rules.AlertOpen, 0))
+		check(s.QueryAlerts(ctx, AlertFilter{State: rules.AlertOpen}))
 	}
 }
 
@@ -461,9 +528,17 @@ func TestAdditiveMigrationsAllowRollback(t *testing.T) {
 	rollbackAt := at.Add(2 * time.Hour)
 	old := openHub(migrations[:previousVersion], nil)
 	writeOldCheck(old, "ck_1", "Website", at)
+	if _, err := old.w.ExecContext(ctx, `INSERT INTO alerts(id, server_id, key, rule, entity, severity, title, detail, state, opened_at)
+		VALUES ('al_legacy', 'basalt', 'disk.space_high:fs:/', 'disk.space_high', 'fs:/', 'warning', 'Disk full', '', 'open', ?)`, ms(at)); err != nil {
+		t.Fatal(err)
+	}
 	old.Close()
 
 	upgraded := openHub(migrations, additiveMigrations)
+	alerts, err := upgraded.ListAlerts(ctx, rules.AlertOpen, 0)
+	if err != nil || len(alerts) != 1 || alerts[0].Title != "Disk full" || alerts[0].Code != "" || alerts[0].Params != nil {
+		t.Fatalf("migrated alerts: %+v, %v", alerts, err)
+	}
 	var v int
 	if err := upgraded.r.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil || v != previousVersion {
 		t.Fatalf("user_version = %d (%v), want %d", v, err, previousVersion)

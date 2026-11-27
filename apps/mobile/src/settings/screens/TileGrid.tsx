@@ -13,6 +13,7 @@ import type { Grid } from '@whombat/screen';
 import { nativeThemes } from '@whombat/tokens';
 import { memo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { BrandMark } from '../../ui/BrandMark';
 
@@ -149,6 +150,7 @@ const Tile = memo(function Tile({
   chosen: boolean;
   onPress: (id: string) => void;
 }) {
+  const { rawLocale } = useI18n();
   const r = tileRect(geometry, widget);
   const face = tileFace(r);
   // What it draws, beside its size, where its brand mark doesn't say it's a photo or a board.
@@ -156,7 +158,7 @@ const Tile = memo(function Tile({
   return (
     <Touchable
       accessibilityRole="button"
-      accessibilityLabel={tileSpoken(label, widget)}
+      accessibilityLabel={tileSpoken(label, widget, rawLocale)}
       accessibilityHint={PHONE_SCREENS_TEXT.tapHint}
       accessibilityState={{ selected: chosen }}
       onPress={() => onPress(widget.id)}

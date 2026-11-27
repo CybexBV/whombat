@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="whombat_updater_channel">App updates</string>
+  <string name="whombat_updater_description">When a new version of the Whombat app is ready.</string>
+  <string name="whombat_updater_title">A new version of Whombat is ready</string>
+  <string name="whombat_updater_body">Version %1$s is out. Tap to update.</string>
+</resources>

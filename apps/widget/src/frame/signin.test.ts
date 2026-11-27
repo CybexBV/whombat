@@ -78,7 +78,7 @@ const fetchMock: FetchLike = async (url, init) => {
 
 let cfg: PublicConfig = ON;
 
-async function start(config: PublicConfig = ON): Promise<FrameApp> {
+async function start(config: PublicConfig = ON, lang?: string): Promise<FrameApp> {
   cfg = config;
   const root = document.createElement('div');
   document.body.append(root);
@@ -88,6 +88,7 @@ async function start(config: PublicConfig = ON): Promise<FrameApp> {
     fetch: fetchMock,
     baseUrl: BASE,
     root,
+    lang,
   });
   await app.load();
   app.handle({ type: 'open', payload: { context: CTX } });
@@ -120,6 +121,46 @@ async function signIn(email = 'Ann@Example.com ') {
   type('#wb-signin-code', '123456');
   await submitForm('wb-signin');
 }
+
+it('renders the Dutch sign-in, keeps the email intact and localizes the report list', async () => {
+  await start(ON, 'nl');
+  button('Log in om je meldingen te volgen').click();
+  expect($('#wb-signin-title').textContent).toBe('Volg je meldingen');
+  type('#wb-signin-email', 'ann@example.com');
+  $<HTMLFormElement>('#wb-signin').requestSubmit();
+  await vi.waitFor(() => expect(app.signinStep).toBe('code'));
+  expect($('.lead .signed-in-email').textContent).toBe('ann@example.com');
+  expect($('.lead').textContent).toMatch(/Vul de code/);
+  type('#wb-signin-code', '123456');
+  $<HTMLFormElement>('#wb-signin').requestSubmit();
+  await vi.waitFor(() => expect(app.view).toBe('form'));
+  expect($('#wb-signed-in').textContent).toBe('Ingelogd als ann@example.com·Uitloggen');
+
+  routes['GET /reporter/reports'] = [
+    {
+      status: 200,
+      body: {
+        email: 'ann@example.com',
+        reports: [
+          {
+            reference: 'FB-7K3Q-9M2X',
+            type: 'feature',
+            status: 'confirmed',
+            summary: 'Dark theme',
+            receivedAt: '2025-12-03T12:00:00.000Z',
+            updatedAt: '2025-12-03T12:00:00.000Z',
+          },
+        ],
+      },
+    },
+  ];
+  await app.showReports();
+  expect($('.report-list').getAttribute('aria-label')).toBe('Je meldingen');
+  expect($('.report-type').textContent).toBe('Idee');
+  expect($('.report-status').textContent).toBe('Genoteerd');
+  expect($('.report-date').textContent).toMatch(/3 dec/);
+  expect($('.report-summary').textContent).toBe('Dark theme');
+});
 
 beforeEach(() => {
   calls = [];

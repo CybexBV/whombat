@@ -14,7 +14,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { NEEDS_YOU_WORDS, nextAt, TEAM_REPORT_WORDS } from '@whombat/client';
+import { needsYouWords, nextAt, TEAM_REPORT_WORDS } from '@whombat/client';
 import {
   useApproval,
   useChangeWindow,
@@ -23,7 +23,7 @@ import {
   useUndoApproval,
 } from '@whombat/client/react';
 import { type ApprovalLastingWords, type CommandScope, formatClock } from '@whombat/core';
-import { APPROVAL_CARD_WORDS } from '@whombat/core/approvals';
+import { approvalCardWords } from '@whombat/core/approvals';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
@@ -33,8 +33,8 @@ import { answerMayHaveGoneThrough, approvalScreen, scopedApproveToast } from '..
 import { useBurrow, useViewContext } from '../data/BurrowProvider';
 import { startedChatRoute } from '../data/chatRoom';
 import { whereOf } from '../data/people';
-import { OVERVIEW_TITLE } from '../data/shell';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { navigateTo } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -52,11 +52,16 @@ import { showNotice, useDecisionFeedback } from './feedback';
 type Props = NativeStackScreenProps<RootStackParamList, 'Approval'>;
 
 export function ApprovalScreen({ route, navigation }: Props) {
+  const { rawLocale, tClient } = useI18n();
+  const approvalCopy = approvalCardWords(rawLocale);
+  const needsYouWordsHere = needsYouWords(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug, bootstrap } = useBurrow();
   const ctx = useViewContext();
-  const { number, back = OVERVIEW_TITLE } = route.params;
+  const { number, back = tMobile('places.overview') } = route.params;
   const query = useApproval({ params: { burrow: slug, number } });
   const feedback = useDecisionFeedback();
   const words = useAgentWords();
@@ -82,26 +87,26 @@ export function ApprovalScreen({ route, navigation }: Props) {
         <BackBar label={back} onPress={goBack} />
         {notFound ? (
           <ReadState
-            title={APPROVAL_CARD_WORDS.empty}
-            body={APPROVAL_CARD_WORDS.emptyBody}
+            title={approvalCopy.empty}
+            body={approvalCopy.emptyBody}
             action={{
-              label: APPROVAL_CARD_WORDS.openInbox,
+              label: approvalCopy.openInbox,
               onPress: () => navigation.navigate('Tabs', { screen: 'NeedsYou' }),
             }}
           />
         ) : query.error ? (
           <ReadState
             problem
-            title={APPROVAL_CARD_WORDS.failed}
-            body={APPROVAL_CARD_WORDS.noSaved}
-            action={{ label: APPROVAL_CARD_WORDS.retry, onPress: () => void query.refetch() }}
-            detail={{ label: APPROVAL_CARD_WORDS.moreDetail, text: readErrorText(query.error) }}
+            title={approvalCopy.failed}
+            body={approvalCopy.noSaved}
+            action={{ label: approvalCopy.retry, onPress: () => void query.refetch() }}
+            detail={{ label: approvalCopy.moreDetail, text: readErrorText(query.error) }}
           />
         ) : (
-          <View style={{ paddingTop: 10 }} accessibilityLabel={APPROVAL_CARD_WORDS.loading}>
+          <View style={{ paddingTop: 10 }} accessibilityLabel={approvalCopy.loading}>
             <View style={{ gap: 12, paddingHorizontal: 22, paddingBottom: 22 }}>
               <Text size={15.5} color={theme.colors.ink2} accessibilityLiveRegion="polite">
-                {APPROVAL_CARD_WORDS.loading}
+                {approvalCopy.loading}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <Skeleton width={64} height={64} radius={32} />
@@ -109,7 +114,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
               </View>
               <Skeleton width={260} height={24} />
             </View>
-            <SkeletonRows count={3} lines={1} label={APPROVAL_CARD_WORDS.loading} />
+            <SkeletonRows count={3} lines={1} label={approvalCopy.loading} />
           </View>
         )}
       </Screen>
@@ -127,10 +132,10 @@ export function ApprovalScreen({ route, navigation }: Props) {
   const footerKind = showUnknown ? 'unknown' : stale && pending ? 'stale' : model.footer.kind;
   const askToCheck = async () => {
     const result = await start
-      .mutateAsync({ text: APPROVAL_CARD_WORDS.checkText(model.question) })
+      .mutateAsync({ text: approvalCopy.checkText(model.question) })
       .catch(() => null);
     if (result?.status === 'ok') navigateTo(navigation as never, startedChatRoute(result.data, back));
-    else feedback.onText(NEEDS_YOU_WORDS.failed);
+    else feedback.onText(needsYouWordsHere.failed);
   };
   const answers = model.footer.kind === 'answers' ? model.footer : null;
   const editDraft = model.editDraft;
@@ -180,7 +185,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
         disabled={decide.isPending}
         feedback="wash"
         accessibilityRole="button"
-        accessibilityHint="Asks before it stops asking"
+        accessibilityHint={tMobile('screens.asks-before-it-stops-asking')}
         ringRadius={10}
         style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', borderRadius: 10 }}
       >
@@ -205,7 +210,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
       <BackBar label={back} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
-        accessibilityLabel={APPROVAL_CARD_WORDS.contentLabel}
+        accessibilityLabel={approvalCopy.contentLabel}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -224,9 +229,9 @@ export function ApprovalScreen({ route, navigation }: Props) {
         }}
       >
         {stale ? (
-          <ReadNotice title={APPROVAL_CARD_WORDS.failedRefresh} body={APPROVAL_CARD_WORDS.saved}>
+          <ReadNotice title={approvalCopy.failedRefresh} body={approvalCopy.saved}>
             <Button
-              label={APPROVAL_CARD_WORDS.retry}
+              label={approvalCopy.retry}
               variant="secondary"
               onPress={() => void query.refetch()}
               style={{ alignSelf: 'flex-start', minHeight: TARGET }}
@@ -303,7 +308,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
         {model.why ? (
           <View style={{ gap: 8 }}>
             <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-              WHY
+              {tMobile('screens.why')}
             </Text>
             <Text size={15.5} lh={1.5}>
               {model.why}
@@ -313,7 +318,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
 
         {model.conditions.length ? (
           <View
-            accessibilityLabel="Conditions"
+            accessibilityLabel={tMobile('screens.conditions')}
             style={{
               borderRadius: 18,
               backgroundColor: theme.colors.sf,
@@ -429,19 +434,19 @@ export function ApprovalScreen({ route, navigation }: Props) {
 
       {footerKind === 'unknown' ? (
         <View
-          accessibilityLabel={APPROVAL_CARD_WORDS.answersLabel}
+          accessibilityLabel={approvalCopy.answersLabel}
           style={{ ...footerStyle, flexDirection: 'column', gap: 12 }}
         >
           <View accessibilityLiveRegion="polite" style={{ gap: 6 }}>
             <Text size={19} weight={600} lh={1.3} color={theme.colors.warnText} accessibilityRole="header">
-              {APPROVAL_CARD_WORDS.unknown}
+              {approvalCopy.unknown}
             </Text>
             <Text size={15} lh={1.5} color={theme.colors.ink2}>
-              {APPROVAL_CARD_WORDS.unknownBody}
+              {approvalCopy.unknownBody}
             </Text>
           </View>
           <Button
-            label={APPROVAL_CARD_WORDS.check(words.name)}
+            label={approvalCopy.check(words.name)}
             variant="secondary"
             size="lg"
             wrap
@@ -452,7 +457,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
       ) : footerKind === 'stale' ? null : model.footer.kind === 'answers' ? (
         // The answers stacked full width, each the same outlined button in the card's order: none looks recommended.
         <View
-          accessibilityLabel={APPROVAL_CARD_WORDS.answersLabel}
+          accessibilityLabel={approvalCopy.answersLabel}
           style={{ ...footerStyle, flexDirection: 'column' }}
         >
           {model.footer.answers.map((a) => (
@@ -474,7 +479,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
               size="lg"
               wrap={large}
               disabled={decide.isPending}
-              accessibilityHint="Opens the report form with this draft"
+              accessibilityHint={tMobile('screens.opens-the-report-form-with-this-draft')}
               onPress={() => navigation.replace('TeamReportNew', { draftId: editDraft, back })}
             />
           ) : null}
@@ -530,11 +535,11 @@ export function ApprovalScreen({ route, navigation }: Props) {
       ) : model.footer.kind === 'undo' ? (
         <View style={footerStyle}>
           <Button
-            label="Undo"
+            label={tClient('inbox.ignore.undo')}
             variant="quiet"
             size="lg"
             disabled={!model.footer.canUndo}
-            accessibilityHint="Returns the request to waiting for a person"
+            accessibilityHint={tMobile('screens.returns-the-request-to-waiting-for-a-person')}
             onPress={() => undo.mutate({ number })}
             style={{ flex: 1 }}
           />

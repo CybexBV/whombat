@@ -20,6 +20,7 @@ import { ExternalLink } from 'lucide-react';
 import { type CSSProperties, type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from 'react';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { AppLink, Card, Dot } from '../parts';
 import { ThingButtonRow } from './Buttons';
 import { type DashboardContext, PanelHead } from './Panels';
@@ -79,7 +80,7 @@ function GalleryItem({
 }) {
   const link = thingItemLink(item);
   const pct = thingProgressPct(item.progress);
-  const when = !item.sub && item.at ? itemWhen(item.at, ctx.now, ctx.timeZone) : null;
+  const when = !item.sub && item.at ? itemWhen(item.at, ctx.now, ctx.timeZone, currentLocale()) : null;
   const body: ReactNode = (
     <>
       <span className={styles.gPic}>
@@ -375,7 +376,7 @@ function ShelfItem({
   ctx: DashboardContext;
 }) {
   const link = thingItemLink(item);
-  const when = !item.sub && item.at ? itemWhen(item.at, ctx.now, ctx.timeZone) : null;
+  const when = !item.sub && item.at ? itemWhen(item.at, ctx.now, ctx.timeZone, currentLocale()) : null;
   const tag = item.person ? shelfTag(item.person) : null;
   const body: ReactNode = (
     <>

@@ -6,6 +6,7 @@
  * `secret` entry any more (contracts CT-823; skill-store.md AP-4156). Pure: no secret is kept here, the sheets hold it
  * only while open.
  */
+
 import { type VaultFieldProblems, vaultAuthOf, vaultFieldProblems, vaultProblemOf } from '@whombat/client';
 import { CreateVaultEntryBody } from '@whombat/core/contracts';
 import {
@@ -16,44 +17,54 @@ import {
   type VaultAuthType,
 } from '@whombat/core/vault';
 import type { z } from 'zod';
+import { mobileTranslator } from '../i18n/translate';
 
 /** The web's form words that core doesn't hold, verbatim. */
-export const VAULT_FORM_TEXT = {
-  kicker: 'VAULT',
-  chooseTemplate: 'What are you adding?',
-  change: 'Change',
-  save: 'Save',
-  cancel: 'Cancel',
-  name: 'Name',
-  address: 'Address',
-  signInPage: 'Sign-in page',
-  signsIn: 'How it signs in',
-  headerName: 'Header name',
-  queryName: 'Parameter name',
-  username: 'Username',
-  namePlaceholder: {
-    token: 'Grafana',
-    basic: 'Printer admin',
-    login: 'Supplier portal',
-  } satisfies Record<PhoneVaultTemplate, string>,
-  addressPlaceholder: {
-    token: 'https://api.example.com/v1',
-    basic: 'http://192.168.1.20',
-    login: 'https://portal.example.com/sign-in',
-  } satisfies Record<PhoneVaultTemplate, string>,
-  descriptionPlaceholder: 'What it’s for, and what your agent may and may not do with it.',
-  secretLabel: { token: 'Token', password: 'Password', secret: 'Secret' },
-  secretPlaceholder: 'Paste it here',
-  secretHint: 'Sealed when you save. Nobody can read it back, not you and not an agent.',
-  added: (name: string) => `Added “${name}” to your Vault.`,
-  addedChecked: (name: string, summary: string) => `Added “${name}” to your Vault. ${summary}`,
-  failed: 'That didn’t go through. Try again in a moment.',
-  secretReplaced: 'Secret replaced.',
-  replaceHint: 'The new secret replaces the old one at once.',
-  signsInWithNothing: 'Signs in with nothing: no secret to replace.',
-  /** What the phone leaves to the web (AP-718). */
-  sshOnWeb: 'SSH keys are added on the web, in the Vault: their servers and public key are set up there.',
-} as const;
+export function vaultFormText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    kicker: t('vaultForm.vaultFormText.kicker'),
+    chooseTemplate: t('vaultForm.vaultFormText.chooseTemplate'),
+    change: t('vaultForm.vaultFormText.change'),
+    save: t('vaultForm.vaultFormText.save'),
+    cancel: t('vaultForm.vaultFormText.cancel'),
+    name: t('vaultForm.vaultFormText.name'),
+    address: t('vaultForm.vaultFormText.address'),
+    signInPage: t('vaultForm.vaultFormText.signInPage'),
+    signsIn: t('vaultForm.vaultFormText.signsIn'),
+    headerName: t('vaultForm.vaultFormText.headerName'),
+    queryName: t('vaultForm.vaultFormText.queryName'),
+    username: t('vaultForm.vaultFormText.username'),
+    namePlaceholder: {
+      token: 'Grafana',
+      basic: 'Printer admin',
+      login: 'Supplier portal',
+    } satisfies Record<PhoneVaultTemplate, string>,
+    addressPlaceholder: {
+      token: 'https://api.example.com/v1',
+      basic: 'http://192.168.1.20',
+      login: 'https://portal.example.com/sign-in',
+    } satisfies Record<PhoneVaultTemplate, string>,
+    descriptionPlaceholder: t('vaultForm.vaultFormText.descriptionPlaceholder'),
+    secretLabel: {
+      token: t('vaultForm.vaultFormText.secretLabel.token'),
+      password: t('vaultForm.vaultFormText.secretLabel.password'),
+      secret: t('vaultForm.vaultFormText.secretLabel.secret'),
+    },
+    secretPlaceholder: t('vaultForm.vaultFormText.secretPlaceholder'),
+    secretHint: t('vaultForm.vaultFormText.secretHint'),
+    added: (name: string) => t('vaultForm.vaultFormText.added', { name }),
+    addedChecked: (name: string, summary: string) =>
+      t('vaultForm.vaultFormText.addedChecked', { name, summary }),
+    failed: t('vaultForm.vaultFormText.failed'),
+    secretReplaced: t('vaultForm.vaultFormText.secretReplaced'),
+    replaceHint: t('vaultForm.vaultFormText.replaceHint'),
+    signsInWithNothing: t('vaultForm.vaultFormText.signsInWithNothing'),
+    /** What the phone leaves to the web (AP-718). */
+    sshOnWeb: t('vaultForm.vaultFormText.sshOnWeb'),
+  } as const;
+}
+export const VAULT_FORM_TEXT = vaultFormText();
 
 /** The sign-in choices of each template: an API never signs in with nothing (VT-03). */
 export const TEMPLATE_AUTHS: Record<PhoneVaultTemplate, VaultAuthType[]> = {

@@ -14,13 +14,15 @@
  */
 
 import { COMMAND_SCOPES, type CommandScope } from '../commands/commands.js';
-import { COMMAND_DECLINE_CTA, commandScopeLabels, isToolCategory } from '../commands/copy.js';
+import { commandDeclineCta, commandScopeLabels, isToolCategory } from '../commands/copy.js';
 import type { Approval, ApprovalAction, ApprovalActionType, ApprovalCondition } from '../domain/approval.js';
 import type { Tone } from '../domain/common.js';
 import { TEAM_REPORT_DRAFT_ACTION, teamReportDraftWords } from '../domain/team-reports.js';
+import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { alwaysAllowRow } from '../keys/actions.js';
-import { KEY_CATALOG } from '../keys/catalog.js';
-import { alwaysAllowLabel, keyRiskRow } from '../keys/grants.js';
+import { joinWithAnd, keyLabel } from '../keys/catalog.js';
+import { alwaysAllowLabel, type KeyTierRow, keyRiskRow } from '../keys/grants.js';
 import { requestedTier } from '../keys/requests.js';
 import { shortSha, stepNumber } from '../text/format.js';
 import {
@@ -35,7 +37,13 @@ import {
   toDate,
   zonedParts,
 } from '../text/time.js';
-import { conditionMet, otherConditions, otherConditionsMet, unmetOtherConditions } from './conditions.js';
+import {
+  conditionMet,
+  defaultConditionLabel,
+  otherConditions,
+  otherConditionsMet,
+  unmetOtherConditions,
+} from './conditions.js';
 import { approvalCopy } from './copy.js';
 import { canDecide, type Decider, undoBlock } from './transitions.js';
 
@@ -162,18 +170,37 @@ export function actionVerbs(action: ApprovalAction): Verbs {
   return VERBS[action.type];
 }
 
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-const numberWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
-
-function joinAnd(items: readonly string[]): string {
-  if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+/**
+ * An action's own words for the card's sentences, in a locale: `not` is what follows “won’t” (Dutch “gaat … niet
+ * uitrollen” carries its own “niet”), `declined` the same with its object (“deploy this commit”).
+ */
+interface ActionWords {
+  base: string;
+  third: string;
+  ing: string;
+  past: string;
+  not: string;
+  declined: string;
 }
 
-function joinOr(items: readonly string[]): string {
+function actionWords(type: ApprovalActionType, tr: CoreTranslator): ActionWords {
+  return {
+    base: tr.t(`approval.verb.${type}.base`),
+    third: tr.t(`approval.verb.${type}.third`),
+    ing: tr.t(`approval.verb.${type}.ing`),
+    past: tr.t(`approval.verb.${type}.past`),
+    not: tr.t(`approval.verb.${type}.not`),
+    declined: tr.t(`approval.verb.${type}.declined`),
+  };
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const numberWord = (tr: CoreTranslator, n: number) =>
+  n >= 0 && n <= 10 ? tr.t(`approval.number.${n}` as 'approval.number.0') : String(n);
+
+function joinOr(tr: CoreTranslator, items: readonly string[]): string {
   if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+  return tr.t('approval.or', { items: items.slice(0, -1).join(', '), last: items[items.length - 1] ?? '' });
 }
 
 function stripProtocol(url: string): string {
@@ -196,6 +223,8 @@ export interface ApprovalViewContext {
   timeZone: string;
   /** Where the request was made, for the mobile context line ("#billing-v2"). */
   where?: string;
+  /** The reader's language (English when absent). */
+  locale?: string | null;
 }
 
 export interface ConditionView {
@@ -354,6 +383,19 @@ export const APPROVAL_ASK_WORDS = {
   details: 'Technical details',
 } as const;
 
+/** `APPROVAL_ASK_WORDS` in a locale. */
+export function approvalAskWords(locale?: string | null): { [K in keyof typeof APPROVAL_ASK_WORDS]: string } {
+  const tr = coreTranslator(locale);
+  return {
+    needs: tr.raw('approval.ask.needs'),
+    yes: tr.t('approval.ask.yes'),
+    now: tr.t('approval.ask.now'),
+    later: tr.t('approval.ask.later'),
+    no: tr.t('approval.ask.no'),
+    details: tr.t('approval.ask.details'),
+  };
+}
+
 /** Whether an approval is an everyday ask in plain words (a server's or connection's call, a message, a file…). */
 export function isEverydayAsk(approval: Pick<Approval, 'action'>): boolean {
   return EVERYDAY_ASKS.includes(approval.action.type);
@@ -367,18 +409,32 @@ const LASTING_BODY = `${LASTING_NEXT} You can change this in Settings.`;
  * The lasting yes's confirmation naming the real place it changes back where that isn't Settings (“on pve-02’s page in
  * Overview”, “on the web”): `where` follows “You can change it back”.
  */
-export function lastingWordsAt(words: ApprovalLastingWords, where: string): ApprovalLastingWords {
-  return { ...words, body: `${LASTING_NEXT} You can change it back ${where}.` };
+export function lastingWordsAt(
+  words: ApprovalLastingWords,
+  where: string,
+  locale?: string | null,
+): ApprovalLastingWords {
+  const tr = coreTranslator(locale);
+  return { ...words, body: tr.t('approval.lasting.at', { next: tr.t('approval.lasting.next'), where }) };
+}
+
+function lastingBody(tr: CoreTranslator): string {
+  return tr.t('approval.lasting.body', { next: tr.t('approval.lasting.next') });
 }
 
 /** The lasting yes on a Servers call that may stop asking (server-asks.md SA-07), behind its confirmation. */
-export function stopAskingConfirm(agent: string, server: string): ApprovalLastingWords {
+export function stopAskingConfirm(
+  agent: string,
+  server: string,
+  locale?: string | null,
+): ApprovalLastingWords {
+  const tr = coreTranslator(locale);
   return {
-    link: `Don’t ask again for ${server}…`,
-    title: `Let ${agent} do this on ${server} without asking?`,
-    body: LASTING_BODY,
-    confirm: `Let ${agent} do it`,
-    keep: 'Keep asking',
+    link: tr.t('approval.lasting.stopLink', { server }),
+    title: tr.t('approval.lasting.stopTitle', { agent, server }),
+    body: lastingBody(tr),
+    confirm: tr.t('approval.lasting.confirm', { agent }),
+    keep: tr.t('approval.lasting.keep'),
   };
 }
 
@@ -393,6 +449,22 @@ export function alwaysAllowConfirm(agent: string, verb: string, label: string): 
   };
 }
 
+/** `alwaysAllowConfirm` for a risk row, in a locale. */
+export function alwaysAllowConfirmFor(
+  agent: string,
+  row: KeyTierRow,
+  locale?: string | null,
+): ApprovalLastingWords {
+  const tr = coreTranslator(locale);
+  return {
+    link: `${alwaysAllowLabel(agent, row, locale)}…`,
+    title: tr.t(`key.risk.${row}.letTitle`, { agent }),
+    body: lastingBody(tr),
+    confirm: tr.t('approval.lasting.confirm', { agent }),
+    keep: tr.t('approval.lasting.keep'),
+  };
+}
+
 /** Where an answered everyday ask is: to come at its time, running, done, failed, approved (waiting to start), no. */
 export type ApprovalAnswerState = 'scheduled' | 'running' | 'done' | 'failed' | 'approved' | 'declined';
 
@@ -404,30 +476,31 @@ export interface ApprovalAnswer {
 }
 
 /** “09:46” today, “Tue” this week, else the date: when an answer happened, after its state. */
-function answeredWhen(at: string, ctx: Pick<ApprovalViewContext, 'now' | 'timeZone'>): string {
+function answeredWhen(at: string, ctx: Pick<ApprovalViewContext, 'now' | 'timeZone' | 'locale'>): string {
   const days = daysAgo(at, ctx.now, ctx.timeZone);
   if (days <= 0) return formatClock(at, ctx.timeZone);
-  if (days < 7) return formatShortWeekday(at, ctx.timeZone);
-  return formatDate(at, ctx.timeZone, { now: ctx.now });
+  if (days < 7) return formatShortWeekday(at, ctx.timeZone, ctx.locale);
+  return formatDate(at, ctx.timeZone, { now: ctx.now }, ctx.locale);
 }
 
 /** “Scheduled for tonight, 03:00”, “Scheduled for tomorrow, 09:00”, “Scheduled for Fri, 09:00”. */
-function scheduledText(at: string, ctx: Pick<ApprovalViewContext, 'now' | 'timeZone'>): string {
+function scheduledText(at: string, ctx: Pick<ApprovalViewContext, 'now' | 'timeZone' | 'locale'>): string {
+  const tr = coreTranslator(ctx.locale);
   const ahead = -daysAgo(at, ctx.now, ctx.timeZone);
   const { hour } = zonedParts(at, ctx.timeZone);
   const clock = formatClock(at, ctx.timeZone);
   // The small hours after midnight still count as tonight, as the quiet hours for changes do.
   const tonight = (ahead === 0 && (hour >= 18 || hour < 6)) || (ahead === 1 && hour < 6);
   const day = tonight
-    ? 'tonight'
+    ? tr.t('approval.answer.tonight')
     : ahead <= 0
-      ? 'today'
+      ? tr.t('approval.answer.today')
       : ahead === 1
-        ? 'tomorrow'
+        ? tr.t('approval.answer.tomorrow')
         : ahead < 7
-          ? formatShortWeekday(at, ctx.timeZone)
-          : formatDate(at, ctx.timeZone, { now: ctx.now });
-  return `Scheduled for ${day}, ${clock}`;
+          ? formatShortWeekday(at, ctx.timeZone, ctx.locale)
+          : formatDate(at, ctx.timeZone, { now: ctx.now }, ctx.locale);
+  return tr.t('approval.answer.scheduled', { day, clock });
 }
 
 /**
@@ -437,72 +510,99 @@ function scheduledText(at: string, ctx: Pick<ApprovalViewContext, 'now' | 'timeZ
  */
 export function approvalAnswer(
   approval: Pick<Approval, 'state' | 'executeAt' | 'execution' | 'executedAt' | 'decidedAt' | 'decidedById'>,
-  ctx: Pick<ApprovalViewContext, 'now' | 'timeZone' | 'viewer' | 'names'>,
+  ctx: Pick<ApprovalViewContext, 'now' | 'timeZone' | 'viewer' | 'names' | 'locale'>,
 ): ApprovalAnswer | null {
   if (approval.state === 'pending') return null;
+  const tr = coreTranslator(ctx.locale);
   const at = (iso: string | null | undefined) => (iso ? ` · ${answeredWhen(iso, ctx)}` : '');
   if (approval.state === 'declined') {
     const mine = !approval.decidedById || approval.decidedById === ctx.viewer?.id;
-    const who = mine ? 'You' : nameOf(ctx, approval.decidedById).shortName;
-    return { state: 'declined', text: `${who} said no${at(approval.decidedAt)}`, tone: 'mut' };
+    const who = mine ? tr.t('approval.answer.you') : nameOf(ctx, approval.decidedById).shortName;
+    return {
+      state: 'declined',
+      text: tr.t('approval.answer.saidNo', { who, at: at(approval.decidedAt) }),
+      tone: 'mut',
+    };
   }
   const run = approval.execution.state;
-  if (run === 'running') return { state: 'running', text: 'Running', tone: 'ok' };
+  if (run === 'running') return { state: 'running', text: tr.t('approval.answer.running'), tone: 'ok' };
   if (run === 'succeeded' || (run === 'idle' && approval.executedAt))
     return {
       state: 'done',
-      text: `Done${at(approval.executedAt ?? approval.execution.finishedAt)}`,
+      text: tr.t('approval.answer.done', { at: at(approval.executedAt ?? approval.execution.finishedAt) }),
       tone: 'ok',
     };
-  if (run === 'failed') return { state: 'failed', text: 'It didn’t work', tone: 'bad' };
+  if (run === 'failed') return { state: 'failed', text: tr.t('approval.answer.failed'), tone: 'bad' };
   const executeAt = approval.executeAt ?? null;
   if (executeAt && toDate(executeAt).getTime() > toDate(ctx.now).getTime())
     return { state: 'scheduled', text: scheduledText(executeAt, ctx), tone: 'ok' };
-  return { state: 'approved', text: 'Approved', tone: 'ok' };
+  return { state: 'approved', text: tr.t('approval.answer.approved'), tone: 'ok' };
 }
 
-function nameOf(ctx: ApprovalViewContext, id: string | null | undefined): NameInfo {
-  if (!id) return { name: 'Someone', shortName: 'Someone' };
-  return ctx.names(id) ?? { name: 'Someone', shortName: 'Someone' };
+function nameOf(ctx: Pick<ApprovalViewContext, 'names' | 'locale'>, id: string | null | undefined): NameInfo {
+  const someone = () => {
+    const name = coreTranslator(ctx.locale).t('approval.someone');
+    return { name, shortName: name };
+  };
+  if (!id) return someone();
+  return ctx.names(id) ?? someone();
 }
 
 /** When a decision happened, in DECIDED rows: "just now" / "at 17:20" / "on 3 Mar at 17:20". */
 function decidedWhen(at: string, ctx: ApprovalViewContext): string {
+  const tr = coreTranslator(ctx.locale);
   const seconds = (toDate(ctx.now).getTime() - toDate(at).getTime()) / 1000;
-  if (seconds >= 0 && seconds < 60) return 'just now';
+  if (seconds >= 0 && seconds < 60) return tr.t('approval.when.justNow');
   const clock = formatClock(at, ctx.timeZone);
-  if (daysAgo(at, ctx.now, ctx.timeZone) <= 1) return `at ${clock}`;
-  return `on ${formatDate(at, ctx.timeZone, { now: ctx.now })} at ${clock}`;
+  if (daysAgo(at, ctx.now, ctx.timeZone) <= 1) return tr.t('approval.when.at', { clock });
+  return tr.t('approval.when.on', {
+    date: formatDate(at, ctx.timeZone, { now: ctx.now }, ctx.locale),
+    clock,
+  });
 }
 
-function checksNote(c: Extract<ApprovalCondition, { kind: 'checks_pass' }>): string {
+function checksNote(c: Extract<ApprovalCondition, { kind: 'checks_pass' }>, tr: CoreTranslator): string {
   if (c.total === 0) {
-    return { pending: 'waiting', running: 'running', passed: 'passed', failed: 'failed' }[c.state];
+    const state = { pending: 'waiting', running: 'running', passed: 'passed', failed: 'failed' } as const;
+    return tr.t(`approval.checks.${state[c.state]}`);
   }
-  const base = `${c.passed} of ${c.total}`;
-  return c.fixing && c.state !== 'passed' ? `${base} · fixing` : base;
+  const base = tr.t('approval.checks.of', { passed: c.passed, total: c.total });
+  return c.fixing && c.state !== 'passed' ? tr.t('approval.checks.fixing', { base }) : base;
+}
+
+/** A condition's label: the stored one, or the reader's words for one of the labels the server writes by default. */
+function conditionLabel(cond: ApprovalCondition, tr: CoreTranslator): string {
+  if (tr.language === 'en') return cond.label;
+  if (cond.kind === 'checks_pass' && cond.label === defaultConditionLabel({ kind: 'checks_pass' }))
+    return tr.t('approval.condition.checks_pass');
+  if (cond.kind === 'person_approves' && cond.label === defaultConditionLabel({ kind: 'person_approves' }))
+    return tr.t('approval.condition.person_approves');
+  const review = / approves the PR$/;
+  if (cond.kind === 'review_approved' && review.test(cond.label))
+    return tr.t('approval.condition.review_approved', { name: cond.label.replace(review, '') });
+  return cond.label;
 }
 
 function conditionView(cond: ApprovalCondition, approval: Approval, ctx: ApprovalViewContext): ConditionView {
+  const tr = coreTranslator(ctx.locale);
   const met = conditionMet(cond, approval.state);
+  const label = conditionLabel(cond, tr);
   let note = '';
   let mobileNote = '';
-  let mobileLabel = cond.label;
+  let mobileLabel = label;
   switch (cond.kind) {
     case 'checks_pass':
-      note = checksNote(cond);
+      note = checksNote(cond, tr);
       mobileNote = note;
-      if (cond.headSha) mobileLabel = `Checks pass on ${shortSha(cond.headSha)}`;
+      if (cond.headSha) mobileLabel = tr.t('approval.checks.on', { sha: shortSha(cond.headSha) });
       break;
     case 'review_approved': {
-      const n = {
-        approved: cond.reviewedAt
-          ? `approved ${formatRecent(cond.reviewedAt, ctx.now, ctx.timeZone)}`
-          : 'approved',
-        changes_requested: 'changes requested',
-        pending: 'waiting',
-        commented: 'commented',
-      }[cond.reviewState];
+      const n =
+        cond.reviewState === 'approved' && cond.reviewedAt
+          ? tr.t('approval.review.approvedAt', {
+              when: formatRecent(cond.reviewedAt, ctx.now, ctx.timeZone, ctx.locale),
+            })
+          : tr.t(`approval.review.${cond.reviewState}`);
       note = n;
       mobileNote = n;
       break;
@@ -510,22 +610,25 @@ function conditionView(cond: ApprovalCondition, approval: Approval, ctx: Approva
     case 'person_approves': {
       if (approval.state === 'approved') {
         const when = approval.decidedAt
-          ? formatRecent(approval.decidedAt, ctx.now, ctx.timeZone)
-          : 'just now';
+          ? formatRecent(approval.decidedAt, ctx.now, ctx.timeZone, ctx.locale)
+          : tr.t('approval.when.justNow');
         note = `${nameOf(ctx, approval.decidedById).shortName} · ${when}`;
-        mobileNote = `${ctx.viewer?.id === approval.decidedById ? 'you' : nameOf(ctx, approval.decidedById).shortName} · ${when}`;
+        mobileNote = `${ctx.viewer?.id === approval.decidedById ? tr.t('approval.you') : nameOf(ctx, approval.decidedById).shortName} · ${when}`;
       } else if (approval.state === 'declined') {
-        note = 'declined';
-        mobileNote = 'declined';
+        note = tr.t('approval.person.declined');
+        mobileNote = note;
       } else {
         const viewerId = ctx.viewer?.id;
         const ordered = [
           ...cond.approverIds.filter((id) => id === viewerId),
           ...cond.approverIds.filter((id) => id !== viewerId),
         ];
-        note = joinOr(ordered.map((id) => (id === viewerId ? 'you' : nameOf(ctx, id).shortName)));
+        note = joinOr(
+          tr,
+          ordered.map((id) => (id === viewerId ? tr.t('approval.you') : nameOf(ctx, id).shortName)),
+        );
         // The phone's condition says what it waits on, so “You say yes · you” doesn't read as a riddle.
-        mobileNote = `Waiting for ${note}`;
+        mobileNote = tr.t('approval.person.waitingFor', { names: note });
       }
       break;
     }
@@ -534,7 +637,7 @@ function conditionView(cond: ApprovalCondition, approval: Approval, ctx: Approva
     id: cond.id,
     kind: cond.kind,
     met,
-    label: cond.label,
+    label,
     mobileLabel,
     note,
     mobileNote,
@@ -544,15 +647,16 @@ function conditionView(cond: ApprovalCondition, approval: Approval, ctx: Approva
 
 /** "checks are green" / "Waffle signs off" — what an approved request is still waiting for. */
 function waitingPhrases(approval: Approval, ctx: ApprovalViewContext): { long: string[]; short: string[] } {
+  const tr = coreTranslator(ctx.locale);
   const long: string[] = [];
   const short: string[] = [];
   for (const c of unmetOtherConditions(approval)) {
     if (c.kind === 'checks_pass') {
-      long.push('checks are green');
-      short.push('checks');
+      long.push(tr.t('approval.phrase.checksGreen'));
+      short.push(tr.t('approval.phrase.checks'));
     } else if (c.kind === 'review_approved') {
       const reviewer = nameOf(ctx, c.reviewerId).shortName;
-      long.push(`${reviewer} signs off`);
+      long.push(tr.t('approval.phrase.signsOff', { name: reviewer }));
       short.push(reviewer);
     }
   }
@@ -560,11 +664,13 @@ function waitingPhrases(approval: Approval, ctx: ApprovalViewContext): { long: s
 }
 
 function metPhrases(approval: Approval, ctx: ApprovalViewContext): string[] {
+  const tr = coreTranslator(ctx.locale);
   const out: string[] = [];
   for (const c of otherConditions(approval)) {
     if (!conditionMet(c, approval.state)) continue;
-    if (c.kind === 'checks_pass') out.push('checks are green');
-    else if (c.kind === 'review_approved') out.push(`${nameOf(ctx, c.reviewerId).shortName} approved`);
+    if (c.kind === 'checks_pass') out.push(tr.t('approval.phrase.checksGreen'));
+    else if (c.kind === 'review_approved')
+      out.push(tr.t('approval.phrase.approved', { name: nameOf(ctx, c.reviewerId).shortName }));
   }
   return out;
 }
@@ -583,10 +689,12 @@ function commandWhyOf(action: ApprovalAction): string | null {
   return why ? cap(why) : null;
 }
 
-/** Builds every piece of approval copy for one viewer at one moment. */
+/** Builds every piece of approval copy for one viewer at one moment, in the viewer's language (`ctx.locale`). */
 export function approvalView(approval: Approval, ctx: ApprovalViewContext): ApprovalView {
+  const tr = coreTranslator(ctx.locale);
+  const locale = ctx.locale;
   const phase = approvalPhase(approval);
-  const v = actionVerbs(approval.action);
+  const v = actionWords(approval.action.type, tr);
   const R = nameOf(ctx, approval.requesterId).shortName;
   const D = nameOf(ctx, approval.decidedById);
   const env = environmentOf(approval.action);
@@ -597,7 +705,7 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
   const grant =
     approval.action.type === 'grant_key'
       ? {
-          label: `“${KEY_CATALOG[approval.action.params.keyId].label}”`,
+          label: `“${keyLabel(approval.action.params.keyId, locale)}”`,
           asks: requestedTier(approval.action.params.keyId) === 'ask',
         }
       : null;
@@ -610,16 +718,14 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
   const offersStopAsking = askServer !== null && ctx.viewer?.kind === 'person';
   const stopAskingSentence =
     askServer && approval.scope === 'agent'
-      ? ` From now on Whombat acts on ${askServer.name} without asking.`
+      ? tr.t('approval.stopAskingSentence', { server: askServer.name })
       : '';
   // A typed action under a risk row (RA-06): Approve, or always allow the agent the row.
   const riskRow = alwaysAllowRow(approval.action);
   const offersAlways = riskRow !== null;
-  const alwaysSentence =
-    riskRow && approval.scope === 'agent'
-      ? ` From now on ${R} may ${keyRiskRow(riskRow).verb} without asking.`
-      : stopAskingSentence;
-  const scopeLabels = command ? commandScopeLabels(R) : null;
+  const mayNow = (row: KeyTierRow) => ` ${tr.t(`key.risk.${row}.mayNow`, { agent: R })}`;
+  const alwaysSentence = riskRow && approval.scope === 'agent' ? mayNow(riskRow) : stopAskingSentence;
+  const scopeLabels = command ? commandScopeLabels(R, locale) : null;
   const why = commandWhyOf(approval.action);
   // The assistant's draft report to the Whombat Team: exactly what would be sent, wherever the card can be answered.
   const reportWords =
@@ -628,69 +734,97 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
       : null;
   const allowedSentence = command
     ? approval.scope === 'task'
-      ? 'Allowed for this task.'
+      ? tr.t('approval.allowed.task')
       : approval.scope === 'agent'
-        ? `Always allowed for ${R}.`
-        : 'Allowed once.'
+        ? tr.t('approval.allowed.agent', { agent: R })
+        : tr.t('approval.allowed.once')
     : '';
   const toldSentence =
-    involved.length === 0 ? '' : ` ${joinAnd(involved)} ${involved.length === 1 ? 'has' : 'have'} been told.`;
+    involved.length === 0
+      ? ''
+      : tr.tp('approval.told', involved.length, { names: joinWithAnd(involved, locale) });
   const declinedSentence = grant
-    ? `${R} won’t get ${grant.label}.`
-    : `${R} won’t ${v.base}${v.declinedObject ? ` ${v.declinedObject}` : ''}.`;
+    ? tr.t('approval.declined.grant', { agent: R, label: grant.label })
+    : tr.t('approval.declined.action', { agent: R, what: v.declined });
   const hasUnmetChecks = unmetOtherConditions(approval).some((c) => c.kind === 'checks_pass');
   const hasUnmetReview = unmetOtherConditions(approval).some((c) => c.kind === 'review_approved');
   const allOthersMet = otherConditionsMet(approval);
+  const upper = (text: string) => text.toLocaleUpperCase(tr.locale);
 
   // Label and tone
-  const waitingFor = hasUnmetChecks ? 'CHECKS' : hasUnmetReview ? 'REVIEW' : 'CONDITIONS';
+  const waitingFor = tr.t(
+    hasUnmetChecks
+      ? 'approval.waitingFor.checks'
+      : hasUnmetReview
+        ? 'approval.waitingFor.review'
+        : 'approval.waitingFor.conditions',
+  );
   const labels: Record<ApprovalPhase, [string, Tone]> = {
-    needs_person: ['NEEDS A PERSON', 'warn'],
-    waiting: [`APPROVED · WAITING FOR ${waitingFor}`, 'warn'],
-    executing: [`APPROVED · ${v.ing.toUpperCase()}`, 'ok'],
-    executed: [v.past.toUpperCase(), 'ok'],
-    failed: [`${v.base.toUpperCase()} FAILED`, 'bad'],
-    declined: ['DECLINED', 'bad'],
+    needs_person: [tr.t('approval.label.needs'), 'warn'],
+    waiting: [tr.t('approval.label.waiting', { what: waitingFor }), 'warn'],
+    executing: [tr.t('approval.label.executing', { ing: upper(v.ing) }), 'ok'],
+    executed: [upper(v.past), 'ok'],
+    failed: [tr.t('approval.label.failed', { base: upper(v.base) }), 'bad'],
+    declined: [tr.t('approval.label.declined'), 'bad'],
   };
   const [label, tone] = labels[phase];
 
   // Card message
   const n = others.length;
   const needsMessage = grant
-    ? `${R} can’t get a key without a person.${grant.asks ? ' Once given, it still asks a person each time it uses it.' : ''}`
+    ? `${tr.t('approval.needs.grant', { agent: R })}${grant.asks ? tr.t('approval.needs.grantAsks') : ''}`
     : n === 0
-      ? `${R} won’t ${v.base} without a person.`
-      : `${R} won’t ${v.base} without a person. Approve now and it goes out once the first ${numberWord(n)} ${n === 1 ? 'is' : 'are'} green.`;
+      ? tr.t('approval.needs.action', { agent: R, what: v.not })
+      : tr.tp('approval.needs.actionAfter', n, { agent: R, what: v.not, countWord: numberWord(tr, n) });
   const durationText =
-    approval.execution.durationMs !== null ? formatDuration(approval.execution.durationMs) : undefined;
+    approval.execution.durationMs !== null
+      ? formatDuration(approval.execution.durationMs, locale)
+      : undefined;
+  const duration = durationText ? tr.t('approval.in', { duration: durationText }) : '';
+  const resultUrl = approval.execution.resultUrl ? stripProtocol(approval.execution.resultUrl) : null;
   const executingMessage = grant
-    ? `Giving ${R} ${grant.label} now.`
+    ? tr.t('approval.executing.grant', { agent: R, label: grant.label })
     : command
-      ? `${allowedSentence} ${R} runs the command in its turn.`
+      ? tr.t('approval.executing.command', { allowed: allowedSentence, agent: R })
       : approval.action.type === 'deploy'
-        ? `${R} is rolling ${approval.action.params.service} to ${approval.action.params.environment}. You’ll get a note here when it’s live, usually in about two minutes.${alwaysSentence}`
-        : `${R} is ${v.ing} now. You’ll get a note here when it’s done.${alwaysSentence}`;
+        ? tr.t('approval.executing.deploy', {
+            agent: R,
+            service: approval.action.params.service,
+            env: approval.action.params.environment,
+            always: alwaysSentence,
+          })
+        : tr.t('approval.executing.action', { agent: R, ing: v.ing, always: alwaysSentence });
   const executedMessage = grant
     ? grant.asks
-      ? `Given. ${R} holds ${grant.label} and asks a person each time it uses it.`
-      : `Given. ${R} can use ${grant.label} from its next turn.`
+      ? tr.t('approval.executed.grantAsks', { agent: R, label: grant.label })
+      : tr.t('approval.executed.grant', { agent: R, label: grant.label })
     : command
-      ? `${allowedSentence} ${R} ran the command.`
+      ? tr.t('approval.executed.command', { allowed: allowedSentence, agent: R })
       : approval.action.type === 'deploy'
-        ? `Deployed to ${approval.action.params.environment}${durationText ? ` in ${durationText}` : ''}.${
-            approval.execution.resultUrl ? ` Try it: ${stripProtocol(approval.execution.resultUrl)}` : ''
-          }${alwaysSentence}`
-        : `${cap(v.past)}${durationText ? ` in ${durationText}` : ''}.${
-            approval.execution.resultUrl ? ` See ${stripProtocol(approval.execution.resultUrl)}` : ''
-          }${alwaysSentence}`;
-  const failedMessage = `${cap(v.base)}${env ? ` to ${env}` : ''} failed.${approval.execution.error ? ` ${approval.execution.error}` : ''}`;
+        ? tr.t('approval.executed.deploy', {
+            env: approval.action.params.environment,
+            duration,
+            link: resultUrl ? tr.t('approval.tryIt', { url: resultUrl }) : '',
+            always: alwaysSentence,
+          })
+        : tr.t('approval.executed.action', {
+            past: cap(v.past),
+            duration,
+            link: resultUrl ? tr.t('approval.see', { url: resultUrl }) : '',
+            always: alwaysSentence,
+          });
+  const failedMessage = tr.t('approval.failed', {
+    base: cap(v.base),
+    env: env ? tr.t('approval.toEnv', { env }) : '',
+    error: approval.execution.error ? ` ${approval.execution.error}` : '',
+  });
   const messages: Record<ApprovalPhase, string> = {
     needs_person: needsMessage,
-    waiting: `Approved. ${R} ${v.third} as soon as ${joinAnd(waiting.long)}.`,
+    waiting: tr.t('approval.waiting', { agent: R, third: v.third, list: joinWithAnd(waiting.long, locale) }),
     executing: executingMessage,
     executed: executedMessage,
     failed: failedMessage,
-    declined: `Declined. ${declinedSentence}${toldSentence}`,
+    declined: tr.t('approval.declined', { sentence: declinedSentence, told: toldSentence }),
   };
   const mobileMessages: Record<ApprovalPhase, string> = {
     ...messages,
@@ -704,65 +838,74 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
     const ms = Math.max(0, toDate(ctx.now).getTime() - toDate(approval.executedAt).getTime());
     executedAgo =
       ms < 3_600_000
-        ? ` ${formatDuration(ms)} ago`
-        : ` ${formatAgo(approval.executedAt, ctx.now, ctx.timeZone)}`;
+        ? tr.t('approval.ago', { duration: formatDuration(ms, locale) })
+        : ` ${formatAgo(approval.executedAt, ctx.now, ctx.timeZone, locale)}`;
   }
   const shorts: Record<ApprovalPhase, string> = {
     needs_person: env
-      ? `${R} is waiting for a person to approve the ${env} deploy.`
-      : `${R} is waiting for a person to approve.`,
-    waiting: `${D.shortName} approved. Waiting for ${joinAnd(waiting.short)}.`,
+      ? tr.t('approval.short.needsEnv', { agent: R, env })
+      : tr.t('approval.short.needs', { agent: R }),
+    waiting: tr.t('approval.short.waiting', {
+      decider: D.shortName,
+      list: joinWithAnd(waiting.short, locale),
+    }),
     executing: env
-      ? `${D.shortName} approved. ${R} is deploying to ${env}.`
+      ? tr.t('approval.short.executingEnv', { decider: D.shortName, agent: R, env })
       : grant
-        ? `${D.shortName} approved. Giving ${R} ${grant.label}.`
-        : `${D.shortName} approved. ${R} is ${v.ing}.`,
+        ? tr.t('approval.short.executingGrant', { decider: D.shortName, agent: R, label: grant.label })
+        : tr.t('approval.short.executing', { decider: D.shortName, agent: R, ing: v.ing }),
     executed: env
-      ? `Deployed to ${env}${executedAgo}. ${D.shortName} approved.`
-      : `${cap(v.past)}${executedAgo}. ${D.shortName} approved.`,
+      ? tr.t('approval.short.executedEnv', { env, ago: executedAgo, decider: D.shortName })
+      : tr.t('approval.short.executed', { past: cap(v.past), ago: executedAgo, decider: D.shortName }),
     failed: failedMessage,
-    declined: `Declined by ${D.shortName}.`,
+    declined: tr.t('approval.short.declined', { decider: D.shortName }),
   };
 
   const inboxDone: Record<ApprovalPhase, string | null> = {
     needs_person: null,
-    waiting: `Approved · waiting for ${joinAnd(waiting.short)}`,
-    executing: `Approved · ${v.ing}`,
+    waiting: tr.t('approval.inbox.waiting', { list: joinWithAnd(waiting.short, locale) }),
+    executing: tr.t('approval.inbox.executing', { ing: v.ing }),
     executed: cap(v.past),
-    failed: `${cap(v.base)} failed`,
-    declined: 'Declined',
+    failed: tr.t('approval.inbox.failed', { base: cap(v.base) }),
+    declined: tr.t('approval.inbox.declined'),
   };
 
   // Log pill and DECIDED row
   const logPill: ApprovalView['logPill'] =
     approval.state === 'pending'
-      ? { text: 'WAITING ON A PERSON', tone: 'warn' }
+      ? { text: tr.t('approval.pill.waiting'), tone: 'warn' }
       : approval.state === 'approved'
-        ? { text: `APPROVED BY ${D.shortName.toUpperCase()}`, tone: 'ok' }
-        : { text: `DECLINED BY ${D.shortName.toUpperCase()}`, tone: 'bad' };
+        ? { text: tr.t('approval.pill.approved', { name: upper(D.shortName) }), tone: 'ok' }
+        : { text: tr.t('approval.pill.declined', { name: upper(D.shortName) }), tone: 'bad' };
   const logDecided: ApprovalView['logDecided'] =
     approval.state === 'pending'
       ? {
           text:
             approval.action.type === 'deploy'
-              ? `Nobody yet. ${R} is holding the deploy.`
-              : `Nobody yet. ${R} is waiting.`,
+              ? tr.t('approval.decided.nobodyDeploy', { agent: R })
+              : tr.t('approval.decided.nobody', { agent: R }),
           tone: 'warn',
         }
       : {
-          text: `${D.name} ${approval.state} ${approval.decidedAt ? decidedWhen(approval.decidedAt, ctx) : 'just now'}`,
+          text: tr.t(
+            approval.state === 'approved' ? 'approval.decided.approved' : 'approval.decided.declined',
+            {
+              name: D.name,
+              when: approval.decidedAt ? decidedWhen(approval.decidedAt, ctx) : tr.t('approval.when.justNow'),
+            },
+          ),
           tone: 'neutral',
         };
 
   // Plan gate step
   const viewerIsApprover = !!ctx.viewer && canDecide(approval, ctx.viewer) === null;
   const planLabels: Record<ApprovalPhase, string> = {
-    needs_person: viewerIsApprover ? 'Needs you' : 'Needs a person',
-    waiting: 'Approved',
-    executing: 'Approved',
+    needs_person: viewerIsApprover ? tr.t('approval.plan.needsYou') : tr.t('approval.plan.needs'),
+    waiting: tr.t('approval.plan.approved'),
+    executing: tr.t('approval.plan.approved'),
     executed: cap(v.past),
-    failed: 'Failed',
-    declined: 'Declined',
+    failed: tr.t('approval.plan.failed'),
+    declined: tr.t('approval.plan.declined'),
   };
 
   const pending = approval.state === 'pending';
@@ -770,57 +913,59 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
   const undoable = !command && !!ctx.viewer && undoBlock(approval) === null && ctx.viewer.kind === 'person';
 
   const approveToast = grant
-    ? `Approved. Giving ${R} ${grant.label}.`
+    ? tr.t('approval.toast.grant', { agent: R, label: grant.label })
     : command
-      ? `${allowedSentence} ${R} runs the command now.`
+      ? tr.t('approval.toast.command', { allowed: allowedSentence, agent: R })
       : allOthersMet
         ? env
-          ? `Approved. ${R} is deploying to ${env}.`
-          : `Approved. ${R} is ${v.ing}.`
-        : `Approved in advance. ${R} will ${v.base} when ${waitingPhrases(approval, ctx).long[0] ?? 'everything is ready'}.`;
+          ? tr.t('approval.toast.deploy', { agent: R, env })
+          : tr.t('approval.toast.action', { agent: R, ing: v.ing })
+        : tr.t('approval.toast.advance', {
+            agent: R,
+            base: v.base,
+            cond: waitingPhrases(approval, ctx).long[0] ?? tr.t('approval.phrase.ready'),
+          });
 
-  const copy = approvalCopy(approval, ctx.names);
+  const copy = approvalCopy(approval, ctx.names, locale);
 
   const created = approval.createdAt;
   const mobileContext = [R, ctx.where, formatClock(created, ctx.timeZone)].filter(Boolean).join(' · ');
+  const approveAnd = allOthersMet
+    ? tr.t('approval.cta.approveAnd', { base: v.base })
+    : tr.t('approval.cta.advance');
+  const askWords = approvalAskWords(locale);
 
   return {
     phase,
     title: copy.title,
     question: copy.question,
     target: copy.target,
-    actionNote: copy.matchesStored ? null : `What actually runs: ${copy.runs}.`,
+    actionNote: copy.matchesStored ? null : tr.t('approval.actionNote', { runs: copy.runs }),
     label,
     tone,
     mobileLabel: label,
     pendingBorder: pending,
-    kicker: `${R.toUpperCase()} IS ASKING`,
-    cta: grant
-      ? copy.title
-      : scopeLabels
-        ? scopeLabels.once
-        : allOthersMet
-          ? `Approve and ${v.base}`
-          : 'Approve in advance',
+    kicker: tr.t('approval.kicker', { agent: upper(R) }),
+    cta: grant ? copy.title : scopeLabels ? scopeLabels.once : approveAnd,
     mobileCta: grant
       ? copy.title.length <= MOBILE_CTA_MAX_CHARS
         ? copy.title
-        : `Give ${grant.label}`
+        : tr.t('approval.cta.give', { label: grant.label })
       : scopeLabels
         ? scopeLabels.once
-        : 'Approve',
-    declineCta: command ? COMMAND_DECLINE_CTA : 'Decline',
+        : tr.t('approval.cta.approve'),
+    declineCta: command ? commandDeclineCta(locale) : tr.t('approval.cta.decline'),
     scopeChoices: scopeLabels
       ? COMMAND_SCOPES.map((scope) => ({ scope, label: scopeLabels[scope] }))
       : offersAlways && riskRow
         ? [
-            { scope: 'once', label: allOthersMet ? `Approve and ${v.base}` : 'Approve in advance' },
-            { scope: 'agent', label: alwaysAllowLabel(R, riskRow) },
+            { scope: 'once', label: approveAnd },
+            { scope: 'agent', label: alwaysAllowLabel(R, riskRow, locale) },
           ]
         : offersStopAsking && askServer
           ? [
-              { scope: 'once', label: allOthersMet ? `Approve and ${v.base}` : 'Approve in advance' },
-              { scope: 'agent', label: stopAskingLabel(askServer.name) },
+              { scope: 'once', label: approveAnd },
+              { scope: 'agent', label: stopAskingLabel(askServer.name, locale) },
             ]
           : null,
     message: messages[phase],
@@ -832,8 +977,11 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
     whatHappens: [
       ...approval.whatHappens,
       ...(approval.action.type === 'mail_send'
-        ? (approval.action.params.attachments ?? []).map(
-            (a) => `Attach “${a.name}” (${a.size.toLocaleString('en-US')} bytes)`,
+        ? (approval.action.params.attachments ?? []).map((a) =>
+            tr.t('approval.attach', {
+              name: a.name,
+              size: formatLocaleNumber(a.size, tr.locale),
+            }),
           )
         : []),
     ].map((text, i) => ({
@@ -842,23 +990,28 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
     })),
     content:
       approval.action.type === 'mail_send'
-        ? { label: 'MESSAGE', text: approval.action.params.body ?? approval.action.params.bodyPreview }
+        ? {
+            label: tr.t('approval.content.message'),
+            text: approval.action.params.body ?? approval.action.params.bodyPreview,
+          }
         : command
-          ? { label: 'COMMAND', text: command.command }
+          ? { label: tr.t('approval.content.command'), text: command.command }
           : reportWords
-            ? { label: 'REPORT', text: reportWords }
+            ? { label: tr.t('approval.content.report'), text: reportWords }
             : null,
     why,
     ask:
       pending && EVERYDAY_ASKS.includes(approval.action.type)
-        ? { ...APPROVAL_ASK_WORDS, needs: APPROVAL_ASK_WORDS.needs.replace('{name}', R) }
+        ? { ...askWords, needs: tr.t('approval.ask.needs', { name: R }) }
         : null,
     lasting:
       pending && EVERYDAY_ASKS.includes(approval.action.type)
         ? offersAlways && riskRow
-          ? alwaysAllowConfirm(R, keyRiskRow(riskRow).verb, alwaysAllowLabel(R, riskRow))
+          ? tr.language === 'en'
+            ? alwaysAllowConfirm(R, keyRiskRow(riskRow).verb, alwaysAllowLabel(R, riskRow))
+            : alwaysAllowConfirmFor(R, riskRow, locale)
           : offersStopAsking && askServer
-            ? stopAskingConfirm(R, askServer.name)
+            ? stopAskingConfirm(R, askServer.name, locale)
             : null
         : null,
     canApprove: pending && viewerCanDecide,
@@ -872,37 +1025,43 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
     },
     toasts: {
       approve: approveToast,
-      decline: `Declined. ${declinedSentence}`,
+      decline: tr.t('approval.toast.decline', { sentence: declinedSentence }),
       ...(offersAlways && riskRow
-        ? { always: `Approved. From now on ${R} may ${keyRiskRow(riskRow).verb} without asking.` }
+        ? { always: tr.t('approval.toast.always', { sentence: mayNow(riskRow) }) }
         : offersStopAsking && askServer
-          ? { always: stopAskingToast(askServer.name) }
+          ? { always: stopAskingToast(askServer.name, locale) }
           : {}),
     },
   };
 }
 
 /** Inbox row text for a needs-you approval: "Deploy feat/invoice-pdf to staging. Checks are green and Waffle approved." */
-export function approvalInboxText(approval: Approval, ctx: Pick<ApprovalViewContext, 'names'>): string {
+export function approvalInboxText(
+  approval: Approval,
+  ctx: Pick<ApprovalViewContext, 'names' | 'locale'>,
+): string {
   const full = { ...ctx, now: approval.createdAt, timeZone: 'UTC' };
   const met = metPhrases(approval, full);
   const waiting = waitingPhrases(approval, full).long;
-  const title = approvalCopy(approval, ctx.names).title;
+  const title = approvalCopy(approval, ctx.names, ctx.locale).title;
   // A command's why, which the person decides by: “Run a destructive command on staging. Clear the stale cache.”
   const why = commandWhyOf(approval.action);
   if (why) return `${title}. ${why}${/[.!?…]$/.test(why) ? '' : '.'}`;
   if (waiting.length === 0) {
-    return met.length ? `${title}. ${cap(joinAnd(met))}.` : `${title}.`;
+    return met.length ? `${title}. ${cap(joinWithAnd(met, ctx.locale))}.` : `${title}.`;
   }
-  return `${title}. Goes out once ${joinAnd(waiting)}.`;
+  return coreTranslator(ctx.locale).t('approval.inboxText.goesOut', {
+    title,
+    list: joinWithAnd(waiting, ctx.locale),
+  });
 }
 
 /** The card's second button on a Servers call that may stop asking (server-asks.md SA-07). */
-export function stopAskingLabel(server: string): string {
-  return `Don’t ask again on ${server}`;
+export function stopAskingLabel(server: string, locale?: string | null): string {
+  return coreTranslator(locale).t('approval.stopAsking.label', { server });
 }
 
 /** The toast after “Don’t ask again on {server}” (SA-07). */
-export function stopAskingToast(server: string): string {
-  return `Approved. Whombat won’t ask again on ${server}.`;
+export function stopAskingToast(server: string, locale?: string | null): string {
+  return coreTranslator(locale).t('approval.stopAsking.toast', { server });
 }

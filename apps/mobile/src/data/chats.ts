@@ -4,14 +4,20 @@
  * assistant-name-mobile.md AP-1534). The task chats' list went with the Chats tab (one-layout-android.md AP-2640). Pure;
  * the sheet is `screens/NewChatSheet.tsx`.
  */
+
 import type { AgentWords } from '@whombat/client';
 import type { ChatSubject } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
-export const CHATS_COPY = {
-  newChat: 'New chat',
-  newChatField: (w: AgentWords) => w.ask,
-  newChatPlaceholder: (w: AgentWords) => w.askPlaceholder,
-} as const;
+export function chatsCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    newChat: t('chats.chatsCopy.newChat'),
+    newChatField: (w: AgentWords) => w.ask,
+    newChatPlaceholder: (w: AgentWords) => w.askPlaceholder,
+  } as const;
+}
+export const CHATS_COPY = chatsCopy();
 
 /** Under “Ask about pve-02” (mock 2): what the agent sees about the subject (“Neo sees …”). */
 export function askAboutLine(subject: ChatSubject, w: AgentWords): string {

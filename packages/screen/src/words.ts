@@ -1,105 +1,154 @@
+import { EN, NL, resolveScreenLanguage, screenFormatLocale } from './i18n/catalog';
+
+type Word = (key: keyof typeof EN) => string;
+
 /**
  * Every word the screen draws itself (the views bring the rest). Plain English, curly quotes, the middle dot; the words
  * Settings shows too (`DESK_SCREEN_WORDS` in core) are the same, which a test keeps so.
  */
-export const SCREEN_WORDS = {
-  /** Whombat's own widgets, as Settings lists them. */
-  own: {
-    clock: { name: 'Clock' },
-    status: { name: 'How things are' },
-    now: { name: 'What’s going on' },
-    strip: { name: 'Servers' },
-    work: { name: '{assistant}’s work' },
-    coming: { name: 'Coming up' },
-    done: { name: 'Done today' },
-    weather: { name: 'Weather' },
-    news: { name: 'News' },
-  },
-  pill: { one: '1 thing needs you', many: '{n} things need you' },
-  locked: { ask: '{assistant} has a question', hidden: 'Unlock to see it' },
-  now: {
-    doneOne: '{assistant} did 1 thing today',
-    doneMany: '{assistant} did {n} things today',
-    empty: 'Nothing going on right now',
-  },
-  strip: { done: '✓ done', next: 'next', more: '+{n}', off: 'off' },
-  server: {
-    processor: 'Processor',
-    memory: 'Memory',
-    disk: 'Disk',
-    /** The meters' short names, as the server cards wrote them. */
-    keys: { cpu: 'CPU', memory: 'MEM', disk: 'DISK' },
-    /** Under the big figure of the smallest form. */
-    cpu: 'processor',
-    chart: 'Processor · {range}',
-    ranges: { '1h': '1 h', '24h': '24 h', '7d': '7 d' },
-    bad: 'Not answering',
-    off: 'Off',
-  },
-  work: { steps: '{done} of {n} done', now: 'now', next: 'next' },
-  done: { empty: 'Nothing done yet today' },
-  list: { empty: 'Nothing here right now', count: '{n} in all' },
-  /** The weather widget's own words (the forecast's own come in its view: the place, what the sky does, the credit). */
-  weather: {
-    now: 'Now',
-    today: 'Today',
-    highLow: 'High {high}° · Low {low}°',
-    short: '{high}° / {low}°',
-    feels: 'Feels like {t}°',
-    rain: '{mm} mm',
-    rainChance: '{n} % chance of rain',
-    sun: 'Sunrise {rise} · Sunset {set}',
-    polarDay: 'The sun stays up all day',
-    polarNight: 'The sun stays down all day',
-    /** Core `WEATHER_WORDS`, kept equal by a test. */
-    problem: 'Can’t read the weather just now',
-    noPlace: 'Choose where this Whombat is in Settings',
-  },
-  /** The news widget's (core `NEWS_WORDS`, kept equal by a test). */
-  news: { empty: 'Choose your news in Settings', problem: 'Can’t read the news just now' },
-  modal: {
-    since: 'Since {clock} · {ago}',
-    asks: '{assistant} asks · {clock}',
-    of: '{i} of {n}',
-    previous: 'Previous',
-    next: 'Next',
-    fix: 'Ask {assistant} to fix it',
-    open: 'Open {name}',
-    answer: 'Answer',
-    notNow: 'Not now',
-    close: 'Close',
-    pin: 'Your PIN first.',
-    looking: '{assistant} is looking into it.',
-    fixing: '{assistant} is fixing it.',
-    fixed: 'Fixed.',
-    /** A screen elsewhere never answers or takes a step (DK-138). */
-    elsewhereAsk: 'Answer it on your phone, or on Whombat’s own screen.',
-    elsewhereLook: 'Fix it from your phone, or on Whombat’s own screen.',
-  },
-  ago: { now: 'just now', min: '{n} min', hour: '{n} h', hourMin: '{h} h {m} min', day: '{n} d' },
-  back: 'Back',
-  trying: 'Trying a layout from Settings · {s} s',
-  /** A widget taking over for a moment, by why (the contract's `DESK_SCREEN_WORDS.spotlight`). */
-  spotlight: { doorbell: 'Someone’s at the door' },
-  pages: 'Pages',
-  page: '{name}, page {i} of {n}',
-  editing: { empty: 'An empty page.', emptyMore: 'Drag widgets here, or press + on one.' },
-} as const;
+function screenCatalog(word: Word) {
+  return {
+    /** Whombat's own widgets, as Settings lists them. */
+    own: {
+      clock: { name: word('own.clock.name') },
+      status: { name: word('own.status.name') },
+      now: { name: word('own.now.name') },
+      strip: { name: word('own.strip.name') },
+      work: { name: word('own.work.name') },
+      coming: { name: word('own.coming.name') },
+      done: { name: word('own.done.name') },
+      weather: { name: word('own.weather.name') },
+      news: { name: word('own.news.name') },
+    },
+    widget: {
+      server: word('widget.server'),
+      figures: word('widget.figures'),
+      panel: word('widget.panel'),
+      widget: word('widget.widget'),
+    },
+    pill: { one: word('pill.one'), many: word('pill.many') },
+    locked: { ask: word('locked.ask'), hidden: word('locked.hidden') },
+    now: {
+      doneOne: word('now.doneOne'),
+      doneMany: word('now.doneMany'),
+      empty: word('now.empty'),
+    },
+    strip: {
+      done: word('strip.done'),
+      next: word('strip.next'),
+      more: word('strip.more'),
+      off: word('strip.off'),
+    },
+    server: {
+      processor: word('server.processor'),
+      memory: word('server.memory'),
+      disk: word('server.disk'),
+      /** The meters' short names, as the server cards wrote them. */
+      keys: {
+        cpu: word('server.keys.cpu'),
+        memory: word('server.keys.memory'),
+        disk: word('server.keys.disk'),
+      },
+      /** Under the big figure of the smallest form. */
+      cpu: word('server.cpu'),
+      chart: word('server.chart'),
+      ranges: {
+        '1h': word('server.ranges.1h'),
+        '24h': word('server.ranges.24h'),
+        '7d': word('server.ranges.7d'),
+      },
+      bad: word('server.bad'),
+      off: word('server.off'),
+    },
+    work: { steps: word('work.steps'), now: word('work.now'), next: word('work.next') },
+    done: { empty: word('done.empty') },
+    list: { empty: word('list.empty'), count: word('list.count') },
+    /** The weather widget's own words (the forecast's own come in its view: the place, what the sky does, the credit). */
+    weather: {
+      now: word('weather.now'),
+      today: word('weather.today'),
+      highLow: word('weather.highLow'),
+      short: word('weather.short'),
+      feels: word('weather.feels'),
+      rain: word('weather.rain'),
+      rainChance: word('weather.rainChance'),
+      sun: word('weather.sun'),
+      polarDay: word('weather.polarDay'),
+      polarNight: word('weather.polarNight'),
+      /** Core `WEATHER_WORDS`, kept equal by a test. */
+      problem: word('weather.problem'),
+      noPlace: word('weather.noPlace'),
+    },
+    /** The news widget's (core `NEWS_WORDS`, kept equal by a test). */
+    news: { empty: word('news.empty'), problem: word('news.problem') },
+    modal: {
+      since: word('modal.since'),
+      asks: word('modal.asks'),
+      of: word('modal.of'),
+      previous: word('modal.previous'),
+      next: word('modal.next'),
+      fix: word('modal.fix'),
+      open: word('modal.open'),
+      answer: word('modal.answer'),
+      notNow: word('modal.notNow'),
+      close: word('modal.close'),
+      pin: word('modal.pin'),
+      looking: word('modal.looking'),
+      fixing: word('modal.fixing'),
+      fixed: word('modal.fixed'),
+      /** A screen elsewhere never answers or takes a step (DK-138). */
+      elsewhereAsk: word('modal.elsewhereAsk'),
+      elsewhereLook: word('modal.elsewhereLook'),
+    },
+    ago: {
+      now: word('ago.now'),
+      min: word('ago.min'),
+      hour: word('ago.hour'),
+      hourMin: word('ago.hourMin'),
+      day: word('ago.day'),
+    },
+    back: word('back'),
+    trying: word('trying'),
+    /** A widget taking over for a moment, by why (the contract's `DESK_SCREEN_WORDS.spotlight`). */
+    spotlight: { doorbell: word('spotlight.doorbell') },
+    pages: word('pages'),
+    page: word('page'),
+    editing: { empty: word('editing.empty'), emptyMore: word('editing.emptyMore') },
+  } as const;
+}
 
 /**
  * A server widget's parts (`opts.show`, DK-153) as *Add a widget* lists them and their views are titled: the runtime's
  * catalogue and the apps' fixture worlds say them alike.
  */
-export const SERVER_SHOW_WORDS = {
-  overview: { name: 'Overview', line: 'Processor, memory and disk, with a chart when it’s wide' },
-  cpu: { name: 'Processor', line: 'How busy it is, now and over time' },
-  memory: { name: 'Memory', line: 'How much memory is in use, now and over time' },
-  network: { name: 'Network', line: 'What goes in and out, now and over time' },
-  storage: { name: 'Storage', line: 'How full each disk and pool is' },
-  guests: { name: 'VMs and containers', line: 'What runs on it and how busy it is' },
-  temp: { name: 'Temperature', line: 'How hot it runs, its hottest sensor first' },
-  alerts: { name: 'Alerts', line: 'What’s wrong with it right now' },
-} as const;
+function serverShowCatalog(word: Word) {
+  return {
+    overview: { name: word('serverShow.overview.name'), line: word('serverShow.overview.line') },
+    cpu: { name: word('serverShow.cpu.name'), line: word('serverShow.cpu.line') },
+    memory: { name: word('serverShow.memory.name'), line: word('serverShow.memory.line') },
+    network: { name: word('serverShow.network.name'), line: word('serverShow.network.line') },
+    storage: { name: word('serverShow.storage.name'), line: word('serverShow.storage.line') },
+    guests: { name: word('serverShow.guests.name'), line: word('serverShow.guests.line') },
+    temp: { name: word('serverShow.temp.name'), line: word('serverShow.temp.line') },
+    alerts: { name: word('serverShow.alerts.name'), line: word('serverShow.alerts.line') },
+  } as const;
+}
+
+const english: Word = (key) => EN[key];
+const dutch: Word = (key) => NL[key] ?? EN[key];
+
+export const SCREEN_WORDS = screenCatalog(english);
+export const SERVER_SHOW_WORDS = serverShowCatalog(english);
+const dutchScreen = screenCatalog(dutch);
+const dutchServerShow = serverShowCatalog(dutch);
+
+export function screenWords(locale?: string | null): typeof SCREEN_WORDS {
+  return resolveScreenLanguage(locale) === 'nl' ? dutchScreen : SCREEN_WORDS;
+}
+
+export function serverShowWords(locale?: string | null): typeof SERVER_SHOW_WORDS {
+  return resolveScreenLanguage(locale) === 'nl' ? dutchServerShow : SERVER_SHOW_WORDS;
+}
 
 /** `text` with each `{key}` replaced. */
 export function fillWords(text: string, values: Readonly<Record<string, string | number>>): string {
@@ -107,28 +156,32 @@ export function fillWords(text: string, values: Readonly<Record<string, string |
 }
 
 /** How long ago, as the modal's “since” says it: “4 min”, “2 h 10 min”, “3 d”. */
-export function agoText(sinceMs: number, nowMs: number): string {
+export function agoText(sinceMs: number, nowMs: number, locale?: string | null): string {
+  const words = screenWords(locale).ago;
   const min = Math.max(0, Math.floor((nowMs - sinceMs) / 60_000));
-  if (min < 1) return SCREEN_WORDS.ago.now;
-  if (min < 60) return fillWords(SCREEN_WORDS.ago.min, { n: min });
+  if (min < 1) return words.now;
+  if (min < 60) return fillWords(words.min, { n: min });
   const h = Math.floor(min / 60);
   if (h < 24)
-    return min % 60 === 0
-      ? fillWords(SCREEN_WORDS.ago.hour, { n: h })
-      : fillWords(SCREEN_WORDS.ago.hourMin, { h, m: min % 60 });
-  return fillWords(SCREEN_WORDS.ago.day, { n: Math.floor(h / 24) });
+    return min % 60 === 0 ? fillWords(words.hour, { n: h }) : fillWords(words.hourMin, { h, m: min % 60 });
+  return fillWords(words.day, { n: Math.floor(h / 24) });
 }
 
 const formats = new Map<string, Intl.DateTimeFormat>();
-function format(timeZone: string | undefined, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = `${timeZone ?? ''}|${JSON.stringify(opts)}`;
+function format(
+  locale: string | null | undefined,
+  timeZone: string | undefined,
+  opts: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const tag = screenFormatLocale(locale);
+  const key = `${tag}|${timeZone ?? ''}|${JSON.stringify(opts)}`;
   let f = formats.get(key);
   if (!f) {
     try {
-      f = new Intl.DateTimeFormat('en-GB', { ...opts, timeZone });
+      f = new Intl.DateTimeFormat(tag, { ...opts, timeZone });
     } catch {
       // An unknown zone draws the device's own time rather than nothing.
-      f = new Intl.DateTimeFormat('en-GB', opts);
+      f = new Intl.DateTimeFormat(tag, opts);
     }
     formats.set(key, f);
   }
@@ -136,19 +189,35 @@ function format(timeZone: string | undefined, opts: Intl.DateTimeFormatOptions):
 }
 
 /** “14:34”, in the Whombat's time zone. */
-export function clockText(ms: number, timeZone?: string): string {
-  return format(timeZone, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
+export function clockText(ms: number, timeZone?: string, locale?: string | null): string {
+  return format(locale, timeZone, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
 }
 
 /** A forecast's day (`YYYY-MM-DD`, the place's own) by its short name: “Wed”. */
-export function weekdayText(date: string): string {
+export function weekdayText(date: string, locale?: string | null): string {
   const ms = Date.parse(`${date}T12:00:00Z`);
-  return Number.isNaN(ms) ? date : format('UTC', { weekday: 'short' }).format(ms);
+  return Number.isNaN(ms) ? date : format(locale, 'UTC', { weekday: 'short' }).format(ms);
 }
 
 /** “Tuesday 27 October”. */
-export function dateText(ms: number, timeZone?: string): string {
-  const parts = format(timeZone, { weekday: 'long', day: 'numeric', month: 'long' }).formatToParts(ms);
+export function dateText(ms: number, timeZone?: string, locale?: string | null): string {
+  const parts = format(locale, timeZone, { weekday: 'long', day: 'numeric', month: 'long' }).formatToParts(
+    ms,
+  );
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   return `${get('weekday')} ${get('day')} ${get('month')}`;
+}
+
+const numbers = new Map<string, Intl.NumberFormat>();
+
+/** A compact number for meters or weather, with the locale's decimal separator. */
+export function screenNumberText(value: number, locale?: string | null): string {
+  const tag = screenFormatLocale(locale);
+  if (tag === 'en-GB') return String(value);
+  let formatter = numbers.get(tag);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(tag, { useGrouping: false, maximumFractionDigits: 20 });
+    numbers.set(tag, formatter);
+  }
+  return formatter.format(value);
 }

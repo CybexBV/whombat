@@ -18,6 +18,7 @@ import {
 } from '@whombat/core/audit';
 import type { ErrorCode } from '@whombat/core/contracts';
 import { Email, LinkRef, ProviderSignInState, Timestamp } from '@whombat/core/domain';
+import { LocaleTag } from '@whombat/core/i18n/schema';
 import { AccountId } from '@whombat/core/ids';
 import {
   ClientFloor,
@@ -237,6 +238,7 @@ export const EnrollClaimInput = z.strictObject({
   confirm: ClaimConfirmTag,
   account: ClaimAccount,
   endpoint: NewEndpoint,
+  locale: LocaleTag.optional(),
 });
 /**
  * `confirm` is the appliance's tag (`tags.appliance`). The client accepts the result — pins the PeerId — only if
@@ -324,6 +326,7 @@ export const EnrollClaimLocalInput = z.strictObject({
   confirm: ClaimConfirmTag.optional(),
   account: ClaimAccount,
   endpoint: NewEndpoint,
+  locale: LocaleTag.optional(),
 });
 export type EnrollClaimLocalInput = z.infer<typeof EnrollClaimLocalInput>;
 

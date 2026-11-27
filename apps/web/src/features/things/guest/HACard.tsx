@@ -3,12 +3,21 @@
  * requested state, what happens when its server fails, and Add / Change (through a review of
  * `key  old → new`) and Remove (asked first). `ha.set` / `ha.remove`; shown only on a cluster.
  */
-import { HA_STATES, type HaForm, haErrors, haForm, haParams, haReviewRows } from '@whombat/client/hosts';
+import {
+  HA_STATES,
+  type HaForm,
+  type HaState,
+  haErrors,
+  haForm,
+  haParams,
+  haReviewRows,
+} from '@whombat/client/hosts';
 import { useHostsChange } from '@whombat/client/hosts/react';
 import { api } from '@whombat/core/contracts';
 import { useId, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Modal, ModalTitle } from '../../../components/Modal';
+import { useWebI18n, type WebTranslator } from '../../../i18n/provider';
 import { SelectField, TextField } from '../manage/fields';
 import { Card, ConfirmDialog, useChangeRunner } from '../parts';
 import styles from '../Things.module.css';
@@ -16,7 +25,16 @@ import { type EditCtx, ReviewList } from './EditDialog';
 import { EditBtn, useChoices } from './editParts';
 import wa from './GuestEdit.module.css';
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** Each requested state's name and what it means, in the page's language. */
+function haStates(t: WebTranslator['t']): readonly { value: HaState; label: string; hint: string }[] {
+  const words: Record<HaState, { label: string; hint: string }> = {
+    started: { label: t('ha.state.started'), hint: t('ha.state.startedHint') },
+    stopped: { label: t('ha.state.stopped'), hint: t('ha.state.stoppedHint') },
+    disabled: { label: t('ha.state.disabled'), hint: t('ha.state.disabledHint') },
+    ignored: { label: t('ha.state.ignored'), hint: t('ha.state.ignoredHint') },
+  };
+  return HA_STATES.map((s) => ({ value: s.value, ...(words[s.value] ?? { label: s.label, hint: s.hint }) }));
+}
 
 function useHaChange(ctx: EditCtx) {
   const change = useHostsChange(api.hosts.manage);
@@ -35,6 +53,7 @@ function useHaChange(ctx: EditCtx) {
 }
 
 export function HACard({ ctx }: { ctx: EditCtx }) {
+  const { t, tp } = useWebI18n();
   const choices = useChoices(ctx);
   const [open, setOpen] = useState<'edit' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,45 +63,52 @@ export function HACard({ ctx }: { ctx: EditCtx }) {
   if (ctx.config.platform !== 'pve' || !(choices?.cluster || ha)) return null;
   return (
     <Card
-      title="High availability"
+      title={t('ha.title')}
       link={
         <span className={wa.waActs} style={{ marginLeft: 'auto' }}>
           <EditBtn
-            label="high availability"
-            text={ha ? 'Change…' : 'Set up…'}
+            label={t('ha.editLabel')}
+            text={t(ha ? 'ha.change' : 'ha.setUp')}
             onClick={() => setOpen('edit')}
           />
           {ha ? (
-            <EditBtn label="high availability" text="Remove…" serious onClick={() => setOpen('remove')} />
+            <EditBtn
+              label={t('ha.editLabel')}
+              text={t('ha.removeEllipsis')}
+              serious
+              onClick={() => setOpen('remove')}
+            />
           ) : null}
         </span>
       }
     >
       {ha ? (
         <dl className={wa.waKv}>
-          <dt>Asked for</dt>
-          <dd>{HA_STATES.find((s) => s.value === ha.state)?.label ?? ha.state}</dd>
+          <dt>{t('ha.askedFor')}</dt>
+          <dd>{haStates(t).find((s) => s.value === ha.state)?.label ?? ha.state}</dd>
           {ha.status ? (
             <>
-              <dt>Now</dt>
+              <dt>{t('ha.now')}</dt>
               <dd>{ha.status.charAt(0).toUpperCase() + ha.status.slice(1)}</dd>
             </>
           ) : null}
-          <dt>When its server fails</dt>
+          <dt>{t('ha.whenFails')}</dt>
           <dd>
-            {plural(ha.maxRestart ?? 1, 'restart', 'restarts')} there, then{' '}
-            {plural(ha.maxRelocate ?? 1, 'move to another server', 'moves to another server')}
+            {t('ha.thenMoves', {
+              restarts: tp('ha.restarts', ha.maxRestart ?? 1),
+              moves: tp('ha.moves', ha.maxRelocate ?? 1),
+            })}
           </dd>
           {ha.comment ? (
             <>
-              <dt>Note</dt>
+              <dt>{t('ha.note')}</dt>
               <dd>{ha.comment}</dd>
             </>
           ) : null}
         </dl>
       ) : (
         <p className={styles.cardBody} style={{ margin: 0, color: 'var(--ink2)' }}>
-          Not set up: when its server fails, {name} stays down until that server is back.
+          {t('ha.notSetUp', { name })}
         </p>
       )}
       {open === 'edit' ? <HaDialog ctx={ctx} onClose={() => setOpen(null)} /> : null}
@@ -90,9 +116,9 @@ export function HACard({ ctx }: { ctx: EditCtx }) {
         <ConfirmDialog
           open
           serious
-          title={`Take ${name} out of high availability?`}
-          body="It keeps running as it is; nothing restarts or moves it when its server fails."
-          confirm="Remove"
+          title={t('ha.removeTitle', { name })}
+          body={t('ha.removeBody')}
+          confirm={t('ha.remove')}
           busy={busy}
           error={error}
           onClose={() => {
@@ -101,7 +127,7 @@ export function HACard({ ctx }: { ctx: EditCtx }) {
           }}
           onConfirm={() =>
             void (async () => {
-              const out = await send('ha.remove', {}, `${name} no longer has high availability.`);
+              const out = await send('ha.remove', {}, t('ha.removed', { name }));
               if (out.ok) setOpen(null);
               else setError(out.message);
             })()
@@ -113,6 +139,8 @@ export function HACard({ ctx }: { ctx: EditCtx }) {
 }
 
 function HaDialog({ ctx, onClose }: { ctx: EditCtx; onClose: () => void }) {
+  const { t } = useWebI18n();
+  const states = haStates(t);
   const ha = ctx.config.ha;
   const name = ctx.guest.name;
   const formId = useId();
@@ -126,7 +154,7 @@ function HaDialog({ ctx, onClose }: { ctx: EditCtx; onClose: () => void }) {
   return (
     <Modal open onOpenChange={(o) => !o && !busy && onClose()}>
       <ModalTitle className={styles.dialogTitle}>
-        {ha ? `High availability of ${name}` : `Set up high availability for ${name}`}
+        {t(ha ? 'ha.dialogTitle' : 'ha.dialogSetUp', { name })}
       </ModalTitle>
       {step === 'edit' ? (
         <form
@@ -139,23 +167,23 @@ function HaDialog({ ctx, onClose }: { ctx: EditCtx; onClose: () => void }) {
           }}
         >
           <SelectField
-            label="Keep it"
-            options={HA_STATES.map((s) => ({ value: s.value, label: s.label }))}
+            label={t('ha.keepIt')}
+            options={states.map((s) => ({ value: s.value, label: s.label }))}
             value={f.state}
             autoFocus
-            hint={HA_STATES.find((s) => s.value === f.state)?.hint}
+            hint={states.find((s) => s.value === f.state)?.hint}
             onChange={(x) => setF({ ...f, state: x.target.value as HaForm['state'] })}
           />
           <div className={styles.formRow}>
             <TextField
-              label="Restarts on its server"
+              label={t('ha.restartsField')}
               inputMode="numeric"
               value={f.maxRestart}
               error={e.maxRestart}
               onChange={(x) => setF({ ...f, maxRestart: x.target.value })}
             />
             <TextField
-              label="Moves to another server"
+              label={t('ha.movesField')}
               inputMode="numeric"
               value={f.maxRelocate}
               error={e.maxRelocate}
@@ -163,7 +191,7 @@ function HaDialog({ ctx, onClose }: { ctx: EditCtx; onClose: () => void }) {
             />
           </div>
           <TextField
-            label="Note"
+            label={t('ha.note')}
             value={f.comment}
             maxLength={200}
             onChange={(x) => setF({ ...f, comment: x.target.value })}
@@ -183,17 +211,17 @@ function HaDialog({ ctx, onClose }: { ctx: EditCtx; onClose: () => void }) {
         {step === 'edit' ? (
           <>
             {!rows.length ? (
-              <span className={`${styles.lbl} ${styles.spacer}`}>Nothing changed yet</span>
+              <span className={`${styles.lbl} ${styles.spacer}`}>{t('ha.nothingChanged')}</span>
             ) : null}
-            <Button onClick={onClose}>Cancel</Button>
+            <Button onClick={onClose}>{t('common.cancel')}</Button>
             <Button type="submit" form={formId} variant="primary" disabled={bad || !rows.length}>
-              Review
+              {t('ha.review')}
             </Button>
           </>
         ) : (
           <>
             <Button disabled={busy} onClick={() => setStep('edit')}>
-              Back
+              {t('common.back')}
             </Button>
             <Button
               variant="primary"
@@ -202,13 +230,13 @@ function HaDialog({ ctx, onClose }: { ctx: EditCtx; onClose: () => void }) {
               onClick={() =>
                 void (async () => {
                   setError(null);
-                  const out = await send('ha.set', haParams(f), `Saved high availability for ${name}.`);
+                  const out = await send('ha.set', haParams(f), t('ha.saved', { name }));
                   if (out.ok) onClose();
                   else setError(out.message);
                 })()
               }
             >
-              {busy ? 'Applying…' : 'Apply'}
+              {t(busy ? 'ha.applying' : 'ha.apply')}
             </Button>
           </>
         )}

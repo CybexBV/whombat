@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="whombat_updater_channel">App-updates</string>
+  <string name="whombat_updater_description">Als er een nieuwe versie van de Whombat-app klaarstaat.</string>
+  <string name="whombat_updater_title">Er is een nieuwe versie van Whombat</string>
+  <string name="whombat_updater_body">Versie %1$s is uit. Tik om bij te werken.</string>
+</resources>

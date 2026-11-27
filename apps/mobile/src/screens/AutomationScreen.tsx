@@ -5,9 +5,9 @@
  * what it asks first, its limits, its recent runs, what the agent is asked word for word (folded) and Delete. Opened
  * from the Automations list, beside it with two pages. Switching, running and deleting never ask the agent.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  AUTOMATION_PAGE_TEXT,
   type AutomationState,
   automationPage,
   automationRunRows,
@@ -20,10 +20,11 @@ import { api } from '@whombat/core/contracts';
 import { type ReactNode, useState } from 'react';
 import { Alert, Platform, RefreshControl, ScrollView, Switch, View } from 'react-native';
 import { PrincipalAvatar } from '../avatars/Avatars';
-import { AUTOMATION_DELETE_TEXT, AUTOMATION_LIST_TEXT, automationGone } from '../data/automations';
+import { automationDeleteText, automationGone, automationListText } from '../data/automations';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
 import { useAutomationNames } from '../data/useAutomationNames';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -73,6 +74,11 @@ const ICONS: Record<Exclude<Extract<AutomationFlowItem, { kind: 'step' }>['icon'
 const MARK_TONES = { plain: 'plain', changes: 'warn', merges: 'bad' } as const;
 
 export function AutomationScreen({ navigation, route }: Props) {
+  const { rawLocale, tClient } = useI18n();
+  const automationDeleteTextHere = automationDeleteText(rawLocale);
+  const automationListTextHere = automationListText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, viewer } = useBurrowBase();
@@ -104,17 +110,17 @@ export function AutomationScreen({ navigation, route }: Props) {
     void runs.refetch();
   };
 
-  const back = <BackBar label={route.params.back ?? 'Automations'} onPress={goBack} />;
+  const back = <BackBar label={route.params.back ?? tMobile('screens.automations')} onPress={goBack} />;
   const gone = automationGone(detail.data, detail.error);
   if (!automation || automation.deletedAt)
     return (
       <Screen>
         {back}
         {detail.isPending && !gone ? (
-          <SkeletonRows count={4} lines={2} label="Loading the automation" />
+          <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-automation')} />
         ) : (
           <ErrorState
-            text={gone ? AUTOMATION_PAGE_TEXT.notFound : AUTOMATION_PAGE_TEXT.failed}
+            text={gone ? tClient('automations.notFound') : tClient('automations.failed')}
             onRetry={gone ? undefined : refresh}
           />
         )}
@@ -140,7 +146,7 @@ export function AutomationScreen({ navigation, route }: Props) {
           if (text) Alert.alert(text.title, text.body);
           refresh();
         },
-        onError: (err) => Alert.alert('Didn’t switch', errorText(err)),
+        onError: (err) => Alert.alert(tMobile('screens.didnt-switch'), errorText(err)),
         onSettled: () => setSwitching(false),
       },
     );
@@ -151,7 +157,7 @@ export function AutomationScreen({ navigation, route }: Props) {
     setStarting(true);
     void start(id, { test: page.run.kind === 'try', tryIt: page.run.tryIt }).then((outcome) => {
       setStarting(false);
-      if (!outcome.ok) return Alert.alert('Didn’t start', outcome.text);
+      if (!outcome.ok) return Alert.alert(tMobile('screens.didnt-start'), outcome.text);
       void runs.refetch();
       navigation.navigate('AutomationRun', { number: outcome.runNumber, back: page.name });
     });
@@ -180,14 +186,14 @@ export function AutomationScreen({ navigation, route }: Props) {
             void list.refetch();
             return goBack();
           }
-          Alert.alert(AUTOMATION_DELETE_TEXT.failed, errorText(err));
+          Alert.alert(automationDeleteTextHere.failed, errorText(err));
         },
       },
     );
   const confirmDelete = () =>
-    Alert.alert(AUTOMATION_DELETE_TEXT.confirmTitle(page.name), AUTOMATION_DELETE_TEXT.confirmBody, [
-      { text: AUTOMATION_DELETE_TEXT.cancel, style: 'cancel' },
-      { text: AUTOMATION_DELETE_TEXT.delete, style: 'destructive', onPress: deleteIt },
+    Alert.alert(automationDeleteTextHere.confirmTitle(page.name), automationDeleteTextHere.confirmBody, [
+      { text: automationDeleteTextHere.cancel, style: 'cancel' },
+      { text: automationDeleteTextHere.delete, style: 'destructive', onPress: deleteIt },
     ]);
 
   const waiting = page.state.tone === 'waiting';
@@ -200,9 +206,9 @@ export function AutomationScreen({ navigation, route }: Props) {
         back={page.name}
         initialText={talkAboutText(page.name)}
         words={{
-          title: AUTOMATION_LIST_TEXT.tellTitle(agent.Name),
-          label: AUTOMATION_LIST_TEXT.tellTitle(agent.Name),
-          placeholder: AUTOMATION_LIST_TEXT.tellPlaceholder(agent.Name),
+          title: automationListTextHere.tellTitle(agent.Name),
+          label: automationListTextHere.tellTitle(agent.Name),
+          placeholder: automationListTextHere.tellPlaceholder(agent.Name),
         }}
       />
       <ScrollView
@@ -286,7 +292,7 @@ export function AutomationScreen({ navigation, route }: Props) {
               indent={false}
               waiting={{
                 text: page.state.line,
-                accessibilityLabel: `${page.state.line} ${AUTOMATION_LIST_TEXT.open}.`,
+                accessibilityLabel: `${page.state.line} ${automationListTextHere.open}.`,
               }}
               onOpen={() => {
                 const number = page.state.waitingRun;
@@ -306,16 +312,19 @@ export function AutomationScreen({ navigation, route }: Props) {
         <View style={{ flexDirection: 'row', gap: 10, marginHorizontal: 20, marginTop: 14 }}>
           {page.run ? (
             <Button
-              label={page.run.label}
+              label={tClient(`automations.action.${page.run.kind}`)}
               variant="primary"
               busy={starting}
-              accessibilityHint={page.run.hint}
+              accessibilityHint={tClient(
+                page.run.kind === 'run' ? 'automations.action.runHint' : 'automations.action.tryHint',
+                { name: page.name },
+              )}
               onPress={run}
               style={{ flex: 1 }}
             />
           ) : null}
           <Button
-            label="Talk about it"
+            label={tClient('automations.action.talk')}
             variant="secondary"
             accessibilityHint={page.talkHint}
             onPress={talk}
@@ -324,7 +333,7 @@ export function AutomationScreen({ navigation, route }: Props) {
         </View>
 
         <View style={{ paddingHorizontal: 16, paddingTop: 18 }}>
-          <SectionLabel>{AUTOMATION_PAGE_TEXT.whatHappens}</SectionLabel>
+          <SectionLabel>{tClient('automations.whatHappens')}</SectionLabel>
           {page.flow ? (
             <Flow items={page.flow} agentId={view.people.agent?.id ?? null} />
           ) : (
@@ -334,13 +343,13 @@ export function AutomationScreen({ navigation, route }: Props) {
           )}
         </View>
 
-        {page.asks.length ? <Lines title={AUTOMATION_PAGE_TEXT.asks} lines={page.asks} /> : null}
-        {page.limits.length ? <Lines title={AUTOMATION_PAGE_TEXT.limits} lines={page.limits} /> : null}
+        {page.asks.length ? <Lines title={tClient('automations.asks')} lines={page.asks} /> : null}
+        {page.limits.length ? <Lines title={tClient('automations.limits')} lines={page.limits} /> : null}
 
         {runRows.length ? (
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <SectionLabel>{AUTOMATION_PAGE_TEXT.runs}</SectionLabel>
+              <SectionLabel>{tClient('automations.runs')}</SectionLabel>
               {/* The last few as small bars, oldest left; each run says its result in words. */}
               <View
                 accessibilityElementsHidden
@@ -389,10 +398,10 @@ export function AutomationScreen({ navigation, route }: Props) {
                 style={[rowStyle(theme, !asked), { gap: 10 }]}
               >
                 <Text size={14} color={theme.colors.ink2} style={{ flex: 1 }}>
-                  {AUTOMATION_PAGE_TEXT.prompts(agent.Name)}
+                  {tClient('automations.prompts', { agent: agent.Name })}
                 </Text>
                 <Text size={12.5} color={theme.colors.mut}>
-                  {AUTOMATION_PAGE_TEXT.promptsCount(page.prompts.length)}
+                  {tClient('automations.promptsCount', { count: page.prompts.length })}
                 </Text>
                 {asked ? (
                   <ChevronUp size={16} color={theme.colors.mut} strokeWidth={1.8} />
@@ -427,7 +436,7 @@ export function AutomationScreen({ navigation, route }: Props) {
             onPress={confirmDelete}
             feedback="fade"
             accessibilityRole="button"
-            accessibilityHint={AUTOMATION_DELETE_TEXT.deleteHint(page.name)}
+            accessibilityHint={automationDeleteTextHere.deleteHint(page.name)}
             style={{
               marginHorizontal: 20,
               marginTop: 18,
@@ -437,7 +446,7 @@ export function AutomationScreen({ navigation, route }: Props) {
             }}
           >
             <Text size={15} weight={600} color={theme.colors.bad}>
-              {AUTOMATION_PAGE_TEXT.delete}
+              {tClient('automations.delete')}
             </Text>
           </Touchable>
         ) : null}

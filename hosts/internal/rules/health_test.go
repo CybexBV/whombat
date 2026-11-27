@@ -83,9 +83,17 @@ func TestHealthConditions(t *testing.T) {
 			t.Errorf("missing %s", k)
 			continue
 		}
-		if got := c.Render(0).Detail; got != d {
+		txt := c.Render(0)
+		if got := txt.Detail; got != d {
 			t.Errorf("%s detail %q, want %q", k, got, d)
 		}
+		if txt.Code != c.Rule || len(txt.Params) == 0 {
+			t.Errorf("%s translation data = %q %v", k, txt.Code, txt.Params)
+		}
+	}
+	smart := m["disk.smart_failing:nvme0n1"].Render(0)
+	if smart.Params["device"] != "nvme0n1" || smart.Params["criticalWarning"] != int64(0x05) {
+		t.Errorf("SMART warning bits = %v", smart.Params)
 	}
 	if c := m["backup.failed:vzdump"]; c.Render == nil || !strings.HasPrefix(c.Render(0).Detail, "3 of 5 machines backed up") {
 		t.Errorf("backup.failed missing or wrong")

@@ -8,6 +8,7 @@
  * A server's check with a limit says when it warns (“Warns above 90 %”, and each item
  * with its own) with Change, which opens Change the limit; someone who can't change it reads the limits without Change.
  */
+
 import {
   type LimitView,
   thingWatchView,
@@ -18,8 +19,9 @@ import type { QuietActions } from '@whombat/client/react';
 import type { ThingWatch } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { Switch, View } from 'react-native';
-import { MONITORING_COPY, type WatchLimitLine, watchLimitLines } from '../../data/monitoring';
+import { monitoringCopy, type WatchLimitLine, watchLimitLines } from '../../data/monitoring';
 import { checkToastName, exceptionText, foldWatchRows, QUIET_COPY, watchRowSpoken } from '../../data/quiet';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ErrorState, SkeletonRows } from '../../ui/primitives';
@@ -275,6 +277,9 @@ function LimitLines({
  * change it: 32 tall with slop to 44, so the lines sit close to the check they belong to.
  */
 function LimitLine({ line, open }: { line: WatchLimitLine; open: ((view: LimitView) => void) | null }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+
   const theme = useTheme();
   const view = line.view;
   return (
@@ -288,7 +293,7 @@ function LimitLine({ line, open }: { line: WatchLimitLine; open: ((view: LimitVi
           feedback="fade"
           ringRadius={10}
           accessibilityRole="button"
-          accessibilityLabel={MONITORING_COPY.changeLimit}
+          accessibilityLabel={monitoringCopyHere.changeLimit}
           accessibilityHint={line.spoken}
           hitSlop={hitSlopFor(32)}
           style={{

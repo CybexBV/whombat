@@ -9,8 +9,8 @@
  * screen does; *Remove from this page* and *Done*. Every button 44dp and named for TalkBack with the widget's name.
  * Changes go into the draft.
  */
+
 import {
-  DESK_SCREENS_TEXT,
   DESK_WIDGET_LIMITS,
   DESK_WIDGET_LOCK,
   DESK_WIDGET_RANGES,
@@ -20,6 +20,7 @@ import {
   type DeskShowPatch,
   type DeskWidget,
   type DeskWidgetLimits,
+  deskScreensText,
   deskWidgetLimits,
   fillDeskWords,
   gridText,
@@ -28,9 +29,10 @@ import {
   type ViewOf,
   widgetSize,
 } from '@whombat/client/desk';
-import { type Grid, SERVER_SHOW_VIEWS, serverShow } from '@whombat/screen';
+import { type Grid, SERVER_SHOW_VIEWS, serverShow, serverShowWords } from '@whombat/screen';
 import { type ReactNode, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import {
@@ -51,7 +53,6 @@ import { DeskMiddleCard, DeskServersCard } from '../DeskShowsPart';
 import { PHONE_SCREENS_TEXT, sizesLine, type TileLabel, tileWhere } from './tiles';
 import { WidgetLogo } from './WidgetLogo';
 
-const E = DESK_SCREENS_TEXT.editor;
 const M = PHONE_SCREENS_TEXT;
 
 export interface WidgetSheetActions {
@@ -118,6 +119,8 @@ export function WidgetSheet({
   /** `bad` for what couldn't be done, `ok` for what was (two widgets swapped). */
   noteTone?: 'bad' | 'ok';
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const [dragging, setDragging] = useState(false);
   const name = label?.name ?? '';
@@ -220,6 +223,8 @@ function SizePart({
   viewOf: ViewOf;
   actions: WidgetSheetActions;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const size = widgetSize(widget, viewOf);
   const presets = sizePresets(size, grid);
@@ -273,7 +278,7 @@ function SizePart({
         {stepper('h')}
       </View>
       <Text size={13} lh={1.4} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-        {`${gridText(widget.w, widget.h)} · ${sizesLine(size)}`}
+        {`${gridText(widget.w, widget.h, rawLocale)} · ${sizesLine(size, rawLocale)}`}
       </Text>
     </View>
   );
@@ -290,10 +295,16 @@ function Shapes({
   onPick,
 }: {
   name: string;
-  presets: readonly { key: keyof typeof E.shapes; w: number; h: number }[];
+  presets: readonly {
+    key: keyof ReturnType<typeof deskScreensText>['editor']['shapes'];
+    w: number;
+    h: number;
+  }[];
   value: { w: number; h: number };
   onPick: (p: { w: number; h: number }) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   return (
     <View
@@ -317,7 +328,10 @@ function Shapes({
             feedback={on ? 'none' : 'wash'}
             ringRadius={9}
             accessibilityRole="radio"
-            accessibilityLabel={fillDeskWords(E.shape, { name: E.shapes[p.key], size: gridText(p.w, p.h) })}
+            accessibilityLabel={fillDeskWords(E.shape, {
+              name: E.shapes[p.key],
+              size: gridText(p.w, p.h, rawLocale),
+            })}
             accessibilityState={{ selected: on }}
             style={{
               flex: 1,
@@ -432,6 +446,8 @@ function OwnSettings({
   limits: boolean;
   onDragging: (dragging: boolean) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const opt = (key: string, value: string) => actions.setOpts({ ...widget.opts, [key]: value });
   if ((widget.type === 'now' || widget.type === 'strip') && pairFirst)
@@ -547,6 +563,9 @@ function ShowsPart({
   onChoose: (item: DeskCatalogItem) => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
+  const labels = serverShowWords(rawLocale);
   if (choices.length < 2 && !reading) return null;
   return (
     <View style={{ gap: 6 }}>
@@ -554,6 +573,8 @@ function ShowsPart({
       <View accessibilityRole="radiogroup" accessibilityLabel={E.shows} style={{ gap: 6 }}>
         {choices.map((item) => {
           const on = sameWidget(widget, item);
+          const { name, line } =
+            item.type === 'server' && labels !== serverShowWords() ? labels[serverShow(item.opts)] : item;
           return (
             <Touchable
               key={`${item.type}|${item.opts.panel ?? ''}|${item.opts.show ?? ''}`}
@@ -563,7 +584,7 @@ function ShowsPart({
               feedback="wash"
               ringRadius={12}
               accessibilityRole="radio"
-              accessibilityLabel={item.line ? `${item.name}, ${item.line}` : item.name}
+              accessibilityLabel={line ? `${name}, ${line}` : name}
               accessibilityState={{ selected: on }}
               style={{
                 minHeight: 44,
@@ -578,11 +599,11 @@ function ShowsPart({
               }}
             >
               <Text size={14.5} weight={500} lh={1.35}>
-                {item.name}
+                {name}
               </Text>
-              {item.line ? (
+              {line ? (
                 <Text size={12.5} lh={1.4} color={theme.colors.mut} numberOfLines={2}>
-                  {item.line}
+                  {line}
                 </Text>
               ) : null}
             </Touchable>
@@ -600,6 +621,8 @@ function ShowsPart({
 
 /** *Limits*: *Used* · *Left*, used unless chosen, for a widget of limits (Fusebox's subscriptions). */
 function LimitsPart({ widget, onLimits }: { widget: DeskWidget; onLimits: (v: DeskWidgetLimits) => void }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   return (
     <View style={{ gap: 8 }}>
@@ -619,6 +642,8 @@ function LimitsPart({ widget, onLimits }: { widget: DeskWidget; onLimits: (v: De
 
 /** *On a locked screen*: *Show it* · *Hide it*, hidden unless chosen, for a widget that shows something private. */
 function LockPart({ widget, onLock }: { widget: DeskWidget; onLock: (lock: string) => void }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   return (
     <View style={{ gap: 8 }}>
@@ -720,6 +745,8 @@ function TouchLine({
   label: TileLabel;
   server?: string | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   const text =
     widget.type === 'server'
@@ -742,6 +769,8 @@ function TouchLine({
 
 /** *Remove from this page*, in red; Undo brings it back. */
 function RemoveButton({ name, onPress }: { name: string; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const E = deskScreensText(rawLocale).editor;
   const theme = useTheme();
   return (
     <Touchable

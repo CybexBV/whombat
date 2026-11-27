@@ -21,6 +21,7 @@ data class LiveDisplay(
   val actions: List<String>,
   /** Burrow slug the run or approval belongs to. */
   val burrow: String,
+  val locale: String? = null,
 ) {
   /** The app screen for this activity (`whombat://runs/1907`, `whombat://approvals/12`). */
   val url: String
@@ -49,6 +50,7 @@ data class LiveDisplay(
         ongoing = json.optBoolean("ongoing", true),
         actions = if (actions == null) emptyList() else List(actions.length()) { actions.getString(it) },
         burrow = burrow,
+        locale = json.optString("locale").ifBlank { null },
       )
     }
   }

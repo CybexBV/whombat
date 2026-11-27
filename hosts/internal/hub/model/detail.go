@@ -125,8 +125,10 @@ func BuildDetail(s *ServerState, now time.Time, in DetailInput) Detail {
 	}
 
 	// Server.
+	note, noteCode, noteParams := s.statusNote(status, now)
 	sv := DetailServer{
-		ID: s.ID, Hostname: s.Hostname, Group: s.Group, Status: status, StatusNote: s.StatusNote(now),
+		ID: s.ID, Hostname: s.Hostname, Group: s.Group, Status: status, StatusNote: note,
+		StatusNoteCode: noteCode, StatusNoteParams: noteParams,
 		OpenAlerts: len(s.Open), Roles: []string{}, Location: strp(s.Location), DetailView: DetailView(r), OSFamily: OSFamily(r),
 		RemoteControl: permsFor(s, in), Collectors: []Collector{}, HostsThisWhombat: HostsThisWhombat(r),
 		Agent: AgentInfo{Connected: s.Connected, ClockSkewS: s.ClockSkewS, Version: strp(s.AgentVersion)},
@@ -182,7 +184,9 @@ func BuildDetail(s *ServerState, now time.Time, in DetailInput) Detail {
 		if t == "" {
 			t, det = a.Title, a.Detail
 		}
-		d.Banner = &Banner{Severity: a.Severity, Title: t, Detail: det, Link: strp(a.Link), Rule: a.Rule, AlertID: a.ID}
+		noteCode, noteParams := alertStatusNote(a)
+		d.Banner = &Banner{Severity: a.Severity, Title: t, Detail: det, Link: strp(a.Link), Rule: a.Rule, AlertID: a.ID,
+			Code: a.Code, Params: a.Params, StatusNoteCode: noteCode, StatusNoteParams: noteParams}
 	}
 
 	if r == nil {

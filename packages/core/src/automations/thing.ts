@@ -1,6 +1,7 @@
 import type { ThingTrigger } from '../domain/automation.js';
 import { catalogEntry } from '../domain/connections-catalog.js';
 import { THING_BACK, THING_DOWN, type ThingIncidentEvent } from '../domain/incidents.js';
+import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
 
 export interface ThingTriggerFacts {
   kind: 'thing';
@@ -54,25 +55,35 @@ export function thingTriggerChecks(triggers: readonly ThingTrigger[], facts: Thi
   return checks.some((c) => c === null) ? [] : [...new Set(checks as string[])];
 }
 
-function kindName(kind: string): string {
-  if (kind === 'server') return 'a server';
-  if (kind === 'device') return 'a device';
+function kindName(kind: string, tr: CoreTranslator): string {
+  if (kind === 'server') return tr.t('thingWhen.server');
+  if (kind === 'device') return tr.t('thingWhen.device');
   const catalogId = kind.split(':')[1];
   const entry = catalogId ? catalogEntry(catalogId) : null;
-  return entry ? `a ${entry.name} connection` : 'a connection';
+  return entry ? tr.t('thingWhen.connectionOf', { name: entry.name }) : tr.t('thingWhen.connection');
 }
 
-export function thingWhenText(trigger: ThingTrigger): string {
-  const kinds = trigger.kinds?.map(kindName) ?? [];
-  const target = trigger.name ?? (kinds.length ? kinds.join(' or ') : 'a watched thing');
+export function thingWhenText(trigger: ThingTrigger, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  const kinds = trigger.kinds?.map((k) => kindName(k, tr)) ?? [];
+  const target = trigger.name ?? (kinds.length ? kinds.join(tr.t('plan.orJoin')) : tr.t('thingWhen.watched'));
   const check = trigger.check && trigger.checkName ? `“${trigger.checkName}”` : null;
-  const change =
-    trigger.event === 'back' ? 'comes back' : trigger.event === 'down' ? 'goes down' : 'has a problem';
-  if (!trigger.forMinutes)
-    return `When ${target} ${trigger.event === 'problem' && check ? `reports ${check}` : change}`;
-  const duration = `${trigger.forMinutes} ${trigger.forMinutes === 1 ? 'minute' : 'minutes'}`;
-  if (trigger.event === 'down') return `When ${target} has been down for ${duration}`;
-  return `When ${target} has been ${check ? `reporting ${check}` : 'having a problem'} for ${duration}`;
+  if (!trigger.forMinutes) {
+    if (trigger.event === 'problem' && check) return tr.t('thingWhen.reports', { target, check });
+    return tr.t(
+      trigger.event === 'back'
+        ? 'thingWhen.back'
+        : trigger.event === 'down'
+          ? 'thingWhen.down'
+          : 'thingWhen.problem',
+      { target },
+    );
+  }
+  const duration = tr.tp('thingWhen.minutes', trigger.forMinutes);
+  if (trigger.event === 'down') return tr.t('thingWhen.downFor', { target, duration });
+  return check
+    ? tr.t('thingWhen.reportingFor', { target, check, duration })
+    : tr.t('thingWhen.problemFor', { target, duration });
 }
 
 export function thingTriggerSummary({ event, incident }: ThingTriggerFacts): string {

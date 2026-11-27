@@ -50,6 +50,7 @@ export interface UndoRequest {
 export type UndoRequests = Readonly<Record<string, UndoRequest>>;
 
 export interface DoneRowsOptions {
+  locale?: string | null | undefined;
   /** The viewer's principal id: their own changes say “You”. */
   viewerId?: string | null | undefined;
   /** Undo requests still being answered (`useUndoRequests`). */
@@ -137,7 +138,7 @@ export function doneRows(
       id: c.id,
       title: c.title,
       detail: c.detail ?? null,
-      when: doneWhen(c.at, now, timeZone),
+      when: doneWhen(c.at, now, timeZone, options.locale),
       action: undo
         ? 'undo'
         : c.undo.state === 'undone' || request

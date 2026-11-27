@@ -4,12 +4,14 @@
  * run — each with Run now and Pause or Resume (on Whombats with `hosts.backup_jobs`; making, changing and deleting a
  * job stay on the web), and the latest backups by guest. Running a job says when it starts and when it ends.
  */
+
 import { formatRelativeDay } from '@whombat/client/hosts';
 import { type BackupJobRowView, backupJobRows, latestBackups } from '@whombat/client/hosts/mobile';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupJob, HostGuest, HostServerDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Dot, OneCard, OneRow } from '../ui/assistant';
@@ -41,6 +43,9 @@ export function ServerBackups({
   /** This Whombat has backup jobs (`hosts.backup_jobs`). */
   jobs: boolean;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const list = useHostManageRead(
     { params: { burrow: slug, serverId }, query: { op: 'backup.list', platform: 'pve' } },
@@ -56,10 +61,13 @@ export function ServerBackups({
   if (b?.lastJob)
     facts.push({
       label: 'Last run',
-      value: `${formatRelativeDay(Date.parse(b.lastJob.at), now, timeZone)} · ${b.lastJob.guestsOk} of ${b.lastJob.guestsTotal} guests${b.lastJob.result === 'ok' ? ', went fine' : `, ${b.lastJob.result}`}`,
+      value: `${formatRelativeDay(Date.parse(b.lastJob.at), now, timeZone, rawLocale)} · ${b.lastJob.guestsOk} of ${b.lastJob.guestsTotal} guests${b.lastJob.result === 'ok' ? ', went fine' : `, ${b.lastJob.result}`}`,
     });
   if (b?.nextRun)
-    facts.push({ label: 'Next run', value: formatRelativeDay(Date.parse(b.nextRun), now, timeZone) });
+    facts.push({
+      label: 'Next run',
+      value: formatRelativeDay(Date.parse(b.nextRun), now, timeZone, rawLocale),
+    });
   if (b?.target) facts.push({ label: 'Saves to', value: b.target });
   const items: HostBackupJob[] = jobsQ.data?.op === 'backupjob.list' ? jobsQ.data.items : [];
   const jobRows = backupJobRows(items, guests, now, timeZone);
@@ -67,7 +75,7 @@ export function ServerBackups({
   return (
     <>
       {facts.length ? (
-        <OneCard label="Backups">
+        <OneCard label={tMobile('screens.backups')}>
           <View style={{ paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2 }}>
             <Facts facts={facts} />
           </View>
@@ -75,11 +83,14 @@ export function ServerBackups({
       ) : null}
       {jobs ? (
         jobsQ.isPending ? (
-          <SkeletonRows count={2} lines={2} label="Loading the backup plans" />
+          <SkeletonRows count={2} lines={2} label={tMobile('screens.loading-the-backup-plans')} />
         ) : jobsQ.isError ? (
-          <ErrorState text="The backup plans didn’t load." onRetry={() => void jobsQ.refetch()} />
+          <ErrorState
+            text={tMobile('screens.the-backup-plans-didnt-load')}
+            onRetry={() => void jobsQ.refetch()}
+          />
         ) : (
-          <OneCard label="Backup jobs">
+          <OneCard label={tMobile('screens.backup-jobs')}>
             {jobRows.length ? (
               jobRows.map((r) => (
                 <OneRow
@@ -100,22 +111,22 @@ export function ServerBackups({
         )
       ) : null}
       {list.isPending ? (
-        <SkeletonRows count={4} lines={2} label="Loading the backups" />
+        <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-backups')} />
       ) : list.isError ? (
-        <ErrorState text="The backups didn’t load." onRetry={() => void list.refetch()} />
+        <ErrorState text={tMobile('screens.the-backups-didnt-load')} onRetry={() => void list.refetch()} />
       ) : (
-        <OneCard label="Latest backups">
+        <OneCard label={tMobile('screens.latest-backups')}>
           {latest.length ? (
             latest.map((r) => (
               <OneRow key={r.volume} title={r.title} line={r.notes || null} meta={r.line} label={r.label} />
             ))
           ) : (
-            <CardQuiet>No backups yet.</CardQuiet>
+            <CardQuiet>{tMobile('screens.no-backups-yet')}</CardQuiet>
           )}
         </OneCard>
       )}
       <Text size={13} lh={1.45} color={theme.colors.mut}>
-        Making, changing and deleting backup plans: in Whombat on a computer.
+        {tMobile('screens.making-changing-and-deleting-backup-plans-in-whombat')}
       </Text>
       {open ? (
         <JobSheet serverId={serverId} serverName={serverName} row={open} onClose={() => setOpen(null)} />

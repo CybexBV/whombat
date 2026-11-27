@@ -5,12 +5,14 @@
  * (less-is-more.md AP-1816). Read from `appliance.status` when the sheet opens; nothing while it loads, fails or has
  * none.
  */
+
 import { type ApplianceStatus, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
+import { useI18n } from '../i18n';
 import { AI_TEXT } from '../settings/ai';
 import { MoreFold } from '../ui/fold';
 import { useManagedOrThrow } from './context';
-import { MANAGED_TEXT } from './copy';
+import { managedText } from './copy';
 import { Card, type Dot, Row } from './ui';
 
 function dotOf(state: ApplianceStatus['providers'][number]['state']): Dot {
@@ -19,6 +21,9 @@ function dotOf(state: ApplianceStatus['providers'][number]['state']): Dot {
 }
 
 export function AiProviders({ folded = false }: { folded?: boolean }) {
+  const { rawLocale } = useI18n();
+  const managedTextHere = managedText(rawLocale);
+
   const { session } = useManagedOrThrow();
   const [providers, setProviders] = useState<ApplianceStatus['providers'] | null>(null);
   useEffect(() => {
@@ -33,13 +38,13 @@ export function AiProviders({ folded = false }: { folded?: boolean }) {
   }, [session]);
   if (!providers?.length) return null;
   const card = (
-    <Card label={folded ? undefined : MANAGED_TEXT.providers}>
+    <Card label={folded ? undefined : managedTextHere.providers}>
       {providers.map((p, i) => (
         <Row
           key={p.provider}
           first={i === 0}
           dot={dotOf(p.state)}
-          title={`${MANAGED_TEXT.providerNames[p.provider] ?? p.provider} · ${MANAGED_TEXT.provider[p.state] ?? p.state}`}
+          title={`${managedTextHere.providerNames[p.provider] ?? p.provider} · ${managedTextHere.provider[p.state] ?? p.state}`}
           meta={p.explanation ?? null}
         />
       ))}

@@ -3,10 +3,12 @@
  * same list, password and keyboard as the box's screen (wifi/parts.tsx), joined to prove the password works; the
  * checks then run again over it, and the install copies the network into the system. *Skip* stays possible.
  */
+
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { useT } from '../i18n/react';
 import type { InstallerState } from '../lib/api';
 import type { Client } from '../lib/client';
-import { INSTALLER as T } from '../lib/copy';
+import { installerCopy } from '../lib/copy';
 import { deskErrorCode } from '../lib/desk';
 import {
   type InstallerWifi,
@@ -16,7 +18,7 @@ import {
   ssidValid,
   type WifiNetwork,
 } from '../lib/network';
-import { failureText, nameProblem, refusalText, WIFI } from '../lib/wifiCopy';
+import { failureText, nameProblem, refusalText, wifiCopy } from '../lib/wifiCopy';
 import { Button } from '../ui/Button';
 import { Bars, Icon } from '../wifi/icons';
 import { type ListState, NetworkList, SecurityChoice, TypedField } from '../wifi/parts';
@@ -26,8 +28,6 @@ import { Frame } from './Frame';
 import styles from './installer.module.css';
 
 type Sub = { kind: 'list' } | { kind: 'password'; ssid: string; hidden: boolean } | { kind: 'other' };
-
-const W = WIFI.installer;
 
 export function WifiStep({
   state,
@@ -48,6 +48,12 @@ export function WifiStep({
   onNext: () => void;
   initial?: SheetInitial;
 }) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+  const W = WIFI.installer;
+
+  const T = installerCopy(t);
+
   const [wifi, setWifi] = useState<InstallerWifi | null>(null);
   const [listState, setListState] = useState<ListState>('looking');
   const first = initial?.step;
@@ -100,11 +106,11 @@ export function WifiStep({
     }
     if (res?.status === 200 && typeof b?.failure === 'string') {
       const f = b.failure as Parameters<typeof failureText>[0];
-      setError(failureText(f, ssid));
+      setError(failureText(f, ssid, t));
       if (f !== 'wrong_password') setSub({ kind: 'list' });
       return;
     }
-    setError(refusalText(res ? deskErrorCode(res.body) : null));
+    setError(refusalText(res ? deskErrorCode(res.body) : null, t));
   };
 
   const pick = (n: WifiNetwork) => {
@@ -164,7 +170,7 @@ export function WifiStep({
       </>
     );
   } else if (sub.kind === 'other') {
-    const problem = name ? nameProblem(name, ssidValid) : null;
+    const problem = name ? nameProblem(name, ssidValid, t) : null;
     const ok = name.trim() !== '' && !problem && !joining;
     const next = () => {
       if (!ok) return;

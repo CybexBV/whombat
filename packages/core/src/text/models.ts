@@ -3,46 +3,62 @@
  * hints, the profile's line, the Keys lines of a change and the quiet note when a turn ran on the default model. Fast
  * replies since 0.96 (CT-466); Configure → Model's Fast replies uses `CHAT_RUNTIME_COPY`'s words (`text/chat-runtime.ts`).
  */
+
 import { type AgentEffort, type ModelFallbackWhere, modelOf, type ProviderModel } from '../domain/models.js';
+import { coreTranslator, coreWords } from '../i18n/catalog.js';
 
-export const EFFORT_LABELS: Readonly<Record<AgentEffort, string>> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-  ultra: 'Ultra',
-};
+const EFFORTS: readonly AgentEffort[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
-export const MODEL_EFFORT_COPY = {
-  modelSection: 'MODEL',
-  backgroundModelSection: 'BACKGROUND MODEL',
-  effortSection: 'EFFORT',
-  defaultModel: 'Default',
-  backgroundModelSame: 'Same as the main model',
-  backgroundModelHint:
-    'Used for automatic checks, care plans and scheduled automations. Chats and plans you start keep the main model.',
-  automatic: 'Automatic',
-  automaticHint: 'Medium for conversations, high for code work.',
-  effortHint: 'Every reply and task uses this. Higher thinks longer: slower replies and more usage.',
+/** Effort names in a locale. */
+export function effortLabels(locale?: string | null): Readonly<Record<AgentEffort, string>> {
+  return coreWords(locale, 'effort', EFFORTS);
+}
+
+export const EFFORT_LABELS: Readonly<Record<AgentEffort, string>> = effortLabels('en');
+
+const MODEL_EFFORT_KEYS = [
+  'modelSection',
+  'backgroundModelSection',
+  'effortSection',
+  'defaultModel',
+  'backgroundModelSame',
+  'backgroundModelHint',
+  'automatic',
+  'automaticHint',
+  'effortHint',
   /** The toast's “Saved Banjo’s …”. */
-  saved: 'model and effort',
+  'saved',
   /** Shown when the box answered ok without keeping what the app asked to save (e.g. an older box stripped a field). */
-  notSaved: 'This Whombat didn’t save that change. Update this Whombat to use every setting.',
-} as const;
+  'notSaved',
+] as const;
+
+/** Configure → Model's words in a locale. */
+export function modelEffortCopy(
+  locale?: string | null,
+): Readonly<Record<(typeof MODEL_EFFORT_KEYS)[number], string>> {
+  return coreWords(locale, 'model', MODEL_EFFORT_KEYS);
+}
+
+export const MODEL_EFFORT_COPY = modelEffortCopy('en');
 
 /** “Default (Opus)” — the tool's default model by name when the list says which — else “Default”. */
-export function defaultModelLabel(models: readonly ProviderModel[] | null | undefined): string {
+export function defaultModelLabel(
+  models: readonly ProviderModel[] | null | undefined,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   const model = modelOf(models, null);
-  return model ? `${MODEL_EFFORT_COPY.defaultModel} (${model.label})` : MODEL_EFFORT_COPY.defaultModel;
+  const word = tr.t('model.defaultModel');
+  return model ? tr.t('model.defaultNamed', { default: word, model: model.label }) : word;
 }
 
 /** The agent's model by name: its label in the list, else its id; the default model's when it names none. */
 export function modelLabel(
   models: readonly ProviderModel[] | null | undefined,
   id: string | null | undefined,
+  locale?: string | null,
 ): string {
-  if (!id) return defaultModelLabel(models);
+  if (!id) return defaultModelLabel(models, locale);
   return modelOf(models, id)?.label ?? id;
 }
 
@@ -50,14 +66,16 @@ export function modelLabel(
 export function backgroundModelLabel(
   models: readonly ProviderModel[] | null | undefined,
   id: string | null | undefined,
+  locale?: string | null,
 ): string {
-  if (!id) return MODEL_EFFORT_COPY.backgroundModelSame;
+  if (!id) return coreTranslator(locale).t('model.backgroundModelSame');
   return modelOf(models, id)?.label ?? id;
 }
 
 /** “Automatic”, “High”, “Extra high”. */
-export function effortLabel(effort: AgentEffort | null | undefined): string {
-  return effort ? EFFORT_LABELS[effort] : MODEL_EFFORT_COPY.automatic;
+export function effortLabel(effort: AgentEffort | null | undefined, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return effort ? tr.t(`effort.${effort}`) : tr.t('model.automatic');
 }
 
 /**
@@ -68,16 +86,18 @@ export function effortLabel(effort: AgentEffort | null | undefined): string {
 export function agentModelSummary(
   runtime: { model?: string | null; effort?: AgentEffort | null; fast?: boolean | null },
   models?: readonly ProviderModel[] | null,
+  locale?: string | null,
 ): string | null {
+  const tr = coreTranslator(locale);
   const fast = runtime.fast === true;
   if (!runtime.model && !runtime.effort && !fast) return null;
-  const parts = [runtime.model ? modelLabel(models, runtime.model) : 'Default model'];
-  if (runtime.effort) parts.push(`${EFFORT_LABELS[runtime.effort]} effort`);
-  if (fast) parts.push('Fast');
+  const parts = [runtime.model ? modelLabel(models, runtime.model, locale) : tr.t('model.defaultModelWords')];
+  if (runtime.effort) parts.push(tr.t('model.effortWords', { effort: tr.t(`effort.${runtime.effort}`) }));
+  if (fast) parts.push(tr.t('model.fast'));
   return parts.join(' · ');
 }
 
-/** The Keys line of a model change: “Set Banjo’s model to Sonnet”, “… to Default (Opus)”. */
+/** The Keys line of a model change: “Set Banjo’s model to Sonnet”, “… to Default (Opus)”. Signed, so English. */
 export function agentModelChangeText(agentName: string, label: string): string {
   return `Set ${agentName}’s model to ${label}`;
 }
@@ -101,14 +121,24 @@ export function agentFastChangeText(agentName: string, on: boolean): string {
  * Configure → Model's quiet note (ME-05): “Fable wasn’t available on Sara’s sign-in, so Banjo used the default model
  * for that turn.” — on the organization’s key, through Fusebox.
  */
-export function modelFallbackText(agentName: string, modelName: string, where: ModelFallbackWhere): string {
+export function modelFallbackText(
+  agentName: string,
+  modelName: string,
+  where: ModelFallbackWhere,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   const on =
     where.kind === 'gateway'
-      ? `through ${where.name ?? 'the AI gateway'}`
+      ? where.name
+        ? tr.t('model.fallbackGateway', { name: where.name })
+        : tr.t('model.fallbackGatewayUnnamed')
       : where.kind === 'org'
-        ? 'on the organization’s key'
+        ? tr.t('model.fallbackOrg')
         : where.kind === 'local'
-          ? 'on the custom AI model'
-          : `on ${where.name ? `${where.name}’s` : 'that person’s'} sign-in`;
-  return `${modelName} wasn’t available ${on}, so ${agentName} used the default model for that reply.`;
+          ? tr.t('model.fallbackLocal')
+          : where.name
+            ? tr.t('model.fallbackPerson', { name: where.name })
+            : tr.t('model.fallbackSomeone');
+  return tr.t('model.fallback', { model: modelName, on, agent: agentName });
 }

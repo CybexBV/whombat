@@ -4,6 +4,7 @@ import { useConnectors, useStartGoogleConnection } from '@whombat/client/react';
 import type { ConnectorService, ConnectorsStatus } from '@whombat/core/domain';
 import { useState } from 'react';
 import { useManaged } from '../../app/providers';
+import { useWebI18n } from '../../i18n/provider';
 
 /** Where Google sends the browser back to: this burrow's Settings → Connections → Google (naming the burrow, AP-365). */
 export function connectionsPath(burrow: string): string {
@@ -40,6 +41,7 @@ export function useConnectGoogle(
   navigate?: (url: string) => void,
   options: ConnectGoogleOptions = {},
 ) {
+  const { tag: uiLocale } = useWebI18n();
   const start = useStartGoogleConnection(navigate);
   const [problem, setProblem] = useState<string | null>(null);
   const managed = useManaged();
@@ -58,9 +60,10 @@ export function useConnectGoogle(
     try {
       await start.mutateAsync({ body: { services: [...services], returnTo } });
     } catch (err) {
-      const licence = licenceRefusalText(err);
+      const licence = licenceRefusalText(err, uiLocale);
       if (licence) setProblem(licence);
-      else if (err instanceof ApiError || err instanceof InvalidRequestError) setProblem(problemText(err));
+      else if (err instanceof ApiError || err instanceof InvalidRequestError)
+        setProblem(problemText(err, undefined, uiLocale));
       else setProblem(COULD_NOT_START);
     }
   }

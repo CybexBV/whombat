@@ -17,12 +17,13 @@
  *   assistant fills in from its documentation; the card says what it connects, takes the key and connects on the card.
  */
 
+import { coreTranslator, isEnglishLocale } from '../i18n/catalog.js';
 import {
   type CatalogEntry,
-  CONNECTION_ACCESS_DEFAULTS,
-  CONNECTION_ACCESS_LABELS,
   CONNECTION_LABEL_MAX,
   type ConnectionAccessLevel,
+  connectionAccessLabels,
+  connectionAccessLines,
   HeaderName,
   QueryName,
   type TokenAuth,
@@ -91,20 +92,36 @@ export function connectEntryOf(named: string): CatalogEntry | null {
 }
 
 /** What a level means for this entry, said of the assistant (“Dusty can see your VMs … and change nothing.”). */
-export function connectAccessLine(entry: CatalogEntry, level: ConnectionAccessLevel, agent: string): string {
-  const text = entry.access?.[level] ?? CONNECTION_ACCESS_DEFAULTS[level];
-  return text.replace(/^(The agent|Agents|Your agent) /, `${agent} `);
+export function connectAccessLine(
+  entry: CatalogEntry,
+  level: ConnectionAccessLevel,
+  agent: string,
+  locale?: string | null,
+): string {
+  // Another language than English has no entry-specific words yet: the level's general line names the assistant.
+  if (!isEnglishLocale(locale)) return connectionAccessLines(agent, locale)[level];
+  const own = entry.access?.[level];
+  if (!own) return connectionAccessLines(agent)[level];
+  // The entries' own English words open with “The agent …”: say the assistant's name instead.
+  return own.replace(/^(The agent|Agents|Your agent) /, `${agent} `);
 }
 
 /**
  * The card's paragraph on the level: “Look only to start: Dusty can see … and change nothing. You can switch it to
  * Manage on its page.” / “Manage: Dusty can also switch devices … still ask you first.”
  */
-export function connectAccessWords(entry: CatalogEntry, level: ConnectionAccessLevel, agent: string): string {
-  const line = connectAccessLine(entry, level, agent);
+export function connectAccessWords(
+  entry: CatalogEntry,
+  level: ConnectionAccessLevel,
+  agent: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  const labels = connectionAccessLabels(locale);
+  const line = connectAccessLine(entry, level, agent, locale);
   return level === 'manage'
-    ? `${CONNECTION_ACCESS_LABELS.manage}: ${line}`
-    : `${CONNECTION_ACCESS_LABELS.read} to start: ${line} You can switch it to ${CONNECTION_ACCESS_LABELS.manage} on its page.`;
+    ? tr.t('connection.accessManage', { label: labels.manage, line })
+    : tr.t('connection.accessRead', { read: labels.read, line, manage: labels.manage });
 }
 
 /** What the connect form opens with from the assistant's card. */
@@ -148,31 +165,42 @@ export const CONNECT_HERE_DECLINE = 'no';
 export const CONNECT_HERE_FIELDS = { secret: 'secret', username: 'username' } as const;
 
 /** The card's words; `{assistant}` is the assistant's short name. */
-export const CONNECT_HERE_TEXT = {
-  title: (label: string) => `Connect ${label}`,
-  signInTitle: (label: string) => `Sign in to ${label}`,
-  where: { mcp: (at: string) => `An MCP server at ${at}.`, api: (at: string) => `An API at ${at}.` },
-  none: 'It needs no sign-in.',
-  token: (assistant: string) =>
-    `Paste its token below. Whombat keeps it sealed and ${assistant} never sees it.`,
-  key: (assistant: string) => `Paste its key below. Whombat keeps it sealed and ${assistant} never sees it.`,
-  basic: (assistant: string) =>
-    `Type its username and password below. Whombat keeps the password sealed and ${assistant} never sees it.`,
-  oauth: (label: string) => `It signs in with your ${label} account: the button opens its sign-in.`,
-  labels: { token: 'Token', key: 'Key', password: 'Password', username: 'Username' },
-  connect: 'Connect',
-  signIn: 'Sign in…',
-  notNow: 'Not now',
-  connected: (label: string) => `Connected · ${label}`,
-  allowed: (label: string) => `Allowed · ${label}`,
-  declined: 'Not now',
-  empty: {
-    token: 'Paste the token.',
-    key: 'Paste the key.',
-    password: 'Type the password.',
-    username: 'Type the username.',
-  },
-} as const;
+export function connectHereText(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  return {
+    title: (label: string) => tr.t('connect.title', { label }),
+    signInTitle: (label: string) => tr.t('connect.signInTitle', { label }),
+    where: {
+      mcp: (at: string) => tr.t('connect.whereMcp', { at }),
+      api: (at: string) => tr.t('connect.whereApi', { at }),
+    },
+    none: tr.t('connect.none'),
+    token: (assistant: string) => tr.t('connect.token', { assistant }),
+    key: (assistant: string) => tr.t('connect.key', { assistant }),
+    basic: (assistant: string) => tr.t('connect.basic', { assistant }),
+    oauth: (label: string) => tr.t('connect.oauth', { label }),
+    labels: {
+      token: tr.t('connect.labels.token'),
+      key: tr.t('connect.labels.key'),
+      password: tr.t('connect.labels.password'),
+      username: tr.t('connect.labels.username'),
+    },
+    connect: tr.t('connect.connect'),
+    signIn: tr.t('connect.signIn'),
+    notNow: tr.t('connect.notNow'),
+    connected: (label: string) => tr.t('connect.connected', { label }),
+    allowed: (label: string) => tr.t('connect.allowed', { label }),
+    declined: tr.t('connect.declined'),
+    empty: {
+      token: tr.t('connect.empty.token'),
+      key: tr.t('connect.empty.key'),
+      password: tr.t('connect.empty.password'),
+      username: tr.t('connect.empty.username'),
+    },
+  };
+}
+
+export const CONNECT_HERE_TEXT = connectHereText('en');
 
 /** What the assistant chose, as `connection_add` takes it. */
 export interface ConnectHereChoice {
@@ -268,7 +296,13 @@ export function connectHereSecretKind(
  * where, how it signs in, the level in plain words, then a write-only field and Connect (or Connect alone when it
  * needs no sign-in), and Not now. Whombat writes every word; the assistant's notes go to the connection, not the card.
  */
-export function connectHereCard(entry: CatalogEntry, ask: GuideConnectAsk, assistant: string): GuideCard {
+export function connectHereCard(
+  entry: CatalogEntry,
+  ask: GuideConnectAsk,
+  assistant: string,
+  locale?: string | null,
+): GuideCard {
+  const CONNECT_HERE_TEXT = connectHereText(locale);
   const at = connectHereAddress(ask.url);
   const where = entry.transport === 'mcp' ? CONNECT_HERE_TEXT.where.mcp(at) : CONNECT_HERE_TEXT.where.api(at);
   const kind = ask.signIn === 'none' ? null : connectHereSecretKind(entry, ask);
@@ -318,7 +352,9 @@ export function connectHereCard(entry: CatalogEntry, ask: GuideConnectAsk, assis
     guide: 'add_connection',
     node: 'here',
     title: CONNECT_HERE_TEXT.title(ask.label).slice(0, 120),
-    body: [where, signIn, connectAccessWords(entry, ask.access, assistant)].join('\n\n').slice(0, 1200),
+    body: [where, signIn, connectAccessWords(entry, ask.access, assistant, locale)]
+      .join('\n\n')
+      .slice(0, 1200),
     blocks,
     state: 'open',
     connectAsk: ask,
@@ -333,7 +369,9 @@ export function connectSignInCard(
   entry: CatalogEntry,
   ask: { label: string; url: string; access: ConnectionAccessLevel; returnTo?: string | null },
   assistant: string,
+  locale?: string | null,
 ): GuideCard {
+  const CONNECT_HERE_TEXT = connectHereText(locale);
   const at = connectHereAddress(ask.url);
   const returnTo = connectReturnPathOf(ask.returnTo);
   const label = ask.label.trim().slice(0, CONNECTION_LABEL_MAX);
@@ -345,7 +383,7 @@ export function connectSignInCard(
     body: [
       CONNECT_HERE_TEXT.where.mcp(at),
       CONNECT_HERE_TEXT.oauth(label),
-      connectAccessWords(entry, ask.access, assistant),
+      connectAccessWords(entry, ask.access, assistant, locale),
     ]
       .join('\n\n')
       .slice(0, 1200),
@@ -394,7 +432,12 @@ export function connectSignInCard(
 }
 
 /** What the locked card says. */
-export function connectHereLocked(outcome: 'connected' | 'allowed' | 'declined', label: string): string {
+export function connectHereLocked(
+  outcome: 'connected' | 'allowed' | 'declined',
+  label: string,
+  locale?: string | null,
+): string {
+  const CONNECT_HERE_TEXT = connectHereText(locale);
   if (outcome === 'connected') return CONNECT_HERE_TEXT.connected(label).slice(0, 200);
   if (outcome === 'allowed') return CONNECT_HERE_TEXT.allowed(label).slice(0, 200);
   return CONNECT_HERE_TEXT.declined;

@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,14 +16,26 @@ import (
 // ---- Alerts -----------------------------------------------------------------
 
 const alertCols = `id, server_id, key, rule, entity, severity, title, detail, banner_title, banner_detail, link,
-	status_note, state, opened_at, COALESCE(resolved_at, 0), COALESCE(ack_at, 0), ack_by, ack_note, COALESCE(ack_until, 0)`
+	status_note, state, opened_at, COALESCE(resolved_at, 0), COALESCE(ack_at, 0), ack_by, ack_note, COALESCE(ack_until, 0),
+	code, params`
 
 func scanAlert(row interface{ Scan(...any) error }) (rules.Alert, error) {
 	var a rules.Alert
 	var oa, ra, aa, au int64
-	var by, note string
+	var by, note, params string
 	err := row.Scan(&a.ID, &a.Server, &a.Key, &a.Rule, &a.Entity, &a.Severity, &a.Title, &a.Detail, &a.BannerTitle,
-		&a.BannerDetail, &a.Link, &a.StatusNote, &a.State, &oa, &ra, &aa, &by, &note, &au)
+		&a.BannerDetail, &a.Link, &a.StatusNote, &a.State, &oa, &ra, &aa, &by, &note, &au, &a.Code, &params)
+	if err != nil {
+		return a, err
+	}
+	if params != "" {
+		a.Params, err = decodeAlertParams(params)
+		if err != nil {
+			slog.Warn("could not decode alert params", "alert_id", a.ID, "error", err)
+			// Without the parameters, readers need the alert's stored wording.
+			a.Code = ""
+		}
+	}
 	a.OpenedAt = fromMS(oa)
 	if ra != 0 {
 		t := fromMS(ra)
@@ -33,7 +48,48 @@ func scanAlert(row interface{ Scan(...any) error }) (rules.Alert, error) {
 			a.Ack.Until = &t
 		}
 	}
-	return a, err
+	return a, nil
+}
+
+func decodeAlertParams(raw string) (map[string]any, error) {
+	var params map[string]any
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber() // Preserve integer counts that cannot round-trip through float64.
+	if err := decoder.Decode(&params); err != nil {
+		return nil, err
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("unexpected data after alert params")
+	}
+	for key, value := range params {
+		switch v := value.(type) {
+		case json.Number:
+			if n, err := v.Int64(); err == nil && v != "-0" {
+				params[key] = n
+			} else if n, err := v.Float64(); err == nil {
+				params[key] = n
+			} else {
+				return nil, err
+			}
+		case []any:
+			names := make([]string, len(v))
+			for i, item := range v {
+				name, ok := item.(string)
+				if !ok {
+					return nil, fmt.Errorf("param %q is not a string list", key)
+				}
+				names[i] = name
+			}
+			params[key] = names
+		case nil:
+			params[key] = []string(nil)
+		case string, bool:
+		default:
+			return nil, fmt.Errorf("unsupported param %q", key)
+		}
+	}
+	return params, nil
 }
 
 // SetAlertAck stores (ack non-nil) or clears an acknowledgement.
@@ -138,11 +194,15 @@ func (s *Store) QueryAlerts(ctx context.Context, f AlertFilter) ([]rules.Alert, 
 
 // InsertAlert stores a newly opened alert.
 func (s *Store) InsertAlert(ctx context.Context, a rules.Alert) error {
-	_, err := s.w.ExecContext(ctx, `INSERT INTO alerts(id, server_id, key, rule, entity, severity, title, detail,
-		banner_title, banner_detail, link, status_note, state, opened_at, resolved_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	params, err := json.Marshal(a.Params)
+	if err != nil {
+		return err
+	}
+	_, err = s.w.ExecContext(ctx, `INSERT INTO alerts(id, server_id, key, rule, entity, severity, title, detail,
+		banner_title, banner_detail, link, status_note, state, opened_at, resolved_at, code, params)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.Server, a.Key, a.Rule, a.Entity, a.Severity, a.Title, a.Detail, a.BannerTitle, a.BannerDetail, a.Link,
-		a.StatusNote, a.State, ms(a.OpenedAt), resolvedMS(a.ResolvedAt))
+		a.StatusNote, a.State, ms(a.OpenedAt), resolvedMS(a.ResolvedAt), a.Code, string(params))
 	return err
 }
 
@@ -155,10 +215,14 @@ func resolvedMS(t *time.Time) any {
 
 // UpdateAlert stores the current text / severity / state of an alert.
 func (s *Store) UpdateAlert(ctx context.Context, a rules.Alert) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE alerts SET severity = ?, title = ?, detail = ?, banner_title = ?,
-		banner_detail = ?, link = ?, status_note = ?, state = ?, resolved_at = ? WHERE id = ?`,
+	params, err := json.Marshal(a.Params)
+	if err != nil {
+		return err
+	}
+	_, err = s.w.ExecContext(ctx, `UPDATE alerts SET severity = ?, title = ?, detail = ?, banner_title = ?,
+		banner_detail = ?, link = ?, status_note = ?, state = ?, resolved_at = ?, code = ?, params = ? WHERE id = ?`,
 		a.Severity, a.Title, a.Detail, a.BannerTitle, a.BannerDetail, a.Link, a.StatusNote, a.State,
-		resolvedMS(a.ResolvedAt), a.ID)
+		resolvedMS(a.ResolvedAt), a.Code, string(params), a.ID)
 	return err
 }
 

@@ -1,6 +1,8 @@
-import { RESEARCH_VERDICT_LABELS, type ResearchCard as ResearchCardData } from '@whombat/core/domain';
+import { type ResearchCard as ResearchCardData, researchVerdictLabels } from '@whombat/core/domain';
 import { formatResearchLabel, formatResearchMeta } from '@whombat/core/text';
 import { cx } from '../../components/cx';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import styles from './Card.module.css';
 import research from './ResearchCard.module.css';
 
@@ -10,6 +12,8 @@ export interface ResearchCardProps {
 
 /** Research card: `RESEARCH · TOPIC` + source count, rows [name · verdict pill · note]. */
 export function ResearchCard({ card }: ResearchCardProps) {
+  const RESEARCH_VERDICT_LABELS = useLocaleWords(researchVerdictLabels);
+  const { tag: uiLocale } = useWebI18n();
   return (
     <section
       className={cx(styles.card, research.card)}
@@ -17,8 +21,10 @@ export function ResearchCard({ card }: ResearchCardProps) {
       data-card="research"
     >
       <div className={cx(styles.header, research.header)}>
-        <span className={styles.label}>{formatResearchLabel(card.topic)}</span>
-        <span className={styles.meta}>{formatResearchMeta(card.sourceCount, card.testedCount)}</span>
+        <span className={styles.label}>{formatResearchLabel(card.topic, uiLocale)}</span>
+        <span className={styles.meta}>
+          {formatResearchMeta(card.sourceCount, card.testedCount, uiLocale)}
+        </span>
       </div>
       <ul className={styles.bare}>
         {card.rows.map((row) => (

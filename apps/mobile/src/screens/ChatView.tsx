@@ -39,6 +39,7 @@
  * messages, without a box: the list's New chat button is the way to a new thread. Inside a thread of theirs the “New” line, in Chat's blue, goes above the first message that was new when
  * it showed.
  */
+
 import { replaceEqualDeep, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
   agentWords,
@@ -155,6 +156,7 @@ import { useSettleThread } from '../data/useThreadSettle';
 import { useThreadWork } from '../data/useThreadWork';
 import { useWebUrl } from '../data/useWebUrl';
 import type { ThreadWorkView } from '../data/working';
+import { useI18n, useMobileT } from '../i18n';
 import { createInViewStore, rowsNearView } from '../lib/inView';
 import { UI_ORIGINS } from '../managed/config';
 import { useManaged } from '../managed/context';
@@ -313,6 +315,9 @@ export function ChatView({
   onRootInView,
   inbox = null,
 }: ChatViewProps) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const { slug, people, mode, bootstrap, clock, viewer: decider, timeZone } = useBurrow();
   // The list's time labels change with the day (Today, Yesterday, the dividers); “just now” and “Last reply 12 min ago”
   // follow the clock in their rows, so the 15-second clock doesn't rebuild the whole history here.
@@ -718,8 +723,8 @@ export function ChatView({
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert(
-        'Camera is off for Whombat',
-        'Allow the camera in your phone’s settings to take a photo here.',
+        tMobile('screens.camera-is-off-for-whombat'),
+        tMobile('screens.allow-the-camera-in-your-phones-settings-to'),
         permission.canAskAgain
           ? [{ text: 'OK' }]
           : [
@@ -782,7 +787,7 @@ export function ChatView({
     () =>
       chatItems(
         messages,
-        { people, viewer: decider, timeZone, now: nowStore.get() },
+        { people, viewer: decider, timeZone, now: nowStore.get(), locale: rawLocale },
         {
           authors,
           everyAuthor: roomTop,
@@ -798,6 +803,7 @@ export function ChatView({
       people,
       decider,
       timeZone,
+      rawLocale,
       nowStore,
       today,
       authors,
@@ -859,7 +865,7 @@ export function ChatView({
   const waitingRoots = threaded?.waitingRoots ?? NO_ROOTS;
   const handedOverRoots = threaded?.handedOverRoots ?? NO_ROOTS;
   const roomAgent = inRoom ? people.agent : undefined;
-  const roomWords = useMemo(() => agentWords(roomAgent?.name), [roomAgent?.name]);
+  const roomWords = useMemo(() => agentWords(roomAgent?.name, rawLocale), [roomAgent?.name, rawLocale]);
   const roomShown = useRef(new Map<string, ThreadWorkView | null>());
   const threadWorkFor = useMemo(() => {
     if (!inRoom) return threadWork;
@@ -1449,9 +1455,9 @@ export function ChatView({
   let body: React.ReactNode;
   if (inbox && !threadRootId) body = inbox;
   else if (!conversationId || source.isPending)
-    body = <SkeletonRows count={6} avatarSize={24} lines={1} label="Loading messages" />;
+    body = <SkeletonRows count={6} avatarSize={24} lines={1} label={tMobile('screens.loading-messages')} />;
   else if (source.error && !source.data)
-    body = <ErrorState text="Messages didn’t load." onRetry={() => void source.refetch()} />;
+    body = <ErrorState text={tMobile('screens.messages-didnt-load')} onRetry={() => void source.refetch()} />;
   else
     body = (
       <View ref={listBox} collapsable={false} style={{ flex: 1 }}>

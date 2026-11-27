@@ -1,4 +1,5 @@
-/** A tiny DOM builder for the frame (no framework, no innerHTML: every string is text). */
+/** A tiny DOM builder for the frame. Every string becomes a text node. */
+import { splitRichTemplate } from '@whombat/core/i18n';
 
 type Child = Node | string | null | undefined | false;
 type AttrValue = string | number | boolean | null | undefined;
@@ -24,6 +25,12 @@ export function append(el: Element, ...children: Child[]): void {
     if (child === null || child === undefined || child === false) continue;
     el.append(typeof child === 'string' ? document.createTextNode(child) : child);
   }
+}
+
+export function translatedParts(template: string, slots: Partial<Record<string, Node>>): Child[] {
+  return splitRichTemplate(template).map((part) =>
+    part.type === 'text' ? part.value : (slots[part.name] ?? `{${part.name}}`),
+  );
 }
 
 const SVG = 'http://www.w3.org/2000/svg';

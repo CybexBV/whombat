@@ -8,7 +8,6 @@
  * assistant-name-web.md AP-1505).
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { CHAT_WORDS } from '@whombat/client';
 import { hostErrorInfo } from '@whombat/client/hosts';
 import { queryKeys } from '@whombat/client/query';
 import { useApiMutation, useChatRooms, useChatThreads, useTheAgent } from '@whombat/client/react';
@@ -19,6 +18,8 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 're
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { SidePane } from '../../components/SidePane';
+import { currentLocale } from '../../i18n/provider';
+import { CHAT_WORDS } from '../../i18n/shared';
 import { ThreadPane } from '../messaging/ThreadPane';
 import { useComposerVoice } from '../voice/useComposerVoice';
 import { MicButton, VoiceBar, voiceBarShown } from '../voice/VoiceBar';
@@ -247,7 +248,7 @@ function NewChat({
       setText('');
       onStarted(r.data);
     } catch (err) {
-      setError(hostErrorInfo(err).message);
+      setError(hostErrorInfo(err, currentLocale()).message);
     }
   };
   return (

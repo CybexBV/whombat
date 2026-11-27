@@ -8,6 +8,7 @@
 import { HostGuestState, type HostServer, type RealtimeEvent } from '@whombat/core';
 import type { RealtimeBus } from '../realtime/bus';
 import type { Logger } from '../services';
+import { localizeHubJson } from './localize';
 import { obj, toHostAlert } from './map';
 import type { HostsChange, HostsService } from './service';
 
@@ -102,7 +103,9 @@ export class HostsRealtime {
           // With its quiet, as the page reads it (QN-14): “Ignored by Mara until it’s back online”.
           await this.#publish({
             type: 'hosts.alert',
-            alert: await this.hosts.withQuiet(toHostAlert(c.alert)),
+            alert: await this.hosts.withQuiet(
+              toHostAlert(localizeHubJson(c.alert, await this.hosts.locale())),
+            ),
           });
           if (typeof obj(c.alert).server === 'string' && obj(c.alert).server) {
             this.#dirty.add(obj(c.alert).server as string);

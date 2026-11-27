@@ -6,24 +6,25 @@
  * checked here by the box's own rules before anything is sent, so no try is spent on a typo; the name and email go only
  * once the box proved it is the one on that screen. Then the app opens it.
  */
+
 import {
   COMMUNITY_TEXT,
   type KnownAppliance,
-  localClaimAccountProblem,
   localClaimLettersReady,
   localClaimNext,
   runLocalClaim,
 } from '@whombat/client/managed';
 import { type ApplianceSession, createSecureSession } from '@whombat/client/session';
+import { claimAccountProblem } from '@whombat/protocol/session';
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, type TextInput, View } from 'react-native';
+import { useI18n, useMobileT } from '../i18n';
+import { useClaimLocale } from '../i18n/provider';
 import { Button } from '../ui/primitives';
-import { PHONE_COMMUNITY_TEXT } from './community';
+import { phoneCommunityText } from './community';
 import { APP_BUILD } from './config';
 import { type EndpointKey, type ManagedEnvironment, PHONE_PLATFORM, phoneClient, phoneLabel } from './env';
 import { ErrorLine, Field, Frame } from './ui';
-
-const T = COMMUNITY_TEXT;
 
 export function LocalClaim({
   env,
@@ -52,6 +53,12 @@ export function LocalClaim({
    */
   onReread: (text: string) => void;
 }) {
+  const { rawLocale, tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
+  const { claim: claimText } = COMMUNITY_TEXT;
+  const phoneCommunityTextHere = phoneCommunityText(rawLocale);
+
+  const locale = useClaimLocale();
   const [stage, setStage] = useState<'letters' | 'account'>('letters');
   const [letters, setLetters] = useState('');
   const [name, setName] = useState('');
@@ -99,15 +106,18 @@ export function LocalClaim({
   const claim = async () => {
     if (!session || busy) return;
     // The box's own rules for a name and an email, before a try is spent on the exchange.
-    const invalid = localClaimAccountProblem({ name, email });
+    const invalid = claimAccountProblem({ name, email });
     if (invalid) {
-      setProblem(invalid);
+      setProblem(
+        invalid === 'name' ? tMobile('localClaim.account.badName') : tMobile('localClaim.account.badEmail'),
+      );
       return;
     }
     setBusy(true);
     setProblem(null);
     try {
       const out = await runLocalClaim({
+        locale,
         session,
         letters,
         appliancePeerId: record.peerId,
@@ -133,24 +143,30 @@ export function LocalClaim({
     }
   };
 
-  const kicker = PHONE_COMMUNITY_TEXT.claim.kicker;
-  const backLink = { label: T.account.back, onPress: back };
+  const kicker = phoneCommunityTextHere.claim.kicker;
+  const backLink = { label: tMobile('managed.back'), onPress: back };
   if (stage === 'letters') {
     const ready = letters.trim().length >= 4;
     const next = () => {
       if (!ready) return;
       // Four letters of the box's alphabet (it has no I, L, O, S, U or Z): anything else is a misread.
       if (!localClaimLettersReady(letters)) {
-        setLettersProblem(T.claim.errors.letters);
+        setLettersProblem(tMobile('claim.malformed'));
         return;
       }
       setLettersProblem(null);
       setStage('account');
     };
     return (
-      <Frame kicker={kicker} title={T.claim.title} sub={T.claim.sub} tip={T.claim.tip} back={backLink}>
+      <Frame
+        kicker={kicker}
+        title={tClient('managed.claim.title')}
+        sub={tMobile('localClaim.sub')}
+        tip={tMobile('localClaim.tip')}
+        back={backLink}
+      >
         <Field
-          label={T.claim.letters}
+          label={tMobile('localClaim.letters')}
           value={letters}
           onChangeText={(v) => {
             setLetters(
@@ -161,7 +177,7 @@ export function LocalClaim({
             );
             setLettersProblem(null);
           }}
-          placeholder={T.claim.lettersPlaceholder}
+          placeholder={claimText.lettersPlaceholder}
           mono
           autoFocus
           autoCapitalize="characters"
@@ -173,16 +189,22 @@ export function LocalClaim({
           onSubmitEditing={next}
         />
         <ErrorLine text={lettersProblem} />
-        <Button label={T.claim.next} size="lg" disabled={!ready} onPress={next} />
+        <Button label={tMobile('localClaim.next')} size="lg" disabled={!ready} onPress={next} />
       </Frame>
     );
   }
   const ready = Boolean(name.trim() && email.trim());
   return (
-    <Frame kicker={kicker} title={T.account.title} sub={T.account.sub} tip={T.account.tip} back={backLink}>
+    <Frame
+      kicker={kicker}
+      title={tMobile('localClaim.account.title')}
+      sub={tMobile('localClaim.account.sub')}
+      tip={tMobile('localClaim.account.tip')}
+      back={backLink}
+    >
       <View style={{ gap: 12 }}>
         <Field
-          label={T.account.name}
+          label={tMobile('localClaim.account.name')}
           value={name}
           onChangeText={(v) => {
             setName(v);
@@ -198,7 +220,7 @@ export function LocalClaim({
         />
         <Field
           ref={emailField}
-          label={T.account.email}
+          label={tMobile('localClaim.account.email')}
           value={email}
           onChangeText={(v) => {
             setEmail(v);
@@ -216,7 +238,7 @@ export function LocalClaim({
       </View>
       <ErrorLine text={problem} />
       <Button
-        label={busy ? T.account.claiming : T.account.claim}
+        label={busy ? tClient('managed.claim.claiming') : tClient('managed.claim.claim')}
         size="lg"
         busy={busy}
         disabled={!ready || !session}

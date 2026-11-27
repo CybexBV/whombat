@@ -10,6 +10,7 @@
  * time it shows (`getComponent`, AP-932), so the navigator's first render doesn't load ~40 screens. `typeof import(…)`
  * keeps each component typed against its route.
  */
+
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   DarkTheme,
@@ -39,8 +40,9 @@ import { isShareUrl } from '../data/shareInbox';
 import { HOME_TAB, INBOX_TAB, OVERVIEW_TITLE, TABS, type Tab as TabName } from '../data/shell';
 import { ChatSettledBridge } from '../data/useThreadSettle';
 import { noteRoute } from '../errors/nativeErrorNotes';
+import { useI18n } from '../i18n';
 import { useBurrowSwitch, useManaged } from '../managed/context';
-import { COPY } from '../managed/copy';
+import { managedCopy } from '../managed/copy';
 import { knownPushRefs } from '../push/knownRefs';
 import { PushAskSheet } from '../push/PushAskSheet';
 import { NotificationShadeBridge } from '../push/ShadeBridge';
@@ -276,6 +278,9 @@ function useLinking(onOpened: (opened: OpenedNotification) => void): LinkingOpti
  * (an approval push opens the approval waiting for the person), This Whombat for news about the appliance itself.
  */
 function usePushTaps(navRef: typeof navigationRef) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   // The sidebar as it is when a tap comes: reading it doesn't draw the navigator again for every message.
   const { slug, currentBootstrap } = useBurrowBase();
   const { client } = useWhombat();
@@ -346,9 +351,9 @@ function usePushTaps(navRef: typeof navigationRef) {
         return;
       }
       navRef.navigate('Tabs', { screen: INBOX_TAB });
-      if (open.to === 'inbox' && open.missing) showNote?.(COPY.push.notFound);
+      if (open.to === 'inbox' && open.missing) showNote?.(managedCopyHere.push.notFound);
     },
-    [session, showNote, byKind, slug, currentBootstrap, navRef],
+    [session, showNote, byKind, slug, currentBootstrap, navRef, managedCopyHere.push.notFound],
   );
   // Taps from the managed root: one that opened the app (before this appliance's session was up), then each new one.
   const taps = managed?.taps;

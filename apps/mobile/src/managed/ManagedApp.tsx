@@ -6,6 +6,7 @@
  * is open and this phone is trusted there, the regular app over an end-to-end session with it (`ApplianceRoot`).
  * Notification taps are held until an appliance is open, then resolved through its session.
  */
+
 import {
   APPLIANCE_TERMS_VERSION,
   type ApplianceRegistry,
@@ -64,6 +65,8 @@ import { WhombatUpdater } from '../../modules/whombat-updater';
 import { QUERY_CACHE_NAME } from '../data/queryPersist';
 import { deviceBox } from '../data/secureBoxNative';
 import { LookAround } from '../demo/LookAround';
+import { useI18n } from '../i18n';
+import { useClaimLocale } from '../i18n/provider';
 import {
   clearCloudStatusWidget,
   clearDepartingStatusWidget,
@@ -87,11 +90,11 @@ import {
 } from './CommunityApp';
 import { ConnectAiScreen } from './ConnectAi';
 import { awaitSession, type CloudSessionStore, cloudSessionStore } from './cloudSession';
-import { COMMUNITY_REGISTRY, PHONE_COMMUNITY_TEXT } from './community';
+import { COMMUNITY_REGISTRY, phoneCommunityText } from './community';
 import { APP_BUILD, CONTROL_URL, UI_ORIGINS } from './config';
 import { asStarted, finishingDevice, pushConnectReturn, takeHeldConnect } from './connectReturn';
 import { createLinkBus, createPushTaps, sendLink } from './context';
-import { COPY } from './copy';
+import { COPY, managedCopy } from './copy';
 import {
   createMobileEnvironment,
   type EndpointKey,
@@ -313,6 +316,10 @@ export function ManagedUpdatePrompt() {
 }
 
 export function ManagedApp() {
+  const { rawLocale, tClient } = useI18n();
+  const phoneCommunityTextHere = phoneCommunityText(rawLocale);
+  const managedCopyHere = managedCopy(rawLocale);
+
   const start = useMemo(() => startManagedApp(), []);
   const env = start.env;
   /**
@@ -480,12 +487,12 @@ export function ManagedApp() {
         setCloud(s);
         setVerifying(null);
       },
-      () => live && setVerifyError(COPY.signIn.badLink),
+      () => live && setVerifyError(managedCopyHere.signIn.badLink),
     );
     return () => {
       live = false;
     };
-  }, [verifying, env]);
+  }, [verifying, env, managedCopyHere.signIn.badLink]);
 
   // The code's token becomes this phone's cloud session (once per token); another account's replaces the one here.
   const redeeming = phone && !phone.error ? phone : null;
@@ -669,13 +676,13 @@ export function ManagedApp() {
   if (cloud === 'unreachable')
     return (
       <GateScreen
-        title={COPY.signIn.title}
-        text={COPY.signIn.unreachable}
+        title={managedCopyHere.signIn.title}
+        text={managedCopyHere.signIn.unreachable}
         actions={
           <>
-            <Button label="Try again" size="lg" onPress={loadCloud} />
+            <Button label={tClient('settings.retry')} size="lg" onPress={loadCloud} />
             <Button
-              label={PHONE_COMMUNITY_TEXT.signIn.joinLink}
+              label={phoneCommunityTextHere.signIn.joinLink}
               variant="quiet"
               onPress={communityEntry.onJoin}
             />
@@ -684,7 +691,12 @@ export function ManagedApp() {
       />
     );
   if (key === 'error')
-    return <GateScreen title={COPY.connection.signedOutTitle} text={COPY.connection.unsupported} />;
+    return (
+      <GateScreen
+        title={managedCopyHere.connection.signedOutTitle}
+        text={managedCopyHere.connection.unsupported}
+      />
+    );
   // A new install starts with “Join a Whombat” (LNK-44): no cloud sign-in is needed to use one. A phone signed in
   // through the cloud kept its session and never sees this; signing in that way stays one tap away.
   if (!cloud && !cloudSignIn && lookAround) return <LookAround onLeave={() => setLookAround(false)} />;
@@ -815,6 +827,9 @@ function SignedIn({
   /** “Use a passkey” on Set up this device (PK-04): the same sign-in as the signed-out screen. */
   onPasskey?: () => Promise<void>;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const registry = useMemo(
     () => createRegistry(cloud.account.accountId, storage()),
     [cloud.account.accountId],
@@ -838,9 +853,9 @@ function SignedIn({
         setAppliances(list);
         setListError(null);
       },
-      () => setListError(COPY.signIn.unreachable),
+      () => setListError(managedCopyHere.signIn.unreachable),
     );
-  }, [env, orgId]);
+  }, [env, orgId, managedCopyHere.signIn.unreachable]);
   useEffect(() => {
     if (route.name === 'appliances') refresh();
   }, [route.name, refresh]);
@@ -1100,7 +1115,7 @@ function SignedIn({
           try {
             await env.control.deleteAccount(typed);
           } catch (e) {
-            return COPY.account.errors[deleteAccountErrorKey(e)];
+            return managedCopyHere.account.errors[deleteAccountErrorKey(e)];
           }
           // Gone at control: this phone forgets what it kept for the account (AP-73); sign-out clears the push
           // handle and the live notifications. The endpoint key stays: it belongs to this phone.
@@ -1455,6 +1470,7 @@ function ClaimFlow({
   onBack: () => void;
   onClaimed: (device: string, peerId: string, accountId: string) => void;
 }) {
+  const locale = useClaimLocale();
   const [step, setStep] = useState<ClaimStep>(card ? { kind: 'card' } : (found ?? { kind: 'looking' }));
   /** Where “Claim with the code on its screen instead” goes back to. */
   const [codeStep, setCodeStep] = useState<ClaimStep>(found ?? { kind: 'looking' });
@@ -1493,6 +1509,7 @@ function ClaimFlow({
     setError(null);
     try {
       const r = await claimAppliance({
+        locale,
         control: env.control,
         orgId,
         request,
@@ -1730,6 +1747,9 @@ function ScreenSignInFlow({
   onGone: (reason: GoneReason) => void;
   onIn: (k: KnownAppliance) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const entry = useDirectoryEntry(env, orgId, device);
   // Android's back out of the flow from a screen that isn't one of its steps (the steps go back a step themselves).
   const out = (screen: ReactNode) => (
@@ -1748,9 +1768,13 @@ function ScreenSignInFlow({
   if (entry === 'missing' || entry === 'unreachable' || isRetired(entry))
     return out(
       <GateScreen
-        title={COPY.screen.title}
-        text={typeof entry === 'object' ? goneNotice('retired', entry.name) : COPY.recover.notInOrg}
-        actions={<Button label={COPY.connection.back} variant="secondary" size="lg" onPress={onBack} />}
+        title={managedCopyHere.screen.title}
+        text={
+          typeof entry === 'object' ? goneNotice('retired', entry.name) : managedCopyHere.recover.notInOrg
+        }
+        actions={
+          <Button label={managedCopyHere.connection.back} variant="secondary" size="lg" onPress={onBack} />
+        }
       />,
     );
   const peer = screenSignInPeer(known?.peerId, entry.contentPeerId);
@@ -1952,6 +1976,9 @@ function LinkTrustFlow({
   onSetup: () => void;
   children: (known: KnownAppliance) => React.ReactElement;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const { device } = link;
   const entry = useDirectoryEntry(env, orgId, device);
   const [pinned, setPinned] = useState<KnownAppliance | null>(null);
@@ -1978,9 +2005,11 @@ function LinkTrustFlow({
 
   const gate = (message: string) => (
     <GateScreen
-      title={COPY.setup.title}
+      title={managedCopyHere.setup.title}
       text={message}
-      actions={<Button label={COPY.connection.back} variant="secondary" size="lg" onPress={onBack} />}
+      actions={
+        <Button label={managedCopyHere.connection.back} variant="secondary" size="lg" onPress={onBack} />
+      }
     />
   );
   if (entry === null)
@@ -1989,7 +2018,7 @@ function LinkTrustFlow({
         <Loading />
       </Screen>
     );
-  if (entry === 'missing' || entry === 'unreachable') return gate(COPY.recover.notInOrg);
+  if (entry === 'missing' || entry === 'unreachable') return gate(managedCopyHere.recover.notInOrg);
   if (isRetired(entry)) return gate(goneNotice('retired', entry.name));
   if (!decision) return null;
   if (decision.kind === 'changed')
@@ -2052,6 +2081,9 @@ function RecoverFlow({
   onForget: () => void;
   onRecovered: (k: KnownAppliance) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const entry = useDirectoryEntry(env, orgId, device);
   const [stop, setStop] = useState<IdentityStop | null>(null);
   if (entry === null)
@@ -2064,9 +2096,13 @@ function RecoverFlow({
   if (entry === 'missing' || entry === 'unreachable' || isRetired(entry))
     return (
       <GateScreen
-        title={COPY.recover.title}
-        text={typeof entry === 'object' ? goneNotice('retired', entry.name) : COPY.recover.notInOrg}
-        actions={<Button label={COPY.connection.back} variant="secondary" size="lg" onPress={onBack} />}
+        title={managedCopyHere.recover.title}
+        text={
+          typeof entry === 'object' ? goneNotice('retired', entry.name) : managedCopyHere.recover.notInOrg
+        }
+        actions={
+          <Button label={managedCopyHere.connection.back} variant="secondary" size="lg" onPress={onBack} />
+        }
       />
     );
   const shown = stop ?? (known && known.peerId !== entry.contentPeerId ? 'changed' : null);
@@ -2097,8 +2133,9 @@ function RecoverFlow({
       setStop(result.kind === 'changed' ? 'changed' : 'kit');
       return null;
     }
-    if (result.kind === 'missing') return input.kit ? COPY.recover.oldKit : COPY.recover.typedUnknown;
-    if (result.kind === 'error') return COPY.recover.errors[result.error];
+    if (result.kind === 'missing')
+      return input.kit ? managedCopyHere.recover.oldKit : managedCopyHere.recover.typedUnknown;
+    if (result.kind === 'error') return managedCopyHere.recover.errors[result.error];
     if (result.kind === 'recovered') onRecovered(result.known);
     return null;
   };

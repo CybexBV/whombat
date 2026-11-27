@@ -7,6 +7,7 @@
  * marks it. “Add a step” opens a sheet (AP-718). Plan changes come back in the answer and over `plan.updated` (burrow
  * topic).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { usePlan, usePlanWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
@@ -23,6 +24,7 @@ import {
   planStepCommand,
 } from '../data/plan';
 import { canAddStep } from '../data/planAdd';
+import { useI18n, useMobileT } from '../i18n';
 import { navigateTo, useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -245,6 +247,8 @@ function StepRow({
 }
 
 export function PlanScreen({ route, navigation }: Props) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -281,11 +285,11 @@ export function PlanScreen({ route, navigation }: Props) {
       <Screen>
         <BackBar label={back} onPress={goBack} />
         {notFound ? (
-          <ErrorState text="This plan isn’t here any more." />
+          <ErrorState text={tMobile('screens.this-plan-isnt-here-any-more')} />
         ) : query.error ? (
-          <ErrorState text="This plan didn’t load." onRetry={() => void query.refetch()} />
+          <ErrorState text={tMobile('screens.this-plan-didnt-load')} onRetry={() => void query.refetch()} />
         ) : (
-          <View style={{ paddingTop: 10 }} accessibilityLabel="Loading the plan">
+          <View style={{ paddingTop: 10 }} accessibilityLabel={tMobile('screens.loading-the-plan')}>
             <View style={{ gap: 10, paddingHorizontal: 22, paddingBottom: 22 }}>
               <Skeleton width={120} height={11} />
               <Skeleton width={240} height={22} />
@@ -305,7 +309,7 @@ export function PlanScreen({ route, navigation }: Props) {
       const text = outcomeText(res);
       if (text) Alert.alert(text.title, text.body);
     },
-    onError: (err: unknown) => Alert.alert('That didn’t go through', errorText(err)),
+    onError: (err: unknown) => Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(err)),
     onSettled: () => setBusy(null),
   };
   const act = (step: PlanStepView, button: PlanStepButton) => {
@@ -321,10 +325,14 @@ export function PlanScreen({ route, navigation }: Props) {
       else update.mutate({ params: params(step.id), body: { state: command.state } }, settle);
     };
     if (button.action === 'cancel')
-      Alert.alert('Cancel this step?', 'It stays on the plan, struck through, and no longer counts.', [
-        { text: 'Keep it', style: 'cancel' },
-        { text: 'Cancel step', style: 'destructive', onPress: run },
-      ]);
+      Alert.alert(
+        tMobile('screens.cancel-this-step'),
+        tMobile('screens.it-stays-on-the-plan-struck-through-and'),
+        [
+          { text: 'Keep it', style: 'cancel' },
+          { text: 'Cancel step', style: 'destructive', onPress: run },
+        ],
+      );
     else run();
   };
 
@@ -335,7 +343,7 @@ export function PlanScreen({ route, navigation }: Props) {
       <MenuSheet
         spec={menuFor ? stepMenu(menuFor) : null}
         visible={menuFor !== null}
-        label={menuFor ? `More for ${menuFor.title}` : 'More'}
+        label={menuFor ? `More for ${menuFor.title}` : tClient('usage.more')}
         onClose={() => setMenuFor(null)}
         onPick={(id) => {
           const step = menuFor;
@@ -396,11 +404,11 @@ export function PlanScreen({ route, navigation }: Props) {
           </View>
         </View>
         <View onLayout={(e) => (stepsY.current = e.nativeEvent.layout.y)}>
-          <Section title="STEPS">
+          <Section title={tMobile('screens.steps')}>
             {model.steps.length === 0 ? (
               <View style={{ padding: 16 }}>
                 <Text size={14.5} color={theme.colors.mut}>
-                  No steps yet. Add the first one below.
+                  {tMobile('screens.no-steps-yet-add-the-first-one-below')}
                 </Text>
               </View>
             ) : (
@@ -421,10 +429,10 @@ export function PlanScreen({ route, navigation }: Props) {
             )}
             {canAddStep(plan) ? (
               <ListRow
-                title="Add a step"
+                title={tMobile('screens.add-a-step')}
                 trailing="+"
                 onPress={() => setAdding(true)}
-                accessibilityLabel="Add a step"
+                accessibilityLabel={tMobile('screens.add-a-step')}
               />
             ) : null}
           </Section>

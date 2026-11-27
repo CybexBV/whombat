@@ -4,7 +4,9 @@
  * it. The composers' recording bar at the desk's size: “Recording 0:12”, then “Turning speech into text…”; a failure
  * shows on the mic's line for five seconds. A small state machine and the helpers the screen draws it with.
  */
-import { DESK, DESK_WORDS } from './deskCopy';
+
+import { english, localized, type Translate } from '../i18n/translate';
+import { deskCopy, deskWordsCopy } from './deskCopy';
 
 /** Voice typing's five minutes (`VOICE_TYPING_MAX_SECONDS`): *Done* happens by itself then. */
 export const MAX_HEAR_SECONDS = 300;
@@ -68,7 +70,9 @@ export function recordingTime(ms: number): string {
 }
 
 /** What the bar says now; null at rest. */
-export function dictationLabel(s: Dictation, now: number): string | null {
+export function dictationLabel(s: Dictation, now: number, t: Translate = english): string | null {
+  const DESK_WORDS = deskWordsCopy(t);
+
   const w = DESK_WORDS.dictation;
   switch (s.phase) {
     case 'idle':
@@ -82,18 +86,22 @@ export function dictationLabel(s: Dictation, now: number): string | null {
   }
 }
 
-const ERROR_TEXT: Record<DictationError, string> = {
-  microphone: DESK.talkMicrophone,
-  off: DESK_WORDS.voiceUnavailable,
-  nothing: DESK_WORDS.dictation.nothing,
-  busy: DESK_WORDS.dictation.busy,
-  badAudio: DESK_WORDS.dictation.badAudio,
-  tooLong: DESK_WORDS.dictation.tooLong,
-  failed: DESK_WORDS.dictation.failed,
-};
+const errorTextCopy = localized(
+  (t): Record<DictationError, string> => ({
+    microphone: deskCopy(t).talkMicrophone,
+    off: deskWordsCopy(t).voiceUnavailable,
+    nothing: deskWordsCopy(t).dictation.nothing,
+    busy: deskWordsCopy(t).dictation.busy,
+    badAudio: deskWordsCopy(t).dictation.badAudio,
+    tooLong: deskWordsCopy(t).dictation.tooLong,
+    failed: deskWordsCopy(t).dictation.failed,
+  }),
+);
 
 /** The failure the mic's line shows now, for five seconds after it happened; null otherwise. */
-export function dictationNotice(s: Dictation, now: number): string | null {
+export function dictationNotice(s: Dictation, now: number, t: Translate = english): string | null {
+  const ERROR_TEXT = errorTextCopy(t);
+
   if (s.phase !== 'idle' || !s.error || s.at === undefined) return null;
   return now - s.at < DICTATION_ERROR_MS ? ERROR_TEXT[s.error] : null;
 }

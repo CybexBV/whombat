@@ -53,7 +53,6 @@ import {
 } from '@whombat/control-contracts/local';
 import {
   applyDeskShowPatch,
-  DESK_CALM_WORDS,
   DESK_LOCK_AGAIN,
   DESK_SCREEN_BOX,
   DESK_SCREEN_VIEWS_MAX,
@@ -84,13 +83,17 @@ import {
   type DeskWidgetView,
   deskAttentionFor,
   deskBox,
+  deskCalmWords,
   deskLayoutWidgets,
   deskMayDecide,
   deskPreviewInput,
   deskQuietNow,
   deskText,
   deskWidgetSpecProblem,
+  deskWords,
   fillDeskWords,
+  resolveLanguage,
+  safeLocaleOrNull,
   type ThingSummary,
   topics,
 } from '@whombat/core';
@@ -119,6 +122,7 @@ import { startOfLocalDay } from '../home/time';
 import { homeWidgetsNow, type WidgetNow } from '../home/widgets';
 import { serversPrincipal } from '../hosts/principal';
 import { HostsError, hostsFor } from '../hosts/service';
+import { burrowLocale, onLocaleChange } from '../i18n/locale';
 import { ApiError, forbidden } from '../lib/errors';
 import { fixLook } from '../looks/research';
 import { type ControlPush, opaqueRef, PUSH_TTL_S, registerPushResolver } from '../managed/push';
@@ -135,8 +139,11 @@ import { type DoorbellRing, followsDoorbell, onDoorbellRing } from '../things/ki
 import { quietThingNotice } from '../things/quiet/service';
 import { DictationError, voiceTypingFor } from '../voice/service';
 import { speakingVoices, voiceFor, voiceHealth } from '../voice/speech';
+import { loadVoiceSettings } from '../voice/store';
+import { wantsDutchVoice } from '../voice/view';
 import { CALM_SOURCE_WAIT_MS, CalmReads, type CalmSample, calmNow, calmPreview, deskCalmInput } from './calm';
 import { createDeskCalmSources, type DeskCalmSources } from './calm-sources';
+import { dutchSpeechText } from './dutch-speech';
 import { deskFoundNow, type FoundInputs, foundInputsOf } from './found';
 import {
   type AskPlace,
@@ -171,7 +178,7 @@ import {
   presenceFor,
   presenceHealth,
 } from './presence';
-import { UnlockPushes, unlockPushWhat } from './push-link';
+import { UnlockPushes, unlockPushPreview, unlockPushWhat } from './push-link';
 import { glanceFacts, screenDetail, screenGrid, screenSummary } from './screen-grid';
 import { type AskedWidget, catalogItemFor, keepPageTimes, placePage } from './screen-pages';
 import type { ScreenPinCheck } from './screen-sessions';
@@ -230,9 +237,6 @@ import type { Resolved, ScreenRecord, ScreensApi, ThingWidgets, WidgetCtx } from
 function deskError(code: DeskErrorCode, message: string, extra: { triesLeft?: number } = {}): SessionOpError {
   return new SessionOpError(DESK_ERROR_STATUS[code], message, { code, ...extra });
 }
-
-/** The unlock push's second line (its first is `DESK_WORDS.settings.unlockRequest`). */
-const UNLOCK_PUSH_BODY = 'Unlock it, or say no if it isn’t you.';
 
 /** How old the glance may be before it is read again (DK-S10). */
 export const GLANCE_MAX_AGE_MS = 10_000;
@@ -484,6 +488,7 @@ export class DeskService {
   #outputs: { burrowId: string | null; list: ReportedOutput[] } | null = null;
   /** Each burrow's screens as last read, for the state's grid (read again with the glance's age, or after a change). */
   readonly #screenLists = new Map<string, { at: number; list: ScreenRecord[] }>();
+  readonly #offLocale: () => void;
 
   constructor(
     readonly services: Services,
@@ -535,6 +540,11 @@ export class DeskService {
       const person = this.#cache?.personId;
       if (person && frame.topic === topics.me(person) && frame.event.type === 'home.changed')
         this.#dirty = true;
+    });
+    // Language changed: drop the cached glance so the desk screen switches immediately.
+    this.#offLocale = onLocaleChange(services, () => {
+      this.#cache = null;
+      this.#dirty = true;
     });
     // A tap on the unlock push opens This Whombat (DK-S21).
     this.#offPush = registerPushResolver(services, async (accountId, ref) => {
@@ -609,6 +619,8 @@ export class DeskService {
     this.#closed = true;
     this.#offTick?.();
     this.#offFrames();
+    this.#offLocale();
+    this.#resolver.close();
     this.#offPush();
     this.#offRing();
     for (const t of this.#timers) clearTimeout(t);
@@ -698,13 +710,16 @@ export class DeskService {
       .select({ preferences: accounts.preferences })
       .from(accounts)
       .where(eq(accounts.id, place.accountId));
-    const own = (account?.preferences as { timeZone?: string | null } | null)?.timeZone;
+    const prefs = account?.preferences as { timeZone?: string | null; locale?: unknown } | null;
+    const own = prefs?.timeZone;
+    const locale = safeLocaleOrNull(prefs?.locale) ?? undefined;
     return {
       burrow: place.burrow,
       person: place.person,
       agent: place.agent,
       accountId: place.accountId,
       timeZone: zoneOf(own, place.burrow.timeZone),
+      ...(locale ? { locale } : {}),
     };
   }
 
@@ -882,6 +897,7 @@ export class DeskService {
         // Its name and face (one-agent.md OA-08).
         assistant: { name: assistant, face: faceOf(place.agent) },
         timeZone: place.timeZone,
+        ...(place.locale ? { locale: place.locale } : {}),
         lockedView: settings.lockedView,
         night: settings.night,
         quiet: deskQuietNow(settings, new Date(now), place.timeZone),
@@ -960,8 +976,9 @@ export class DeskService {
           askCount: input.askCount,
           recent: full.recent,
           changes: (from) => this.#looks.changesSince(from),
+          locale: cache.place?.locale ?? null,
         }));
-    const calm = calmNow(input, show, view, new Date(now), { digest, sample });
+    const calm = calmNow(input, show, view, new Date(now), { digest, sample, locale: cache.place?.locale });
     if (!calm) this.services.log.warn('desk: the calm glance wasn’t one the screen takes');
     return calm;
   }
@@ -1073,8 +1090,13 @@ export class DeskService {
 
   /** The person hears about the fifth wrong PIN in Chat, once (DK-04). */
   #tellWrongPins(row: DeskRow): void {
-    this.services.background.run('desk: wrong PINs', () =>
-      tellPerson(this.services, row.burrowId, row.personId, DESK_WORDS.settings.wrongPins),
+    this.services.background.run('desk: wrong PINs', async () =>
+      tellPerson(
+        this.services,
+        row.burrowId,
+        row.personId,
+        deskWords(await burrowLocale(this.services, row.burrowId)).settings.wrongPins,
+      ),
     );
   }
 
@@ -1092,10 +1114,11 @@ export class DeskService {
       const { request, fresh } = this.lock.ask(now);
       if (fresh) {
         this.#unlockPushes.remember(request.id, place.accountId, place.burrow.slug, now);
+        const locale = place.locale ?? (await burrowLocale(this.services, place.burrow.id));
         await this.options.push
           ?.forAccounts([place.accountId], 'security', unlockPushWhat(request.id), {
             group: unlockPushWhat(request.id),
-            preview: { title: DESK_WORDS.settings.unlockRequest, body: UNLOCK_PUSH_BODY },
+            preview: unlockPushPreview(locale),
           })
           .catch((err) => this.services.log.warn({ err: String(err) }, 'desk: the unlock push wasn’t sent'));
         // Ran out unanswered: the phone's notice goes and Settings hears it (a later request is its own).
@@ -1658,6 +1681,7 @@ export class DeskService {
       servers: cards.map((card) => ({ card, row: card.id ? fleet?.rows.get(card.id) : undefined })),
       show,
       activityLine: (catalogId) => this.#reads.sources.activityLine(catalogId),
+      locale: place.locale,
     });
   }
 
@@ -1678,6 +1702,7 @@ export class DeskService {
       input.scenario,
       name,
       new Date(this.#now()),
+      cache.place.locale,
     );
   }
 
@@ -1843,10 +1868,25 @@ export class DeskService {
     if (!port) throw noVoice();
     const place = await this.placeOf(row);
     const assistant = screenText(place?.agent.name, 40) || 'your assistant';
-    const text = deskText(fillDeskWords(DESK_WORDS.settings.sample, { assistant }), VOICE_TTS_TEXT_MAX);
+    const isDutch = resolveLanguage(place?.locale) === 'nl';
+    const voiceSettings = isDutch ? await loadVoiceSettings(this.services.db).catch(() => null) : null;
+    const dutchReady =
+      isDutch &&
+      voiceSettings !== null &&
+      wantsDutchVoice(voiceSettings) &&
+      Boolean((await voiceHealth(this.services).catch(() => null))?.languages?.includes('nl'));
+    const nlSample = deskText(
+      fillDeskWords(deskWords(place?.locale).settings.sample, { assistant }),
+      VOICE_TTS_TEXT_MAX,
+    );
+    const enSample = deskText(fillDeskWords(DESK_WORDS.settings.sample, { assistant }), VOICE_TTS_TEXT_MAX);
     let wav: Buffer;
     try {
-      wav = await port.tts(text, input.voice);
+      wav = dutchReady
+        ? await port
+            .tts(dutchSpeechText(nlSample), input.voice, 'nl')
+            .catch(() => port.tts(enSample, input.voice))
+        : await port.tts(enSample, input.voice);
     } catch (err) {
       this.services.log.warn({ err: String(err) }, 'desk: the voice sample wasn’t made');
       throw noVoice();
@@ -1917,8 +1957,13 @@ export class DeskService {
       if (res.status !== 'ok' || !(res.result as { paired: boolean }).paired) return false;
       this.#reset();
       await this.#changed();
-      this.services.background.run('desk: paired itself', () =>
-        tellPerson(this.services, target.burrowId, target.id, DESK_WORDS.settings.selfPaired),
+      this.services.background.run('desk: paired itself', async () =>
+        tellPerson(
+          this.services,
+          target.burrowId,
+          target.id,
+          deskWords(await burrowLocale(this.services, target.burrowId)).settings.selfPaired,
+        ),
       );
       // The moment the person has an assistant (desk-found.md DF-02): Found on your network looks now.
       foundScansFor(this.services).kick();
@@ -1977,6 +2022,7 @@ export class DeskService {
       viewer: { accountId: place.accountId, burrowId: place.burrow.id, principal: place.person },
       now,
       timeZone: place.timeZone,
+      ...(place.locale ? { locale: place.locale } : {}),
       assistant: screenText(place.agent.name, 40) || 'Your assistant',
     };
   }
@@ -2009,7 +2055,7 @@ export class DeskService {
         { screen: record.id, detail: String(JSON.stringify(detail) ?? detail) },
         message,
       );
-    const views = screenViews(specs, resolved, view, (message, id) => warn(message, id));
+    const views = screenViews(specs, resolved, view, (message, id) => warn(message, id), ctx.locale);
     this.#rememberShown(record.id, view, ctx.now.getTime(), views);
     return screenGrid({
       record,
@@ -2019,6 +2065,7 @@ export class DeskService {
       views,
       calm,
       view,
+      locale: ctx.locale ?? null,
       warn,
     });
   }
@@ -2179,7 +2226,7 @@ export class DeskService {
     if (!at) throw new ApiError('not_found', 'There’s nobody to show this screen for.');
     const now = this.services.clock();
     const input = at.cache.calm ?? (await this.#calmInput(at.place, at.cache.full ?? EMPTY_GLANCE, now));
-    const calm = calmNow(input, record.show, view, now);
+    const calm = calmNow(input, record.show, view, now, { locale: at.place.locale });
     if (!calm) throw new Error('desk: the calm glance isn’t one the screen takes');
     const ctx = this.#widgetCtx(at.place, now);
     const facts = this.#factsOf(at.cache, at.place, now);
@@ -2226,7 +2273,12 @@ export class DeskService {
     );
     const ctx = this.#widgetCtx(at.place, now);
     const resolved = await this.#resolver.resolve(ctx, specs, this.#factsOf(at.cache, at.place, now), 0);
-    return this.#rememberShown(record.id, view, now.getTime(), screenViews(specs, resolved, view)).has(key);
+    return this.#rememberShown(
+      record.id,
+      view,
+      now.getTime(),
+      screenViews(specs, resolved, view, undefined, ctx.locale),
+    ).has(key);
   }
 
   /**
@@ -2477,8 +2529,13 @@ export class DeskService {
           )
         : ([] as ScreenHomeWidget[]),
     ]);
-    const home = homeWidgetsGroup(homeWidgets, ctx.assistant);
-    return [ownGroup(ctx.assistant), ...serverGroups(fleet), ...thingGroups.flat(), ...(home ? [home] : [])];
+    const home = homeWidgetsGroup(homeWidgets, ctx.assistant, ctx.locale);
+    return [
+      ownGroup(ctx.assistant, ctx.locale),
+      ...serverGroups(fleet, ctx.locale),
+      ...thingGroups.flat(),
+      ...(home ? [home] : []),
+    ];
   }
 
   /**
@@ -2498,13 +2555,14 @@ export class DeskService {
     const now = this.services.clock();
     const real = cache.calm ?? (await this.#calmInput(place, cache.full ?? EMPTY_GLANCE, now));
     const name = (await this.#whombatName()) ?? (screenText(place.burrow.name, 40) || 'Whombat');
-    const preview = calmPreview(real, record.show, input.scenario ?? 'now', name, now);
+    const preview = calmPreview(real, record.show, input.scenario ?? 'now', name, now, place.locale);
     const input2 = input.scenario
-      ? deskPreviewInput({ ...real, now }, record.show, input.scenario, DESK_CALM_WORDS)
+      ? deskPreviewInput({ ...real, now }, record.show, input.scenario, deskCalmWords(place.locale ?? null))
       : { ...real, now };
     const specs = input.widgets.slice(0, DESK_SCREEN_VIEWS_MAX);
+    const widgetCtx = this.#widgetCtx(place, now);
     const resolved = await this.#resolver.resolve(
-      this.#widgetCtx(place, now),
+      widgetCtx,
       specs,
       this.#factsOf(cache, place, now),
       SCREEN_VIEWS_WAIT_MS,
@@ -2512,8 +2570,11 @@ export class DeskService {
     return {
       name: preview.name,
       calm: preview.calm,
-      views: viewsFor(screenViews(specs, resolved, 'everything'), principal.protocolMinor),
-      attention: deskAttentionFor(input2, record.show, 'everything', record.popups),
+      views: viewsFor(
+        screenViews(specs, resolved, 'everything', undefined, widgetCtx.locale),
+        principal.protocolMinor,
+      ),
+      attention: deskAttentionFor(input2, record.show, 'everything', record.popups, place.locale),
     };
   }
 
@@ -2595,6 +2656,7 @@ export class DeskService {
           things: thingGroups,
           accounts: accountGroups,
           widgets: homeWidgets,
+          locale: ctx.locale ?? null,
         }),
         principal.protocolMinor,
       ),

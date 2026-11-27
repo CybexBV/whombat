@@ -6,6 +6,7 @@
  */
 import type { AutomationToday } from '@whombat/core';
 import { zonedInstant } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
 import {
   daysAgo,
   formatAgo,
@@ -15,32 +16,69 @@ import {
   toDate,
   zonedParts,
 } from '@whombat/core/text';
+import { clientTranslator } from '../i18n/catalog';
+
+function locShortWeekday(at: string | Date | number, timeZone: string, locale?: string | null): string {
+  if (!locale) return formatShortWeekday(at, timeZone);
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), { weekday: 'short', timeZone })
+    .format(toDate(at))
+    .replace(/\.$/, '');
+}
+
+function locDate(
+  at: string | Date | number,
+  timeZone: string,
+  now: Date | number,
+  locale?: string | null,
+): string {
+  if (!locale) return formatDate(at, timeZone, { now: toDate(now) });
+  const d = toDate(at);
+  const sameYear = zonedParts(d, timeZone).year === zonedParts(now, timeZone).year;
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone,
+  })
+    .format(d)
+    .replace(/\.$/, '');
+}
 
 /** A Needs you item's corner: the clock when it came today, else how long it has waited (`1 day ago`, `3 days ago`). */
-export function needsYouWhen(at: string, now: Date | number, timeZone: string): string {
+export function needsYouWhen(
+  at: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
   const days = daysAgo(at, now, timeZone);
   if (days <= 0) return formatClock(at, timeZone);
-  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  return clientTranslator(locale).tp('home.time.daysAgo', days);
 }
 
 /** When a change was made (Done recently): the clock today, the weekday this week, else the date. */
-export function doneWhen(at: string, now: Date | number, timeZone: string): string {
+export function doneWhen(at: string, now: Date | number, timeZone: string, locale?: string | null): string {
   const days = daysAgo(at, now, timeZone);
   if (days <= 0) return formatClock(at, timeZone);
-  if (days < 7) return formatShortWeekday(at, timeZone);
-  return formatDate(at, timeZone, { now: toDate(now) });
+  if (days < 7) return locShortWeekday(at, timeZone, locale);
+  return locDate(at, timeZone, now, locale);
 }
 
 /** An automation's line on Home: `ran 08:00`, `failed 07:10`, `runs 22:00`. */
-export function automationWhen(item: Pick<AutomationToday, 'state' | 'at'>, timeZone: string): string {
+export function automationWhen(
+  item: Pick<AutomationToday, 'state' | 'at'>,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   const clock = formatClock(item.at, timeZone);
   switch (item.state) {
     case 'ran':
-      return `ran ${clock}`;
+      return tr.t('home.time.ran', { clock });
     case 'failed':
-      return `failed ${clock}`;
+      return tr.t('home.time.failed', { clock });
     case 'scheduled':
-      return `runs ${clock}`;
+      return tr.t('home.time.runs', { clock });
   }
 }
 
@@ -65,23 +103,31 @@ export function nextAt(now: Date | number, timeZone: string, time: string): stri
 }
 
 /** `until tomorrow 09:00`, `until 18:00`, `until Fri 09:00`: when something snoozed comes back. */
-export function untilText(until: string, now: Date | number, timeZone: string): string {
+export function untilText(
+  until: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   const ahead = -daysAgo(until, now, timeZone);
   const clock = formatClock(until, timeZone);
-  if (ahead <= 0) return `until ${clock}`;
-  if (ahead === 1) return `until tomorrow ${clock}`;
-  if (ahead < 7) return `until ${formatShortWeekday(until, timeZone)} ${clock}`;
-  return `until ${formatDate(until, timeZone, { now: toDate(now) })}`;
+  if (ahead <= 0) return tr.t('home.time.untilClock', { clock });
+  if (ahead === 1) return tr.t('home.time.untilTomorrow', { clock });
+  if (ahead < 7)
+    return tr.t('home.time.untilDayClock', { day: locShortWeekday(until, timeZone, locale), clock });
+  return tr.t('home.time.untilDate', { date: locDate(until, timeZone, now, locale) });
 }
 
 /** When something comes back, as said in a sentence: `at 18:00`, `tomorrow at 09:00`, `on Fri at 09:00`, `on 3 Oct`. */
-export function atText(at: string, now: Date | number, timeZone: string): string {
+export function atText(at: string, now: Date | number, timeZone: string, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   const ahead = -daysAgo(at, now, timeZone);
   const clock = formatClock(at, timeZone);
-  if (ahead <= 0) return `at ${clock}`;
-  if (ahead === 1) return `tomorrow at ${clock}`;
-  if (ahead < 7) return `on ${formatShortWeekday(at, timeZone)} at ${clock}`;
-  return `on ${formatDate(at, timeZone, { now: toDate(now) })}`;
+  if (ahead <= 0) return tr.t('home.time.atClock', { clock });
+  if (ahead === 1) return tr.t('home.time.tomorrowAt', { clock });
+  if (ahead < 7) return tr.t('home.time.onDayAt', { day: locShortWeekday(at, timeZone, locale), clock });
+  return tr.t('home.time.onDate', { date: locDate(at, timeZone, now, locale) });
 }
 
 /**
@@ -93,23 +139,37 @@ export function readingTime(
   at: string | null | undefined,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): { text: string; exact: string; known: boolean } {
+  const tr = clientTranslator(locale);
   const t = at ? Date.parse(at) : Number.NaN;
-  if (!Number.isFinite(t))
-    return { text: 'Reading time unknown', exact: 'Reading time unknown', known: false };
+  if (!Number.isFinite(t)) {
+    const unknown = tr.t('home.time.readingUnknown');
+    return { text: unknown, exact: unknown, known: false };
+  }
+  const ago = locale ? localizedAgo(t, now, timeZone, locale) : formatAgo(t, now, timeZone);
   return {
-    text: `Read ${formatAgo(t, now, timeZone)}`,
-    exact: `Read at ${readingsMoment(t, timeZone)}`,
+    text: tr.t('home.time.readAgo', { ago }),
+    exact: tr.t('home.time.readAt', { moment: readingsMoment(t, timeZone, locale) }),
     known: true,
   };
 }
 
+function localizedAgo(t: number, now: Date | number, timeZone: string, locale: string): string {
+  const tr = clientTranslator(locale);
+  const sec = Math.max(0, Math.round((toDate(now).getTime() - t) / 1000));
+  if (sec < 60) return tr.t('managed.ago.justNow');
+  if (sec < 3600) return tr.t('hosts.ago.min', { n: Math.floor(sec / 60) });
+  if (sec < 86_400) return tr.t('hosts.ago.h', { n: Math.floor(sec / 3600) });
+  return locDate(t, timeZone, now, locale);
+}
+
 /** A saved reading's moment, the day always said: “14:00 on 23 Sept”. */
-export function readingsMoment(at: Date | number | string, timeZone: string): string {
-  const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone }).format(
-    toDate(at),
-  );
-  return `${formatClock(at, timeZone)} on ${day}`;
+export function readingsMoment(at: Date | number | string, timeZone: string, locale?: string | null): string {
+  const day = new Intl.DateTimeFormat(formatLocaleOf(locale), { day: 'numeric', month: 'short', timeZone })
+    .format(toDate(at))
+    .replace(/\.$/, '');
+  return clientTranslator(locale).t('home.time.clockOnDay', { clock: formatClock(at, timeZone), day });
 }
 
 /**

@@ -8,17 +8,18 @@ import {
   featureValueLabel,
 } from '@whombat/client';
 import {
-  FEATURE_REQUEST_WORDS,
   type FeatureDecisionChoice,
   type FeatureRequestView,
   featureRequestFrom,
   featureRequestOutcome,
+  featureRequestWords,
   featureValueText,
 } from '@whombat/core';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useLocaleWords } from '../../i18n/words';
 import cardStyles from './Card.module.css';
 import styles from './FeatureRequestCard.module.css';
 
@@ -75,6 +76,7 @@ function NoteForm({
   onSend: (text: string) => void;
   onCancel: () => void;
 }) {
+  const FEATURE_REQUEST_WORDS = useLocaleWords(featureRequestWords);
   const id = useId();
   const [text, setText] = useState(initial);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -150,6 +152,7 @@ export function FeatureRequestCard({
   problem = null,
   onDecide,
 }: FeatureRequestCardProps) {
+  const FEATURE_REQUEST_WORDS = useLocaleWords(featureRequestWords);
   const [form, setForm] = useState<FeatureForm | null>(null);
   const openers = useRef<Partial<Record<FeatureForm, HTMLButtonElement | null>>>({});
   const waiting = request.state === 'waiting';

@@ -18,55 +18,125 @@ import {
   overviewShowId,
 } from '@whombat/core';
 import type { HostServer } from '@whombat/core/domain';
+import { clientTranslator, EN } from '../i18n/catalog';
 import type { HomeThingRow } from './sections';
 
 /* Words ----------------------------------------------------------------------------------------------------------- */
 
 export const ARRANGE_WORDS = {
-  arrange: 'Arrange',
-  done: 'Done',
-  arrangeLabel: 'Arrange the Overview',
-  doneLabel: 'Done arranging',
-  barTitle: 'Arranging the Overview.',
-  barBody: 'Drag a tile to move it, or press its gear to change what it shows and its size.',
-  barBodyPhone: 'Press a tile’s gear to change what it shows, its size and its place.',
-  same: 'Your phone and your computer show the same Overview.',
-  add: 'Add to Overview',
+  arrange: EN['arrange.arrange'],
+  done: EN['arrange.done'],
+  arrangeLabel: EN['arrange.arrangeLabel'],
+  doneLabel: EN['arrange.doneLabel'],
+  barTitle: EN['arrange.barTitle'],
+  barBody: EN['arrange.barBody'],
+  barBodyPhone: EN['arrange.barBodyPhone'],
+  same: EN['arrange.same'],
+  add: EN['arrange.add'],
   addLine: (removed: number) => (removed ? `${removed} removed` : 'What you remove waits here'),
-  addEmpty: 'Everything is on the Overview.',
-  addTiles: 'Connections',
-  addPins: 'Pinned',
+  addEmpty: EN['arrange.addEmpty'],
+  addTiles: EN['arrange.addTiles'],
+  addPins: EN['arrange.addPins'],
   changeTile: (name: string) => `Change the ${name} tile`,
-  changeFigure: 'Change this figure',
+  changeFigure: EN['arrange.changeFigure'],
   changePin: (title: string) => `Change ${title}`,
-  figureTitle: 'Figure at the top',
+  figureTitle: EN['arrange.figureTitle'],
   figureSub: (n: number) => `Figure ${n} of 4`,
-  pinSub: 'Pinned from a chat',
-  shows: 'What it shows',
-  span: 'Time span',
-  size: 'Size',
-  width: 'Width',
-  place: 'Place',
-  earlier: 'Move earlier',
-  later: 'Move later',
-  remove: 'Remove from Overview',
-  close: 'Close',
-  own: 'Whombat',
-  shownAlready: 'At the top already',
-  reading: 'Reading what it can show…',
-  couldntRead: 'Couldn’t read what it can show. Try again in a moment.',
-  couldntSave: 'Couldn’t save the Overview. Try again.',
-  mainFigures: 'Its main figures',
-  sizes: { s: 'Small', w: 'Wide', l: 'Large' } satisfies Record<OverviewTileSize, string>,
-  pinSizes: { half: 'Half', full: 'Full width' },
-  ranges: { '1h': '1 hour', '24h': '24 hours', '7d': '7 days' } satisfies Record<OverviewRange, string>,
+  pinSub: EN['arrange.pinSub'],
+  shows: EN['arrange.shows'],
+  span: EN['arrange.span'],
+  size: EN['arrange.size'],
+  width: EN['arrange.width'],
+  place: EN['arrange.place'],
+  earlier: EN['arrange.earlier'],
+  later: EN['arrange.later'],
+  remove: EN['arrange.remove'],
+  close: EN['arrange.close'],
+  own: EN['arrange.own'],
+  shownAlready: EN['arrange.shownAlready'],
+  reading: EN['arrange.reading'],
+  couldntRead: EN['arrange.couldntRead'],
+  couldntSave: EN['arrange.couldntSave'],
+  mainFigures: EN['arrange.mainFigures'],
+  sizes: { s: EN['arrange.sizes.s'], w: EN['arrange.sizes.w'], l: EN['arrange.sizes.l'] } satisfies Record<
+    OverviewTileSize,
+    string
+  >,
+  pinSizes: { half: EN['arrange.pinSizes.half'], full: EN['arrange.pinSizes.full'] },
+  ranges: {
+    '1h': EN['arrange.ranges.1h'],
+    '24h': EN['arrange.ranges.24h'],
+    '7d': EN['arrange.ranges.7d'],
+  } satisfies Record<OverviewRange, string>,
   ownNames: {
-    servers: 'Servers running',
-    connections: 'Connections working',
-    needsYou: 'Needs you',
-    doneToday: 'Done today',
+    servers: EN['arrange.ownNames.servers'],
+    connections: EN['arrange.ownNames.connections'],
+    needsYou: EN['arrange.ownNames.needsYou'],
+    doneToday: EN['arrange.ownNames.doneToday'],
   } satisfies Record<OverviewOwnFigure, string>,
 } as const;
+
+export function arrangeWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  if (tr.language === 'en') return ARRANGE_WORDS;
+  return {
+    arrange: tr.t('arrange.arrange'),
+    done: tr.t('arrange.done'),
+    arrangeLabel: tr.t('arrange.arrangeLabel'),
+    doneLabel: tr.t('arrange.doneLabel'),
+    barTitle: tr.t('arrange.barTitle'),
+    barBody: tr.t('arrange.barBody'),
+    barBodyPhone: tr.t('arrange.barBodyPhone'),
+    same: tr.t('arrange.same'),
+    add: tr.t('arrange.add'),
+    addLine: (removed: number) =>
+      removed ? tr.t('arrange.addLine', { removed }) : tr.t('arrange.addLineEmpty'),
+    addEmpty: tr.t('arrange.addEmpty'),
+    addTiles: tr.t('arrange.addTiles'),
+    addPins: tr.t('arrange.addPins'),
+    changeTile: (name: string) => tr.t('arrange.changeTile', { name }),
+    changeFigure: tr.t('arrange.changeFigure'),
+    changePin: (title: string) => tr.t('arrange.changePin', { title }),
+    figureTitle: tr.t('arrange.figureTitle'),
+    figureSub: (n: number) => tr.t('arrange.figureSub', { n }),
+    pinSub: tr.t('arrange.pinSub'),
+    shows: tr.t('arrange.shows'),
+    span: tr.t('arrange.span'),
+    size: tr.t('arrange.size'),
+    width: tr.t('arrange.width'),
+    place: tr.t('arrange.place'),
+    earlier: tr.t('arrange.earlier'),
+    later: tr.t('arrange.later'),
+    remove: tr.t('arrange.remove'),
+    close: tr.t('arrange.close'),
+    own: tr.t('arrange.own'),
+    shownAlready: tr.t('arrange.shownAlready'),
+    reading: tr.t('arrange.reading'),
+    couldntRead: tr.t('arrange.couldntRead'),
+    couldntSave: tr.t('arrange.couldntSave'),
+    mainFigures: tr.t('arrange.mainFigures'),
+    sizes: {
+      s: tr.t('arrange.sizes.s'),
+      w: tr.t('arrange.sizes.w'),
+      l: tr.t('arrange.sizes.l'),
+    },
+    pinSizes: {
+      half: tr.t('arrange.pinSizes.half'),
+      full: tr.t('arrange.pinSizes.full'),
+    },
+    ranges: {
+      '1h': tr.t('arrange.ranges.1h'),
+      '24h': tr.t('arrange.ranges.24h'),
+      '7d': tr.t('arrange.ranges.7d'),
+    },
+    ownNames: {
+      servers: tr.t('arrange.ownNames.servers'),
+      connections: tr.t('arrange.ownNames.connections'),
+      needsYou: tr.t('arrange.ownNames.needsYou'),
+      doneToday: tr.t('arrange.ownNames.doneToday'),
+    },
+  };
+}
 
 /* The starting layout and the arranged order ---------------------------------------------------------------------- */
 
@@ -367,8 +437,11 @@ export function ownFace(
   things: readonly Pick<HomeThingRow, 'id' | 'level' | 'notAnswering'>[],
   fleet: readonly Pick<HostServer, 'status'>[] | null,
   assistant: string | null,
+  locale?: string | null,
 ): FigureFace {
-  const label = ARRANGE_WORDS.ownNames[own];
+  const tr = clientTranslator(locale);
+  const label = arrangeWords(locale).ownNames[own];
+  const needsLook = (n: number) => tr.tp('overview.figure.needsLook', n);
   switch (own) {
     case 'servers': {
       // Without the servers' list (no hosts service, or not read yet) there is nothing to count.
@@ -379,9 +452,13 @@ export function ownFace(
       const ok = all.length - bad - warn;
       return face({
         value: String(all.length - bad),
-        unit: `of ${all.length}`,
+        unit: tr.t('overview.figure.total', { count: all.length }),
         label,
-        line: bad ? `${bad} not running` : warn ? `${warn} need${warn === 1 ? 's' : ''} a look` : 'All fine',
+        line: bad
+          ? tr.t('overview.figure.serverDown', { count: bad })
+          : warn
+            ? needsLook(warn)
+            : tr.t('overview.figure.fine'),
         tone: bad ? 'bad' : warn ? 'warn' : 'ok',
         parts: all.length
           ? [
@@ -403,15 +480,15 @@ export function ownFace(
       const ok = mine.length - bad - warn - off;
       return face({
         value: String(ok),
-        unit: `of ${mine.length}`,
+        unit: tr.t('overview.figure.total', { count: mine.length }),
         label,
         line: bad
-          ? `${bad} not working`
+          ? tr.t('overview.figure.connectionDown', { count: bad })
           : off
-            ? `${off} not answering`
+            ? tr.t('overview.figure.noAnswer', { count: off })
             : warn
-              ? `${warn} need${warn === 1 ? 's' : ''} a look`
-              : 'All fine',
+              ? needsLook(warn)
+              : tr.t('overview.figure.fine'),
         tone: bad ? 'bad' : off ? 'off' : warn ? 'warn' : 'ok',
         parts: mine.length
           ? [
@@ -428,21 +505,17 @@ export function ownFace(
       return face({
         value: String(n),
         label,
-        line: n
-          ? n === 1
-            ? 'One thing waits for you'
-            : `${n} things wait for you`
-          : 'Nothing waits for you',
+        line: n ? tr.tp('overview.figure.waiting', n) : tr.t('overview.figure.noneWaiting'),
         tone: n ? 'warn' : 'ok',
       });
     }
     case 'doneToday': {
       const n = data.doneToday?.length ?? 0;
-      const who = assistant?.trim() || 'Your assistant';
+      const who = assistant?.trim() || tr.t('overview.page.assistant');
       return face({
         value: String(n),
         label,
-        line: n ? `Finished by ${who}` : `${who} hasn’t finished anything yet`,
+        line: tr.t(n ? 'overview.figure.finished' : 'overview.figure.noneFinished', { who }),
       });
     }
   }
@@ -456,31 +529,61 @@ export function topKey(top: OverviewLayoutTop): string {
 /* The summary card and Today -------------------------------------------------------------------------------------- */
 
 export const OVERVIEW_PAGE_WORDS = {
-  live: 'Live',
-  fine: 'Everything’s fine',
+  live: EN['overview.page.live'],
+  fine: EN['overview.page.fine'],
   read: (ago: string) => `read ${ago}`,
-  justNow: 'just now',
+  justNow: EN['overview.page.justNow'],
   minAgo: (n: number) => `${n} min ago`,
   watching: (assistant: string, servers: number, connections: number) =>
     `${assistant} keeps an eye on ${servers} ${servers === 1 ? 'server' : 'servers'} and ${connections} ${connections === 1 ? 'connection' : 'connections'}.`,
-  today: 'Today',
+  today: EN['overview.page.today'],
   todayLine: (done: number, planned: number) =>
     planned
       ? `${done} ${done === 1 ? 'thing' : 'things'} so far · ${planned} planned`
       : `${done} ${done === 1 ? 'thing' : 'things'} so far`,
-  allActivity: 'All activity',
-  now: 'Now',
+  allActivity: EN['overview.page.allActivity'],
+  now: EN['overview.page.now'],
   showAll: (n: number) => `Show all ${n}`,
-  showFewer: 'Show fewer',
-  failed: 'failed',
-  automation: 'Automation',
+  showFewer: EN['overview.page.showFewer'],
+  failed: EN['overview.page.failed'],
+  automation: EN['overview.page.automation'],
 } as const;
 
+export function overviewPageWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  if (tr.language === 'en') return OVERVIEW_PAGE_WORDS;
+  return {
+    live: tr.t('overview.page.live'),
+    fine: tr.t('overview.page.fine'),
+    read: (ago: string) => tr.t('overview.page.read', { ago }),
+    justNow: tr.t('overview.page.justNow'),
+    minAgo: (n: number) => tr.t('overview.page.minAgo', { n }),
+    watching: (assistant: string, servers: number, connections: number) =>
+      tr.t('overview.page.watching', {
+        assistant,
+        servers: tr.tp('overview.page.serverCount', servers),
+        connections: tr.tp('overview.page.connectionCount', connections),
+      }),
+    today: tr.t('overview.page.today'),
+    todayLine: (done: number, planned: number) => {
+      const soFar = tr.tp('overview.page.todayLine', done);
+      return planned ? tr.t('overview.page.todayPlanned', { soFar, planned }) : soFar;
+    },
+    allActivity: tr.t('overview.page.allActivity'),
+    now: tr.t('overview.page.now'),
+    showAll: (n: number) => tr.t('overview.page.showAll', { n }),
+    showFewer: tr.t('overview.page.showFewer'),
+    failed: tr.t('overview.page.failed'),
+    automation: tr.t('overview.page.automation'),
+  };
+}
+
 /** How long ago Home was read, for “read just now”, “read 3 min ago”. */
-export function readAgo(at: string | number | Date, now: number): string {
+export function readAgo(at: string | number | Date, now: number, locale?: string | null): string {
+  const words = overviewPageWords(locale);
   const ms = now - new Date(at).getTime();
   const min = Math.floor(ms / 60_000);
-  return min < 1 ? OVERVIEW_PAGE_WORDS.justNow : OVERVIEW_PAGE_WORDS.minAgo(min);
+  return min < 1 ? words.justNow : words.minAgo(min);
 }
 
 export type TodayTone = 'done' | 'bad' | 'plan';
@@ -507,6 +610,7 @@ export function todayMoments(
   now: number,
   timeZone: string,
   assistant: string | null,
+  locale?: string | null,
 ): { moments: TodayMoment[]; now: number; done: number; planned: number } {
   const minuteOf = (at: string | number) => {
     const p = new Intl.DateTimeFormat('en-GB', {
@@ -526,7 +630,8 @@ export function todayMoments(
   const today = dayOf(now);
   const hhmm = (m: number) =>
     `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-  const who = assistant?.trim() || 'Your assistant';
+  const who = assistant?.trim() || clientTranslator(locale).t('overview.page.assistant');
+  const words = overviewPageWords(locale);
   const moments: TodayMoment[] = [];
   for (const d of data.doneToday ?? []) {
     if (dayOf(d.at) !== today) continue;
@@ -549,10 +654,7 @@ export function todayMoments(
       minute,
       time: hhmm(minute),
       text: a.name,
-      from:
-        a.state === 'failed'
-          ? `${OVERVIEW_PAGE_WORDS.automation} · ${OVERVIEW_PAGE_WORDS.failed}`
-          : OVERVIEW_PAGE_WORDS.automation,
+      from: a.state === 'failed' ? `${words.automation} · ${words.failed}` : words.automation,
       tone: a.state === 'failed' ? 'bad' : a.state === 'scheduled' ? 'plan' : 'done',
       href: `/automations/${a.id}`,
     });

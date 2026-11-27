@@ -35,6 +35,7 @@ import type { Db } from '../db/client';
 import { accounts, burrows } from '../db/schema/index';
 import { postAskCard } from '../guides/ask';
 import { makeCard } from '../guides/flows';
+import { tServer } from '../i18n/catalog';
 import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import type { ToolContext } from '../mcp/tools';
@@ -94,9 +95,13 @@ const tokens = (q: string) =>
     .filter((t) => t.length >= 2);
 
 /** The place of a setting with the assistant's name in it. */
-function whereOf(e: AssistantSetting, agent: string): { page: SettingsPageId; where: string; about: string } {
+function whereOf(
+  e: AssistantSetting,
+  agent: string,
+  locale?: string | null,
+): { page: SettingsPageId; where: string; about: string } {
   const page = (e.page ?? 'you.profile') as SettingsPageId;
-  const p = pageWords(page, agent);
+  const p = pageWords(page, agent, locale);
   return { page, where: p.where, about: p.about };
 }
 
@@ -177,17 +182,19 @@ async function personOf(ctx: ToolContext) {
     slugOf(ctx.services.db, ctx.burrowId),
   ]);
   if (!account || !slug) return null;
-  return { turn, account, slug, agent: shortName(turn.agent) };
+  const locale = (account.preferences as { locale?: string | null } | null)?.locale ?? null;
+  return { turn, account, slug, agent: shortName(turn.agent), locale };
 }
 
 /* settings_find ---------------------------------------------------------------------------------------------- */
 
-/** How well a setting matches the asked words: every word counts once, the op's own name most. */
+/** How well a setting matches the asked words: every word counts once, matching both English and localized labels. */
 function score(op: string, e: AssistantSetting, agent: string, words: readonly string[]): number {
   if (!words.length) return 0;
-  const place = whereOf(e, agent);
+  const en = whereOf(e, agent, 'en');
+  const nl = whereOf(e, agent, 'nl');
   const name = fold(op);
-  const text = fold(`${e.words ?? ''} ${place.where} ${place.about}`);
+  const text = fold(`${e.words ?? ''} ${en.where} ${en.about} ${nl.where} ${nl.about}`);
   let n = 0;
   for (const w of words) {
     if (name.includes(w)) n += 3;
@@ -212,7 +219,7 @@ export async function settingsFindTool(ctx: ToolContext, input: FindIn): Promise
         .map((m) => m.op);
   const settings = matches.slice(0, FIND_MAX).map((op, i) => {
     const e = assistantSetting(op);
-    const place = whereOf(e, who.agent);
+    const place = whereOf(e, who.agent, who.locale);
     const spec = specOf(op);
     const access = e.access as 'never' | 'read' | 'change' | 'ask';
     const schema = access !== 'never' && spec && i < FIND_WITH_INPUT ? inputSchemaOf(spec) : null;
@@ -233,7 +240,7 @@ export async function settingsFindTool(ctx: ToolContext, input: FindIn): Promise
       ? {}
       : {
           pages: SETTINGS_PAGE_IDS.map((page) => {
-            const p = pageWords(page, who.agent);
+            const p = pageWords(page, who.agent, who.locale);
             return { page, where: p.where, about: p.about };
           }),
         }),
@@ -248,7 +255,8 @@ export async function settingsReadTool(ctx: ToolContext, input: ReadIn): Promise
   const e = assistantSetting(input.op);
   const spec = specOf(input.op);
   if (e.access === 'none' || !spec) return failed('unknown', SETTINGS_TOOL_TEXT.unknown(input.op));
-  if (e.access === 'never') return failed('never', SETTINGS_TOOL_TEXT.never(whereOf(e, who.agent).where));
+  if (e.access === 'never')
+    return failed('never', SETTINGS_TOOL_TEXT.never(whereOf(e, who.agent, who.locale).where));
   if (e.access !== 'read') return failed('wrong_tool', SETTINGS_TOOL_TEXT.notARead(input.op));
   const dispatcher = sessionDispatcherOf(ctx.services);
   if (!dispatcher) return failed('unavailable', SETTINGS_TOOL_TEXT.unavailable);
@@ -271,7 +279,7 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
   const e = assistantSetting(input.op);
   const spec = specOf(input.op);
   if (e.access === 'none' || !spec) return failed('unknown', SETTINGS_TOOL_TEXT.unknown(input.op));
-  const place = whereOf(e, who.agent);
+  const place = whereOf(e, who.agent, who.locale);
   if (e.access === 'never') return failed('never', SETTINGS_TOOL_TEXT.never(place.where));
   if (e.access === 'read') return failed('wrong_tool', SETTINGS_TOOL_TEXT.notAChange(input.op));
   const full = withBurrow(spec, input.input, who.slug);
@@ -328,10 +336,10 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
 /* settings_open ---------------------------------------------------------------------------------------------- */
 
 /** The card's button: “Open Backups” (the page's last part). */
-export function openLabel(where: string): string {
-  const last = where.split('→').pop()?.trim() || 'Settings';
-  const label = `Open ${last}`;
-  return label.length <= 40 ? label : 'Open it';
+export function openLabel(where: string, locale?: string | null): string {
+  const last = where.split('→').pop()?.trim() || tServer(locale, 'settings.open.settings');
+  const label = tServer(locale, 'settings.open.page', { page: last });
+  return label.length <= 40 ? label : tServer(locale, 'settings.open.it');
 }
 
 export async function settingsOpenTool(ctx: ToolContext, input: OpenIn): Promise<SettingsOpenOutput> {
@@ -339,7 +347,7 @@ export async function settingsOpenTool(ctx: ToolContext, input: OpenIn): Promise
   if (!who) return failed('not_here', SETTINGS_TOOL_TEXT.notHere);
   if (!Object.hasOwn(SETTINGS_PAGES, input.page))
     return failed('unknown', SETTINGS_TOOL_TEXT.unknownPage(input.page));
-  const page = pageWords(input.page as SettingsPageId, who.agent);
+  const page = pageWords(input.page as SettingsPageId, who.agent, who.locale);
   const card = makeCard({
     guide: 'settings',
     node: 'open',
@@ -348,7 +356,14 @@ export async function settingsOpenTool(ctx: ToolContext, input: OpenIn): Promise
     blocks: [
       {
         type: 'actions',
-        actions: [{ id: 'open', label: openLabel(page.where), style: 'primary', href: `/${page.path}` }],
+        actions: [
+          {
+            id: 'open',
+            label: openLabel(page.where, who.locale),
+            style: 'primary',
+            href: `/${page.path}`,
+          },
+        ],
       },
     ],
   });

@@ -10,6 +10,7 @@ import { Info } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { AddToJobDialog } from '../manage/BackupJobs';
 import { BackupTable } from '../manage/BackupTable';
 import { BackupNowDialog } from '../manage/GuestDialogs';
@@ -52,7 +53,7 @@ export function BackupsTab({
         title="Backups"
         meta={
           newest
-            ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(Date.parse(newest), Date.now(), timeZone)}`
+            ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(Date.parse(newest), Date.now(), timeZone, currentLocale())}`
             : undefined
         }
         link={

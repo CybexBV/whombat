@@ -59,10 +59,12 @@ func New(load func() screen.Screen, footer []string, now func() time.Time) *Serv
 
 // State is GET /api/state.
 type State struct {
-	Mode   string `json:"mode"`
-	Now    string `json:"now"`
-	Claim  Claim  `json:"claim"`
-	Footer string `json:"footer"`
+	Mode           string `json:"mode"`
+	Now            string `json:"now"`
+	Claim          Claim  `json:"claim"`
+	Footer         string `json:"footer"`
+	Locale         string `json:"locale,omitempty"`
+	StandardFooter bool   `json:"standardFooter,omitempty"`
 	// Desk is the runtime's desk state (DK-01…DK-12), null without a desk socket or an answer within a second.
 	Desk *desk.State `json:"desk"`
 	// Network is how the box is connected (the chip, CG-100), null without a desk socket or an answer within 2 s.
@@ -103,6 +105,8 @@ type ReachLink struct {
 	InApp string `json:"inApp,omitempty"`
 	// GraceEndsOn is the day grace ends as the text console says it (“25 November”, the box's time zone).
 	GraceEndsOn string `json:"graceEndsOn,omitempty"`
+	// GraceEndsAt is the same day as an ISO date in the box's time zone.
+	GraceEndsAt string `json:"graceEndsAt,omitempty"`
 }
 
 // ReachTailscale is what Tailscale needs from the person: its sign-in page (without the scheme, shown as text) and
@@ -226,7 +230,10 @@ func (s *Server) State(ctx context.Context) State {
 	if si := sc.LiveSignIn(now); si != nil {
 		c.SignIn = &SignIn{Code: si.Code, Name: si.Name, Device: si.Device, ExpiresAt: si.ExpiresAt.UTC().Format(time.RFC3339)}
 	}
-	st := State{Mode: "console", Now: now.UTC().Format(time.RFC3339), Claim: c, Footer: s.footer}
+	st := State{
+		Mode: "console", Now: now.UTC().Format(time.RFC3339), Claim: c,
+		Footer: s.footer, StandardFooter: s.footer == screen.Footer, Locale: sc.Locale,
+	}
 	if sc.Alert != nil {
 		st.Alert = &Alert{Kind: sc.Alert.Kind, Since: sc.Alert.Since.UTC().Format(time.RFC3339)}
 	}
@@ -264,6 +271,9 @@ func reach(sc screen.Screen, now time.Time) *Reach {
 		switch {
 		case l.GraceShown():
 			out.Link = &ReachLink{State: l.State, GraceEndsOn: screen.DayMonth(l.GraceEndsAt, now)}
+			if sc.Locale != "" {
+				out.Link.GraceEndsAt = l.GraceEndsAt.In(now.Location()).Format(time.DateOnly)
+			}
 		case l.State == string(protocol.LinkStateEnded):
 			out.Link = &ReachLink{State: l.State}
 		}

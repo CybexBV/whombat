@@ -38,6 +38,12 @@
     "path": {
       "type": "string",
       "pattern": "^\\/[A-Za-z0-9/_.~%?&=-]{0,199}$"
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 35,
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$"
     }
   },
   "required": [

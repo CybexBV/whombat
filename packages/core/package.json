@@ -25,7 +25,11 @@
     "./backup": "./src/backup/index.ts",
     "./share": "./src/share/index.ts",
     "./ids": "./src/ids.ts",
-    "./own-address": "./src/own-address/index.ts"
+    "./own-address": "./src/own-address/index.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./i18n/locale": "./src/i18n/locale.ts",
+    "./i18n/engine": "./src/i18n/engine.ts",
+    "./i18n/schema": "./src/i18n/schema.ts"
   },
   "files": [
     "dist"
@@ -111,6 +115,22 @@
       "./own-address": {
         "types": "./dist/own-address/index.d.ts",
         "default": "./dist/own-address/index.js"
+      },
+      "./i18n": {
+        "types": "./dist/i18n/index.d.ts",
+        "default": "./dist/i18n/index.js"
+      },
+      "./i18n/locale": {
+        "types": "./dist/i18n/locale.d.ts",
+        "default": "./dist/i18n/locale.js"
+      },
+      "./i18n/engine": {
+        "types": "./dist/i18n/engine.d.ts",
+        "default": "./dist/i18n/engine.js"
+      },
+      "./i18n/schema": {
+        "types": "./dist/i18n/schema.d.ts",
+        "default": "./dist/i18n/schema.js"
       }
     }
   },

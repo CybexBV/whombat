@@ -9,6 +9,7 @@ import { ENGINE_PROBLEM_COPY, formatAgo, providerStateLabel } from '@whombat/cor
 import type { ReactNode } from 'react';
 import { Button } from '../../components/Button';
 import { type DotTone, StatusDot } from '../../components/StatusDot';
+import { useWebI18n } from '../../i18n/provider';
 import { GitHubNotice } from '../github/GitHubNotice';
 import styles from './AiProviderPanel.module.css';
 
@@ -42,7 +43,8 @@ const TONES: Record<ProviderSetup['state'], DotTone> = {
  * runner's version, CT-1451; chatgpt-no-client.md AP-5611, AP-5613, AP-5622), with what went wrong under it.
  */
 export function ProviderRow({ setup }: { setup: ProviderSetup }) {
-  const label = providerStateLabel(setup);
+  const { tag: uiLocale } = useWebI18n();
+  const label = providerStateLabel(setup, uiLocale);
   return (
     <div className={styles.row}>
       <div className={styles.head}>

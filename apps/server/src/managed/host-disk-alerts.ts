@@ -17,6 +17,7 @@ import type { HostDisks } from '@whombat/protocol/session';
 import { asc, eq } from 'drizzle-orm';
 import { burrows } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
+import { burrowLocale } from '../i18n/locale';
 import { iso } from '../lib/time';
 import type { PrincipalRow } from '../read/principals';
 import type { Services } from '../services';
@@ -85,7 +86,8 @@ export class HostDiskAlerts {
     for (const { id } of rows) {
       const level = await this.keep(id, usedPct);
       if (!level) continue;
-      const text = hostDiskAlertText({ level, usedPct, freeBytes: disk.freeBytes, biggest });
+      const locale = await burrowLocale(this.services, id);
+      const text = hostDiskAlertText({ level, usedPct, freeBytes: disk.freeBytes, biggest, locale });
       const thePersonHere = await thePerson(this.services.db, id);
       for (const person of thePersonHere ? [thePersonHere] : []) {
         if (!person.accountId || told.has(person.accountId)) continue;

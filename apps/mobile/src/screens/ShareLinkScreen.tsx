@@ -4,6 +4,7 @@
  * with Share link (the system's share sheet) and Copy link. Opened from a Chat thread's header (the whole thread) or a
  * message's menu (from that message on).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   SHARE_EXPIRY_OPTIONS,
@@ -18,6 +19,7 @@ import { SHARE_DEFAULT_EXPIRY, type ShareExpiry } from '@whombat/core/share';
 import { useMemo, useState } from 'react';
 import { ScrollView, Share, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useMobileT } from '../i18n';
 import { Card, Note, Row } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -32,6 +34,7 @@ import { switchColors } from '../ui/switchColors';
 type Props = NativeStackScreenProps<RootStackParamList, 'ShareLink'>;
 
 export function ShareLinkScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const { slug, timeZone } = useBurrowBase();
   const theme = useTheme();
   const bottomRoom = useBottomRoom();
@@ -45,7 +48,7 @@ export function ShareLinkScreen({ route, navigation }: Props) {
   const [pictures, setPictures] = useState(true);
   const [expiry, setExpiry] = useState<ShareExpiry>(SHARE_DEFAULT_EXPIRY);
   const [made, setMade] = useState<SharedLink | null>(null);
-  const back = <BackBar label="Back" onPress={() => navigation.goBack()} />;
+  const back = <BackBar label={tMobile('managed.back')} onPress={() => navigation.goBack()} />;
   const p = preview.data;
   if (preview.isError)
     return (
@@ -84,7 +87,7 @@ export function ShareLinkScreen({ route, navigation }: Props) {
               </Card>
               <View style={{ gap: 10 }}>
                 <Button
-                  label="Share link"
+                  label={tMobile('screens.share-link')}
                   size="lg"
                   onPress={() => void Share.share({ message: made.url, url: made.url })}
                 />

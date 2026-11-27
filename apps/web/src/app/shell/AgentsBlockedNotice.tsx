@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { StatusDot } from '../../components/StatusDot';
 import { useAgentSetupStatus } from '../../features/agent/AiProviderPanel';
 import { useClientsStatus, useSignInsStatus } from '../../features/ai/useAi';
+import { useWebI18n } from '../../i18n/provider';
 import { useAppServices } from '../providers';
 import styles from './ShellLayout.module.css';
 
@@ -24,6 +25,7 @@ import styles from './ShellLayout.module.css';
  * AIG-07, AIG-16; AP-1126): its turns need nobody's sign-in.
  */
 export function AgentsBlockedNotice({ burrow, onSettings }: { burrow: string; onSettings: boolean }) {
+  const { tag: uiLocale } = useWebI18n();
   const { managed } = useAppServices();
   // Read at mount and on `agent.updated`; polled only while a notice shows (web-efficiency.md WE-06).
   const { data: status } = useAgentSetupStatus(burrow);
@@ -53,7 +55,7 @@ export function AgentsBlockedNotice({ burrow, onSettings }: { burrow: string; on
     return (
       <div className={styles.notice} role="status">
         <StatusDot tone="warn" size={7} label={null} />
-        <span className={styles.noticeText}>{agentsBlockedNotice(status, words.name)}</span>
+        <span className={styles.noticeText}>{agentsBlockedNotice(status, words.name, uiLocale)}</span>
         <Link
           to="/settings"
           search={{ tab: 'advanced', part: 'ai' }}

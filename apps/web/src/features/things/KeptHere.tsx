@@ -8,6 +8,7 @@ import { keptHere } from '@whombat/client/managed';
 import { useBackupPlaces } from '@whombat/client/react';
 import { BACKUP_PLACE_TEXT } from '@whombat/core/domain';
 import { useAppServices } from '../../app/providers';
+import { currentLocale } from '../../i18n/provider';
 import { useNow } from '../messaging/useRoom';
 import { Card, StateCell } from './parts';
 import styles from './Things.module.css';
@@ -17,7 +18,11 @@ export function BackupsKeptHere({ thing }: { thing: string }) {
   const { session, managed } = useAppServices();
   const places = useBackupPlaces(session);
   const now = useNow(60_000);
-  const rows = keptHere(places.data, thing, { whombat: managed?.applianceName, now });
+  const rows = keptHere(places.data, thing, {
+    whombat: managed?.applianceName,
+    now,
+    locale: currentLocale(),
+  });
   if (!rows) return null;
   return (
     <Card title={BACKUP_PLACE_TEXT.keptHere} id="backups-kept-here">

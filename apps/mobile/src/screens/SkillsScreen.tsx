@@ -9,6 +9,7 @@
  * by its name. No editor and no Add skills: those are the web's (AP-5574). Opened from Settings' Skills row, back to
  * Settings.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   SKILL_LIBRARY_TEXT,
@@ -27,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { SKILLS_PHONE_TEXT, skillRowLabel } from '../data/skillLibrary';
 import { useSkillLibraryAgent, useSkillsAbsentText } from '../data/useSkillLibraryHere';
+import { useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -44,6 +46,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Skills'>;
 type Block = { kind: 'group'; group: SkillGroup } | { kind: 'folds'; folds: SkillFold[] };
 
 export function SkillsScreen({ navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug } = useBurrowBase();
@@ -106,7 +109,7 @@ export function SkillsScreen({ navigation }: Props) {
   if (!agent)
     return (
       <Screen>
-        <BackBar label="Back" onPress={goBack} />
+        <BackBar label={tMobile('managed.back')} onPress={goBack} />
         <QuietText>{absent}</QuietText>
       </Screen>
     );
@@ -159,7 +162,7 @@ export function SkillsScreen({ navigation }: Props) {
           {q ? (
             <Touchable
               onPress={() => setQ('')}
-              accessibilityLabel="Clear search"
+              accessibilityLabel={tMobile('screens.clear-search')}
               ringRadius={16}
               hitSlop={hitSlopFor(34)}
               style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}
@@ -190,7 +193,7 @@ export function SkillsScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <BackBar label="Back" onPress={goBack} />
+      <BackBar label={tMobile('managed.back')} onPress={goBack} />
       <FlatList
         style={{ flex: 1 }}
         data={blocks}

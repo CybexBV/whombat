@@ -7,7 +7,6 @@ import {
   type Approval,
   TEAM_REPORT_DRAFT_ACTION,
   TEAM_REPORT_STAGES,
-  TEAM_REPORT_STATUS_WORDS,
   type TeamReport,
   type TeamReportClientContext,
   type TeamReportContext,
@@ -19,75 +18,148 @@ import {
   teamReportNeedsYou,
   teamReportOpen,
   teamReportStage,
+  teamReportStatusWords,
 } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
 import { type ProtocolVersion, protocolAtLeast, TEAM_REPORTS_MINOR } from '@whombat/protocol/session';
 import { formatDay, formatRelativeDay, formatTime } from './hosts/format';
+import { clientTranslator, EN } from './i18n/catalog';
 
 /** Where a security problem goes instead: privately, on GitHub. */
 export const TEAM_REPORT_SECURITY_URL = 'https://github.com/CybexBV/whombat/security/advisories/new';
 
 export const TEAM_REPORT_WORDS = {
-  entry: 'Report a problem or idea',
-  title: 'Your reports',
-  intro: 'Problems and ideas you sent the Whombat Team, and their answers.',
-  newReport: 'New report',
-  empty: 'Tell the Whombat Team what isn’t working or what you’d like Whombat to do.',
-  stale: 'This list may be out of date: the Whombat Team can’t be reached right now.',
-  loading: 'Loading…',
-  updateFirst: 'Update this Whombat to send reports to the Whombat Team.',
-  listFailed: 'Your reports couldn’t load. Try again.',
-  tryAgain: 'Try again',
-  open: 'Open',
-  closed: 'Closed',
-  showClosed: 'Show',
-  hideClosed: 'Hide',
-  unread: 'New answer',
-  back: 'Your reports',
+  entry: EN['reports.entry'],
+  title: EN['reports.title'],
+  intro: EN['reports.intro'],
+  newReport: EN['reports.newReport'],
+  empty: EN['reports.empty'],
+  stale: EN['reports.stale'],
+  loading: EN['reports.loading'],
+  updateFirst: EN['reports.updateFirst'],
+  listFailed: EN['reports.listFailed'],
+  tryAgain: EN['reports.tryAgain'],
+  open: EN['reports.open'],
+  closed: EN['reports.closed'],
+  showClosed: EN['reports.showClosed'],
+  hideClosed: EN['reports.hideClosed'],
+  unread: EN['reports.unread'],
+  back: EN['reports.back'],
   // The form.
-  formTitle: 'New report',
-  kindQuestion: 'What is it about?',
+  formTitle: EN['reports.formTitle'],
+  kindQuestion: EN['reports.kindQuestion'],
   kinds: {
-    bug: { title: 'Something’s wrong', hint: 'Whombat doesn’t do what it should.' },
-    idea: { title: 'An idea', hint: 'Something you’d like Whombat to do.' },
+    bug: { title: EN['reports.kind.bug.title'], hint: EN['reports.kind.bug.hint'] },
+    idea: { title: EN['reports.kind.idea.title'], hint: EN['reports.kind.idea.hint'] },
   },
-  textLabel: { bug: 'What happened?', idea: 'What would you like Whombat to do?' },
-  expectedLabel: 'What did you expect?',
-  optional: 'Optional',
-  sentWith: 'What’s sent with it',
-  sentWithNothingElse: 'Nothing else: no files, logs or pictures.',
-  warning:
-    'The Whombat Team and its AI assistant read what you send here. Leave out passwords and private details.',
-  securityQuestion: 'A security problem?',
-  securityLink: 'Report it privately.',
-  send: 'Send',
-  sending: 'Sending…',
-  sent: 'Sent. The Whombat Team reads every report and answers here.',
-  draftDone: 'That draft was already sent or put aside. You can write a new report here.',
+  textLabel: { bug: EN['reports.textLabel.bug'], idea: EN['reports.textLabel.idea'] },
+  expectedLabel: EN['reports.expectedLabel'],
+  optional: EN['reports.optional'],
+  sentWith: EN['reports.sentWith'],
+  sentWithNothingElse: EN['reports.sentWithNothingElse'],
+  warning: EN['reports.warning'],
+  securityQuestion: EN['reports.securityQuestion'],
+  securityLink: EN['reports.securityLink'],
+  send: EN['reports.send'],
+  sending: EN['reports.sending'],
+  sent: EN['reports.sent'],
+  draftDone: EN['reports.draftDone'],
   /** The assistant's card: opens the form with its draft, to change it before sending. */
-  edit: 'Edit',
-  draftFailed: 'The draft couldn’t load. You can write the report here.',
+  edit: EN['reports.edit'],
+  draftFailed: EN['reports.draftFailed'],
   // A report's page.
-  you: 'You',
-  team: 'Whombat Team',
-  expected: 'Expected',
-  progress: 'Progress',
-  reply: 'Write to the Whombat Team',
-  replySend: 'Send',
-  confirmQuestion: 'Is it fixed for you?',
-  works: 'It works',
-  stillHappening: 'Still happening',
-  more: 'More',
-  withdraw: 'Withdraw report',
-  withdrawConfirm: 'Withdraw this report? It is deleted, also from the Whombat Team’s list of reports.',
-  withdrawn: 'Report withdrawn.',
-  cancel: 'Cancel',
-  notFound: 'This report isn’t here any more.',
-  reportFailed: 'This report couldn’t load. Try again.',
+  you: EN['reports.you'],
+  team: EN['reports.team'],
+  expected: EN['reports.expected'],
+  progress: EN['reports.progress'],
+  reply: EN['reports.reply'],
+  replySend: EN['reports.send'],
+  confirmQuestion: EN['reports.confirmQuestion'],
+  works: EN['reports.works'],
+  stillHappening: EN['reports.stillHappening'],
+  more: EN['reports.more'],
+  withdraw: EN['reports.withdraw'],
+  withdrawConfirm: EN['reports.withdrawConfirm'],
+  withdrawn: EN['reports.withdrawn'],
+  cancel: EN['reports.cancel'],
+  notFound: EN['reports.notFound'],
+  reportFailed: EN['reports.reportFailed'],
   /** Above a conversation too long for one answer: its oldest messages aren't here. */
-  earlier: 'Earlier messages aren’t shown here.',
-  failed: 'That didn’t go through. Try again in a moment.',
-  full: 'This report can’t take more replies. Start a new report if something is still wrong.',
+  earlier: EN['reports.earlier'],
+  failed: EN['reports.failed'],
+  full: EN['reports.full'],
 } as const;
+
+export function teamReportWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  if (tr.language === 'en') return TEAM_REPORT_WORDS;
+  return {
+    entry: tr.t('reports.entry'),
+    title: tr.t('reports.title'),
+    intro: tr.t('reports.intro'),
+    newReport: tr.t('reports.newReport'),
+    empty: tr.t('reports.empty'),
+    stale: tr.t('reports.stale'),
+    loading: tr.t('reports.loading'),
+    updateFirst: tr.t('reports.updateFirst'),
+    listFailed: tr.t('reports.listFailed'),
+    tryAgain: tr.t('reports.tryAgain'),
+    open: tr.t('reports.open'),
+    closed: tr.t('reports.closed'),
+    showClosed: tr.t('reports.showClosed'),
+    hideClosed: tr.t('reports.hideClosed'),
+    unread: tr.t('reports.unread'),
+    back: tr.t('reports.back'),
+    formTitle: tr.t('reports.formTitle'),
+    kindQuestion: tr.t('reports.kindQuestion'),
+    kinds: {
+      bug: {
+        title: tr.t('reports.kind.bug.title'),
+        hint: tr.t('reports.kind.bug.hint'),
+      },
+      idea: {
+        title: tr.t('reports.kind.idea.title'),
+        hint: tr.t('reports.kind.idea.hint'),
+      },
+    },
+    textLabel: {
+      bug: tr.t('reports.textLabel.bug'),
+      idea: tr.t('reports.textLabel.idea'),
+    },
+    expectedLabel: tr.t('reports.expectedLabel'),
+    optional: tr.t('reports.optional'),
+    sentWith: tr.t('reports.sentWith'),
+    sentWithNothingElse: tr.t('reports.sentWithNothingElse'),
+    warning: tr.t('reports.warning'),
+    securityQuestion: tr.t('reports.securityQuestion'),
+    securityLink: tr.t('reports.securityLink'),
+    send: tr.t('reports.send'),
+    sending: tr.t('reports.sending'),
+    sent: tr.t('reports.sent'),
+    draftDone: tr.t('reports.draftDone'),
+    edit: tr.t('reports.edit'),
+    draftFailed: tr.t('reports.draftFailed'),
+    you: tr.t('reports.you'),
+    team: tr.t('reports.team'),
+    expected: tr.t('reports.expected'),
+    progress: tr.t('reports.progress'),
+    reply: tr.t('reports.reply'),
+    replySend: tr.t('reports.send'),
+    confirmQuestion: tr.t('reports.confirmQuestion'),
+    works: tr.t('reports.works'),
+    stillHappening: tr.t('reports.stillHappening'),
+    more: tr.t('reports.more'),
+    withdraw: tr.t('reports.withdraw'),
+    withdrawConfirm: tr.t('reports.withdrawConfirm'),
+    withdrawn: tr.t('reports.withdrawn'),
+    cancel: tr.t('reports.cancel'),
+    notFound: tr.t('reports.notFound'),
+    reportFailed: tr.t('reports.reportFailed'),
+    earlier: tr.t('reports.earlier'),
+    failed: tr.t('reports.failed'),
+    full: tr.t('reports.full'),
+  };
+}
 
 /** The action the box's card names when the assistant asks to send its draft (the box's `TEAM_REPORT_ACTION`). */
 export { TEAM_REPORT_DRAFT_ACTION };
@@ -129,24 +201,21 @@ export function teamReportDraftOfHref(href: string | null | undefined): string |
 
 /** A report's kind in one word, for its row and page. */
 export const TEAM_REPORT_KIND_WORDS: Readonly<Record<TeamReportKind, string>> = {
-  bug: 'Problem',
-  idea: 'Idea',
+  bug: EN['reports.kindWord.bug'],
+  idea: EN['reports.kindWord.idea'],
 };
 
+export function teamReportKindWords(locale?: string | null): Readonly<Record<TeamReportKind, string>> {
+  const tr = clientTranslator(locale);
+  return { bug: tr.t('reports.kindWord.bug'), idea: tr.t('reports.kindWord.idea') };
+}
+
 /** Why a new report can't be sent now, in the person's words (`reason`); null when it can. */
-export function teamReportsUnavailableText(reason: TeamReportsReason | null): string | null {
-  switch (reason) {
-    case 'unreachable':
-      return 'The Whombat Team can’t be reached right now. Try again in a moment.';
-    case 'link_off':
-      return 'New reports need Whombat Link.';
-    case 'off':
-      return 'The Whombat Team isn’t taking new reports right now.';
-    case 'not_invited':
-      return 'Sending new reports isn’t open to you right now.';
-    default:
-      return null;
-  }
+export function teamReportsUnavailableText(
+  reason: TeamReportsReason | null,
+  locale?: string | null,
+): string | null {
+  return reason ? clientTranslator(locale).t(`reports.unavailable.${reason}`) : null;
 }
 
 /**
@@ -197,22 +266,35 @@ export function teamReportsUnread(rows: readonly Pick<TeamReportRow, 'unread'>[]
 }
 
 /** About's line for the person's reports: “No reports yet”, “1 report”, “3 reports · 1 new answer”. */
-export function teamReportsSummary(rows: readonly Pick<TeamReportRow, 'unread'>[]): string {
-  if (!rows.length) return 'No reports yet';
-  const count = rows.length === 1 ? '1 report' : `${rows.length} reports`;
+export function teamReportsSummary(
+  rows: readonly Pick<TeamReportRow, 'unread'>[],
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
+  if (!rows.length) return tr.t('reports.summaryNone');
+  const count = tr.tp('reports.summaryCount', rows.length);
   const unread = teamReportsUnread(rows);
-  if (!unread) return count;
-  return `${count} · ${unread === 1 ? '1 new answer' : `${unread} new answers`}`;
+  return unread ? `${count} · ${tr.tp('reports.summaryUnread', unread)}` : count;
 }
 
-/** A row's line under its title: “#12 · Problem · Looking into it”. */
-export function teamReportRowLine(row: Pick<TeamReportRow, 'number' | 'kind' | 'status'>): string {
-  return `#${row.number} · ${TEAM_REPORT_KIND_WORDS[row.kind]} · ${TEAM_REPORT_STATUS_WORDS[row.status]}`;
+/** A row's line under its title. */
+export function teamReportRowLine(
+  row: Pick<TeamReportRow, 'number' | 'kind' | 'status'>,
+  locale?: string | null,
+): string {
+  return `#${row.number} · ${teamReportKindWords(locale)[row.kind]} · ${teamReportStatusWords(locale)[row.status]}`;
 }
 
 /** A row's name for screen readers: its title, its status, and whether something is new. */
-export function teamReportRowLabel(row: Pick<TeamReportRow, 'title' | 'status' | 'unread'>): string {
-  return [row.title, TEAM_REPORT_STATUS_WORDS[row.status], row.unread ? TEAM_REPORT_WORDS.unread : null]
+export function teamReportRowLabel(
+  row: Pick<TeamReportRow, 'title' | 'status' | 'unread'>,
+  locale?: string | null,
+): string {
+  return [
+    row.title,
+    teamReportStatusWords(locale)[row.status],
+    row.unread ? teamReportWords(locale).unread : null,
+  ]
     .filter(Boolean)
     .join(', ');
 }
@@ -220,21 +302,28 @@ export function teamReportRowLabel(row: Pick<TeamReportRow, 'title' | 'status' |
 const DAY_MS = 86_400_000;
 
 /** A list's time: “14:05” today, “Yesterday”, a weekday within the week, else “6 Oct”. Seconds since 1970. */
-export function teamReportWhen(at: number, now: number, timeZone?: string): string {
+export function teamReportWhen(at: number, now: number, timeZone?: string, locale?: string | null): string {
   const t = at * 1000;
-  const today = formatDay(now, timeZone);
-  if (formatDay(t, timeZone) === today && Math.abs(now - t) < DAY_MS) return formatTime(t, timeZone);
-  if (formatDay(now - DAY_MS, timeZone) === formatDay(t, timeZone)) return 'Yesterday';
+  const today = formatDay(now, timeZone, locale);
+  if (formatDay(t, timeZone, locale) === today && Math.abs(now - t) < DAY_MS) return formatTime(t, timeZone);
+  if (formatDay(now - DAY_MS, timeZone, locale) === formatDay(t, timeZone, locale))
+    return clientTranslator(locale).t('reports.yesterday');
   if (now - t < 6 * DAY_MS && now >= t)
-    return new Intl.DateTimeFormat('en-GB', { weekday: 'short', ...(timeZone ? { timeZone } : {}) }).format(
-      t,
-    );
-  return formatDay(t, timeZone);
+    return new Intl.DateTimeFormat(formatLocaleOf(locale), {
+      weekday: 'short',
+      ...(timeZone ? { timeZone } : {}),
+    }).format(t);
+  return formatDay(t, timeZone, locale);
 }
 
 /** A conversation's time: “Today 14:05”, “Yesterday 09:12”, “Mon 08:00”, “4 Oct, 02:00”. Seconds since 1970. */
-export function teamReportMessageWhen(at: number, now: number, timeZone?: string): string {
-  return formatRelativeDay(at * 1000, now, timeZone);
+export function teamReportMessageWhen(
+  at: number,
+  now: number,
+  timeZone?: string,
+  locale?: string | null,
+): string {
+  return formatRelativeDay(at * 1000, now, timeZone, locale);
 }
 
 /** One line of a report's conversation, oldest first. */
@@ -256,7 +345,9 @@ export type TeamReportEntry =
 export function teamReportTimeline(
   report: Pick<TeamReport, 'text' | 'expected' | 'createdAt' | 'messages'>,
   earlier = 0,
+  locale?: string | null,
 ) {
+  const words = teamReportWords(locale);
   const entries: TeamReportEntry[] = [
     { kind: 'sent', key: 'sent', at: report.createdAt, text: report.text, expected: report.expected },
   ];
@@ -276,7 +367,7 @@ export function teamReportTimeline(
         key: `${m.id}-status`,
         at: m.at,
         status: m.status,
-        words: teamReportStatusLine(m.status, m.author),
+        words: teamReportStatusLine(m.status, m.author, locale),
       });
     if (m.text.trim())
       entries.push({
@@ -284,7 +375,7 @@ export function teamReportTimeline(
         key: m.id,
         at: m.at,
         author: m.author,
-        who: m.author === 'team' ? TEAM_REPORT_WORDS.team : TEAM_REPORT_WORDS.you,
+        who: m.author === 'team' ? words.team : words.you,
         text: m.text,
       });
   });
@@ -292,12 +383,23 @@ export function teamReportTimeline(
 }
 
 /** A status change in the conversation: the team's as the new status, the person's press as what they said. */
-export function teamReportStatusLine(status: TeamReportStatus, author: 'reporter' | 'team' = 'team'): string {
+export function teamReportStatusLine(
+  status: TeamReportStatus,
+  author: 'reporter' | 'team' = 'team',
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   if (author === 'reporter') {
-    if (status === 'confirmed') return 'You said it works';
-    if (teamReportOpen(status)) return 'You said it still happens';
+    if (status === 'confirmed') return tr.t('reports.youWorks');
+    if (teamReportOpen(status)) return tr.t('reports.youStill');
   }
-  return `Status: ${TEAM_REPORT_STATUS_WORDS[status]}`;
+  return tr.t('reports.statusLine', { status: teamReportStatusWords(locale)[status] });
+}
+
+function teamReportStages(locale?: string | null): readonly [string, string, string, string] {
+  const tr = clientTranslator(locale);
+  if (tr.language === 'en') return TEAM_REPORT_STAGES;
+  return [tr.t('reports.stage.0'), tr.t('reports.stage.1'), tr.t('reports.stage.2'), tr.t('reports.stage.3')];
 }
 
 export type TeamReportStepState = 'done' | 'current' | 'ahead';
@@ -307,10 +409,13 @@ export type TeamReportStepState = 'done' | 'current' | 'ahead';
  * own current while the team works on it. Received and Fixed are done once reached; a report that ended without a fix
  * stays where it got to, done.
  */
-export function teamReportTrack(status: TeamReportStatus): { label: string; state: TeamReportStepState }[] {
+export function teamReportTrack(
+  status: TeamReportStatus,
+  locale?: string | null,
+): { label: string; state: TeamReportStepState }[] {
   const stage = teamReportStage(status);
   const ended = !teamReportOpen(status);
-  return TEAM_REPORT_STAGES.map((label, i) => ({
+  return teamReportStages(locale).map((label, i) => ({
     label,
     state:
       i < stage || (i === stage && (ended || stage === 0 || stage === 3))
@@ -322,9 +427,14 @@ export function teamReportTrack(status: TeamReportStatus): { label: string; stat
 }
 
 /** The track for a screen reader: “Step 2 of 4: Looking into it”. */
-export function teamReportTrackLabel(status: TeamReportStatus): string {
+export function teamReportTrackLabel(status: TeamReportStatus, locale?: string | null): string {
   const stage = teamReportStage(status);
-  return `Step ${stage + 1} of ${TEAM_REPORT_STAGES.length}: ${TEAM_REPORT_STAGES[stage]}`;
+  const stages = teamReportStages(locale);
+  return clientTranslator(locale).t('reports.trackLabel', {
+    step: stage + 1,
+    total: stages.length,
+    label: stages[stage],
+  });
 }
 
 /** What the app says about itself, before it is checked against the contract. */
@@ -358,18 +468,6 @@ export function teamReportClientContext(input: TeamReportClientInput): TeamRepor
   return out;
 }
 
-const CLIENT_WORDS: Record<'web' | 'android' | 'ios', string> = {
-  web: 'Web app',
-  android: 'Android app',
-  ios: 'iPhone app',
-};
-
-/** The update channel as people say it: Beta is the development channel. */
-const CHANNEL_WORDS: Record<NonNullable<TeamReportContext['channel']>, string> = {
-  development: 'Beta',
-  production: 'Production',
-};
-
 type SentWithContext = Pick<
   TeamReportContext,
   'runtimeVersion' | 'channel' | 'client' | 'appVersion' | 'device' | 'language'
@@ -379,11 +477,30 @@ type SentWithContext = Pick<
  * What the box adds about itself, its version and update channel, in the words the app knows: “0.304.0 · Beta”, or
  * what it doesn't know named (“0.304.0 and its update channel”). The box always adds both.
  */
-function boxWords(context: SentWithContext): string {
-  const channel = context.channel ? CHANNEL_WORDS[context.channel] : null;
+function boxWords(context: SentWithContext, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  const channel = context.channel ? tr.t(`reports.channel.${context.channel}`) : null;
   if (context.runtimeVersion && channel) return `${context.runtimeVersion} · ${channel}`;
-  if (context.runtimeVersion) return `${context.runtimeVersion} and its update channel`;
-  return 'Its version and update channel';
+  if (context.runtimeVersion)
+    return tr.t('reports.boxVersionAndChannel', { version: context.runtimeVersion });
+  return tr.t('reports.boxUnknown');
+}
+
+function sentWithRows(context: SentWithContext, locale?: string | null) {
+  const tr = clientTranslator(locale);
+  const rows: { kind: 'box' | 'client' | 'device' | 'language'; label: string; value: string }[] = [
+    { kind: 'box', label: 'Whombat', value: boxWords(context, locale) },
+  ];
+  if (context.client)
+    rows.push({
+      kind: 'client',
+      label: tr.t(`reports.client.${context.client}`),
+      value: context.appVersion ?? tr.t('reports.versionUnknown'),
+    });
+  if (context.device) rows.push({ kind: 'device', label: tr.t('reports.device'), value: context.device });
+  if (context.language)
+    rows.push({ kind: 'language', label: tr.t('reports.language'), value: context.language });
+  return rows;
 }
 
 /**
@@ -391,31 +508,27 @@ function boxWords(context: SentWithContext): string {
  * the app doesn't know them), this app's version, the device and system in a few words, the language. Another part not
  * known is left out.
  */
-export function teamReportSentWith(context: SentWithContext): { label: string; value: string }[] {
-  const rows: { label: string; value: string }[] = [{ label: 'Whombat', value: boxWords(context) }];
-  if (context.client)
-    rows.push({
-      label: CLIENT_WORDS[context.client],
-      value: context.appVersion ?? 'version not known',
-    });
-  if (context.device) rows.push({ label: 'Device', value: context.device });
-  if (context.language) rows.push({ label: 'Language', value: context.language });
-  return rows;
+export function teamReportSentWith(
+  context: SentWithContext,
+  locale?: string | null,
+): { label: string; value: string }[] {
+  return sentWithRows(context, locale).map(({ label, value }) => ({ label, value }));
 }
 
 /**
  * “What’s sent with it” folded into one line: “Whombat 0.304.0 · Beta · Web app 3.158.0 · Firefox 146 · Linux · en-GB”,
  * or “Web app 3.158.0 · … · en-GB, and this Whombat’s version and update channel” while the app doesn't know them.
  */
-export function teamReportSentWithLine(context: SentWithContext): string {
+export function teamReportSentWithLine(context: SentWithContext, locale?: string | null): string {
   const known = !!context.runtimeVersion && !!context.channel;
-  const parts = teamReportSentWith(context)
-    .filter((r) => known || r.label !== 'Whombat')
-    .map((r) => (r.label === 'Device' || r.label === 'Language' ? r.value : `${r.label} ${r.value}`))
+  const parts = sentWithRows(context, locale)
+    .filter((r) => known || r.kind !== 'box')
+    .map((r) => (r.kind === 'device' || r.kind === 'language' ? r.value : `${r.label} ${r.value}`))
     .join(' · ');
   if (known) return parts;
-  const box = 'this Whombat’s version and update channel';
-  return parts ? `${parts}, and ${box}` : box.charAt(0).toUpperCase() + box.slice(1);
+  const tr = clientTranslator(locale);
+  const box = tr.t('reports.thisBoxVersionAndChannel');
+  return parts ? tr.t('reports.sentWithAnd', { parts, box }) : box.charAt(0).toUpperCase() + box.slice(1);
 }
 
 /**

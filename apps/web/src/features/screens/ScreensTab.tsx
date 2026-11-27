@@ -9,8 +9,6 @@
 import {
   DESK_DOORBELL,
   DESK_POPUPS,
-  DESK_SCREEN_WORDS,
-  DESK_SCREENS_TEXT,
   type DeskApi,
   type DeskDoorbell,
   type DeskPopups,
@@ -32,6 +30,7 @@ import {
   useDeskScreenViews,
 } from '@whombat/client/desk/react';
 import { useTheAgent } from '@whombat/client/react';
+import { deskScreenWords } from '@whombat/core';
 import { formatClock, formatDate } from '@whombat/core/text';
 import { FittedScreen } from '@whombat/screen/react';
 import { ChevronLeft } from 'lucide-react';
@@ -43,6 +42,9 @@ import { Input } from '../../components/Input';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
+import { DESK_SCREENS_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { ScreenTab } from '../desk/ScreenTab';
 import type { ScreenPart } from '../desk/screenTab';
 import { useDeskHere } from '../desk/useDeskHere';
@@ -148,10 +150,12 @@ function linesContext(desk: DeskScreen | undefined, timeZone: string) {
     box: desk?.display ? { builtIn: desk.display.builtIn, name: desk.display.name } : null,
     lockAgain: desk?.paired ? deskLockAgainOf(desk.settings) : null,
     lockedView: desk?.paired ? desk.settings.lockedView : null,
+    locale: currentLocale(),
     when: (iso: string) =>
-      formatDate(iso, timeZone, { now }) === formatDate(now, timeZone, { now })
+      formatDate(iso, timeZone, { now }, currentLocale()) ===
+      formatDate(now, timeZone, { now }, currentLocale())
         ? formatClock(iso, timeZone)
-        : formatDate(iso, timeZone, { year: 'auto', now }),
+        : formatDate(iso, timeZone, { year: 'auto', now }, currentLocale()),
   };
 }
 
@@ -291,6 +295,7 @@ function ScreenSettings({
   part?: ScreenPart;
   onPartChange?: (part: ScreenPart) => void;
 }) {
+  const DESK_SCREEN_WORDS = useLocaleWords(deskScreenWords);
   const { words } = useTheAgent(burrow);
   const detail = useDeskScreen(api, known ? id : null);
   const actions = useDeskScreenActions(api);
@@ -308,7 +313,7 @@ function ScreenSettings({
     return (
       <div className={s.tab}>
         {back}
-        <p className={styles.empty}>{screensErrorText({})}</p>
+        <p className={styles.empty}>{screensErrorText({}, undefined, currentLocale())}</p>
       </div>
     );
   const screen = detail.data;
@@ -317,7 +322,7 @@ function ScreenSettings({
   const save = (patch: { name?: string; popups?: DeskPopups; doorbell?: DeskDoorbell }) =>
     void actions
       .update({ screen: screen.id, ...patch })
-      .catch((error) => toast.show(screensErrorText(error)));
+      .catch((error) => toast.show(screensErrorText(error, undefined, currentLocale())));
   return (
     <div className={s.tab} data-screen-page={screen.id}>
       {back}
@@ -430,7 +435,7 @@ function ScreenSettings({
                   );
                   onBack();
                 })
-                .catch((error) => toast.show(screensErrorText(error)));
+                .catch((error) => toast.show(screensErrorText(error, undefined, currentLocale())));
             }}
           >
             {T.page.removeConfirm}

@@ -20,7 +20,6 @@ import {
   catalogName,
   catalogRows,
   catalogServers,
-  DESK_SCREENS_TEXT,
   DESK_WIDGET_LIMITS,
   DESK_WIDGET_RANGES,
   DESK_WORDS,
@@ -57,7 +56,7 @@ import {
   useDeskScreenViews,
   useDeskWidgets,
 } from '@whombat/client/desk/react';
-import { NEWS_WORDS, WEATHER_WORDS } from '@whombat/core';
+import { newsWords, weatherWords } from '@whombat/core';
 import { cellRect, type Grid, screenGrid, serverShow, sizeOf, type WidgetSize } from '@whombat/screen';
 import { WidgetPreview } from '@whombat/screen/react';
 import {
@@ -96,6 +95,9 @@ import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
+import { DESK_SCREENS_TEXT } from '../../../i18n/clientWords';
+import { currentLocale } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { GroupLabel, LevelRow, OptionMark, ServerRows } from '../../desk/ShowsPart';
 import { AppLink } from '../../things/parts';
 import e from './Editor.module.css';
@@ -132,7 +134,7 @@ export function widgetName(
   catalog: DeskCatalog | undefined,
   assistant: string,
 ): string {
-  const own = ownWidgetName(w.type, assistant);
+  const own = ownWidgetName(w.type, assistant, currentLocale());
   if (own) return own;
   const found = catalogFind(catalog, w);
   if (found) return catalogName(found.group, found.item);
@@ -632,7 +634,7 @@ function PeekPreview({
         <span className={e.size}>{`${size.w}×${size.h}`}</span>
       </div>
       <div className={e.peekBox} style={{ height: height + 24 }}>
-        {live.data || ownWidgetName(pick.widget.type, assistant) ? (
+        {live.data || ownWidgetName(pick.widget.type, assistant, currentLocale()) ? (
           <WidgetPreview
             widget={spec}
             view={view}
@@ -683,13 +685,15 @@ function ChosenPanel({
   onOpen,
   widget,
 }: WidgetPanelProps & { widget: DeskWidget }) {
+  const WEATHER_WORDS = useLocaleWords(weatherWords);
+  const NEWS_WORDS = useLocaleWords(newsWords);
   const view = views.get(widget.id);
   const group = catalogGroupOf(catalog, widget);
   const found = catalogFind(catalog, widget);
   const name = nameOf(widget);
   const limits = widgetSize(widget, viewOf);
   const kind = viewOf(widget) ?? view?.kind;
-  const ownType = ownWidgetName(widget.type, assistant) !== null;
+  const ownType = ownWidgetName(widget.type, assistant, currentLocale()) !== null;
   // A server's part says what it is; its overview, that it's a server.
   const sub =
     widget.type === 'server'
@@ -1052,7 +1056,10 @@ function SizeField({
               key={p.key}
               type="button"
               aria-pressed={widget.w === p.w && widget.h === p.h}
-              aria-label={fillDeskWords(E.shape, { name: E.shapes[p.key], size: gridText(p.w, p.h) })}
+              aria-label={fillDeskWords(E.shape, {
+                name: E.shapes[p.key],
+                size: gridText(p.w, p.h, currentLocale()),
+              })}
               onClick={() => say(ed.resize(widget.id, { w: p.w, h: p.h }))}
             >
               <ShapeCells w={p.w} h={p.h} />
@@ -1082,8 +1089,8 @@ function SizeField({
       </div>
       <span className={e.fieldHint}>
         {fillDeskWords(E.sizes, {
-          min: gridText(limits.min[0], limits.min[1]),
-          max: gridText(limits.max[0], limits.max[1]),
+          min: gridText(limits.min[0], limits.min[1], currentLocale()),
+          max: gridText(limits.max[0], limits.max[1], currentLocale()),
         })}
       </span>
     </div>
@@ -1186,7 +1193,7 @@ function ShowFields({
   const save = (patch: DeskShowPatch) =>
     void actions
       .update({ screen: screen.id, show: patch })
-      .catch((error) => toast.show(screensErrorText(error)));
+      .catch((error) => toast.show(screensErrorText(error, undefined, currentLocale())));
   const level = (key: string): DeskShowLevel => deskShowLevel(show, key);
   const fill = (text: string) => fillDeskWords(text, { assistant });
   const groups = useMemo(

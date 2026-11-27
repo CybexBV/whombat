@@ -4,6 +4,7 @@
  * permissions, the redirect address to copy, then the app key and secret (masked, no autofill) — and once saved Replace
  * and Remove (with the web's confirm). An app set in the Whombat's config is only shown. The words are the web's (`APP_SETUP_TEXT`).
  */
+
 import {
   APP_SETUP_TEXT,
   type AppMethod,
@@ -18,6 +19,7 @@ import { api } from '@whombat/core/contracts';
 import type { CatalogAppStatus, CatalogEntry } from '@whombat/core/domain';
 import { type ReactNode, useState } from 'react';
 import { Alert, View } from 'react-native';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { copyToClipboard } from '../../ui/clipboard';
@@ -136,6 +138,8 @@ function Step({
   done: boolean;
   children: ReactNode;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <View style={{ gap: 8 }}>
@@ -153,7 +157,7 @@ function Step({
         </Text>
         <StatusDot
           color={done ? theme.colors.ok : theme.colors.mut}
-          label={done ? 'Done' : 'To do'}
+          label={done ? tClient('schedules.end.done') : tMobile('screens.to-do')}
           size={7}
         />
       </View>

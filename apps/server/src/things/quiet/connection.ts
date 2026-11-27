@@ -40,6 +40,14 @@ export function withNotice<T extends ThingSummary>(
   return thing;
 }
 
+/** Keeps the lines behind `from`'s dot for `to` too: the same thing, its words said in another language. */
+export function carryNotice(from: ThingSummary, to: ThingSummary): void {
+  const notice = NOTICES.get(from);
+  const lines = LINES.get(from);
+  if (notice) NOTICES.set(to, notice);
+  if (lines) LINES.set(to, lines);
+}
+
 /** The line behind a thing's dot, when it was kept. */
 export function thingNotice(thing: ThingSummary): GlanceNotice | undefined {
   return NOTICES.get(thing);
