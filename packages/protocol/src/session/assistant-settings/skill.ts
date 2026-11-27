@@ -20,7 +20,11 @@ const GROUPS: readonly { file: string; title: string; prefixes: readonly string[
     title: 'Connections, servers and services',
     prefixes: ['connections', 'overview'],
   },
-  { file: 'this-whombat.md', title: 'This Whombat (the box)', prefixes: ['appliance'] },
+  {
+    file: 'this-whombat.md',
+    title: 'This Whombat (the box), and its news and weather',
+    prefixes: ['appliance', 'news'],
+  },
   { file: 'advanced.md', title: 'Advanced', prefixes: ['advanced'] },
   {
     file: 'elsewhere.md',

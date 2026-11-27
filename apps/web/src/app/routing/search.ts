@@ -162,8 +162,8 @@ export function validateBranchSearch(raw: Raw): BranchSearch {
 
 /**
  * Settings' pages, the tabs (settings-groups.md, sidebar-tabs.md; `@whombat/client`'s `SETTINGS_GROUPS`): You (no
- * `?tab=`), the assistant (`agent`), Connections (`connections`), This Whombat (`appliance`) and Advanced
- * (`advanced`), and Often used's Phone app (`phone`; settings-phone-link.md SPL-23).
+ * `?tab=`), the assistant (`agent`), Connections (`connections`), This Whombat (`appliance`), News and weather
+ * (`news`) and Advanced (`advanced`), and Often used's Phone app (`phone`; settings-phone-link.md SPL-23).
  */
 export type SettingsTab = SettingsGroup | 'phone';
 
@@ -423,7 +423,8 @@ export interface SettingsRedirect {
  * The new address of an old Settings link (SS-02), or null when it is current. The tabs before the four groups:
  * Profile is You, Notifications and Devices You's parts, About you and Notes the assistant's Memory, AI its AI sign-in
  * (`#clients` and `#spend` Advanced's), Skills and Spend Advanced's pages, GitHub and Website feedback connections,
- * Screen a part of This Whombat; This Whombat's Devices is You's and the assistant's access its What it may do; the old
+ * Screen a part of This Whombat; This Whombat's Devices is You's and the assistant's access its What it may do, and its
+ * About's place and news (`#place`, `#news`) are News and weather's; the old
  * Agent parts (model, what runs, spend) Advanced's, its keys What it may do. The Connections tab's pages open on the
  * Connections page's address (Add a connection, a catalog entry's page, GitHub, Google, Microsoft, Email, Website
  * feedback). Advanced's pages that moved go where they are now. The route redirects with
@@ -497,6 +498,8 @@ export function settingsRedirect(search: SettingsSearch, hash = ''): SettingsRed
     }
     case 'appliance': {
       if (hash === 'screen') return at({ group: 'appliance' }, { section: 'screen' });
+      // Where this Whombat is and the news it reads left About for a page of their own.
+      if (hash === 'place' || hash === 'news') return at({ group: 'news', hash });
       const moved = whombatSectionPlace(search.section ?? (hash === 'devices' ? 'devices' : undefined));
       return moved ? { ...at(moved), ...withHash(hash === 'devices' ? '' : hash) } : null;
     }

@@ -258,6 +258,10 @@ describe('settings in four groups and their old addresses (SS-02)', () => {
       settings({ tab: 'appliance', section: 'screen', screen: 'scr_abcdefgh' }),
     ],
     [{ tab: 'appliance' }, 'screen', settings({ tab: 'appliance', section: 'screen' })],
+    // Where this Whombat is and its news: their own page.
+    [{ tab: 'appliance', section: 'about' }, 'place', settings({ tab: 'news' }, 'place')],
+    [{ tab: 'appliance', section: 'about' }, 'news', settings({ tab: 'news' }, 'news')],
+    [{ tab: 'appliance' }, 'news', settings({ tab: 'news' }, 'news')],
     // The Connections tab's pages open on the Connections page.
     [{ tab: 'connections', connection: 'add' }, '', connections({ connection: 'add' })],
     [
@@ -318,6 +322,7 @@ describe('settings in four groups and their old addresses (SS-02)', () => {
     expect(settingsRedirect({ tab: 'appliance', section: 'about' })).toBeNull();
     expect(settingsRedirect({ tab: 'appliance', section: 'backups' }, 'set-up')).toBeNull();
     expect(settingsRedirect({ tab: 'appliance', section: 'screen', part: 'lock' })).toBeNull();
+    expect(settingsRedirect({ tab: 'news' }, 'place')).toBeNull();
   });
 
   it('carries a validated old address to the same place as the route does', () => {
@@ -334,6 +339,8 @@ describe('settings in four groups and their old addresses (SS-02)', () => {
       settings({ tab: 'appliance', section: 'screen', part: 'lock' }),
     );
     expect(go({ tab: 'appliance', section: 'screen', part: 'lock' })).toBeNull();
+    expect(go({ tab: 'appliance', section: 'about' }, 'news')).toEqual(settings({ tab: 'news' }, 'news'));
+    expect(validateSettingsSearch({ tab: 'news', part: 'x' })).toEqual({ tab: 'news' });
   });
 
   it('This Whombat’s part (AP-1221): one of its own, only on its tab; the Overview has none', () => {

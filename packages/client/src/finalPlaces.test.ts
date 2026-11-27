@@ -13,13 +13,22 @@ const TZ = 'Europe/Amsterdam';
 
 describe('the Settings home', () => {
   it('has five groups in one order, the assistant by its name, and no brief', () => {
-    expect(SETTINGS_HOME_GROUPS).toEqual(['you', 'agent', 'connections', 'appliance', 'screens', 'advanced']);
+    expect(SETTINGS_HOME_GROUPS).toEqual([
+      'you',
+      'agent',
+      'connections',
+      'appliance',
+      'news',
+      'screens',
+      'advanced',
+    ]);
     const rows = settingsHomeRows('dusty', ['profile', 'notifications', 'devices']);
     expect(rows.map((r) => r.title)).toEqual([
       'You',
       'Dusty',
       'Connections',
       'This Whombat',
+      'News and weather',
       'Screens',
       'Advanced',
     ]);

@@ -125,6 +125,7 @@ export { default as Reply } from 'lucide-react-native/icons/message-square-reply
 export { default as Mic } from 'lucide-react-native/icons/mic';
 export { default as Minus } from 'lucide-react-native/icons/minus';
 export { default as Monitor } from 'lucide-react-native/icons/monitor';
+export { default as Moon } from 'lucide-react-native/icons/moon';
 export { default as Mouse } from 'lucide-react-native/icons/mouse';
 export { default as Music } from 'lucide-react-native/icons/music';
 export { default as Network } from 'lucide-react-native/icons/network';
@@ -159,6 +160,7 @@ export { default as ShieldX } from 'lucide-react-native/icons/shield-x';
 export { default as Siren } from 'lucide-react-native/icons/siren';
 export { default as SlidersHorizontal } from 'lucide-react-native/icons/sliders-horizontal';
 export { default as SlidersVertical } from 'lucide-react-native/icons/sliders-vertical';
+export { default as Smartphone } from 'lucide-react-native/icons/smartphone';
 export { default as Sparkles } from 'lucide-react-native/icons/sparkles';
 export { default as Speaker } from 'lucide-react-native/icons/speaker';
 export { default as Square } from 'lucide-react-native/icons/square';

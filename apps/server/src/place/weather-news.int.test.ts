@@ -1,16 +1,20 @@
 /**
  * Where this Whombat is, its news sites, and the weather and the news for the assistant, end to end (weather-news.md):
  * the place guessed from the time zone, looked up and kept; the suggested sites for it turned on, a site of the person's
- * own added; the assistant's two tools reading MET Norway and the feeds. OpenStreetMap, MET and the sites are answered
- * by fakes through the open-data seam. It needs Postgres: the place and the sites are kept on the burrow's row through
- * the commit pipeline, which signs each change.
+ * own added; the assistant's two tools reading MET Norway and the feeds; browsing a country's sites, importing another
+ * reader's list in one commit, and an app before more news shown twelve sources without losing the rest when it saves.
+ * OpenStreetMap, MET and the sites are answered by fakes through the open-data seam. It needs Postgres: the place and
+ * the sites are kept on the burrow's row through the commit pipeline, which signs each change.
  */
 import { api, buildPath, NEWS_SUGGESTIONS, NewsSourcesView, WeatherForecastOutput } from '@whombat/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { NEWS_MORE_MINOR } from '@whombat/protocol/session';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { burrows, events } from '../db/schema/index';
+import { accounts, burrows, events } from '../db/schema/index';
 import { type OpenDataAnswer, useOpenDataForTests } from '../lib/open-data';
+import { runApiHandler } from '../managed/dispatcher';
 import { TOOL_HANDLERS, type ToolContext } from '../mcp/tools';
+import { newsRoutes } from '../news/routes';
 import type { DispatchRow } from '../runtime/context';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
@@ -231,5 +235,78 @@ describe('the assistant’s weather and news', () => {
     expect(strike.status === 'ok' && strike.headlines.map((h) => h.title)).toEqual(['Rail strike on Monday']);
     await call('PUT', buildPath(api.news.setSources.path, B), { ids: [] });
     expect((await TOOL_HANDLERS.news_headlines(toolCtx(), {})).status).toBe('none');
+  });
+});
+
+describe('more news', () => {
+  const updates = async () => {
+    const [row] = await t.services.db
+      .select({ n: count() })
+      .from(events)
+      .where(and(eq(events.burrowId, t.burrowId), eq(events.type, 'burrow.updated')));
+    return row?.n ?? 0;
+  };
+
+  it('browses the place’s country, the region first, and any other country', async () => {
+    const here = await call('GET', buildPath(api.news.browse.path, B));
+    expect(here.status).toBe(200);
+    expect(here.body.country).toBe('NL');
+    expect(here.body.sites[0]).toMatchObject({ id: 'nl-omroep-brabant', near: 'region', on: false });
+    expect(here.body.countries.map((c: Body) => c.code)).toEqual(expect.arrayContaining(['NL', 'SE', 'US']));
+    const sweden = await call('GET', `${buildPath(api.news.browse.path, B)}?country=SE`);
+    expect(sweden.body.country).toBe('SE');
+    expect(sweden.body.sites.every((s: Body) => s.id.startsWith('se-') && s.near === null)).toBe(true);
+  });
+
+  it('imports another reader’s list in one change, skipping what can’t be added with why', async () => {
+    const before = await updates();
+    const urls = [NOS, 'own.example.com', 'https://own.example.com/atom', 'ftp://x.example.com/feed'];
+    const imported = await call('POST', buildPath(api.news.importSites.path, B), {
+      urls: [...urls, 'https://gone.example.com/'],
+    });
+    expect(imported.status).toBe(200);
+    expect(imported.body.added.map((s: Body) => s.name)).toEqual(['NOS Nieuws', 'Own News']);
+    expect(imported.body.skipped.map((s: Body) => s.url)).toEqual([
+      'ftp://x.example.com/feed',
+      'https://gone.example.com/',
+    ]);
+    expect(imported.body.news.chosen).toHaveLength(2);
+    expect(await updates()).toBe(before + 1);
+    // All of it on already: nothing to add, nothing changed.
+    const again = await call('POST', buildPath(api.news.importSites.path, B), { urls });
+    expect([again.body.added, again.body.skipped.length]).toEqual([[], 1]);
+    expect(await updates()).toBe(before + 1);
+  });
+
+  it('shows an app before more news twelve sources and keeps the rest when it saves', async () => {
+    const nl = (await call('GET', buildPath(api.news.browse.path, B))).body.sites.map((s: Body) => s.id);
+    const fifteen: string[] = nl.slice(0, 15);
+    await call('PUT', buildPath(api.news.setSources.path, B), { ids: fifteen });
+    const { accountId } = await sessionFor(t.services, IDS.mara);
+    const [account] = await t.services.db.select().from(accounts).where(eq(accounts.id, accountId));
+    const older = (id: string, input: { body?: object } = {}) => {
+      const def = newsRoutes.find((r) => r.endpoint.id === id);
+      if (!def) throw new Error(id);
+      return runApiHandler(
+        t.services,
+        def,
+        id,
+        account ?? null,
+        { params: B, ...input },
+        NEWS_MORE_MINOR - 1,
+      );
+    };
+    const seen = (await older('news.sources')).body as Body;
+    expect(seen.chosen.map((s: Body) => s.id)).toEqual(fifteen.slice(0, 12));
+    // It turns its second source off; the three it couldn't see stay on after its list.
+    const kept = fifteen.slice(0, 12).filter((_, i) => i !== 1);
+    await older('news.setSources', { body: { ids: kept } });
+    expect((await news()).body.chosen.map((s: Body) => s.id)).toEqual([...kept, ...fifteen.slice(12)]);
+    const refused = await older('news.addSite', { body: { url: 'own.example.com' } }).catch(
+      (err: { code: string; extra: { fields: { url: string[] } } }) => err,
+    );
+    expect(refused).toMatchObject({ code: 'validation_failed' });
+    expect((refused as { extra: { fields: { url: string[] } } }).extra.fields.url[0]).toContain('12');
+    await call('PUT', buildPath(api.news.setSources.path, B), { ids: [] });
   });
 });

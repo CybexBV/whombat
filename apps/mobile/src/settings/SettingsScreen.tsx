@@ -2,9 +2,10 @@
  * The Settings tab (the final design, docs/design-handoff/council-ui-2026-11/16-final/settings/,
  * docs/decisions/final-settings-vault-files-usage.md; settings-tab-android.md AP-2620…AP-2627), the same on iPhone and
  * Android: the title and one line, a newer app on top (`UpdateCard`), **Often used** — Notifications on a Whombat, and
- * the theme (System · Light · Dark, saved to the account) — then **All settings**, the groups in the web's order:
+ * the theme (Light · Dark · Auto, saved to the account) — then **All settings**, the groups in the web's order:
  * You (your face and what You holds), the assistant by its name (its face, what it runs on or its AI sign-in in
- * trouble), Connections (what needs you, else how many are connected), This Whombat, Screens where it has them, and
+ * trouble), Connections (what needs you, else how many are connected), This Whombat, News and weather (where the
+ * Whombat is and the news it reads, where it answers them), Screens where it has them, and
  * Advanced (`settingsRows`), each with one line on how it is doing and a chevron. This Whombat's state is read here:
  * while it loads or can't be read a card in Often used says so and every row keeps working. VERSION under it, then
  * Sign out and Switch Whombat (none in the demo). Pulling the page down reads it again and asks for a newer app.
@@ -30,7 +31,7 @@ import { COPY as MANAGED_COPY } from '../managed/copy';
 import { useUpdateCheck } from '../managed/useAppUpdate';
 import { type AppNavigation, useAppNavigation } from '../navigation/hooks';
 import { useBeside } from '../navigation/panes';
-import { THEME_PREFERENCES } from '../theme/preference';
+import { THEME_PREFERENCES, type ThemePreference } from '../theme/preference';
 import { Text } from '../theme/Text';
 import { useTheme, useThemeContext } from '../theme/theme';
 import { Screen } from '../ui/headers';
@@ -40,9 +41,13 @@ import {
   Contrast,
   type LucideIcon,
   Monitor,
+  Moon,
+  Newspaper,
   Plug,
   Settings as SettingsIcon,
   SlidersVertical,
+  Smartphone,
+  Sun,
 } from '../ui/icons';
 import { PLACE_SIDE, PlaceCard, PlaceRow, PlaceSection, PlaceState } from '../ui/place';
 import { Button } from '../ui/primitives';
@@ -51,7 +56,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 import { TabTop } from '../ui/topRow';
 import { useSetTheme } from './accountTheme';
 import { youLine, youPartsHere } from './groups';
-import { SETTINGS_TEXT, type SettingsRowKey } from './list';
+import { SETTINGS_TEXT, type SettingsRowKey, type SettingsRowView } from './list';
 import { UpdateCard } from './UpdateCard';
 import { useApplianceLine, useSettingsRows } from './useSettingsFacts';
 import { VersionCard } from './VersionCard';
@@ -64,6 +69,7 @@ const LEADING = { width: 24, alignItems: 'center', justifyContent: 'center' } as
 const ICONS: Record<Exclude<SettingsRowKey, 'agent'>, LucideIcon> = {
   connections: Plug,
   appliance: Box,
+  news: Newspaper,
   screen: Monitor,
   advanced: SlidersVertical,
 };
@@ -72,21 +78,27 @@ const ICONS: Record<Exclude<SettingsRowKey, 'agent'>, LucideIcon> = {
 const ROW_ROUTES: Record<SettingsRowKey, readonly string[]> = {
   agent: ['SettingsAgent'],
   connections: ['Connections'],
-  appliance: ['Whombat', 'SettingsWhombat'],
+  appliance: ['Whombat', 'SettingsWhombat', 'WhombatAbout'],
+  news: ['SettingsNews'],
   screen: ['SettingsDesk'],
   advanced: ['SettingsAdvanced'],
 };
 
-/** Where a row goes (AP-2625): its group's page. */
-function openRow(navigation: AppNavigation, key: SettingsRowKey, managed: boolean) {
+/** Where a row goes (AP-2625): its group's page, or the page its line is about (“Update ready”: About). */
+function openRow(navigation: AppNavigation, row: SettingsRowView, managed: boolean) {
+  const key = row.key;
   switch (key) {
     case 'agent':
       return navigation.navigate('SettingsAgent');
     case 'connections':
       return navigation.navigate('Connections');
     case 'appliance':
-      // A Whombat's Overview is This Whombat (AP-2626); the demo world's is its own page.
+      // A Whombat's Overview is This Whombat (AP-2626); the demo world's is its own page. An update that waits for
+      // the owner opens About, where Update now is.
+      if (managed && row.opens === 'about') return navigation.navigate('WhombatAbout');
       return managed ? navigation.navigate('Whombat') : navigation.navigate('SettingsWhombat');
+    case 'news':
+      return navigation.navigate('SettingsNews');
     case 'screen':
       return navigation.navigate('SettingsDesk');
     case 'advanced':
@@ -213,9 +225,10 @@ export function SettingsScreen() {
                 title={row.key === 'screen' ? SETTINGS_HOME_TEXT.screensTitle : row.title}
                 line={row.value ?? homeLine(row.key)}
                 bad={row.tone === 'bad'}
+                warn={row.tone === 'warn'}
                 label={row.label}
                 selected={!!beside && ROW_ROUTES[row.key].includes(beside.name)}
-                onPress={() => openRow(navigation, row.key, !!managed)}
+                onPress={() => openRow(navigation, row, !!managed)}
               />
             ))}
           </PlaceCard>
@@ -252,7 +265,14 @@ export function SettingsScreen() {
   );
 }
 
-/** The theme in the list (AP-2622): one tap, saved to the account. The word stays whole; the switch takes the rest. */
+/** Each theme's icon, as the web's menu has them: the sun, the moon, and the phone that Auto follows. */
+const THEME_ICONS: Record<ThemePreference, LucideIcon> = { light: Sun, dark: Moon, system: Smartphone };
+const THEME_OPTIONS = THEME_PREFERENCES.map((o) => ({ ...o, icon: THEME_ICONS[o.value] }));
+
+/**
+ * The theme in the list (AP-2622): Light · Dark · Auto, as on the web, one tap, saved to the account. The word stays
+ * whole; the switch takes the rest.
+ */
 function ThemeRow({ first }: { first: boolean }) {
   const theme = useTheme();
   const { preference } = useThemeContext();
@@ -280,7 +300,7 @@ function ThemeRow({ first }: { first: boolean }) {
       <View style={{ flex: 1, minWidth: 180, alignItems: 'flex-end' }}>
         <View style={{ width: '100%', maxWidth: 216 }}>
           <Segmented
-            options={THEME_PREFERENCES}
+            options={THEME_OPTIONS}
             value={preference}
             onChange={setTheme}
             label={SETTINGS_TEXT.theme}

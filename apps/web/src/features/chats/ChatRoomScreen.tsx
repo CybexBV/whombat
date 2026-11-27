@@ -28,6 +28,7 @@ import { useSearchUpdate } from '../../app/routing/navigation';
 import type { RoomSearch } from '../../app/routing/search';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
+import { NotificationsOffer } from '../../push/NotificationsOffer';
 import { AppLink } from '../files/AppLink';
 import { RoomStatus } from '../messaging/ConversationRoom';
 import roomStyles from '../messaging/ConversationRoom.module.css';
@@ -493,6 +494,8 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
           </div>
         </header>
         <div className={styles.items} onScroll={onScroll} data-inbox-scroll="">
+          {/* Where the browser has never asked, the Chat asks once whether to send notifications. */}
+          {room === 'chat' ? <NotificationsOffer burrow={burrow} /> : null}
           {threads.isLoading ? (
             <SkeletonRows count={6} lines={2} className={styles.skeleton} />
           ) : threads.error && !threads.threads.length ? (

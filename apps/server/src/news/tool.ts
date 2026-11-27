@@ -1,7 +1,8 @@
 /**
- * `news_headlines` (docs/decisions/weather-news.md): the newest headlines of the news sites the person turned on, read
- * by this Whombat (`NewsReader`), each with its site, local time and link. `query` keeps those with all its words, here:
- * nothing the agent asks goes out. In a Looks ahead check a headline's link may then be read and named as a source.
+ * `news_headlines` (docs/decisions/weather-news.md): the newest headlines of the news sources the person turned on, read
+ * by this Whombat (`NewsReader`), each with its source, local time and link, and no one source more than its share of
+ * them. `query` keeps those with all its words from every headline read, here: nothing the agent asks goes out. In a
+ * Looks ahead check a headline's link may then be read and named as a source.
  */
 import { NEWS_HEADLINES_MAX, type NewsHeadlinesInput, type NewsHeadlinesOutput } from '@whombat/core';
 import { eq } from 'drizzle-orm';
@@ -11,13 +12,13 @@ import { aheadSawHeadlines } from '../looks-ahead/turn';
 import type { ToolContext } from '../mcp/tools';
 import { localIso } from '../weather/forecast';
 import { newsSourcesOf } from './commands';
-import { mergeHeadlines, newsFor } from './reader';
+import { mergeHeadlines, newsFor, newsShare } from './reader';
 
 type Input = z.output<typeof NewsHeadlinesInput>;
 
 /** What the agent hears when there are no headlines to give (to the agent, never the chat). */
 export const NEWS_TOOL_TEXT = {
-  none: 'No news site is on: the person turns them on in Settings → This Whombat → News, or asks you (settings_read news.sources, then settings_change news.setSources).',
+  none: 'No news source is on: the person turns them on in Settings → News and weather, or asks you (settings_read news.sources or news.browse, then settings_change news.setSources).',
   unavailable: 'None of the news sites could be read just now. Try again in a while.',
 } as const;
 
@@ -42,16 +43,17 @@ export async function newsHeadlinesTool(ctx: ToolContext, input: Input): Promise
   if (!read.some((r) => r.ok || r.items.length > 0))
     return { status: 'unavailable', message: NEWS_TOOL_TEXT.unavailable };
   const timeZone = burrow?.timeZone ?? 'UTC';
-  const all = mergeHeadlines(read, NEWS_HEADLINES_MAX * sources.length);
-  const headlines = all
-    .filter((h) => matches(h.title, input.query))
-    .slice(0, input.limit ?? DEFAULT_LIMIT)
-    .map((h) => ({
-      source: h.source,
-      title: h.title,
-      at: localIso(Date.parse(h.at), timeZone),
-      link: h.link,
-    }));
+  const limit = input.limit ?? DEFAULT_LIMIT;
+  // With words to look for, every headline read that has them; without, the newest, no source past its share.
+  const found = input.query
+    ? mergeHeadlines(read, NEWS_HEADLINES_MAX * sources.length).filter((h) => matches(h.title, input.query))
+    : mergeHeadlines(read, limit, newsShare(limit, sources.length));
+  const headlines = found.slice(0, limit).map((h) => ({
+    source: h.source,
+    title: h.title,
+    at: localIso(Date.parse(h.at), timeZone),
+    link: h.link,
+  }));
   aheadSawHeadlines(
     ctx.services,
     ctx.dispatch,

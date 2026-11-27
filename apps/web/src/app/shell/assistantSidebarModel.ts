@@ -2,8 +2,9 @@
  * The assistant shell's sidebar (mock 1; one-whombat.md ONE-04; app one-whombat-shell.md AP-1256): pure, so its rules
  * are unit-tested.
  *
- * - The burrow's name (its switcher), then the seven places in one order: Chat, Inbox, Overview, Automations, Files,
- *   Vault, Settings. Search is ⌘K / Ctrl K and Usage is in Settings → Advanced, not rows of their own. Chat's badge
+ * - The burrow's name (its switcher), then the six places in one order: Chat, Inbox, Overview, Automations, Files,
+ *   Vault. Settings is in the account menu (and ⌘, / Ctrl ,), Search is ⌘K / Ctrl K, Usage opens only at its address:
+ *   none is a row of its own. Chat's badge
  *   counts its unread replies and Feedback's (Feedback opens from Chat's head); the Inbox's is the one count of what
  *   needs the person (`summary.needsYou`) in the colour of the worst of them. A count shows once the Whombat has
  *   answered and never at zero.
@@ -42,15 +43,7 @@ import { VAULT_COPY } from '@whombat/core/vault';
 import { clearChatWords } from '../../features/chats/clearWords';
 import { INBOX_PATH, type ShellLocation } from './location';
 
-export type AssistantNavId =
-  | 'chat'
-  | 'needsYou'
-  | 'dashboard'
-  | 'home'
-  | 'automations'
-  | 'files'
-  | 'vault'
-  | 'settings';
+export type AssistantNavId = 'chat' | 'needsYou' | 'dashboard' | 'home' | 'automations' | 'files' | 'vault';
 
 export interface AssistantNavRow {
   id: AssistantNavId;
@@ -161,7 +154,6 @@ export function buildAssistantSidebarModel(
     row('automations', words.automations.label, '/automations', location.kind === 'automations'),
     row('files', words.files.label, '/files', location.kind === 'files'),
     row('vault', words.vault.label, '/vault', location.kind === 'vault'),
-    row('settings', words.settings.label, '/settings', location.kind === 'settings'),
   ];
   const { me } = bootstrap;
   const rows = thingRows(input.things ?? [], location.kind === 'thing' ? location.id : null);

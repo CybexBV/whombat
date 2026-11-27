@@ -1,22 +1,67 @@
-/* The account menu's version line (SS-08): under the menu's last item, muted DM Mono, like a menu note. */
-.version {
-  display: block;
-  margin-top: 2px;
-  padding: 6px 10px 4px;
-  border-radius: var(--radius-small);
+/* The account menu's last line: the version on the left, whether it is up to date on the right, in muted DM Mono. */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0 0;
   color: var(--mut);
-  font: 400 11.5px var(--font-mono);
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font: 400 11px var(--font-mono);
+}
+
+.version,
+.state {
+  padding: 4px 8px;
+  border-radius: var(--radius-small);
   white-space: nowrap;
+}
+
+/* The version: a quiet button that copies the whole line. */
+.version {
+  overflow: hidden;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
 .version:hover {
   color: var(--ink2);
 }
 
-.version:focus-visible {
+.state {
+  flex: none;
+  margin-left: auto;
+  text-decoration: none;
+}
+
+.upToDate {
+  color: var(--ok-text);
+}
+
+.ready,
+.ready:hover {
+  color: var(--warn-text);
+}
+
+.ready:hover {
+  background: var(--sel);
+}
+
+.version:focus-visible,
+.ready:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: -2px;
+}
+
+/* In the Places drawer every target is 44px tall. */
+@media (max-width: 1023.98px) {
+  .version,
+  .ready {
+    min-height: 44px;
+  }
 }

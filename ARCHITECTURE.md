@@ -1868,11 +1868,17 @@ Setup and operation: `docs/github.md`.
   (`placeFromTimeZone`, from `zone.tab`); `place.find` looks one up on OpenStreetMap's Nominatim (`PlaceFinder`: one
   request a second per box, answers kept a day), `place.set` keeps it. `WeatherService` keeps MET Norway's
   Locationforecast per place in memory and asks again only after it expires (never within 30 minutes, with jitter,
-  never on the hour, `If-Modified-Since`); sunrise and sunset are worked out on the box (`sunTimes`). The news sites the
-  person turned on or added (`burrows.news`, up to 12; `news.sources`, `news.setSources`, `news.addSite`, which finds a
-  page's feed) are read by `NewsReader` every 15 minutes while something needs them (RSS, RDF and Atom with htmlparser2;
-  headline, site, time and link only). Every such request goes through `openDataGet` with Whombat's User-Agent and the
-  outbound rules. The `weather` and `news` widgets read both once per burrow (`desk/widgets/weather-news.ts`), the
+  never on the hour, `If-Modified-Since`); sunrise and sunset are worked out on the box (`sunTimes`). The news sources
+  the person turned on, added or imported (`burrows.news`, up to 30) change through `news.setSources`, `news.addSite`
+  (`news/discover.ts`: a feed, a page's feed, or the feed of a YouTube channel, subreddit, Mastodon or Bluesky account,
+  Apple podcast or GitHub project, with its `kind`) and `news.importSites` (`news/import.ts`: another reader's list,
+  each address checked as one added, four at a time within 20 seconds, then one commit); `news.sources` and
+  `news.browse` read them and the suggestions table (`NEWS_SUGGESTIONS`, generated from
+  `scripts/weather-news/news-feeds.psv`). An app before session minor 19 is shown the first 12 and keeps the rest when
+  it saves (`news/older-apps.ts`, through the session's `protocolMinor` in the handler context). `NewsReader` reads
+  them every 15 minutes while something needs them, six at a time, each feed's first MiB (RSS, RDF and Atom with
+  htmlparser2; headline, site, time and link only), and the widget and the assistant take each source's share of the
+  newest. Every such request goes through `openDataGet` with Whombat's User-Agent and the outbound rules. The `weather` and `news` widgets read both once per burrow (`desk/widgets/weather-news.ts`), the
   assistant through `weather_forecast` and `news_headlines`, and a Looks ahead calendar check gets the forecast for the
   plan's day.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
@@ -1984,8 +1990,8 @@ shows its way forward (a line that needs the person only that, Settle with the r
 web and in the swipe's More on the phone (`ui/swipeRow.tsx`, as Chat's threads), and Settled is a bar pinned to the
 bottom of the screen that opens upward. An approval is the same card in its thread, its dialog, the Inbox and the
 phone's approval screen (core `approvalCardFacts`, web `AskCard`;
-[approval-card.md](docs/decisions/approval-card.md)). Chat's head leads to everything the assistant did (`/done`). The web's sidebar is Chat · Inbox · Overview · Automations · Files · Vault · Settings (`assistantSidebarModel.ts`; Feedback opens from Chat's head, Search is ⌘K / Ctrl K; Usage isn't offered), then Servers and Connections as two tabs (Servers first, the other tab's
-problems still in view; `assistantSidebarModel.ts` `sidebarLists`); then the person, whose row opens the account menu (Settings → You's parts first, then Phone app, notifications, the theme, Sign out); below 1024 px it is the Places drawer under a 56px bar with Places at the left and what needs you at the right. Search (`/search`) groups the Whombat's chat results with the things, settings and places it matches in the page (`features/search/searchCatalog.ts`). The phone's tabs are Chat · Inbox · Overview ·
+[approval-card.md](docs/decisions/approval-card.md)). Chat's head leads to everything the assistant did (`/done`). The web's sidebar is Chat · Inbox · Overview · Automations · Files · Vault (`assistantSidebarModel.ts`; Feedback opens from Chat's head, Search is ⌘K / Ctrl K, Settings is ⌘, / Ctrl , and in the account menu; Usage isn't offered), then Servers and Connections as two tabs (Servers first, the other tab's
+problems still in view; `assistantSidebarModel.ts` `sidebarLists`); then the person, whose row opens the account menu (their profile, Light · Dark · Auto, Settings, Get the phone app, Report a problem or idea, Sign out, and the version with whether an update is ready; [account-menu.md](docs/app/decisions/account-menu.md)). Browser notifications come on by themselves on a page load where the browser already allows them and this browser isn't registered; where it never asked, the Chat asks once, and Settings → Notifications has the switch (`push/useWebPush.ts`, `push/pushChoice.ts`); below 1024 px it is the Places drawer under a 56px bar with Places at the left and what needs you at the right. Search (`/search`) groups the Whombat's chat results with the things, settings and places it matches in the page (`features/search/searchCatalog.ts`). The phone's tabs are Chat · Inbox · Overview ·
 Automations · Settings; a tab's screen has one top row: Places' ☰ at the left, the tab's title, and Search's magnifier at
 the right ([chat-inbox-phone.md](docs/app/decisions/chat-inbox-phone.md), [one-chat.md](docs/decisions/one-chat.md), [automations-tab.md](docs/app/decisions/automations-tab.md),
 [sidebar-tabs.md](docs/decisions/sidebar-tabs.md), [final-shell-web.md](docs/decisions/final-shell-web.md)); Overview is the page at `/connections`: the broken thing first, then
@@ -2055,12 +2061,13 @@ sentence, its raw words under More detail where there is room. Schedules are sai
 
 Settings opens on a home, the same on the web and the phone: Often used (Notifications, Theme, and on the web Phone app,
 the QR sign-in at `/settings?tab=phone` that You → Devices' Add a phone also opens; `/mobile` keeps a page of its own
-in the sign-in frame only where no Whombat is open), then six groups —
+in the sign-in frame only where no Whombat is open), then seven groups —
 You (profile, notifications, devices), the assistant by its name (name and face, the AI sign-in, memory with its notes,
 and what it may do — every permission by thing in the words Just watch · Ask me first · Go ahead), Connections (what
 this Whombat is signed in to: what needs you, accounts, apps and services; `@whombat/client/connections`
-`settingsList.ts`; also on Overview), This Whombat (overview, backups, About), Screens (where it has a screen) and
-Advanced, a folded list of the expert pages (the model, the AI programs, what runs, skills, the audit log and signing
+`settingsList.ts`; also on Overview), This Whombat (overview, backups, About), News and weather (where it is and the
+news sources it reads, in order, with suggestions by country and topic and an OPML import; where the Whombat answers
+them), Screens (where it has a screen) and Advanced, a folded list of the expert pages (the model, the AI programs, what runs, skills, the audit log and signing
 keys, diagnostics); each group is a page of its own. What the assistant may do holds its keys, the commands always
 allowed (folded) and, while the local network is closed to it, the home networks it may reach. On both, a home row says how things are
 where it can (This Whombat's what needs you there, the web's Phone app which phone is in). The groups, their parts, the home's

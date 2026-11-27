@@ -29,13 +29,13 @@ export function useBurrowRealtime(burrow: string, topics: readonly string[] | un
 }
 
 /**
- * Per-user theme (TODO 1.1): the preference from the bootstrap wins once loaded; toggling the theme
- * pill saves it through `PATCH /me/preferences` and patches the cached bootstrap.
+ * Per-user theme (TODO 1.1): the preference from the bootstrap wins once loaded (`system` follows the device); the
+ * person's choice — Light, Dark or Auto — is saved through `PATCH /me/preferences` and patches the cached bootstrap.
  */
 export function useShellThemeSync(burrow: string, preference: ThemePreference | undefined) {
   const { client, queryClient } = useAppServices();
   const save = useCallback(
-    (theme: 'light' | 'dark') => {
+    (theme: ThemePreference) => {
       client.me
         .updatePreferences({ body: { theme } })
         .then((result) => {
@@ -51,7 +51,7 @@ export function useShellThemeSync(burrow: string, preference: ThemePreference | 
     },
     [client, queryClient, burrow],
   );
-  useThemePreferenceSync(preference === 'light' || preference === 'dark' ? preference : null, save);
+  useThemePreferenceSync(preference ?? null, save);
 }
 
 /**
@@ -82,7 +82,7 @@ export interface ShellKeyboardOptions {
 /** Focusable element on the search screen that ⌘K focuses when search is already open. */
 export const SEARCH_INPUT_SELECTOR = '[data-search-input]';
 
-/** Global shortcuts: ⌘K / Ctrl K, Esc (modal → pane → search), Alt+↑/↓. */
+/** Global shortcuts: ⌘K / Ctrl K, ⌘, / Ctrl , (Settings), Esc (modal → pane → search), Alt+↑/↓. */
 export function useShellKeyboard(options: ShellKeyboardOptions) {
   const navigate = useNavigate();
   const navigateHref = useNavigateHref();
@@ -107,6 +107,9 @@ export function useShellKeyboard(options: ShellKeyboardOptions) {
           void navigate({ to: '/search' });
           return;
         }
+        case 'openSettings':
+          void navigate({ to: '/settings' });
+          return;
         case 'closeModal':
           void updateSearch((prev) => ({ ...prev, approval: undefined }));
           return;
@@ -165,7 +168,7 @@ export function useShellKeyboard(options: ShellKeyboardOptions) {
 /**
  * Registers `apps/web/public/sw.js` once the shell mounts (`docs/decisions/web-push-connect.md`): no
  * permission prompt, just gets `notificationclick` deep-linking and future push delivery ready.
- * Subscribing is a separate, explicit opt-in (`apps/web/src/push/useWebPush.ts`).
+ * Subscribing is `apps/web/src/push/useWebPush.ts`'s: by itself where the browser already allows it, else from a click.
  */
 export function useServiceWorkerRegistration() {
   const managed = useManaged();

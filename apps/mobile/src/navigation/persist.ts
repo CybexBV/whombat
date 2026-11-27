@@ -142,6 +142,7 @@ const LISTS = new Set([
   'SettingsAi',
   'SettingsWhombat',
   'SettingsDesk',
+  'SettingsNews',
   'SettingsAdvanced',
   // Search, with what was typed (phone-shell-final.md).
   'Search',

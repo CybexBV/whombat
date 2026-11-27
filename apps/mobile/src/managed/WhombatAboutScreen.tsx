@@ -57,7 +57,6 @@ import { useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { showNotice } from '../screens/feedback';
 import { AgentUpdatesSwitchRow } from '../settings/AgentUpdatesSwitch';
-import { PlaceNewsCards } from '../settings/PlaceNewsCards';
 import { VersionCard } from '../settings/VersionCard';
 import { VERSION_TEXT } from '../settings/version';
 import { Text } from '../theme/Text';
@@ -230,9 +229,6 @@ export function WhombatAboutScreen() {
             {/* “Keep server agents up to date” (agent-updates-app.md AP-2992). */}
             <AgentUpdatesSwitchRow />
           </VersionCard>
-
-          {/* Where this Whombat is and the news it reads (Whombat weather-news.md; weather-news-apps.md). */}
-          <PlaceNewsCards />
 
           {/* How it is reached: this phone's connection, Whombat Link, its address, Tailscale (LNK-42). The licence
               shows nothing (LNK-04). */}

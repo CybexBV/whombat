@@ -27,6 +27,11 @@ export interface SessionHandlerContext<E extends AnyEndpoint> {
   /** Present on burrow routes (`/burrows/:burrow/…`): the caller's principal there. */
   access: BurrowAccess;
   services: Services;
+  /**
+   * The session protocol minor of the app that asked, for an answer or a change an older app reads differently;
+   * undefined for the assistant, tests and anything else outside an app's session, which get today's.
+   */
+  protocolMinor?: number | undefined;
 }
 
 export interface RunnerHandlerContext<E extends AnyEndpoint> extends SessionHandlerContext<E> {

@@ -396,7 +396,8 @@ export function buildAllowlist(): OperationAllowlist {
 
 /**
  * Runs an allowlisted `api` op's REST handler in-process as `account` (MR-05): the input guards, the same
- * `burrowAccess` membership check, the handler, and — outside production — its answer checked against the contract.
+ * `burrowAccess` membership check, the handler (told the asking app's `protocolMinor`, for answers an older app reads
+ * differently), and — outside production — its answer checked against the contract.
  * Refusals are thrown (`ApiError`, `OutcomeReply`). The session's `runApi` and tests' in-process caller share it.
  */
 export async function runApiHandler(
@@ -405,6 +406,7 @@ export async function runApiHandler(
   op: string,
   account: RequestAuth['account'],
   input: { params: unknown; query?: unknown; body?: unknown },
+  protocolMinor?: number,
 ): Promise<{ body: unknown; raw: Raw | null }> {
   const ep = def.endpoint;
   if (ep.auth === 'runner') throw new Error(`${ep.id} requires the runner's HTTP listener`);
@@ -424,6 +426,7 @@ export async function runApiHandler(
     auth,
     access,
     services,
+    protocolMinor,
   });
   if (result instanceof Raw) return { body: result.body, raw: result };
   if (services.config.NODE_ENV !== 'production') {
@@ -1052,7 +1055,7 @@ export class SessionDispatcher {
       (ep.id === 'things.cancelWatch' && !readsThingAutomations(minor))
     )
       throw new SessionOpError('unavailable', 'Update the Whombat app, then try again.');
-    const out = await runApiHandler(this.services, def, spec.op, principal.account, input);
+    const out = await runApiHandler(this.services, def, spec.op, principal.account, input, minor);
     if (out.raw) return out;
     const hostAnswer = hostAnswerFor(ep.id, out.body, minor);
     return { ...out, body: answerFor(ep.id, thingAnswerFor(ep.id, hostAnswer, minor), minor) };

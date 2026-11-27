@@ -1,7 +1,8 @@
 /**
  * The place and the news of a fake box (Whombat weather-news.md), for the web's fixture mode and the phone's demo world:
  * `place.find` from a small list of towns (nothing leaves the app), `place.set` (null goes back to the time zone's guess),
- * `news.sources`, `news.setSources` and `news.addSite` as the runtime answers them, refusals included. It starts with
+ * `news.sources`, `news.setSources`, `news.addSite`, `news.browse` and `news.importSites` as the runtime answers them,
+ * refusals included (a YouTube channel, a subreddit or a Mastodon account by its feed, read by hand). It starts with
  * the guess for Amsterdam and one site of the person's own on (AT5), so Settings shows a site that is on and one
  * suggested. Pure TypeScript; the host turns its answers into responses and puts `place()` in the burrow it serves.
  */
@@ -10,9 +11,14 @@ import {
   NEWS_SOURCES_MAX,
   NEWS_WORDS,
   NewsAddSiteBody,
+  NewsBrowseQuery,
   type NewsChosenSource,
+  NewsImportBody,
+  type NewsImportSkipped,
   NewsSetSourcesBody,
+  type NewsSourceKind,
   type NewsSourcesView,
+  newsBrowse,
   newsSiteAddress,
   newsSuggestion,
   newsSuggestionsFor,
@@ -106,6 +112,8 @@ export const PLACE_NEWS_OPS = [
   'news.sources',
   'news.setSources',
   'news.addSite',
+  'news.browse',
+  'news.importSites',
 ] as const;
 
 export function createFakePlaceNews(options: FakePlaceNewsOptions): FakePlaceNews {
@@ -119,6 +127,22 @@ export function createFakePlaceNews(options: FakePlaceNewsOptions): FakePlaceNew
       chosen,
       suggestions: newsSuggestionsFor(place).filter((s) => !on.has(s.id)),
     };
+  };
+
+  /** One source of the person's own by its address, as `news.addSite` adds it; `fresh` when it wasn't on yet. */
+  const addOne = (typed: string): { added: NewsChosenSource; fresh: boolean } | { problem: string } => {
+    const address = newsSiteAddress(typed);
+    if (!address) return { problem: NEWS_WORDS.notHttps };
+    // Read by hand: the phone's URL can't name a host.
+    const [, host = '', path = ''] = /^https:\/\/(?:www\.)?([^/?#:]+)[^/?#]*(\/[^?#]*)?/.exec(address) ?? [];
+    const known = ownFeed(host, path, address);
+    if (!known) return { problem: NEWS_WORDS.notFeed };
+    const added: NewsChosenSource = { id: ownNewsSourceId(known.url), ...known, own: true };
+    const was = chosen.find((s) => s.id === added.id);
+    if (was) return { added: was, fresh: false };
+    if (chosen.length >= NEWS_SOURCES_MAX) return { problem: newsFullTextOf() };
+    chosen = [...chosen, added];
+    return { added, fresh: true };
   };
 
   const find = (raw: Record<string, unknown> | undefined): FakeAnswer => {
@@ -177,25 +201,28 @@ export function createFakePlaceNews(options: FakePlaceNewsOptions): FakePlaceNew
         case 'news.addSite': {
           const parsed = NewsAddSiteBody.safeParse(input.body ?? {});
           if (!parsed.success) return refuse('url', NEWS_WORDS.notHttps);
-          if (chosen.length >= NEWS_SOURCES_MAX) return refuse('url', newsFullTextOf());
-          // Read by hand: the phone's URL can't name a host.
-          const [, host = '', path = ''] =
-            /^https:\/\/(?:www\.)?([^/?#:]+)[^/?#]*(\/[^?#]*)?/.exec(
-              newsSiteAddress(parsed.data.url) ?? '',
-            ) ?? [];
-          const address = newsSiteAddress(parsed.data.url) ?? '';
-          const page = PAGES[host];
-          const isFeed = /(rss|feed|atom|\.xml)/i.test(path);
-          if (!page && !isFeed) return refuse('url', NEWS_WORDS.notFeed);
-          const url = page && !isFeed ? page.feed : address;
-          const added: NewsChosenSource = {
-            id: ownNewsSourceId(url),
-            name: page?.name ?? host,
-            url,
-            own: true,
-          };
-          if (!chosen.some((s) => s.id === added.id)) chosen = [...chosen, added];
-          return ok({ added, news: news() });
+          const found = addOne(parsed.data.url);
+          if ('problem' in found) return refuse('url', found.problem);
+          return ok({ added: found.added, news: news() });
+        }
+        case 'news.browse': {
+          const parsed = NewsBrowseQuery.safeParse(input.query ?? {});
+          if (!parsed.success) return refuse('country', 'Choose a country from the list.');
+          return ok(
+            newsBrowse({ country: parsed.data.country, place, on: new Set(chosen.map((s) => s.id)) }),
+          );
+        }
+        case 'news.importSites': {
+          const parsed = NewsImportBody.safeParse(input.body ?? {});
+          if (!parsed.success) return refuse('urls', NEWS_WORDS.importNone);
+          const added: NewsChosenSource[] = [];
+          const skipped: NewsImportSkipped[] = [];
+          for (const url of parsed.data.urls) {
+            const found = addOne(url);
+            if ('problem' in found) skipped.push({ url, problem: found.problem });
+            else if (found.fresh) added.push(found.added);
+          }
+          return ok({ added, skipped, news: news() });
         }
         default:
           return null;
@@ -206,4 +233,28 @@ export function createFakePlaceNews(options: FakePlaceNewsOptions): FakePlaceNew
 
 function newsFullTextOf(): string {
   return NEWS_WORDS.full.replace('{n}', String(NEWS_SOURCES_MAX));
+}
+
+/** The feed of an address the fake knows: a page it knows, a feed, a YouTube channel, a subreddit, a Mastodon account. */
+function ownFeed(
+  host: string,
+  path: string,
+  address: string,
+): { name: string; url: string; kind: NewsSourceKind } | null {
+  const page = PAGES[host];
+  if (/(rss|feed|atom|\.xml)/i.test(path)) return { name: page?.name ?? host, url: address, kind: 'site' };
+  if (page) return { name: page.name, url: page.feed, kind: 'site' };
+  const channel = /^\/channel\/(UC[\w-]{22})/.exec(path)?.[1];
+  if (host === 'youtube.com' && channel)
+    return {
+      name: 'YouTube channel',
+      url: `https://www.youtube.com/feeds/videos.xml?channel_id=${channel}`,
+      kind: 'youtube',
+    };
+  const sub = /^\/r\/(\w{2,21})/.exec(path)?.[1];
+  if (host.endsWith('reddit.com') && sub)
+    return { name: `r/${sub}`, url: `https://www.reddit.com/r/${sub}/.rss`, kind: 'reddit' };
+  const handle = /^\/@(\w{1,30})\/?$/.exec(path)?.[1];
+  if (handle) return { name: `@${handle}`, url: `https://${host}/@${handle}.rss`, kind: 'mastodon' };
+  return null;
 }

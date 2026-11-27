@@ -185,6 +185,7 @@ describe('the parity screens (MQ) are restored like their neighbours', () => {
         name,
       ).toBe(false);
     expect(restorableRoute({ name: 'Spend' }, world)).toBe(true);
+    expect(restorableRoute({ name: 'SettingsNews' }, world)).toBe(true);
     expect(restorableRoute({ name: 'AuditLog' }, world)).toBe(true);
     expect(restorableRoute({ name: 'Members' }, world)).toBe(false);
     expect(restorableRoute({ name: 'Memory' }, world)).toBe(true);

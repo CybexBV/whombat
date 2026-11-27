@@ -1,12 +1,13 @@
 /**
- * Reading the news sites the person turned on (docs/decisions/weather-news.md), as a feed reader does: each site's feed
- * fetched over https from its own address (no redirects: the address kept is the feed's own), kept 15 minutes, and read
- * only while something needs it (a shown widget, the assistant, Looks ahead). A site that can't be read keeps the
- * headlines it had and says so (`problemOf`), and is tried again after 5 minutes. The headlines of all sites together come
- * newest first, each once (by link, and by the same words).
+ * Reading the news sources the person turned on (docs/decisions/weather-news.md), as a feed reader does: each source's
+ * feed fetched over https from its own address (no redirects: the address kept is the feed's own), a few at a time, its
+ * first megabyte at most (a long feed's newest items come first), kept 15 minutes, and read only while something needs
+ * it (a shown widget, the assistant, Looks ahead). A source that can't be read keeps the headlines it had and says so
+ * (`problemOf`), and is tried again after 5 minutes. The headlines of all sources together come newest first, each once
+ * (by link, and by the same words), with a fair share for each source so one busy feed doesn't fill the list.
  */
 import { NEWS_FEED_KEEP_S, type NewsHeadline, type NewsSource } from '@whombat/core';
-import { openDataGet } from '../lib/open-data';
+import { OPEN_DATA_MAX_BYTES, openDataGet } from '../lib/open-data';
 import type { Services } from '../services';
 import { type FeedItem, parseFeed } from './feeds';
 
@@ -14,6 +15,34 @@ import { type FeedItem, parseFeed } from './feeds';
 export const NEWS_RETRY_MS = 5 * 60_000;
 /** Feeds kept at most. */
 const KEPT_MAX = 100;
+/** Feeds read at once: thirty sources come in a few rounds rather than thirty connections in one go. */
+export const NEWS_READS_AT_ONCE = 6;
+
+/** `fn` for each item, at most `limit` at once, the answers in the items' order. */
+export async function eachLimited<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i] as T, i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  return out;
+}
+
+/**
+ * The most headlines of one source in a list of `max` from `sources` sources: an even share, never fewer than three, so
+ * a busy subreddit doesn't push every other source out while a single source still fills the list.
+ */
+export function newsShare(max: number, sources: number): number {
+  return sources <= 1 ? max : Math.max(3, Math.ceil(max / sources));
+}
 
 /** What `news.sources` and the tool say of a site that couldn't be read. */
 export const NEWS_READ_WORDS = {
@@ -35,10 +64,14 @@ interface Entry {
   pending: Promise<void> | null;
 }
 
-/** All sites' headlines together, newest first, each once (by link, and by the same words), at most `max`. */
+/**
+ * All sources' headlines together, newest first, each once (by link, and by the same words), at most `max`, and at
+ * most `perSource` of any one source.
+ */
 export function mergeHeadlines(
   bySource: readonly { source: Pick<NewsSource, 'id' | 'name'>; items: readonly FeedItem[] }[],
   max: number,
+  perSource = max,
 ): NewsHeadline[] {
   const all = bySource.flatMap(({ source, items }) =>
     items.map((i) => ({ sourceId: source.id, source: source.name, title: i.title, at: i.at, link: i.link })),
@@ -46,12 +79,16 @@ export function mergeHeadlines(
   all.sort((a, b) => b.at - a.at);
   const links = new Set<string>();
   const titles = new Set<string>();
+  const counts = new Map<string, number>();
   const out: NewsHeadline[] = [];
   for (const h of all) {
     const words = h.title.toLowerCase();
     if (links.has(h.link) || titles.has(words)) continue;
     links.add(h.link);
     titles.add(words);
+    const count = counts.get(h.sourceId) ?? 0;
+    if (count >= perSource) continue;
+    counts.set(h.sourceId, count + 1);
     out.push({ ...h, at: new Date(h.at).toISOString() });
     if (out.length >= max) break;
   }
@@ -64,16 +101,14 @@ export class NewsReader {
 
   constructor(private readonly services: Services) {}
 
-  /** Each site's headlines and whether it could be read now, reading those whose 15 minutes are up. */
+  /** Each source's headlines and whether it could be read now, reading those whose 15 minutes are up. */
   async read(
     sources: readonly NewsSource[],
   ): Promise<{ source: NewsSource; items: FeedItem[]; ok: boolean }[]> {
-    return Promise.all(
-      sources.map(async (source) => {
-        const e = await this.#feed(source.url);
-        return { source, items: e.items, ok: e.problem === null && e.has };
-      }),
-    );
+    return eachLimited(sources, NEWS_READS_AT_ONCE, async (source) => {
+      const e = await this.#feed(source.url);
+      return { source, items: e.items, ok: e.problem === null && e.has };
+    });
   }
 
   /** Why a site's last read failed, or null (also when it was never read). */
@@ -101,10 +136,15 @@ export class NewsReader {
   async #fetch(e: Entry, url: string): Promise<void> {
     const now = () => this.services.clock().getTime();
     try {
-      const res = await openDataGet(this.services, url, { accept: FEED_ACCEPT });
+      const res = await openDataGet(
+        this.services,
+        url,
+        { accept: FEED_ACCEPT },
+        { keepFirst: OPEN_DATA_MAX_BYTES },
+      );
       if (res.status >= 300 && res.status < 400) throw new FeedProblem(NEWS_READ_WORDS.moved);
       if (res.status !== 200) throw new FeedProblem(NEWS_READ_WORDS.failed, `HTTP ${res.status}`);
-      const feed = parseFeed(res.body.toString('utf8'), url, now());
+      const feed = parseFeed(res.body.toString('utf8'), url, now(), { truncated: res.truncated });
       if (!feed) throw new FeedProblem(NEWS_READ_WORDS.notFeed);
       e.items = feed.items;
       e.problem = null;

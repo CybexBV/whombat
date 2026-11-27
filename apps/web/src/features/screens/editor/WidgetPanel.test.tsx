@@ -88,6 +88,36 @@ describe('Add a widget (DK-163)', () => {
   });
 });
 
+describe('the news and the weather lead to Settings → News and weather', () => {
+  it('offers the news’ Choose sources, asking first while the layout isn’t saved', async () => {
+    open();
+    const add = await panel();
+    const user = userEvent.setup();
+    const news = await within(add).findByRole('button', { name: /^Add News/ }, { timeout: 8000 });
+    await user.click(screen.getByRole('button', { name: '+ Page' }));
+    await user.click(news);
+    const chosen = await screen.findByRole('complementary', { name: 'News' });
+    const link = within(chosen).getByRole('link', { name: 'Choose sources' });
+    expect(link.getAttribute('href')).toBe('/settings?tab=news#news');
+    await user.click(link);
+    const ask = await screen.findByRole('dialog');
+    await user.click(within(ask).getByRole('button', { name: 'Leave' }));
+    expect(await screen.findByRole('heading', { name: 'News and weather', level: 1 })).toBeTruthy();
+  });
+
+  it('offers the weather’s place', async () => {
+    open();
+    const add = await panel();
+    const user = userEvent.setup();
+    const weather = await within(add).findByRole('button', { name: /^Add Weather/ }, { timeout: 8000 });
+    await user.click(screen.getByRole('button', { name: '+ Page' }));
+    await user.click(weather);
+    const chosen = await screen.findByRole('complementary', { name: 'Weather' });
+    const link = within(chosen).getByRole('link', { name: 'Choose where this Whombat is in Settings' });
+    expect(link.getAttribute('href')).toBe('/settings?tab=news#place');
+  });
+});
+
 describe('an account widget’s icon', () => {
   it('says what it shows: its calendar, its mail, its pull requests', () => {
     const icon = (panel: string, name: string) => accountIcon({ name, opts: { panel } });

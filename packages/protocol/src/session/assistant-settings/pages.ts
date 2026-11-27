@@ -80,8 +80,7 @@ export const SETTINGS_PAGES = {
   'appliance.overview': {
     where: 'Settings → This Whombat → Overview',
     path: 'settings?tab=appliance',
-    about:
-      'how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail, where it is and its news',
+    about: 'how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail',
   },
   'appliance.backups': {
     where: 'Settings → This Whombat → Backups',
@@ -97,6 +96,12 @@ export const SETTINGS_PAGES = {
     where: 'Settings → This Whombat → About',
     path: 'settings?tab=appliance&section=about',
     about: 'versions and updates, when updates may happen, remote help and the licence',
+  },
+  news: {
+    where: 'Settings → News and weather',
+    path: 'settings?tab=news',
+    about:
+      'where this Whombat is (for the weather and local news), and the news sources it reads: on and off, their order, suggestions by country and topic, adding your own, importing a list',
   },
   'advanced.model': {
     where: 'Settings → Advanced → Model and effort',

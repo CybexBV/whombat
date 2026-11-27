@@ -1,4 +1,4 @@
-> Version `2026-11-26`.
+> Version `2026-11-27`.
 
 # Whombat Privacy Policy
 
@@ -231,8 +231,11 @@ so they see its IP address and what it asks for, and their own privacy policies 
 - **OpenStreetMap**'s place search (**Nominatim**, run by the OpenStreetMap Foundation) finds the place you type, or
   the town at your device's location (rounded to about a kilometre), when you set where your Whombat is or ask your
   assistant about the weather somewhere.
-- **The news sites you choose** send your Whombat their headlines. It reads only the sites you turned on or added,
-  every quarter of an hour while something shows the news; until you turn one on, it reads none.
+- **The news sites you choose** send your Whombat their headlines. It reads only the sites you turned on, added or
+  imported, every quarter of an hour while something shows the news; until you turn one on, it reads none. YouTube,
+  Reddit, Mastodon, Bluesky and GitHub are asked only when you add a channel, subreddit, account or project of theirs.
+- **Apple**'s podcast directory tells your Whombat where a podcast's feed is, once, when you add an Apple Podcasts
+  address.
 
 Tailscale, the AI providers and the services you connect are yours to choose; section 3 says how your Whombat talks
 to them.

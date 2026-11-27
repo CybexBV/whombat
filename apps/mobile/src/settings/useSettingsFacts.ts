@@ -7,7 +7,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { deskScreenLine, deskSectionShown } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
-import { whombatOverview } from '@whombat/client/managed';
+import { updateReady, whombatOverview } from '@whombat/client/managed';
+import { placeNewsShown, useSessionProtocol } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
 import Constants from 'expo-constants';
 import { useMemo } from 'react';
@@ -34,8 +35,9 @@ import { screensOffered, screensRowLine } from './screens/screensList';
 const FIVE_MINUTES = 5 * 60_000;
 
 /**
- * A managed Whombat's line (AP-2626): the shared Overview from its status alone; undefined while it loads, null when it
- * can't be read (the Settings home says so, its rows still work).
+ * A managed Whombat's line (AP-2626): the shared Overview from its status alone, and “Update ready” while an update
+ * waits for the owner's yes; undefined while it loads, null when it can't be read (the Settings home says so, its rows
+ * still work).
  */
 export function useApplianceLine(): ApplianceLine | null | undefined {
   const managed = useManaged();
@@ -63,7 +65,7 @@ export function useApplianceLine(): ApplianceLine | null | undefined {
         timeZone,
       }),
     );
-    return managedApplianceLine(overview);
+    return managedApplianceLine(overview, updateReady(status.data));
   }, [managed, mode, status.data, status.error, timeZone]);
 }
 
@@ -99,6 +101,8 @@ export function useSettingsRows(): SettingsRowView[] {
   const asked = useDeskScreens(deskApi);
   const screens = screensOffered(asked) === 'screens' ? asked.data : undefined;
   // Screens of widgets: how many there are (AP-6000); else the box's own screen's line where it has one.
+  // News and weather where the Whombat answers the place and the news.
+  const news = placeNewsShown(useSessionProtocol());
   const screenLine = screens
     ? screensRowLine(screens)
     : desk && deskSectionShown(desk)
@@ -114,7 +118,8 @@ export function useSettingsRows(): SettingsRowView[] {
         connections,
         screen: screenLine === null ? null : { value: screenLine, tone: null },
         screens: screens !== undefined,
+        news,
       }),
-    [screenLine, screens, mode, agent, ai, appliance, connections],
+    [screenLine, screens, mode, agent, ai, appliance, connections, news],
   );
 }

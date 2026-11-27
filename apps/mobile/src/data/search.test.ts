@@ -127,6 +127,18 @@ describe('Search (phone-shell-final.md)', () => {
     });
     expect(demo.map((s) => s.key)).not.toContain('notifications');
     expect(demo.map((s) => s.key)).toContain('screen');
+    expect(demo.map((s) => s.key)).not.toContain('news');
+    const withNews = searchSettings({
+      assistant: 'Neo',
+      managed: true,
+      you: 'You',
+      screen: null,
+      advanced: [],
+      news: true,
+    });
+    expect(withNews.find((s) => s.key === 'news')?.target).toEqual({ kind: 'page', name: 'SettingsNews' });
+    const found = searchEntries({ threads: [], things: [], settings: withNews, assistant: 'Neo' });
+    expect(searchMatches(found, 'weather').some((g) => g.group === 'settings')).toBe(true);
     expect(demo.find((s) => s.key === 'appliance')?.target).toEqual({
       kind: 'page',
       name: 'SettingsWhombat',

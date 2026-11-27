@@ -12,9 +12,14 @@ import type { AppUpdateSource } from './appUpdate';
 
 export interface ManagedPush {
   state: PushState;
+  /**
+   * Registered on an iPhone allowed quietly (provisional): notifications wait in Notification Center without a sound or
+   * a banner, and `enable` asks for alerts.
+   */
+  quiet?: boolean;
   /** Epoch ms of the last push this install received (null: none yet). Separate from the session. */
   lastReceivedAt: number | null;
-  /** Asks for permission (only from a tap) and registers. */
+  /** Asks for permission (only from a tap; on a quiet iPhone, for alerts) and registers. */
   enable(): void;
   /** Opens the system settings for this app (after a denial). */
   openSettings(): void;

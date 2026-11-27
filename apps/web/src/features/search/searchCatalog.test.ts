@@ -58,6 +58,17 @@ describe('the Search catalogue', () => {
     expect(keys('devices', true)).toContain('setting:you:devices');
   });
 
+  it('finds News and weather by its parts, only where the Whombat answers them', () => {
+    const withNews = searchCatalog({ things, agent: 'Neo', here: { managed: true }, news: true });
+    for (const words of ['news', 'weather', 'place', 'youtube', 'opml'])
+      expect(matchCatalog(withNews, words).map((e) => e.key)).toContain('setting:news');
+    expect(withNews.find((e) => e.key === 'setting:news')).toMatchObject({
+      title: 'News and weather',
+      href: '/settings?tab=news',
+    });
+    expect(keys('weather', true)).not.toContain('setting:news');
+  });
+
   it('lists the places but Search itself and Usage, in the sidebar’s order, each at its one address', () => {
     const places = catalog().filter((e) => e.group === 'places');
     expect(places.map((e) => e.key)).toEqual(

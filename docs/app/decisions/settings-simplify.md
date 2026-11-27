@@ -40,7 +40,7 @@ GitHub is a connection with its own tab; machine settings spread over General, R
   contracts version. Devices is a section here (managed only), anchor `#devices`.
 - SS-07 Members only see what they can use: This Whombat shows members VERSION and the read-only rows; owners/admins
   see everything (each section keeps its own permission rule).
-- SS-08 Account menu: a muted mono line at the bottom, “Whombat {runtime} · app {app}” (only “app {app}” when the
+- SS-08 **Superseded by account-menu.md ACM-05.** Account menu: a muted mono line at the bottom, “Whombat {runtime} · app {app}” (only “app {app}” when the
   runtime version is unknown); it links to Settings → This Whombat.
 
 ## Skills move to the Agents page
@@ -114,7 +114,7 @@ GitHub is a connection with its own tab; machine settings spread over General, R
   the vendored contracts version) and `VITE_WHOMBAT_BUILD`; the Whombat's version from `appliance.status` on a managed
   box and from `health.get` on a self-hosted server, which tells only admins and local callers — members see the app's
   version alone. No server change.
-- SS-46 The account menu's version line is its own component (`app/shell/AccountMenuVersion.tsx`) under Sign out, read
+- SS-46 **Superseded in part by account-menu.md ACM-05 (read once the pointer or focus comes to the person's row).** The account menu's version line is its own component (`app/shell/AccountMenuVersion.tsx`) under Sign out, read
   when the menu opens.
 - SS-47 Profile: WHAT YOUR AGENTS KNOW ABOUT YOU is one section (`#about-you`): the label with the characters used
   beside it, the intro, then one card — the learning switch, the entries, the add field. Settings scrolls to an address's

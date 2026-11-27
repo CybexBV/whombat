@@ -125,13 +125,16 @@ export const BOX_SETTINGS = {
   'burrows.update': change('appliance.overview', 'Rename this Whombat, set its time zone or link previews'),
 
   // Where this Whombat is, for the weather and the news it suggests: the person may say it in Chat (“we live in Breda”).
-  'place.find': read('appliance.overview', 'Look up a place on OpenStreetMap'),
-  'place.set': change('appliance.overview', 'Set where this Whombat is, for the weather and local news'),
+  'place.find': read('news', 'Look up a place on OpenStreetMap'),
+  'place.set': change('news', 'Set where this Whombat is, for the weather and local news'),
   // Which news sites this Whombat reads: nothing is read from a site until it is on.
-  'news.sources': read('appliance.overview', 'Read the news sites that are on and the ones suggested'),
-  'news.setSources': change('appliance.overview', 'Turn news sites on or off'),
+  'news.sources': read('news', 'Read the news sites that are on and the ones suggested'),
+  'news.setSources': change('news', 'Turn news sites on or off'),
   // A site of the person's own is read every quarter of an hour, and what it says reaches the assistant: their yes.
-  'news.addSite': ask('appliance.overview', 'Add a news site'),
+  'news.addSite': ask('news', 'Add a news site'),
+  'news.browse': read('news', 'Browse the news sites suggested in a country'),
+  // A list from another reader names sites as adding one does: the person's yes each time.
+  'news.importSites': ask('news', 'Add news sources from another reader’s list'),
 
   'changeWindow.get': read('appliance.about', 'Read the quiet hours for updates and restarts'),
   'changeWindow.set': ask('appliance.about', 'Change the quiet hours for updates and restarts'),

@@ -1,37 +1,43 @@
 /**
- * Asking for notifications with a reason first (MN-05). The app doesn't ask cold: while Android hasn't asked yet, a push
- * bridge (`PushBridge` self-hosted, `useManagedPush` managed) offers a card in the inbox — what notifications are for,
- * “Turn on” (then Android's question) and “Not now”. “Not now” is kept on this phone: the card doesn't come back, and
- * Settings → Notifications keeps “Turn on”. Once notifications are allowed or refused the card goes. Pure: the store is
- * injected (`promptStore.ts` has the app's).
+ * The one time the app asks for notifications, with a reason (docs/app/decisions/mobile-reach.md). Where the phone
+ * must ask first (Android 13 and later, never asked: `pushStart` says `sheet`), the push bridge (`useManagedPush`)
+ * offers a sheet at the first open after sign-in: “Get a ping when {Agent} needs you?”, Turn on (then Android's
+ * question) and Not now. Not now is kept on this phone: the sheet doesn't come back, and Settings → Notifications keeps
+ * Turn on. Once notifications are allowed or refused the sheet goes. Pure: the store is injected (`promptStore.ts` has
+ * the app's).
  */
+import { agentWords } from '@whombat/client';
 import { type KeyValueStore, STORAGE_KEYS } from '../lib/kv';
 
-/** The card's words, in the app's voice. */
-export const PUSH_PROMPT_COPY = {
-  title: 'Know when something needs you',
-  text: 'Turn on notifications for approvals to give, mentions and your agent’s answers. Your phone asks you next.',
-  turnOn: 'Turn on',
-  notNow: 'Not now',
-} as const;
+/** The sheet's words, the web's own; `{Agent}` is the assistant's name. */
+export function pushPromptCopy(agent: string | null | undefined) {
+  return {
+    title: `Get a ping when ${agentWords(agent).name} needs you?`,
+    text: 'Only for things that need you, like an approval or a backup that failed. You can change this in Settings.',
+    turnOn: 'Turn on',
+    notNow: 'Not now',
+  } as const;
+}
 
 export interface PushPromptState {
-  /** The card shows: Android hasn't asked yet and the person hasn't said “Not now”. */
+  /** The sheet shows: the phone must ask, and the person hasn't said “Not now”. */
   shown: boolean;
-  /** “Turn on” is waiting for Android's answer. */
+  /** Turn on is waiting for the system's answer. */
   busy: boolean;
 }
 
 export interface PushPrompt {
   state(): PushPromptState;
   subscribe(listener: () => void): () => void;
-  /** Android hasn't asked yet; `turnOn` asks (and registers). */
+  /** Whether “Not now” was said on this phone (also before this run). */
+  notNowKept(): Promise<boolean>;
+  /** The phone must ask first; `turnOn` asks (and registers). */
   offer(turnOn: () => Promise<unknown>): void;
-  /** Allowed, refused or not available: no card. */
+  /** Allowed, refused or not available: no sheet. */
   withdraw(): void;
-  /** “Turn on”: Android asks now. */
+  /** Turn on: the system asks now. */
   turnOn(): Promise<void>;
-  /** “Not now”: no card on this phone again (Settings keeps “Turn on”). */
+  /** Not now, or the sheet closed: not asked again on this phone (Settings keeps Turn on). */
   notNow(): Promise<void>;
 }
 
@@ -71,6 +77,10 @@ export function createPushPrompt(store: KeyValueStore): PushPrompt {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    async notNowKept() {
+      await read();
+      return dismissed === true;
+    },
     offer(turnOn) {
       offered = turnOn;
       if (dismissed === null) void read();
@@ -88,7 +98,7 @@ export function createPushPrompt(store: KeyValueStore): PushPrompt {
       try {
         await ask();
       } catch {
-        // The bridge says what came of it (offers again while Android still hasn't asked).
+        // The bridge says what came of it in Settings → Notifications.
       } finally {
         busy = false;
         if (offered === ask) offered = null;
@@ -96,6 +106,7 @@ export function createPushPrompt(store: KeyValueStore): PushPrompt {
       }
     },
     async notNow() {
+      if (busy) return;
       dismissed = true;
       emit();
       await store.set(PUSH_PROMPT_KEY, new Date().toISOString()).catch(() => {});

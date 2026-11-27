@@ -60,7 +60,17 @@ export interface SearchSetting {
   line: string;
   /** More words it is found by that it doesn't show (“appearance” for Theme). */
   terms?: string;
-  icon: 'you' | 'bell' | 'theme' | 'assistant' | 'connections' | 'box' | 'screen' | 'advanced' | 'part';
+  icon:
+    | 'you'
+    | 'bell'
+    | 'theme'
+    | 'assistant'
+    | 'connections'
+    | 'box'
+    | 'news'
+    | 'screen'
+    | 'advanced'
+    | 'part';
   target: SettingTarget;
 }
 
@@ -239,6 +249,8 @@ export function searchSettings(input: {
   you: string;
   /** The box's screen row's name, where it has one (“Screen”, “Screens”). */
   screen: string | null;
+  /** The Whombat answers the place and the news: News and weather is a page. */
+  news?: boolean;
   advanced: readonly AdvancedRowView[];
 }): SearchSetting[] {
   const groups = SETTINGS_GROUP_TEXT.groups(input.assistant);
@@ -303,6 +315,18 @@ export function searchSettings(input: {
       icon: 'box',
       target: { kind: 'page', name: input.managed ? 'Whombat' : 'SettingsWhombat' },
     },
+    ...(input.news
+      ? [
+          {
+            key: 'news',
+            title: SETTINGS_TEXT.rows.news,
+            line: SETTINGS_TEXT.newsLine,
+            terms: 'weather place headlines feeds sources',
+            icon: 'news',
+            target: { kind: 'page', name: 'SettingsNews' },
+          } satisfies SearchSetting,
+        ]
+      : []),
     ...(input.screen
       ? [
           {

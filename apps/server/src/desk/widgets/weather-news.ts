@@ -8,7 +8,7 @@ import { NEWS_HEADLINES_MAX } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { burrows } from '../../db/schema/index';
 import { newsSourcesOf } from '../../news/commands';
-import { mergeHeadlines, newsFor } from '../../news/reader';
+import { mergeHeadlines, newsFor, newsShare } from '../../news/reader';
 import type { NewsRead } from '../../news/view';
 import { placeOfBurrow } from '../../place/store';
 import type { Services } from '../../services';
@@ -35,7 +35,7 @@ export async function readNews(services: Services, burrowId: string): Promise<Ne
   const read = await newsFor(services).read(sources);
   return {
     sources: sources.length,
-    headlines: mergeHeadlines(read, NEWS_HEADLINES_MAX),
+    headlines: mergeHeadlines(read, NEWS_HEADLINES_MAX, newsShare(NEWS_HEADLINES_MAX, sources.length)),
     anyRead: read.some((r) => r.ok),
   };
 }

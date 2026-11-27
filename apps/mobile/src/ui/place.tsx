@@ -74,6 +74,7 @@ export function PlaceRow({
   tag,
   line,
   bad = false,
+  warn = false,
   first = false,
   selected = false,
   label,
@@ -88,6 +89,8 @@ export function PlaceRow({
   line?: string | null;
   /** The line in the Not working colour. */
   bad?: boolean;
+  /** The line in the warning's text colour (“Update ready”). */
+  warn?: boolean;
   first?: boolean;
   /** With two pages: the page beside the list shows what it opens. */
   selected?: boolean;
@@ -136,7 +139,11 @@ export function PlaceRow({
           </Text>
         )}
         {line ? (
-          <Text size={13.5} lh={1.4} color={bad ? theme.colors.bad : theme.colors.ink2}>
+          <Text
+            size={13.5}
+            lh={1.4}
+            color={bad ? theme.colors.bad : warn ? theme.colors.warnText : theme.colors.ink2}
+          >
             {line}
           </Text>
         ) : null}

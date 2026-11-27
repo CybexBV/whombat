@@ -1,3 +1,4 @@
+import type { ThemeChoice } from '@whombat/client';
 import type { ThemeName } from '@whombat/tokens';
 import {
   createContext,
@@ -20,20 +21,24 @@ import {
   writeStoredTheme,
 } from './theme';
 
-type PreferenceListener = (theme: ThemeName) => void;
+type PreferenceListener = (choice: ThemeChoice) => void;
 
 export interface ThemeContextValue {
   /** The theme in effect. */
   theme: ThemeName;
   /** The explicit choice (local or from the server), or null when following the system. */
   preference: ThemeName | null;
+  /** Light, Dark or Auto (`system`, following the device): the account menu's three choices. */
+  choice: ThemeChoice;
   /** User choice: persisted locally and reported to `useThemePreferenceSync` listeners. */
   setTheme: (theme: ThemeName) => void;
+  /** Light, dark or Auto, chosen by the person: kept on this device and reported like `setTheme`. */
+  setChoice: (choice: ThemeChoice) => void;
   toggleTheme: () => void;
   /** Forget the explicit choice and follow `prefers-color-scheme` again. */
   followSystem: () => void;
   /** Apply a preference that came from elsewhere (e.g. the server) without echoing it back. */
-  applyPreference: (theme: ThemeName) => void;
+  applyPreference: (choice: ThemeChoice) => void;
   /** @internal used by `useThemePreferenceSync`. */
   subscribe: (listener: PreferenceListener) => () => void;
 }
@@ -64,13 +69,15 @@ export function ThemeProvider({ children, root }: ThemeProviderProps) {
     return () => mql.removeEventListener?.('change', onChange);
   }, []);
 
-  const applyPreference = useCallback((next: ThemeName) => {
-    writeStoredTheme(next);
-    setPreference(next);
+  const applyPreference = useCallback((next: ThemeChoice) => {
+    // Auto keeps nothing on this device, so the page follows the system from its first paint.
+    const stored = next === 'system' ? null : next;
+    writeStoredTheme(stored);
+    setPreference(stored);
   }, []);
 
-  const setTheme = useCallback(
-    (next: ThemeName) => {
+  const setChoice = useCallback(
+    (next: ThemeChoice) => {
       applyPreference(next);
       for (const listener of listeners.current) listener(next);
     },
@@ -81,19 +88,18 @@ export function ThemeProvider({ children, root }: ThemeProviderProps) {
     () => ({
       theme,
       preference,
-      setTheme,
-      toggleTheme: () => setTheme(otherTheme(theme)),
-      followSystem: () => {
-        writeStoredTheme(null);
-        setPreference(null);
-      },
+      choice: preference ?? 'system',
+      setTheme: setChoice,
+      setChoice,
+      toggleTheme: () => setChoice(otherTheme(theme)),
+      followSystem: () => applyPreference('system'),
       applyPreference,
       subscribe: (listener) => {
         listeners.current.add(listener);
         return () => listeners.current.delete(listener);
       },
     }),
-    [theme, preference, setTheme, applyPreference],
+    [theme, preference, setChoice, applyPreference],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -108,12 +114,12 @@ export function useTheme(): ThemeContextValue {
 /**
  * Wires the per-user theme preference stored on the server (ARCHITECTURE "Theme … persisted locally
  * and per user"). Pass the preference from the current user's profile (or undefined while loading)
- * and a callback that saves a new choice. The server value is applied when it arrives; user toggles
- * are reported to `save`.
+ * and a callback that saves a new choice. The server value is applied when it arrives (`system` follows
+ * the device); the person's choices are reported to `save`.
  */
 export function useThemePreferenceSync(
-  serverPreference: ThemeName | null | undefined,
-  save: (theme: ThemeName) => void,
+  serverPreference: ThemeChoice | null | undefined,
+  save: (choice: ThemeChoice) => void,
 ): void {
   const { applyPreference, subscribe } = useTheme();
   const saveRef = useRef(save);

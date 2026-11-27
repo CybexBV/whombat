@@ -23,7 +23,14 @@ import {
 } from '@whombat/client';
 import { DESK_SCREENS_TEXT } from '@whombat/client/desk';
 import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
-import { CONNECTIONS_HREF, parseThingId, type ThingSummary } from '@whombat/core';
+import {
+  CONNECTIONS_HREF,
+  NEWS_KIND_WORDS,
+  NEWS_WORDS,
+  PLACE_SETTING_WORDS,
+  parseThingId,
+  type ThingSummary,
+} from '@whombat/core';
 import { INBOX_PATH } from '../../app/shell/location';
 
 export type CatalogGroup = 'things' | 'settings' | 'places';
@@ -32,7 +39,7 @@ export type CatalogIcon =
   | { kind: 'mark'; mark: MarkLike }
   | { kind: 'glyph'; glyph: ThingGlyph }
   | { kind: 'place'; place: AppPlace }
-  | { kind: 'setting'; group: 'you' | 'agent' | 'connections' | 'appliance' | 'advanced' };
+  | { kind: 'setting'; group: 'you' | 'agent' | 'connections' | 'appliance' | 'news' | 'advanced' };
 
 export interface CatalogEntry {
   /** Unique within the catalogue: where Back puts the focus again. */
@@ -52,7 +59,17 @@ export interface CatalogInput {
   /** The assistant's name. */
   agent: string;
   here: SettingsHere;
+  /** The Whombat answers where it is and the news it reads (`placeNewsShown`): News and weather is found too. */
+  news?: boolean;
 }
+
+/** What News and weather is found by besides its name: its parts and the kinds of source it takes. */
+const NEWS_SEARCH_TERMS = [
+  PLACE_SETTING_WORDS.title,
+  'location town city weather forecast headlines feeds RSS OPML',
+  NEWS_WORDS.chosen,
+  ...Object.values(NEWS_KIND_WORDS),
+].join(' ');
 
 const PLACE_HREFS: Record<AppPlace, string> = {
   search: '/search',
@@ -71,7 +88,7 @@ export function placeHref(place: AppPlace): string {
   return PLACE_HREFS[place];
 }
 
-export function searchCatalog({ things, agent, here }: CatalogInput): CatalogEntry[] {
+export function searchCatalog({ things, agent, here, news = false }: CatalogInput): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
   const kinds = SEARCH_WORDS.kinds;
   for (const row of thingRows(things ?? [])) {
@@ -147,6 +164,17 @@ export function searchCatalog({ things, agent, here }: CatalogInput): CatalogEnt
     THIS_WHOMBAT_TEXT.parts.about,
     '/settings?tab=appliance&section=about',
   );
+  // News and weather, found by what is on it too (the place, the weather, the sources and their kinds).
+  if (news)
+    entries.push({
+      key: 'setting:news',
+      group: 'settings',
+      title: groups.news,
+      line: `${SETTINGS_GROUP_TEXT.title} · ${NEWS_WORDS.homeLine}`,
+      href: '/settings?tab=news',
+      icon: { kind: 'setting', group: 'news' },
+      terms: `${SETTINGS_GROUP_TEXT.title} ${NEWS_SEARCH_TERMS}`,
+    });
   // Advanced's pages with their own line; Usage isn't offered (its row is hidden too).
   for (const row of advancedRowsHere(agent, here))
     if (row.key !== 'spend')
