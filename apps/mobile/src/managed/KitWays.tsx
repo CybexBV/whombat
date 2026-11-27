@@ -5,6 +5,7 @@
  * account has none for it) and keeps the envelope at control, shares the print page, shares the file. A locked kit is
  * confirmed at once (`recovery.kit.confirm`); a printed or saved one after “I’ve saved the kit”, as before.
  */
+
 import {
   accountOf,
   BACKUP_OPTIONS_TEXT,
@@ -25,6 +26,7 @@ import {
 import { type ApplianceSession, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FileIcon, type LucideIcon, Printer, Square, SquareCheck, UserKey } from '../ui/icons';
@@ -39,7 +41,7 @@ import {
   kitPrintHtml,
   type KitWays as Ways,
 } from './backupOptions';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { phoneLabel } from './env';
 import { ErrorLine, Frame, Note } from './ui';
 
@@ -69,6 +71,9 @@ export interface KitWaysProps {
 }
 
 export function KitWays(props: KitWaysProps) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const { session, control, platform, appliancePeerId } = props;
   const prf = !!platform?.prf && !!control;
   const [ways, setWays] = useState<Ways>(() => initialKitWays(prf));
@@ -150,7 +155,7 @@ export function KitWays(props: KitWaysProps) {
           setError(
             e instanceof PasskeyError && e.code === 'unsupported'
               ? K.noPrf
-              : (passkeyErrorText(e) ?? COPY.claim.errors.failed),
+              : (passkeyErrorText(e) ?? managedCopyHere.claim.errors.failed),
           );
           return;
         }
@@ -178,7 +183,7 @@ export function KitWays(props: KitWaysProps) {
       if (locked) await confirm();
       else setKept(true);
     } catch {
-      setError(COPY.claim.errors.failed);
+      setError(managedCopyHere.claim.errors.failed);
     } finally {
       setBusy(false);
     }
@@ -189,27 +194,31 @@ export function KitWays(props: KitWaysProps) {
 
   if (kept)
     return (
-      <Frame kicker={COPY.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
+      <Frame kicker={managedCopyHere.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
         <Note text={K.saved} />
         <ErrorLine text={error} />
         <Button
-          label={COPY.kit.confirm}
+          label={managedCopyHere.kit.confirm}
           size="lg"
           busy={busy}
           onPress={() => {
             setBusy(true);
             setError(null);
             confirm()
-              .catch(() => setError(COPY.claim.errors.failed))
+              .catch(() => setError(managedCopyHere.claim.errors.failed))
               .finally(() => setBusy(false));
           }}
         />
-        <Button label={COPY.kit.downloadAgain} variant="secondary" onPress={() => setKept(false)} />
+        <Button
+          label={managedCopyHere.kit.downloadAgain}
+          variant="secondary"
+          onPress={() => setKept(false)}
+        />
       </Frame>
     );
 
   return (
-    <Frame kicker={COPY.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
+    <Frame kicker={managedCopyHere.kit.kicker} title={K.title} sub={K.lead(props.applianceName)} {...back}>
       <WaysCard ways={ways} prf={prf} onChange={setWays} />
       {ways.passkey && hasPasskey === false ? <Note text={K.noPasskey(props.applianceName)} /> : null}
       <ErrorLine text={error} />

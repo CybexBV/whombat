@@ -12,7 +12,6 @@ import {
   BACKUP_OPTIONS_TEXT,
   type ClaimCard,
   type ClaimRequest,
-  COPY,
   type ControlApi,
   type ControlSession,
   type CreateOrgInput,
@@ -82,6 +81,8 @@ import { Input } from '../components/Input';
 import { SectionLabel } from '../components/SectionLabel';
 import { StatusDot } from '../components/StatusDot';
 import { SCREEN_MODE_TEXT } from '../features/screens/screenMode/model';
+import { COPY } from '../i18n/managed';
+import { currentLocale } from '../i18n/provider';
 import { saveBlob } from '../lib/saveBlob';
 import { KeepWayBack, type KitChoices, KitPrintSheet, startingKitChoices } from './KitScreen';
 import { browserLabel } from './keys';
@@ -845,7 +846,7 @@ export function AppliancesScreen({
                     {online
                       ? COPY.appliances.online
                       : a.lastSeenAt
-                        ? COPY.appliances.offline(agoText(a.lastSeenAt, now))
+                        ? COPY.appliances.offline(agoText(a.lastSeenAt, now, currentLocale()))
                         : COPY.appliances.neverSeen}
                     {a.revocationsPending > 0 && (
                       <span className={styles.warn}>

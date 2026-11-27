@@ -18,6 +18,7 @@ import { Icon } from '../../../components/Icon';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { useToast } from '../../../components/Toast';
 import { TierRow, ToggleRow } from '../../../components/Toggle';
+import { currentLocale } from '../../../i18n/provider';
 import settings from '../../settings/SettingsScreen.module.css';
 import { KeyTierRows } from '../KeyTierRows';
 import { useKeyLinks } from '../keyLinks';
@@ -65,7 +66,7 @@ export function KeysSection({
   showKey,
 }: SettingsTabProps & { showKey?: string | undefined }) {
   const { agent } = profile;
-  const t = permissionsText(agent.name);
+  const t = permissionsText(agent.name, currentLocale());
   const ids = useId();
   const { data: host } = useHostInfo({ params: { burrow } });
   const allowances = useCommandAllowances({ params: { burrow } });
@@ -142,7 +143,7 @@ export function KeysSection({
         {lockedRows.map(({ option, note }) => (
           <ToggleRow
             key={option.keyId}
-            label={keyLabel(option.keyId)}
+            label={keyLabel(option.keyId, currentLocale())}
             checked={false}
             locked
             note={note ?? undefined}
@@ -165,7 +166,7 @@ export function KeysSection({
                 return (
                   <TierRow<Tier>
                     key={option.keyId}
-                    label={keyLabel(option.keyId)}
+                    label={keyLabel(option.keyId, currentLocale())}
                     options={TIER_SEGMENTS}
                     value={draft.tiers[option.keyId] ?? option.defaultTier ?? 'ask'}
                     onChange={(next) =>
@@ -180,7 +181,7 @@ export function KeysSection({
               return (
                 <ToggleRow
                   key={option.keyId}
-                  label={keyLabel(option.keyId)}
+                  label={keyLabel(option.keyId, currentLocale())}
                   checked={row.checked}
                   onCheckedChange={(on) =>
                     form.edit((d) => ({ ...d, keys: { ...d.keys, [option.keyId]: on } }))

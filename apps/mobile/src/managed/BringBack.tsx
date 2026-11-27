@@ -12,6 +12,7 @@
  * From the app's Backups (`later`): `resume` opens where a restore stands (finishing it, trying again); `replace` brings
  * one back on a Whombat that started fresh, after saying what's on it now is set aside (`backup.adopt` with `replace`).
  */
+
 import { agentWords, createClient, theAgentOf } from '@whombat/client';
 import {
   accountKitsToBringBack,
@@ -38,6 +39,7 @@ import { type ApplianceSession, OperationError, sessionOps } from '@whombat/clie
 import type { BackupCheckpoint, BackupRestoreState } from '@whombat/protocol/session';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -913,6 +915,8 @@ function Done({
   state: BackupRestoreState | null;
   onOpen: () => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const client = useMemo(() => createClient({ session }), [session]);
   const [agent, setAgent] = useState<string | null>(null);
@@ -930,7 +934,7 @@ function Done({
       live = false;
     };
   }, [client]);
-  const words = agentWords(agent);
+  const words = agentWords(agent, rawLocale);
   const lines = [
     servers === 'staged' ? B.doneServers(null) : null,
     B.doneBackups(state?.newPassword?.place ?? null),

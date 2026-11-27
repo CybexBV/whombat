@@ -6,6 +6,7 @@
  * with a code to type where the service gives one; connection-signin-android.md AP-3951). The words are the web's
  * (`@whombat/client/connections`).
  */
+
 import {
   CONNECT_FORM_TEXT,
   filledText,
@@ -28,6 +29,7 @@ import { ActivityIndicator, Linking, ScrollView, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { type PendingLogin, underLabel, waitEnds, waitWords } from '../../data/connectForm';
 import { TAB_WORDS } from '../../data/shell';
+import { useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { copyToClipboard } from '../../ui/clipboard';
@@ -133,6 +135,7 @@ export function TextLink({
   onPress: () => void;
   external?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
@@ -141,7 +144,7 @@ export function TextLink({
       ringRadius={8}
       accessibilityRole={external ? 'link' : 'button'}
       accessibilityLabel={label}
-      accessibilityHint={external ? 'Opens in your browser' : undefined}
+      accessibilityHint={external ? tMobile('ui.opens-in-your-browser') : undefined}
       style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}
     >
       <Text size={14} weight={500} color={theme.colors.brand}>
@@ -527,6 +530,7 @@ export function MoreToggle({
  * (AP-3951). The words are the web's, with the browser.
  */
 export function LoginWaitView({ login, onCancel }: { login: PendingLogin; onCancel: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [now, setNow] = useState(() => Date.now());
   const [ends] = useState(() => waitEnds(login, Date.now()));
@@ -552,7 +556,7 @@ export function LoginWaitView({ login, onCancel }: { login: PendingLogin; onCanc
       <Button
         label={`${words.open} ↗`}
         variant="secondary"
-        accessibilityHint="Opens in your browser"
+        accessibilityHint={tMobile('ui.opens-in-your-browser')}
         onPress={() => openOutside(login.flow.loginUrl)}
       />
       <Button label={words.cancel} variant="quiet" onPress={onCancel} />

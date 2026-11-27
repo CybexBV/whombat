@@ -8,10 +8,12 @@
 import { VAULT_ROW_TEXT, vaultEntrySourceLine, vaultEntryTag, vaultRowLine } from '@whombat/client';
 import { useTheAgent, useVault, useVaultNetworks } from '@whombat/client/react';
 import { VAULT_LIMIT_MESSAGES } from '@whombat/core/contracts';
-import { VAULT_COPY, type VaultEntry, type VaultNetwork, vaultEntryWhere } from '@whombat/core/vault';
+import { type VaultEntry, type VaultNetwork, vaultCopy, vaultEntryWhere } from '@whombat/core/vault';
 import { Lock } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Tag } from '../../components/Tag';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import { errorDetail, PlaceRowBody, PlaceState, placeStyles as place } from '../settings/Place';
 import { AddToVaultModal } from './AddToVaultModal';
@@ -31,6 +33,7 @@ export interface VaultTabProps {
 }
 
 export function VaultTab({ burrow, open, onOpenChange, adding: asked, onAddingChange }: VaultTabProps) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const query = useVault({ params: { burrow } });
   const networks = useVaultNetworks({});
   const [ownOpen, setOwnOpen] = useState<string | undefined>(open);
@@ -109,7 +112,7 @@ function EntryRow({
   const { words: agent } = useTheAgent(burrow);
   const detailId = useId();
   const line = vaultRowLine(entry, { now: Date.now(), timeZone: viewer.timeZone, agent: agent.name });
-  const where = vaultEntryWhere(entry);
+  const where = vaultEntryWhere(entry, currentLocale());
   const tag = vaultEntryTag(entry);
   const source = vaultEntrySourceLine(entry, Date.now(), viewer.timeZone);
   return (

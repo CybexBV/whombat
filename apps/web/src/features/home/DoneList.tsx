@@ -4,6 +4,7 @@ import type { ChangeEntry } from '@whombat/core';
 import { Check, Undo2 } from 'lucide-react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n } from '../../i18n/provider';
 import { AppLink } from '../files/AppLink';
 import { useBurrowContext } from '../messaging/useRoom';
 import styles from './Home.module.css';
@@ -30,11 +31,13 @@ export function DoneList({
   /** The page the list is on: a change linking to it gets no Review (AP-4573). */
   here?: string;
 }) {
+  const { tag: uiLocale } = useWebI18n();
   const undo = useUndo(burrow);
   const { me } = useBurrowContext(burrow);
   const { agent: assistant } = useTheAgent(burrow);
   const requests = useUndoRequests(burrow);
   const rows = doneRows(changes, now, timeZone, {
+    locale: uiLocale,
     viewerId: me?.id,
     requests,
     assistantName: assistant?.name,

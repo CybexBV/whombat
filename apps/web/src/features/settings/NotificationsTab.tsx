@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createLink } from '@tanstack/react-router';
-import { dndSetText, quietHoursText, toggleDay, WEEKDAY_LABELS } from '@whombat/client';
+import { dndSetText, quietHoursText, toggleDay, weekdayLabels } from '@whombat/client';
 import { COMMUNITY_TEXT } from '@whombat/client/managed';
 import { queryKeys } from '@whombat/client/query';
 import { useBootstrap, useTheAgent } from '@whombat/client/react';
@@ -23,6 +23,8 @@ import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { BOX_PAGE_TEXT } from '../../managed/pageText';
 import { useWebPush } from '../../push/useWebPush';
 import { useReach } from '../machine/useReach';
@@ -140,7 +142,7 @@ function DndSection({
   const state = dndStateText(prefs, now, timeZone);
 
   const setUntil = (until: string) =>
-    apply((p) => ({ ...p, dndUntil: until }), dndSetText(until, Date.now(), timeZone));
+    apply((p) => ({ ...p, dndUntil: until }), dndSetText(until, Date.now(), timeZone, currentLocale()));
 
   const onCustom = async (event: FormEvent) => {
     event.preventDefault();
@@ -264,6 +266,7 @@ function QuietHoursSection({
   timeZone: string;
   apply: Apply;
 }) {
+  const WEEKDAY_LABELS = useLocaleWords(weekdayLabels);
   const ids = useId();
   const schedule = prefs.schedule;
   const [start, setStart] = useState(schedule.start);
@@ -293,7 +296,7 @@ function QuietHoursSection({
               Quiet hours
             </label>
             <span className={styles.rowMeta} id={`${ids}-summary`}>
-              {quietHoursText(schedule)}
+              {quietHoursText(schedule, currentLocale())}
             </span>
           </span>
           <Toggle

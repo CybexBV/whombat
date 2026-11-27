@@ -4,6 +4,7 @@
  * answer. A leaf module: the place flows, the Inbox and the session's ops all use it.
  */
 import { requestUnixHttp, UnixHttpError } from '@whombat/node-io/http';
+import { tServer } from '../i18n/catalog';
 
 /** What one call may take: a status read is short, the list of backups may be long. */
 export interface BackupCallOptions {
@@ -58,8 +59,12 @@ export class BackupServiceDown extends Error {
 }
 
 /** What people read when the backup service doesn't answer (instead of “Something went wrong”). */
-export const BACKUP_DOWN_TEXT =
-  'Your Whombat’s backup service isn’t answering right now. It usually comes back by itself; try again in a minute.';
+export const BACKUP_DOWN_TEXT = tServer(null, 'managed.backup.down');
+
+/** The same words in a locale. */
+export function backupDownText(locale?: string | null): string {
+  return tServer(locale, 'managed.backup.down');
+}
 
 const UNREACHABLE = new Set(['ENOENT', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'EACCES', 'ENOTSOCK']);
 

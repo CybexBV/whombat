@@ -4,6 +4,9 @@
  * session ops carry, the place ids, the order the Inbox proposes them in and the words people see.
  */
 import { z } from 'zod';
+import { type CoreMessageKey, coreTranslator } from '../i18n/catalog.js';
+import type { MessageVars } from '../i18n/engine.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 
 /** What runs the place: Whombat's agent on Unraid or another Linux server, or a NAS reached through its own API. */
 export const BACKUP_PLACE_KINDS = ['unraid', 'linux', 'truenas', 'synology', 'qnap'] as const;
@@ -240,6 +243,106 @@ export const BACKUP_PLACE_TEXT = {
     spaceDetail: (freeGb: number) => `${freeGb} GB left.`,
   },
 } as const;
+
+/** `BACKUP_PLACE_TEXT`'s shape with plain strings, as `backupPlaceText` gives it in any locale. */
+type Widen<T> = T extends string
+  ? string
+  : T extends (...args: infer A) => infer R
+    ? (...args: A) => Widen<R>
+    : { readonly [K in keyof T]: Widen<T[K]> };
+export type BackupPlaceWords = Widen<typeof BACKUP_PLACE_TEXT>;
+
+/** `BACKUP_PLACE_TEXT` in a locale: the words people see, in their language (English when none is given). */
+export function backupPlaceText(locale?: string | null): BackupPlaceWords {
+  const tr = coreTranslator(locale);
+  const t = (key: string, vars?: MessageVars) => tr.t(`backupPlace.${key}` as CoreMessageKey, vars);
+  const english = tr.language === 'en';
+  return {
+    heading: t('heading'),
+    kind: (k: BackupPlaceKind) => t(`kind.${k}`),
+    state: {
+      in_use: t('state.in_use'),
+      ready: t('state.ready'),
+      connect_first: t('state.connect_first'),
+      manage_first: t('state.manage_first'),
+      unsupported: t('state.unsupported'),
+    },
+    use: t('use'),
+    byHand: t('byHand'),
+    check: t('check'),
+    moveTitle: (name: string) => t('moveTitle', { name }),
+    moveBody: (from: string) => t('moveBody', { from }),
+    appendOnly: t('appendOnly'),
+    cleanup: (days: number) => t('cleanup', { days }),
+    noCleanup: t('noCleanup'),
+    keptHere: t('keptHere'),
+    reasons: {
+      connect: (said: string) => t('reasons.connect', { said }),
+      manage: t('reasons.manage'),
+      noDocker: t('reasons.noDocker'),
+      arrayStopped: t('reasons.arrayStopped'),
+      self: t('reasons.self'),
+      synologyOld: t('reasons.synologyOld'),
+      synologyNoContainerManager: t('reasons.synologyNoContainerManager'),
+      trueNasOld: t('reasons.trueNasOld'),
+      trueNasNoPool: t('reasons.trueNasNoPool'),
+      trueNasAppsStopped: t('reasons.trueNasAppsStopped'),
+      qnapNoContainerStation: t('reasons.qnapNoContainerStation'),
+      dockerDown: t('reasons.dockerDown'),
+      nfsOff: t('reasons.nfsOff'),
+      helperOld: t('reasons.helperOld'),
+      notYet: t('reasons.notYet'),
+      other: t('reasons.other'),
+      noAddress: (place: string) => t('reasons.noAddress', { place }),
+    },
+    refused: {
+      gone: t('refused.gone'),
+      move: (from: string) => t('refused.move', { from }),
+      inUse: (place: string) => t('refused.inUse', { place }),
+      byHandOnly: t('refused.byHandOnly'),
+      checkExpired: t('refused.checkExpired'),
+      unknown: t('refused.unknown'),
+    },
+    ownDisk: (place: string) => t('ownDisk', { place }),
+    failed: {
+      install: (place: string) => t('failed.install', { place }),
+      destination: (place: string) => t('failed.destination', { place }),
+      cleanup: (place: string) => t('failed.cleanup', { place }),
+    },
+    location: {
+      said: (kind: BackupPlaceKind, name: string) =>
+        t(
+          kind === 'truenas'
+            ? 'location.pool'
+            : kind === 'synology' || kind === 'qnap'
+              ? 'location.sharedFolder'
+              : 'location.share',
+          { name },
+        ),
+      shared: t('location.shared'),
+      holdsOther: t('location.holdsOther'),
+      onPool: (pool: string) => t('location.onPool', { pool }),
+      gone: t('location.gone'),
+      newBackups: (from: string) => t('location.newBackups', { from }),
+    },
+    setSay: (place: string, where: string | null, running: boolean) =>
+      t('setSay', {
+        place,
+        where: where ? t('setSay.where', { where }) : '',
+        first: t(running ? 'setSay.running' : 'setSay.soon'),
+      }),
+    watch: {
+      cleanupName: t('watch.cleanupName'),
+      cleanupTitle: (place: string) => t('watch.cleanupTitle', { place }),
+      cleanupDetail: t('watch.cleanupDetail'),
+      spaceName: t('watch.spaceName'),
+      spaceTitle: (place: string) => t('watch.spaceTitle', { place }),
+      // English says the number as it is; other languages with their own decimal separator.
+      spaceDetail: (freeGb: number) =>
+        t('watch.spaceDetail', { freeGb: english ? String(freeGb) : formatLocaleNumber(freeGb, locale) }),
+    },
+  };
+}
 
 /**
  * The client name a Whombat's backups go under on a place (BPL-01): `whombat-<name>-<id>`, lowercase letters, digits

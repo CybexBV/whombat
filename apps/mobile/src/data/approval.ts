@@ -37,11 +37,11 @@ import {
 } from '@whombat/client';
 import {
   type AgentFace,
-  APPROVAL_ASK_WORDS,
   type Approval,
   type ApprovalLastingWords,
   alwaysAllowConfirm,
   alwaysAllowRow,
+  approvalAskWords,
   approvalView,
   type CommandScope,
   formatClock,
@@ -201,7 +201,7 @@ export function approvalScreen(
     view.lasting ??
     (riskRow && always ? alwaysAllowConfirm(agentName, keyRiskRow(riskRow).verb, always) : null);
   const lasting = always && words ? lastingWordsAt(words, lastingWhere(server)) : null;
-  const W = APPROVAL_ASK_WORDS;
+  const W = approvalAskWords(ctx.locale);
   const editDraft = view.ask && view.canApprove ? teamReportDraftOf(approval) : null;
   const later = Boolean(view.ask && tonight && view.canApprove && !editDraft);
   const answers: ApprovalAnswerButton[] = [

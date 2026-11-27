@@ -1,5 +1,6 @@
-import { SETTINGS_GROUP_TEXT, type YouPart } from '@whombat/client';
+import type { YouPart } from '@whombat/client';
 import { SegmentedControl } from '../../components/SegmentedControl';
+import { useSettingsGroupText } from '../../i18n/words';
 import { PromptsPart } from '../prompts/PromptsPart';
 import { ManagedDevices, useApplianceStatus } from './ManagedTabs';
 import { NotificationsTab } from './NotificationsTab';
@@ -24,6 +25,7 @@ export function YouTab({
   part?: YouPart;
   onPartChange: (part: YouPart) => void;
 }) {
+  const SETTINGS_GROUP_TEXT = useSettingsGroupText();
   const parts = useYouParts(burrow);
   const current: YouPart = part && parts.includes(part) ? part : 'profile';
   usePartInView(tw.parts ?? '', current);

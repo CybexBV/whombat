@@ -6,16 +6,18 @@
  * conversation's Files. A conversation the sidebar doesn't list (a task chat) is looked up on its own. Loading, no
  * files yet (with Go to Chat) and a failed read each have a card of their own.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { FILES_COPY, type FilesConversationRow, filesConversationRows } from '@whombat/client';
+import { type FilesConversationRow, filesConversationRows } from '@whombat/client';
 import { useConversation, useFilesSummary } from '@whombat/client/react';
 import { useMemo } from 'react';
 import { RefreshControl, ScrollView } from 'react-native';
 import { useBurrow, useViewContext } from '../data/BurrowProvider';
 import { filesListRow, filesRowFor } from '../data/files';
-import { PLACE_WORDS } from '../data/places';
+import { filesCopy } from '../data/filesCopy';
 import { useAgentWords } from '../data/useAgent';
 import { useFilesSpace } from '../data/useFiles';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { useTheme } from '../theme/theme';
 import { BackBar, Screen } from '../ui/headers';
@@ -62,6 +64,10 @@ function UnlistedFilesRow({
 }
 
 export function FilesScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const filesCopyHere = filesCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
@@ -75,9 +81,9 @@ export function FilesScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <BackBar
-        label={route.params?.back ?? 'Back'}
+        label={route.params?.back ?? tMobile('managed.back')}
         onPress={goBack}
-        right={<PlacesButton current="files" here={PLACE_WORDS.files} />}
+        right={<PlacesButton current="files" here={filesCopyHere.title} />}
       />
       <ScrollView
         style={{ flex: 1 }}
@@ -92,26 +98,26 @@ export function FilesScreen({ navigation, route }: Props) {
           />
         }
       >
-        <PlaceTitle title={FILES_COPY.title} intro={FILES_COPY.intro} />
+        <PlaceTitle title={filesCopyHere.title} intro={filesCopyHere.intro} />
         {!on ? null : summary.error && !summary.data ? (
           <PlaceState
             kind="failed"
             icon={Folder}
-            title={FILES_COPY.readFailed}
-            line={FILES_COPY.readFailedLine}
-            retryLabel={FILES_COPY.retry}
+            title={filesCopyHere.readFailed}
+            line={filesCopyHere.readFailedLine}
+            retryLabel={filesCopyHere.retry}
             onRetry={() => void summary.refetch()}
           />
         ) : !summary.data ? (
-          <PlaceState kind="loading" icon={Folder} title={FILES_COPY.loading} />
+          <PlaceState kind="loading" icon={Folder} title={filesCopyHere.loading} />
         ) : rows.length === 0 ? (
           <PlaceState
             kind="empty"
             icon={Folder}
-            title={FILES_COPY.emptyTitle}
-            line={FILES_COPY.emptyLine(words.Name)}
+            title={filesCopyHere.emptyTitle}
+            line={filesCopyHere.emptyLine(words.Name)}
             action={{
-              label: FILES_COPY.goToChat,
+              label: filesCopyHere.goToChat,
               onPress: () => navigation.navigate('Tabs', { screen: 'ChatRoom' }),
             }}
           />

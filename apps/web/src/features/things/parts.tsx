@@ -10,6 +10,7 @@ import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import styles from './Things.module.css';
 
 /** A link inside the app: a plain click navigates without a reload, a modified click opens a tab. */
@@ -133,10 +134,11 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function ErrorLine({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const { tag: uiLocale } = useWebI18n();
   if (!error) return null;
   return (
     <div className={styles.empty} role="alert">
-      <span className={styles.error}>{hostErrorInfo(error).message}</span>
+      <span className={styles.error}>{hostErrorInfo(error, uiLocale).message}</span>
       {onRetry ? (
         <>
           {' '}
@@ -210,6 +212,7 @@ export function ConfirmDialog({
  * refusal returned (for a dialog to show) or toasted.
  */
 export function useChangeRunner() {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const run = useCallback(
@@ -222,7 +225,7 @@ export function useChangeRunner() {
       try {
         const result = await send();
         if (result.status !== 'ok') {
-          const message = commitOutcomeText(result) ?? '';
+          const message = commitOutcomeText(result, uiLocale) ?? '';
           toast.show(message);
           return { ok: false, message };
         }
@@ -230,14 +233,14 @@ export function useChangeRunner() {
         if (text) toast.show(text);
         return { ok: true, data: result.data };
       } catch (error) {
-        const message = hostErrorInfo(error).message;
+        const message = hostErrorInfo(error, uiLocale).message;
         if (!opts.inline) toast.show(message);
         return { ok: false, message, error };
       } finally {
         setBusy(false);
       }
     },
-    [toast],
+    [toast, uiLocale],
   );
   return { run, busy };
 }

@@ -6,9 +6,11 @@
  * or a read that failed with data on screen (in warn-text, never red: nothing is broken, the read is). Floats like
  * “New messages ↓” (`jumpPill.tsx`), so nothing moves when it comes or goes; in the tree it comes right after the list.
  */
+
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { READ_STATE_TEXT, type ReadLine, readLineOf, UPDATING_AFTER_MS } from '../data/readLine';
+import { type ReadLine, readLineOf, readStateText, UPDATING_AFTER_MS } from '../data/readLine';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { TARGET } from './readState';
@@ -63,6 +65,9 @@ export function useReadLine(source: ReadSource, now: () => number = Date.now): R
 }
 
 export function ReadStatePill({ source }: { source: ReadSource }) {
+  const { rawLocale } = useI18n();
+  const readStateTextHere = readStateText(rawLocale);
+
   const theme = useTheme();
   const line = useReadLine(source);
   if (!line) return null;
@@ -86,24 +91,24 @@ export function ReadStatePill({ source }: { source: ReadSource }) {
       {line === 'updating' ? (
         <View style={pill} accessible accessibilityLiveRegion="polite">
           <Text size={13} weight={500} color={theme.colors.mut}>
-            {READ_STATE_TEXT.updating}
+            {readStateTextHere.updating}
           </Text>
         </View>
       ) : (
         <Touchable
           onPress={() => void source.refetch()}
-          accessibilityLabel={`${READ_STATE_TEXT.failed}. ${READ_STATE_TEXT.retry}`}
-          accessibilityHint={READ_STATE_TEXT.retryHint}
+          accessibilityLabel={`${readStateTextHere.failed}. ${readStateTextHere.retry}`}
+          accessibilityHint={readStateTextHere.retryHint}
           accessibilityLiveRegion="polite"
           feedback="wash"
           ringRadius={TARGET / 2}
           style={pill}
         >
           <Text size={13} weight={500} color={theme.colors.warnText}>
-            {`${READ_STATE_TEXT.failed} · `}
+            {`${readStateTextHere.failed} · `}
           </Text>
           <Text size={13} weight={600} color={theme.colors.ink}>
-            {READ_STATE_TEXT.retry}
+            {readStateTextHere.retry}
           </Text>
         </Touchable>
       )}

@@ -4,6 +4,7 @@
  * WHAT’S IN IT from its own coverage (what comes back, what it left out, what a new Whombat sets up again), “Check this
  * backup now” (`backup.check`; the result lands on the backup) and, below it, “Bring things back from this backup”.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   BACKUP_LOOK_TEXT,
@@ -16,6 +17,7 @@ import { useBackupCheckpoints, useCheckBackup } from '@whombat/client/react';
 import { formatBytes } from '@whombat/core/text';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -25,7 +27,7 @@ import { Button, ErrorState, Loading, SectionLabel } from '../ui/primitives';
 import { useBottomRoom } from '../ui/screenBottom';
 import { backupErrorText } from './BackupDestination';
 import { backupTitle } from './backupOptions';
-import { MANAGED_TEXT } from './copy';
+import { managedText } from './copy';
 import { ErrorLine, Note } from './ui';
 import { useBackupPlaceName, useBackupSession } from './useBackups';
 
@@ -34,6 +36,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'BackupDetail'>;
 const T = BACKUP_OPTIONS_TEXT.detail;
 
 export function BackupDetailScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const managedTextHere = managedText(rawLocale);
+
   const theme = useTheme();
   const bottomRoom = useBottomRoom();
   const session = useBackupSession();
@@ -52,7 +57,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={() => void list.refetch()} />
+        <ErrorState text={managedTextHere.loadError} onRetry={() => void list.refetch()} />
       </Screen>
     );
   if (!list.data)
@@ -72,7 +77,7 @@ export function BackupDetailScreen({ route, navigation }: Props) {
       </Screen>
     );
   const isFirst = cp.own && own.at(-1)?.id === cp.id;
-  const added = cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded);
+  const added = cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded, rawLocale);
   const reason = backupLabel(cp, isFirst);
   const checkDay = cp.check ? relativeDay(cp.check.at) : null;
 

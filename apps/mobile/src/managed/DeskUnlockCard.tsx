@@ -5,10 +5,12 @@
  * counting down, and Unlock (filled) · No, 44dp side by side. The push about it (kind `security`, the “Needs you”
  * channel) opens This Whombat, where this is. Words: `DESK_TEXT.unlock`.
  */
+
 import { DESK_TEXT, type DeskApi, deskUnlockAnswerText } from '@whombat/client/desk';
 import { useDeskActions, useDeskUnlockRequest } from '@whombat/client/desk/react';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
+import { useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -18,6 +20,7 @@ import { Card } from './ui';
 const U = DESK_TEXT.unlock;
 
 export function DeskUnlockCard({ api }: { api: DeskApi | null }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const request = useDeskUnlockRequest(api);
   const actions = useDeskActions(api);
@@ -29,7 +32,7 @@ export function DeskUnlockCard({ api }: { api: DeskApi | null }) {
       await actions.answerUnlock({ id: request.id, unlock });
       showNotice(deskUnlockAnswerText(unlock));
     } catch (error) {
-      Alert.alert('That didn’t go through', deskUnlockAnswerText(unlock, error));
+      Alert.alert(tMobile('managed.that-didnt-go-through'), deskUnlockAnswerText(unlock, error));
     } finally {
       setBusy(null);
     }

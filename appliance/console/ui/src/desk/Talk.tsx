@@ -6,10 +6,12 @@
  * words wait in the box until *Send*. *Back* keeps the conversation open, *Close conversation* ends it. A server task's
  * card is a live row (TF-17); after a lock the conversation opens where it was read to (TF-18).
  */
+
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ASK_STATE_WORDS, type Convo, type ConvoRow } from '../lib/conversation';
+import { useT } from '../i18n/react';
+import { askStateWordsCopy, type Convo, type ConvoRow } from '../lib/conversation';
 import type { DeskPaired, DeskPower, DeskSessionTask } from '../lib/desk';
-import { DESK, DESK_WORDS, fill } from '../lib/deskCopy';
+import { deskCopy, deskWordsCopy, fill } from '../lib/deskCopy';
 import { type Dictation, dictationLabel, dictationNotice, MAX_TALK_TEXT } from '../lib/dictation';
 import { taskRow } from '../lib/taskCard';
 import styles from './desk.module.css';
@@ -87,6 +89,10 @@ export interface TalkProps {
 }
 
 export function Talk(p: TalkProps) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const { paired, convo } = p;
   const input = useRef<HTMLTextAreaElement>(null);
   const typing = p.draft !== null;
@@ -103,8 +109,8 @@ export function Talk(p: TalkProps) {
   const send = () => {
     if (p.draft?.trim() && p.canAsk && !busyMic) p.onSend(p.draft);
   };
-  const label = dictationLabel(p.dictation, p.pageNow);
-  const notice = dictationNotice(p.dictation, p.pageNow);
+  const label = dictationLabel(p.dictation, p.pageNow, t);
+  const notice = dictationNotice(p.dictation, p.pageNow, t);
   const dw = DESK_WORDS.dictation;
 
   // Follow the newest message while read to the bottom; else say a new one came (DK-63).
@@ -346,6 +352,10 @@ function Row({
   onOpenAsk: (number: number) => void;
   onReplay: (talkId: string) => void;
 }) {
+  const t = useT();
+  const DESK = deskCopy(t);
+  const ASK_STATE_WORDS = askStateWordsCopy(t);
+
   const words = row.paragraphs.map((t, i) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: a message's paragraphs in their order
     <span key={i} className={styles.msgPara}>
@@ -413,7 +423,9 @@ function Row({
  * time it has run (ticking) or took, and once it ended the outcome's line.
  */
 function TaskRow({ task, now }: { task: DeskSessionTask; now: number }) {
-  const v = taskRow(task, now);
+  const t = useT();
+
+  const v = taskRow(task, now, t);
   return (
     <article className={styles.task} data-state={task.state} aria-label={`${v.title}. ${v.label}`}>
       <i className={styles.taskDot} aria-hidden="true" />

@@ -7,6 +7,7 @@
  * button, Worth a look folded at five, and the range control's options. The builders word and format everything; this
  * only arranges it for a narrow screen and says it for TalkBack. Pure; the renderer is `screens/thing/Panels.tsx`.
  */
+
 import {
   figureCharts,
   type PlacedChart,
@@ -32,18 +33,23 @@ import type {
   ThingTone,
 } from '@whombat/core';
 import { toDate } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
 import type { ChartSwatch, HostReadout } from './hostStatus';
 import { personInitial } from './serviceSlots';
 import { type LinkRun, linkRun, type PhoneThingTab } from './thingPage';
 
-export const DASHBOARD_COPY = {
-  /** Worth a look's fold (DS-05). */
-  showMore: (n: number) => `Show ${n} more`,
-  showFewer: 'Show fewer',
-  nothing: 'Nothing needs a look.',
-  /** The range control's name for TalkBack. */
-  range: 'What the charts show',
-} as const;
+export function dashboardCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** Worth a look's fold (DS-05). */
+    showMore: (n: number) => t('dashboard.dashboardCopy.showMore', { n }),
+    showFewer: t('dashboard.dashboardCopy.showFewer'),
+    nothing: t('dashboard.dashboardCopy.nothing'),
+    /** The range control's name for TalkBack. */
+    range: t('dashboard.dashboardCopy.range'),
+  } as const;
+}
+export const DASHBOARD_COPY = dashboardCopy();
 
 /** The range a page without one shows (DS-03). */
 export const DEFAULT_RANGE: HostSeriesRange = '24h';

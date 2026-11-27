@@ -59,6 +59,7 @@ import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
 import { saveBlob } from '../../../lib/saveBlob';
 import { GuestPower } from '../guest/GuestPower';
 import { Badge, Dot, useChangeRunner } from '../parts';
@@ -421,7 +422,7 @@ function ConsoleView({
     if (plan.kind === 'empty') setNotice({ text: 'There’s no text on the clipboard.', tone: 'bad' });
     else if (plan.kind === 'too_large')
       setNotice({
-        text: `That’s ${formatBytes(plan.bytes)}; up to ${formatBytes(PASTE_LIMIT_BYTES)} can be pasted.`,
+        text: `That’s ${formatBytes(plan.bytes, currentLocale())}; up to ${formatBytes(PASTE_LIMIT_BYTES, currentLocale())} can be pasted.`,
         tone: 'bad',
       });
     else if (plan.kind === 'ask') setPasteAsk({ mode: 'confirm', analysis: plan.analysis });

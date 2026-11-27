@@ -3,6 +3,7 @@
  * (Whombat one-agent.md OA-14; app one-agent.md AP-4990): the step has no owner. A refusal shows under the form in the
  * server's words; what went through is a toast, and the plan's answer is on the screen at once.
  */
+
 import { usePlanWrite } from '@whombat/client/react';
 import type { Plan } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
@@ -17,6 +18,7 @@ import {
   addStepRefusal,
   PLAN_STEP_TITLE_MAX,
 } from '../data/planAdd';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField, FormMessage } from '../ui/formField';
@@ -33,14 +35,23 @@ export function AddStepSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   return (
-    <Sheet visible={visible} onClose={onClose} title="PLAN" label="Add a step" maxHeight="92%">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={tMobile('screens.plan')}
+      label={tMobile('screens.add-a-step')}
+      maxHeight="92%"
+    >
       {visible ? <AddStepFields plan={plan} onClose={onClose} /> : null}
     </Sheet>
   );
 }
 
 function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const add = usePlanWrite(api.plans.addStep);
@@ -72,7 +83,7 @@ function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8, gap: 14 }}>
       <View style={{ paddingHorizontal: 22, gap: 4 }}>
         <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-          Add a step
+          {tMobile('screens.add-a-step')}
         </Text>
         <Text size={13.5} lh={1.4} color={theme.colors.mut} numberOfLines={2}>
           {plan.title}
@@ -80,21 +91,27 @@ function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
       </View>
       <View style={{ paddingHorizontal: 22, gap: 14 }}>
         <FormField
-          label="New step"
+          label={tMobile('screens.new-step')}
           value={title}
           onChangeText={(v) => {
             setTitle(v);
             setRefusal(null);
           }}
           maxLength={PLAN_STEP_TITLE_MAX}
-          placeholder="Add a step"
+          placeholder={tMobile('screens.add-a-step')}
           autoFocus
         />
       </View>
       <View style={{ paddingHorizontal: 22, gap: 10 }}>
         <FormMessage text={refusal} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button label="Cancel" variant="secondary" disabled={busy} onPress={onClose} style={{ flex: 1 }} />
+          <Button
+            label={tClient('reports.cancel')}
+            variant="secondary"
+            disabled={busy}
+            onPress={onClose}
+            style={{ flex: 1 }}
+          />
           <Button
             label={addStepLabel(busy)}
             busy={busy}

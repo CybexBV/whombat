@@ -20,10 +20,11 @@ import {
   type GatewayProvider,
   sortUsageWindows,
 } from '@whombat/core/domain';
-import { AI_GATEWAY_COPY } from '@whombat/core/text';
+import { aiGatewayCopy } from '@whombat/core/text';
 import { useId } from 'react';
 import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
+import { useLocaleWords } from '../../i18n/words';
 import settings from '../settings/SettingsScreen.module.css';
 import { formatPlan } from './model';
 import styles from './Usage.module.css';
@@ -77,6 +78,7 @@ function ProviderCard({
   now: number;
   timeZone: string;
 }) {
+  const AI_GATEWAY_COPY = useLocaleWords(aiGatewayCopy);
   const id = useId();
   const name = AI_GATEWAY_COPY.groups[provider];
   return (
@@ -156,6 +158,7 @@ function Account({
 
 /** The generic AI gateway reports no accounts: whether it answers, and which tools go through it. */
 function AnswersCard({ pool, line }: { pool: GatewayPool; line: { text: string } }) {
+  const AI_GATEWAY_COPY = useLocaleWords(aiGatewayCopy);
   const id = useId();
   return (
     <article className={settings.card} aria-labelledby={id} data-gateway-answers={pool.reachable}>

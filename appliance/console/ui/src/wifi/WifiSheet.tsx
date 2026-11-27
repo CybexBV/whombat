@@ -5,8 +5,10 @@
  * may not, the sheet shows the same list read-only and says how to change it. The console server's `/api/network…`
  * ask the runtime (§2.6).
  */
+
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import deskStyles from '../desk/desk.module.css';
+import { useT } from '../i18n/react';
 import type { Client } from '../lib/client';
 import { deskErrorCode } from '../lib/desk';
 import {
@@ -25,7 +27,7 @@ import {
   ssidValid,
   type WifiNetwork,
 } from '../lib/network';
-import { changeView, connectionLine, nameProblem, refusalText, WIFI } from '../lib/wifiCopy';
+import { changeView, connectionLine, nameProblem, refusalText, wifiCopy } from '../lib/wifiCopy';
 import { useHoldFocus, useLastInput, useNow } from '../ui/hooks';
 import { Bars, Icon } from './icons';
 import { type ListState, NetworkList, Outcome, SecurityChoice, TypedField } from './parts';
@@ -60,6 +62,9 @@ export function WifiSheet({
   onClose: () => void;
   initial?: SheetInitial;
 }) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
   const [answer, setAnswer] = useState<NetworkAnswer | null>(null);
   const [unreadable, setUnreadable] = useState(false);
   const [scan, setScan] = useState<WifiNetwork[]>([]);
@@ -109,10 +114,10 @@ export function WifiSheet({
     if (step.kind !== 'change' || !followed || followed.id !== step.id) return;
     if (followed.phase === 'failed' && followed.failure === 'wrong_password') {
       setStep({ kind: 'password', ssid: step.ssid, hidden: step.hidden });
-      setError(changeView(followed).line);
+      setError(changeView(followed, t).line);
       setFollowed(null);
     }
-  }, [followed, step]);
+  }, [followed, step, t]);
 
   // Untouched for 2 minutes the sheet closes, unless a change runs (CG-108).
   const now = useNow(1000);
@@ -150,7 +155,7 @@ export function WifiSheet({
       setStep({ kind: 'list' });
       return;
     }
-    setError(refusalText(code));
+    setError(refusalText(code, t));
   };
 
   const join = (ssid: string, passphrase: string | null, hidden: boolean) =>
@@ -187,7 +192,7 @@ export function WifiSheet({
   );
 
   if (step.kind === 'change') {
-    const v = followed ? changeView(followed) : null;
+    const v = followed ? changeView(followed, t) : null;
     body = (
       <Outcome
         title={v?.title ?? (followed?.kind === 'forget' ? WIFI.forgetting : WIFI.joining)}
@@ -276,7 +281,7 @@ export function WifiSheet({
       </>
     );
   } else if (step.kind === 'other') {
-    const problem = name ? nameProblem(name, ssidValid) : null;
+    const problem = name ? nameProblem(name, ssidValid, t) : null;
     const ok = name.trim() !== '' && !problem && !busy;
     const next = () => {
       if (!ok) return;
@@ -353,7 +358,7 @@ export function WifiSheet({
         <Head
           kicker={WIFI.kicker}
           title={readOnly || missing ? WIFI.readOnlyTitle : WIFI.title}
-          line={network ? connectionLine(network) : null}
+          line={network ? connectionLine(network, t) : null}
           via={network ? network : null}
         />
         {unreadable && !network ? (
@@ -453,6 +458,9 @@ function Head({
   line?: string | null;
   via?: NetworkAnswer['network'] | null;
 }) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
   const icon = via ? viaIcon(via) : null;
   // Out of reach on a cable or a Wi-Fi network says so; with no network at all the line says it already.
   const offline = via !== null && via !== undefined && !via.online && connectedVia(via) !== 'none';

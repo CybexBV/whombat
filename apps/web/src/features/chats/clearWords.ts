@@ -1,5 +1,5 @@
-import { CHAT_WORDS } from '@whombat/client';
 import type { ChatRoom } from '@whombat/core';
+import { CHAT_WORDS } from '../../i18n/shared';
 
 /**
  * What clearing a room says, before and after (chat-clear.md AP-4502, AP-4503). The cleared threads are found with

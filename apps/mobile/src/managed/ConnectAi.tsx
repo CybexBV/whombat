@@ -5,13 +5,9 @@
  * (open claude.ai in the in-app browser, approve, copy the code it shows, paste it here). Asked only while nothing is
  * ready; Skip for now opens the Whombat, where the line that the assistant can't work yet shows as before.
  */
+
 import { agentWords, createClient, theAgentOf } from '@whombat/client';
-import {
-  CONNECT_AI_PROVIDERS,
-  CONNECT_AI_TEXT,
-  connectAiStep,
-  readyProviders,
-} from '@whombat/client/managed';
+import { CONNECT_AI_PROVIDERS, connectAiStep, connectAiText, readyProviders } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
 import {
   type ClientsList,
@@ -21,16 +17,18 @@ import {
   type SignInsList,
 } from '@whombat/client/signins';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '../i18n';
 import { Button, Loading } from '../ui/primitives';
 import { AiSignInCard } from './AiSignIn';
 import { Frame, Note } from './ui';
-
-const T = CONNECT_AI_TEXT;
 
 /** How often the lists are read while the step is open (a sign-in finishing, Claude Code installing). */
 const LIST_POLL_MS = 3_000;
 
 export function ConnectAiScreen({ session, onDone }: { session: ApplianceSession; onDone: () => void }) {
+  const { rawLocale } = useI18n();
+  const T = connectAiText(rawLocale);
+
   const client = useMemo(() => createClient({ session }), [session]);
   const [signIns, setSignIns] = useState<SignInsList>();
   const [clients, setClients] = useState<ClientsList>();
@@ -81,7 +79,7 @@ export function ConnectAiScreen({ session, onDone }: { session: ApplianceSession
     if (step === 'go_on') done.current();
   }, [step]);
 
-  const words = agentWords(name);
+  const words = agentWords(name, rawLocale);
   if (step === 'go_on' || step === 'checking')
     return (
       <Frame kicker={T.kicker} title={T.title} sub={T.sub(words.Name)} tip={T.tip}>

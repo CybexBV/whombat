@@ -1,8 +1,8 @@
 import {
-  DEVICE_SKILL_COPY,
   DEVICE_TIER_LABELS,
   type DeviceActionChoice,
   type DeviceSkillCard as DeviceSkillCardData,
+  deviceSkillCopy,
   limitText,
   type ToolArgLimit,
 } from '@whombat/core';
@@ -11,6 +11,7 @@ import { type FormEvent, useId, useState } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { TierRow } from '../../components/Toggle/TierRow';
+import { useLocaleWords } from '../../i18n/words';
 import styles from './DeviceSkillCard.module.css';
 
 type Tier = DeviceActionChoice['tier'];
@@ -76,6 +77,7 @@ export function DeviceSkillCard({
   onSwitchOn,
   onDecline,
 }: DeviceSkillCardProps) {
+  const DEVICE_SKILL_COPY = useLocaleWords(deviceSkillCopy);
   const [showing, setShowing] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const titleId = useId();
@@ -209,6 +211,7 @@ function SkillDetails({
   canDecline: boolean;
   onDecline: () => void;
 }) {
+  const DEVICE_SKILL_COPY = useLocaleWords(deviceSkillCopy);
   return (
     <div className={styles.details}>
       <h4 className={styles.sublbl}>{DEVICE_SKILL_COPY.canRead}</h4>

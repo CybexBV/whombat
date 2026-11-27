@@ -44,6 +44,7 @@ import { homeWidgetsNow, type WidgetNow } from '../home/widgets';
 import { alertLine, serverLines, serverNotice, verdictOf } from '../hosts/quiet-lines';
 import { HostsUnavailable, hostsFor } from '../hosts/service';
 import { fleetFor } from '../hosts/sources';
+import { tServer } from '../i18n/catalog';
 import { type LookLine, lookLines } from '../looks/lines';
 import { loadPrincipalsByIds, type PrincipalRow, shortName } from '../read/principals';
 import { type ApprovalRow, approvalByNumber, approvalForViewer } from '../read/work';
@@ -274,11 +275,20 @@ export function deskCalmWork(task: WorkingTask | null): DeskCalmWork | null {
 /* Asks ------------------------------------------------------------------------------------------ */
 
 /** The approve button's words (DK-05): the ask's own (“Restart Plex”), without its question mark or its server. */
-export function approveLabel(title: string, where: string | undefined): string {
+export function approveLabel(title: string, where: string | undefined, locale?: string | null): string {
   let words = screenText(title, 200).replace(/\?$/, '').trim();
-  if (where && words.toLowerCase().endsWith(` on ${where.toLowerCase()}`))
-    words = words.slice(0, -(where.length + 4)).trim();
-  return words && Array.from(words).length <= 40 ? words : 'Approve';
+  // The title names the server at its end: “on pve-01” in English, “op pve-01” in Dutch.
+  if (where) {
+    const end = words.toLowerCase();
+    for (const joint of [' on ', ' op ']) {
+      const tail = `${joint}${where.toLowerCase()}`;
+      if (end.endsWith(tail)) {
+        words = words.slice(0, -tail.length).trim();
+        break;
+      }
+    }
+  }
+  return words && Array.from(words).length <= 40 ? words : tServer(locale, 'desk.approve');
 }
 
 /**
@@ -373,6 +383,8 @@ export interface ApprovalAskParts {
   args: Record<string, unknown> | null;
   /** Who asks: the requester's name (TF-15). */
   from?: string | null;
+  /** The screen's language. */
+  locale?: string | null;
 }
 
 /**
@@ -390,11 +402,20 @@ export function deskAskChoices(view: Partial<Pick<ApprovalView, 'scopeChoices'>>
 }
 
 /** An approval as the screen shows it (DK-S09): the web card's title (TF-15); words with nothing to show left out. */
-export function deskApprovalAsk({ number, item, approval, view, args, from }: ApprovalAskParts): DeskAsk {
+export function deskApprovalAsk({
+  number,
+  item,
+  approval,
+  view,
+  args,
+  from,
+  locale,
+}: ApprovalAskParts): DeskAsk {
   const server =
     approval.action.type === 'connection_call' ? (approval.action.params.server?.name ?? '') : '';
   const where = screenText(server, 40);
-  const title = screenText(view.title || item.title || view.question, 120) || 'A decision';
+  const title =
+    screenText(view.title || item.title || view.question, 120) || tServer(locale, 'desk.aDecision');
   const choices = deskAskChoices(view);
   const who = from ? screenText(from, 40) : '';
   const facts = [view.content?.text.split('\n')[0] ?? '', view.target]
@@ -410,7 +431,7 @@ export function deskApprovalAsk({ number, item, approval, view, args, from }: Ap
     ...shown('where', where),
     ...shown('detail', screenText(approval.explainer || approval.summary || item.body, 400)),
     ...(facts.length ? { facts } : {}),
-    ...shown('approveLabel', approveLabel(view.title || title, where || undefined)),
+    ...shown('approveLabel', approveLabel(view.title || title, where || undefined, locale)),
     onDesk: may.ok,
     ...(may.ok ? {} : { phoneReason: may.reason }),
     // The person's no works for every approval (DK-61, DK-S60).
@@ -442,6 +463,7 @@ async function approvalViewFor(services: Services, place: DeskPlace, row: Approv
     viewer: { id: place.person.id, kind: 'person' },
     now,
     timeZone: place.timeZone,
+    ...(place.locale ? { locale: place.locale } : {}),
   });
   return { approval, requester, view };
 }
@@ -480,6 +502,7 @@ async function approvalAsk(
       view,
       args: callArgsOf(services, row),
       from: requester ? shortName(requester) || requester.name : null,
+      locale: place.locale ?? null,
     }),
     at: { conversationId: row.conversationId, messageId: row.messageId },
   };
@@ -839,7 +862,7 @@ export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const late = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new HostsUnavailable('timeout', 'The servers didn’t answer in time.')),
+      () => reject(new HostsUnavailable('timeout', tServer(null, 'desk.serversTimeout'))),
       ms,
     );
     timer.unref?.();

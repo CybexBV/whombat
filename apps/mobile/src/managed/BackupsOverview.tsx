@@ -7,6 +7,7 @@
  * all), the quiet line about older backups on the places used before, the line about asking the assistant, and Details
  * (where, who clears, checking the newest, the paper copy). The web's page stacked, words from `BACKUP_OPTIONS_TEXT`.
  */
+
 import {
   ACCOUNTS_TEXT,
   BACKUP_OPTIONS_TEXT,
@@ -22,6 +23,7 @@ import { formatBytes } from '@whombat/core/text';
 import type { BackupCheckpointsOutput, BackupKeep } from '@whombat/protocol/session';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -320,11 +322,13 @@ export function BackupNeedsYou({
   local: BackupCheckpointsOutput['local'];
   placeName: string | null;
 }) {
+  const { rawLocale } = useI18n();
+
   const { move, remove } = useBackupLocal(session);
   const [note, setNote] = useState<string | null>(null);
   const hasLocal = !!local && local.count > 0;
   if (!hasLocal && !note) return null;
-  const size = local ? formatBytes(local.bytes) : '';
+  const size = local ? formatBytes(local.bytes, rawLocale) : '';
   const range =
     local?.oldest && local.newest ? `${shortDate(local.oldest)} – ${shortDate(local.newest)}` : '';
   const confirmRemove = () =>

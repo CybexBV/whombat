@@ -15,7 +15,7 @@ import {
   type WebSearchCheckState,
   type WebSearchView,
 } from '@whombat/core/domain';
-import { WEB_SEARCH_COPY, webSearchCheckText } from '@whombat/core/text';
+import { webSearchCheckText, webSearchCopy } from '@whombat/core/text';
 import { type FormEvent, useId, useState } from 'react';
 import { Button, ButtonLink } from '../../components/Button';
 import { Icon } from '../../components/Icon';
@@ -23,6 +23,8 @@ import { Input } from '../../components/Input';
 import { SectionLabel } from '../../components/SectionLabel';
 import { type DotTone, StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { ConfirmDialog } from '../conversations/ConfirmDialog';
 import styles from './ai.module.css';
 import { useClearWebSearch, useSetWebSearch, useTestWebSearch } from './useWebSearch';
@@ -51,6 +53,7 @@ function refusalOf(err: unknown): { message: string | null; apiKey: string | nul
 }
 
 export function WebSearchSection({ burrow, view }: { burrow: string; view: WebSearchView | null }) {
+  const WEB_SEARCH_COPY = useLocaleWords(webSearchCopy);
   const id = useId();
   const { words } = useTheAgent(burrow);
   const [replacing, setReplacing] = useState(false);
@@ -94,6 +97,7 @@ function OnRow({
   assistant: string;
   onReplace: () => void;
 }) {
+  const WEB_SEARCH_COPY = useLocaleWords(webSearchCopy);
   const toast = useToast();
   const test = useTestWebSearch(burrow);
   const clear = useClearWebSearch(burrow);
@@ -148,7 +152,7 @@ function OnRow({
       </div>
       {check ? (
         <span className={styles.hint} role="status" data-tone={checkTone(check.state)} data-check-line="">
-          {webSearchCheckText(check.state)}
+          {webSearchCheckText(check.state, currentLocale())}
         </span>
       ) : null}
       {problem && !asking ? (
@@ -189,6 +193,7 @@ function KeyForm({
   onDone: () => void;
   onCancel: (() => void) | null;
 }) {
+  const WEB_SEARCH_COPY = useLocaleWords(webSearchCopy);
   const fieldId = useId();
   const toast = useToast();
   const set = useSetWebSearch(burrow);

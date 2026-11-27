@@ -9,6 +9,7 @@
  * starts) and follows it every 1.5 s while it looks; Scan again starts over; Look in another network adds one. A refusal
  * (an older server) leaves the section out. The web's words and rules (`@whombat/client/connections`).
  */
+
 import { ApiError, InvalidRequestError } from '@whombat/client';
 import {
   cidrProblem,
@@ -29,6 +30,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useViewContext } from '../../data/BurrowProvider';
 import { connectionLogo } from '../../data/connections';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ConnectionLogo } from '../../ui/ConnectionLogo';
@@ -122,6 +124,8 @@ export function FoundOnNetwork({
   query: string;
   onConnect: (row: FoundRow) => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { now, timeZone } = useViewContext();
   const found = useFoundScan(burrow);
@@ -254,7 +258,7 @@ export function FoundOnNetwork({
           <View style={{ gap: 2 }}>
             {looked && scan ? (
               <Text size={12.5} color={theme.colors.mut}>
-                {`${looked}${scan.finishedAt ? ` · ${formatAgo(scan.finishedAt, now, timeZone)}` : ''}`}
+                {`${looked}${scan.finishedAt ? ` · ${formatAgo(scan.finishedAt, now, timeZone, rawLocale)}` : ''}`}
               </Text>
             ) : null}
             {hiddenCount > 0 ? (

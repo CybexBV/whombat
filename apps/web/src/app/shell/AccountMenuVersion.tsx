@@ -1,15 +1,11 @@
 import { Link } from '@tanstack/react-router';
-import { UPDATE_STATE_WORDS } from '@whombat/client/managed';
+import { updateStateWords } from '@whombat/client/managed';
 import { copyText } from '../../components/CopyButton';
 import { cx } from '../../components/cx';
 import { useToast } from '../../components/Toast';
 import { menuVersion, type WhombatVersions } from '../../features/settings/version';
+import { useWebI18n } from '../../i18n/provider';
 import styles from './AccountMenuVersion.module.css';
-
-const ACCOUNT_VERSION_TEXT = {
-  copied: 'Version copied.',
-  notCopied: 'Couldn’t copy. Your browser didn’t allow it.',
-} as const;
 
 /**
  * The account menu's last line, in muted mono: “Whombat 0.2.0” (the version without its build; “app 0.36.0” while the
@@ -24,6 +20,8 @@ export function AccountMenuVersion({
   versions: WhombatVersions;
   onNavigate?: () => void;
 }) {
+  const { t, tag: uiLocale } = useWebI18n();
+  const words = updateStateWords(uiLocale);
   const toast = useToast();
   const { short, full } = menuVersion(versions);
   return (
@@ -35,7 +33,7 @@ export function AccountMenuVersion({
         aria-label={full}
         onClick={() =>
           void copyText(full).then((ok) =>
-            toast.show(ok ? ACCOUNT_VERSION_TEXT.copied : ACCOUNT_VERSION_TEXT.notCopied),
+            toast.show(ok ? t('account.versionCopied') : t('common.copyDenied')),
           )
         }
       >
@@ -49,12 +47,12 @@ export function AccountMenuVersion({
           onClick={onNavigate}
           data-account-update="ready"
         >
-          {UPDATE_STATE_WORDS.ready}
+          {words.ready}
         </Link>
       ) : versions.update === 'upToDate' ? (
         <span className={cx(styles.state, styles.upToDate)} data-account-update="up-to-date">
           <span aria-hidden="true">● </span>
-          {UPDATE_STATE_WORDS.upToDate}
+          {words.upToDate}
         </span>
       ) : null}
     </div>

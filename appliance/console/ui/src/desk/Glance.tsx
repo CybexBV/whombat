@@ -5,9 +5,12 @@
  * tiles (DK-91). What the runtime leaves out while locked (titles in “A summary”, everything in “Only the time”) simply
  * isn't drawn; the layout keeps its places.
  */
+
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { BluetoothChip } from '../bluetooth/BluetoothLayer';
+import { useT } from '../i18n/react';
+import { english, type Translate } from '../i18n/translate';
 import type {
   DeskAsk,
   DeskBox,
@@ -18,7 +21,7 @@ import type {
   DeskPower,
   DeskServer,
 } from '../lib/desk';
-import { ago, clockText, DESK, DESK_WORDS, dateText, fill, foundSay } from '../lib/deskCopy';
+import { ago, clockText, dateText, deskCopy, deskWordsCopy, fill, foundSay } from '../lib/deskCopy';
 import { type FitPlan, planFit } from '../lib/deskFit';
 import { assistantLine, type NeedRow, needRows, needsTotal, researchTitle } from '../lib/needsYou';
 import { NetworkChip } from '../wifi/WifiLayer';
@@ -71,6 +74,9 @@ export interface GlanceProps {
 
 /** The top bar's chips: Talk (unlocked), the network, Bluetooth, remote help and the lock. */
 function Chips({ paired, unlocked, locksIn, camera, present, looking, onLock, onTalk }: GlanceProps) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <>
       {unlocked && paired.voice && (
@@ -118,6 +124,8 @@ function AskRow({
   now: number;
   onAsk: () => void;
 }) {
+  const t = useT();
+
   return (
     <button
       type="button"
@@ -132,7 +140,7 @@ function AskRow({
         <b className={styles.askTitle}>{ask.title}</b>
         <span className={styles.askMeta}>
           {/* Who asks (TF-15): the requester when the runtime names one. */}
-          {ask.from ?? assistant} · {ago(ask.at, now)}
+          {ask.from ?? assistant} · {ago(ask.at, now, undefined, t)}
         </span>
       </span>
     </button>
@@ -141,6 +149,9 @@ function AskRow({
 
 /** Something that needs a look (DK-93): red when it is down or in trouble, amber otherwise; why, or what it is. */
 function LookRow({ look, onLook }: { look: DeskLook; onLook: () => void }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <button
       type="button"
@@ -152,7 +163,7 @@ function LookRow({ look, onLook }: { look: DeskLook; onLook: () => void }) {
     >
       <span className={styles.dot} data-tone={look.state === 'look' ? undefined : 'bad'} />
       <span className={styles.askRowText}>
-        <b className={styles.askTitle}>{researchTitle(look)}</b>
+        <b className={styles.askTitle}>{researchTitle(look, t)}</b>
         <span className={styles.askMeta}>{look.reason ?? DESK_WORDS.looks.kinds[look.kind]}</span>
       </span>
     </button>
@@ -163,6 +174,10 @@ function LookRow({ look, onLook }: { look: DeskLook; onLook: () => void }) {
 const ROWS = 2;
 
 function NeedsYou(props: GlanceProps & { glance: DeskGlance }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const { glance, paired, unlocked, now, onAsk, onAnswer, onLook } = props;
   const count = needsTotal(glance);
   const rows = needRows(glance);
@@ -275,6 +290,9 @@ function NeedsYou(props: GlanceProps & { glance: DeskGlance }) {
 }
 
 function Working({ working }: { working: NonNullable<DeskGlance['working']> }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <section className={`${styles.card} ${styles.work}`}>
       <span className={styles.label}>{DESK_WORDS.workingOn}</span>
@@ -299,6 +317,9 @@ function Working({ working }: { working: NonNullable<DeskGlance['working']> }) {
 }
 
 function DoneToday({ done, timeZone }: { done: DeskGlance['done']; timeZone: string }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <section className={`${styles.card} ${styles.doneList}`}>
       <span className={styles.label}>{DESK_WORDS.doneToday}</span>
@@ -319,12 +340,13 @@ function DoneToday({ done, timeZone }: { done: DeskGlance['done']; timeZone: str
  */
 function sayOf(
   glance: DeskGlance | null,
+  t: Translate = english,
 ): { text: string; more: string | null; opens?: NeedRow | null } | null {
   if (!glance) return null;
   const { found } = glance;
   const calm = glance.servers.length === 0 && needsTotal(glance) === 0 && glance.working === null;
-  if (found && calm) return foundSay(found);
-  return assistantLine(glance);
+  if (found && calm) return foundSay(found, t);
+  return assistantLine(glance, t);
 }
 
 /**
@@ -395,9 +417,11 @@ function Say({
 }
 
 export function Glance(props: GlanceProps) {
+  const t = useT();
+
   const { paired, glance, power, burrow, now } = props;
   const tz = paired.timeZone;
-  const say = sayOf(glance);
+  const say = sayOf(glance, t);
   const working = glance?.working ?? null;
   const done = glance?.done ?? [];
   const battery = power?.source === 'battery';
@@ -417,7 +441,7 @@ export function Glance(props: GlanceProps) {
         <div>
           <div className={styles.clock}>
             <ClockText text={clockText(now, tz)} />
-            <span className={styles.date}>{dateText(now, tz)}</span>
+            <span className={styles.date}>{dateText(now, tz, t.locale)}</span>
           </div>
           {say && <Say say={say} {...props} />}
         </div>
@@ -517,6 +541,9 @@ function Fitted({
   onServers?: () => void;
   onSelf?: () => void;
 }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   const whombat: DeskBox | null = glance.box ?? glance.self ?? null;
   const all = [...glance.servers, ...(glance.extraServers ?? [])];
   const servers = all.slice(0, plan.servers);
@@ -583,6 +610,7 @@ function fitGlance(glance: DeskGlance | null, room: Room | null): FitPlan | null
 
 /** “Only the time” while locked (DK-03): the clock, the date and the one line. */
 export function ClockOnly(props: GlanceProps) {
+  const t = useT();
   const { paired, glance, power, burrow, now } = props;
   const tz = paired.timeZone;
   return (
@@ -594,7 +622,7 @@ export function ClockOnly(props: GlanceProps) {
         <div className={styles.bigClock}>
           <ClockText text={clockText(now, tz)} />
         </div>
-        <div className={styles.bigDate}>{dateText(now, tz)}</div>
+        <div className={styles.bigDate}>{dateText(now, tz, t.locale)}</div>
         {glance?.status.text && <p className={styles.bigLine}>{glance.status.text}</p>}
       </div>
       {power?.source === 'battery' && (

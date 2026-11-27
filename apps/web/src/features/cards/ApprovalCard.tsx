@@ -20,6 +20,7 @@ import { useMemo } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { currentLocale } from '../../i18n/provider';
 import { AskCard, type AskCardEdit } from '../approvals/AskCard';
 import { AskDetails } from '../approvals/AskDetails';
 import { connectionCallView } from '../approvals/connectionCall';
@@ -115,7 +116,7 @@ export function ApprovalCard({
   if (isEverydayAsk(approval)) {
     const answer = approvalAnswer(approval, { names, viewer, now, timeZone });
     const later = view.canApprove ? approveLater : undefined;
-    const choices = view.canApprove && view.canDecline ? approvalAnswerChoices(!!later) : [];
+    const choices = view.canApprove && view.canDecline ? approvalAnswerChoices(!!later, currentLocale()) : [];
     const run: Record<ApprovalAnswerKey, (() => void) | undefined> = {
       now: onApprove,
       later: later?.onSelect,

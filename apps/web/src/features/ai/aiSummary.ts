@@ -5,7 +5,8 @@
  */
 import { CLIENT_NAMES, CLIENT_PROVIDERS, type ClientsList } from '@whombat/client/signins';
 import type { AgentSetupStatus, ClientStatus, LiveProvider } from '@whombat/core/domain';
-import { ENGINE_PROBLEM_COPY } from '@whombat/core/text';
+import { engineProblemCopy } from '@whombat/core/text';
+import { currentLocale } from '../../i18n/provider';
 
 export const YOUR_AI_TEXT = {
   /** The one sentence over the sign-ins (AP-1780), with the assistant's name. */
@@ -73,6 +74,7 @@ export function foldSummary({
   clients: ClientsList | undefined;
   setup: AgentSetupStatus | undefined;
 }): FoldSummary {
+  const ENGINE_PROBLEM_COPY = engineProblemCopy(currentLocale());
   if (setup && !setup.runner.connected)
     return { text: 'Part of Whombat is restarting', tone: 'bad', attention: true };
   const engine =

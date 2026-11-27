@@ -1,5 +1,5 @@
 /**
- * Central registry of every co-located i18n catalog in the monorepo (docs/decisions/i18n.md I18N-02).
+ * Central registry of every co-located i18n catalog in the monorepo (docs/decisions/i18n.md).
  * Each package owns its own declarative English and translated catalogs; this registry lets
  * `scripts/i18n/check.ts` and `scripts/i18n/po.ts` validate and export all of them together.
  */
@@ -16,66 +16,36 @@ export interface CatalogEntry {
   context?: Readonly<Record<string, string>>;
 }
 
-export async function loadCatalogs(): Promise<CatalogEntry[]> {
-  const entries: CatalogEntry[] = [];
-  const candidates: Array<{ name: string; load: () => Promise<CatalogEntry | null> }> = [
-    {
-      name: 'core',
-      load: async () => tryLoad('core', '../../packages/core/src/i18n/catalog'),
-    },
-    {
-      name: 'client',
-      load: async () => tryLoad('client', '../../packages/client/src/i18n/catalog'),
-    },
-    {
-      name: 'screen',
-      load: async () => tryLoad('screen', '../../packages/screen/src/i18n/catalog'),
-    },
-    {
-      name: 'server',
-      load: async () => tryLoad('server', '../../apps/server/src/i18n/catalog'),
-    },
-    {
-      name: 'web',
-      load: async () => tryLoad('web', '../../apps/web/src/i18n/catalog'),
-    },
-    {
-      name: 'mobile',
-      load: async () => tryLoad('mobile', '../../apps/mobile/src/i18n/catalog'),
-    },
-    {
-      name: 'widget',
-      load: async () => tryLoad('widget', '../../apps/widget/src/i18n/catalog'),
-    },
-    {
-      name: 'console-ui',
-      load: async () => tryLoad('console-ui', '../../appliance/console/ui/src/i18n/catalog'),
-    },
-  ];
-  for (const c of candidates) {
-    const loaded = await c.load();
-    if (loaded) entries.push(loaded);
-  }
-  return entries;
+interface RawCatalogModule {
+  EN?: MessageCatalog;
+  NL?: MessageCatalog;
+  CONTEXT?: Readonly<Record<string, string>>;
 }
 
-async function tryLoad(name: string, specifier: string): Promise<CatalogEntry | null> {
-  try {
-    const mod = (await import(specifier)) as {
-      EN?: MessageCatalog;
-      NL?: MessageCatalog;
-      CONTEXT?: Readonly<Record<string, string>>;
-    };
-    if (!mod.EN || !mod.NL) return null;
-    return {
-      name,
+const LOADERS: ReadonlyArray<{ name: string; load: () => Promise<RawCatalogModule> }> = [
+  { name: 'core', load: () => import('../../packages/core/src/i18n/catalog.ts') },
+  { name: 'client', load: () => import('../../packages/client/src/i18n/catalog.ts') },
+  { name: 'screen', load: () => import('../../packages/screen/src/i18n/catalog.ts') },
+  { name: 'server', load: () => import('../../apps/server/src/i18n/catalog.ts') },
+  { name: 'web', load: () => import('../../apps/web/src/i18n/catalog.ts') },
+  { name: 'mobile', load: () => import('../../apps/mobile/src/i18n/catalog.ts') },
+  { name: 'widget', load: () => import('../../apps/widget/src/i18n/catalog.ts') },
+  { name: 'console-ui', load: () => import('../../appliance/console/ui/src/i18n/catalog.ts') },
+];
+
+export async function loadCatalogs(): Promise<CatalogEntry[]> {
+  const entries: CatalogEntry[] = [];
+  for (const item of LOADERS) {
+    const mod = await item.load();
+    if (!mod.EN || !mod.NL) {
+      throw new Error(`i18n catalog "${item.name}" is missing EN or NL exports`);
+    }
+    entries.push({
+      name: item.name,
       en: mod.EN,
       locales: { nl: mod.NL },
       ...(mod.CONTEXT ? { context: mod.CONTEXT } : {}),
-    };
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === 'ERR_MODULE_NOT_FOUND' || code === 'ENOENT') return null;
-    throw err;
+    });
   }
+  return entries;
 }

@@ -4,6 +4,7 @@
  * state (CG-41): what the page doesn't understand goes, a part without the words it needs goes, and the glance stays
  * drawable. Plus the top bar's few pure decisions (which chips show, in which tone) and the durations it says.
  */
+import { english, type Translate } from '../i18n/translate';
 import { LOOK_FIX_LABEL_MAX, LOOK_RESEARCH_STATES, type LookResearchState } from './research';
 
 type Obj = Record<string, unknown>;
@@ -266,16 +267,16 @@ export function parseCalm(v: unknown): DeskCalm | null {
 }
 
 /** “2 h 10 min”, “45 min”, “3 days”: how long, for Welcome back (DK-120). */
-export function awayText(seconds: number): string {
+export function awayText(seconds: number, t: Translate = english): string {
   const min = Math.max(1, Math.round(seconds / 60));
-  if (min < 60) return `${min} min`;
+  if (min < 60) return t('calm.min', { min });
   const h = Math.floor(min / 60);
   if (h < 24) {
     const rest = min % 60;
-    return rest ? `${h} h ${rest} min` : `${h} ${h === 1 ? 'hour' : 'hours'}`;
+    return rest ? t('calm.hMin', { h, rest }) : `${h} ${h === 1 ? t('calm.hour') : t('calm.hours')}`;
   }
   const days = Math.floor(h / 24);
-  return `${days} ${days === 1 ? 'day' : 'days'}`;
+  return `${days} ${days === 1 ? t('calm.day') : t('calm.days')}`;
 }
 
 /** Whether a top bar chip shows (DK-110): *Always*, *When it matters* only while `off` is true, never *Off*. */

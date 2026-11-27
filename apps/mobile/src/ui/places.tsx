@@ -5,6 +5,7 @@
  * Choosing a place closes the sheet and, once it is down, opens the place; closing it puts a screen reader back on the
  * button that opened it.
  */
+
 import { StackActions } from '@react-navigation/native';
 import { useHostsFleet, useHostsStatus } from '@whombat/client/hosts/react';
 import { useHomeOverview } from '@whombat/client/react';
@@ -13,16 +14,17 @@ import { Platform, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { serverFacts } from '../data/homeServers';
 import {
-  PLACE_WORDS,
   PLACES,
-  PLACES_COPY,
   type PlaceId,
   type PlaceThingRow,
   placeLabel,
   placeRoute,
+  placesCopy,
   placesThings,
+  placeWords,
   type ServerFacts,
 } from '../data/places';
+import { useI18n } from '../i18n';
 import { openHref, useAppNavigation } from '../navigation/hooks';
 import { useBadges } from '../navigation/TabBar';
 import { Text } from '../theme/Text';
@@ -90,6 +92,8 @@ export function PlacesButton({
   here: string;
   iconOnly?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const copy = placesCopy(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<View>(null);
@@ -102,7 +106,7 @@ export function PlacesButton({
         feedback="wash"
         ringRadius={iconOnly ? SHELL_TARGET / 2 : 10}
         accessibilityRole="button"
-        accessibilityLabel={PLACES_COPY.open}
+        accessibilityLabel={copy.open}
         accessibilityState={{ expanded: open }}
         style={{
           minHeight: SHELL_TARGET,
@@ -118,7 +122,7 @@ export function PlacesButton({
         <Menu size={iconOnly ? 22 : 20} color={theme.colors.ink2} strokeWidth={1.75} />
         {iconOnly ? null : (
           <Text size={15} color={theme.colors.ink2}>
-            {PLACES_COPY.open}
+            {copy.open}
           </Text>
         )}
       </Touchable>
@@ -149,6 +153,8 @@ function PlacesSheet({
   onClose: () => void;
   onChosen: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const copy = placesCopy(rawLocale);
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { slug } = useBurrowBase();
@@ -156,8 +162,8 @@ function PlacesSheet({
   const overview = useHomeOverview({ params: { burrow: slug } });
   const servers = useServerFacts();
   const things = useMemo(
-    () => placesThings(overview.data?.things, servers),
-    [overview.data?.things, servers],
+    () => placesThings(overview.data?.things, servers, rawLocale),
+    [overview.data?.things, servers, rawLocale],
   );
   const after = useAfterSheet();
   const go = after.onDismissed;
@@ -187,7 +193,7 @@ function PlacesSheet({
     },
   };
   return (
-    <Sheet visible={visible} onClose={onClose} onDismissed={go} label={PLACES_COPY.title} maxHeight="92%">
+    <Sheet visible={visible} onClose={onClose} onDismissed={go} label={copy.title} maxHeight="92%">
       <View
         style={{
           flexDirection: 'row',
@@ -199,14 +205,14 @@ function PlacesSheet({
         }}
       >
         <Text size={20} weight={700} accessibilityRole="header">
-          {PLACES_COPY.title}
+          {copy.title}
         </Text>
         <Touchable
           onPress={onClose}
           feedback="wash"
           ringRadius={SHELL_TARGET / 2}
           accessibilityRole="button"
-          accessibilityLabel={PLACES_COPY.close}
+          accessibilityLabel={copy.close}
           style={{
             width: SHELL_TARGET,
             height: SHELL_TARGET,
@@ -229,8 +235,8 @@ function PlacesSheet({
           return (
             <PlaceRow
               key={place}
-              label={placeLabel(place, count, badge?.tone === 'bad')}
-              title={PLACE_WORDS[place]}
+              label={placeLabel(place, count, badge?.tone === 'bad', rawLocale)}
+              title={placeWords(rawLocale)[place]}
               selected={place === current}
               leading={<Icon size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
               count={count}
@@ -240,7 +246,7 @@ function PlacesSheet({
           );
         })}
         {things.servers.length ? (
-          <ThingsSection title={PLACES_COPY.servers}>
+          <ThingsSection title={copy.servers}>
             {things.servers.map((t) => (
               <PlaceRow
                 key={t.id}
@@ -254,7 +260,7 @@ function PlacesSheet({
           </ThingsSection>
         ) : null}
         {things.connections.length ? (
-          <ThingsSection title={PLACES_COPY.connections}>
+          <ThingsSection title={copy.connections}>
             {things.connections.map((t) => (
               <PlaceRow
                 key={t.id}

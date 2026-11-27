@@ -1,4 +1,5 @@
 /** Navigation params and where a `LinkRef` opens on mobile. Pure. */
+
 import {
   agentPartPlace,
   appPath,
@@ -21,6 +22,7 @@ import {
 } from '@whombat/core';
 import type { ConversationFilesTarget } from '../data/files';
 import { INBOX_TAB } from '../data/shell';
+import { mobileTranslator } from '../i18n/translate';
 import { type AccountPage, connectionsScreenUrl, legacyConnectionsTabUrl } from './connectionLinks';
 
 /**
@@ -1341,7 +1343,11 @@ export function urlFromPushData(data: unknown): string | null {
  * What TalkBack says for a “‹ …” button: “Back to Inbox”, or just “Back” when the button names no place
  * (its label is “Back” itself).
  */
-export function backButtonLabel(label: string): string {
+export function backButtonLabel(label: string, locale?: string): string {
   const place = label.trim();
-  return !place || place.toLowerCase() === 'back' ? 'Back' : `Back to ${place}`;
+  const { t } = mobileTranslator(locale);
+  const back = t('managed.back');
+  return !place || place.toLowerCase() === 'back' || place === back
+    ? back
+    : t('navigation.backTo', { place });
 }

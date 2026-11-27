@@ -26,7 +26,7 @@ import {
   formatMbits,
   formatUsagePct,
   HOST_RANGE_LABELS,
-  HOST_STATUS_COPY,
+  hostStatusCopy,
   NBSP,
 } from '@whombat/core/text';
 import { HOST_METRICS_RANGES, type HostMetrics } from '@whombat/protocol/session';
@@ -48,6 +48,8 @@ import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import styles from './HostStatus.module.css';
 import { useHostStatus } from './useHostStatus';
 
@@ -72,6 +74,7 @@ const RANGE_OPTIONS = HOST_METRICS_RANGES.map((r) => ({ value: r, label: HOST_RA
 
 /** How the box is doing (BS-01): the person's, there is nobody else to keep it from (one-person.md AP-5694). */
 export function HostStatusSection({ burrow }: { burrow: string }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const id = useId();
   const ref = useRef<HTMLElement>(null);
   const { state, setRange } = useHostStatus(burrow, ref);
@@ -145,6 +148,7 @@ export function HostStatusSection({ burrow }: { burrow: string }) {
  * AP-3020): plugged in with the plug, on battery with an amber (from 15 %, red) dot, as the desk screen's power chip.
  */
 function LiveLine({ power }: { power: ReturnType<typeof hostPowerLine> }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const live = (
     <p className={styles.sub}>
       <span className={styles.live} aria-hidden="true" />
@@ -221,6 +225,7 @@ function Tile({
 }
 
 function Tiles({ metrics }: { metrics: HostMetrics }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const t = useMemo(() => hostTiles(metrics), [metrics]);
   return (
     <div className={styles.tiles}>
@@ -281,6 +286,7 @@ function ChartCard({
   /** Under the chart or its table either way (today's agents). */
   after?: ReactNode;
 }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const [asTable, setAsTable] = useState(false);
   return (
     <div className={cx(styles.card, styles.chart)}>
@@ -331,6 +337,7 @@ function Legend({ items, box }: { items: readonly { name: string; color: string 
 const newestFirst = <T,>(rows: readonly T[]) => [...rows].reverse();
 
 function ProcessorCard({ metrics }: { metrics: HostMetrics }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const hintId = useId();
   const { series, timeZone } = metrics;
   const points = useMemo(() => hostChartPoints(series), [series]);
@@ -348,7 +355,7 @@ function ProcessorCard({ metrics }: { metrics: HostMetrics }) {
         line: (v: number) => splitLead(HOST_STATUS_COPY.busy(v)),
       },
     ],
-    [points],
+    [points, HOST_STATUS_COPY.busy],
   );
   return (
     <ChartCard
@@ -383,9 +390,10 @@ function ProcessorCard({ metrics }: { metrics: HostMetrics }) {
   );
 }
 
-const mbits = (bps: number | null) => `${formatMbits(bps ?? 0)}${NBSP}Mbit/s`;
+const mbits = (bps: number | null) => `${formatMbits(bps ?? 0, currentLocale())}${NBSP}Mbit/s`;
 
 function NetworkCard({ metrics }: { metrics: HostMetrics }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const hintId = useId();
   const { series, timeZone } = metrics;
   const points = useMemo(() => hostChartPoints(series), [series]);
@@ -409,7 +417,7 @@ function NetworkCard({ metrics }: { metrics: HostMetrics }) {
         line: (v: number) => splitLead(HOST_STATUS_COPY.speedUp(v)),
       },
     ],
-    [points],
+    [points, HOST_STATUS_COPY.speedUp, HOST_STATUS_COPY.speedDown],
   );
   return (
     <ChartCard
@@ -456,6 +464,8 @@ function NetworkCard({ metrics }: { metrics: HostMetrics }) {
 const tipLine = (color: string, words: string) => ({ color, ...splitLead(words) });
 
 function DaysCard({ metrics }: { metrics: HostMetrics }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
+  const { tag: uiLocale } = useWebI18n();
   const hintId = useId();
   const rows = useMemo(() => hostDayRows(metrics.days), [metrics.days]);
   const scale = useMemo(() => hostDayScale(rows), [rows]);
@@ -504,7 +514,7 @@ function DaysCard({ metrics }: { metrics: HostMetrics }) {
           height={160}
           rows={newestFirst(rows).map((r) => ({
             key: r.date,
-            cells: [r.title, formatBytes(r.inBytes), formatBytes(r.outBytes)],
+            cells: [r.title, formatBytes(r.inBytes, uiLocale), formatBytes(r.outBytes, uiLocale)],
           }))}
         />
       )}
@@ -515,6 +525,7 @@ function DaysCard({ metrics }: { metrics: HostMetrics }) {
 /* Disk -------------------------------------------------------------------------------------------------------- */
 
 function DiskCard({ metrics }: { metrics: HostMetrics }) {
+  const HOST_STATUS_COPY = useLocaleWords(hostStatusCopy);
   const data = metrics.disks.data;
   const rows = useMemo(() => hostDiskRows(data), [data]);
   const text = hostDiskText(metrics.disks);

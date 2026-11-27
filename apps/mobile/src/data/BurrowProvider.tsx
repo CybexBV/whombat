@@ -6,6 +6,7 @@
  * in the burrow, the viewer, the time zone and the clock (`useBurrowBase()`) change only when they do, and so does
  * `useViewContext()`; `now` moves in 15-second steps from one shared timer (`lib/now`).
  */
+
 import { useBootstrap, useSubscription } from '@whombat/client/react';
 import type { Bootstrap, Decider } from '@whombat/core';
 import {
@@ -17,6 +18,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react';
+import { useI18n } from '../i18n';
 import { createNowStore, type NowStore } from '../lib/now';
 import { deviceTimeZone, resolveTimeZone } from '../lib/time';
 import type { AppMode } from './config';
@@ -149,5 +151,9 @@ export function useNowLabel<T extends string | null>(
 export function useViewContext(): ViewContext {
   const { people, viewer, timeZone } = useBurrowBase();
   const now = useNow();
-  return useMemo(() => ({ people, viewer, now, timeZone }), [people, viewer, now, timeZone]);
+  const { rawLocale } = useI18n();
+  return useMemo(
+    () => ({ people, viewer, now, timeZone, locale: rawLocale }),
+    [people, viewer, now, timeZone, rawLocale],
+  );
 }

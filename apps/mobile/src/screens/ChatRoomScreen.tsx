@@ -14,6 +14,7 @@
  * While the app is open, a job the agent handed to T3 Code from one of the room's threads says in a toast when it starts
  * to need the person, is done or failed (`useJobToasts`).
  */
+
 import { StackActions } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { agentFaceOf, CHAT_WORDS } from '@whombat/client';
@@ -24,10 +25,11 @@ import { type ReactNode, useContext, useEffect, useMemo, useState } from 'react'
 import { Platform, useWindowDimensions, View } from 'react-native';
 import { WhombatAvatar } from '../avatars/Avatars';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { CHAT_COPY } from '../data/chatRoom';
+import { chatCopy } from '../data/chatRoom';
 import { fitHeaderButtons, HEADER_GAP, type HeaderButtonSpec } from '../data/headerFit';
 import type { NativeMenuSpec } from '../data/nativeMenu';
 import { useAgentWords, useTheAgentHere } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { ListToggleContext, RestingPageContext, useBeside, usePaneRole } from '../navigation/panes';
 import { Text } from '../theme/Text';
@@ -156,6 +158,10 @@ function RoomBody({
   failed: boolean;
   back: string;
 }) {
+  const { rawLocale } = useI18n();
+  const chatCopyHere = chatCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const navigation = useAppNavigation();
   const qc = useQueryClient();
   const { slug } = useBurrowBase();
@@ -188,11 +194,12 @@ function RoomBody({
     if (failed && !known)
       return (
         <ErrorState
-          text={room === 'chat' ? CHAT_COPY.failed : CHAT_COPY.feedbackFailed}
+          text={room === 'chat' ? chatCopyHere.failed : chatCopyHere.feedbackFailed}
           onRetry={() => void qc.invalidateQueries({ queryKey: queryKeys.scope('chats.list') })}
         />
       );
-    if (!known) return <SkeletonRows count={6} avatarSize={24} lines={1} label="Loading messages" />;
+    if (!known)
+      return <SkeletonRows count={6} avatarSize={24} lines={1} label={tMobile('screens.loading-messages')} />;
   }
   const welcome = (
     <RoomEmpty
@@ -249,6 +256,9 @@ export function NewChatScreen({ route }: { route: { params?: { room?: ChatRoom }
  * right page beside Chat while nothing is open there (AP-6301), which Chat's New chat brings back and wakes.
  */
 export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom; pushed?: boolean }) {
+  const { rawLocale } = useI18n();
+  const chatCopyHere = chatCopy(rawLocale);
+
   const navigation = useAppNavigation();
   const { slug } = useBurrowBase();
   const rooms = useChatRooms(slug);
@@ -310,7 +320,7 @@ export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom
       )}
       {!conversationId && rooms.error && !rooms.known ? (
         <ErrorState
-          text={room === 'chat' ? CHAT_COPY.failed : CHAT_COPY.feedbackFailed}
+          text={room === 'chat' ? chatCopyHere.failed : chatCopyHere.feedbackFailed}
           onRetry={() => void qc.invalidateQueries({ queryKey: queryKeys.scope('chats.list') })}
         />
       ) : (

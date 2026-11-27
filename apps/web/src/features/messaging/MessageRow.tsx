@@ -4,10 +4,8 @@ import {
   agentFaceBackground,
   agentFaceOf,
   attachmentsBesideCard,
-  CHAT_WORDS,
   isAutomationPrincipal,
   lastReplyLabel,
-  SETTLE_WORDS,
   T3_CODE_NAME,
   THREAD_NEW_LABEL,
   THREAD_STAGE_WORDS,
@@ -32,6 +30,8 @@ import { ArrowUpRight, Check, ChevronRight, Workflow } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { currentLocale } from '../../i18n/provider';
+import { CHAT_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { RanOnNotes, ranOnTitle } from '../chats/runtime/RanOn';
 import { HandoffMinutes, T3Mark } from './Handoff';
 import { MessageAttachments } from './MessageAttachments';
@@ -348,7 +348,7 @@ export function MessageRow({
     ? threadRowLabel({
         replies:
           message.replyCount > 0
-            ? [formatReplies(message.replyCount), lastReply].filter(Boolean).join(', ')
+            ? [formatReplies(message.replyCount, currentLocale()), lastReply].filter(Boolean).join(', ')
             : THREAD_STAGE_WORDS.noReplies,
         unread: threadNew ? THREAD_NEW_LABEL : null,
         stage: rootRow ? (line && stage === 'handedOver' ? null : stage) : null,
@@ -507,7 +507,7 @@ export function MessageRow({
                     <ThreadHead key={id} principal={lookup(id)} />
                   ))}
                 </span>
-                <span className={styles.replies}>{formatReplies(message.replyCount)}</span>
+                <span className={styles.replies}>{formatReplies(message.replyCount, currentLocale())}</span>
                 {/* Spaces between the parts keep the link's name readable; a flex row doesn't draw them. */}{' '}
                 {lastReply && <LastReply label={lastReply} />}{' '}
               </>

@@ -5,6 +5,7 @@ import { IconButton } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { EmptyNote, ErrorNote, SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
+import { useWebI18n } from '../../i18n/provider';
 import { useCurrentConversation } from '../plans';
 import { messageExcerpt } from './messageActions';
 import styles from './PinsPane.module.css';
@@ -46,6 +47,7 @@ export const PINS_SEARCH = {
  * when it is loaded, otherwise (older history, or a thread reply) opened in the thread pane.
  */
 export function PinsPane({ burrow, onClose }: { burrow: string; onClose: () => void }) {
+  const { tag: uiLocale } = useWebI18n();
   const conversation = useCurrentConversation(burrow);
   const { lookup, timeZone } = useBurrowContext(burrow);
   const now = useNow(60_000);
@@ -105,7 +107,9 @@ export function PinsPane({ burrow, onClose }: { burrow: string; onClose: () => v
                       <span className={styles.content}>
                         <span className={styles.meta}>
                           <span className={styles.name}>{author?.name ?? 'Someone'}</span>
-                          <span className={styles.time}>{formatRecent(m.createdAt, now, timeZone)}</span>
+                          <span className={styles.time}>
+                            {formatRecent(m.createdAt, now, timeZone, uiLocale)}
+                          </span>
                         </span>
                         <span className={styles.text}>
                           {excerpt ||
@@ -119,7 +123,7 @@ export function PinsPane({ burrow, onClose }: { burrow: string; onClose: () => v
                           <span className={styles.pinnedBy}>
                             <Icon name="pin" size={11} />
                             {by ? `Pinned by ${by.name}` : 'Pinned'} ·{' '}
-                            {formatRecent(m.pinnedAt, now, timeZone)}
+                            {formatRecent(m.pinnedAt, now, timeZone, uiLocale)}
                           </span>
                         )}
                       </span>

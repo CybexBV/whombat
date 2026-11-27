@@ -4,11 +4,13 @@
  * tombstone of a deleted thread root and “Saved to your Vault · Plex” (AP-4037). The chat's own language: `sf` cards with a `line` border, mono labels, 44dp
  * targets (AP-500, AP-503, AP-507, AP-508, AP-509).
  */
+
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import type { PreviewCard, ReactionPill } from '../data/reactions';
 import type { TurnFailedView } from '../data/turns';
 import type { VaultSavedRow } from '../data/vaultSaved';
+import { useI18n, useMobileT } from '../i18n';
 import { opensInApp, useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -30,11 +32,12 @@ export function ReactionRow({
   onAdd?: () => void;
   disabled?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   if (pills.length === 0) return null;
   return (
     <View
-      accessibilityLabel="Reactions"
+      accessibilityLabel={tMobile('ui.reactions')}
       style={{
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -49,7 +52,9 @@ export function ReactionRow({
           feedback="wash"
           ringRadius={16}
           accessibilityLabel={p.accessibilityLabel}
-          accessibilityHint={p.mine ? 'Takes your reaction back' : 'Adds your reaction'}
+          accessibilityHint={
+            p.mine ? tMobile('ui.takes-your-reaction-back') : tMobile('ui.adds-your-reaction')
+          }
           accessibilityState={{ selected: p.mine }}
           hitSlop={hitSlopFor(32)}
           style={{
@@ -76,7 +81,7 @@ export function ReactionRow({
           disabled={disabled}
           feedback="wash"
           ringRadius={16}
-          accessibilityLabel="Add a reaction"
+          accessibilityLabel={tMobile('ui.add-a-reaction')}
           hitSlop={hitSlopFor(32)}
           style={{
             width: 32,
@@ -97,6 +102,7 @@ export function ReactionRow({
 
 /** Compact cards for the links in a message (no images): site, title, two lines of description; a tap opens it. */
 export function LinkPreviews({ cards }: { cards: readonly PreviewCard[] }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const openUrl = useOpenUrl();
   if (cards.length === 0) return null;
@@ -110,7 +116,9 @@ export function LinkPreviews({ cards }: { cards: readonly PreviewCard[] }) {
           ringRadius={14}
           accessibilityRole="link"
           accessibilityLabel={c.accessibilityLabel}
-          accessibilityHint={opensInApp(c.url) ? 'Opens in Whombat' : 'Opens in your browser'}
+          accessibilityHint={
+            opensInApp(c.url) ? tMobile('ui.opens-in-whombat') : tMobile('ui.opens-in-your-browser')
+          }
           style={{
             minHeight: 44,
             gap: 3,
@@ -162,6 +170,7 @@ export function TurnFailedCardView({
   /** “Hide card” in the top right of a card opened from its line (docs/decisions/card-settle.md AP-730). */
   hide?: ReactNode;
 }) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   return (
     <View
@@ -196,7 +205,7 @@ export function TurnFailedCardView({
       </View>
       {onRetry && !view.retried ? (
         <Button
-          label="Try again"
+          label={tClient('settings.retry')}
           busy={busy}
           onPress={onRetry}
           accessibilityHint={`Asks ${view.agentName} to try this turn again`}
@@ -214,11 +223,12 @@ export function TurnFailedCardView({
 
 /** A small “Pinned” above a pinned message (CT-174). */
 export function PinnedMark() {
+  const { tClient } = useI18n();
   const theme = useTheme();
   return (
     <View
       accessible
-      accessibilityLabel="Pinned"
+      accessibilityLabel={tClient('overview.tab.pinned')}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -228,7 +238,7 @@ export function PinnedMark() {
     >
       <Pin size={12} color={theme.colors.mut} strokeWidth={2} />
       <Text size={11} weight={500} mono color={theme.colors.mut}>
-        Pinned
+        {tClient('overview.tab.pinned')}
       </Text>
     </View>
   );
@@ -236,10 +246,11 @@ export function PinnedMark() {
 
 /** “(edited)” under a message whose author line isn't shown (CT-173). */
 export function EditedMark() {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Text size={11} mono color={theme.colors.mut} style={{ alignSelf: 'flex-start', marginTop: -4 }}>
-      (edited)
+      {tMobile('ui.edited')}
     </Text>
   );
 }

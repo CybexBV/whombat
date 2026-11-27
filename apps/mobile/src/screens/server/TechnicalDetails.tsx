@@ -3,11 +3,13 @@
  * quiet 44dp row; open, its versions, processor, memory, address and Whombat's helper as label and value, then the
  * cards only someone who runs it needs (storage and pools, the platform's facts, the cluster).
  */
+
 import type { ServerDetailRow } from '@whombat/client/hosts';
 import type { ThingPagePanel } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
-import { SERVER_COPY } from '../../data/servers';
+import { serverCopy } from '../../data/servers';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -24,6 +26,9 @@ export function TechnicalDetailsCard({
   panels: readonly ThingPagePanel[];
   ctx: PanelContext;
 }) {
+  const { rawLocale } = useI18n();
+  const serverCopyHere = serverCopy(rawLocale);
+
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   if (!rows.length && !panels.length) return null;
@@ -35,13 +40,13 @@ export function TechnicalDetailsCard({
           onPress={() => setOpen(!open)}
           feedback="wash"
           accessibilityRole="button"
-          accessibilityLabel={SERVER_COPY.technical}
+          accessibilityLabel={serverCopyHere.technical}
           accessibilityState={{ expanded: open }}
           style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14 }}
         >
           <Chevron size={16} color={theme.colors.ink2} />
           <Text size={14} weight={500} color={theme.colors.ink2}>
-            {SERVER_COPY.technical}
+            {serverCopyHere.technical}
           </Text>
         </Touchable>
         {open

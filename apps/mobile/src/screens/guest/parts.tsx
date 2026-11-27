@@ -4,9 +4,11 @@
  * a row of choices (storages, how to back up), a figure tile and the small header tags. Colours only from the theme;
  * every control is 44dp or more, and every row is read as one sentence.
  */
+
 import type { ReviewLine } from '@whombat/client/hosts/mobile';
 import type { ReactNode } from 'react';
 import { Switch, View } from 'react-native';
+import { useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { MonoLabel } from '../../ui/assistant';
@@ -105,16 +107,17 @@ export function RowAction({
 
 /** The review: each change `label  old → new`, then what a running guest takes later. */
 export function ReviewList({ lines, note }: { lines: readonly ReviewLine[]; note?: string | null }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   if (!lines.length)
     return (
       <Text size={14.5} lh={1.45} color={theme.colors.ink2} style={{ marginTop: 12 }}>
-        Nothing to change: it already is like this.
+        {tMobile('screens.nothing-to-change-it-already-is-like-this')}
       </Text>
     );
   return (
     <View style={{ marginTop: 14, gap: 8 }}>
-      <MonoLabel>Review the change</MonoLabel>
+      <MonoLabel>{tMobile('screens.review-the-change')}</MonoLabel>
       {lines.map((l) => (
         <View
           key={l.key}

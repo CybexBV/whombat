@@ -34,12 +34,14 @@ import { formatClock } from '@whombat/core/text';
 import { useCallback, useState } from 'react';
 import { useNavigateHref, useSearchUpdate } from '../../app/routing/navigation';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import { markIfUnknown } from '../approvals/unknownAnswer';
 
 const SOMETHING_WENT_WRONG = 'That didn’t work. Try again in a moment.';
 
 /** Carry out a Needs you intent; `busy` is the item being acted on. */
 export function useNeedsYouActions(burrow: string, timeZone: string) {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const qc = useQueryClient();
   const navigateHref = useNavigateHref();
@@ -106,7 +108,7 @@ export function useNeedsYouActions(burrow: string, timeZone: string) {
           case 'snooze': {
             const result = await snooze.mutateAsync({ ref: intent.ref, until: intent.until });
             if (result.status !== 'ok') toast.show(SOMETHING_WENT_WRONG);
-            else toast.show(`I’ll remind you ${atText(intent.until, Date.now(), timeZone)}.`);
+            else toast.show(`I’ll remind you ${atText(intent.until, Date.now(), timeZone, uiLocale)}.`);
             return;
           }
           case 'investigate': {
@@ -141,7 +143,7 @@ export function useNeedsYouActions(burrow: string, timeZone: string) {
         setBusy(null);
       }
     },
-    [burrow, decide, snooze, start, answerRemovals, navigateHref, toast, leave, qc, timeZone],
+    [burrow, decide, snooze, start, answerRemovals, navigateHref, toast, leave, qc, timeZone, uiLocale],
   );
 
   /**

@@ -5,12 +5,12 @@
  * the mock world answers in the page. Every screen says it is a demo (`DemoNotice`), and Leave the demo comes back.
  */
 import { createMemoryHistory } from '@tanstack/react-router';
-import { COPY } from '@whombat/client/managed';
 import { useEffect, useState } from 'react';
 import { App } from '../app/App';
 import { AuthLayout } from '../app/auth/AuthLayout';
 import { type AppServices, createAppServices } from '../app/services';
 import { Button } from '../components/Button';
+import { COPY } from '../i18n/managed';
 import styles from './managed.module.css';
 import { ErrorLine } from './screens';
 

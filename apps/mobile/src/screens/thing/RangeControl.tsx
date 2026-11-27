@@ -6,9 +6,11 @@
  * range's lines. A server's says “Live · every 10 s” under it, with a green dot (its figures follow the live events).
  * 38dp tall, padded to 44dp.
  */
+
 import type { HostSeriesRange } from '@whombat/core';
 import { View } from 'react-native';
-import { DASHBOARD_COPY, type RangeOption } from '../../data/dashboard';
+import { dashboardCopy, type RangeOption } from '../../data/dashboard';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Touchable } from '../../ui/Touchable';
@@ -26,13 +28,16 @@ export function RangeControl({
   /** “Live · every 10 s” (servers only). */
   live?: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const dashboardCopyHere = dashboardCopy(rawLocale);
+
   const theme = useTheme();
   if (!options.length) return null;
   return (
     <View style={{ gap: 6 }}>
       <View
         accessibilityRole="radiogroup"
-        accessibilityLabel={DASHBOARD_COPY.range}
+        accessibilityLabel={dashboardCopyHere.range}
         style={{
           flexDirection: 'row',
           padding: 3,

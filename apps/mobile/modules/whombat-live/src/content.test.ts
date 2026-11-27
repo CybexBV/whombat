@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { peopleFrom } from '../../../src/data/people';
 import { mobileMomentApproval } from '../../../src/fixtures/fixture-server';
 import { liveViewer } from '../../../src/live/viewer';
-import { reconcileActivities, runLiveFor } from './content';
+import { approvalLiveFor, reconcileActivities, runLiveFor } from './content';
 
 const b = bootstrap();
 const mara = liveViewer(b, peopleFrom(b.principals));
@@ -56,16 +56,19 @@ describe('pushes and reconnects', () => {
 });
 
 describe('managed pushes shown natively', () => {
-  it('use exactly the shared content-free words, one line per kind', async () => {
-    const { PUSH_TEXT } = await import('@whombat/client/managed');
-    const kotlin = readFileSync(
-      join(__dirname, '../android/src/main/java/com/whombat/live/LiveNotifications.kt'),
-      'utf8',
-    );
+  it.each([
+    ['en-GB', 'values'],
+    ['nl-NL', 'values-nl'],
+  ])('uses the shared content-free words for %s', async (locale, folder) => {
+    const { pushText } = await import('@whombat/client/managed');
+    const xml = readFileSync(join(__dirname, `../android/src/main/res/${folder}/strings.xml`), 'utf8');
     const native = Object.fromEntries(
-      [...kotlin.matchAll(/"(\w+)" to "([^"]+)"/g)].map((m) => [m[1] as string, m[2] as string]),
+      [...xml.matchAll(/<string name="whombat_push_(\w+)">([^<]+)<\/string>/g)].map((match) => [
+        match[1],
+        match[2],
+      ]),
     );
-    expect(native).toEqual(PUSH_TEXT);
+    expect(native).toEqual(pushText(locale));
   });
 });
 
@@ -77,8 +80,24 @@ describe('an approval’s live button', () => {
     );
     const widget = readFileSync(join(__dirname, '../ios/widget/WhombatLiveWidget.swift'), 'utf8');
     const attributes = readFileSync(join(__dirname, '../ios/WhombatLiveAttributes.swift'), 'utf8');
-    expect(kotlin).toMatch(/"approve" -> "Review"/);
-    expect(widget).toMatch(/action == "approve" \? "Review"/);
+    expect(kotlin).toMatch(/"approve" -> words.getString\(R.string.whombat_action_review\)/);
+    expect(widget).toContain('state.actionLabel(action)');
+    expect(attributes).toMatch(/case "approve": return dutch \? "Bekijken" : "Review"/);
     for (const source of [kotlin, widget, attributes]) expect(source).not.toContain('decide=');
   });
+});
+
+it('uses Dutch for a run and an approval while preserving their titles and URLs', () => {
+  const owned = { ...run, status: 'paused' as const, askedById: mara.id };
+  const english = runLiveFor(owned, mara, 'en-GB');
+  const dutch = runLiveFor(owned, mara, 'nl-NL');
+  expect(dutch?.display).toMatchObject({ key: english?.display.key, title: owned.title });
+  expect(dutch?.display.text).toContain('Gepauzeerd');
+  expect(english?.display.text).toContain('Paused');
+  const approval = mobileMomentApproval();
+  const viewer = {
+    ...mara,
+    id: approval.conditions.flatMap((c) => (c.kind === 'person_approves' ? c.approverIds : []))[0] ?? mara.id,
+  };
+  expect(approvalLiveFor(approval, viewer, 'nl-NL')?.display.text).toContain('voorwaarden');
 });

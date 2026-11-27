@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal, ModalDescription, ModalTitle } from '../../../components/Modal';
+import { currentLocale } from '../../../i18n/provider';
 import { useManage } from '../manage/useManage';
 import { Dot } from '../parts';
 import styles from '../Things.module.css';
@@ -69,7 +70,8 @@ export function TaskDialog({
           query: { platform: task.platform, logStart: next.current },
         });
         if (!live) return;
-        if (res.status !== 'ok') throw new Error(commitOutcomeText(res) ?? 'That didn’t work.');
+        if (res.status !== 'ok')
+          throw new Error(commitOutcomeText(res, currentLocale()) ?? 'That didn’t work.');
         const s = res.data;
         const add = s.log ?? [];
         if (add.length) setLines((l) => [...l, ...add]);
@@ -120,7 +122,7 @@ export function TaskDialog({
     task.serverId,
     Number.isFinite(started) ? `started ${formatTime(started)}` : '',
     status?.user ? `by ${status.user}` : '',
-    status ? formatDuration(taskSeconds(status.started, status.ended, now)) : '',
+    status ? formatDuration(taskSeconds(status.started, status.ended, now), currentLocale()) : '',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -132,7 +134,7 @@ export function TaskDialog({
       {!status ? (
         error ? (
           <p className={styles.error} role="alert">
-            {hostErrorInfo(error).message}{' '}
+            {hostErrorInfo(error, currentLocale()).message}{' '}
             <button type="button" className={styles.cardLink} onClick={() => setAttempt((n) => n + 1)}>
               Try again
             </button>

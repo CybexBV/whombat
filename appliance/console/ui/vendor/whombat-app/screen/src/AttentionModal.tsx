@@ -7,12 +7,11 @@
  */
 import type { ReactNode } from 'react';
 import { type ModalState, type ModalView, modalStep, modalView, notNow } from './attention';
-import { cx, EnvProvider, Face, type ScreenEnv } from './parts';
+import { screenFormatLocale } from './i18n/catalog';
+import { cx, EnvProvider, Face, type ScreenEnv, useScreenWords } from './parts';
 import st from './screen.module.css';
 import type { DeskAttention, DeskAttentionItem } from './types';
-import { agoText, clockText, fillWords, SCREEN_WORDS } from './words';
-
-const M = SCREEN_WORDS.modal;
+import { agoText, clockText, fillWords, screenWords } from './words';
 
 /** One of a question's own answers as the host gives it (DK-151). */
 export interface AskButton {
@@ -127,6 +126,7 @@ function PhoneIcon({ size = 16 }: { size?: number }) {
 
 /** A question's own answers (DK-151), then *Not now*, and its line under them. */
 function AskButtons({ view, onNotNow }: { view: AskView; onNotNow: () => void }) {
+  const words = useScreenWords().modal;
   const wait = view.busy === true;
   const press = (f: () => void) => () => {
     if (!wait) f();
@@ -152,7 +152,7 @@ function AskButtons({ view, onNotNow }: { view: AskView; onNotNow: () => void })
           </button>
         ))}
         <button type="button" className={cx(st.btn, st.quiet, st.focus)} onClick={onNotNow}>
-          {M.notNow}
+          {words.notNow}
         </button>
       </div>
       {view.note && (
@@ -177,12 +177,13 @@ function Buttons({
   actions: AttentionActions;
   onNotNow: () => void;
 }) {
+  const words = useScreenWords().modal;
   const elsewhere = !!actions.answerElsewhere;
   const out: ReactNode[] = [];
   let note: string | null = null;
   let acts = false;
   if (item.kind === 'ask') {
-    if (elsewhere) note = M.elsewhereAsk;
+    if (elsewhere) note = words.elsewhereAsk;
     else if (actions.renderAsk) {
       out.push(<span key="ask">{actions.renderAsk(item)}</span>);
       acts = true;
@@ -195,14 +196,14 @@ function Buttons({
           className={cx(st.btn, st.primary, st.focus)}
           onClick={() => actions.onAnswer?.(ask, item)}
         >
-          {M.answer}
+          {words.answer}
         </button>,
       );
       acts = true;
     }
   } else {
     const stage = item.research && item.research !== 'failed' ? item.research : null;
-    if (elsewhere) note = M.elsewhereLook;
+    if (elsewhere) note = words.elsewhereLook;
     else if (stage === 'found' && item.fix && actions.onStep) {
       out.push(
         <button
@@ -223,7 +224,7 @@ function Buttons({
           className={cx(st.btn, st.primary, st.focus)}
           onClick={() => actions.onFix?.(item)}
         >
-          {fillWords(M.fix, { assistant })}
+          {fillWords(words.fix, { assistant })}
         </button>,
       );
     }
@@ -235,7 +236,7 @@ function Buttons({
           className={cx(st.btn, st.focus)}
           onClick={() => actions.onOpen?.(item)}
         >
-          {fillWords(M.open, { name: item.name })}
+          {fillWords(words.open, { name: item.name })}
         </button>,
       );
       acts = true;
@@ -243,10 +244,10 @@ function Buttons({
   }
   out.push(
     <button key="notnow" type="button" className={cx(st.btn, st.quiet, st.focus)} onClick={onNotNow}>
-      {M.notNow}
+      {words.notNow}
     </button>,
   );
-  if (!note && acts && actions.locked) note = M.pin;
+  if (!note && acts && actions.locked) note = words.pin;
   return (
     <>
       <div className={st.mdButtons}>{out}</div>
@@ -276,19 +277,22 @@ function Top({
   from?: string | undefined;
   onState: (s: ModalState) => void;
 }) {
+  const words = screenWords(env.locale).modal;
   const since = item.since ? Date.parse(item.since) : Number.NaN;
-  const clock = Number.isFinite(since) ? clockText(since, env.timeZone) : null;
+  const clock = Number.isFinite(since) ? clockText(since, env.timeZone, env.locale) : null;
   const n = view.items.length;
   return (
     <div className={st.mdTop}>
       {item.kind === 'ask' ? (
         <span className={st.mdAsks}>
           {!from && <Face size={30} />}
-          {clock ? fillWords(M.asks, { assistant: from ?? env.assistant, clock }) : (from ?? env.assistant)}
+          {clock
+            ? fillWords(words.asks, { assistant: from ?? env.assistant, clock })
+            : (from ?? env.assistant)}
         </span>
       ) : (
         <span className={st.mdSince}>
-          {clock ? fillWords(M.since, { clock, ago: agoText(since, now) }) : item.name}
+          {clock ? fillWords(words.since, { clock, ago: agoText(since, now, env.locale) }) : item.name}
         </span>
       )}
       {n > 1 && (
@@ -297,18 +301,18 @@ function Top({
             <button
               type="button"
               className={cx(st.arrow, st.focus)}
-              aria-label={M.previous}
+              aria-label={words.previous}
               onClick={() => onState(modalStep(view, -1))}
             >
               <Chevron back />
             </button>
           )}
-          {fillWords(M.of, { i: view.index + 1, n })}
+          {fillWords(words.of, { i: view.index + 1, n })}
           {view.index < n - 1 && (
             <button
               type="button"
               className={cx(st.arrow, st.focus)}
-              aria-label={M.next}
+              aria-label={words.next}
               onClick={() => onState(modalStep(view, 1))}
             >
               <Chevron />
@@ -321,10 +325,12 @@ function Top({
 }
 
 export function AttentionModal(props: AttentionModalProps) {
-  const env = props.env ?? { assistant: 'Dusty', editing: false };
   const view = modalView(props.attention, props.away, props.state);
   const item = view.item;
   if (!view.open || !item) return null;
+  const env = props.env ?? { assistant: 'Dusty', editing: false };
+  const lang = env.locale ? screenFormatLocale(env.locale) : undefined;
+  const words = screenWords(env.locale).modal;
   const putAway = () => {
     const out = notNow(view);
     props.onAway(out.away);
@@ -334,20 +340,28 @@ export function AttentionModal(props: AttentionModalProps) {
   const ask = item.kind === 'ask' && !props.answerElsewhere ? (props.askView?.(item) ?? null) : null;
   const stage = item.kind === 'look' && item.research && item.research !== 'failed' ? item.research : null;
   const says =
-    stage === 'looking' ? M.looking : stage === 'fixing' ? M.fixing : stage === 'fixed' ? M.fixed : null;
+    stage === 'looking'
+      ? words.looking
+      : stage === 'fixing'
+        ? words.fixing
+        : stage === 'fixed'
+          ? words.fixed
+          : null;
   return (
     <EnvProvider value={env}>
       {/* The backdrop closes what the pill opened; what opened by itself waits for an answer or *Not now*. */}
       <button
         type="button"
         className={st.ov}
-        aria-label={M.close}
+        lang={lang}
+        aria-label={words.close}
         tabIndex={-1}
         onClick={view.mode === 'all' ? () => props.onState({ pill: false, shown: null }) : undefined}
       />
       <section
         className={st.md}
         role="dialog"
+        lang={lang}
         aria-modal="true"
         aria-label={item.title}
         data-kind={item.kind}

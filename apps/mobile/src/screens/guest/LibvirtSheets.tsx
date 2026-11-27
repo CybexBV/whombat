@@ -4,11 +4,13 @@
  * off: a name and where its disks go; the copy gets its own network addresses). Rename and Delete are the shared
  * sheets. What runs as a libvirt task says when it starts and when it ends.
  */
+
 import { libvirtNameError, stoppedCheck } from '@whombat/client/hosts/mobile';
 import { useHostGuests, useHostManageRead } from '@whombat/client/hosts/react';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useMobileT } from '../../i18n';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
 import type { SheetBase } from './GuestSheets';
@@ -56,6 +58,7 @@ export function LibvirtBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Clone: a full copy with its own disks and network addresses, while it is switched off. */
 export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const guests = useHostGuests(
     { params: { burrow: slug }, query: { server: serverId, limit: 200 } },
@@ -80,7 +83,7 @@ export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
       visible
       onClose={() => !busy && onClose()}
       title={`Clone ${guest.name}`}
-      body="A full copy with its own disks and network addresses. The copy starts switched off."
+      body={tMobile('screens.a-full-copy-with-its-own-disks-and')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -103,7 +106,7 @@ export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
     >
       <View style={{ gap: 16, marginTop: 16 }}>
         <FormField
-          label="Name"
+          label={tMobile('screens.name')}
           value={name}
           onChangeText={setName}
           error={name.trim() ? nameError : null}
@@ -114,7 +117,7 @@ export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
         />
         {stores.length > 1 ? (
           <Choices
-            label="Its disks go to"
+            label={tMobile('screens.its-disks-go-to')}
             options={[
               { value: '', label: 'Where they are now' },
               ...stores.map((s) => ({ value: s, label: s === 'folder:domains' ? 'The VM folder' : s })),

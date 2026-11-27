@@ -1,8 +1,9 @@
-import { INBOX_WORDS, newCountLabel, type InboxRow as Row, SETTLE_WORDS } from '@whombat/client';
+import { newCountLabel, type InboxRow as Row } from '@whombat/client';
 import { Check, Mail, MailOpen } from 'lucide-react';
 import { type MouseEvent, memo } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { INBOX_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import styles from './ChatRoomScreen.module.css';
 import { ThreadIcon } from './ThreadIcon';
 

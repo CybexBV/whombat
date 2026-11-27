@@ -11,10 +11,9 @@ import {
   type AutomationStep,
   type AutomationTrigger,
   EXTERNAL_STEP_KINDS,
-  type GitHubTriggerEvent,
   stepKindLabel,
-  TRIGGER_KIND_LABELS,
 } from '../domain/automation.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { ExprError, parseExpr, referencedSteps } from './expr.js';
 import { findMyWhenText } from './findmy.js';
 import { mailTriggerProblems, mailWhenText } from './mail.js';
@@ -251,59 +250,69 @@ export function parseAutomationExport(
   return problems.length ? { ok: false, problems } : { ok: true, file: parsed.data };
 }
 
-/** Short words for a GitHub trigger in `triggerSummary` (0.66; was the raw event name). */
-const GITHUB_TRIGGER_SUMMARY: Record<GitHubTriggerEvent, string> = {
-  issue_opened: 'New issues',
-  pr_opened: 'New pull requests',
-  pr_updated: 'New commits on pull requests',
-  checks_completed: 'Checks on pull requests',
-  review_submitted: 'Reviews on pull requests',
-  branch_pushed: 'Pushes',
-};
-
-/** “New reports in Acme Desk dev”, “New bug reports in …”, “New feature requests in …” (0.69, TA-04). */
-function trackerSummary(kinds: readonly string[] | undefined): string {
+/** Which reports a tracker trigger listens to: any (`report`), only bugs (`bug`) or only feature requests (`feature`). */
+export function trackerItemKind(kinds: readonly string[] | undefined): 'report' | 'bug' | 'feature' {
   const set = new Set(kinds ?? ['bug', 'feature']);
-  if (set.size !== 1) return 'New reports';
-  return set.has('bug') ? 'New bug reports' : 'New feature requests';
+  if (set.size !== 1) return 'report';
+  return set.has('bug') ? 'bug' : 'feature';
 }
 
 /**
  * “Message in #bugs · 🐛 in #bugs · Every day at 09:00 · Europe/Amsterdam”. A tracker trigger names its connection's
- * label (0.69), “a tracker connection” when the viewer can't see it.
+ * label (0.69), “a tracker connection” when the viewer can't see it. In the viewer's locale when one is given.
  */
 export function triggerSummary(
   triggers: readonly AutomationTrigger[],
   conversationTitle: (id: string) => string | undefined = () => undefined,
   connectionLabel: (id: string) => string | undefined = () => undefined,
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
+  const room = (id: string) => conversationTitle(id) ?? tr.t('trigger.privateRoom');
   return triggers
     .map((t) => {
-      const room = (id: string) => conversationTitle(id) ?? 'a private room';
       switch (t.kind) {
-        case 'message_posted':
+        case 'message_posted': {
+          const where = room(t.conversationId);
           return t.contains.length
-            ? `Message with “${t.contains[0]}”${t.contains.length > 1 ? '…' : ''} in ${room(t.conversationId)}`
-            : `Message in ${room(t.conversationId)}`;
+            ? tr.t('trigger.messageWith', {
+                word: t.contains[0] ?? '',
+                more: t.contains.length > 1 ? '…' : '',
+                room: where,
+              })
+            : tr.t('trigger.message', { room: where });
+        }
         case 'reaction_added':
-          return `${t.value} in ${room(t.conversationId)}`;
+          return tr.t('trigger.reaction', { value: t.value, room: room(t.conversationId) });
         case 'schedule':
-          return describeSchedule(t.schedule, t.timeZone);
-        case 'github':
-          return `${GITHUB_TRIGGER_SUMMARY[t.event]}${t.event === 'checks_completed' && t.checksState === 'failed' ? ' (failed)' : ''} on ${t.repo}`;
+          return describeSchedule(t.schedule, t.timeZone, locale);
+        case 'github': {
+          const what = tr.t(`trigger.github.${t.event}`);
+          const failed = t.event === 'checks_completed' && t.checksState === 'failed';
+          return tr.t('trigger.github', {
+            what: failed ? tr.t('trigger.github.failed', { what }) : what,
+            repo: t.repo,
+          });
+        }
         case 'webhook':
-          return 'Webhook';
+          return tr.t('trigger.webhook');
         case 'manual':
-          return TRIGGER_KIND_LABELS.manual;
+          return tr.t('trigger.manual');
         case 'tracker':
           // “Customer replies in Acme Desk dev” (0.75, TA-31).
-          return `${t.event === 'reporter_replied' ? 'Customer replies' : trackerSummary(t.itemKinds)} in ${connectionLabel(t.connectionId) ?? 'a tracker connection'}`;
+          return tr.t('trigger.tracker', {
+            what:
+              t.event === 'reporter_replied'
+                ? tr.t('trigger.tracker.replied')
+                : tr.t(`trigger.tracker.${trackerItemKind(t.itemKinds)}`),
+            connection: connectionLabel(t.connectionId) ?? tr.t('recipe.tracker.unknown'),
+          });
         case 'mail':
-          return mailWhenText(t, connectionLabel(t.connectionId));
+          return mailWhenText(t, connectionLabel(t.connectionId), locale);
         case 'thing':
-          return thingWhenText(t);
+          return thingWhenText(t, locale);
         case 'findmy':
-          return findMyWhenText(t);
+          return findMyWhenText(t, locale);
       }
       return '';
     })

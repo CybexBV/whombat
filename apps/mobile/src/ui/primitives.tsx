@@ -2,6 +2,7 @@
  * Mobile primitives in the mock's language: buttons (44 / 52dp), filter chips, mono section labels,
  * 20dp grouped lists, status lines and quiet states. Colors come from the theme only.
  */
+
 import type { Tone } from '@whombat/core';
 import type { ReactNode } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { makeStyles, useTheme } from '../theme/theme';
 import type { LucideIcon } from './icons';
@@ -323,10 +325,11 @@ export function SkeletonRows({
 }
 
 export function ErrorState({ text, onRetry }: { text: string; onRetry?: () => void }) {
+  const { tClient } = useI18n();
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 16 }}>
       <QuietText style={{ paddingVertical: 0 }}>{text}</QuietText>
-      {onRetry ? <Button label="Try again" variant="secondary" onPress={onRetry} /> : null}
+      {onRetry ? <Button label={tClient('settings.retry')} variant="secondary" onPress={onRetry} /> : null}
     </View>
   );
 }

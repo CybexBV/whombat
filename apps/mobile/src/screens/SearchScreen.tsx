@@ -14,17 +14,18 @@ import { useChatRooms, useChatThreads, useHomeOverview } from '@whombat/client/r
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { PLACE_WORDS, placeRoute } from '../data/places';
+import { placeRoute, placeWords } from '../data/places';
 import {
-  SEARCH_COPY,
   type SearchEntry,
   type SearchSetting,
+  searchCopy,
   searchEntries,
   searchSettings,
   searchSuggestions,
   searchView,
 } from '../data/search';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { openHref } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { advancedRowsOnPhone, youLine, youPartsHere } from '../settings/groups';
@@ -70,9 +71,11 @@ const SETTING_ICONS: Record<SearchSetting['icon'], LucideIcon> = {
 };
 
 /** What this page is called in the “‹ …” of what it opens. */
-const HERE = SEARCH_COPY.title;
 
 export function SearchScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const searchCopyHere = searchCopy(rawLocale);
+
   const theme = useTheme();
   const bottomRoom = useBottomRoom();
   const { slug, timeZone, mode } = useBurrowBase();
@@ -104,21 +107,30 @@ export function SearchScreen({ navigation, route }: Props) {
     () =>
       searchSettings({
         assistant: words.Name,
+        locale: rawLocale,
         managed,
         you: youLine(youPartsHere({ mode })),
         screen: screenRow,
         news: newsRow,
         advanced: advancedRowsOnPhone(words.name, { mode }),
       }),
-    [words.Name, words.name, managed, mode, screenRow, newsRow],
+    [words.Name, words.name, managed, mode, screenRow, newsRow, rawLocale],
   );
   const threads = useMemo(
     () => threadRows([...chat.threads, ...feedback.threads], now, timeZone),
     [chat.threads, feedback.threads, now, timeZone],
   );
   const entries = useMemo(
-    () => searchEntries({ threads, things: overview.data?.things, settings, assistant: words.Name, servers }),
-    [threads, overview.data?.things, settings, words.Name, servers],
+    () =>
+      searchEntries({
+        threads,
+        things: overview.data?.things,
+        settings,
+        assistant: words.Name,
+        servers,
+        locale: rawLocale,
+      }),
+    [threads, overview.data?.things, settings, words.Name, servers, rawLocale],
   );
   const loading = !rooms.known || chat.isLoading || feedback.isLoading || overview.isLoading;
   const failed =
@@ -126,7 +138,7 @@ export function SearchScreen({ navigation, route }: Props) {
     (!!chat.error && chat.threads.length === 0) ||
     (!!feedback.error && feedback.threads.length === 0) ||
     (!!overview.error && !overview.data);
-  const view = searchView({ query, entries, loading: loading && !failed, failed });
+  const view = searchView({ query, entries, loading: loading && !failed, failed, locale: rawLocale });
   const retry = () => {
     chat.refetch();
     feedback.refetch();
@@ -137,10 +149,14 @@ export function SearchScreen({ navigation, route }: Props) {
     const o = entry.open;
     switch (o.kind) {
       case 'thread':
-        return navigation.navigate('Thread', { messageId: o.rootId, back: HERE });
+        return navigation.navigate('Thread', { messageId: o.rootId, back: searchCopyHere.title });
       case 'thing':
         if (o.href) return void openHref(o.href);
-        return navigation.navigate('Thing', { thingId: o.thingId, title: o.title, back: HERE });
+        return navigation.navigate('Thing', {
+          thingId: o.thingId,
+          title: o.title,
+          back: searchCopyHere.title,
+        });
       case 'setting':
         if (o.target.kind === 'tab')
           return navigation.dispatch(StackActions.popTo('Tabs', { screen: 'Settings' }));
@@ -149,7 +165,7 @@ export function SearchScreen({ navigation, route }: Props) {
           o.target.params,
         );
       case 'place': {
-        const r = placeRoute(o.place, HERE);
+        const r = placeRoute(o.place, searchCopyHere.title);
         if (r.kind === 'tab') return navigation.dispatch(StackActions.popTo('Tabs', { screen: r.tab }));
         return (navigation.navigate as (name: string, params: object) => void)(r.name, r.params);
       }
@@ -158,22 +174,22 @@ export function SearchScreen({ navigation, route }: Props) {
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   const status =
     view.kind === 'results'
-      ? SEARCH_COPY.count(view.count)
+      ? searchCopyHere.count(view.count)
       : view.kind === 'none'
-        ? SEARCH_COPY.count(0)
+        ? searchCopyHere.count(0)
         : view.kind === 'loading'
-          ? SEARCH_COPY.searching
+          ? searchCopyHere.searching
           : view.kind === 'failed'
-            ? SEARCH_COPY.failedStatus
+            ? searchCopyHere.failedStatus
             : '';
   const field = textMetrics({ size: 16, family: 'sans', lineHeight: 1.3 });
 
   return (
     <Screen>
       <BackBar
-        label={route.params?.back ?? PLACE_WORDS.chat}
+        label={route.params?.back ?? placeWords(rawLocale).chat}
         onPress={goBack}
-        right={<PlacesButton current="search" here={HERE} />}
+        right={<PlacesButton current="search" here={searchCopyHere.title} />}
       />
       <ScrollView
         style={{ flex: 1, borderTopWidth: 1, borderTopColor: theme.colors.line }}
@@ -188,10 +204,10 @@ export function SearchScreen({ navigation, route }: Props) {
       >
         <View style={{ gap: 6 }}>
           <Text size={28} weight={700} tracking={-0.02} accessibilityRole="header">
-            {SEARCH_COPY.title}
+            {searchCopyHere.title}
           </Text>
           <Text size={15} lh={1.4} color={theme.colors.ink2}>
-            {SEARCH_COPY.intro}
+            {searchCopyHere.intro}
           </Text>
         </View>
         <View
@@ -214,8 +230,8 @@ export function SearchScreen({ navigation, route }: Props) {
             value={query}
             onChangeText={setQuery}
             autoFocus={!route.params?.q}
-            placeholder={SEARCH_COPY.field}
-            accessibilityLabel={SEARCH_COPY.field}
+            placeholder={searchCopyHere.field}
+            accessibilityLabel={searchCopyHere.field}
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.brand}
             cursorColor={theme.colors.ink}
@@ -241,7 +257,7 @@ export function SearchScreen({ navigation, route }: Props) {
               feedback="wash"
               ringRadius={SHELL_TARGET / 2}
               accessibilityRole="button"
-              accessibilityLabel={SEARCH_COPY.clear}
+              accessibilityLabel={searchCopyHere.clear}
               style={{
                 width: SHELL_TARGET,
                 height: SHELL_TARGET,
@@ -260,30 +276,30 @@ export function SearchScreen({ navigation, route }: Props) {
         {view.kind === 'empty' ? (
           <StateCard
             icon
-            title={SEARCH_COPY.emptyTitle}
-            body={SEARCH_COPY.emptyBody}
-            actions={searchSuggestions(entries).map((word) => (
+            title={searchCopyHere.emptyTitle}
+            body={searchCopyHere.emptyBody}
+            actions={searchSuggestions(entries, rawLocale).map((word) => (
               <SmallButton key={word} label={word} onPress={() => setQuery(word)} />
             ))}
           />
         ) : view.kind === 'loading' ? (
           <View accessibilityState={{ busy: true }} style={{ gap: 12 }}>
-            <StateCard title={SEARCH_COPY.looking(view.query)} />
+            <StateCard title={searchCopyHere.looking(view.query)} />
             <Skeleton height={64} radius={14} />
             <Skeleton height={64} radius={14} width="70%" />
           </View>
         ) : view.kind === 'failed' ? (
           <StateCard
-            title={SEARCH_COPY.failedTitle}
-            body={SEARCH_COPY.failedBody}
-            actions={[<SmallButton key="retry" label={SEARCH_COPY.retry} onPress={retry} />]}
+            title={searchCopyHere.failedTitle}
+            body={searchCopyHere.failedBody}
+            actions={[<SmallButton key="retry" label={searchCopyHere.retry} onPress={retry} />]}
           />
         ) : view.kind === 'none' ? (
           <StateCard
             icon
-            title={SEARCH_COPY.noneTitle(view.query)}
-            body={SEARCH_COPY.noneBody}
-            actions={[<SmallButton key="clear" label={SEARCH_COPY.clear} onPress={() => setQuery('')} />]}
+            title={searchCopyHere.noneTitle(view.query)}
+            body={searchCopyHere.noneBody}
+            actions={[<SmallButton key="clear" label={searchCopyHere.clear} onPress={() => setQuery('')} />]}
           />
         ) : (
           view.groups.map((g) => (

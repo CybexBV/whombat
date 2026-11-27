@@ -7,20 +7,20 @@
  * words are the shared `voiceSectionView` and `VOICE_TEXT`; a choice is saved at once and put back when refused. Every
  * target 44dp.
  */
+
 import {
-  VOICE_TEXT,
   type VoiceApi,
   type VoiceDutchRow,
   type VoiceModelRow,
   type VoiceSectionView,
   voiceSectionShown,
-  voiceSectionView,
   voiceSettingErrorText,
 } from '@whombat/client/voice';
 import { useVoice, useVoiceActions } from '@whombat/client/voice/react';
-import type { VoiceTypingPatch } from '@whombat/core/domain';
+import { type VoiceTypingPatch, voiceWords } from '@whombat/core/domain';
 import { type ReactNode, useState } from 'react';
 import { Alert, Linking, Switch, View } from 'react-native';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { OneSheet } from '../ui/oneSheet';
@@ -28,20 +28,33 @@ import { Button } from '../ui/primitives';
 import { Segmented } from '../ui/Segmented';
 import { switchColors } from '../ui/switchColors';
 import { Touchable } from '../ui/Touchable';
+import { localizedVoiceError, localizedVoiceView } from '../voice/copy';
 import { Card, dotColor } from './ui';
 
 /** The section, or nothing (no voice typing on this Whombat). */
 export function VoiceSection({ api }: { api: VoiceApi | null }) {
   const voice = useVoice(api);
+  const { rawLocale } = useI18n();
   if (!api || !voiceSectionShown(voice.data)) return null;
-  return <VoiceCard api={api} view={voiceSectionView(voice.data)} />;
+  return <VoiceCard api={api} view={localizedVoiceView(voice.data, rawLocale)} />;
 }
 
-const failed = (error: unknown) => Alert.alert('That didn’t go through', voiceSettingErrorText(error));
+function useVoiceFailure() {
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
+  return (error: unknown) =>
+    Alert.alert(
+      t('managed.that-didnt-go-through'),
+      localizedVoiceError(voiceSettingErrorText(error), rawLocale),
+    );
+}
 
 function VoiceCard({ api, view }: { api: VoiceApi; view: VoiceSectionView }) {
+  const { rawLocale } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const actions = useVoiceActions(api);
+  const failed = useVoiceFailure();
   const save = (patch: VoiceTypingPatch) =>
     void actions
       .update(patch)
@@ -51,11 +64,11 @@ function VoiceCard({ api, view }: { api: VoiceApi; view: VoiceSectionView }) {
           (patch.model !== undefined && saved.model !== patch.model) ||
           (patch.language !== undefined && saved.language !== patch.language)
         )
-          Alert.alert('That didn’t go through', VOICE_TEXT.errors.notSaved);
+          Alert.alert(tMobile('managed.that-didnt-go-through'), tMobile('voice.error.notSaved'));
       })
       .catch(failed);
   return (
-    <Card label={VOICE_TEXT.sectionLabel}>
+    <Card label={voiceWords(rawLocale).section.toUpperCase()}>
       <Part first>
         <Head
           title={view.on.title}
@@ -120,8 +133,10 @@ function VoiceCard({ api, view }: { api: VoiceApi; view: VoiceSectionView }) {
  * the agreement and downloads the model; turning it off removes its files.
  */
 function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const actions = useVoiceActions(api);
+  const failed = useVoiceFailure();
   const [askLicence, setAskLicence] = useState(false);
   const [pending, setPending] = useState(false);
   const [agreeing, setAgreeing] = useState(false);
@@ -138,7 +153,8 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
     void actions
       .setDutchVoice({ on: false })
       .then((saved) => {
-        if (saved.dutchVoice?.on !== false) Alert.alert('That didn’t go through', VOICE_TEXT.errors.notSaved);
+        if (saved.dutchVoice?.on !== false)
+          Alert.alert(tMobile('managed.that-didnt-go-through'), tMobile('voice.error.notSaved'));
       })
       .catch(failed)
       .finally(() => setPending(false));
@@ -151,7 +167,7 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
       .setDutchVoice({ on: true, licenceVersion: row.licenceVersion })
       .then((saved) => {
         if (saved.dutchVoice?.on !== true) {
-          Alert.alert('That didn’t go through', VOICE_TEXT.errors.notSaved);
+          Alert.alert(tMobile('managed.that-didnt-go-through'), tMobile('voice.error.notSaved'));
           return;
         }
         setAskLicence(false);
@@ -296,6 +312,7 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
 function ModelPart({ api, row }: { api: VoiceApi; row: VoiceModelRow }) {
   const theme = useTheme();
   const actions = useVoiceActions(api);
+  const failed = useVoiceFailure();
   const [pending, setPending] = useState(false);
   const act = () => {
     if (!row.action || pending) return;

@@ -11,6 +11,7 @@
  * back to it reads everything again (a destination set up, a passkey added). Pushes
  * about the Whombat itself open it; so does Settings → This Whombat. Not mocked: a pushed screen in settings' language.
  */
+
 import { useIsFocused } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { DESK_QUERY_KEY, useDesk } from '@whombat/client/desk/react';
@@ -21,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { UpdateCard } from '../settings/UpdateCard';
 import { useDeskNameSync } from '../settings/useDeskName';
@@ -33,7 +35,7 @@ import { useVoiceApi } from '../voice/useVoiceApi';
 import { BluetoothSection } from './BluetoothSection';
 import { useBackupPasskeyTap } from './backupPasskey';
 import { useManagedOrThrow } from './context';
-import { COPY, MANAGED_TEXT } from './copy';
+import { managedCopy, managedText } from './copy';
 import { DeskSettingsRow } from './DeskSection';
 import { DeskUnlockCard } from './DeskUnlockCard';
 import { HostStatusSection } from './HostStatus';
@@ -79,6 +81,11 @@ function useOverviewLists() {
 }
 
 export function WhombatScreen() {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+  const managedTextHere = managedText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const navigation = useAppNavigation();
   const managed = useManagedOrThrow();
@@ -138,12 +145,12 @@ export function WhombatScreen() {
     open(step.to, step.params);
   };
 
-  const back = <BackBar label="Back" onPress={() => navigation.goBack()} />;
+  const back = <BackBar label={tMobile('managed.back')} onPress={() => navigation.goBack()} />;
   if (error)
     return (
       <Screen>
         {back}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={reload} />
+        <ErrorState text={managedTextHere.loadError} onRetry={reload} />
       </Screen>
     );
   if (!status || !lists)
@@ -169,7 +176,7 @@ export function WhombatScreen() {
     <Screen>
       {back}
       <ScrollView contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}>
-        <LargeTitle title={COPY.whombat.title} />
+        <LargeTitle title={managedCopyHere.whombat.title} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
           <DeskUnlockCard api={desk} />
           <UpdateCard />
@@ -196,14 +203,14 @@ export function WhombatScreen() {
           <VoiceSection api={voice} />
           <NetworkSection
             machine={machine}
-            onHardware={() => navigation.navigate('WhombatHardware', { back: COPY.whombat.title })}
+            onHardware={() => navigation.navigate('WhombatHardware', { back: managedCopyHere.whombat.title })}
             onRepoint={() => navigation.navigate('RepointServers')}
           />
           <TailscaleSection here={tailscale} />
           <MailSection here={mail} />
           <BluetoothSection
             machine={machine}
-            onHardware={() => navigation.navigate('WhombatHardware', { back: COPY.whombat.title })}
+            onHardware={() => navigation.navigate('WhombatHardware', { back: managedCopyHere.whombat.title })}
           />
           <Card label={T.glance}>
             {glance.map((row, i) => (

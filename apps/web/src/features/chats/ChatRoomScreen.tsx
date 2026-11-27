@@ -2,8 +2,6 @@ import { useRouterState } from '@tanstack/react-router';
 import { WhombatAvatar } from '@whombat/avatars/react';
 import {
   agentFaceOf,
-  CHAT_WORDS,
-  INBOX_WORDS,
   type InboxFilter,
   inboxCounts,
   inboxFiltered,
@@ -11,7 +9,6 @@ import {
   nextRootAfter,
   type InboxRow as Row,
   rowStep,
-  SETTLE_WORDS,
 } from '@whombat/client';
 import {
   useChatRooms,
@@ -28,6 +25,7 @@ import { useSearchUpdate } from '../../app/routing/navigation';
 import type { RoomSearch } from '../../app/routing/search';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
+import { CHAT_WORDS, INBOX_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { NotificationsOffer } from '../../push/NotificationsOffer';
 import { AppLink } from '../files/AppLink';
 import { RoomStatus } from '../messaging/ConversationRoom';

@@ -8,7 +8,8 @@ import type { UpdateFacts } from '@whombat/control-contracts/local';
 import type { NeedsYouItem } from '@whombat/core';
 import { burrows } from '../db/schema/index';
 import { homeAudience, publishHomeChanged } from '../home/notify';
-import { registerNeedsYouSource, type SourceCtx } from '../home/registry';
+import { registerNeedsYouSource, type SourceCtx, sourceLocale } from '../home/registry';
+import { tServer } from '../i18n/catalog';
 import { loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
 import { checkStartsOn, registerChecks } from '../things/quiet/defaults';
@@ -23,11 +24,16 @@ registerChecks([
 /** This Whombat → About, where the updates and the switch are. */
 export const UPDATES_HREF = '/settings?tab=appliance&section=about';
 
-export const UPDATE_READY_WORDS = {
-  title: 'An update is ready',
-  body: 'Your Whombat installs it when you say so.',
-  open: 'See the update',
-} as const;
+/** The item's words in a locale. */
+export function updateReadyWords(locale?: string | null) {
+  return {
+    title: tServer(locale, 'managed.update.title'),
+    body: tServer(locale, 'managed.update.body'),
+    open: tServer(locale, 'managed.update.open'),
+  };
+}
+
+export const UPDATE_READY_WORDS = updateReadyWords(null);
 
 /** The release waiting for the owner's yes, or null. */
 export function ownerWaitOf(update: UpdateFacts | null | undefined): string | null {
@@ -35,19 +41,18 @@ export function ownerWaitOf(update: UpdateFacts | null | undefined): string | nu
 }
 
 /** The item (pure): one per release, so a newer one waiting is a new item. */
-export function updateReadyItem(release: string, since: string): NeedsYouItem {
+export function updateReadyItem(release: string, since: string, locale?: string | null): NeedsYouItem {
+  const words = updateReadyWords(locale);
   return {
     id: `update:owner:${release}`.slice(0, 200),
     ref: { kind: 'update', id: release },
     kind: 'alert',
     severity: 'info',
     nature: 'you',
-    title: UPDATE_READY_WORDS.title,
-    body: UPDATE_READY_WORDS.body,
+    title: words.title,
+    body: words.body,
     at: since,
-    actions: [
-      { id: 'open', label: UPDATE_READY_WORDS.open, style: 'primary', kind: 'open', href: UPDATES_HREF },
-    ],
+    actions: [{ id: 'open', label: words.open, style: 'primary', kind: 'open', href: UPDATES_HREF }],
     href: UPDATES_HREF,
   };
 }
@@ -61,7 +66,7 @@ export function registerUpdateOwnerSource(update: () => UpdateFacts | null): voi
     if (!release || !facts?.waiting) return [];
     const person = ctx.reads?.person ?? (await loadPrincipalRow(ctx.db, ctx.personId));
     if (person?.kind !== 'person') return [];
-    return [updateReadyItem(release, new Date(facts.waiting.since).toISOString())];
+    return [updateReadyItem(release, new Date(facts.waiting.since).toISOString(), await sourceLocale(ctx))];
   });
 }
 

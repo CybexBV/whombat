@@ -2,6 +2,7 @@ import { CARD_FRAME_WORDS, RUN_ATTENTION_LABEL, runAttention, runFrame } from '@
 import type { Run } from '@whombat/core/domain';
 import { formatAdditions, formatDeletions, formatTestsPassing, plural } from '@whombat/core/text';
 import { cx } from '../../components/cx';
+import { currentLocale } from '../../i18n/provider';
 import { runControls } from '../runs/runModel';
 import { CardFrame, FrameButton, frameStyles as f } from './CardFrame';
 import { runBranchHref, runHref } from './links';
@@ -90,7 +91,9 @@ export function RunCard({
           {r.tests && (
             <>
               <dt>Tests</dt>
-              <dd className={cx(run.tests, passing && run.testsPassing)}>{formatTestsPassing(r.tests)}</dd>
+              <dd className={cx(run.tests, passing && run.testsPassing)}>
+                {formatTestsPassing(r.tests, currentLocale())}
+              </dd>
             </>
           )}
           <dt>Changes</dt>

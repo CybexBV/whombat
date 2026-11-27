@@ -50,6 +50,30 @@ func stateJSON(t *testing.T, st *desk.State) map[string]any {
 	return m
 }
 
+func TestPairedLocale(t *testing.T) {
+	f := desktest.Start(t)
+	c, ck := newClient(t, f)
+	ctx := context.Background()
+	for _, want := range []string{"nl-NL", "en-GB", ""} {
+		body := desktest.Paired
+		if want != "" {
+			body = strings.Replace(body, `"paired":{`, `"paired":{"locale":"`+want+`",`, 1)
+		}
+		f.Set(desk.PathState, desktest.Answer{Body: body})
+		st := c.State(ctx)
+		if st == nil || st.Paired == nil {
+			t.Fatalf("locale %q: no paired state", want)
+		}
+		m := stateJSON(t, st)
+		paired := m["paired"].(map[string]any)
+		got, present := paired["locale"]
+		if present != (want != "") || (present && got != want) {
+			t.Errorf("locale %q: %v", want, paired)
+		}
+		ck.add(time.Second)
+	}
+}
+
 // The state is the runtime's, checked, and asked at most once a second; a request that changes it drops the cache.
 func TestStateCache(t *testing.T) {
 	f := desktest.Start(t)

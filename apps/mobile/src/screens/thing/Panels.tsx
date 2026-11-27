@@ -15,6 +15,7 @@
  * (`ThingButton.tsx`), a list line's small picture and a row's or line's outside page. A service's settings
  * (`Settings.tsx`; service-settings.md SST-01…SST-09) and any card's Ask in its head (SST-08). Colours only from the theme.
  */
+
 import {
   handleTheseView,
   keepHereQuestion,
@@ -22,7 +23,7 @@ import {
   type LimitView,
   limitNow,
   noticeGroups,
-  OVERVIEW_WORDS,
+  overviewWords,
   thingImageInitial,
   widgetChart,
 } from '@whombat/client';
@@ -37,7 +38,7 @@ import {
   type BarRowView,
   barRows,
   type CellPart,
-  DASHBOARD_COPY,
+  dashboardCopy,
   type FigureTile,
   figurePress,
   figureTiles,
@@ -51,7 +52,7 @@ import {
   wideLayout,
 } from '../../data/dashboard';
 import type { ChartSwatch, HostReadout } from '../../data/hostStatus';
-import { MONITORING_COPY } from '../../data/monitoring';
+import { monitoringCopy } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
 import { LINE_PICTURE_WIDTH, SERVICE_COPY } from '../../data/servicePanels';
 import { panelAsk } from '../../data/serviceSettings';
@@ -68,10 +69,11 @@ import {
   noticesBadge,
   PANEL_ROWS_FIRST,
   type PhoneThingTab,
-  QUIET_LINE_COPY,
-  THING_PAGE_COPY,
+  quietLineCopy,
+  thingPageCopy,
 } from '../../data/thingPage';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { LineChart, Meter, Readout, SmallLine, swatchColor } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -450,13 +452,16 @@ function Parts({ parts, size = 13 }: { parts: readonly CellPart[]; size?: number
 
 /** “Show all 171” under a long table or list. */
 function useFirstRows<T>(rows: readonly T[]): { shown: readonly T[]; more: ReactNode } {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const [all, setAll] = useState(false);
   if (all || rows.length <= PANEL_ROWS_FIRST) return { shown: rows, more: null };
   return {
     shown: rows.slice(0, PANEL_ROWS_FIRST),
     more: (
       <View style={{ paddingHorizontal: 14, paddingVertical: 8 }}>
-        <Button label={THING_PAGE_COPY.showAll(rows.length)} variant="quiet" onPress={() => setAll(true)} />
+        <Button label={thingPageCopyHere.showAll(rows.length)} variant="quiet" onPress={() => setAll(true)} />
       </View>
     ),
   };
@@ -480,6 +485,9 @@ function FigureCard({
   ctx: PanelContext;
   figures: FigureOpening | null;
 }) {
+  const { rawLocale } = useI18n();
+  const overviewWordsHere = overviewWords(rawLocale);
+
   const theme = useTheme();
   const tiles = useMemo(() => figureTiles(panel.items, ctx.range), [panel.items, ctx.range]);
   const presses = useMemo(
@@ -553,7 +561,7 @@ function FigureCard({
           feedback="fade"
           ringRadius={8}
           accessibilityRole="button"
-          accessibilityLabel={OVERVIEW_WORDS.readingHistory}
+          accessibilityLabel={overviewWordsHere.readingHistory}
           style={{
             minHeight: 44,
             flexDirection: 'row',
@@ -565,7 +573,7 @@ function FigureCard({
           }}
         >
           <Text size={13.5} weight={600} color={theme.colors.brand}>
-            {OVERVIEW_WORDS.readingHistory}
+            {overviewWordsHere.readingHistory}
           </Text>
           <ChevronRight size={14} color={theme.colors.brand} strokeWidth={1.8} />
         </Touchable>
@@ -779,6 +787,9 @@ function NoticesCard({
   panel: Extract<ThingPagePanel, { kind: 'notices' }>;
   ctx: PanelContext;
 }) {
+  const { rawLocale } = useI18n();
+  const dashboardCopyHere = dashboardCopy(rawLocale);
+
   const theme = useTheme();
   const quiet = ctx.quiet ?? null;
   const agent = useAgentWords();
@@ -842,12 +853,12 @@ function NoticesCard({
     >
       {!badge ? (
         // Nothing asks: its words, above the folded heads-ups and quiet lines (QN-14; AP-4862).
-        <CardQuiet text={panel.empty?.trim() || DASHBOARD_COPY.nothing} first />
+        <CardQuiet text={panel.empty?.trim() || dashboardCopyHere.nothing} first />
       ) : null}
       {shown.map(line)}
       {more || open ? (
         <FoldRow
-          label={open ? DASHBOARD_COPY.showFewer : DASHBOARD_COPY.showMore(more)}
+          label={open ? dashboardCopyHere.showFewer : dashboardCopyHere.showMore(more)}
           onPress={() => setOpen(!open)}
         />
       ) : null}
@@ -876,7 +887,7 @@ function NoticesCard({
       {unfolded ? pick(groups.folded).map(line) : null}
       {groups.foldLabel ? (
         <FoldRow
-          label={unfolded ? DASHBOARD_COPY.showFewer : groups.foldLabel}
+          label={unfolded ? dashboardCopyHere.showFewer : groups.foldLabel}
           onPress={() => setUnfolded(!unfolded)}
         />
       ) : null}
@@ -911,6 +922,11 @@ function NoticeLine({
   ctx: PanelContext;
   onMenu: ((row: NoticeRowView) => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const monitoringCopyHere = monitoringCopy(rawLocale);
+  const quietLineCopyHere = quietLineCopy(rawLocale);
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   const action = row.action;
   const quiet = ctx.quiet ?? null;
@@ -1018,7 +1034,7 @@ function NoticeLine({
             feedback="wash"
             ringRadius={22}
             accessibilityLabel={row.menu.label}
-            accessibilityHint={QUIET_LINE_COPY.menuHint}
+            accessibilityHint={quietLineCopyHere.menuHint}
             style={MENU_DOT}
           >
             <Ellipsis size={18} color={theme.colors.mut} strokeWidth={1.8} />
@@ -1030,12 +1046,12 @@ function NoticeLine({
             disabled={quiet.busy(undo)}
             feedback="fade"
             ringRadius={10}
-            accessibilityLabel={QUIET_LINE_COPY.undoLabel(row.title)}
-            accessibilityHint={QUIET_LINE_COPY.undoHint}
+            accessibilityLabel={quietLineCopyHere.undoLabel(row.title)}
+            accessibilityHint={quietLineCopyHere.undoHint}
             style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
           >
             <Text size={13} weight={600} color={theme.colors.brand}>
-              {THING_PAGE_COPY.undo}
+              {thingPageCopyHere.undo}
             </Text>
           </Touchable>
         ) : null}
@@ -1045,12 +1061,12 @@ function NoticeLine({
             disabled={endQuiet.busy}
             feedback="fade"
             ringRadius={10}
-            accessibilityLabel={`${MONITORING_COPY.endNow}: ${row.title}`}
-            accessibilityHint={MONITORING_COPY.endNowHint}
+            accessibilityLabel={`${monitoringCopyHere.endNow}: ${row.title}`}
+            accessibilityHint={monitoringCopyHere.endNowHint}
             style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
           >
             <Text size={13} weight={600} color={theme.colors.brand}>
-              {MONITORING_COPY.endNow}
+              {monitoringCopyHere.endNow}
             </Text>
           </Touchable>
         ) : null}
@@ -1670,6 +1686,9 @@ function AccessCard({
   panel: Extract<ThingPagePanel, { kind: 'access' }>;
   ctx: PanelContext;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   const rows = useMemo(() => accessRows(panel), [panel]);
   return (
@@ -1678,14 +1697,14 @@ function AccessCard({
       right={
         ctx.openSettings ? (
           <HeaderLink
-            label={THING_PAGE_COPY.change}
-            hint={THING_PAGE_COPY.changeHint}
+            label={thingPageCopyHere.change}
+            hint={thingPageCopyHere.changeHint}
             onPress={ctx.openSettings}
           />
         ) : undefined
       }
     >
-      {panel.lookOnly ? <CardQuiet text={THING_PAGE_COPY.lookOnly} first /> : null}
+      {panel.lookOnly ? <CardQuiet text={thingPageCopyHere.lookOnly} first /> : null}
       {rows.map((r) => (
         <OneRow
           key={r.label}
@@ -1715,6 +1734,8 @@ function WidgetsCard({
   panel: Extract<ThingPagePanel, { kind: 'widgets' }>;
   ctx: PanelContext;
 }) {
+  const { rawLocale } = useI18n();
+
   const { slug } = useBurrowBase();
   const list = useWidgets({ params: { burrow: slug }, query: { thing: ctx.thing.id } }, { retry: false });
   const widgets = list.data?.widgets ?? [];
@@ -1739,7 +1760,9 @@ function WidgetsCard({
             <SuggestionChip
               key={s}
               label={s}
-              onPress={() => ctx.run({ kind: 'ask', question: keepHereQuestion(s, ctx.thing.name) })}
+              onPress={() =>
+                ctx.run({ kind: 'ask', question: keepHereQuestion(s, ctx.thing.name, rawLocale) })
+              }
             />
           ))}
         </View>
@@ -1786,11 +1809,16 @@ const plainNumber = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(
  * from.
  */
 export function WidgetBlock({ widget, first }: { widget: Widget; first: boolean }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   // The last point's age moves on by the minute, not at every tick of the shared clock.
   const minute = Math.floor(useNow().getTime() / 60_000) * 60_000;
-  const model = useMemo(() => widgetChart(widget, timeZone, minute), [widget, timeZone, minute]);
+  const model = useMemo(
+    () => widgetChart(widget, timeZone, minute, rawLocale),
+    [widget, timeZone, minute, rawLocale],
+  );
   const [selected, setSelected] = useState<number | null>(null);
   const swatch = (color: 1 | 2 | 3): ChartSwatch =>
     color === 1 ? 'chart1' : color === 2 ? 'chart2' : 'chart3';

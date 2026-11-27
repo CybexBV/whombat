@@ -6,6 +6,7 @@
  * that says when it starts and when it ends, in the web's words (`unraidChangeWords`); a parity check's task ends when
  * the check runs (“The parity check on blackbox is running.”), and Whombat says how the check itself ended.
  */
+
 import { arrayStopWords, unraidChangeWords } from '@whombat/client/hosts';
 import {
   type DiskRowView,
@@ -16,6 +17,7 @@ import {
 import type { HostGuest, HostUnraidDetail } from '@whombat/core';
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
+import { useMobileT } from '../../i18n';
 import { OneCard } from '../../ui/assistant';
 import { Facts } from '../../ui/facts';
 import { OneSheet } from '../../ui/oneSheet';
@@ -87,6 +89,7 @@ export function CheckParitySheet({
   serverName: string;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [correct, setCorrect] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +98,7 @@ export function CheckParitySheet({
       visible
       onClose={() => !busy && onClose()}
       title={`Check parity on ${serverName}`}
-      body="It reads every disk. That takes hours, and the disks are slower meanwhile."
+      body={tMobile('screens.it-reads-every-disk-that-takes-hours-and')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -130,6 +133,7 @@ export function CancelParitySheet({
   serverName: string;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -138,8 +142,8 @@ export function CancelParitySheet({
       onClose={() => !busy && onClose()}
       badge={serverName}
       tone="warn"
-      title="Cancel the parity check?"
-      body="It stops where it is. You can start a new one later; it begins again from the start."
+      title={tMobile('screens.cancel-the-parity-check')}
+      body={tMobile('screens.it-stops-where-it-is-you-can-start')}
       busy={busy ? 'go' : null}
       buttons={[
         {
@@ -240,6 +244,7 @@ export function PluginUpdateSheet({
   count: number;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [error, setError] = useState<string | null>(null);
   const title = plugin
@@ -252,7 +257,7 @@ export function PluginUpdateSheet({
       badge={serverName}
       tone="warn"
       title={title}
-      body="Unraid installs the new version now. Most plugins need no restart."
+      body={tMobile('screens.unraid-installs-the-new-version-now-most-plugins')}
       busy={busy ? 'go' : null}
       buttons={[
         {

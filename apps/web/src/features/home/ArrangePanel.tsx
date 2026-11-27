@@ -4,7 +4,7 @@
  * size, its place and Remove; for a figure at the top — Whombat's own and every thing's figures; for a pinned chart —
  * its width, its place and Remove; and *Add to Overview* — what was removed. Every choice applies and is saved at once.
  */
-import { ARRANGE_WORDS, type ArrangedTile, type OverviewTile, showId, topKey } from '@whombat/client';
+import { type ArrangedTile, arrangeWords, type OverviewTile, showId, topKey } from '@whombat/client';
 import { useOverviewFigures } from '@whombat/client/react';
 import {
   type DeskWidgetView,
@@ -20,6 +20,7 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../../components/Icon';
 import { paneFocus } from '../../components/SidePane';
+import { useLocaleWords } from '../../i18n/words';
 import s from './Arranged.module.css';
 import { TileCard, TileLogo } from './ArrangedTiles';
 
@@ -108,6 +109,7 @@ function Head({
   sub: string;
   onClose: () => void;
 }) {
+  const words = useLocaleWords(arrangeWords);
   return (
     <header className={s.drh}>
       <span className={s.tlogo} aria-hidden="true">
@@ -117,7 +119,7 @@ function Head({
         <h2 id="arrange-panel-title">{title}</h2>
         <small>{sub}</small>
       </div>
-      <button type="button" className={s.x} aria-label={ARRANGE_WORDS.close} onClick={onClose}>
+      <button type="button" className={s.x} aria-label={words.close} onClick={onClose}>
         <Icon icon={X} size={18} />
       </button>
     </header>
@@ -125,15 +127,16 @@ function Head({
 }
 
 function Moves({ index, count, onMove }: { index: number; count: number; onMove: (by: -1 | 1) => void }) {
+  const words = useLocaleWords(arrangeWords);
   return (
     <>
-      <h3>{ARRANGE_WORDS.place}</h3>
+      <h3>{words.place}</h3>
       <div className={s.moves}>
         <button type="button" className={s.ghost} disabled={index <= 0} onClick={() => onMove(-1)}>
-          {ARRANGE_WORDS.earlier}
+          {words.earlier}
         </button>
         <button type="button" className={s.ghost} disabled={index >= count - 1} onClick={() => onMove(1)}>
-          {ARRANGE_WORDS.later}
+          {words.later}
         </button>
       </div>
     </>
@@ -145,6 +148,7 @@ const hasTime = (v: DeskWidgetView | undefined) =>
   !!v && (v.kind === 'chart' || ((v.kind === 'figures' || v.kind === 'server') && !!v.spark?.length));
 
 function TileBody(p: ArrangePanelProps & { target: { kind: 'tile'; thing: string } }) {
+  const words = useLocaleWords(arrangeWords);
   const index = p.tiles.findIndex((t) => t.tile.thing === p.target.thing);
   const entry = p.tiles[index];
   const figures = useOverviewFigures(p.burrow, p.target.thing, !!entry);
@@ -159,7 +163,7 @@ function TileBody(p: ArrangePanelProps & { target: { kind: 'tile'; thing: string
       <Head
         logo={<TileLogo row={item.row} size={22} />}
         title={item.row.name}
-        sub={ARRANGE_WORDS.changeTile(item.row.name)}
+        sub={words.changeTile(item.row.name)}
         onClose={p.onClose}
       />
       <div className={s.prev}>
@@ -167,16 +171,16 @@ function TileBody(p: ArrangePanelProps & { target: { kind: 'tile'; thing: string
           <TileCard entry={entry} view={view} editing preview />
         </div>
       </div>
-      <h3>{ARRANGE_WORDS.shows}</h3>
+      <h3>{words.shows}</h3>
       <div className={s.opts}>
         {figures.isPending ? (
-          <p className={s.empty}>{ARRANGE_WORDS.reading}</p>
+          <p className={s.empty}>{words.reading}</p>
         ) : figures.isError ? (
-          <p className={s.empty}>{ARRANGE_WORDS.couldntRead}</p>
+          <p className={s.empty}>{words.couldntRead}</p>
         ) : (
           (items.length
             ? items
-            : [{ type: 'figures' as const, opts: {}, name: ARRANGE_WORDS.mainFigures, line: '' }]
+            : [{ type: 'figures' as const, opts: {}, name: words.mainFigures, line: '' }]
           ).map((it) => {
             const panel = it.type === 'panel' ? it.opts.panel : undefined;
             const on = (tile.panel ?? undefined) === panel;
@@ -204,22 +208,22 @@ function TileBody(p: ArrangePanelProps & { target: { kind: 'tile'; thing: string
       </div>
       {hasTime(view) ? (
         <>
-          <h3>{ARRANGE_WORDS.span}</h3>
+          <h3>{words.span}</h3>
           <Seg
-            label={ARRANGE_WORDS.span}
+            label={words.span}
             value={tile.range ?? '24h'}
-            items={(['1h', '24h', '7d'] as const).map((v) => ({ v, text: ARRANGE_WORDS.ranges[v] }))}
+            items={(['1h', '24h', '7d'] as const).map((v) => ({ v, text: words.ranges[v] }))}
             onPick={(v) => p.onRange(tile.thing, v)}
           />
         </>
       ) : null}
-      <h3>{ARRANGE_WORDS.size}</h3>
+      <h3>{words.size}</h3>
       <Seg
-        label={ARRANGE_WORDS.size}
+        label={words.size}
         value={tile.size}
         items={(['s', 'w', 'l'] as const).map((v) => ({
           v,
-          text: ARRANGE_WORDS.sizes[v],
+          text: words.sizes[v],
           glyph: <Shape cells={SHAPES[v]} />,
         }))}
         onPick={(v) => p.onSize(tile.thing, v)}
@@ -231,6 +235,7 @@ function TileBody(p: ArrangePanelProps & { target: { kind: 'tile'; thing: string
 }
 
 function TopBody(p: ArrangePanelProps & { target: { kind: 'top'; index: number } }) {
+  const words = useLocaleWords(arrangeWords);
   const figures = useOverviewFigures(p.burrow, null);
   const current = p.top[p.target.index];
   const taken = new Set(p.top.filter((_, i) => i !== p.target.index).map(topKey));
@@ -248,7 +253,7 @@ function TopBody(p: ArrangePanelProps & { target: { kind: 'top'; index: number }
       >
         <span>
           {name}
-          {taken.has(key) ? <small>{ARRANGE_WORDS.shownAlready}</small> : line ? <small>{line}</small> : null}
+          {taken.has(key) ? <small>{words.shownAlready}</small> : line ? <small>{line}</small> : null}
         </span>
       </button>
     );
@@ -257,17 +262,17 @@ function TopBody(p: ArrangePanelProps & { target: { kind: 'top'; index: number }
     <>
       <Head
         logo={<Icon icon={Plus} size={20} />}
-        title={ARRANGE_WORDS.figureTitle}
-        sub={ARRANGE_WORDS.figureSub(p.target.index + 1)}
+        title={words.figureTitle}
+        sub={words.figureSub(p.target.index + 1)}
         onClose={p.onClose}
       />
-      <h3>{ARRANGE_WORDS.shows}</h3>
-      <div className={s.grp}>{ARRANGE_WORDS.own}</div>
+      <h3>{words.shows}</h3>
+      <div className={s.grp}>{words.own}</div>
       <div className={s.opts}>
-        {OVERVIEW_OWN_FIGURES.map((own) => option({ own }, ARRANGE_WORDS.ownNames[own], null))}
+        {OVERVIEW_OWN_FIGURES.map((own) => option({ own }, words.ownNames[own], null))}
       </div>
-      {figures.isPending ? <p className={s.empty}>{ARRANGE_WORDS.reading}</p> : null}
-      {figures.isError ? <p className={s.empty}>{ARRANGE_WORDS.couldntRead}</p> : null}
+      {figures.isPending ? <p className={s.empty}>{words.reading}</p> : null}
+      {figures.isError ? <p className={s.empty}>{words.couldntRead}</p> : null}
       {(figures.data?.groups ?? [])
         .filter((g) => g.thing)
         .map((g) => {
@@ -298,24 +303,20 @@ function TopBody(p: ArrangePanelProps & { target: { kind: 'top'; index: number }
 }
 
 function PinBody(p: ArrangePanelProps & { target: { kind: 'pin'; id: string } }) {
+  const words = useLocaleWords(arrangeWords);
   const index = p.pins.findIndex((x) => x.id === p.target.id);
   const pin = p.pins[index];
   if (!pin) return null;
   return (
     <>
-      <Head
-        logo={<Icon icon={Plus} size={20} />}
-        title={pin.title}
-        sub={ARRANGE_WORDS.pinSub}
-        onClose={p.onClose}
-      />
-      <h3>{ARRANGE_WORDS.width}</h3>
+      <Head logo={<Icon icon={Plus} size={20} />} title={pin.title} sub={words.pinSub} onClose={p.onClose} />
+      <h3>{words.width}</h3>
       <Seg
-        label={ARRANGE_WORDS.width}
+        label={words.width}
         value={pin.size}
         items={(['half', 'full'] as const).map((v) => ({
           v,
-          text: ARRANGE_WORDS.pinSizes[v],
+          text: words.pinSizes[v],
           glyph: <Shape cells={v === 'half' ? [0] : [0, 1]} />,
         }))}
         onPick={(v) => p.onPinSize(pin.id, v)}
@@ -327,19 +328,15 @@ function PinBody(p: ArrangePanelProps & { target: { kind: 'pin'; id: string } })
 }
 
 function AddBody(p: ArrangePanelProps) {
+  const words = useLocaleWords(arrangeWords);
   const none = !p.removedTiles.length && !p.removedPins.length;
   return (
     <>
-      <Head
-        logo={<Icon icon={Plus} size={20} />}
-        title={ARRANGE_WORDS.add}
-        sub={ARRANGE_WORDS.same}
-        onClose={p.onClose}
-      />
-      {none ? <p className={s.empty}>{ARRANGE_WORDS.addEmpty}</p> : null}
+      <Head logo={<Icon icon={Plus} size={20} />} title={words.add} sub={words.same} onClose={p.onClose} />
+      {none ? <p className={s.empty}>{words.addEmpty}</p> : null}
       {p.removedTiles.length ? (
         <>
-          <h3>{ARRANGE_WORDS.addTiles}</h3>
+          <h3>{words.addTiles}</h3>
           <div className={s.opts}>
             {p.removedTiles.map(({ item }) => (
               <button
@@ -362,7 +359,7 @@ function AddBody(p: ArrangePanelProps) {
       ) : null}
       {p.removedPins.length ? (
         <>
-          <h3>{ARRANGE_WORDS.addPins}</h3>
+          <h3>{words.addPins}</h3>
           <div className={s.opts}>
             {p.removedPins.map((pin) => (
               <button key={pin.id} type="button" className={s.opt} onClick={() => p.onAddPin(pin.id)}>
@@ -383,16 +380,17 @@ function Foot({
   problem,
   remove,
 }: Pick<ArrangePanelProps, 'onClose' | 'problem'> & { remove?: () => void }) {
+  const words = useLocaleWords(arrangeWords);
   return (
     <>
       <div className={s.foot}>
         {remove ? (
           <button type="button" className={s.danger} onClick={remove}>
-            {ARRANGE_WORDS.remove}
+            {words.remove}
           </button>
         ) : null}
         <button type="button" className={s.btn} onClick={onClose}>
-          {ARRANGE_WORDS.done}
+          {words.done}
         </button>
       </div>
       {problem ? (
@@ -400,7 +398,7 @@ function Foot({
           {problem}
         </p>
       ) : (
-        <p className={s.fine}>{ARRANGE_WORDS.same}</p>
+        <p className={s.fine}>{words.same}</p>
       )}
     </>
   );

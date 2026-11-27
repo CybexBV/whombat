@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import { PLACES_WORDS } from '@whombat/client';
 import { cx } from '../../components/cx';
+import { PLACES_WORDS } from '../../i18n/shared';
 import { INBOX_PATH } from './location';
 import styles from './NeedsYouBarLink.module.css';
 

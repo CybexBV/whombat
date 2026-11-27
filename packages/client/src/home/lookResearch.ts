@@ -11,13 +11,12 @@ import {
   chatThreadHref,
   DESK_WORDS,
   type DeskHero,
+  deskWords,
   fillDeskWords,
   type HomeOverview,
   type LookResearch,
   type ThingPage,
 } from '@whombat/core';
-
-const W = DESK_WORDS.looks;
 
 /** Where the research is, as a screen draws it; `failed` draws as no research. */
 export type LookResearchShown = Exclude<LookResearch['state'], 'failed'>;
@@ -57,8 +56,10 @@ export function lookResearchView(
   research: LookResearch | null | undefined,
   assistant: string,
   reason?: string | null,
+  locale?: string | null,
 ): LookResearchView | null {
   if (!research || research.state === 'failed') return null;
+  const W = locale ? deskWords(locale).looks : DESK_WORDS.looks;
   const ask = fillDeskWords(W.ask, { assistant });
   switch (research.state) {
     case 'looking': {

@@ -9,7 +9,6 @@
 import { type BrandMarkName, isBrandMark } from '@whombat/brand';
 import {
   HOST_DESTRUCTIVE_ACTIONS,
-  HOST_STATUS_LABELS,
   type HostAlert,
   type HostGuest,
   type HostGuestAction,
@@ -22,6 +21,7 @@ import {
   type HostServerDetail,
   type HostServerStatus,
   hostOsMark,
+  hostStatusLabels,
   thingHref,
 } from '@whombat/core/domain';
 import { lastValue, secondsAbove } from './chart';
@@ -75,9 +75,9 @@ export function shortOs(os: string | null | undefined): string {
 }
 
 /** The status words (`statusNote` when the service gave one, “Running hot”; else the contracts' label). */
-export function statusText(status: HostServerStatus, note?: string | null): string {
+export function statusText(status: HostServerStatus, note?: string | null, locale?: string | null): string {
   if (note && status !== 'ok') return note.charAt(0).toUpperCase() + note.slice(1);
-  return HOST_STATUS_LABELS[status];
+  return hostStatusLabels(locale)[status];
 }
 
 /**
@@ -121,7 +121,7 @@ export interface ServerRowView {
   offline: boolean;
 }
 
-export function serverRow(s: HostServer): ServerRowView {
+export function serverRow(s: HostServer, locale?: string | null): ServerRowView {
   const running = s.guests.reduce((a, g) => a + g.running, 0);
   const total = s.guests.reduce((a, g) => a + g.total, 0);
   const offline = s.status === 'offline' || s.status === 'pending';
@@ -132,7 +132,7 @@ export function serverRow(s: HostServer): ServerRowView {
     href: serverHref(s.id),
     status: s.status,
     tone: serverTone(s.status),
-    statusLabel: statusText(s.status, s.statusNote),
+    statusLabel: statusText(s.status, s.statusNote, locale),
     subtitle: [shortOs(s.os), s.cpu?.model].filter(Boolean).join(' · '),
     mark: serverMark(s),
     cpuText: offline ? DASH : formatPct(s.cpuPct),
@@ -159,7 +159,7 @@ export function serverRows(servers: readonly HostServer[]): ServerRowView[] {
   const rank: Record<HostServerStatus, number> = { bad: 0, offline: 1, warn: 2, pending: 3, ok: 4 };
   return [...servers]
     .sort((a, b) => rank[a.status] - rank[b.status] || a.name.localeCompare(b.name))
-    .map(serverRow);
+    .map((s) => serverRow(s));
 }
 
 /** “5 online · 66 of 133 running” (Home's Servers card): machines and apps together, so no noun. */

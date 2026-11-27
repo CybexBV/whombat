@@ -5,15 +5,16 @@
  * entry opens with its first result. An SSH key is added on the web, and a website login is tested there. The form
  * lives only while the sheet is open: the secret goes with it, and never into navigation params.
  */
+
 import { VAULT_AUTH_LABELS, vaultProblemOf } from '@whombat/client';
 import { useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import {
-  VAULT_COPY,
   VAULT_DESCRIPTION_MAX,
   VAULT_NAME_MAX,
   VAULT_SECRET_MAX,
   type VaultNetwork,
+  vaultCopy,
 } from '@whombat/core/vault';
 import { useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
@@ -25,14 +26,15 @@ import {
   type FieldProblems,
   type PhoneVaultTemplate,
   phoneVaultTemplates,
-  VAULT_FORM_TEXT,
   type VaultForm,
   vaultAddressHint,
   vaultCreateBody,
   vaultFormFields,
   vaultFormProblems,
+  vaultFormText,
   vaultTemplateChoice,
 } from '../data/vaultForm';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField, FormMessage } from '../ui/formField';
@@ -54,12 +56,17 @@ export function AddToVaultSheet({
   /** The new entry, to open it. */
   onAdded: (entry: { id: string; name: string }) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultCopyHere = vaultCopy(rawLocale);
+
+  const vaultFormTextHere = vaultFormText(rawLocale);
+
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
-      title={VAULT_FORM_TEXT.kicker}
-      label={VAULT_COPY.add}
+      title={vaultFormTextHere.kicker}
+      label={vaultCopyHere.add}
       maxHeight="92%"
     >
       {visible ? <AddForm networks={networks} onClose={onClose} onAdded={onAdded} /> : null}
@@ -76,6 +83,12 @@ function AddForm({
   onClose: () => void;
   onAdded: (entry: { id: string; name: string }) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultCopyHere = vaultCopy(rawLocale);
+
+  const vaultFormTextHere = vaultFormText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const create = useVaultWrite(api.vault.create, slug);
@@ -131,13 +144,13 @@ function AddForm({
         }
       }
       showNotice(
-        summary ? VAULT_FORM_TEXT.addedChecked(entry.name, summary) : VAULT_FORM_TEXT.added(entry.name),
+        summary ? vaultFormTextHere.addedChecked(entry.name, summary) : vaultFormTextHere.added(entry.name),
       );
       onAdded({ id: entry.id, name: entry.name });
     } catch (error) {
       const p = vaultProblemOf(error);
       setProblems(p.fields);
-      setMessage(p.message ?? (Object.keys(p.fields).length ? null : VAULT_FORM_TEXT.failed));
+      setMessage(p.message ?? (Object.keys(p.fields).length ? null : vaultFormTextHere.failed));
     }
   };
 
@@ -146,10 +159,10 @@ function AddForm({
       <ScrollView contentContainerStyle={{ paddingBottom: 8, gap: 12 }}>
         <View style={{ paddingHorizontal: 22, gap: 4 }}>
           <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-            {VAULT_COPY.add}
+            {vaultCopyHere.add}
           </Text>
           <Text size={14} color={theme.colors.ink2}>
-            {VAULT_FORM_TEXT.chooseTemplate}
+            {vaultFormTextHere.chooseTemplate}
           </Text>
         </View>
         <View
@@ -175,10 +188,10 @@ function AddForm({
               />
             );
           })}
-          <CardNote>{VAULT_FORM_TEXT.sshOnWeb}</CardNote>
+          <CardNote>{vaultFormTextHere.sshOnWeb}</CardNote>
         </View>
         <View style={{ paddingHorizontal: 22 }}>
-          <Button label={VAULT_FORM_TEXT.cancel} variant="secondary" onPress={onClose} />
+          <Button label={vaultFormTextHere.cancel} variant="secondary" onPress={onClose} />
         </View>
       </ScrollView>
     );
@@ -192,28 +205,28 @@ function AddForm({
     >
       <View style={{ gap: 4 }}>
         <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-          {VAULT_COPY.add}
+          {vaultCopyHere.add}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text size={13.5} lh={1.4} color={theme.colors.ink2} style={{ flex: 1 }}>
             {`${choice.title} · ${choice.body}`}
           </Text>
           <Button
-            label={VAULT_FORM_TEXT.change}
+            label={vaultFormTextHere.change}
             variant="quiet"
             disabled={busy}
-            accessibilityHint="Choose what you’re adding again"
+            accessibilityHint={tMobile('screens.choose-what-youre-adding-again')}
             onPress={() => choose(null)}
           />
         </View>
       </View>
       <FormField
-        label={VAULT_FORM_TEXT.name}
+        label={vaultFormTextHere.name}
         value={form.name}
         onChangeText={(v) => set('name', v)}
         error={problems.name}
         maxLength={VAULT_NAME_MAX}
-        placeholder={VAULT_FORM_TEXT.namePlaceholder[template]}
+        placeholder={vaultFormTextHere.namePlaceholder[template]}
       />
       <FormField
         label={fields.addressLabel}
@@ -229,26 +242,26 @@ function AddForm({
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
-        placeholder={VAULT_FORM_TEXT.addressPlaceholder[template]}
+        placeholder={vaultFormTextHere.addressPlaceholder[template]}
       />
       <FormField
-        label={VAULT_COPY.descriptionLabel}
+        label={vaultCopyHere.descriptionLabel}
         value={form.description}
         onChangeText={(v) => set('description', v)}
         error={problems.description}
         multiline
         maxLength={VAULT_DESCRIPTION_MAX}
-        placeholder={VAULT_FORM_TEXT.descriptionPlaceholder}
+        placeholder={vaultFormTextHere.descriptionPlaceholder}
       />
       {fields.auths.length > 0 ? (
         <View style={{ gap: 8 }}>
           <Text size={13} weight={500} color={theme.colors.ink2}>
-            {VAULT_FORM_TEXT.signsIn}
+            {vaultFormTextHere.signsIn}
           </Text>
           <View
             style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 4 }}
             accessibilityRole="radiogroup"
-            accessibilityLabel={VAULT_FORM_TEXT.signsIn}
+            accessibilityLabel={vaultFormTextHere.signsIn}
           >
             {fields.auths.map((a) => (
               <Chip
@@ -264,7 +277,7 @@ function AddForm({
       ) : null}
       {fields.headerName ? (
         <FormField
-          label={VAULT_FORM_TEXT.headerName}
+          label={vaultFormTextHere.headerName}
           value={form.headerName}
           onChangeText={(v) => set('headerName', v)}
           error={problems['auth.name']}
@@ -276,7 +289,7 @@ function AddForm({
       ) : null}
       {fields.queryName ? (
         <FormField
-          label={VAULT_FORM_TEXT.queryName}
+          label={vaultFormTextHere.queryName}
           value={form.queryName}
           onChangeText={(v) => set('queryName', v)}
           error={problems['auth.name']}
@@ -289,7 +302,7 @@ function AddForm({
       ) : null}
       {fields.username ? (
         <FormField
-          label={VAULT_FORM_TEXT.username}
+          label={vaultFormTextHere.username}
           value={form.username}
           onChangeText={(v) => set('username', v)}
           error={problems['auth.username']}
@@ -305,22 +318,22 @@ function AddForm({
           value={form.secret}
           onChangeText={(v) => set('secret', v)}
           error={problems.secret}
-          hint={VAULT_FORM_TEXT.secretHint}
+          hint={vaultFormTextHere.secretHint}
           secret
           maxLength={VAULT_SECRET_MAX}
-          placeholder={VAULT_FORM_TEXT.secretPlaceholder}
+          placeholder={vaultFormTextHere.secretPlaceholder}
         />
       ) : null}
       <FormMessage text={message} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
-          label={VAULT_FORM_TEXT.cancel}
+          label={vaultFormTextHere.cancel}
           variant="secondary"
           disabled={busy}
           onPress={onClose}
           style={{ flex: 1 }}
         />
-        <Button label={VAULT_FORM_TEXT.save} busy={busy} onPress={() => void save()} style={{ flex: 1 }} />
+        <Button label={vaultFormTextHere.save} busy={busy} onPress={() => void save()} style={{ flex: 1 }} />
       </View>
     </ScrollView>
   );

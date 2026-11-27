@@ -5,6 +5,7 @@
  * sheet with its field, then the review in words and Apply with the digest it was read with; “Changed meanwhile —
  * review again.” over the review of what is there now. Hardware stays on the web, and the screen says so.
  */
+
 import { CHANGED_MEANWHILE, isEmptyDraft } from '@whombat/client/hosts';
 import {
   isoChoices,
@@ -22,6 +23,7 @@ import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useMobileT } from '../../i18n';
 import { OneCard } from '../../ui/assistant';
 import { FormField, FormMessage } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
@@ -42,6 +44,7 @@ export function LibvirtSettings({
   /** An edit, with the CD/DVD drive it changes. */
   onEdit: (kind: LibvirtEditKind, key?: string) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   return (
     <>
       {libvirtSettingGroups(config).map((group) => (
@@ -59,7 +62,7 @@ export function LibvirtSettings({
                 action={
                   canChange && edit ? (
                     <RowAction
-                      label="Change"
+                      label={tMobile('screens.change')}
                       spoken={`Change ${r.label.toLowerCase()}`}
                       onPress={() => onEdit(edit, r.key)}
                     />
@@ -92,6 +95,7 @@ export function LibvirtEditSheet({
   cdrom?: string;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const spec = libvirtEditSpec(kind, guest.name, config);
   const [input, setInput] = useState(() => libvirtEditStart(config, kind, cdrom));
@@ -161,7 +165,7 @@ export function LibvirtEditSheet({
       visible
       onClose={onClose}
       title={spec.title}
-      body={kind === 'cdrom' ? 'It changes at once, also while it runs.' : null}
+      body={kind === 'cdrom' ? tMobile('screens.it-changes-at-once-also-while-it-runs') : null}
       buttons={[
         {
           id: 'review',
@@ -189,7 +193,7 @@ export function LibvirtEditSheet({
               onChange={(iso) => setInput({ ...input, iso })}
             />
           ) : (
-            <QuietText>Looking for ISO images…</QuietText>
+            <QuietText>{tMobile('screens.looking-for-iso-images')}</QuietText>
           )
         ) : (
           <FormField

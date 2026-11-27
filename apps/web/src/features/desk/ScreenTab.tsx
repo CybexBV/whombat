@@ -20,6 +20,7 @@ import { formatDate } from '@whombat/core/text';
 import { useState } from 'react';
 import { cx } from '../../components/cx';
 import { SegmentedControl } from '../../components/SegmentedControl';
+import { currentLocale } from '../../i18n/provider';
 import styles from '../settings/SettingsScreen.module.css';
 import {
   ChoiceSwitchRow,
@@ -105,7 +106,7 @@ function Screen({
   const line = screen.paired
     ? fillDeskWords(W.pairedLine, {
         name: v.onScreen.line,
-        date: formatDate(screen.paired.pairedAt, timeZone, { year: 'auto', now }),
+        date: formatDate(screen.paired.pairedAt, timeZone, { year: 'auto', now }, currentLocale()),
       })
     : v.onScreen.line;
   const close = () => setDialog(null);

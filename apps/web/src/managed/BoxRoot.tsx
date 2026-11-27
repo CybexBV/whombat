@@ -14,7 +14,6 @@
 
 import {
   COMMUNITY_TEXT,
-  COPY,
   claimSecretOfPath,
   claimSecretOfTyped,
   createRegistry,
@@ -53,6 +52,8 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from
 import { AuthLayout } from '../app/auth/AuthLayout';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import { COPY } from '../i18n/managed';
+import { useWebI18n } from '../i18n/provider';
 import { ApplianceApp } from './ApplianceApp';
 import { BoxSetup } from './BoxSetup';
 import type { BoxEnvironment } from './boxEnv';
@@ -182,6 +183,8 @@ type Phase =
 
 /** The box's page: `env` is where the box comes from (`loadBoxEnvironment`, once per page). */
 export function BoxRoot({ env }: { env: BoxEnvironment }) {
+  // Reads the language so a change draws the sign-in and claim screens again without losing where they are.
+  useWebI18n();
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   // What the claim's letters screen says after the box was asked again in the middle of a claim.

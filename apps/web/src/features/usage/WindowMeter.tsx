@@ -1,5 +1,6 @@
 import type { UsageWindow } from '@whombat/core/domain';
 import { formatResetsIn, formatResetTime } from '@whombat/core/text';
+import { currentLocale } from '../../i18n/provider';
 import { meterTone, windowPctText, windowStatusWord } from './model';
 import styles from './Usage.module.css';
 import { UsageBar } from './UsageBar';
@@ -25,7 +26,7 @@ export function WindowMeter({
 }) {
   const word = windowStatusWord(w);
   const tone = meterTone(w);
-  const resets = formatResetsIn(w.resetsAt, now);
+  const resets = formatResetsIn(w.resetsAt, now, currentLocale());
   return (
     <div className={styles.window} data-usage-window={w.kind} data-compact={compact || undefined}>
       <div className={styles.windowHead}>
@@ -43,7 +44,7 @@ export function WindowMeter({
       {resets ? (
         <span
           className={styles.windowMeta}
-          title={w.resetsAt ? formatResetTime(w.resetsAt, now, timeZone) : undefined}
+          title={w.resetsAt ? formatResetTime(w.resetsAt, now, timeZone, currentLocale()) : undefined}
         >
           {resets}
         </span>

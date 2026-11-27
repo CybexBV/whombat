@@ -6,13 +6,15 @@
  * the text read and written with the missing reports, and what saved plans used. The window chooser stays while the
  * report loads, is empty or can't be read. Read again on open and on pull; nothing here is live.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { USAGE_TEXT, USAGE_WINDOWS, type UsageWindow, usageView } from '@whombat/client';
+import { USAGE_WINDOWS, type UsageWindow, usageText, usageView } from '@whombat/client';
 import { useSpendOverview } from '@whombat/client/react';
 import { useState } from 'react';
 import { Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -30,22 +32,26 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Spend'>;
 const TARGET = Platform.OS === 'android' ? 48 : 44;
 
 export function SpendScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const usageTextHere = usageText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrow();
   const overview = useSpendOverview({ params: { burrow: slug } });
   const words = useAgentWords();
   const [window, setWindow] = useState<UsageWindow>('today');
-  const view = overview.data ? usageView(overview.data, words.name) : null;
+  const view = overview.data ? usageView(overview.data, words.name, rawLocale) : null;
   const shown = view?.windows[window];
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
   return (
     <Screen>
       <BackBar
-        label={route.params?.back ?? 'Back'}
+        label={route.params?.back ?? tMobile('managed.back')}
         onPress={goBack}
-        right={<PlacesButton current="usage" here={USAGE_TEXT.title} />}
+        right={<PlacesButton current="usage" here={usageTextHere.title} />}
       />
       <ScrollView
         style={{ flex: 1 }}
@@ -59,10 +65,10 @@ export function SpendScreen({ navigation, route }: Props) {
           />
         }
       >
-        <PlaceTitle title={USAGE_TEXT.title} intro={USAGE_TEXT.intro(words.name)} />
+        <PlaceTitle title={usageTextHere.title} intro={usageTextHere.intro(words.name)} />
         <View
           accessibilityRole="radiogroup"
-          accessibilityLabel={USAGE_TEXT.windowsLabel}
+          accessibilityLabel={usageTextHere.windowsLabel}
           style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
         >
           {USAGE_WINDOWS.map((w) => {
@@ -72,7 +78,7 @@ export function SpendScreen({ navigation, route }: Props) {
                 key={w}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: on }}
-                accessibilityLabel={USAGE_TEXT.windows[w]}
+                accessibilityLabel={usageTextHere.windows[w]}
                 feedback={on ? 'fade' : 'wash'}
                 ringRadius={12}
                 onPress={() => setWindow(w)}
@@ -87,7 +93,7 @@ export function SpendScreen({ navigation, route }: Props) {
                 }}
               >
                 <Text size={15} weight={on ? 600 : 500} color={on ? theme.colors.btnfg : theme.colors.ink}>
-                  {USAGE_TEXT.windows[w]}
+                  {usageTextHere.windows[w]}
                 </Text>
               </Touchable>
             );
@@ -99,13 +105,13 @@ export function SpendScreen({ navigation, route }: Props) {
             <PlaceState
               kind="failed"
               icon={ChartNoAxesColumn}
-              title={USAGE_TEXT.failedTitle}
-              line={USAGE_TEXT.failedLine}
-              retryLabel={USAGE_TEXT.retry}
+              title={usageTextHere.failedTitle}
+              line={usageTextHere.failedLine}
+              retryLabel={usageTextHere.retry}
               onRetry={() => void overview.refetch()}
             />
           ) : (
-            <PlaceState kind="loading" icon={ChartNoAxesColumn} title={USAGE_TEXT.loading} />
+            <PlaceState kind="loading" icon={ChartNoAxesColumn} title={usageTextHere.loading} />
           )
         ) : (
           <>
@@ -116,13 +122,13 @@ export function SpendScreen({ navigation, route }: Props) {
               <PlaceState
                 kind="empty"
                 icon={ChartNoAxesColumn}
-                title={USAGE_TEXT.emptyTitle}
-                line={USAGE_TEXT.emptyLine}
+                title={usageTextHere.emptyTitle}
+                line={usageTextHere.emptyLine}
               />
             ) : (
               <>
                 <View accessible accessibilityLabel={shown.spoken} style={{ gap: 12 }}>
-                  <Tile label={USAGE_TEXT.cost} meta={shown.coverage}>
+                  <Tile label={usageTextHere.cost} meta={shown.coverage}>
                     {shown.cost ? (
                       <View
                         style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 }}
@@ -131,12 +137,12 @@ export function SpendScreen({ navigation, route }: Props) {
                           {shown.cost}
                         </Text>
                         <Text size={13} mono color={theme.colors.ink2}>
-                          {USAGE_TEXT.unit}
+                          {usageTextHere.unit}
                         </Text>
                       </View>
                     ) : (
                       <Text size={20} weight={600}>
-                        {USAGE_TEXT.noCost}
+                        {usageTextHere.noCost}
                       </Text>
                     )}
                   </Tile>
@@ -147,7 +153,7 @@ export function SpendScreen({ navigation, route }: Props) {
                   </Tile>
                 </View>
                 <Text size={16} lh={1.5}>
-                  {USAGE_TEXT.definition}
+                  {usageTextHere.definition}
                 </Text>
               </>
             )}
@@ -164,17 +170,20 @@ export function SpendScreen({ navigation, route }: Props) {
                 paddingVertical: 4,
               }}
             >
-              <MoreFold label={USAGE_TEXT.more}>
-                <MoreBlock title={USAGE_TEXT.coverageTitle} lines={USAGE_TEXT.coverageLines} />
+              <MoreFold label={usageTextHere.more}>
+                <MoreBlock title={usageTextHere.coverageTitle} lines={usageTextHere.coverageLines} />
                 {shown.empty ? null : (
                   <MoreBlock
-                    title={USAGE_TEXT.textTitle}
+                    title={usageTextHere.textTitle}
                     strong={shown.text}
-                    lines={[USAGE_TEXT.textLine(words.name), shown.reports]}
+                    lines={[usageTextHere.textLine(words.name), shown.reports]}
                   />
                 )}
                 {view.plans.length > 0 ? (
-                  <MoreBlock title={USAGE_TEXT.plansTitle} lines={[...view.plans, USAGE_TEXT.plansLine]} />
+                  <MoreBlock
+                    title={usageTextHere.plansTitle}
+                    lines={[...view.plans, usageTextHere.plansLine]}
+                  />
                 ) : null}
               </MoreFold>
             </View>

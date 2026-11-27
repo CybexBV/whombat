@@ -7,12 +7,14 @@
  * through is a toast, and the card folds into its line when the server re-sends it. Opened from its line it is the
  * same card without buttons, with “Hide card”.
  */
+
 import { useApiMutation } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
-import { AUTOMATION_PLAN_TEXT, type PlanCardView, tryItLabel } from '../data/automationPlan';
+import { automationPlanText, type PlanCardView, tryItLabel } from '../data/automationPlan';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { errorText, outcomeText, showNotice } from '../screens/feedback';
 import { SAMPLES_STALE_MS, useAutomationSamples, useStartAutomation } from '../screens/useStartAutomation';
@@ -34,6 +36,9 @@ export function AutomationPlanCardView({
   /** Opened from its line: “Hide card” returns the line. */
   collapse?: (() => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const automationPlanTextHere = automationPlanText(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const navigation = useAppNavigation();
@@ -58,7 +63,7 @@ export function AutomationPlanCardView({
       .then(
         (result) => {
           if (result.status !== 'ok') return setProblem(outcomeText(result)?.body ?? errorText(null));
-          showNotice(AUTOMATION_PLAN_TEXT.turnedOn[kind](view.name));
+          showNotice(automationPlanTextHere.turnedOn[kind](view.name));
         },
         (error) => setProblem(errorText(error)),
       )
@@ -72,7 +77,7 @@ export function AutomationPlanCardView({
       .then(
         (result) => {
           if (result.status !== 'ok') return setProblem(outcomeText(result)?.body ?? errorText(null));
-          showNotice(AUTOMATION_PLAN_TEXT.setAside[kind](view.name));
+          showNotice(automationPlanTextHere.setAside[kind](view.name));
         },
         (error) => setProblem(errorText(error)),
       )
@@ -84,7 +89,7 @@ export function AutomationPlanCardView({
     void start(view.automationId, { test: true, tryIt: view.tryIt }).then((outcome) => {
       setBusy(null);
       if (!outcome.ok) return setProblem(outcome.text);
-      showNotice(AUTOMATION_PLAN_TEXT.trying(view.name, outcome.sample?.number ?? null));
+      showNotice(automationPlanTextHere.trying(view.name, outcome.sample?.number ?? null));
       navigation.navigate('AutomationRun', { number: outcome.runNumber, back: 'Back' });
     });
   };
@@ -145,7 +150,7 @@ export function AutomationPlanCardView({
             gap: 4,
           }}
         >
-          <MonoLabel>{AUTOMATION_PLAN_TEXT.whatChanges}</MonoLabel>
+          <MonoLabel>{automationPlanTextHere.whatChanges}</MonoLabel>
           {view.changes.map((c) => (
             <View
               key={c.key}
@@ -220,7 +225,7 @@ export function AutomationPlanCardView({
           }}
         >
           <Text size={14} weight={600} accessibilityRole="header">
-            {AUTOMATION_PLAN_TEXT.thinking}
+            {automationPlanTextHere.thinking}
           </Text>
           {view.thinking.map((point) => (
             <View key={point} style={{ flexDirection: 'row', gap: 8 }}>
@@ -278,7 +283,7 @@ export function AutomationPlanCardView({
             onPress={turnOn}
             busy={busy === 'accept'}
             disabled={busy !== null && busy !== 'accept'}
-            accessibilityHint={AUTOMATION_PLAN_TEXT.acceptHint[kind](view.name)}
+            accessibilityHint={automationPlanTextHere.acceptHint[kind](view.name)}
           />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button
@@ -287,7 +292,7 @@ export function AutomationPlanCardView({
               onPress={tryIt}
               busy={busy === 'try'}
               disabled={busy !== null && busy !== 'try'}
-              accessibilityHint={AUTOMATION_PLAN_TEXT.tryHint}
+              accessibilityHint={automationPlanTextHere.tryHint}
               style={{ flex: 1 }}
             />
             <Button
@@ -296,7 +301,7 @@ export function AutomationPlanCardView({
               onPress={notNow}
               busy={busy === 'decline'}
               disabled={busy !== null && busy !== 'decline'}
-              accessibilityHint={AUTOMATION_PLAN_TEXT.declineHint[kind]}
+              accessibilityHint={automationPlanTextHere.declineHint[kind]}
               style={{ flex: 1 }}
             />
           </View>
@@ -306,7 +311,7 @@ export function AutomationPlanCardView({
             </Text>
           ) : null}
           <Text size={13.5} lh={1.4} color={theme.colors.mut}>
-            {AUTOMATION_PLAN_TEXT.replyHint}
+            {automationPlanTextHere.replyHint}
           </Text>
         </View>
       ) : null}

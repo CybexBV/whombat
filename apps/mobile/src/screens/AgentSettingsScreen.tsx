@@ -8,10 +8,11 @@
  * model, keys, what runs, schedules, spend and skills in Advanced). You change all of it (one-person-android.md
  * AP-5761). Leaving a part (or the page) with unsaved changes asks first. A failed load says what happened (AP-707).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { agentFaceOf, hasLooksAhead } from '@whombat/client';
 import { useAgent, useSessionProtocol } from '@whombat/client/react';
-import { AGENT_STATUS_COPY } from '@whombat/core';
+import { agentStatusCopy } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { WhombatAvatar } from '../avatars/Avatars';
@@ -19,10 +20,11 @@ import { agentLoadProblem, contractMismatchLine } from '../data/agentLoad';
 import { AGENT_PAGE_TEXT, type AgentPart, agentKeyParam, agentParts } from '../data/agentPage';
 import { useBurrow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { NeedsNewerApp } from '../managed/NeedsNewerApp';
 import type { RootStackParamList } from '../navigation/routes';
 import { agentPartTarget } from '../settings/groups';
-import { SETTINGS_TEXT } from '../settings/list';
+import { settingsText } from '../settings/list';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BackBar, Screen } from '../ui/headers';
@@ -39,6 +41,11 @@ import { type PartProps, useUnsavedGuard } from './agent/parts';
 type Props = NativeStackScreenProps<RootStackParamList, 'SettingsAgent'>;
 
 export function AgentSettingsScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const settingsTextHere = settingsText(rawLocale);
+
+  const agentStatusCopyHere = agentStatusCopy(rawLocale);
+
   const theme = useTheme();
   const { slug, mode } = useBurrow();
   const words = useAgentWords();
@@ -84,7 +91,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
     const problem = query.error ? agentLoadProblem(query.error) : null;
     return (
       <Screen>
-        <BackBar label={SETTINGS_TEXT.title} onPress={goBack} />
+        <BackBar label={settingsTextHere.title} onPress={goBack} />
         {problem?.kind === 'newer' ? (
           <NeedsNewerApp />
         ) : problem?.kind === 'gone' ? (
@@ -112,7 +119,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
   };
   return (
     <Screen>
-      <BackBar label={SETTINGS_TEXT.title} onPress={goBack} />
+      <BackBar label={settingsTextHere.title} onPress={goBack} />
       <View
         style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 22, paddingTop: 2 }}
       >
@@ -129,7 +136,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
             {agent.name}
           </Text>
           <Text size={11} weight={500} mono tracking={0.05} color={theme.status[agent.status]}>
-            {AGENT_STATUS_COPY[agent.status].label.toUpperCase()}
+            {agentStatusCopyHere[agent.status].label.toUpperCase()}
           </Text>
         </View>
       </View>

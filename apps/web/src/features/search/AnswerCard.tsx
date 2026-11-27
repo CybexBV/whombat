@@ -5,6 +5,7 @@ import { formatAnswerMeta } from '@whombat/core';
 import { segmentCitations } from '@whombat/core/text';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
+import { currentLocale } from '../../i18n/provider';
 import styles from './AnswerCard.module.css';
 
 export interface AnswerCardProps {
@@ -39,7 +40,7 @@ export function AnswerCard({
             <span className={styles.meta}>couldn’t find an answer</span>
           ) : (
             <span className={styles.meta}>
-              {formatAnswerMeta(answer.citations.length, answer.durationMs)}
+              {formatAnswerMeta(answer.citations.length, answer.durationMs, currentLocale())}
             </span>
           )}
         </div>

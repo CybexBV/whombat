@@ -1,10 +1,13 @@
+import type { Translate } from '../i18n/translate';
 /** The desk's shared pieces: the top bar, the agent's face, a server card, a home tile, the power line. */
+
 import { WhombatAvatar } from '@whombat/avatars/react';
 import { isBrandMark } from '@whombat/brand';
 import { BrandMark, WhombatLogo } from '@whombat/brand/react';
 import type { ReactNode, Ref } from 'react';
+import { useT } from '../i18n/react';
 import type { AgentFace, DeskMeter, DeskPower, DeskServer, DeskTile } from '../lib/desk';
-import { DESK_WORDS, fill, percent, powerBanner, powerChip, unlockedText } from '../lib/deskCopy';
+import { deskWordsCopy, fill, percent, powerBanner, powerChip, unlockedText } from '../lib/deskCopy';
 import styles from './desk.module.css';
 import { Icon, TILE_ICON } from './icons';
 
@@ -52,6 +55,8 @@ export function TopBar({
   /** The chips on the right, after the power chip. */
   children?: ReactNode;
 }) {
+  const t = useT();
+
   return (
     <header className={styles.top}>
       {/* The full face at 24 px (mockups 1–3): the stage draws it at 48 px on the Z13, where the brand picks it. */}
@@ -67,7 +72,7 @@ export function TopBar({
                 power.source === 'battery' ? `${styles.chipIcon} ${styles.chipWarn}` : styles.chipIcon
               }
             />
-            {powerChip(power)}
+            {powerChip(power, t)}
           </span>
           {children && <span className={styles.sep} />}
         </>
@@ -113,7 +118,10 @@ export function LockChip({
   looking?: boolean;
   onLock: () => void;
 }) {
-  const text = unlockedText(name, minutes, present);
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
+  const text = unlockedText(name, minutes, present, t);
   const cameraLabel = camera ? DESK_WORDS.cameraOn : looking ? DESK_WORDS.cameraLooking : null;
   const mark = cameraLabel && <CameraMark label={cameraLabel} />;
   if (!unlocked) {
@@ -171,10 +179,10 @@ export function Segments({
 /** A card's bar: 20 segments now that the bar has a line of its own (DK-80). */
 export const CARD_SEGMENTS = 20;
 
-const C = DESK_WORDS.card;
-
 /** One of a card's lines (DK-80): the short label, the block bar and the percentage; none: an empty bar and “–”. */
 function CardLine({ k, meter }: { k: string; meter: DeskMeter | null | undefined }) {
+  const C = deskWordsCopy(useT()).card;
+
   return (
     <span className={styles.cardLine}>
       <span className={styles.cardKey}>{k}</span>
@@ -198,6 +206,8 @@ export interface CardFigures {
 
 /** CPU, MEM and DISK, each on a line of its own (DK-80, mockup frame 1). */
 export function CardLines({ cpu, memory, disk }: CardFigures) {
+  const C = deskWordsCopy(useT()).card;
+
   return (
     <span className={styles.cardLines}>
       <CardLine k={C.cpu} meter={cpu} />
@@ -208,7 +218,9 @@ export function CardLines({ cpu, memory, disk }: CardFigures) {
 }
 
 /** A card's button label (DK-83): “Open pve-01. up 41 d. CPU 18 %, MEM 54 %, DISK 33 %”. */
-export function cardLabel(name: string, note: string, f: CardFigures): string {
+export function cardLabel(name: string, note: string, f: CardFigures, t: Translate): string {
+  const C = deskWordsCopy(t).card;
+
   const v = (m: DeskMeter | null | undefined) => (m ? percent(m.value) : C.none);
   const figures = `${C.cpu} ${v(f.cpu)}, ${C.memory} ${v(f.memory)}, ${C.disk} ${v(f.disk)}`;
   return [fill(C.open, { name }), note, figures].filter(Boolean).join('. ');
@@ -276,11 +288,12 @@ export function ServerCard({
   /** Opens the server's own screen (DK-83); absent: the card doesn't open. */
   onOpen?: () => void;
 }) {
+  const t = useT();
   return (
     <OpenCard
       className={[styles.card, styles.server, className].filter(Boolean).join(' ')}
       state={server.state}
-      label={cardLabel(server.name, server.note, server)}
+      label={cardLabel(server.name, server.note, server, t)}
       onOpen={onOpen}
     >
       <span className={styles.serverHead}>
@@ -332,7 +345,9 @@ export function PowerBanner({
   /** The glance measures the one-line version to plan the room above it (CG-135). */
   ref?: Ref<HTMLDivElement>;
 }) {
-  const b = powerBanner(power, assistant, timeZone);
+  const t = useT();
+
+  const b = powerBanner(power, assistant, timeZone, t);
   if (!b) return null;
   return (
     <div ref={ref} className={compact ? styles.battery : styles.power} role="status">
@@ -362,6 +377,9 @@ export function PageHead({
   onBack: () => void;
   children?: ReactNode;
 }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   return (
     <header className={styles.pageHead}>
       <button

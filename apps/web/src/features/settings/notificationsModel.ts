@@ -13,6 +13,7 @@ import {
   zonedInstant,
   zonedParts,
 } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 /** “Do not disturb is on until 14:52.”, or null while it's off. */
 export function dndStateText(
@@ -21,7 +22,7 @@ export function dndStateText(
   timeZone: string,
 ): string | null {
   if (!isDndActive(prefs, now) || !prefs.dndUntil) return null;
-  return `Do not disturb is on until ${endsText(prefs.dndUntil, now, timeZone)}.`;
+  return `Do not disturb is on until ${endsText(prefs.dndUntil, now, timeZone, currentLocale())}.`;
 }
 
 /** `2026-09-23T18:30` (a `datetime-local` value) for `at` in `timeZone`. */

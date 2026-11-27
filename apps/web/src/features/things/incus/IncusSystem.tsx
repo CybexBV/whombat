@@ -22,6 +22,7 @@ import {
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostServerDetail, HostTask } from '@whombat/core/domain';
 import { cx } from '../../../components/cx';
+import { currentLocale } from '../../../i18n/provider';
 import { useManage } from '../manage/useManage';
 import { Card, ErrorLine, StateCell } from '../parts';
 import styles from '../Things.module.css';
@@ -62,7 +63,9 @@ export function IncusSystem({
                     {[
                       w.count > 1 ? `${w.count} times` : null,
                       w.project ? `project ${w.project}` : null,
-                      w.lastSeen ? `last ${formatAgoIso(w.lastSeen, Date.parse(detail.asOf))}` : null,
+                      w.lastSeen
+                        ? `last ${formatAgoIso(w.lastSeen, Date.parse(detail.asOf), currentLocale())}`
+                        : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -210,10 +213,12 @@ function Operations({
                   <StateCell tone={taskStatusTone(t.status)} text={TASK_STATUS_WORDS[t.status]} compact />
                 </td>
                 <td className={cx(styles.num, styles.dropS)}>
-                  {formatRelativeDay(Date.parse(t.started), now, timeZone)}
+                  {formatRelativeDay(Date.parse(t.started), now, timeZone, currentLocale())}
                 </td>
                 <td className={cx(styles.num, styles.dropM)}>
-                  {t.status === 'running' ? DASH : formatDuration(taskSeconds(t.started, t.ended, now))}
+                  {t.status === 'running'
+                    ? DASH
+                    : formatDuration(taskSeconds(t.started, t.ended, now), currentLocale())}
                 </td>
                 <td>
                   {t.status === 'running' && taskCancellable(t) && canChange ? (

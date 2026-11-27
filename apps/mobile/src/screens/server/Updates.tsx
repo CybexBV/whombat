@@ -5,6 +5,7 @@
  * `serverUpdatesView` (`@whombat/client/hosts`): Full control, the runtime's `hosts.package_updates`, not on
  * Unraid (its Plugins have their own).
  */
+
 import {
   isUnraidServer,
   type ServerUpdatesView,
@@ -12,6 +13,7 @@ import {
   UPDATES_WORDS,
 } from '@whombat/client/hosts';
 import type { HostServerDetail } from '@whombat/core';
+import { useMobileT } from '../../i18n';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
 
 /** The view of a server's updates (null until its page is read). */
@@ -32,6 +34,7 @@ export function useServerUpdatesView(
 
 /** The Summary's card: the Updates line, when it was read, the restart it needs; it opens the Updates screen. */
 export function UpdatesCard({ view, onOpen }: { view: ServerUpdatesView; onOpen: () => void }) {
+  const { t: tMobile } = useMobileT();
   const restart = view.restart.tone === 'warn';
   return (
     <OneCard label={UPDATES_WORDS.title}>
@@ -41,7 +44,7 @@ export function UpdatesCard({ view, onOpen }: { view: ServerUpdatesView; onOpen:
         meta={view.line.checked}
         chevron
         label={`${UPDATES_WORDS.title}: ${view.line.text}${view.line.checked ? `, ${view.line.checked}` : ''}`}
-        hint="Opens the updates"
+        hint={tMobile('screens.opens-the-updates')}
         onPress={onOpen}
       />
       {restart ? (
@@ -52,7 +55,7 @@ export function UpdatesCard({ view, onOpen }: { view: ServerUpdatesView; onOpen:
           line={view.restart.text}
           chevron
           label={`${UPDATES_WORDS.restartTitle}: ${view.restart.text}`}
-          hint="Opens the updates"
+          hint={tMobile('screens.opens-the-updates')}
           onPress={onOpen}
         />
       ) : null}

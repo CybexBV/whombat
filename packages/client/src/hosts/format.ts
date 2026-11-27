@@ -32,9 +32,15 @@ export function formatInt(v: number): string {
 }
 
 /** Below 10 one decimal (“1.2”, “0.4”, “1”), from 10 a whole number (“42”). */
-export function formatNum(v: number | null | undefined): string {
+export function formatNum(v: number | null | undefined, locale?: string | null): string {
   if (v == null || !Number.isFinite(v)) return DASH;
   if (v === 0) return '0';
+  if (clientTranslator(locale).language === 'nl') {
+    const small = Math.abs(v) < 10;
+    return new Intl.NumberFormat(formatLocaleOf(locale), { maximumFractionDigits: small ? 1 : 0 }).format(
+      small ? Number(v.toFixed(1)) : Math.round(v),
+    );
+  }
   if (Math.abs(v) < 10) return trimZeros(v.toFixed(1));
   return formatInt(Math.round(v));
 }

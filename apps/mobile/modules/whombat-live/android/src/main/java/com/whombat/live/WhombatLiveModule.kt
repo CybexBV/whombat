@@ -31,6 +31,10 @@ class WhombatLiveModule : Module() {
 
     Function("isSupported") { true }
 
+    Function("setLocale") { locale: String ->
+      LiveLocale.set(context, locale)
+    }
+
     /** Tone colors from `@whombat/tokens`, kept for pushes that arrive while the app is closed. */
     Function("configure") { colorsJson: String ->
       LiveColors.save(context, colorsJson)

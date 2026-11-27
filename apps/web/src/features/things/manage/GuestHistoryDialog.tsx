@@ -6,7 +6,7 @@ import {
   formatNum,
   formatPct1,
   formatTooltipTime,
-  HOST_RANGE_WORDS,
+  hostRangeWords,
   mibText,
   niceCeiling,
   timeTicks,
@@ -18,6 +18,8 @@ import { Button } from '../../../components/Button';
 import { TimeChart } from '../../../components/charts';
 import { Modal, ModalDescription, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { currentLocale } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { Empty, ErrorLine } from '../parts';
 import styles from '../Things.module.css';
 
@@ -34,6 +36,7 @@ export function GuestHistoryDialog({
   guest: HostGuest;
   onClose: () => void;
 }) {
+  const HOST_RANGE_WORDS = useLocaleWords(hostRangeWords);
   const [range, setRange] = useState<Range>('24h');
   const m = useHostGuestMetrics({
     params: { burrow, serverId, guestId: g.id },
@@ -45,7 +48,8 @@ export function GuestHistoryDialog({
   const cpuMax = niceCeiling(Math.max(0, ...cpu.map((v) => v ?? 0)));
   const memMax = Math.max(g.memoryLimitMb ?? 0, ...mem.map((v) => v ?? 0), 1);
   const ticks = d ? timeTicks(d.timestamps, d.range) : [];
-  const point = (i: number) => formatTooltipTime(d?.range ?? range, Date.parse(d?.timestamps[i] ?? ''));
+  const point = (i: number) =>
+    formatTooltipTime(d?.range ?? range, Date.parse(d?.timestamps[i] ?? ''), undefined, currentLocale());
   const any = cpu.some((v) => v != null) || mem.some((v) => v != null);
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} width="lg">

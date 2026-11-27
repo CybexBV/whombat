@@ -7,7 +7,6 @@
 import {
   DESK_POPUPS,
   DESK_SCREEN_CODE_RE,
-  DESK_SCREEN_WORDS,
   DESK_SCREENS_TEXT,
   type DeskApi,
   type DeskPopups,
@@ -17,6 +16,7 @@ import {
 } from '@whombat/client/desk';
 import { useDeskScreenActions } from '@whombat/client/desk/react';
 import { useTheAgent } from '@whombat/client/react';
+import { deskScreenWords } from '@whombat/core';
 import { type FormEvent, useEffect, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
@@ -24,6 +24,7 @@ import { Input } from '../../components/Input';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
+import { useLocaleWords } from '../../i18n/words';
 import s from './Screens.module.css';
 
 const T = DESK_SCREENS_TEXT.addDialog;
@@ -49,6 +50,7 @@ export function AddScreenDialog({
   onClose: () => void;
   onAdded: (screen: string) => void;
 }) {
+  const DESK_SCREEN_WORDS = useLocaleWords(deskScreenWords);
   const { words } = useTheAgent(burrow);
   const actions = useDeskScreenActions(api);
   const toast = useToast();

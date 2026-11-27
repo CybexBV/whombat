@@ -5,6 +5,7 @@ import { auditFields, auditLinkLabel, auditMeta, auditPill, auditTag, formatCloc
 import { vaultAuditDetailText } from '@whombat/core/vault';
 import { Button } from '../../components/Button';
 import { Tag, type TagTone } from '../../components/Tag';
+import { useWebI18n } from '../../i18n/provider';
 import { PersonAvatar } from '../messaging/PersonAvatar';
 import styles from './AuditRow.module.css';
 
@@ -25,9 +26,10 @@ export interface AuditRowProps {
 
 /** One audit log row: `[48px time · 28px avatar · content · pill]`, expandable to the signed detail. */
 export function AuditRow({ event, actor, ctx, open, onToggle, onNavigate }: AuditRowProps) {
+  const { tag: uiLocale } = useWebI18n();
   const info = ctx.principal(event.actorId);
   const name = info?.name ?? 'Someone';
-  const tag = auditTag(info ?? { kind: 'person', name: 'Someone', shortName: 'Someone' });
+  const tag = auditTag(info ?? { kind: 'person', name: 'Someone', shortName: 'Someone' }, uiLocale);
   const pill = auditPill(event, ctx);
   const link = event.ref;
   const linkLabel = link ? auditLinkLabel(link, { approvalPending: pill?.tone === 'warn' }) : null;

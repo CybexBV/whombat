@@ -24,8 +24,10 @@ import {
   type DeskWidgetSpec,
   type DeskWidgetView,
   DeskWidgetView as DeskWidgetViewSchema,
+  deskScreenWords,
 } from '@whombat/core';
 import { hostsFor } from '../../hosts/service';
+import { keepFields, localizeTree } from '../../i18n/phrases';
 import { type NewsRead, newsDeskView } from '../../news/view';
 import type { Services } from '../../services';
 import { type WeatherRead, weatherDeskView } from '../../weather/view';
@@ -447,8 +449,9 @@ export class WidgetResolver {
   }
 }
 
-/** The words that stand in for what's left out. */
-const HIDDEN = DESK_SCREEN_WORDS.locked.hidden;
+/** The words that stand in for what's left out, in the screen's language. */
+const hiddenWords = (locale?: string | null) =>
+  locale ? deskScreenWords(locale).locked.hidden : DESK_SCREEN_WORDS.locked.hidden;
 
 /**
  * A widget's view as the lock lets it show (DK-138): unlocked everything; in *A summary* a widget whose resolution
@@ -459,8 +462,10 @@ export function trimView(
   r: Resolved,
   opts: Readonly<Record<string, string>>,
   view: DeskCalmView,
+  locale?: string | null,
 ): DeskWidgetView | null {
   if (view === 'time') return null;
+  const HIDDEN = hiddenWords(locale);
   if (view === 'everything' || !r.private || opts.lock === 'show') return r.view;
   const v = r.view;
   const base = {
@@ -496,6 +501,9 @@ export function trimView(
   }
 }
 
+/** A screen view's machine fields: what kind it is, its shape and the server it names stay as they are. */
+const DESK_VIEW_KEEP = keepFields('shape', 'state', 'server', 'credit', 'mark', 'locked');
+
 /** A picture as `viewPictures` keeps it: what it belongs to and its signed ref. */
 export function pictureKey(thing: string, ref: string): string {
   return `${thing}\n${ref}`;
@@ -527,14 +535,18 @@ export function screenViews(
   resolved: ReadonlyMap<string, Resolved>,
   view: DeskCalmView,
   warn: (message: string, id: string) => void = () => {},
+  locale?: string | null,
 ): DeskWidgetView[] {
   const out: DeskWidgetView[] = [];
   for (const spec of specs) {
     const r = resolved.get(spec.id);
     if (!r) continue;
-    const trimmed = trimView(r, spec.opts ?? {}, view);
+    // The lock trims by the widget's `private` mark first; only then are its words said in the screen's language, so
+    // what a locked screen shows never depends on the words.
+    const trimmed = trimView(r, spec.opts ?? {}, view, locale);
     if (!trimmed) continue;
-    const parsed = DeskWidgetViewSchema.safeParse(trimmed);
+    const said = DeskWidgetViewSchema.safeParse(localizeTree(trimmed, locale, { keep: DESK_VIEW_KEEP }));
+    const parsed = said.success ? said : DeskWidgetViewSchema.safeParse(trimmed);
     if (parsed.success) out.push(parsed.data);
     else warn('desk: a widget’s view isn’t one the screen takes', spec.id);
     if (out.length >= DESK_SCREEN_VIEWS_MAX) break;

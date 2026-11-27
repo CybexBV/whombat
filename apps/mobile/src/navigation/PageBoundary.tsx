@@ -6,6 +6,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { notePageError } from '../errors/nativeErrorNotes';
+import { useMobileT } from '../i18n';
 import { Screen } from '../ui/headers';
 import { Button, QuietText } from '../ui/primitives';
 
@@ -41,12 +42,13 @@ export class PageBoundary extends Component<Props, { failed: boolean }> {
 }
 
 function PageFailed({ onRetry, onBack }: { onRetry: () => void; onBack?: () => void }) {
+  const { t } = useMobileT();
   return (
     <Screen>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 16 }}>
-        <QuietText style={{ paddingVertical: 0 }}>{PAGE_FAILED_TEXT.text}</QuietText>
-        <Button label={PAGE_FAILED_TEXT.retry} variant="secondary" onPress={onRetry} />
-        {onBack ? <Button label={PAGE_FAILED_TEXT.back} variant="quiet" onPress={onBack} /> : null}
+        <QuietText style={{ paddingVertical: 0 }}>{t('thingPage.thingPageCopy.failed')}</QuietText>
+        <Button label={t('search.searchCopy.retry')} variant="secondary" onPress={onRetry} />
+        {onBack ? <Button label={t('navigation.goBack')} variant="quiet" onPress={onBack} /> : null}
       </View>
     </Screen>
   );

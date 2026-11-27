@@ -7,11 +7,13 @@
  * paragraphs and headings are iOS's own text view (`@bsky.app/react-native-uitextview`): held, a word is selected with
  * its handles and the system's Copy, Select All, Look Up and Share; links still open with a tap (ios-native.md).
  */
+
 import { UITextView } from '@bsky.app/react-native-uitextview';
 import { type Block, type Inline, parseMessage, type TableAlign, type TableBlock } from '@whombat/core';
 import { type ComponentType, memo, type ReactNode, useEffect, useId, useMemo } from 'react';
 import { Platform, Text as RNText, ScrollView, type TextProps, type TextStyle, View } from 'react-native';
 import { headingSize } from '../data/richPreview';
+import { useMobileT } from '../i18n';
 import { useOpenUrl } from '../navigation/hooks';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
@@ -183,6 +185,7 @@ const ALIGN: Record<NonNullable<TableAlign>, TextStyle['textAlign']> = {
 
 /** A GitHub table (CT-149): scrolls sideways inside the bubble; header on sf2, rows ruled and tinted in turn. */
 function TableView({ block, p }: { block: TableBlock; p: Palette }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   // Rows are laid out one by one: every cell of a column gets the column's width (from its longest text).
   const widths = block.align.map((_, col) =>
@@ -218,7 +221,7 @@ function TableView({ block, p }: { block: TableBlock; p: Palette }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        accessibilityLabel="Table"
+        accessibilityLabel={tMobile('ui.table')}
         style={{ flexGrow: 0, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.line }}
       >
         <View>

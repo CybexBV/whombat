@@ -22,7 +22,7 @@ import {
   missingAttachmentsText,
   stepKindLabel,
   type TrackerWords,
-  UNKNOWN_TRACKER_WORDS,
+  unknownTrackerWords,
 } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useId, useState } from 'react';
@@ -35,6 +35,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot, StatusPill } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { usePrHref } from '../branch/usePrHref';
 import { MessageText } from '../messaging/MessageRow';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
@@ -167,7 +168,7 @@ export function stepOutcome(
   step: AutomationRunStep,
   nameOf: (id: string) => string,
   steps: readonly AutomationRunStep[] = [],
-  words: TrackerWords = UNKNOWN_TRACKER_WORDS,
+  words: TrackerWords = unknownTrackerWords(currentLocale()),
 ): string | null {
   const o = step.output as Record<string, unknown>;
   switch (step.kind) {
@@ -232,6 +233,7 @@ export function stepOutcome(
  * Pause / Resume / Cancel. A step whose outcome is uncertain after a crash waits for a person to say what happened.
  */
 export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps) {
+  const { tag: uiLocale } = useWebI18n();
   const params = { burrow, number };
   const { data, error, isPending, refetch } = useAutomationRun({ params });
   const { rooms } = useAutomationRooms(burrow);
@@ -306,7 +308,7 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
               ? 'Resumed.'
               : 'Stopped. Any agent working for it stops too.',
         ),
-        onError: (err) => toast.show(problemText(err)),
+        onError: (err) => toast.show(problemText(err, undefined, uiLocale)),
         onSettled: () => setPending(null),
       },
     );
@@ -319,7 +321,7 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
         onSuccess: done(
           resolution === 'retry' ? 'It tries that step again.' : 'Thanks. It goes on from there.',
         ),
-        onError: (err) => toast.show(problemText(err)),
+        onError: (err) => toast.show(problemText(err, undefined, uiLocale)),
         onSettled: () => setPending(null),
       },
     );
@@ -371,7 +373,8 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
             </div>
             <h1 className={styles.title}>Run #{run.number}</h1>
             <p className={styles.subtitle}>
-              {run.trigger.summary} · {formatRecent(run.startedAt ?? run.createdAt, now, viewer.timeZone)}
+              {run.trigger.summary} ·{' '}
+              {formatRecent(run.startedAt ?? run.createdAt, now, viewer.timeZone, uiLocale)}
               {run.tokens !== null ? ` · ${run.tokens.toLocaleString('en-GB')} tokens` : ''}
             </p>
           </div>

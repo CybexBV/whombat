@@ -6,6 +6,7 @@
  * coloured by the file's language with the web's syntax colours (`tokenizeFileLines`, MX-06); changed lines stay plain
  * green or red, as on the web (AP-664). `whombat://pr/482/file?path=…&repo=…` opens it from a link (MX-06).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ApiError,
@@ -24,6 +25,7 @@ import { FlatList, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { LINE_KIND_LABELS, LINE_MARKS } from '../data/pullRequest';
+import { useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -120,6 +122,7 @@ const FileLine = memo(function FileLine({
 });
 
 export function PullRequestFileScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug } = useBurrowBase();
@@ -155,7 +158,7 @@ export function PullRequestFileScreen({ route, navigation }: Props) {
 
   let body: ReactNode;
   if (view && view.shown !== 'text') body = <QuietText>{PR_FILE_SHOWN_TEXT[view.shown]}</QuietText>;
-  else if (view && lines.length === 0) body = <QuietText>This file is empty.</QuietText>;
+  else if (view && lines.length === 0) body = <QuietText>{tMobile('screens.this-file-is-empty')}</QuietText>;
   else if (view)
     body = (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
@@ -184,15 +187,15 @@ export function PullRequestFileScreen({ route, navigation }: Props) {
   else if (query.error)
     body = (
       <ErrorState
-        text="Couldn’t open this file. Try again in a moment."
+        text={tMobile('screens.couldnt-open-this-file-try-again-in-a')}
         onRetry={() => void query.refetch()}
       />
     );
-  else body = <SkeletonRows count={8} lines={1} label="Loading the file" />;
+  else body = <SkeletonRows count={8} lines={1} label={tMobile('screens.loading-the-file')} />;
 
   return (
     <Screen>
-      <BackBar label="Files changed" onPress={goBack} />
+      <BackBar label={tMobile('screens.files-changed')} onPress={goBack} />
       <View style={{ gap: 6, paddingHorizontal: 22, paddingBottom: 12 }}>
         <Text size={14} weight={500} mono numberOfLines={2} accessibilityRole="header">
           {path}
@@ -210,11 +213,11 @@ export function PullRequestFileScreen({ route, navigation }: Props) {
           ) : null}
           {view && view.status !== 'modified' ? (
             <Text size={11.5} mono color={theme.colors.mut}>
-              {view.status === 'added' ? 'New file' : 'Deleted'}
+              {view.status === 'added' ? tMobile('screens.new-file') : tMobile('screens.deleted')}
             </Text>
           ) : null}
           <Text size={11.5} mono color={theme.colors.mut}>
-            View only
+            {tMobile('screens.view-only')}
           </Text>
           {starts.length > 0 ? (
             <Text size={11.5} mono color={theme.colors.mut}>
@@ -237,14 +240,14 @@ export function PullRequestFileScreen({ route, navigation }: Props) {
           }}
         >
           <Button
-            label="Previous file"
+            label={tMobile('screens.previous-file')}
             variant="secondary"
             disabled={!previous}
             onPress={() => previous && open(previous)}
             style={{ flex: 1 }}
           />
           <Button
-            label="Next file"
+            label={tMobile('screens.next-file')}
             variant="secondary"
             disabled={!next}
             onPress={() => next && open(next)}

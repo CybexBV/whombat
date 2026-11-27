@@ -7,6 +7,7 @@
  * row (AP-1010…), and a write back to a tracker as what it wrote (report-trackers.md TA-11). Pure, like the other
  * `data/` helpers; copy matches the web screens.
  */
+
 import {
   ApiError,
   AUTOMATION_ACTION_TEXT,
@@ -30,6 +31,7 @@ import {
   type TrackerWords,
   UNKNOWN_TRACKER_WORDS,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { type ScheduleRow, scheduleRows } from './schedules';
 
 // The list's and the page's words are the web's too (`@whombat/client` automationView).
@@ -49,29 +51,37 @@ export {
  * `warn`: it happened, and the automation isn't broken for it. A finished run's page says how it went
  * (`automationRunLabel`: “Finished · worked”).
  */
-export const RUN_STATUS_COPY: Record<AutomationRunStatus, { label: string; tone: Tone }> = {
-  queued: { label: 'Queued', tone: 'neutral' },
-  running: { label: 'Running', tone: 'ok' },
-  waiting: { label: 'Waiting', tone: 'warn' },
-  paused: { label: 'Paused', tone: 'warn' },
-  succeeded: { label: 'Done', tone: 'ok' },
-  failed: { label: 'Failed', tone: 'warn' },
-  cancelled: { label: 'Stopped', tone: 'neutral' },
-  skipped: { label: 'Skipped', tone: 'neutral' },
-  needs_review: { label: 'Needs you', tone: 'warn' },
-};
+export function runStatusCopy(locale?: string): Record<AutomationRunStatus, { label: string; tone: Tone }> {
+  const { t } = mobileTranslator(locale);
+  return {
+    queued: { label: t('automations.runStatusCopy.queued.label'), tone: 'neutral' },
+    running: { label: t('automations.runStatusCopy.running.label'), tone: 'ok' },
+    waiting: { label: t('automations.runStatusCopy.waiting.label'), tone: 'warn' },
+    paused: { label: t('automations.runStatusCopy.paused.label'), tone: 'warn' },
+    succeeded: { label: t('automations.runStatusCopy.succeeded.label'), tone: 'ok' },
+    failed: { label: t('automations.runStatusCopy.failed.label'), tone: 'warn' },
+    cancelled: { label: t('automations.runStatusCopy.cancelled.label'), tone: 'neutral' },
+    skipped: { label: t('automations.runStatusCopy.skipped.label'), tone: 'neutral' },
+    needs_review: { label: t('automations.runStatusCopy.needs_review.label'), tone: 'warn' },
+  };
+}
+export const RUN_STATUS_COPY = runStatusCopy();
 
-export const STEP_STATE_COPY: Record<AutomationStepState, { label: string; tone: Tone }> = {
-  pending: { label: 'not yet', tone: 'neutral' },
-  running: { label: 'running', tone: 'ok' },
-  waiting: { label: 'waiting', tone: 'warn' },
-  succeeded: { label: 'done', tone: 'ok' },
-  failed: { label: 'failed', tone: 'bad' },
-  skipped: { label: 'skipped', tone: 'neutral' },
-  cancelled: { label: 'stopped', tone: 'neutral' },
-  blocked: { label: 'blocked', tone: 'bad' },
-  uncertain: { label: 'uncertain', tone: 'bad' },
-};
+export function stepStateCopy(locale?: string): Record<AutomationStepState, { label: string; tone: Tone }> {
+  const { t } = mobileTranslator(locale);
+  return {
+    pending: { label: t('automations.stepStateCopy.pending.label'), tone: 'neutral' },
+    running: { label: t('automations.stepStateCopy.running.label'), tone: 'ok' },
+    waiting: { label: t('automations.stepStateCopy.waiting.label'), tone: 'warn' },
+    succeeded: { label: t('automations.stepStateCopy.succeeded.label'), tone: 'ok' },
+    failed: { label: t('automations.stepStateCopy.failed.label'), tone: 'bad' },
+    skipped: { label: t('automations.stepStateCopy.skipped.label'), tone: 'neutral' },
+    cancelled: { label: t('automations.stepStateCopy.cancelled.label'), tone: 'neutral' },
+    blocked: { label: t('automations.stepStateCopy.blocked.label'), tone: 'bad' },
+    uncertain: { label: t('automations.stepStateCopy.uncertain.label'), tone: 'bad' },
+  };
+}
+export const STEP_STATE_COPY = stepStateCopy();
 
 /** “Message in #bugs” → “Message in #bugs.”; a sentence keeps its own stop. */
 function sentence(text: string): string {
@@ -80,60 +90,67 @@ function sentence(text: string): string {
 
 /* The list's words, its tiles and runs (automation-page.md AP-6330) ------------------------------------------ */
 
-export const AUTOMATION_LIST_TEXT = {
-  /** Under the title: the list is an overview, the agent makes and changes them. */
-  intro: (agent: string) => `What ${agent} does on its own.`,
-  /** Over the field. */
-  tellIntro: (agent: string) => `To make one or change one, tell ${agent}.`,
-  /** The field-like button that starts a new Chat thread. */
-  tell: (agent: string) => `Tell ${agent} what should happen on its own`,
-  /** The field's words: short, so attach, the mic and send keep one row at any text size. */
-  tellShort: (agent: string) => `Tell ${agent}…`,
-  // In the sheet it opens, which has the room.
-  tellPlaceholder: (agent: string) => `Tell ${agent} what to do on its own…`,
-  tellTitle: (agent: string) => `Tell ${agent}`,
-  tellHint: 'Starts a new thread in Chat',
-  automations: 'Automations',
-  loading: 'Loading automations',
-  emptyTitle: 'No automations yet',
-  empty: (agent: string) =>
-    `Repeated jobs and their results will appear here. Tell ${agent} what should happen on its own.`,
-  emptyButton: (agent: string) => `Tell ${agent}…`,
-  readFailed: 'Couldn’t read your automations.',
-  readFailedText: 'There’s no saved copy to show on this device yet.',
-  refreshFailed: 'Couldn’t refresh your automations.',
-  savedAt: (when: string) => `Showing the list saved at ${when}.`,
-  tryAgain: 'Try again',
-  ask: (agent: string) => `Ask ${agent}`,
-  /** What “Ask Dusty” puts in the field, unsent. */
-  askText: 'My automations list didn’t load. Can you check what’s wrong?',
-  moreDetail: 'More detail',
-  /** A plan waiting for a yes. */
-  planWaiting: 'Waiting for you',
-  /** Talk about it without a plan's thread: a new one, with this ready to finish. */
-  talkAbout: AUTOMATION_ACTION_TEXT.about,
-  /** The agent's schedules on the list. */
-  onlyTellsYou: 'Only tells you',
-  noRuns: 'No runs yet',
-  open: AUTOMATION_WAITING_TEXT.open,
-} as const;
+export function automationListText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** Under the title: the list is an overview, the agent makes and changes them. */
+    intro: (agent: string) => t('automations.automationListText.intro', { agent }),
+    /** Over the field. */
+    tellIntro: (agent: string) => t('automations.automationListText.tellIntro', { agent }),
+    /** The field-like button that starts a new Chat thread. */
+    tell: (agent: string) => t('automations.automationListText.tell', { agent }),
+    /** The field's words: short, so attach, the mic and send keep one row at any text size. */
+    tellShort: (agent: string) => t('automations.automationListText.tellShort', { agent }),
+    // In the sheet it opens, which has the room.
+    tellPlaceholder: (agent: string) => t('automations.automationListText.tellPlaceholder', { agent }),
+    tellTitle: (agent: string) => t('automations.automationListText.tellTitle', { agent }),
+    tellHint: t('automations.automationListText.tellHint'),
+    automations: t('automations.automationListText.automations'),
+    loading: t('automations.automationListText.loading'),
+    emptyTitle: t('automations.automationListText.emptyTitle'),
+    empty: (agent: string) => t('automations.automationListText.empty', { agent }),
+    emptyButton: (agent: string) => t('automations.automationListText.emptyButton', { agent }),
+    readFailed: t('automations.automationListText.readFailed'),
+    readFailedText: t('automations.automationListText.readFailedText'),
+    refreshFailed: t('automations.automationListText.refreshFailed'),
+    savedAt: (when: string) => t('automations.automationListText.savedAt', { when }),
+    tryAgain: t('automations.automationListText.tryAgain'),
+    ask: (agent: string) => t('automations.automationListText.ask', { agent }),
+    /** What “Ask Dusty” puts in the field, unsent. */
+    askText: t('automations.automationListText.askText'),
+    moreDetail: t('automations.automationListText.moreDetail'),
+    /** A plan waiting for a yes. */
+    planWaiting: t('automations.automationListText.planWaiting'),
+    /** Talk about it without a plan's thread: a new one, with this ready to finish. */
+    talkAbout: AUTOMATION_ACTION_TEXT.about,
+    /** The agent's schedules on the list. */
+    onlyTellsYou: t('automations.automationListText.onlyTellsYou'),
+    noRuns: t('automations.automationListText.noRuns'),
+    open: AUTOMATION_WAITING_TEXT.open,
+  } as const;
+}
+export const AUTOMATION_LIST_TEXT = automationListText();
 
 /** How a mark looks on the automation's page: `plain` reaches a place, `warn` changes code or calls out, `bad` merges. */
 export type AutomationTagTone = 'plain' | 'warn' | 'bad';
 
 /* Deleting (contracts 0.66 `automations.delete`, CT-322; automation-recipes.md AP-980…) ---------------------------- */
 
-export const AUTOMATION_DELETE_TEXT = {
-  delete: 'Delete',
-  cancel: 'Cancel',
-  confirmTitle: (name: string) => `Delete “${name}”?`,
-  confirmBody: 'It stops now, and runs in progress stop too. Its past runs stay in the audit log.',
-  /** The alert's title when the Whombat refused; its body is the server's message. */
-  failed: 'Didn’t delete',
-  /** The run page of a deleted automation. */
-  deleted: 'This automation was deleted.',
-  deleteHint: (name: string) => `Asks before deleting ${name}`,
-} as const;
+export function automationDeleteText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    delete: t('automations.automationDeleteText.delete'),
+    cancel: t('automations.automationDeleteText.cancel'),
+    confirmTitle: (name: string) => t('automations.automationDeleteText.confirmTitle', { name }),
+    confirmBody: t('automations.automationDeleteText.confirmBody'),
+    /** The alert's title when the Whombat refused; its body is the server's message. */
+    failed: t('automations.automationDeleteText.failed'),
+    /** The run page of a deleted automation. */
+    deleted: t('automations.automationDeleteText.deleted'),
+    deleteHint: (name: string) => t('automations.automationDeleteText.deleteHint', { name }),
+  } as const;
+}
+export const AUTOMATION_DELETE_TEXT = automationDeleteText();
 
 /**
  * The automation is gone: the `automation.deleted` frame marked it, or the Whombat answers 404 (someone deleted it
@@ -340,7 +357,12 @@ const SAYS_IN_WORDS: ReadonlySet<AutomationRunStep['kind']> = new Set([
 ]);
 
 /** `words`: the tracker's as the automation keeps them (`automationTrackerWords`), for its tracker steps. */
-export function runSteps(run: AutomationRun, words: TrackerWords = UNKNOWN_TRACKER_WORDS): RunStepView[] {
+export function runSteps(
+  run: AutomationRun,
+  words: TrackerWords = UNKNOWN_TRACKER_WORDS,
+  locale?: string,
+): RunStepView[] {
+  const states = stepStateCopy(locale);
   return run.steps.map((s) => {
     const o = s.output as Record<string, unknown>;
     // A step of a kind this version doesn't know (an older version's) without a name is “An earlier step”.
@@ -380,7 +402,7 @@ export function runSteps(run: AutomationRun, words: TrackerWords = UNKNOWN_TRACK
       result ??
       coding ??
       (text ? text.slice(0, 280) : input);
-    const state = STEP_STATE_COPY[s.state];
+    const state = states[s.state];
     const approvalOpen = s.approvalNumber !== null && s.state === 'waiting';
     const says = assessment
       ? [
@@ -430,8 +452,9 @@ const unreached = (step: AutomationRunStep | undefined) => step?.state === 'skip
 export function runStepsView(
   run: AutomationRun,
   words: TrackerWords = UNKNOWN_TRACKER_WORDS,
+  locale?: string,
 ): { steps: RunStepView[]; skipped: SkippedStepsView | null } {
-  const all = runSteps(run, words);
+  const all = runSteps(run, words, locale);
   if (runActive(run.status)) return { steps: all, skipped: null };
   let first = all.length;
   while (first > 0 && unreached(run.steps[first - 1])) first--;
@@ -439,6 +462,11 @@ export function runStepsView(
   if (tail.length < 2) return { steps: all, skipped: null };
   return {
     steps: all.slice(0, first),
-    skipped: { label: `${tail.length}${first > 0 ? ' more' : ''} steps skipped`, steps: tail },
+    skipped: {
+      label: mobileTranslator(locale).t(first > 0 ? 'automations.skippedMore' : 'automations.skipped', {
+        count: tail.length,
+      }),
+      steps: tail,
+    },
   };
 }

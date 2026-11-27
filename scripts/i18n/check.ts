@@ -123,10 +123,16 @@ export function validateCatalogs(
       const hashKey = `${entry.name}:${key}`;
       const currentHash = sourceHash(serializeMessage(enVal));
       hashes[hashKey] = currentHash;
-      if (storedHashes && hashKey in storedHashes && storedHashes[hashKey] !== currentHash) {
-        errors.push(
-          `${hashKey}: English source changed (stored ${storedHashes[hashKey]}, now ${currentHash}); review translations and run scripts/i18n/check.ts --update-hashes`,
-        );
+      if (storedHashes) {
+        if (!(hashKey in storedHashes)) {
+          errors.push(
+            `${hashKey}: missing from scripts/i18n/source-hashes.json; run pnpm exec tsx scripts/i18n/check.ts --update-hashes`,
+          );
+        } else if (storedHashes[hashKey] !== currentHash) {
+          errors.push(
+            `${hashKey}: English source changed (stored ${storedHashes[hashKey]}, now ${currentHash}); review translations and run pnpm exec tsx scripts/i18n/check.ts --update-hashes`,
+          );
+        }
       }
     }
 

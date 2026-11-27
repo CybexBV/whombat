@@ -6,6 +6,7 @@
  * opens in its place and says so once. Opened from the assistant's card (`draftId`), the form starts with its draft
  * and sending it finishes it. Where the person can't send now, it says why and Send stays off, as on the web.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -30,6 +31,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { phoneDeviceWords, phoneLanguage } from '../data/teamReports';
+import { useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
 import { ErrorLine } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
@@ -88,6 +90,7 @@ function useUpdateChannel() {
 }
 
 export function TeamReportNewScreen({ navigation, route }: Props) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const bottomRoom = useBottomRoom();
@@ -151,7 +154,7 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <BackBar
-        label={route.params?.back ?? 'Back'}
+        label={route.params?.back ?? tMobile('managed.back')}
         onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TeamReports'))}
       />
       <KeyboardAvoidingView style={{ flex: 1 }}>

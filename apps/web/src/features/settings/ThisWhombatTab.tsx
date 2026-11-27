@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { whombatSectionPlace } from '@whombat/client';
-import { DESK_SCREENS_TEXT, DESK_WORDS } from '@whombat/client/desk';
+import { DESK_SCREENS_TEXT } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
 import {
   HERMES_WORDS,
@@ -15,7 +15,7 @@ import {
 } from '@whombat/client/managed';
 import { useBootstrap, useTheAgent, useVaultNetworks } from '@whombat/client/react';
 import { type ApplianceStatus, sessionOps } from '@whombat/client/session';
-import { agentsReachLanOn } from '@whombat/core';
+import { agentsReachLanOn, deskWords } from '@whombat/core';
 import { ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAppServices, useCommunity } from '../../app/providers';
@@ -26,6 +26,7 @@ import { Icon } from '../../components/Icon';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { useLocaleWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { QuietHoursSection } from '../care/QuietHoursSection';
 import { DeskUnlockRow } from '../desk/DeskSection';
@@ -107,6 +108,7 @@ export function ThisWhombatTab({
   onScreenChange?: ((screen: string | undefined) => void) | undefined;
   onEditLayout?: ((screen: string) => void) | undefined;
 }) {
+  const DESK_WORDS = useLocaleWords(deskWords);
   const { managed } = useAppServices();
   const community = useCommunity();
   const navigate = useNavigate();

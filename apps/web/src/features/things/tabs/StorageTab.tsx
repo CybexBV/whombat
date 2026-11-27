@@ -36,6 +36,7 @@ import type { HostDisk, HostServerDetail, HostStorage } from '@whombat/core/doma
 import { DISK_USAGE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { type CSSProperties, useMemo, useState } from 'react';
 import { cx } from '../../../components/cx';
+import { currentLocale } from '../../../i18n/provider';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
 import dash from '../dashboard/Dashboard.module.css';
 import { StorageContentDialog } from '../manage/StorageContentDialog';
@@ -138,13 +139,13 @@ function SpaceUseCard({
     try {
       const r = await measure.mutateAsync({ params: { burrow, serverId }, body: {} });
       if (r.status !== 'ok') {
-        setNote(commitOutcomeText(r));
+        setNote(commitOutcomeText(r, currentLocale()));
         return;
       }
       const skip = diskUsageSkipNote(r.data);
       if (skip) setNote(skip);
     } catch (err) {
-      setNote(hostErrorInfo(err).message);
+      setNote(hostErrorInfo(err, currentLocale()).message);
     }
   }
 
@@ -152,7 +153,7 @@ function SpaceUseCard({
 
   const metaParts: string[] = [];
   if (use?.measuredAt) {
-    metaParts.push(`Measured ${formatAgoIso(use.measuredAt, now)}`);
+    metaParts.push(`Measured ${formatAgoIso(use.measuredAt, now, currentLocale())}`);
     if (use.measuredMount && volumes.length > 1) metaParts.push(use.measuredMount);
     if (use.partial) metaParts.push('partial');
   } else if (use) {

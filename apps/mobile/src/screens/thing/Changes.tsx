@@ -5,14 +5,16 @@
  * changed and when; Undo while it can be undone (its inverse runs through the pipeline, so it may ask a person first),
  * “Undone” once it was, Review where there is something to look at. A person's own change (Restart) has no Undo.
  */
+
 import { type DoneRow, doneRows, undoOutcome } from '@whombat/client';
 import { useChanges, useUndoChange } from '@whombat/client/react';
 import type { ChangeEntry } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { ACTIVITY_PAGE, THING_PAGE_COPY } from '../../data/thingPage';
+import { ACTIVITY_PAGE, thingPageCopy } from '../../data/thingPage';
 import { useTheAgentHere } from '../../data/useAgent';
+import { useI18n, useMobileT } from '../../i18n';
 import { openHref } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -24,6 +26,9 @@ import { HeaderLink } from './parts';
 
 /** Undo with its outcome said: “Undone.”, that it waits for a person, or that the assistant was asked (its chat opens). */
 function useUndo() {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const { slug } = useBurrowBase();
   const assistantName = useTheAgentHere()?.name ?? null;
   const undo = useUndoChange(slug);
@@ -43,7 +48,7 @@ function useUndo() {
           if (outcome.kind === 'requested' && outcome.href) openHref(outcome.href);
           return;
         }
-        showNotice(result.data.state === 'asked' ? THING_PAGE_COPY.undoAsked : THING_PAGE_COPY.undoDone);
+        showNotice(result.data.state === 'asked' ? thingPageCopyHere.undoAsked : thingPageCopyHere.undoDone);
       }, feedback.onError)
       .finally(() => setBusy(null));
   };
@@ -64,6 +69,9 @@ function ChangeRow({
   onUndo: () => void;
   onReview: (href: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   const who = row.change.actor.kind === 'person' ? row.change.actor.name : null;
   const meta = [row.when, who].filter(Boolean).join(' · ');
@@ -83,7 +91,7 @@ function ChangeRow({
       <View
         style={{ flex: 1, minWidth: 0, gap: 2 }}
         accessible
-        accessibilityLabel={[row.title, row.detail, meta, row.undone ? THING_PAGE_COPY.undone : null]
+        accessibilityLabel={[row.title, row.detail, meta, row.undone ? thingPageCopyHere.undone : null]
           .filter(Boolean)
           .join('. ')}
       >
@@ -106,7 +114,7 @@ function ChangeRow({
       </View>
       {row.action === 'undo' ? (
         <Button
-          label={THING_PAGE_COPY.undo}
+          label={thingPageCopyHere.undo}
           variant="secondary"
           busy={busy}
           onPress={onUndo}
@@ -114,14 +122,14 @@ function ChangeRow({
         />
       ) : row.action === 'review' && row.href ? (
         <Button
-          label={THING_PAGE_COPY.review}
+          label={thingPageCopyHere.review}
           variant="quiet"
           onPress={() => onReview(row.href as string)}
           accessibilityHint={row.title}
         />
       ) : row.undone ? (
         <Text size={12} mono color={theme.colors.mut}>
-          {THING_PAGE_COPY.undone}
+          {thingPageCopyHere.undone}
         </Text>
       ) : null}
     </View>
@@ -133,6 +141,9 @@ const thingPageHref = (thingId: string) => `/things/${encodeURIComponent(thingId
 
 /** “Whombat did here” on the Overview: the newest `limit`, “Show all” opening Activity; none, no card. */
 export function ChangesCard({ title, limit, ctx }: { title: string; limit: number; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const list = useChanges(
@@ -154,8 +165,8 @@ export function ChangesCard({ title, limit, ctx }: { title: string; limit: numbe
       right={
         more ? (
           <HeaderLink
-            label={THING_PAGE_COPY.showEverything}
-            hint={THING_PAGE_COPY.showEverythingHint}
+            label={thingPageCopyHere.showEverything}
+            hint={thingPageCopyHere.showEverythingHint}
             onPress={() => ctx.run({ kind: 'tab', tab: 'activity' })}
           />
         ) : undefined
@@ -223,6 +234,10 @@ function ActivityPage({
   onUndo: (change: ChangeEntry) => void;
   ctx: PanelContext;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
   const list = useChanges(
@@ -237,12 +252,13 @@ function ActivityPage({
     () => doneRows(list.data?.changes ?? [], now, timeZone, { here }),
     [list.data, now, timeZone, here],
   );
-  if (list.isPending) return <SkeletonRows count={before ? 2 : 4} lines={2} label="Loading what changed" />;
+  if (list.isPending)
+    return <SkeletonRows count={before ? 2 : 4} lines={2} label={tMobile('screens.loading-what-changed')} />;
   if (!list.data)
     return before ? null : (
-      <ErrorState text={THING_PAGE_COPY.activityFailed} onRetry={() => void list.refetch()} />
+      <ErrorState text={thingPageCopyHere.activityFailed} onRetry={() => void list.refetch()} />
     );
-  if (!before && !rows.length) return <QuietText>{THING_PAGE_COPY.activityEmpty(page.name)}</QuietText>;
+  if (!before && !rows.length) return <QuietText>{thingPageCopyHere.activityEmpty(page.name)}</QuietText>;
   const next = list.data.before;
   return (
     <>
@@ -258,7 +274,7 @@ function ActivityPage({
       ))}
       {last && next ? (
         <View style={{ paddingHorizontal: 14, paddingVertical: 8 }}>
-          <Button label={THING_PAGE_COPY.showOlder} variant="quiet" onPress={() => onMore(next)} />
+          <Button label={thingPageCopyHere.showOlder} variant="quiet" onPress={() => onMore(next)} />
         </View>
       ) : null}
     </>

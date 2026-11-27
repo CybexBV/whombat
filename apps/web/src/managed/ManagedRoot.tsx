@@ -20,7 +20,6 @@ import {
   type ApplianceRegistry,
   type ApplianceSummary,
   type ClaimRequest,
-  COPY,
   type ControlSession,
   claimAppliance,
   claimErrorText,
@@ -92,6 +91,8 @@ import { ThemeProvider } from '../app/theme';
 import { Button } from '../components/Button';
 import { AccountMobilePage, PhoneLinkPage, PublicMobilePage } from '../features/mobile';
 import { WHATS_NEW_MARKDOWN } from '../features/whatsNew/changelog';
+import { COPY } from '../i18n/managed';
+import { useWebI18n, WebI18nProvider } from '../i18n/provider';
 import { LEGAL_PAGES, LegalPage } from '../legal/LegalPage';
 import { ApplianceApp } from './ApplianceApp';
 import { BringBackFlow } from './BringBack';
@@ -183,6 +184,8 @@ function enrollSession(env: ManagedEnvironment, target: Omit<ConnectTarget, 'cha
 }
 
 export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
+  // Reads the language so a change draws the sign-in and claim screens again without losing where they are.
+  useWebI18n();
   const [path, navigate] = useLocation();
   const [cloud, setCloud] = useState<ControlSession | null | 'loading'>('loading');
   const [key, setKey] = useState<EndpointKey | null | 'unsupported' | 'weakKey'>(null);
@@ -392,7 +395,8 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
   const legal = LEGAL_PAGES[url.pathname];
   if (legal) return <LegalPage text={legal} />;
   // What's new is public too: the phone opens it in the browser, and a link to it works for anyone.
-  if (whatsNewPage && url.pathname === WHATS_NEW_PATH) return <LegalPage text={WHATS_NEW_MARKDOWN} />;
+  if (whatsNewPage && url.pathname === WHATS_NEW_PATH)
+    return <LegalPage text={WHATS_NEW_MARKDOWN} governing={false} />;
   // A phone sign-in QR code opened in a browser (AP-526): public, and never redeemed here; its fragment stays on this
   // page (never a sign-in's `next`).
   if (url.pathname === PHONE_SIGNIN_PATH) return <PhoneLinkPage loadDownload={loadAndroid} />;
@@ -1376,6 +1380,7 @@ function ClaimFlow({
   found: NearbyClaimStep | null;
   onClaimed: (device: string, name: string | null, peerId: string, accountId: string) => void;
 }) {
+  const { locale: claimLocale } = useWebI18n();
   const [step, setStep] = useState<ClaimStep>(found ?? { kind: 'looking' });
   const handedOver = useRef(found);
   /** Bumped by “Look again”: asks `claims.nearby` once more. */
@@ -1424,6 +1429,8 @@ function ClaimFlow({
         clientPeerId: keyPair.peerId,
         account: { name: cloud.account.name ?? typedName, email: cloud.account.email },
         endpoint: { label: browserLabel(), platform: 'web' },
+        // The language this page is in becomes the new account's (a box that predates languages ignores it).
+        locale: claimLocale,
       });
       // Only now, with the appliance's confirmation checked, is its PeerId pinned (CC-07).
       onClaimed(r.device, null, r.peerId, r.accountId);
@@ -1926,8 +1933,10 @@ function RecoverFlow({
 
 export function ManagedApp({ env }: { env: ManagedEnvironment }) {
   return (
-    <ThemeProvider>
-      <ManagedRoot env={env} />
-    </ThemeProvider>
+    <WebI18nProvider>
+      <ThemeProvider>
+        <ManagedRoot env={env} />
+      </ThemeProvider>
+    </WebI18nProvider>
   );
 }

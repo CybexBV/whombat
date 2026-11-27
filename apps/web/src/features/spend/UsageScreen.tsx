@@ -6,26 +6,24 @@
  * and written, the reports that are missing and what saved plans used. Read again each time the page opens; nothing
  * here is live. The window chooser and the page stay while the report loads, is empty or can't be read.
  */
-import {
-  USAGE_TEXT,
-  USAGE_WINDOWS,
-  type UsageWindow,
-  type UsageWindowView,
-  usageView,
-} from '@whombat/client';
+import { USAGE_WINDOWS, type UsageWindow, type UsageWindowView, usageView } from '@whombat/client';
 import { useSpendOverview, useTheAgent } from '@whombat/client/react';
 import { ChartNoAxesColumn, ChevronRight } from 'lucide-react';
 import { useId, useState } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n } from '../../i18n/provider';
+import { useUsageText } from '../../i18n/words';
 import { errorDetail, PlacePage, PlaceState } from '../settings/Place';
 import styles from './Usage.module.css';
 
 export function UsageScreen({ burrow }: { burrow: string }) {
+  const USAGE_TEXT = useUsageText();
+  const { tag: uiLocale } = useWebI18n();
   const { words } = useTheAgent(burrow);
   const query = useSpendOverview({ params: { burrow } }, { staleTime: 0, refetchOnMount: 'always' });
   const [window, setWindow] = useState<UsageWindow>('today');
-  const view = query.data ? usageView(query.data, words.name) : null;
+  const view = query.data ? usageView(query.data, words.name, uiLocale) : null;
   const shown = view?.windows[window];
   return (
     <PlacePage screen="usage" title={USAGE_TEXT.title} intro={USAGE_TEXT.intro(words.name)}>
@@ -103,6 +101,7 @@ export function UsageScreen({ burrow }: { burrow: string }) {
 
 /** More: provider coverage, the text read and written with the missing reports, and what plans used. */
 function More({ window, plans, agent }: { window: UsageWindowView; plans: string[]; agent: string }) {
+  const USAGE_TEXT = useUsageText();
   const ids = useId();
   return (
     <details className={styles.more}>

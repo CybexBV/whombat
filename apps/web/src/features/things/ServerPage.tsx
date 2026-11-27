@@ -10,16 +10,7 @@
  * once asked for (`?ask=1`), with a notice's question ready to send. Live through `hosts:<burrowId>` (AP-1304,
  * AP-1308).
  */
-import {
-  CHAT_WORDS,
-  holdView,
-  KEEP_QUIET_WORDS,
-  limitNow,
-  lineLimit,
-  OVERVIEW_WORDS,
-  partsOf,
-  readingsMoment,
-} from '@whombat/client';
+import { holdView, KEEP_QUIET_WORDS, limitNow, lineLimit, partsOf, readingsMoment } from '@whombat/client';
 import {
   arrayGroups,
   detailGuests,
@@ -63,6 +54,9 @@ import { Server } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { InlineRename } from '../../components/InlineRename';
 import { Tabs } from '../../components/Tabs';
+import { useWebI18n } from '../../i18n/provider';
+import { CHAT_WORDS } from '../../i18n/shared';
+import { useOverviewWords } from '../../i18n/words';
 import { ReadNote, ReadTime } from '../home/ReadState';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
 import { AskButton, AskPane, isAskOpen } from './AskPane';
@@ -142,6 +136,8 @@ function tabCount(key: string, d: HostServerDetail): number | null {
 }
 
 export function ServerPage({ burrow, serverId }: ServerPageProps) {
+  const OVERVIEW_WORDS = useOverviewWords();
+  const { tag: uiLocale } = useWebI18n();
   const { bootstrap, timeZone } = useBurrowContext(burrow);
   const { words } = useTheAgent(burrow);
   useHostsLive(bootstrap?.burrow.id);
@@ -275,7 +271,7 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
             className={styles.readNote}
             title={
               serverReportAt(d)
-                ? OVERVIEW_WORDS.savedFrom(readingsMoment(serverReportAt(d) as string, zone))
+                ? OVERVIEW_WORDS.savedFrom(readingsMoment(serverReportAt(d) as string, zone, uiLocale))
                 : OVERVIEW_WORDS.savedUnknown
             }
             body={OVERVIEW_WORDS.keepLast}

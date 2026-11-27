@@ -30,6 +30,7 @@ public struct WhombatLiveAttributes: ActivityAttributes {
     public var ongoing: Bool
     /// `approve`, `details`, `open_run`
     public var actions: [String]
+    public var locale: String?
   }
 
   /// `run:<id>` / `approval:<id>` (`liveActivityRef`).
@@ -48,8 +49,32 @@ public struct WhombatLiveAttributes: ActivityAttributes {
 }
 
 public extension WhombatLiveAttributes.ContentState {
+  func actionLabel(_ action: String, fallbackLocale: String? = nil) -> String {
+    let dutch = LiveWidgetLocale.isDutch(locale ?? fallbackLocale ?? LiveWidgetLocale.shared)
+    switch action {
+    case "approve": return dutch ? "Bekijken" : "Review"
+    case "details": return "Details"
+    default: return dutch ? "Open uitvoering" : "Open run"
+    }
+  }
+
   /// The app screen for this activity (`whombat://runs/1907`, `whombat://approvals/12`).
   var url: URL? {
     URL(string: kind == "run" ? "whombat://runs/\(number)" : "whombat://approvals/\(number)")
+  }
+}
+
+
+enum LiveWidgetLocale {
+  static let key = "com.whombat.live.locale"
+
+  static var shared: String? {
+    let group = Bundle.main.object(forInfoDictionaryKey: "WhombatStatusWidgetAppGroup") as? String
+    return group.flatMap { UserDefaults(suiteName: $0)?.string(forKey: key) }
+      ?? Locale.preferredLanguages.first
+  }
+
+  static func isDutch(_ tag: String?) -> Bool {
+    Locale(identifier: tag ?? "en-GB").language.languageCode?.identifier == "nl"
   }
 }

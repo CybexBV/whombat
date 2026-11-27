@@ -6,10 +6,11 @@
  * to copy, as the web's). On a Whombat with `hosts.agent_updates`; `agentUpdatesView` decides. The server's
  * settings are read every few seconds while its agent updates.
  */
+
 import {
   AGENT_UPDATE_POLL_MS,
-  AGENT_UPDATE_WORDS,
   agentUpdatesView,
+  agentUpdateWords,
   agentUpdating,
   COMMAND_COPY,
   commitOutcomeText,
@@ -26,6 +27,7 @@ import { api, type HostServerDetail } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
@@ -44,6 +46,10 @@ export function AgentUpdatesCard({
   serverName: string;
   detail: HostServerDetail;
 }) {
+  const { rawLocale } = useI18n();
+  const agentUpdateWordsHere = agentUpdateWords(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const settings = useHostServerSettings(
@@ -75,9 +81,9 @@ export function AgentUpdatesCard({
     now: Date.parse(detail.asOf),
   });
   if (!view) return null;
-  const W = AGENT_UPDATE_WORDS;
+  const W = agentUpdateWordsHere;
 
-  const failed = (text: string) => Alert.alert('That didn’t go through', text);
+  const failed = (text: string) => Alert.alert(tMobile('managed.that-didnt-go-through'), text);
   const press = () =>
     update.mutate(
       { params: { burrow: slug, serverId } },
@@ -85,8 +91,8 @@ export function AgentUpdatesCard({
         onSuccess: (r) =>
           r.status === 'ok'
             ? showNotice(W.started(r.data.state, serverName))
-            : failed(commitOutcomeText(r) ?? ''),
-        onError: (error) => failed(hostErrorInfo(error).message),
+            : failed(commitOutcomeText(r, rawLocale) ?? ''),
+        onError: (error) => failed(hostErrorInfo(error, rawLocale).message),
       },
     );
   const show = () => {
@@ -97,8 +103,8 @@ export function AgentUpdatesCard({
         (r) =>
           r.status === 'ok'
             ? setCommand(updateCommand(r.data.installCommand, settings.data?.agent?.install))
-            : failed(commitOutcomeText(r) ?? ''),
-        (error: unknown) => failed(hostErrorInfo(error).message),
+            : failed(commitOutcomeText(r, rawLocale) ?? ''),
+        (error: unknown) => failed(hostErrorInfo(error, rawLocale).message),
       )
       .finally(() => setMaking(false));
   };

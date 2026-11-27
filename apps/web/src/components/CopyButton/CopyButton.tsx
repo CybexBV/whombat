@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useWebI18n } from '../../i18n/provider';
 import { useToast } from '../Toast';
 
 /** Copies `text`: the Clipboard API, else a selected textarea (plain-http origins). */
@@ -40,17 +41,16 @@ export interface CopyButtonProps {
  * invite (docs/decisions/auth-selfhost.md). Styled by the row it sits in, like its “Remove” neighbour.
  */
 export function CopyButton({ text, copied, className, label, children }: CopyButtonProps) {
+  const { t } = useWebI18n();
   const toast = useToast();
   return (
     <button
       type="button"
       className={className}
       aria-label={label}
-      title={label ? 'Copy' : undefined}
+      title={label ? t('common.copy') : undefined}
       onClick={() => {
-        void copyText(text).then((ok) =>
-          toast.show(ok ? copied : 'Couldn’t copy. Your browser didn’t allow it.'),
-        );
+        void copyText(text).then((ok) => toast.show(ok ? copied : t('common.copyDenied')));
       }}
     >
       {children}

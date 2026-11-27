@@ -11,6 +11,7 @@
  * older runtime, or a box without a support key, says it isn't available yet. The flow, the states and the words are
  * the shared client's (`useRemoteHelp`, `remoteHelpCard`, `remoteHelpVisitGroups`).
  */
+
 import { useIsFocused } from '@react-navigation/native';
 import {
   REMOTE_HELP_DEFAULT_CHOICE,
@@ -31,6 +32,7 @@ import { type RemoteHelpModel, useRemoteHelp } from '@whombat/client/react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Alert, type LayoutChangeEvent, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -40,7 +42,7 @@ import { RadioCards } from '../ui/radioCards';
 import { Segmented } from '../ui/Segmented';
 import { Sheet } from '../ui/sheet';
 import { Touchable } from '../ui/Touchable';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import {
   downloadTranscript,
   helpCodeSpoken,
@@ -622,6 +624,9 @@ function TranscriptSheet({
   open: { visitId: string; transcript: RemoteHelpTranscript } | null;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const theme = useTheme();
   const window = useWindowDimensions();
   const [busy, setBusy] = useState(false);
@@ -665,13 +670,13 @@ function TranscriptSheet({
         </ScrollView>
         {shown?.cut ? (
           <Text size={13} lh={1.45} color={theme.colors.mut}>
-            {COPY.remoteHelp.cut}
+            {managedCopyHere.remoteHelp.cut}
           </Text>
         ) : null}
         <Problem text={note} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            label={COPY.remoteHelp.share}
+            label={managedCopyHere.remoteHelp.share}
             variant="secondary"
             disabled={busy}
             onPress={() => void act((visitId, bytes) => shareTranscript(transcriptFiles, visitId, bytes))}

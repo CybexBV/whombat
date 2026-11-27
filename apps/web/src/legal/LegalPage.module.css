@@ -53,6 +53,16 @@
   font: var(--type-secondary);
 }
 
+.languageNote {
+  margin: 12px 0 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+  color: var(--ink);
+  font: var(--type-secondary);
+}
+
 .list {
   margin: 0 0 16px;
   padding-left: 24px;

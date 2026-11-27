@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { INBOX_WORDS } from '@whombat/client';
 import { useMarkThreadUnread, useReadThread, useWhombat } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { useCallback } from 'react';
 import { useToast } from '../../components/Toast';
+import { INBOX_WORDS } from '../../i18n/shared';
 import { THREAD_PAGE } from '../messaging/useThreadPages';
 
 export interface ThreadMark {

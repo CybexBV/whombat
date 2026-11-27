@@ -29,7 +29,7 @@ import {
   type BackupServerToPoint,
   backupDownloadLabel,
 } from '@whombat/core/backup';
-import { HOST_REPOINT_WORDS } from '@whombat/core/domain';
+import { hostRepointWords } from '@whombat/core/domain';
 import { type DragEvent, type MouseEvent, type ReactNode, useId, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useNavigateHref } from '../../app/routing/navigation';
@@ -39,6 +39,8 @@ import { Input } from '../../components/Input';
 import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import styles from './BackupFile.module.css';
 import { backupSaveMethod, openBackupSink } from './backupSave';
 import settings from './SettingsScreen.module.css';
@@ -323,11 +325,12 @@ function Making({ maker }: { maker: BackupMaker }) {
 }
 
 function Ready({ maker }: { maker: BackupMaker }) {
+  const { tag: uiLocale } = useWebI18n();
   const file = maker.file;
   const [note, setNote] = useState<string | null>(null);
   if (file?.status !== 'ready') return null;
   const method = backupSaveMethod();
-  const label = maker.downloaded ? D.downloadAgain : backupDownloadLabel(file.size ?? 0);
+  const label = maker.downloaded ? D.downloadAgain : backupDownloadLabel(file.size ?? 0, uiLocale);
   const variant = maker.downloaded ? 'secondary' : 'primary';
   const d = maker.download;
   const save = async () => {
@@ -509,6 +512,7 @@ function OpenFile({ restorer }: { restorer: BackupRestorer }) {
 }
 
 function Preview({ restorer }: { restorer: BackupRestorer }) {
+  const HOST_REPOINT_WORDS = useLocaleWords(hostRepointWords);
   const preview = restorer.preview;
   const differentId = useId();
   const addressId = useId();
@@ -672,6 +676,7 @@ function Outcome({ restorer }: { restorer: BackupRestorer }) {
  * Connections, filled in with its address (a password once).
  */
 function ServersToPoint({ servers }: { servers: readonly BackupServerToPoint[] }) {
+  const HOST_REPOINT_WORDS = useLocaleWords(hostRepointWords);
   const navigate = useNavigateHref();
   return (
     <ul className={styles.toPoint} aria-label={HOST_REPOINT_WORDS.pointThemHere}>

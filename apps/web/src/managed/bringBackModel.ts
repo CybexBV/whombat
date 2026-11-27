@@ -12,6 +12,7 @@ import {
 } from '@whombat/client/managed';
 import type { BackupCheckpoint, BackupRestoreState } from '@whombat/protocol/session';
 import { backupWhen } from '../features/settings/backupOptionsModel';
+import { currentLocale } from '../i18n/provider';
 
 const B = BACKUP_OPTIONS_TEXT.bringBack;
 
@@ -70,7 +71,7 @@ export function chooseRows(checkpoints: readonly BackupCheckpoint[], now = new D
   return checkpoints.map((cp) => {
     const label = backupLabel(cp, false);
     const meta = [
-      ago(cp.createdAt),
+      ago(cp.createdAt, currentLocale()),
       late.has(cp.id) ? B.afterReplaced : null,
       cp.reason === 'scheduled' ? null : label,
       cp.check?.ok ? B.checkedLower : null,

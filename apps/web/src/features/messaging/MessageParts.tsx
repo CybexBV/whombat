@@ -3,7 +3,7 @@
  * pills, “(edited)”, the pin marker, the tombstone, link previews, what the Vault took and the inline editor.
  */
 import { Link } from '@tanstack/react-router';
-import { composerText, SETTLE_WORDS, vaultSavedRows } from '@whombat/client';
+import { composerText, vaultSavedRows } from '@whombat/client';
 import {
   emojiByChar,
   formatClock,
@@ -30,6 +30,7 @@ import {
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { SETTLE_WORDS } from '../../i18n/shared';
 import styles from './MessageParts.module.css';
 import { messageFits, TOO_LONG_NOTE } from './messageLimit';
 import { useMentionAutocorrect } from './useMentionAutocorrect';

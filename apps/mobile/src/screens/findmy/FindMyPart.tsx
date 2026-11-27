@@ -7,6 +7,7 @@
  * `FIND_MY_WORDS`); the screen's own reason comes first, as on the Mac's Screen segment. The tab names the Mac
  * (`ThingPageTab.server`); its page is read here.
  */
+
 import { HUMAN_TONES, initialsFor } from '@whombat/avatars';
 import {
   FIND_MY_WORDS,
@@ -29,6 +30,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, View } from 'react-native';
 import { HumanAvatar } from '../../avatars/Avatars';
 import { useBurrowBase, useNow, useNowStore } from '../../data/BurrowProvider';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard } from '../../ui/assistant';
@@ -47,6 +49,8 @@ const toneOf = (p: Pick<FindMyPersonRow, 'tone'>) => HUMAN_TONES[p.tone] ?? HUMA
 
 /** The tab of the Find My connection whose Mac is `serverId`: the Mac's page first, for its screen's switches. */
 export function FindMyPart({ serverId }: { serverId: string }) {
+  const { rawLocale } = useI18n();
+
   const { slug } = useBurrowBase();
   const now = useNow().getTime();
   const q = useHostServer({ params: { burrow: slug, serverId } }, { retry: false });
@@ -54,7 +58,7 @@ export function FindMyPart({ serverId }: { serverId: string }) {
   if (d)
     return <FindMyRead serverId={serverId} serverName={d.server.name ?? serverId} detail={d} now={now} />;
   return q.error ? (
-    <ErrorState text={hostErrorInfo(q.error).message} onRetry={() => void q.refetch()} />
+    <ErrorState text={hostErrorInfo(q.error, rawLocale).message} onRetry={() => void q.refetch()} />
   ) : (
     <CardSkeletons label={FIND_MY_WORDS.title} count={2} />
   );
@@ -71,6 +75,8 @@ function FindMyRead({
   detail: HostServerDetail;
   now: number;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const clock = useNowStore();
@@ -87,7 +93,9 @@ function FindMyRead({
   if (!screen) return null;
   const view = findMyView(tab.state, { name: serverName, now, screen });
   const status =
-    tab.error && !tab.state ? { tone: 'bad' as const, text: hostErrorInfo(tab.error).message } : view.status;
+    tab.error && !tab.state
+      ? { tone: 'bad' as const, text: hostErrorInfo(tab.error, rawLocale).message }
+      : view.status;
 
   return (
     <>
@@ -276,6 +284,8 @@ function FindMyMap({
   state: HostFindMy | undefined;
   people: readonly FindMyPersonRow[];
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const box = { w: width, h: MAP_HEIGHT };
@@ -333,7 +343,7 @@ function FindMyMap({
               accessibilityLiveRegion="polite"
               style={{ textAlign: 'center' }}
             >
-              {hostErrorInfo(map.error).message}
+              {hostErrorInfo(map.error, rawLocale).message}
             </Text>
           ) : (
             <ActivityIndicator color={theme.colors.mut} />
@@ -463,6 +473,8 @@ function ExactPicture({
   now: number;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const view = findMyExactView(state, person.id, server, now);
   const picture = useFindMyPicture({ burrow: slug, serverId, state, person: person.id });
@@ -471,7 +483,7 @@ function ExactPicture({
     view.kind === 'failed'
       ? view.text
       : view.kind === 'ready' && picture.error
-        ? hostErrorInfo(picture.error).message
+        ? hostErrorInfo(picture.error, rawLocale).message
         : null;
   return (
     <View style={{ paddingHorizontal: 22, paddingBottom: 8, gap: 14 }}>

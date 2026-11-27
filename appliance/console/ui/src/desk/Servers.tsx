@@ -3,10 +3,12 @@
  * first, up to 24 from `/api/desk/servers`, the rest counted; it scrolls by touch when they don't fit. Touching one
  * opens its screen, whose swipes go through this list. Until the first answer, the glance's servers.
  */
+
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/react';
 import type { Client } from '../lib/client';
 import { type DeskServer, type DeskServersAnswer, deskErrorCode, parseServersAnswer } from '../lib/desk';
-import { DESK_WORDS, fill } from '../lib/deskCopy';
+import { deskWordsCopy, fill } from '../lib/deskCopy';
 import { SERVER_REFRESH_MS } from '../lib/deskServer';
 import styles from './desk.module.css';
 import { PageHead, ServerCard } from './parts';
@@ -30,6 +32,9 @@ export function ServersScreen({
   onServer: (list: DeskServer[], index: number) => void;
   onGone: (code: PageGone) => void;
 }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   const [answer, setAnswer] = useState<DeskServersAnswer | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const gone = useRef(onGone);

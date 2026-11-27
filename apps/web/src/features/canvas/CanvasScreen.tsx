@@ -10,6 +10,7 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Skeleton, SkeletonRows } from '../../components/ListState';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import styles from './CanvasScreen.module.css';
 import { canvasHeading } from './canvasCopy';
 import { useCollaborators, useMinWidth } from './collab/hooks';
@@ -48,6 +49,7 @@ interface SelectionButton {
  * the comments column (threads next to their anchors, new comments on selected words, replies, resolve).
  */
 export function CanvasScreen({ burrow, slug }: CanvasScreenProps) {
+  const { tag: uiLocale } = useWebI18n();
   const { data, error, refetch } = useCanvas({ params: { burrow, slug } });
   const burrowQuery = useBurrow({ params: { burrow } });
   const bootstrap = useBootstrap({ params: { burrow } });
@@ -91,8 +93,9 @@ export function CanvasScreen({ burrow, slug }: CanvasScreenProps) {
       data.canvas.updatedAt,
       now,
       timeZone,
+      uiLocale,
     );
-  }, [data, principals, now, timeZone]);
+  }, [data, principals, now, timeZone, uiLocale]);
 
   const view = useMemo<CanvasViewValue>(
     () => ({ principals, plan: data?.plan ?? null, provenance: provenanceText }),
@@ -220,7 +223,7 @@ export function CanvasScreen({ burrow, slug }: CanvasScreenProps) {
               );
             })}
           </span>
-          {formatPresence(presentIds.length)}
+          {formatPresence(presentIds.length, uiLocale)}
         </span>
         <Button variant="secondary" size="md" onClick={handleShare}>
           Share

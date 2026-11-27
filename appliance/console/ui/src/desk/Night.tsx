@@ -2,17 +2,14 @@
  * Quiet hours (mockup 4, DK-09), the power cut (DK-10) and pairing the screen (DK-02). Nobody there by day is the
  * glance, dimmed (DK-97): `Desk`.
  */
+
+import { useT } from '../i18n/react';
 import { countdown } from '../lib/console';
 import type { DeskGlance, DeskPaired, DeskPower } from '../lib/desk';
-import { clockText, DESK, DESK_WORDS } from '../lib/deskCopy';
+import { clockText, deskCopy, deskWordsCopy } from '../lib/deskCopy';
 import { nightLine } from '../lib/deskScene';
 import styles from './desk.module.css';
 import { ClockText, PowerBanner, TopBar } from './parts';
-
-const LINE = {
-  fine: DESK_WORDS.status.allFine,
-  needsYou: DESK_WORDS.status.somethingNeedsYou,
-} as const;
 
 /** The dim clock: the time, one line, and the banner when the power is out. Nothing wakes it but a touch. */
 export function Night({
@@ -26,12 +23,14 @@ export function Night({
   power: DeskPower | null;
   now: number;
 }) {
+  const words = deskWordsCopy(useT());
+  const line = nightLine(glance) === 'fine' ? words.status.allFine : words.status.somethingNeedsYou;
   return (
     <div className={styles.night}>
       <div className={styles.nightClock}>
         <ClockText text={clockText(now, paired.timeZone)} />
       </div>
-      <p className={styles.nightLine}>{LINE[nightLine(glance)]}</p>
+      <p className={styles.nightLine}>{line}</p>
       {power?.source === 'battery' && (
         <PowerBanner power={power} assistant={paired.assistant.name} timeZone={paired.timeZone} />
       )}
@@ -53,6 +52,10 @@ export function Pairing({
   power: DeskPower | null;
   now: number;
 }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   return (
     <div className={styles.pairing}>
       <TopBar burrow={burrow} power={power} />

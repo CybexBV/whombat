@@ -3,9 +3,10 @@
  * the new secret in a write-only field, and for basic auth or a website login the username with it. The value lives
  * only while the sheet is open (cleared on Save and on close), is never logged and never goes into navigation params.
  */
+
 import { useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
-import { VAULT_COPY, VAULT_SECRET_MAX, type VaultAuth } from '@whombat/core/vault';
+import { VAULT_SECRET_MAX, type VaultAuth, vaultCopy } from '@whombat/core/vault';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -14,8 +15,9 @@ import {
   replaceProblemOf,
   replaceSecretModel,
   setSecretBody,
-  VAULT_FORM_TEXT,
+  vaultFormText,
 } from '../data/vaultForm';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField, FormMessage } from '../ui/formField';
@@ -36,14 +38,27 @@ export function ReplaceSecretSheet({
   target: ReplaceTarget | null;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultCopyHere = vaultCopy(rawLocale);
+
   return (
-    <Sheet visible={target !== null} onClose={onClose} title={VAULT_COPY.secret} label={VAULT_COPY.replace}>
+    <Sheet
+      visible={target !== null}
+      onClose={onClose}
+      title={vaultCopyHere.secret}
+      label={vaultCopyHere.replace}
+    >
       {target ? <ReplaceForm target={target} onClose={onClose} /> : null}
     </Sheet>
   );
 }
 
 function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () => void }) {
+  const { rawLocale } = useI18n();
+  const vaultCopyHere = vaultCopy(rawLocale);
+
+  const vaultFormTextHere = vaultFormText(rawLocale);
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const setSecret = useVaultWrite(api.vault.setSecret, slug);
@@ -69,7 +84,7 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
         return;
       }
       setValue('');
-      showNotice(VAULT_FORM_TEXT.secretReplaced);
+      showNotice(vaultFormTextHere.secretReplaced);
       onClose();
     } catch (error) {
       const p = replaceProblemOf(error);
@@ -82,15 +97,15 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
     <View style={{ paddingHorizontal: 22, paddingBottom: 8, gap: 14 }}>
       <View style={{ gap: 4 }}>
         <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-          {`${VAULT_COPY.replace} · ${target.name}`}
+          {`${vaultCopyHere.replace} · ${target.name}`}
         </Text>
         <Text size={13.5} lh={1.4} color={theme.colors.mut}>
-          {VAULT_FORM_TEXT.replaceHint}
+          {vaultFormTextHere.replaceHint}
         </Text>
       </View>
       {model.withUsername ? (
         <FormField
-          label={VAULT_FORM_TEXT.username}
+          label={vaultFormTextHere.username}
           value={username}
           onChangeText={setUsername}
           error={problems.username}
@@ -108,23 +123,23 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
           setMessage(null);
         }}
         error={problems.secret}
-        hint={VAULT_FORM_TEXT.secretHint}
+        hint={vaultFormTextHere.secretHint}
         secret
         autoFocus
         maxLength={VAULT_SECRET_MAX}
-        placeholder={VAULT_FORM_TEXT.secretPlaceholder}
+        placeholder={vaultFormTextHere.secretPlaceholder}
       />
       <FormMessage text={message} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
-          label={VAULT_FORM_TEXT.cancel}
+          label={vaultFormTextHere.cancel}
           variant="secondary"
           disabled={setSecret.isPending}
           onPress={onClose}
           style={{ flex: 1 }}
         />
         <Button
-          label={VAULT_FORM_TEXT.save}
+          label={vaultFormTextHere.save}
           busy={setSecret.isPending}
           disabled={!value}
           onPress={() => void save()}

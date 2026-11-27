@@ -16,6 +16,7 @@
  * its “Set up backups” opens it with the destination form open (`setUp`, dropped once read); a link that says a bring
  * back waits (`bringBack`, the Inbox's Finish and Try again) opens the bring back flow where it stands.
  */
+
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BACKUP_FILE_TEXT } from '@whombat/client';
@@ -32,7 +33,7 @@ import {
   bringBackLaterOffered,
   coverageGaps,
   earlierPlacesLine,
-  SCOPE_LABELS,
+  scopeLabels,
   THIS_WHOMBAT_TEXT,
 } from '@whombat/client/managed';
 import {
@@ -49,6 +50,7 @@ import { ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { startedChatRoute } from '../data/chatRoom';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { navigateTo } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
@@ -67,7 +69,7 @@ import {
 } from './BackupsOverview';
 import { useBackupPasskeyTap } from './backupPasskey';
 import { useManaged, useManagedOrThrow } from './context';
-import { COPY, MANAGED_TEXT } from './copy';
+import { managedCopy, managedText } from './copy';
 import { sharePaperCopy } from './paperCopy';
 import { Card, type Dot, Note, Row } from './ui';
 import { useApplianceStatus } from './useApplianceStatus';
@@ -238,18 +240,22 @@ function BackupsParts({
 
 /** The demo world's Backups (AP-6864): the new parts over the demo's box; places, kit and file are a Whombat's. */
 function DemoBackups({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+  const managedTextHere = managedText(rawLocale);
+
   const bottomRoom = useBottomRoom();
   const session = useBackupSession();
   return (
     <Screen>
-      <BackBar label={COPY.whombat.title} onPress={() => navigation.goBack()} />
+      <BackBar label={managedCopyHere.whombat.title} onPress={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}>
         <LargeTitle title={THIS_WHOMBAT_TEXT.parts.backups} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
           {session ? (
             <BackupsParts session={session} passkey={null} paper={null} />
           ) : (
-            <ErrorState text={MANAGED_TEXT.loadError} />
+            <ErrorState text={managedTextHere.loadError} />
           )}
         </View>
       </ScrollView>
@@ -258,6 +264,12 @@ function DemoBackups({ navigation }: Props) {
 }
 
 function ManagedBackups({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+  const managedTextHere = managedText(rawLocale);
+
+  const scopeLabelsHere = scopeLabels(rawLocale);
+
   const bottomRoom = useBottomRoom();
   const managed = useManagedOrThrow();
   const { status, error, reload } = useApplianceStatus({ follow: false });
@@ -285,7 +297,7 @@ function ManagedBackups({ route, navigation }: Props) {
   }, [bringBack, navigation, onBringBack]);
   const back = (
     <BackBar
-      label={COPY.whombat.title}
+      label={managedCopyHere.whombat.title}
       onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Whombat'))}
     />
   );
@@ -293,7 +305,7 @@ function ManagedBackups({ route, navigation }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={reload} />
+        <ErrorState text={managedTextHere.loadError} onRetry={reload} />
       </Screen>
     );
   if (!status || shown === 'loading')
@@ -369,20 +381,20 @@ function ManagedBackups({ route, navigation }: Props) {
       >
         <LargeTitle title={THIS_WHOMBAT_TEXT.parts.backups} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
-          <Card label={MANAGED_TEXT.backups}>
+          <Card label={managedTextHere.backups}>
             <Row
               first
               dot={backupDot}
-              title={MANAGED_TEXT.backup[b.state]}
+              title={managedTextHere.backup[b.state]}
               meta={
                 b.state === 'unprotected'
-                  ? `${MANAGED_TEXT.backup.unprotectedMeta} ${backupBlocksText(status) ?? ''}`.trim()
+                  ? `${managedTextHere.backup.unprotectedMeta} ${backupBlocksText(status) ?? ''}`.trim()
                   : [
                       b.lastSuccessAt
-                        ? MANAGED_TEXT.backup.last(ago(b.lastSuccessAt))
-                        : MANAGED_TEXT.backup.none,
+                        ? managedTextHere.backup.last(ago(b.lastSuccessAt, rawLocale))
+                        : managedTextHere.backup.none,
                       b.lastFailure?.reason,
-                      b.recoverable ? MANAGED_TEXT.backup.recoverable : null,
+                      b.recoverable ? managedTextHere.backup.recoverable : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')
@@ -392,23 +404,23 @@ function ManagedBackups({ route, navigation }: Props) {
             <CurrentPlaceRow />
             {b.coverage.length > 0 ? (
               <Row
-                title={MANAGED_TEXT.backup.covers}
-                meta={`${b.coverage.map((c) => SCOPE_LABELS[c] ?? c).join(', ')}${b.relogin.length ? `. ${MANAGED_TEXT.backup.relogin}` : ''}`}
+                title={managedTextHere.backup.covers}
+                meta={`${b.coverage.map((c) => scopeLabelsHere[c] ?? c).join(', ')}${b.relogin.length ? `. ${managedTextHere.backup.relogin}` : ''}`}
               />
             ) : null}
             {/* A real gap warns; what the backup leaves out by design is a quiet line that says why. */}
             {gaps.length > 0 ? (
               <Row
                 dot="warn"
-                title={MANAGED_TEXT.backup.notCovered}
-                meta={gaps.map((c) => SCOPE_LABELS[c] ?? c).join(', ')}
+                title={managedTextHere.backup.notCovered}
+                meta={gaps.map((c) => scopeLabelsHere[c] ?? c).join(', ')}
               />
             ) : null}
             {onPurpose.length > 0 ? (
               <Row
-                title={MANAGED_TEXT.backup.onPurpose}
-                meta={MANAGED_TEXT.backup.onPurposeMeta(
-                  onPurpose.map((c) => SCOPE_LABELS[c] ?? c).join(', '),
+                title={managedTextHere.backup.onPurpose}
+                meta={managedTextHere.backup.onPurposeMeta(
+                  onPurpose.map((c) => scopeLabelsHere[c] ?? c).join(', '),
                 )}
               />
             ) : null}
@@ -425,21 +437,21 @@ function ManagedBackups({ route, navigation }: Props) {
           {later}
 
           {onKit ? (
-            <Card label={MANAGED_TEXT.kit}>
+            <Card label={managedTextHere.kit}>
               {status.recovery.kitVerified ? (
-                <Row first dot="ok" title={MANAGED_TEXT.kitSaved} meta={MANAGED_TEXT.kitSavedMeta} />
+                <Row first dot="ok" title={managedTextHere.kitSaved} meta={managedTextHere.kitSavedMeta} />
               ) : (
                 // No kit isn't a warning (BX-01, AP-3527): the box's screen lets a device back in.
                 <Row
                   first
                   dot="mut"
-                  title={MANAGED_TEXT.kitMissing}
+                  title={managedTextHere.kitMissing}
                   meta={
                     status.recovery.rotationPending
-                      ? MANAGED_TEXT.kitRotationPending
-                      : MANAGED_TEXT.kitMissingMeta
+                      ? managedTextHere.kitRotationPending
+                      : managedTextHere.kitMissingMeta
                   }
-                  action={<Button label={MANAGED_TEXT.kitMake} variant="secondary" onPress={onKit} />}
+                  action={<Button label={managedTextHere.kitMake} variant="secondary" onPress={onKit} />}
                 />
               )}
             </Card>
@@ -472,17 +484,20 @@ function BringBackLaterCard({ onPress }: { onPress: () => void }) {
  * Whombat (one line says when; the backups keep this one safe already).
  */
 function BackupFileCard({ onOpen }: { onOpen: () => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
     <Card label={BACKUP_FILE_TEXT.section}>
       <Row
         first
-        title={COPY.backupFile.title}
+        title={managedCopyHere.backupFile.title}
         meta={BACKUP_FILE_TEXT.when}
         action={
           <Button
-            label={COPY.backupFile.open}
+            label={managedCopyHere.backupFile.open}
             variant="secondary"
-            accessibilityHint={COPY.backupFile.openHint}
+            accessibilityHint={managedCopyHere.backupFile.openHint}
             onPress={onOpen}
           />
         }

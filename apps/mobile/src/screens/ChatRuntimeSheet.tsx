@@ -10,6 +10,7 @@
  * after sending. In a thread a change is saved at once and applies from its next reply. Every rule and word is
  * `@whombat/client`'s (`chat/runtime.ts`, `react/chatRuntime.ts`), shared with the web.
  */
+
 import {
   type ChatFastRow,
   type ChatModelRow,
@@ -44,18 +45,19 @@ import {
 import { useChatRuntime, useMakeChatDefault, useSetThreadRuntime } from '@whombat/client/react';
 import {
   type AgentEffort,
-  CHAT_RUNTIME_COPY,
   type ChatProvider,
   type ChatRoom,
   type ChatRuntime,
   type ChatRuntimeView,
+  chatRuntimeCopy,
   type Message,
-  MODEL_EFFORT_COPY,
+  modelEffortCopy,
 } from '@whombat/core';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useTheAgentHere } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -142,6 +144,9 @@ export function useChatRuntimeChoice({
 
 /** The icon in the pill and its sheet (AP-2715, AP-2716, chat-runtime-icon.md AP-2962). */
 export function ChatRuntimeControl({ choice }: { choice: ChatRuntimeChoice }) {
+  const { rawLocale } = useI18n();
+  const chatRuntimeCopyHere = chatRuntimeCopy(rawLocale);
+
   const [open, setOpen] = useState(false);
   const navigation = useAppNavigation();
   const button = chatRuntimeButton(choice.view, choice.runtime);
@@ -150,8 +155,8 @@ export function ChatRuntimeControl({ choice }: { choice: ChatRuntimeChoice }) {
   if (button.noAi)
     return (
       <NoAiIcon
-        label={CHAT_RUNTIME_COPY.noAiLabel(choice.view.assistantName)}
-        line={CHAT_RUNTIME_COPY.noAi}
+        label={chatRuntimeCopyHere.noAiLabel(choice.view.assistantName)}
+        line={chatRuntimeCopyHere.noAi}
         onPress={() => navigation.navigate('SettingsAgent', { part: 'ai' })}
       />
     );
@@ -188,6 +193,10 @@ export function ChatRuntimeSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const chatRuntimeCopyHere = chatRuntimeCopy(rawLocale);
+  const modelEffortCopyHere = modelEffortCopy(rawLocale);
+
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { slug } = useBurrowBase();
@@ -237,7 +246,7 @@ export function ChatRuntimeSheet({
       .then((result) => {
         if (result.status !== 'ok') return setDefaultRefusal(chatRuntimeRefusalText(result));
         const saved = result.data.agent.runtime;
-        if (!modelRuntimeSaved(body, saved, models)) return setDefaultRefusal(MODEL_EFFORT_COPY.notSaved);
+        if (!modelRuntimeSaved(body, saved, models)) return setDefaultRefusal(modelEffortCopyHere.notSaved);
         showNotice(chatMadeDefaultText(view, saved));
         choice.madeDefault();
         close();
@@ -245,7 +254,7 @@ export function ChatRuntimeSheet({
       .catch((error: unknown) => setDefaultRefusal(chatRuntimeRefusalText(error)));
   };
   const refusal = defaultRefusal ?? choice.refusal;
-  const title = CHAT_RUNTIME_COPY.answersWith(name);
+  const title = chatRuntimeCopyHere.answersWith(name);
   return (
     <Sheet
       visible={visible}
@@ -278,12 +287,12 @@ export function ChatRuntimeSheet({
                 feedback="fade"
                 ringRadius={6}
                 accessibilityRole="link"
-                accessibilityLabel={`${CHAT_RUNTIME_COPY.setUp}: ${h.text}`}
+                accessibilityLabel={`${chatRuntimeCopyHere.setUp}: ${h.text}`}
                 hitSlop={hitSlopFor(20)}
                 style={{ minHeight: 20, justifyContent: 'center' }}
               >
                 <Text size={12.5} weight={600} color={theme.colors.brand}>
-                  {CHAT_RUNTIME_COPY.setUp}
+                  {chatRuntimeCopyHere.setUp}
                 </Text>
               </Touchable>
             </View>
@@ -329,11 +338,11 @@ export function ChatRuntimeSheet({
               color={theme.colors.mut}
               style={{ marginBottom: 8 }}
             >
-              {CHAT_RUNTIME_COPY.effort}
+              {chatRuntimeCopyHere.effort}
             </Text>
             <View
               accessibilityRole="radiogroup"
-              accessibilityLabel={CHAT_RUNTIME_COPY.effort}
+              accessibilityLabel={chatRuntimeCopyHere.effort}
               style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}
             >
               {efforts.map((e) => (
@@ -367,7 +376,7 @@ export function ChatRuntimeSheet({
             feedback="wash"
             ringRadius={12}
             accessibilityRole="button"
-            accessibilityLabel={CHAT_RUNTIME_COPY.makeDefault(name)}
+            accessibilityLabel={chatRuntimeCopyHere.makeDefault(name)}
             accessibilityState={{ busy: makeDefault.isPending }}
             style={{
               height: 46,
@@ -382,7 +391,7 @@ export function ChatRuntimeSheet({
             }}
           >
             <Text size={14.5} weight={600} color={theme.colors.ink2}>
-              {CHAT_RUNTIME_COPY.makeDefault(name)}
+              {chatRuntimeCopyHere.makeDefault(name)}
             </Text>
           </Touchable>
         ) : null}
@@ -413,6 +422,9 @@ function ProviderSwitch({
   segments: readonly ChatProviderSegment[];
   onPick: (provider: ChatProvider) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const chatRuntimeCopyHere = chatRuntimeCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <View
@@ -438,7 +450,7 @@ function ProviderSwitch({
           accessibilityRole="radio"
           accessibilityLabel={s.label}
           accessibilityState={{ checked: s.picked, disabled: !s.ready && !s.picked }}
-          {...(!s.ready ? { accessibilityHint: CHAT_RUNTIME_COPY.notSetUp(s.label) } : {})}
+          {...(!s.ready ? { accessibilityHint: chatRuntimeCopyHere.notSetUp(s.label) } : {})}
           style={{
             flex: 1,
             height: 44,
@@ -487,6 +499,9 @@ export function ModelRows({
   onPick: (id: string | null) => void;
   onMore: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const chatRuntimeCopyHere = chatRuntimeCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <View
@@ -542,7 +557,7 @@ export function ModelRows({
               }}
             >
               <Text size={10} weight={500} mono color={theme.colors.mut}>
-                {CHAT_RUNTIME_COPY.defaultTag}
+                {chatRuntimeCopyHere.defaultTag}
               </Text>
             </View>
           ) : null}
@@ -554,11 +569,11 @@ export function ModelRows({
           feedback="wash"
           ringRadius={8}
           accessibilityRole="button"
-          accessibilityLabel={CHAT_RUNTIME_COPY.more(more)}
+          accessibilityLabel={chatRuntimeCopyHere.more(more)}
           style={{ minHeight: 44, justifyContent: 'center', paddingLeft: 36, borderRadius: 8 }}
         >
           <Text size={12.5} color={theme.colors.mut}>
-            {CHAT_RUNTIME_COPY.more(more)}
+            {chatRuntimeCopyHere.more(more)}
           </Text>
         </Touchable>
       ) : null}

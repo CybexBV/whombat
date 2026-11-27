@@ -2039,7 +2039,7 @@ export class DeskService {
         { screen: record.id, detail: String(JSON.stringify(detail) ?? detail) },
         message,
       );
-    const views = screenViews(specs, resolved, view, (message, id) => warn(message, id));
+    const views = screenViews(specs, resolved, view, (message, id) => warn(message, id), ctx.locale);
     this.#rememberShown(record.id, view, ctx.now.getTime(), views);
     return screenGrid({
       record,
@@ -2256,7 +2256,12 @@ export class DeskService {
     );
     const ctx = this.#widgetCtx(at.place, now);
     const resolved = await this.#resolver.resolve(ctx, specs, this.#factsOf(at.cache, at.place, now), 0);
-    return this.#rememberShown(record.id, view, now.getTime(), screenViews(specs, resolved, view)).has(key);
+    return this.#rememberShown(
+      record.id,
+      view,
+      now.getTime(),
+      screenViews(specs, resolved, view, undefined, ctx.locale),
+    ).has(key);
   }
 
   /**
@@ -2533,8 +2538,9 @@ export class DeskService {
       ? deskPreviewInput({ ...real, now }, record.show, input.scenario, DESK_CALM_WORDS)
       : { ...real, now };
     const specs = input.widgets.slice(0, DESK_SCREEN_VIEWS_MAX);
+    const widgetCtx = this.#widgetCtx(place, now);
     const resolved = await this.#resolver.resolve(
-      this.#widgetCtx(place, now),
+      widgetCtx,
       specs,
       this.#factsOf(cache, place, now),
       SCREEN_VIEWS_WAIT_MS,
@@ -2542,7 +2548,10 @@ export class DeskService {
     return {
       name: preview.name,
       calm: preview.calm,
-      views: viewsFor(screenViews(specs, resolved, 'everything'), principal.protocolMinor),
+      views: viewsFor(
+        screenViews(specs, resolved, 'everything', undefined, widgetCtx.locale),
+        principal.protocolMinor,
+      ),
       attention: deskAttentionFor(input2, record.show, 'everything', record.popups),
     };
   }

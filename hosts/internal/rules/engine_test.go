@@ -14,6 +14,58 @@ func sensorReport(temp float64) *proto.Report {
 	return &proto.Report{Sensors: []proto.Sensor{{ID: "cpu_package", Label: "CPU package", TempC: temp, LimitC: 85}}}
 }
 
+func TestTextEqual(t *testing.T) {
+	text := Text{Title: "title", Detail: "detail", BannerTitle: "banner", BannerDetail: "banner detail", Code: "example.rule",
+		Params: map[string]any{"names": []string{"one", "two"}, "count": 2, "limit": 5.5, "custom": true}}
+	restored := text
+	restored.Params = map[string]any{"custom": true, "limit": 5.5, "count": int64(2), "names": []string{"one", "two"}}
+	if !text.Equal(restored) || !restored.Equal(text) {
+		t.Fatal("equivalent JSON params compare differently")
+	}
+	for _, tc := range []struct {
+		name   string
+		change func(*Text)
+	}{
+		{"title", func(t *Text) { t.Title = "other" }},
+		{"detail", func(t *Text) { t.Detail = "other" }},
+		{"banner title", func(t *Text) { t.BannerTitle = "other" }},
+		{"banner detail", func(t *Text) { t.BannerDetail = "other" }},
+		{"code", func(t *Text) { t.Code = "other" }},
+		{"list order", func(t *Text) { t.Params["names"] = []string{"two", "one"} }},
+		{"number", func(t *Text) { t.Params["count"] = 3.0 }},
+		{"missing param", func(t *Text) { delete(t.Params, "custom") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			changed := text
+			changed.Params = map[string]any{"names": []string{"one", "two"}, "count": 2, "limit": 5.5, "custom": true}
+			tc.change(&changed)
+			if text.Equal(changed) {
+				t.Fatalf("changed text compares equal: %+v", changed)
+			}
+		})
+	}
+}
+
+func TestEngineUpdatesAlertWhenOnlyParamsChange(t *testing.T) {
+	e := NewEngine()
+	now := time.Now()
+	report := func(wear float64) *proto.Report {
+		return &proto.Report{Disks: []proto.Disk{{Device: "nvme1n1", Type: "nvme", WearPct: &wear}}}
+	}
+	first := e.Evaluate("s", HostConditions(report(78.1)), notHeartbeat, now).Opened
+	if len(first) != 1 {
+		t.Fatalf("opened = %+v", first)
+	}
+	next := e.Evaluate("s", HostConditions(report(78.2)), notHeartbeat, now).Updated
+	if len(next) != 1 || next[0].ID != first[0].ID || next[0].Title != first[0].Title ||
+		next[0].Code != "disk.wear_high.plain" || next[0].Params["pct"] != 78.2 {
+		t.Fatalf("updated = %+v", next)
+	}
+	if ch := e.Evaluate("s", HostConditions(report(78.2)), notHeartbeat, now); !ch.Empty() {
+		t.Fatalf("equal params should leave the alert alone: %+v", ch)
+	}
+}
+
 func TestEngineTempHighFiresAfterTenMinutes(t *testing.T) {
 	e := NewEngine()
 	t0 := time.Date(2026, 10, 11, 13, 0, 0, 0, time.UTC)
@@ -31,6 +83,9 @@ func TestEngineTempHighFiresAfterTenMinutes(t *testing.T) {
 	a := ch.Opened[0]
 	if a.Title != "CPU package at 80 °C" || a.Detail != "Above 72 °C for 10 min" {
 		t.Errorf("text = %q / %q", a.Title, a.Detail)
+	}
+	if a.Code != RuleTempHigh || a.Params["sensor"] != proto.SensorCPU || a.Params["tempC"] != 80.0 || a.Params["heldSeconds"] != int64(600) {
+		t.Errorf("translation data = %q %v", a.Code, a.Params)
 	}
 	// Key is stable; a second evaluation updates the duration text only.
 	ch = e.Evaluate("shale", HostConditions(sensorReport(80)), notHeartbeat, t0.Add(14*time.Minute))

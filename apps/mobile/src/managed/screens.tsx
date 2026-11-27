@@ -5,6 +5,7 @@
  * Whombat (save through the share sheet → “I’ve saved the kit”), pairing, signing in at the box's screen (BX-02), and
  * the plain full-page states a session can end in. Not mocked: they follow the sign-in screen.
  */
+
 import {
   type ApplianceSummary,
   agoText,
@@ -46,12 +47,13 @@ import { type ApplianceSession, OperationError, sessionOps } from '@whombat/clie
 import { normalizeClaimSecret } from '@whombat/protocol/session';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, View } from 'react-native';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button, Loading } from '../ui/primitives';
-import { PHONE_COMMUNITY_TEXT } from './community';
+import { phoneCommunityText } from './community';
 import { UI_ORIGINS } from './config';
-import { COPY } from './copy';
+import { COPY, managedCopy } from './copy';
 import { type KitPrinter, KitWays } from './KitWays';
 import { OrDivider, PhoneHero, PhoneScanner, ScanButton } from './PhoneSignInScreens';
 import { QrScanner } from './QrScanner';
@@ -121,6 +123,10 @@ export function SignInScreen({
     onLink: (link: LocalLinkParts) => void;
   };
 }) {
+  const { rawLocale, tClient } = useI18n();
+  const phoneCommunityTextHere = phoneCommunityText(rawLocale);
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [mode, setMode] = useState(initialMode);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -152,13 +158,13 @@ export function SignInScreen({
       onClose={() => setScanning(false)}
       onDenied={() => {
         setScanning(false);
-        setScanError(COPY.phone.scanDenied);
+        setScanError(managedCopyHere.phone.scanDenied);
       }}
       onLink={(link) => {
         setScanning(false);
         onPhoneLink(link);
       }}
-      escapeLabel={COPY.signIn.withEmail}
+      escapeLabel={managedCopyHere.signIn.withEmail}
       onEscape={toEmail}
       {...(community && {
         onLocalLink: (link: LocalLinkParts) => {
@@ -168,7 +174,7 @@ export function SignInScreen({
       })}
     />
   );
-  const C = PHONE_COMMUNITY_TEXT.signIn;
+  const C = phoneCommunityTextHere.signIn;
   const communityPart = community ? (
     <>
       {community.boxes.length > 0 ? (
@@ -183,7 +189,7 @@ export function SignInScreen({
               meta={C.openMeta}
               action={
                 <Button
-                  label="Open"
+                  label={tClient('automations.waiting.open')}
                   variant="secondary"
                   accessibilityLabel={C.open(b.name ?? C.unnamed)}
                   onPress={() => community.onOpen(b.device)}
@@ -199,25 +205,25 @@ export function SignInScreen({
   if (sent)
     return (
       <Frame
-        kicker={COPY.signIn.kicker}
-        title={COPY.signIn.sentTitle}
-        sub={COPY.signIn.sent(sent)}
-        tip={COPY.signIn.tip}
+        kicker={managedCopyHere.signIn.kicker}
+        title={managedCopyHere.signIn.sentTitle}
+        sub={managedCopyHere.signIn.sent(sent)}
+        tip={managedCopyHere.signIn.tip}
       >
-        <Note text={COPY.signIn.openHint} />
-        <Button label={COPY.signIn.again} variant="quiet" onPress={() => setSent(null)} />
+        <Note text={managedCopyHere.signIn.openHint} />
+        <Button label={managedCopyHere.signIn.again} variant="quiet" onPress={() => setSent(null)} />
       </Frame>
     );
   if (mode === 'email')
     return (
       <Frame
-        kicker={COPY.signIn.kicker}
-        title={COPY.signIn.emailTitle}
-        sub={COPY.signIn.sub}
-        tip={COPY.signIn.tip}
+        kicker={managedCopyHere.signIn.kicker}
+        title={managedCopyHere.signIn.emailTitle}
+        sub={managedCopyHere.signIn.sub}
+        tip={managedCopyHere.signIn.tip}
       >
         <Field
-          label={COPY.signIn.email}
+          label={managedCopyHere.signIn.email}
           value={email}
           onChangeText={setEmail}
           placeholder="you@company.com"
@@ -230,7 +236,7 @@ export function SignInScreen({
         />
         <ErrorLine text={error} />
         <Button
-          label={COPY.signIn.send}
+          label={managedCopyHere.signIn.send}
           size="lg"
           busy={busy}
           disabled={!email.trim()}
@@ -238,7 +244,7 @@ export function SignInScreen({
         />
         {onPasskey ? <PasskeyButton onPasskey={onPasskey} onError={setError} /> : null}
         <Button
-          label={COPY.signIn.withScan}
+          label={managedCopyHere.signIn.withScan}
           variant="quiet"
           onPress={() => {
             setMode('scan');
@@ -251,14 +257,14 @@ export function SignInScreen({
     );
   return (
     <Frame
-      kicker={COPY.signIn.kicker}
-      title={COPY.signIn.scanTitle}
-      sub={COPY.signIn.scanSub}
-      tip={COPY.signIn.scanTip}
+      kicker={managedCopyHere.signIn.kicker}
+      title={managedCopyHere.signIn.scanTitle}
+      sub={managedCopyHere.signIn.scanSub}
+      tip={managedCopyHere.signIn.scanTip}
       hero={<PhoneHero />}
     >
       <ScanButton
-        label={COPY.signIn.scan}
+        label={managedCopyHere.signIn.scan}
         onPress={() => {
           setScanError(null);
           setScanning(true);
@@ -266,7 +272,7 @@ export function SignInScreen({
       />
       {onPasskey ? <PasskeyButton onPasskey={onPasskey} onError={setScanError} /> : null}
       <ErrorLine text={scanError} />
-      <Button label={COPY.signIn.withEmail} variant="quiet" onPress={toEmail} />
+      <Button label={managedCopyHere.signIn.withEmail} variant="quiet" onPress={toEmail} />
       {communityPart}
       {scanner}
     </Frame>
@@ -274,14 +280,17 @@ export function SignInScreen({
 }
 
 export function VerifyScreen({ error, onBack }: { error: string | null; onBack: () => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
     <Frame
-      kicker={COPY.signIn.kicker}
-      title={error ? COPY.signIn.title : COPY.signIn.verifying}
+      kicker={managedCopyHere.signIn.kicker}
+      title={error ? managedCopyHere.signIn.title : managedCopyHere.signIn.verifying}
       sub={error}
-      tip={COPY.signIn.tip}
+      tip={managedCopyHere.signIn.tip}
     >
-      {error ? <Button label={COPY.signIn.again} variant="secondary" onPress={onBack} /> : null}
+      {error ? <Button label={managedCopyHere.signIn.again} variant="secondary" onPress={onBack} /> : null}
     </Frame>
   );
 }
@@ -302,7 +311,10 @@ export function CreateOrgScreen({
   onDone: () => void;
   onSignOut: () => void;
 }) {
-  const t = PHONE_COMMUNITY_TEXT.noWhombat;
+  const { rawLocale } = useI18n();
+  const phoneCommunityTextHere = phoneCommunityText(rawLocale);
+
+  const t = phoneCommunityTextHere.noWhombat;
   return (
     <Frame kicker={t.kicker} title={t.title} sub={t.sub}>
       <Button label={t.join} size="lg" onPress={onJoin} />
@@ -352,6 +364,9 @@ export function AppliancesScreen({
   /** Name a Whombat in the directory (AP-3086); resolves to why it failed, or null. */
   onRename?: (a: ApplianceSummary, name: string) => Promise<string | null>;
 }) {
+  const { rawLocale, tClient } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const theme = useTheme();
   const now = Date.now();
   const rows = appliances ? listedAppliances(appliances, remembers) : [];
@@ -361,10 +376,10 @@ export function AppliancesScreen({
   const empty = appliances ? appliancesEmptyText(appliances) : null;
   return (
     <Frame
-      kicker={COPY.appliances.kicker}
-      title={COPY.appliances.title}
-      sub={COPY.appliances.sub}
-      tip={COPY.appliances.tip}
+      kicker={managedCopyHere.appliances.kicker}
+      title={managedCopyHere.appliances.title}
+      sub={managedCopyHere.appliances.sub}
+      tip={managedCopyHere.appliances.tip}
     >
       {notice ? (
         <Card>
@@ -376,7 +391,7 @@ export function AppliancesScreen({
         </Card>
       ) : null}
       <ErrorLine text={error} />
-      {error ? <Button label="Try again" variant="secondary" onPress={onRefresh} /> : null}
+      {error ? <Button label={tClient('settings.retry')} variant="secondary" onPress={onRefresh} /> : null}
       {rows.length > 0 ? (
         <Card>
           {rows.map((a, i) => {
@@ -387,14 +402,14 @@ export function AppliancesScreen({
                   key={a.device}
                   first={i === 0}
                   dot="mut"
-                  dotLabel={COPY.appliances.retired}
+                  dotLabel={managedCopyHere.appliances.retired}
                   title={name}
                   muted
-                  meta={COPY.appliances.retired}
+                  meta={managedCopyHere.appliances.retired}
                   action={
                     onForget ? (
                       <Button
-                        label={COPY.appliances.forget}
+                        label={managedCopyHere.appliances.forget}
                         variant="secondary"
                         onPress={() => onForget(a)}
                         accessibilityHint={`Forgets ${name} on this phone`}
@@ -406,11 +421,13 @@ export function AppliancesScreen({
             const online = a.lastSeenAt !== null && now / 1000 - a.lastSeenAt < 120;
             const meta = [
               online
-                ? COPY.appliances.online
+                ? managedCopyHere.appliances.online
                 : a.lastSeenAt
-                  ? COPY.appliances.offline(agoText(a.lastSeenAt, now))
-                  : COPY.appliances.neverSeen,
-              a.revocationsPending > 0 ? COPY.appliances.pendingRevocations(a.revocationsPending) : null,
+                  ? managedCopyHere.appliances.offline(agoText(a.lastSeenAt, now, rawLocale))
+                  : managedCopyHere.appliances.neverSeen,
+              a.revocationsPending > 0
+                ? managedCopyHere.appliances.pendingRevocations(a.revocationsPending)
+                : null,
             ]
               .filter(Boolean)
               .join(' · ');
@@ -419,12 +436,12 @@ export function AppliancesScreen({
                 key={a.device}
                 first={i === 0}
                 dot={online ? 'ok' : 'mut'}
-                dotLabel={online ? COPY.appliances.online : 'Offline'}
+                dotLabel={online ? managedCopyHere.appliances.online : 'Offline'}
                 title={name}
                 meta={meta}
                 action={
                   <Button
-                    label={COPY.appliances.open}
+                    label={managedCopyHere.appliances.open}
                     variant="secondary"
                     onPress={() => onOpen(a)}
                     accessibilityHint={`Opens ${name}`}
@@ -446,7 +463,11 @@ export function AppliancesScreen({
             .map((a) => (
               <Button
                 key={a.device}
-                label={rows.length > 1 ? `${COPY.recover.lost} · ${a.name ?? a.device}` : COPY.recover.lost}
+                label={
+                  rows.length > 1
+                    ? `${managedCopyHere.recover.lost} · ${a.name ?? a.device}`
+                    : managedCopyHere.recover.lost
+                }
                 variant="quiet"
                 onPress={() => onRecover(a)}
               />
@@ -467,22 +488,26 @@ export function AppliancesScreen({
             return (
               <Button
                 key={a.device}
-                label={rows.length > 1 ? `${COPY.appliances.rename} · ${name}` : COPY.appliances.rename}
+                label={
+                  rows.length > 1
+                    ? `${managedCopyHere.appliances.rename} · ${name}`
+                    : managedCopyHere.appliances.rename
+                }
                 variant="quiet"
                 onPress={() => setNaming(a.device)}
-                accessibilityLabel={COPY.appliances.renameLabel(name)}
+                accessibilityLabel={managedCopyHere.appliances.renameLabel(name)}
               />
             );
           })
       ) : null}
-      <Button label={COPY.appliances.claim} size="lg" onPress={onClaim} />
+      <Button label={managedCopyHere.appliances.claim} size="lg" onPress={onClaim} />
       <View style={{ gap: 2 }}>
-        <Button label={COPY.appliances.signOut} variant="quiet" onPress={onSignOut} />
+        <Button label={managedCopyHere.appliances.signOut} variant="quiet" onPress={onSignOut} />
         <Text size={12} mono color={theme.colors.mut} style={{ textAlign: 'center' }}>
           {session.account.email}
         </Text>
         {onDeleteAccount ? (
-          <Button label={COPY.account.deleteEntry} variant="quiet" onPress={onDeleteAccount} />
+          <Button label={managedCopyHere.account.deleteEntry} variant="quiet" onPress={onDeleteAccount} />
         ) : null}
       </View>
     </Frame>
@@ -499,6 +524,9 @@ function NameEditor({
   onSave: (name: string) => Promise<string | null>;
   onDone: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [value, setValue] = useState(appliance.name ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -514,21 +542,21 @@ function NameEditor({
   return (
     <View style={{ gap: 12 }}>
       <Field
-        label={COPY.appliances.nameLabel(appliance.device)}
+        label={managedCopyHere.appliances.nameLabel(appliance.device)}
         value={value}
         onChangeText={(v) => {
           setValue(v);
           setError(null);
         }}
-        placeholder={COPY.appliances.namePlaceholder}
+        placeholder={managedCopyHere.appliances.namePlaceholder}
         autoCapitalize="words"
         autoFocus
         returnKeyType="done"
         onSubmitEditing={save}
       />
       <ErrorLine text={error} />
-      <Button label={COPY.appliances.save} busy={busy} onPress={save} />
-      <Button label={COPY.appliances.cancel} variant="quiet" onPress={onDone} />
+      <Button label={managedCopyHere.appliances.save} busy={busy} onPress={save} />
+      <Button label={managedCopyHere.appliances.cancel} variant="quiet" onPress={onDone} />
     </View>
   );
 }
@@ -537,9 +565,12 @@ function NameEditor({
 
 /** The person's name on the Whombat, asked only when the cloud account has none. */
 function NameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
     <Field
-      label={COPY.claim.nameLabel}
+      label={managedCopyHere.claim.nameLabel}
       value={value}
       onChangeText={onChange}
       autoCapitalize="words"
@@ -598,9 +629,17 @@ const backToList = (onBack: () => void) => ({ label: COPY.appliances.title, onPr
 
 /** `claims.nearby` is on its way. */
 export function ClaimLookingScreen({ onBack }: { onBack: () => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
-    <Frame kicker={COPY.claim.kicker} title={COPY.claim.title} tip={COPY.claim.tip} back={backToList(onBack)}>
-      <Note text={COPY.claim.looking} />
+    <Frame
+      kicker={managedCopyHere.claim.kicker}
+      title={managedCopyHere.claim.title}
+      tip={managedCopyHere.claim.tip}
+      back={backToList(onBack)}
+    >
+      <Note text={managedCopyHere.claim.looking} />
     </Frame>
   );
 }
@@ -611,13 +650,17 @@ export function ClaimLookingScreen({ onBack }: { onBack: () => void }) {
  * until it's ticked; the terms open in the browser from the hosted UI. 44px targets.
  */
 function TermsCheck({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  const { rawLocale, language } = useI18n();
+  const { t } = useMobileT();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked }}
-        accessibilityLabel={COPY.claim.termsLabel}
+        accessibilityLabel={managedCopyHere.claim.termsLabel}
         onPress={() => onChange(!checked)}
         style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 }}
       >
@@ -640,7 +683,7 @@ function TermsCheck({ checked, onChange }: { checked: boolean; onChange: (v: boo
           ) : null}
         </View>
         <Text size={14.5} color={theme.colors.ink2}>
-          {COPY.claim.termsAgree}{' '}
+          {managedCopyHere.claim.termsAgree}{' '}
         </Text>
       </Pressable>
       <Pressable
@@ -650,9 +693,14 @@ function TermsCheck({ checked, onChange }: { checked: boolean; onChange: (v: boo
         style={{ minHeight: 44, justifyContent: 'center' }}
       >
         <Text size={14.5} color={theme.colors.ink} style={{ textDecorationLine: 'underline' }}>
-          {COPY.claim.termsLink}
+          {managedCopyHere.claim.termsLink}
         </Text>
       </Pressable>
+      {language === 'nl' ? (
+        <Text size={13} color={theme.colors.mut} style={{ width: '100%' }}>
+          {t('claim.termsEnglish')}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -667,6 +715,9 @@ export function ClaimFoundScreen({
   onNotThisOne,
   onCard,
 }: ClaimScreenProps & { box: NearbyAppliance; onNotThisOne: () => void; onCard: () => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [typed, setTyped] = useState('');
   const [name, setName] = useState('');
   const [bad, setBad] = useState(false);
@@ -679,40 +730,40 @@ export function ClaimFoundScreen({
   };
   return (
     <Frame
-      kicker={COPY.claim.kicker}
-      title={COPY.claim.foundTitle}
-      sub={COPY.claim.foundSub}
-      tip={COPY.claim.tip}
+      kicker={managedCopyHere.claim.kicker}
+      title={managedCopyHere.claim.foundTitle}
+      sub={managedCopyHere.claim.foundSub}
+      tip={managedCopyHere.claim.tip}
       back={backToList(onBack)}
     >
       <Card>
         <Row
           first
           dot="ok"
-          dotLabel={COPY.appliances.online}
+          dotLabel={managedCopyHere.appliances.online}
           title={modelLabel(box.model)}
           meta={box.device}
         />
       </Card>
       <LettersField
-        label={COPY.claim.letters}
+        label={managedCopyHere.claim.letters}
         value={typed}
         onChange={setTyped}
-        placeholder={COPY.claim.lettersPlaceholder}
-        hint={COPY.claim.lettersHint}
+        placeholder={managedCopyHere.claim.lettersPlaceholder}
+        hint={managedCopyHere.claim.lettersHint}
       />
       {askName ? <NameField value={name} onChange={setName} /> : null}
       <TermsCheck checked={agreed} onChange={setAgreed} />
-      <ErrorLine text={bad ? COPY.claim.malformed : error} />
+      <ErrorLine text={bad ? managedCopyHere.claim.malformed : error} />
       <Button
-        label={busy ? COPY.claim.claiming : COPY.claim.claim}
+        label={busy ? managedCopyHere.claim.claiming : managedCopyHere.claim.claim}
         size="lg"
         busy={busy}
         disabled={!agreed || !typed.trim() || (askName && !name.trim())}
         onPress={submit}
       />
-      <Button label={COPY.claim.notThisOne} variant="quiet" onPress={onNotThisOne} />
-      <Button label={COPY.claim.withCard} variant="quiet" onPress={onCard} />
+      <Button label={managedCopyHere.claim.notThisOne} variant="quiet" onPress={onNotThisOne} />
+      <Button label={managedCopyHere.claim.withCard} variant="quiet" onPress={onCard} />
     </Frame>
   );
 }
@@ -731,12 +782,15 @@ export function ClaimPickScreen({
   onCard: () => void;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
     <Frame
-      kicker={COPY.claim.kicker}
-      title={COPY.claim.severalTitle(boxes.length)}
-      sub={COPY.claim.severalSub}
-      tip={COPY.claim.tip}
+      kicker={managedCopyHere.claim.kicker}
+      title={managedCopyHere.claim.severalTitle(boxes.length)}
+      sub={managedCopyHere.claim.severalSub}
+      tip={managedCopyHere.claim.tip}
       back={backToList(onBack)}
     >
       <Card>
@@ -745,22 +799,22 @@ export function ClaimPickScreen({
             key={b.device}
             first={i === 0}
             dot="ok"
-            dotLabel={COPY.appliances.online}
+            dotLabel={managedCopyHere.appliances.online}
             title={modelLabel(b.model)}
             meta={b.device}
             action={
               <Button
-                label={COPY.claim.pick}
+                label={managedCopyHere.claim.pick}
                 variant="secondary"
                 onPress={() => onPick(b)}
-                accessibilityHint={COPY.claim.pickLabel(modelLabel(b.model), b.device)}
+                accessibilityHint={managedCopyHere.claim.pickLabel(modelLabel(b.model), b.device)}
               />
             }
           />
         ))}
       </Card>
-      <Button label={COPY.claim.noneOfThese} variant="quiet" onPress={onNone} />
-      <Button label={COPY.claim.withCard} variant="quiet" onPress={onCard} />
+      <Button label={managedCopyHere.claim.noneOfThese} variant="quiet" onPress={onNone} />
+      <Button label={managedCopyHere.claim.withCard} variant="quiet" onPress={onCard} />
     </Frame>
   );
 }
@@ -778,16 +832,19 @@ export function ClaimNoneScreen({
   onCard: () => void;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
     <Frame
-      kicker={COPY.claim.kicker}
-      title={COPY.claim.noneTitle}
-      sub={COPY.claim.noneSub}
-      tip={COPY.claim.tip}
+      kicker={managedCopyHere.claim.kicker}
+      title={managedCopyHere.claim.noneTitle}
+      sub={managedCopyHere.claim.noneSub}
+      tip={managedCopyHere.claim.tip}
       back={backToList(onBack)}
     >
-      <Button label={COPY.claim.lookAgain} size="lg" onPress={onLookAgain} />
-      <Button label={COPY.claim.withCard} variant="quiet" onPress={onCard} />
+      <Button label={managedCopyHere.claim.lookAgain} size="lg" onPress={onLookAgain} />
+      <Button label={managedCopyHere.claim.withCard} variant="quiet" onPress={onCard} />
     </Frame>
   );
 }
@@ -802,6 +859,9 @@ export function ClaimCardScreen({
   onBack,
   onCode,
 }: ClaimScreenProps & { initial?: ClaimCard | null; onCode: () => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [device, setDevice] = useState(initial?.device ?? '');
   const [secret, setSecret] = useState(initial?.secret ?? '');
   const [name, setName] = useState('');
@@ -812,30 +872,35 @@ export function ClaimCardScreen({
   const ready = agreed && device.trim() && secret.trim() && (!askName || name.trim());
   return (
     <Frame
-      kicker={COPY.claim.kicker}
-      title={COPY.claim.cardTitle}
-      sub={COPY.claim.cardSub}
-      tip={COPY.claim.cardTip}
+      kicker={managedCopyHere.claim.kicker}
+      title={managedCopyHere.claim.cardTitle}
+      sub={managedCopyHere.claim.cardSub}
+      tip={managedCopyHere.claim.cardTip}
       back={backToList(onBack)}
     >
-      <Button label={COPY.claim.scan} variant="secondary" size="lg" onPress={() => setScanning(true)} />
+      <Button
+        label={managedCopyHere.claim.scan}
+        variant="secondary"
+        size="lg"
+        onPress={() => setScanning(true)}
+      />
       <Note text={note} />
       <ErrorLine text={scanError} />
       <Field
-        label={COPY.claim.device}
+        label={managedCopyHere.claim.device}
         value={device}
         onChangeText={setDevice}
         mono
-        placeholder={COPY.claim.devicePlaceholder}
+        placeholder={managedCopyHere.claim.devicePlaceholder}
         autoCapitalize="none"
         autoCorrect={false}
       />
       <Field
-        label={COPY.claim.secret}
+        label={managedCopyHere.claim.secret}
         value={secret}
         onChangeText={setSecret}
         mono
-        placeholder={COPY.claim.secretPlaceholder}
+        placeholder={managedCopyHere.claim.secretPlaceholder}
         autoCapitalize="characters"
         autoCorrect={false}
         autoComplete="off"
@@ -844,7 +909,7 @@ export function ClaimCardScreen({
       <TermsCheck checked={agreed} onChange={setAgreed} />
       <ErrorLine text={error} />
       <Button
-        label={busy ? COPY.claim.claiming : COPY.claim.claim}
+        label={busy ? managedCopyHere.claim.claiming : managedCopyHere.claim.claim}
         size="lg"
         busy={busy}
         disabled={!ready}
@@ -855,22 +920,22 @@ export function ClaimCardScreen({
           )
         }
       />
-      <Button label={COPY.claim.withCode} variant="quiet" onPress={onCode} />
+      <Button label={managedCopyHere.claim.withCode} variant="quiet" onPress={onCode} />
       <QrScanner
         visible={scanning}
         onClose={() => setScanning(false)}
         onDenied={() => {
           setScanning(false);
-          setScanError(COPY.claim.scanDenied);
+          setScanError(managedCopyHere.claim.scanDenied);
         }}
         onScanned={(text) => {
           const card = parseClaimQr(text);
-          if (!card) return COPY.claim.scanWrong;
+          if (!card) return managedCopyHere.claim.scanWrong;
           setDevice(card.device);
           setSecret(card.secret);
           setScanning(false);
           setScanError(null);
-          setNote(COPY.claim.scanned);
+          setNote(managedCopyHere.claim.scanned);
           return null;
         }}
       />
@@ -916,6 +981,9 @@ export function RecoveryKitScreen({
   /** Reached from This Whombat (a new kit, BX-01): a way back. */
   onBack?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [kit] = useState<RecoveryKit>(() => newRecoveryKit({ applianceName, device, appliancePeerId }));
   const [registered, setRegistered] = useState<{ kitId: string; challenge: string } | null>(null);
   /** The kit's backup section: undefined while it's asked for (the kit waits for it), null: none set up (AP-265). */
@@ -939,18 +1007,18 @@ export function RecoveryKitScreen({
         .then((r) => setRegistered({ kitId: r.kitId, challenge: r.challenge }))
         .catch((e: unknown) => {
           if (e instanceof OperationError && e.code === 'recovery_key_exists') setRotate(true);
-          else setError(COPY.claim.errors.failed);
+          else setError(managedCopyHere.claim.errors.failed);
         });
     sessionOps.applianceStatus(session).then(
       (s) => (s.recovery.enrolled && s.recovery.kitVerified ? setRotate(true) : void register()),
       () => void register(),
     );
-  }, [session, kit]);
+  }, [session, kit, managedCopyHere.claim.errors.failed]);
 
   const rotateKit = async () => {
     const secret = recoverySecretFromKey(current);
     if (!secret) {
-      setError(COPY.claim.errors.recovery_rotation_invalid);
+      setError(managedCopyHere.claim.errors.recovery_rotation_invalid);
       return;
     }
     setBusy(true);
@@ -970,8 +1038,8 @@ export function RecoveryKitScreen({
     } catch (err) {
       setError(
         err instanceof OperationError && err.code === 'recovery_rotation_invalid'
-          ? COPY.claim.errors.recovery_rotation_invalid
-          : COPY.claim.errors.failed,
+          ? managedCopyHere.claim.errors.recovery_rotation_invalid
+          : managedCopyHere.claim.errors.failed,
       );
     } finally {
       setBusy(false);
@@ -984,14 +1052,14 @@ export function RecoveryKitScreen({
   if (rotate && !registered)
     return (
       <Frame
-        kicker={COPY.kit.kicker}
-        title={COPY.kit.rotateTitle}
-        sub={COPY.kit.rotateSub}
-        tip={COPY.kit.tip}
+        kicker={managedCopyHere.kit.kicker}
+        title={managedCopyHere.kit.rotateTitle}
+        sub={managedCopyHere.kit.rotateSub}
+        tip={managedCopyHere.kit.tip}
         {...(onBack ? { back: { label: 'Back', onPress: onBack } } : {})}
       >
         <Field
-          label={COPY.kit.currentKey}
+          label={managedCopyHere.kit.currentKey}
           value={current}
           onChangeText={setCurrent}
           mono
@@ -1002,7 +1070,7 @@ export function RecoveryKitScreen({
         />
         <ErrorLine text={error} />
         <Button
-          label={COPY.kit.rotate}
+          label={managedCopyHere.kit.rotate}
           size="lg"
           busy={busy}
           disabled={!current.trim()}
@@ -1060,6 +1128,9 @@ export function PairScreen({
   /** At the box (BX-02): its screen shows a code for this phone (the screen flow). */
   onScreen?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const theme = useTheme();
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -1104,7 +1175,7 @@ export function PairScreen({
       setRequest({ pairingId: r.pairingId, code: r.code });
       setState('pending');
     } catch {
-      setError(COPY.claim.errors.failed);
+      setError(managedCopyHere.claim.errors.failed);
     } finally {
       setBusy(false);
     }
@@ -1112,11 +1183,11 @@ export function PairScreen({
 
   return (
     <Frame
-      kicker={COPY.pair.kicker}
-      title={COPY.pair.title}
-      sub={COPY.pair.sub}
-      tip={COPY.pair.tip}
-      back={{ label: COPY.appliances.title, onPress: onBack }}
+      kicker={managedCopyHere.pair.kicker}
+      title={managedCopyHere.pair.title}
+      sub={managedCopyHere.pair.sub}
+      tip={managedCopyHere.pair.tip}
+      back={{ label: managedCopyHere.appliances.title, onPress: onBack }}
     >
       {request && state === 'pending' ? (
         <View style={{ gap: 8 }}>
@@ -1128,7 +1199,7 @@ export function PairScreen({
             color={theme.colors.mut}
             style={{ paddingHorizontal: 6 }}
           >
-            {COPY.pair.code}
+            {managedCopyHere.pair.code}
           </Text>
           <Text
             size={36}
@@ -1136,7 +1207,7 @@ export function PairScreen({
             weight={500}
             tracking={0.06}
             style={{ paddingHorizontal: 6 }}
-            accessibilityLabel={`${COPY.pair.code}: ${request.code.split('').join(' ')}`}
+            accessibilityLabel={`${managedCopyHere.pair.code}: ${request.code.split('').join(' ')}`}
             testID="pairing-code"
           >
             {request.code}
@@ -1149,7 +1220,7 @@ export function PairScreen({
             color={theme.colors.mut}
             style={{ paddingHorizontal: 6, paddingTop: 8 }}
           >
-            {COPY.pair.fingerprint}
+            {managedCopyHere.pair.fingerprint}
           </Text>
           <Text
             size={20}
@@ -1157,41 +1228,41 @@ export function PairScreen({
             weight={500}
             tracking={0.06}
             style={{ paddingHorizontal: 6 }}
-            accessibilityLabel={`${COPY.pair.fingerprint}: ${fingerprint.split('').join(' ')}`}
+            accessibilityLabel={`${managedCopyHere.pair.fingerprint}: ${fingerprint.split('').join(' ')}`}
             testID="pairing-fingerprint"
           >
             {fingerprint}
           </Text>
-          <Note text={COPY.pair.fingerprintHelp} />
-          <Note text={COPY.pair.waiting} />
+          <Note text={managedCopyHere.pair.fingerprintHelp} />
+          <Note text={managedCopyHere.pair.waiting} />
         </View>
       ) : (
         <>
           {onPhoneLink ? (
             <>
               <ScanButton
-                label={COPY.phone.pairScan}
+                label={managedCopyHere.phone.pairScan}
                 onPress={() => {
                   setScanError(null);
                   setScanning(true);
                 }}
               />
-              <Note text={COPY.phone.pairScanHint} />
+              <Note text={managedCopyHere.phone.pairScanHint} />
               <ErrorLine text={scanError} />
               {onScreen ? <ScreenWayRow onUse={onScreen} /> : null}
-              <OrDivider label={COPY.phone.pairOr} />
+              <OrDivider label={managedCopyHere.phone.pairOr} />
               <PhoneScanner
                 visible={scanning}
                 onClose={() => setScanning(false)}
                 onDenied={() => {
                   setScanning(false);
-                  setScanError(COPY.phone.scanDeniedSignedIn);
+                  setScanError(managedCopyHere.phone.scanDeniedSignedIn);
                 }}
                 onLink={(link) => {
                   setScanning(false);
                   onPhoneLink(link);
                 }}
-                escapeLabel={COPY.pair.start}
+                escapeLabel={managedCopyHere.pair.start}
                 onEscape={() => setScanning(false)}
               />
             </>
@@ -1201,18 +1272,24 @@ export function PairScreen({
           <ErrorLine
             text={
               error ??
-              (state === 'denied' ? COPY.pair.denied : state === 'expired' ? COPY.pair.expired : null)
+              (state === 'denied'
+                ? managedCopyHere.pair.denied
+                : state === 'expired'
+                  ? managedCopyHere.pair.expired
+                  : null)
             }
           />
           <Button
-            label={COPY.pair.start}
+            label={managedCopyHere.pair.start}
             size="lg"
             variant={onPhoneLink ? 'secondary' : 'primary'}
             busy={busy}
             onPress={() => void start()}
           />
-          {onRecover ? <Button label={COPY.pair.recover} variant="quiet" onPress={onRecover} /> : null}
-          <Note text={COPY.pair.noDevice} />
+          {onRecover ? (
+            <Button label={managedCopyHere.pair.recover} variant="quiet" onPress={onRecover} />
+          ) : null}
+          <Note text={managedCopyHere.pair.noDevice} />
         </>
       )}
     </Frame>
@@ -1249,6 +1326,9 @@ export function RecoverScreen({
   onSubmit: (input: KitInput) => Promise<string | null>;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [file, setFile] = useState<{ name: string; kit: SavedKit } | null>(null);
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -1260,20 +1340,24 @@ export function RecoverScreen({
       const picked = await pickKit();
       if (!picked) return;
       const read = readKitFile(picked.text);
-      if (!read.ok) return setError(read.reason === 'damaged' ? COPY.recover.damaged : COPY.recover.notAKit);
-      if (read.kit.device && read.kit.device !== device) return setError(COPY.recover.otherWhombat);
+      if (!read.ok)
+        return setError(
+          read.reason === 'damaged' ? managedCopyHere.recover.damaged : managedCopyHere.recover.notAKit,
+        );
+      if (read.kit.device && read.kit.device !== device)
+        return setError(managedCopyHere.recover.otherWhombat);
       setFile({ name: picked.name, kit: read.kit });
     } catch {
-      setError(COPY.recover.notAKit);
+      setError(managedCopyHere.recover.notAKit);
     }
   };
 
   const submit = async () => {
     setError(null);
     const secretKeyHex = file?.kit.secretKeyHex ?? recoverySecretFromKey(typed);
-    if (!secretKeyHex) return setError(COPY.recover.badKey);
+    if (!secretKeyHex) return setError(managedCopyHere.recover.badKey);
     const accountId = file?.kit.accountId ?? knownAccountId;
-    if (!accountId) return setError(COPY.recover.whoUnknown);
+    if (!accountId) return setError(managedCopyHere.recover.whoUnknown);
     setBusy(true);
     const refused = await onSubmit({ secretKeyHex, accountId, kit: file?.kit ?? null });
     if (refused) {
@@ -1284,22 +1368,22 @@ export function RecoverScreen({
 
   return (
     <Frame
-      kicker={COPY.recover.kicker}
-      title={COPY.recover.title}
-      sub={COPY.recover.sub}
-      tip={COPY.recover.tip}
-      back={{ label: COPY.appliances.title, onPress: onBack }}
+      kicker={managedCopyHere.recover.kicker}
+      title={managedCopyHere.recover.title}
+      sub={managedCopyHere.recover.sub}
+      tip={managedCopyHere.recover.tip}
+      back={{ label: managedCopyHere.appliances.title, onPress: onBack }}
     >
-      <Button label={COPY.recover.openFile} variant="secondary" onPress={() => void open()} />
+      <Button label={managedCopyHere.recover.openFile} variant="secondary" onPress={() => void open()} />
       {file ? (
-        <Note text={COPY.recover.opened(file.name)} />
+        <Note text={managedCopyHere.recover.opened(file.name)} />
       ) : (
         <Field
-          label={COPY.recover.key}
+          label={managedCopyHere.recover.key}
           value={typed}
           onChangeText={setTyped}
           mono
-          placeholder={COPY.recover.keyPlaceholder}
+          placeholder={managedCopyHere.recover.keyPlaceholder}
           autoCapitalize="characters"
           autoCorrect={false}
           autoComplete="off"
@@ -1307,7 +1391,7 @@ export function RecoverScreen({
       )}
       <ErrorLine text={error} />
       <Button
-        label={busy ? COPY.recover.working : COPY.recover.go}
+        label={busy ? managedCopyHere.recover.working : managedCopyHere.recover.go}
         size="lg"
         busy={busy}
         disabled={!file && !typed.trim()}
@@ -1329,7 +1413,10 @@ export function DeleteAccountScreen({
   onDelete: (typed: string) => Promise<string | null>;
   onBack: () => void;
 }) {
-  const t = COPY.account;
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
+  const t = managedCopyHere.account;
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1350,7 +1437,7 @@ export function DeleteAccountScreen({
       title={t.title}
       sub={t.sub}
       tip={t.tip}
-      back={{ label: COPY.appliances.title, onPress: onBack }}
+      back={{ label: managedCopyHere.appliances.title, onPress: onBack }}
     >
       <Card label={t.deleted}>
         {t.deletedItems.map((item, i) => (
@@ -1401,12 +1488,15 @@ export function SetupScreen({
   /** At the box (BX-02): its screen shows a code for this phone (the screen flow). */
   onScreen?: () => void;
 }) {
-  const t = COPY.setup;
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
+  const t = managedCopyHere.setup;
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const ways = [
     ...(onPasskey ? [PASSKEY_COPY.setupWay] : []),
-    ...(onScreen ? [COPY.screen.way] : []),
+    ...(onScreen ? [managedCopyHere.screen.way] : []),
     ...t.ways,
   ];
   return (
@@ -1415,7 +1505,7 @@ export function SetupScreen({
       title={t.title}
       sub={t.sub}
       tip={t.tip}
-      back={{ label: COPY.appliances.title, onPress: onBack }}
+      back={{ label: managedCopyHere.appliances.title, onPress: onBack }}
     >
       <Card>
         {ways.map((way, i) => (
@@ -1425,7 +1515,9 @@ export function SetupScreen({
       {onPasskey ? (
         <PasskeyButton onPasskey={onPasskey} onError={setError} label={PASSKEY_COPY.setupUse} />
       ) : null}
-      {onScreen ? <Button label={COPY.screen.use} variant="secondary" size="lg" onPress={onScreen} /> : null}
+      {onScreen ? (
+        <Button label={managedCopyHere.screen.use} variant="secondary" size="lg" onPress={onScreen} />
+      ) : null}
       <Field
         label={t.paste}
         hint={t.pasteHint}
@@ -1466,14 +1558,17 @@ export function IdentityStopScreen({
   /** Removes this phone's record of the Whombat (only offered when there is one). */
   onForget?: () => void;
 }) {
-  const t = COPY.identity;
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
+  const t = managedCopyHere.identity;
   const [title, text] =
     stop === 'changed'
       ? [t.changedTitle, t.changed]
       : stop === 'link'
         ? [t.linkTitle, t.link]
         : stop === 'code'
-          ? [COPY.phone.codeMismatchTitle, COPY.phone.codeMismatch]
+          ? [managedCopyHere.phone.codeMismatchTitle, managedCopyHere.phone.codeMismatch]
           : [t.kitTitle, t.kit];
   return (
     <GateScreen
@@ -1481,7 +1576,7 @@ export function IdentityStopScreen({
       text={text}
       actions={
         <>
-          <Button label={COPY.connection.back} size="lg" onPress={onBack} />
+          <Button label={managedCopyHere.connection.back} size="lg" onPress={onBack} />
           {onForget ? (
             <Button
               label={t.forget}
@@ -1505,8 +1600,15 @@ export function IdentityStopScreen({
 
 /** While a passkey opens the Whombat: the sign-in frame, nothing to do. */
 export function PasskeyProgressScreen({ name }: { name: string | null }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
-    <Frame kicker={COPY.signIn.kicker} title={PASSKEY_COPY.opening(name)} sub={PASSKEY_COPY.openingText}>
+    <Frame
+      kicker={managedCopyHere.signIn.kicker}
+      title={PASSKEY_COPY.opening(name)}
+      sub={PASSKEY_COPY.openingText}
+    >
       <Loading />
     </Frame>
   );
@@ -1522,14 +1624,17 @@ export function PasskeyStopScreen({
   onOtherWay: () => void;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   return (
     <GateScreen
-      title={COPY.setup.title}
+      title={managedCopyHere.setup.title}
       text={text}
       actions={
         <>
           <Button label={PASSKEY_COPY.otherWay} size="lg" onPress={onOtherWay} />
-          <Button label={COPY.connection.back} variant="secondary" size="lg" onPress={onBack} />
+          <Button label={managedCopyHere.connection.back} variant="secondary" size="lg" onPress={onBack} />
         </>
       }
     />

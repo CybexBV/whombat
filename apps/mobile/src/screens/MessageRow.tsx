@@ -6,6 +6,7 @@
  * an agent's activity, presence or another row's state don't re-render it. A thread's first message in Chat and Feedback
  * swipes left to Settle (or Open again) and More (`swipe`).
  */
+
 import type { MarkLike } from '@whombat/brand';
 import type { GuideActInput, ThreadStage, WorkLine } from '@whombat/client';
 import { authorStatus, FIND_MY_WATCH_WORDS, jobResultView, wordsUnderCard } from '@whombat/client';
@@ -32,6 +33,7 @@ import { LOAD_EARLIER_REPLIES, type MovedCardLink, THREAD_PAGE_SIZE } from '../d
 import { SETTLE_COPY } from '../data/threadSettle';
 import type { MessageFileActions } from '../data/useFiles';
 import type { ThreadWorkView } from '../data/working';
+import { useI18n, useMobileT } from '../i18n';
 import { openHref } from '../navigation/hooks';
 import { useTheme } from '../theme/theme';
 import { MessageAttachmentsView } from '../ui/attachments';
@@ -251,11 +253,13 @@ export const MessageRow = memo(function MessageRow({
   movedCard = null,
   below = null,
 }: MessageRowProps) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
+  const { rawLocale } = useI18n();
   // “just now” for its first minute, then its time: the row follows the clock only until then.
   const time = useNowLabel(
-    (now) => sentLabel(item.sentAt, item.time, now, timeZone),
+    (now) => sentLabel(item.sentAt, item.time, now, timeZone, rawLocale),
     (now) => item.showAuthor && sentFollowsClock(item.sentAt, now),
   );
   /** A selection of words was showing when this tap began (`textSelectionShowing`). */
@@ -291,7 +295,7 @@ export const MessageRow = memo(function MessageRow({
   // The assessor's card: its options while undecided (on a runtime with `feedback.decisions`), the full assessment folded.
   const assessmentCardProps = (card: AssessmentCardModel | undefined) => {
     if (!card) return {};
-    const details = { title: 'Full assessment', rows: card.rows, items: card.evidence };
+    const details = { title: tMobile('screens.full-assessment'), rows: card.rows, items: card.evidence };
     if (!card.options) return { details };
     return {
       details,

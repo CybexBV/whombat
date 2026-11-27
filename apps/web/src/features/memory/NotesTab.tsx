@@ -8,6 +8,7 @@ import { LoadErrorNote } from '../../app/runtime';
 import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import type { SettingsTabProps } from '../agent/settings/AgentTab';
 import settings from '../agent/settings/AgentTab.module.css';
 import { SaveBar } from '../agent/settings/SaveBar';
@@ -22,9 +23,10 @@ import own from './MemoryEntries.module.css';
  * it); under it when it changed last. Not in the mocks: the settings page's rows.
  */
 export function NotesTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
+  const { tag: uiLocale } = useWebI18n();
   const ids = useId();
   const { agent } = profile;
-  const copy = notesCopy(agent.name);
+  const copy = notesCopy(agent.name, uiLocale);
   const toast = useToast();
   const { data: bootstrap } = useBootstrap({ params: { burrow } });
   const { data, error, refetch } = useAgentNotes({ params: { burrow } });
@@ -37,7 +39,8 @@ export function NotesTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
   const text = form.draft?.text ?? '';
   const used = [...text.replace(/\r\n?/g, '\n').trim()].length;
   const over = used > AGENT_NOTES_MAX;
-  const changed = data?.updatedAt != null ? formatDate(data.updatedAt, timeZone, { now: Date.now() }) : null;
+  const changed =
+    data?.updatedAt != null ? formatDate(data.updatedAt, timeZone, { now: Date.now() }, uiLocale) : null;
 
   async function onSave() {
     if (!form.draft || over) return;
@@ -61,7 +64,7 @@ export function NotesTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
           <SectionLabel id={`${ids}-label`}>{copy.title}</SectionLabel>
           {data && (
             <span className={own.usage} id={`${ids}-usage`}>
-              {memoryUsageText(used, data.limit)}
+              {memoryUsageText(used, data.limit, uiLocale)}
             </span>
           )}
         </div>

@@ -5,9 +5,11 @@
  * holds the one thing that needs you (the hero, with what else waits on a line each) or up to three things going on;
  * the servers sit in a strip along the bottom. The runtime decides all of it (core's planner); this draws it.
  */
+
 import { WhombatLogo } from '@whombat/brand/react';
 import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
 import { BluetoothChip } from '../bluetooth/BluetoothLayer';
+import { useT } from '../i18n/react';
 import {
   awayText,
   barShows,
@@ -20,7 +22,7 @@ import {
   sparkPoints,
 } from '../lib/calm';
 import type { DeskGlance, DeskLook, DeskPaired, DeskPower } from '../lib/desk';
-import { ago, clockText, DESK_WORDS, dateText, duration, fill, powerChip } from '../lib/deskCopy';
+import { clockText, dateText, deskWordsCopy, duration, elapsedText, fill, powerChip } from '../lib/deskCopy';
 import { type LookStage, lookStep, researchSays } from '../lib/needsYou';
 import { chipView } from '../lib/wifiCopy';
 import { Bars, Icon as WifiIcon } from '../wifi/icons';
@@ -32,7 +34,6 @@ import { Icon } from './icons';
 import { ClockText, Face, LockChip, Mark, PowerBanner } from './parts';
 import { useRemoteHelp } from './RemoteHelp';
 
-const W = DESK_WORDS.calm;
 const NONE: ReadonlySet<string> = new Set();
 
 export interface CalmProps {
@@ -135,6 +136,11 @@ export type ChipsProps = Pick<
  * help, updating, the battery and the lock. The calm glance's top bar and the screen of widgets' show the same.
  */
 export function BarChips(props: ChipsProps & { onSheet: () => void }) {
+  const t = useT();
+  const W = deskWordsCopy(t).calm;
+
+  const DESK_WORDS = deskWordsCopy(t);
+
   const { calm, paired, power, unlocked, onSheet } = props;
   const { summary, open: openWifi } = useNetwork();
   const { help, open: openHelp } = useRemoteHelp();
@@ -152,7 +158,7 @@ export function BarChips(props: ChipsProps & { onSheet: () => void }) {
       ),
     );
   if (summary) {
-    const v = chipView(summary);
+    const v = chipView(summary, t);
     const noNetwork = summary.via === 'none';
     if (barShows(calm.bar.network, noNetwork))
       chips.push(
@@ -220,7 +226,7 @@ export function BarChips(props: ChipsProps & { onSheet: () => void }) {
       chips.push(
         chipButton(
           'battery',
-          powerChip(power),
+          powerChip(power, t),
           <>
             <BatteryIcon percent={power.percent} />
             {low
@@ -228,7 +234,7 @@ export function BarChips(props: ChipsProps & { onSheet: () => void }) {
               : out
                 ? power.minutesLeft === null
                   ? fill(W.bar.onBatteryNoTime, { n: power.percent })
-                  : fill(W.bar.onBattery, { time: duration(power.minutesLeft) })
+                  : fill(W.bar.onBattery, { time: duration(power.minutesLeft, t) })
                 : fill(W.bar.charge, { n: power.percent })}
             {!out && power.charging && <Icon name="plug" className={styles.chipIcon} />}
           </>,
@@ -275,6 +281,8 @@ export function CalmSheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const W = deskWordsCopy(useT()).calm;
+
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: catches bubbling keys and clicks, nothing of its own
     <div
@@ -313,15 +321,18 @@ export function StatusSheet({
   power: DeskPower | null;
   onClose: () => void;
 }) {
+  const t = useT();
+  const W = deskWordsCopy(t).calm;
+
   const { summary, open: openWifi } = useNetwork();
   const { help, open: openHelp } = useRemoteHelp();
   const rows: [string, string, (() => void) | null][] = [];
   if (summary) {
-    const v = chipView(summary);
+    const v = chipView(summary, t);
     rows.push([W.sheet.network, summary.via === 'cable' ? W.bar.cable : v.text, openWifi]);
     rows.push([W.sheet.internet, summary.online ? W.bar.online : W.bar.offline, null]);
   }
-  if (power) rows.push([W.sheet.battery, powerChip(power), null]);
+  if (power) rows.push([W.sheet.battery, powerChip(power, t), null]);
   if (help) rows.push([W.sheet.remoteHelp, help.connected ? W.bar.remoteLive : W.bar.remoteOn, openHelp]);
   if (calm.update) rows.push([W.sheet.updates, W.bar.updates[calm.update], null]);
   return (
@@ -361,6 +372,11 @@ function heroStage(hero: CalmHero): LookStage | null {
 }
 
 function Hero(props: CalmProps & { hero: CalmHero }) {
+  const t = useT();
+  const W = deskWordsCopy(t).calm;
+
+  const DESK_WORDS = deskWordsCopy(t);
+
   const { hero, glance, now, paired, onFix, onStep, onIgnore, onServer } = props;
   const look = hero.look ? glance.needsYou.looks?.find((l) => l.key === hero.look) : undefined;
   const open = () =>
@@ -368,12 +384,12 @@ function Hero(props: CalmProps & { hero: CalmHero }) {
   // A look the assistant looked into (LR-09, CG-373): its words beside its face, green once fixed, no age then.
   const stage = heroStage(hero);
   const title = stage && stage !== 'looking' && look?.research?.title ? look.research.title : hero.title;
-  const says = stage ? researchSays(look, stage, hero.detail) : null;
+  const says = stage ? researchSays(look, stage, hero.detail, t) : null;
   const since =
     hero.since && stage !== 'fixed'
       ? fill(W.since, {
           clock: clockText(Date.parse(hero.since), paired.timeZone),
-          ago: ago(hero.since, now).replace(' ago', ''),
+          ago: elapsedText(hero.since, now, t),
         })
       : null;
   const stop = (f: () => void) => (e: MouseEvent) => {
@@ -487,6 +503,8 @@ function Hero(props: CalmProps & { hero: CalmHero }) {
 }
 
 function AlsoLine({ also, onOpen }: { also: CalmAlso; onOpen: () => void }) {
+  const W = deskWordsCopy(useT()).calm;
+
   return (
     <button
       type="button"
@@ -505,6 +523,8 @@ function AlsoLine({ also, onOpen }: { also: CalmAlso; onOpen: () => void }) {
 }
 
 function Moment({ m, paired }: { m: CalmMoment; paired: DeskPaired }) {
+  const W = deskWordsCopy(useT()).calm;
+
   return (
     <div className={styles.moment} data-pinned={m.pinned || undefined} data-kind={m.kind}>
       <span className={styles.momentName}>
@@ -531,6 +551,11 @@ function Moment({ m, paired }: { m: CalmMoment; paired: DeskPaired }) {
 /* The strip (DK-116, DK-117) ------------------------------------------------------------------------------------- */
 
 function StripChip({ s, onServer }: { s: CalmServer; onServer?: (id: string) => void }) {
+  const t = useT();
+  const W = deskWordsCopy(t).calm;
+
+  const DESK_WORDS = deskWordsCopy(t);
+
   const say = s.work === 'done' ? W.strip.done : s.work === 'next' ? W.strip.next : s.say;
   const inner = (
     <>
@@ -581,11 +606,14 @@ function StripChip({ s, onServer }: { s: CalmServer; onServer?: (id: string) => 
 /* Welcome back (DK-120…DK-122) ------------------------------------------------------------------------------------ */
 
 function Welcome({ digest, props }: { digest: CalmDigest; props: CalmProps }) {
+  const t = useT();
+  const W = deskWordsCopy(t).calm;
+
   const tz = props.paired.timeZone;
   return (
     <section className={styles.welcome}>
       <h1 className={styles.welcomeTitle}>{W.welcome.title}</h1>
-      <p className={styles.welcomeAway}>{fill(W.welcome.away, { time: awayText(digest.awayS) })}</p>
+      <p className={styles.welcomeAway}>{fill(W.welcome.away, { time: awayText(digest.awayS, t) })}</p>
       <ul className={styles.welcomeList}>
         {digest.items.map((it) => (
           <li key={`${it.icon}-${it.text}`} className={styles.welcomeRow} data-icon={it.icon}>
@@ -624,6 +652,11 @@ function Welcome({ digest, props }: { digest: CalmDigest; props: CalmProps }) {
 /* The glance ----------------------------------------------------------------------------------------------------- */
 
 export function CalmGlance(props: CalmProps) {
+  const t = useT();
+  const W = deskWordsCopy(t).calm;
+
+  const DESK_WORDS = deskWordsCopy(t);
+
   const { calm, paired, glance, now, power } = props;
   const tz = paired.timeZone;
   const [sheet, setSheet] = useState<'status' | 'done' | null>(null);
@@ -655,7 +688,8 @@ export function CalmGlance(props: CalmProps) {
       {hero && <div className={styles.edge} data-tone={heroStage(hero) === 'fixed' ? 'ok' : hero.tone} />}
       {sample && (
         <div className={styles.sample}>
-          {W.sample} · {Math.max(0, Math.ceil((Date.parse(sample.until) - now) / 1000))} s
+          {W.sample} · {Math.max(0, Math.ceil((Date.parse(sample.until) - now) / 1000))}
+          {t('desk.calm.s')}
         </div>
       )}
       <TopBar {...props} onSheet={() => setSheet('status')} />
@@ -664,7 +698,7 @@ export function CalmGlance(props: CalmProps) {
           <div className={styles.clock}>
             <ClockText text={clockText(now, tz)} />
           </div>
-          <div className={styles.date}>{dateText(now, tz)}</div>
+          <div className={styles.date}>{dateText(now, tz, t.locale)}</div>
         </div>
         {!digest && (
           <div className={styles.headline} data-tone={calm.headline.tone}>

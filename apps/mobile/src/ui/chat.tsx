@@ -50,6 +50,7 @@ import {
   type RunSettledModel,
 } from '../data/messages';
 import { type ThreadWorkView, thinkingLabels } from '../data/working';
+import { useI18n, useMobileT } from '../i18n';
 import { nextElapsedTick, RUN_SECONDS_BELOW_MS } from '../lib/elapsed';
 import { pulseRange } from '../lib/pulse';
 import { useOpenUrl } from '../navigation/hooks';
@@ -120,10 +121,11 @@ export function ReceiptsCard({
   receipts: readonly Receipt[];
   onOpen?: (receipt: Receipt) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <View
-      accessibilityLabel="Receipts"
+      accessibilityLabel={tMobile('ui.receipts')}
       style={{
         alignSelf: 'stretch',
         flexDirection: 'column',
@@ -275,6 +277,8 @@ function DigestRow({ item }: { item: DigestItem }) {
 
 /** A digest card (RM-08), whole: `INBOX · 7 UNREAD`, sections of items; collapsed ones fold to a line. */
 export function DigestCardView({ card }: { card: DigestCard }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
   return (
@@ -293,7 +297,7 @@ export function DigestCardView({ card }: { card: DigestCard }) {
       }}
     >
       <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-        {formatDigestLabel(card.title, card.summary)}
+        {formatDigestLabel(card.title, card.summary, rawLocale)}
       </Text>
       {card.sections.map((section, i) => {
         const open = !section.collapsed || opened.has(i);
@@ -364,8 +368,10 @@ export function ThinkingBubble({
   /** The stop is on its way: the button waits. */
   stopping?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
-  const label = shown ?? typingLabel(name);
+  const label = shown ?? typingLabel(name, rawLocale);
   const words = (
     <View
       accessible
@@ -476,13 +482,14 @@ export function DayDivider({ label }: { label: string }) {
 
 /** The “New” line above the first message the reader hadn't read when they opened the conversation (MX-05). */
 export function UnreadLine({ label, tone = 'brand' }: { label: string; tone?: 'brand' | 'new' }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   // In Chat and Feedback blue means “new” everywhere: the inbox's dot and count, and this line in a thread.
   const color = tone === 'new' ? theme.chart.chart1 : theme.colors.brand;
   return (
     <View
       accessible
-      accessibilityLabel="New messages from here"
+      accessibilityLabel={tMobile('ui.new-messages-from-here')}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
     >
       <View style={{ flex: 1, height: 1, backgroundColor: color }} />
@@ -582,6 +589,7 @@ export function RunProgressBar({
   height?: number;
   style?: ViewStyle;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const reduced = useReducedMotion();
   const sweep = useRef(new Animated.Value(0)).current;
@@ -600,7 +608,7 @@ export function RunProgressBar({
   return (
     <View
       accessibilityRole="progressbar"
-      accessibilityLabel="Run progress"
+      accessibilityLabel={tMobile('ui.run-progress')}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(progress) }}
       onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
       style={[
@@ -965,13 +973,14 @@ export function CardSummaryView({
 
 /** “Hide card” in the top right corner of a card opened from its line (AP-730): returns the line. 44dp. */
 export function HideCardButton({ onPress }: { onPress: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
       onPress={onPress}
       feedback="wash"
       accessibilityRole="button"
-      accessibilityLabel="Hide card"
+      accessibilityLabel={tMobile('ui.hide-card')}
       accessibilityState={{ expanded: true }}
       ringRadius={12}
       style={{
@@ -1008,6 +1017,8 @@ export function RunLineView({
   onRetry?: () => void;
   retrying?: boolean;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const reduced = useReducedMotion();
   const pulse = useRef(new Animated.Value(0)).current;
@@ -1036,7 +1047,7 @@ export function RunLineView({
         feedback="wash"
         accessibilityRole="link"
         accessibilityLabel={[line.lead, line.detail].filter(Boolean).join(', ')}
-        accessibilityHint="Opens the run"
+        accessibilityHint={tMobile('ui.opens-the-run')}
         ringRadius={10}
         style={{ flex: 1, minHeight: 44, justifyContent: 'center', gap: 6, paddingVertical: 6 }}
       >
@@ -1072,14 +1083,14 @@ export function RunLineView({
           disabled={retrying}
           feedback="wash"
           accessibilityRole="button"
-          accessibilityLabel="Try again"
+          accessibilityLabel={tClient('settings.retry')}
           accessibilityHint={`Asks ${line.agentName} to try this run again`}
           accessibilityState={{ disabled: retrying, busy: retrying }}
           ringRadius={10}
           style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8, marginRight: -8 }}
         >
           <Text size={13.5} weight={600} color={retrying ? theme.colors.mut : theme.colors.brand}>
-            Try again
+            {tClient('settings.retry')}
           </Text>
         </Touchable>
       ) : null}
@@ -1285,6 +1296,7 @@ export function ReportLineView({
   /** The whole report, under the row while `expanded`. */
   children?: ReactNode;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const facts = [line.reference, ...line.meta].join(' · ');
   return (
@@ -1345,7 +1357,7 @@ export function ReportLineView({
             }}
           >
             <Text size={13.5} weight={500} numberOfLines={1}>
-              {expanded ? 'Hide details' : 'Details'}
+              {expanded ? tMobile('ui.hide-details') : tMobile('ui.details')}
             </Text>
           </View>
         </Touchable>
@@ -1398,9 +1410,12 @@ export function LiveRunCardView({
   onWatch: () => void;
   onOpen: () => void;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const nowMs = useElapsedClock(clock, run.startedAt, RUN_SECONDS_BELOW_MS);
-  const elapsed = formatDuration(Math.max(0, nowMs - new Date(run.startedAt).getTime()));
+  const elapsed = formatDuration(Math.max(0, nowMs - new Date(run.startedAt).getTime()), rawLocale);
   return (
     <View
       style={{
@@ -1463,7 +1478,7 @@ export function LiveRunCardView({
           onPress={onOpen}
           feedback="wash"
           accessibilityRole="button"
-          accessibilityLabel="Show card"
+          accessibilityLabel={tMobile('ui.show-card')}
           accessibilityState={{ expanded: false }}
           ringRadius={12}
           style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -12 }}
@@ -1560,6 +1575,7 @@ export function ThreadRepliesRow({
    */
   jobLine?: WorkLine | null;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   // The job's line says what “Handed over” said, and what waits for the person when that is its work.
@@ -1571,7 +1587,7 @@ export function ThreadRepliesRow({
   const workText = workLine ? (workLine.line ?? `${workLine.name} ${workLine.text}`) : null;
   // Its own clock: the row re-renders when the words change, not the conversation's list.
   const last = useNowLabel(
-    (now) => (lastAt ? lastReplyText(lastAt, now, timeZone) : null),
+    (now) => (lastAt ? lastReplyText(lastAt, now, timeZone, rawLocale) : null),
     (now) => !!lastAt && !work && lastReplyFollowsClock(lastAt, now),
   );
   const lastText = workLine || stage ? null : last;
@@ -2073,6 +2089,8 @@ export function Composer({
   /** Which draft this is (a conversation, a thread): a recording for another one is dropped. Default `placeholder`. */
   voiceKey?: string;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [text, setText] = useState(keptDraft);
   // The latest text, ahead of React's re-render: two quick changes (Enter picking a mention, then another key) must read
@@ -2202,10 +2220,10 @@ export function Composer({
             <MicButton voice={voice} disabled={disabled} />
             <Touchable
               onPress={send}
-              accessibilityLabel="Send"
+              accessibilityLabel={tClient('reports.send')}
               accessibilityHint={
                 attachments.some((a) => a.state === 'uploading')
-                  ? 'Waits for the upload to finish'
+                  ? tMobile('ui.waits-for-the-upload-to-finish')
                   : undefined
               }
               accessibilityState={{ disabled: !sendable }}

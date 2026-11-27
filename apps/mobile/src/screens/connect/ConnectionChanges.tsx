@@ -9,6 +9,7 @@
  * code: the steps to make one and its field) and Remove (asked first; the Vault's sync asks in place whether the
  * entries it kept in step stay in the Vault). Before, a button opened the web page.
  */
+
 import { disconnectQuery, ONEPASSWORD_APP_TEXT, ONEPASSWORD_DISCONNECT_OPTIONS } from '@whombat/client';
 import {
   accessChoices,
@@ -33,10 +34,10 @@ import { useMacChoices } from '@whombat/client/hosts/react';
 import { useConnectionWrite } from '@whombat/client/react';
 import {
   type CatalogEntry,
-  CONNECTION_ACCESS_LABELS,
   type ConnectionAccessLevel,
   type ConnectionView,
   catalogSignIn,
+  connectionAccessLabels,
 } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import type { OnePasswordDisconnectChoice } from '@whombat/core/vault';
@@ -56,6 +57,7 @@ import {
 import { connectionsWebPath } from '../../data/connections';
 import { useAgentWords } from '../../data/useAgent';
 import { useWebUrl } from '../../data/useWebUrl';
+import { useI18n, useMobileT } from '../../i18n';
 import { holdPhoneConnect } from '../../managed/connectReturn';
 import { useManaged } from '../../managed/context';
 import { Text } from '../../theme/Text';
@@ -161,6 +163,9 @@ export function LevelBlock({
   conn: ConnectionView;
   onSignInAgain: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectionAccessLabelsHere = connectionAccessLabels(rawLocale);
+
   const assistant = useAgentWords();
   const words: ConnectionWords = connectionWords(assistant.name);
   const update = useConnectionWrite(api.connections.update, slug);
@@ -222,7 +227,7 @@ export function LevelBlock({
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text size={15} weight={600}>
-                {CONNECTION_ACCESS_LABELS[conn.access]}
+                {connectionAccessLabelsHere[conn.access]}
               </Text>
               {current ? <Note>{current.text}</Note> : null}
             </View>
@@ -411,6 +416,7 @@ export function SignInBlock({
   /** The form asked that way is laid out: the screen brings it into sight. */
   onAgainShown?: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const agent = useAgentWords();
   const managed = useManaged();
   const webUrl = useWebUrl();
@@ -723,7 +729,7 @@ export function SignInBlock({
                     label={view.again.label}
                     variant={needs ? 'primary' : 'secondary'}
                     disabled={busy}
-                    accessibilityHint="Opens in your browser"
+                    accessibilityHint={tMobile('ui.opens-in-your-browser')}
                     onPress={() => void signInAgain()}
                   />
                 ) : null}

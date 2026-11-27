@@ -4,11 +4,13 @@
  * it holds whether the sheet is open and draws it over the whole stage, so the scenes only place a chip or a button.
  * Without a network summary (no desk socket, an older runtime) nothing of it shows and the screens are as before.
  */
+
 import { createContext, type ReactNode, useCallback, useContext, useState } from 'react';
 import deskStyles from '../desk/desk.module.css';
+import { useT } from '../i18n/react';
 import type { Client } from '../lib/client';
 import type { NetworkSummary } from '../lib/network';
-import { chipLabel, chipView, WIFI } from '../lib/wifiCopy';
+import { chipLabel, chipView, wifiCopy } from '../lib/wifiCopy';
 import { Bars, Icon } from './icons';
 import { type SheetInitial, WifiSheet } from './WifiSheet';
 import styles from './wifi.module.css';
@@ -58,16 +60,18 @@ export function useNetwork(): { summary: NetworkSummary | null; open: () => void
 
 /** The network chip: cable, the Wi-Fi network's name, or none; amber while Whombat can't be reached. Opens the sheet. */
 export function NetworkChip({ after }: { after?: ReactNode }) {
+  const t = useT();
+
   const { summary, open } = useContext(Context);
   if (!summary) return null;
-  const v = chipView(summary);
+  const v = chipView(summary, t);
   return (
     <>
       <button
         type="button"
         className={`${deskStyles.chip} ${deskStyles.chipButton} ${styles.chip}`}
         data-warn={v.warn || undefined}
-        aria-label={chipLabel(summary)}
+        aria-label={chipLabel(summary, t)}
         onClick={(e) => {
           // Not the locked glance's “touch to unlock”.
           e.stopPropagation();
@@ -95,6 +99,9 @@ export function NetworkChip({ after }: { after?: ReactNode }) {
  * network.” and *Choose Wi-Fi*; otherwise the text console's words, as before.
  */
 export function WaitingHint({ fallback, className }: { fallback: ReactNode; className?: string }) {
+  const t = useT();
+  const WIFI = wifiCopy(t);
+
   const { summary, open } = useContext(Context);
   if (!summary || summary.wifiMissing) return <>{fallback}</>;
   return (

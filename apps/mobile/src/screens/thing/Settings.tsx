@@ -9,6 +9,7 @@
  * {title}” with its questions and “Or ask something else…”. Whatever opens after a sheet waits until it is down. Words
  * and arrangement: `data/serviceSettings.ts`.
  */
+
 import { useQueryClient } from '@tanstack/react-query';
 import { undoOutcome } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
@@ -29,8 +30,9 @@ import {
   settingSheet,
   type ThingSettingsPanel,
 } from '../../data/serviceSettings';
-import { THING_PAGE_COPY } from '../../data/thingPage';
+import { thingPageCopy } from '../../data/thingPage';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { BigButton, MonoLabel } from '../../ui/assistant';
@@ -48,6 +50,9 @@ import { CardQuiet } from './parts';
  * reads the page again. Its refusal (“…was changed again since…”) is said in the server's words.
  */
 export function usePutBack(thing: string): (changeId: string) => void {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const { slug } = useBurrowBase();
   const qc = useQueryClient();
   const undo = useUndoChange(slug);
@@ -59,7 +64,7 @@ export function usePutBack(thing: string): (changeId: string) => void {
       .then((result) => {
         if (result.status !== 'ok') return feedback.onResult(result);
         if (result.data.state === 'requested') return showNotice(undoOutcome(result.data, assistant).message);
-        showNotice(result.data.state === 'asked' ? THING_PAGE_COPY.undoAsked : SETTINGS_COPY.putBackDone);
+        showNotice(result.data.state === 'asked' ? thingPageCopyHere.undoAsked : SETTINGS_COPY.putBackDone);
       }, feedback.onError)
       .finally(() => {
         void qc.invalidateQueries({ queryKey: queryKeys.scope('things.page', { burrow: slug, thing }) });
@@ -129,6 +134,7 @@ function SettingRow({
   ctx: PanelContext;
   onChoose: () => void;
 }) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   const act = ctx.act ?? null;
   const view = useMemo(() => settingRowView(row, act?.guesses[guessKey(row.id)]?.value), [row, act?.guesses]);
@@ -228,7 +234,7 @@ function SettingRow({
     <View accessible accessibilityLabel={view.spoken} style={style}>
       <RowWords view={view} />
       {view.look === 'switch' ? (
-        <RowValue text={view.on ? 'On' : 'Off'} />
+        <RowValue text={view.on ? tClient('automations.on') : tClient('notifications.off')} />
       ) : (
         <>
           <RowValue text={view.value} />

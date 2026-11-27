@@ -63,6 +63,7 @@ import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { useWebI18n } from '../../i18n/provider';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { backupErrorText } from './BackupDestination';
 import { BackupDetail } from './BackupDetail';
@@ -447,6 +448,7 @@ export function PasskeyLine({ onArmed }: { onArmed: () => void }) {
 
 /** NEEDS YOU: the older backups on the box, when there are any; nothing otherwise. */
 function BackupNeedsYou({ placeName }: { placeName: string | null }) {
+  const { tag: uiLocale } = useWebI18n();
   const { session } = useAppServices();
   const list = useBackupCheckpoints(session);
   const local = list.data?.local ?? null;
@@ -488,7 +490,7 @@ function BackupNeedsYou({ placeName }: { placeName: string | null }) {
             <div className={styles.needsMain}>
               <span className={styles.needsTitle}>{L.title(local.count)}</span>
               <span className={styles.needsMeta}>
-                {L.meta(localRange(local), formatBytes(local.bytes), placeName)}
+                {L.meta(localRange(local), formatBytes(local.bytes, uiLocale), placeName)}
               </span>
               {error ? (
                 <span className={styles.needsError} role="alert">
@@ -524,7 +526,7 @@ function BackupNeedsYou({ placeName }: { placeName: string | null }) {
           <div className={tw.dialogHead}>
             <ModalTitle className={tw.dialogTitle}>{L.removeTitle}</ModalTitle>
             <ModalDescription className={tw.dialogLead}>
-              {L.removeLead(formatBytes(local?.bytes ?? 0))}
+              {L.removeLead(formatBytes(local?.bytes ?? 0, uiLocale))}
             </ModalDescription>
           </div>
           <div className={tw.dialogActions}>

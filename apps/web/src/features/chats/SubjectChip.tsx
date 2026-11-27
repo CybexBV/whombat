@@ -1,7 +1,8 @@
-import { THING_STATUS_LABELS } from '@whombat/client';
+import { thingStatusLabels } from '@whombat/client';
 import { useHomeOverview } from '@whombat/client/react';
 import { type ChatSubject, thingHref, thingId } from '@whombat/core';
 import { cx, variantClass } from '../../components/cx';
+import { useLocaleWords } from '../../i18n/words';
 import { AppLink } from '../files/AppLink';
 import { useThingLinkProps } from '../things/prefetch';
 import styles from './SubjectChip.module.css';
@@ -23,6 +24,7 @@ export function SubjectChip({
   /** False inside another link (a row of the Settled list): the pill alone. */
   link?: boolean;
 }) {
+  const THING_STATUS_LABELS = useLocaleWords(thingStatusLabels);
   const { data } = useHomeOverview({ params: { burrow } }, { retry: false });
   const thing = data?.things.find((t) => t.id === thingId(subject.kind, subject.id));
   // Its page is read while the pointer rests on the pill (page-speed.md AP-2660).

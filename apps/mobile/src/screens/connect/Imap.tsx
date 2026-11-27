@@ -5,6 +5,7 @@
  * Change, which opens the server fields (open from the start when nothing was found), and a known provider's hint.
  * Connected: the account, its servers and state, Change password, Disconnect (asked first), the checks and Check again.
  */
+
 import {
   draftFromSettings,
   hintLinks,
@@ -40,6 +41,7 @@ import { formatAgo } from '@whombat/core/text';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useViewContext } from '../../data/BurrowProvider';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { FormField, FormMessage } from '../../ui/formField';
@@ -374,6 +376,9 @@ export function MailAccount({
   below?: ReactNode;
   bottomInset: number;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { now, timeZone } = useViewContext();
   const connect = useImapConnect();
@@ -470,7 +475,9 @@ export function MailAccount({
                 {mailCheckName(item)}
               </Text>
               <Text size={13} color={theme.colors.mut} style={{ flex: 1 }}>
-                {item.state === 'ok' ? 'Working' : (item.message ?? 'Couldn’t check')}
+                {item.state === 'ok'
+                  ? tMobile('screens.working')
+                  : (item.message ?? tMobile('screens.couldnt-check'))}
               </Text>
             </View>
           ))}
@@ -517,7 +524,7 @@ export function MailAccount({
             {check.isPending
               ? IMAP_COPY.checking
               : connection.checkedAt
-                ? `Checked ${formatAgo(connection.checkedAt, now, timeZone)}`
+                ? `Checked ${formatAgo(connection.checkedAt, now, timeZone, rawLocale)}`
                 : IMAP_COPY.notChecked}
           </Text>
           <Button

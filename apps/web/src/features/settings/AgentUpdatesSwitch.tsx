@@ -4,12 +4,7 @@
  * nothing updates by itself; Update now still works on each server's System tab. Stopped after a version didn't come
  * back on a server, its words say so in amber. Only on a Whombat with `hosts.agent_updates`. Saved at once.
  */
-import {
-  AGENT_UPDATE_WORDS,
-  agentSettingsView,
-  commitOutcomeText,
-  hostErrorInfo,
-} from '@whombat/client/hosts';
+import { agentSettingsView, commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import { useHostAgentSettings, useHostsChange, useHostsStatus } from '@whombat/client/hosts/react';
 import { MANAGED_TEXT } from '@whombat/client/managed';
 import { api } from '@whombat/core/contracts';
@@ -19,10 +14,14 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { useWebI18n } from '../../i18n/provider';
+import { useAgentUpdateWords } from '../../i18n/words';
 import styles from './SettingsScreen.module.css';
 
 /** The switch's row, inside a card (the managed About's UPDATES); null where it doesn't show. */
 export function AgentUpdatesSwitch({ burrow, last = true }: { burrow: string; last?: boolean }) {
+  const AGENT_UPDATE_WORDS = useAgentUpdateWords();
+  const { tag: uiLocale } = useWebI18n();
   const ids = useId();
   const toast = useToast();
   const status = useHostsStatus({ params: { burrow } }, { retry: false });
@@ -31,16 +30,16 @@ export function AgentUpdatesSwitch({ burrow, last = true }: { burrow: string; la
   });
   const change = useHostsChange(api.hosts.updateAgentSettings);
   if (!settings.data) return null;
-  const v = agentSettingsView(settings.data);
+  const v = agentSettingsView(settings.data, uiLocale);
   const save = (autoUpdate: boolean) =>
     change.mutateAsync({ params: { burrow }, body: { autoUpdate } }).then(
       (result) =>
         toast.show(
           result.status === 'ok'
             ? AGENT_UPDATE_WORDS.switched(autoUpdate)
-            : (commitOutcomeText(result) ?? ''),
+            : (commitOutcomeText(result, uiLocale) ?? ''),
         ),
-      (error) => toast.show(hostErrorInfo(error).message),
+      (error) => toast.show(hostErrorInfo(error, uiLocale).message),
     );
   return (
     <div className={cx(styles.row, last && styles.lastRow)} data-row="agent-updates">

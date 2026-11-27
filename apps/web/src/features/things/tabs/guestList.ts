@@ -6,6 +6,7 @@
  */
 import { DASH, formatPct1, formatUptimeShort, GUEST_STATE_WORDS, guestNote } from '@whombat/client/hosts';
 import type { HostGuest } from '@whombat/core/domain';
+import { currentLocale } from '../../../i18n/provider';
 
 const NBSP = '\u00a0';
 
@@ -135,5 +136,5 @@ export function guestCpu(g: Pick<HostGuest, 'state' | 'cpuPct'>): { text: string
 
 /** How long it has been up, short (“55 d”, “52 min”); a dash when stopped. */
 export function guestUp(g: Pick<HostGuest, 'state' | 'uptimeS'>): string {
-  return guestOn(g) && g.uptimeS != null ? formatUptimeShort(g.uptimeS) : DASH;
+  return guestOn(g) && g.uptimeS != null ? formatUptimeShort(g.uptimeS, currentLocale()) : DASH;
 }

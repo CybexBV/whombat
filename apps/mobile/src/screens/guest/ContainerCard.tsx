@@ -4,11 +4,13 @@
  * version; Docker on Unraid with a dockerMan template), the autostart switch (done at once), and the link to its web
  * page. The switch and Update need the server's Manage switch; this Whombat itself never shows them.
  */
+
 import { unraidChangeWords } from '@whombat/client/hosts';
 import { containerView, selfAllowsOp } from '@whombat/client/hosts/mobile';
 import type { HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -31,6 +33,8 @@ export function ContainerCard({
   /** The Manage switch on and this Whombat's runtime can (`hosts.unraid` / `hosts.libvirt`). */
   canChange: boolean;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const v = containerView(g, onUnraid);
   const { send, busy } = useManageChange(serverId);
@@ -47,11 +51,13 @@ export function ContainerCard({
       done: unraidChangeWords('guest.autostart', serverName, { target: g.name, on }).finished,
     }).then((o) => setError(o.ok || o.waiting ? null : o.message));
   return (
-    <OneCard label={g.platform === 'docker' ? 'Container' : 'Virtual machine'}>
+    <OneCard
+      label={g.platform === 'docker' ? tMobile('screens.container') : tMobile('screens.virtual-machine')}
+    >
       {v.updateText ? (
         <SettingLine
           first
-          label="Updates"
+          label={tClient('hosts.agentUpdates.title')}
           value={v.updateText}
           sub={
             g.updateAvailable && !v.canUpdate
@@ -60,7 +66,11 @@ export function ContainerCard({
           }
           action={
             canChange && v.canUpdate ? (
-              <RowAction label="Update" spoken={`Update ${g.name}`} onPress={() => setAsking(true)} />
+              <RowAction
+                label={tMobile('screens.update')}
+                spoken={`Update ${g.name}`}
+                onPress={() => setAsking(true)}
+              />
             ) : null
           }
         />
@@ -96,7 +106,7 @@ export function ContainerCard({
           }}
         >
           <Text size={15} weight={500} color={theme.colors.brand}>
-            Open its web page
+            {tMobile('screens.open-its-web-page')}
           </Text>
           <Text size={12.5} mono color={theme.colors.mut} numberOfLines={1}>
             {v.webUi}
@@ -127,6 +137,7 @@ function UpdateSheet({
   guest: HostGuestDetail;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { send, busy } = useManageChange(serverId);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -136,7 +147,7 @@ function UpdateSheet({
       badge={guest.name}
       tone="warn"
       title={`Update ${guest.name}?`}
-      body="It stops, gets the new version and starts again. That takes a minute or two."
+      body={tMobile('screens.it-stops-gets-the-new-version-and-starts')}
       busy={busy ? 'go' : null}
       buttons={[
         {

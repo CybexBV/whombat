@@ -6,6 +6,7 @@
  * timeline's settings. The words and numbers are the web's (`FIND_MY_TIMELINE_WORDS`, `findMyListRows`, …); days are
  * cut in the phone's time zone on the app's clock (the demo world's own in the demo).
  */
+
 import { HUMAN_TONES, initialsFor } from '@whombat/avatars';
 import {
   type FindMyAxis,
@@ -64,6 +65,7 @@ import Svg, { Defs, Line, Pattern, Rect } from 'react-native-svg';
 import { HumanAvatar } from '../../avatars/Avatars';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -114,6 +116,8 @@ interface Ctx {
 
 /** The tab of the Find My connection `connectionId`, whose Mac is `serverId`. */
 export function FindMyTimelinePart({ connectionId, serverId }: { connectionId: string; serverId: string }) {
+  const { rawLocale } = useI18n();
+
   const { slug } = useBurrowBase();
   const tz = useMemo(findMyDeviceTimeZone, []);
   const now = useNow().getTime();
@@ -134,7 +138,7 @@ export function FindMyTimelinePart({ connectionId, serverId }: { connectionId: s
   const data = read.data;
   if (!data)
     return read.error ? (
-      <ErrorState text={hostErrorInfo(read.error).message} onRetry={() => void read.refetch()} />
+      <ErrorState text={hostErrorInfo(read.error, rawLocale).message} onRetry={() => void read.refetch()} />
     ) : (
       <CardSkeletons label={W.everyone} count={2} />
     );
@@ -762,6 +766,8 @@ function DayMap({
   date: string;
   segments: readonly FindMyTimelineSegment[];
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const box = { w: width, h: MAP_HEIGHT };
@@ -783,7 +789,11 @@ function DayMap({
   const lines = findMyTimelineLines(segments, marks);
   const here = findMyNowMark(segments, marks);
   const quiet =
-    !spots || map.noSpots ? W.noSpots(who.first) : map.error ? hostErrorInfo(map.error).message : null;
+    !spots || map.noSpots
+      ? W.noSpots(who.first)
+      : map.error
+        ? hostErrorInfo(map.error, rawLocale).message
+        : null;
   return (
     <View
       onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}

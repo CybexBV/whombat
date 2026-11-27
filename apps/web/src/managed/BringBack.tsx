@@ -13,14 +13,13 @@
  * From the app's Backups (`later`): `resume` opens where a restore stands (finishing it, trying again); `replace` brings
  * one back on a Whombat that started fresh, after saying what's on it now is set aside (`backup.adopt` with `replace`).
  */
-import { AGENT_FALLBACK_NAME, createClient } from '@whombat/client';
+import { agentFallbackName, createClient } from '@whombat/client';
 import {
   accountKitsToBringBack,
   BACKUP_OPTIONS_TEXT,
   type BringBackKit,
   backupToBringBack,
   bringBackName,
-  COPY,
   type ControlApi,
   capital,
   kitFromScan,
@@ -57,6 +56,8 @@ import { cx } from '../components/cx';
 import { Icon } from '../components/Icon';
 import { Tag } from '../components/Tag';
 import { backupErrorText } from '../features/settings/BackupDestination';
+import { COPY } from '../i18n/managed';
+import { useLocaleWords } from '../i18n/words';
 import styles from './bringBack.module.css';
 import {
   type BringBackStep,
@@ -128,6 +129,7 @@ export function BringBackFlow({
   onList,
   pollMs = RESTORE_POLL_MS,
 }: BringBackProps) {
+  const AGENT_FALLBACK_NAME = useLocaleWords(agentFallbackName);
   const [step, setStep] = useState<BringBackStep | null>(null);
   const [kits, setKits] = useState<BringBackKit[] | null>(null);
   const [looking, setLooking] = useState<Looking>('idle');

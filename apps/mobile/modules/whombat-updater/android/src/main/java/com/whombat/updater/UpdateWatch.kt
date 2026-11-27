@@ -7,6 +7,8 @@ import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
 import android.content.Context
+import android.content.res.Configuration
+import java.util.Locale
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.os.Build
@@ -100,10 +102,15 @@ object UpdateWatch {
 
   private fun notify(context: Context, version: String): Boolean {
     val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+    val tag = context.getSharedPreferences("com.whombat.live", Context.MODE_PRIVATE).getString("locale", null)
+    val locale = tag?.let(Locale::forLanguageTag) ?: Locale.getDefault()
+    val words = context.createConfigurationContext(Configuration(context.resources.configuration).apply {
+      setLocale(if (locale.language == "nl") locale else Locale.UK)
+    })
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       manager.createNotificationChannel(
-        NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
-          description = "When a new version of the Whombat app is ready."
+        NotificationChannel(CHANNEL, words.getString(R.string.whombat_updater_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
+          description = words.getString(R.string.whombat_updater_description)
         },
       )
     }
@@ -121,8 +128,8 @@ object UpdateWatch {
       .takeIf { it != 0 } ?: context.applicationInfo.icon
     val notification = NotificationCompat.Builder(context, CHANNEL)
       .setSmallIcon(small)
-      .setContentTitle("A new version of Whombat is ready")
-      .setContentText("Version $version is out. Tap to update.")
+      .setContentTitle(words.getString(R.string.whombat_updater_title))
+      .setContentText(words.getString(R.string.whombat_updater_body, version))
       .setContentIntent(tap)
       .setAutoCancel(true)
       .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)

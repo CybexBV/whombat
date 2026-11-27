@@ -14,10 +14,11 @@ import { useAgentSchedules, useAutomations } from '@whombat/client/react';
 import { formatClock, formatDate } from '@whombat/core';
 import { type ReactNode, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
-import { AUTOMATION_LIST_TEXT, onlyTellsYouRows } from '../data/automations';
+import { automationListText, onlyTellsYouRows } from '../data/automations';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
 import { useAutomationNames } from '../data/useAutomationNames';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { isBeside, useBeside } from '../navigation/panes';
 import { Text } from '../theme/Text';
@@ -43,6 +44,10 @@ function savedWhen(at: number, now: Date, timeZone: string): string {
 }
 
 export function AutomationsScreen() {
+  const { rawLocale } = useI18n();
+  const automationListTextHere = automationListText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const navigation = useAppNavigation();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -73,7 +78,7 @@ export function AutomationsScreen() {
   );
   // On an iPhone the list runs on under iOS's tab bar and ends above it.
   const bottomRoom = useBottomRoom();
-  const T = AUTOMATION_LIST_TEXT;
+  const T = automationListTextHere;
   const tell = () => setTelling({ text: null });
 
   return (
@@ -82,7 +87,7 @@ export function AutomationsScreen() {
       <NewChatSheet
         visible={telling !== null}
         onClose={() => setTelling(null)}
-        back="Automations"
+        back={tMobile('screens.automations')}
         initialText={telling?.text ?? null}
         words={{
           title: T.tellTitle(agent.Name),
@@ -123,7 +128,7 @@ export function AutomationsScreen() {
             text={
               list.data ? T.savedAt(savedWhen(list.dataUpdatedAt, view.now, view.timeZone)) : T.readFailedText
             }
-            detail={problemText(list.error)}
+            detail={problemText(list.error, undefined, rawLocale)}
             agent={agent.Name}
             busy={list.isRefetching}
             onRetry={() => void list.refetch()}
@@ -212,8 +217,11 @@ function Group({ title, count, children }: { title: string; count?: number; chil
 
 /** Nothing yet: what will show here, and Tell Dusty…, which opens the field's sheet. */
 function EmptyList({ agent, onTell }: { agent: string; onTell: () => void }) {
+  const { rawLocale } = useI18n();
+  const automationListTextHere = automationListText(rawLocale);
+
   const theme = useTheme();
-  const T = AUTOMATION_LIST_TEXT;
+  const T = automationListTextHere;
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 12, alignItems: 'flex-start' }}>
       <View
@@ -260,9 +268,12 @@ function ReadProblem({
   onRetry: () => void;
   onAsk: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const automationListTextHere = automationListText(rawLocale);
+
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const T = AUTOMATION_LIST_TEXT;
+  const T = automationListTextHere;
   return (
     <View
       accessibilityLiveRegion="polite"
@@ -324,6 +335,9 @@ function ReadProblem({
  * empty send mark keep their own columns at the end, on one row at every text size; the whole field is one target.
  */
 function TellField({ agent, onPress }: { agent: string; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const automationListTextHere = automationListText(rawLocale);
+
   const theme = useTheme();
   const send = sendLook(theme, false);
   return (
@@ -331,8 +345,8 @@ function TellField({ agent, onPress }: { agent: string; onPress: () => void }) {
       onPress={onPress}
       feedback="wash"
       accessibilityRole="button"
-      accessibilityLabel={AUTOMATION_LIST_TEXT.tell(agent)}
-      accessibilityHint={AUTOMATION_LIST_TEXT.tellHint}
+      accessibilityLabel={automationListTextHere.tell(agent)}
+      accessibilityHint={automationListTextHere.tellHint}
       ringRadius={14}
       style={{
         minHeight: 56,
@@ -349,7 +363,7 @@ function TellField({ agent, onPress }: { agent: string; onPress: () => void }) {
       }}
     >
       <Text size={15} color={theme.colors.ink2} numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
-        {AUTOMATION_LIST_TEXT.tellShort(agent)}
+        {automationListTextHere.tellShort(agent)}
       </Text>
       <View
         style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}

@@ -6,6 +6,7 @@
  * shows its figures. The rules are pure functions in `lib/deskScene.ts`, `lib/askQueue.ts`, `lib/talk.ts`,
  * `lib/conversation.ts`, `lib/decide.ts`, `lib/unlock.ts`, `lib/deskServer.ts` and `lib/taskCard.ts`.
  */
+
 import {
   type ReactNode,
   useCallback,
@@ -17,6 +18,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from '../i18n/react';
 import type { ConsoleState } from '../lib/api';
 import {
   afterAsk,
@@ -49,7 +51,7 @@ import {
   parseTalk,
   type ServerRange,
 } from '../lib/desk';
-import { DESK, DESK_WORDS, fill } from '../lib/deskCopy';
+import { deskCopy, deskWordsCopy, fill } from '../lib/deskCopy';
 import { lockedDesk, unlockLapsed } from '../lib/deskHold';
 import {
   type AskSig,
@@ -200,6 +202,10 @@ export function Desk({
   held = false,
   initial,
 }: Props) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const now = useNow(1000);
   // The server's clock at this render (a poll re-renders with a new offset between the page's ticks).
   const serverNow = Date.now() + offset;
@@ -214,9 +220,9 @@ export function Desk({
     if (!sentFound) setFoundGone(false);
   }, [sentFound]);
   const desk = useMemo(() => {
-    const d = lapsed ? lockedDesk(sent) : sent;
+    const d = lapsed ? lockedDesk(sent, t) : sent;
     return foundGone && d.glance?.found ? { ...d, glance: { ...d.glance, found: null } } : d;
-  }, [sent, lapsed, foundGone]);
+  }, [sent, lapsed, foundGone, t]);
   const paired = desk.paired;
   const glance = desk.glance;
   const unlocked = isUnlocked(desk.lock, serverNow);
@@ -719,7 +725,7 @@ export function Desk({
       openPad('talk');
       return;
     }
-    const text = lookQuestion(look);
+    const text = lookQuestion(look, t);
     const server = look.server ?? null;
     openTalk(true, server);
     if (!canAsk(talk)) return setDraft(text);
@@ -747,7 +753,7 @@ export function Desk({
     const a = res ? parseQuietAnswer(res.status, res.body) : 'failed';
     setSheetBusy(false);
     if (a === 'quieted') setLookDone({ key: look.key, how });
-    else setSheetNote(quietRefusal(a, look.name));
+    else setSheetNote(quietRefusal(a, look.name, t));
     // Quieted, gone or the screen locked meanwhile: the state shows it.
     if (a !== 'failed' && a !== 'notAllowed') refresh();
   }
@@ -772,7 +778,7 @@ export function Desk({
     if (a === 'taken') setStepSent(look.key);
     else if (a !== 'locked') {
       setOverlay({ kind: 'look', key: look.key });
-      setSheetNote(quietRefusal(a, look.name));
+      setSheetNote(quietRefusal(a, look.name, t));
     }
     if (a !== 'failed' && a !== 'notAllowed') refresh();
   }
@@ -1156,7 +1162,7 @@ export function Desk({
   } else if (paired && scene === 'talk') {
     const convo = convoHidden
       ? { earlier: 0, rows: [], open: false }
-      : conversation(session, talk, followed, paired.assistant.name, paired.voice);
+      : conversation(session, talk, followed, paired.assistant.name, paired.voice, t);
     body = (
       <Talk
         paired={paired}
@@ -1320,6 +1326,7 @@ export function Desk({
                       talk: (ask) => openTalk(ask.inTalk !== true),
                       unlock: () => openPad(null),
                     },
+                    t,
                   )
           }
           onLook={props.onLook}

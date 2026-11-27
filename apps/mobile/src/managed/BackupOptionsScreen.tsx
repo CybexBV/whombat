@@ -5,6 +5,7 @@
  * Choose… with four numbers), SPACE (a limit in GB, off at first) and CHECKING (the weekly check). Save sends every
  * option at once (`backup.setPolicy`) and goes back.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BACKUP_OPTIONS_TEXT, keepTicks, policySummary } from '@whombat/client/managed';
 import { useBackupCheckpoints, useBackupPolicy, useSetBackupPolicy } from '@whombat/client/react';
@@ -12,6 +13,7 @@ import { formatBytes } from '@whombat/core/text';
 import type { BackupFrequency } from '@whombat/protocol/session';
 import { type ReactNode, useEffect, useState } from 'react';
 import { ScrollView, Switch, TextInput, View } from 'react-native';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -27,7 +29,7 @@ import { Touchable } from '../ui/Touchable';
 import { backupErrorText } from './BackupDestination';
 import { Tag } from './BackupsOverview';
 import { draftInput, draftKeep, type KeepChoice, type PolicyDraft, policyDraft } from './backupOptions';
-import { MANAGED_TEXT } from './copy';
+import { managedText } from './copy';
 import { ErrorLine } from './ui';
 import { useBackupPlaceName, useBackupSession } from './useBackups';
 
@@ -37,6 +39,9 @@ const D = BACKUP_OPTIONS_TEXT.dialog;
 const FREQUENCIES: BackupFrequency[] = ['nightly', '6h', 'hourly'];
 
 export function BackupOptionsScreen({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const managedTextHere = managedText(rawLocale);
+
   const theme = useTheme();
   const bottomRoom = useBottomRoom();
   const session = useBackupSession();
@@ -89,7 +94,7 @@ export function BackupOptionsScreen({ navigation }: Props) {
     return (
       <Screen>
         {header}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={() => void policy.refetch()} />
+        <ErrorState text={managedTextHere.loadError} onRetry={() => void policy.refetch()} />
       </Screen>
     );
   if (!draft || !policy.data)
@@ -223,11 +228,13 @@ export function BackupOptionsScreen({ navigation }: Props) {
               meta={
                 draft.limitOn
                   ? Number.isFinite(limitGb) && limitGb > 0
-                    ? D.limitOn(formatBytes(limitGb * 1e9))
+                    ? D.limitOn(formatBytes(limitGb * 1e9, rawLocale))
                     : D.limitOffPlain
                   : D.limitOff(
                       placeName,
-                      list.data?.space?.freeBytes == null ? null : formatBytes(list.data.space.freeBytes),
+                      list.data?.space?.freeBytes == null
+                        ? null
+                        : formatBytes(list.data.space.freeBytes, rawLocale),
                     )
               }
               value={draft.limitOn}

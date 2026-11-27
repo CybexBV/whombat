@@ -60,17 +60,19 @@ object LiveNotifications {
   fun ensureChannels(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    val words = LiveLocale.localized(context)
+    // Re-registering a channel ID updates its name and description and retains the person's settings.
     manager.createNotificationChannels(
       listOf(
-        NotificationChannel(CHANNEL_RUNS, "Runs in progress", NotificationManager.IMPORTANCE_LOW).apply {
-          description = "An agent’s run you asked for or follow, with its progress."
+        NotificationChannel(CHANNEL_RUNS, words.getString(R.string.whombat_channel_runs), NotificationManager.IMPORTANCE_LOW).apply {
+          description = words.getString(R.string.whombat_channel_runs_description)
           setShowBadge(false)
         },
-        NotificationChannel(CHANNEL_NEEDS_YOU, "Needs you", NotificationManager.IMPORTANCE_HIGH).apply {
-          description = "Requests that wait for a person, like a deploy to approve."
+        NotificationChannel(CHANNEL_NEEDS_YOU, words.getString(R.string.whombat_channel_needs_you), NotificationManager.IMPORTANCE_HIGH).apply {
+          description = words.getString(R.string.whombat_channel_needs_you_description)
         },
-        NotificationChannel(CHANNEL_UPDATES, "Mentions and agent updates", NotificationManager.IMPORTANCE_DEFAULT)
-          .apply { description = "Mentions and what agents tell you." },
+        NotificationChannel(CHANNEL_UPDATES, words.getString(R.string.whombat_channel_updates), NotificationManager.IMPORTANCE_DEFAULT)
+          .apply { description = words.getString(R.string.whombat_channel_updates_description) },
       ),
     )
   }
@@ -224,14 +226,14 @@ object LiveNotifications {
    * `whombat://push?kind=…&ref=…`; the app finds out what happened through its session.
    */
   val GENERIC_TEXT = mapOf(
-    "message" to "New message",
-    "mention" to "You were mentioned",
-    "approval" to "Something is waiting for your approval",
-    "run" to "An agent has news about a run",
-    "update" to "Your Whombat has an update",
-    "backup" to "Your Whombat’s backups need a look",
-    "security" to "A security change on your Whombat",
-    "generic" to "Whombat needs you",
+    "message" to R.string.whombat_push_message,
+    "mention" to R.string.whombat_push_mention,
+    "approval" to R.string.whombat_push_approval,
+    "run" to R.string.whombat_push_run,
+    "update" to R.string.whombat_push_update,
+    "backup" to R.string.whombat_push_backup,
+    "security" to R.string.whombat_push_security,
+    "generic" to R.string.whombat_push_generic,
   )
 
   fun pushTapUrl(kind: String, ref: String): String =
@@ -253,8 +255,10 @@ object LiveNotifications {
     if (!canPost(context)) return
     ensureChannels(context)
     val kind = if (GENERIC_TEXT.containsKey(push.kind)) push.kind else "generic"
-    val generic = GENERIC_TEXT.getValue(kind)
-    val title = push.title ?: "Whombat"
+    val words = LiveLocale.localized(context)
+    val generic = words.getString(GENERIC_TEXT.getValue(kind))
+    val defaultTitle = words.getString(R.string.whombat_notification_title)
+    val title = push.title ?: defaultTitle
     val text = push.body ?: generic
     val needsYou = kind == "approval" || kind == "security"
     val channel = if (needsYou) CHANNEL_NEEDS_YOU else CHANNEL_UPDATES
@@ -264,7 +268,7 @@ object LiveNotifications {
     val lockScreen = NotificationCompat.Builder(context, channel)
       .setSmallIcon(R.drawable.whombat_live_small)
       .setColor(color)
-      .setContentTitle("Whombat")
+      .setContentTitle(defaultTitle)
       .setContentText(generic)
       .setCategory(category)
       .build()
@@ -302,12 +306,12 @@ object LiveNotifications {
       if (display.ongoing) putBoolean(EXTRA_REQUEST_PROMOTED_ONGOING, true)
     }
 
-  private fun actionLabel(action: String): String? =
+  private fun actionLabel(words: Context, action: String): String? =
     when (action) {
-      "open_run" -> "Open run"
-      "details" -> "Details"
-      // The wire value stays `approve`; the button only opens the approval, where the person approves.
-      "approve" -> "Review"
+      "open_run" -> words.getString(R.string.whombat_action_open_run)
+      "details" -> words.getString(R.string.whombat_action_details)
+      // The button opens the approval page.
+      "approve" -> words.getString(R.string.whombat_action_review)
       else -> null
     }
 
@@ -339,8 +343,9 @@ object LiveNotifications {
     }
     style.setProgressTrackerIcon(Icon.createWithResource(context, R.drawable.whombat_live_tracker))
     builder.setStyle(style)
+    val words = LiveLocale.localized(context, display.locale)
     for (action in display.actions) {
-      val label = actionLabel(action) ?: continue
+      val label = actionLabel(words, action) ?: continue
       val intent = openIntent(context, display.url)
       val icon = Icon.createWithResource(context, R.drawable.whombat_live_small)
       builder.addAction(
@@ -379,8 +384,9 @@ object LiveNotifications {
     } else {
       builder.setProgress(100, display.progress, false)
     }
+    val words = LiveLocale.localized(context, display.locale)
     for (action in display.actions) {
-      val label = actionLabel(action) ?: continue
+      val label = actionLabel(words, action) ?: continue
       builder.addAction(
         NotificationCompat.Action.Builder(
           R.drawable.whombat_live_small,

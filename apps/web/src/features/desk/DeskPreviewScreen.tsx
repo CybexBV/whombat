@@ -26,6 +26,7 @@ import { type CSSProperties, useLayoutEffect, useRef, useState } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { StatusDot } from '../../components/StatusDot';
+import { currentLocale } from '../../i18n/provider';
 import p from './DeskPreview.module.css';
 
 const C = DESK_WORDS.calm;
@@ -135,7 +136,7 @@ function Chip({ icon, text, tone }: { icon: LucideIcon; text?: string; tone?: 'w
 /** “Tuesday 20 October”. */
 function longDate(now: number, timeZone: string): string {
   const d = zonedParts(now, timeZone);
-  return `${formatWeekday(now, timeZone)} ${d.day} ${MONTHS[d.month - 1]}`;
+  return `${formatWeekday(now, timeZone, currentLocale())} ${d.day} ${MONTHS[d.month - 1]}`;
 }
 
 function Clock({ calm, now, timeZone }: { calm: DeskCalm; now: number; timeZone: string }) {
@@ -196,7 +197,7 @@ function Hero({
   const since = hero.since
     ? fillDeskWords(C.since, {
         clock: formatClock(hero.since, timeZone),
-        ago: formatPowerLeft(Math.max(1, (now - Date.parse(hero.since)) / 60_000)),
+        ago: formatPowerLeft(Math.max(1, (now - Date.parse(hero.since)) / 60_000), currentLocale()),
       })
     : null;
   // The hero names a server by its hosts id; the button by the name the strip shows.

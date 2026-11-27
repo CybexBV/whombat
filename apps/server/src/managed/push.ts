@@ -9,6 +9,7 @@
 import { hkdfSync, randomBytes } from 'node:crypto';
 import type { PushKind, PushRequest } from '@whombat/control-contracts/device';
 import { type LinkRef, notificationPreferencesOf, type PushPayload } from '@whombat/core';
+import { formatLocaleOf, safeLocaleOrNull } from '@whombat/core/i18n';
 import { PushRef, pushRefFor } from '@whombat/protocol/session';
 import { and, desc, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { managedAppOrigin } from '../config';
@@ -21,12 +22,13 @@ import {
   principals,
 } from '../db/schema/index';
 import { previewBody, previewTitle, pushKind } from '../domain/push-preview';
+import { burrowLocale } from '../i18n/locale';
 import { ApiError } from '../lib/errors';
 import type { ControlPushOptions } from '../push/sender';
 import type { Services } from '../services';
 import { linkEmailOf } from './link/mail';
 import { ManagerCallError, type ManagerPort } from './ports';
-import { appPageTarget, type SecurityNotice, SecurityPushes } from './security-push';
+import { appPageTarget, noticeIn, type SecurityNotice, SecurityPushes } from './security-push';
 
 export { pushKind } from '../domain/push-preview';
 
@@ -58,6 +60,12 @@ function subject(payload: PushPayload): string {
     (payload.run ? `run:${payload.burrow}:${payload.run.number}` : null) ??
     (payload.approval ? `approval:${payload.burrow}:${payload.approval.number}` : `burrow:${payload.burrow}`)
   );
+}
+
+/** The locale a person chose, from their stored preferences (null: the default). */
+function localeOfPreferences(preferences: unknown): string | null {
+  const raw = safeLocaleOrNull((preferences as { locale?: unknown } | null)?.locale);
+  return raw ? formatLocaleOf(raw) : null;
 }
 
 export class ControlPush {
@@ -118,14 +126,25 @@ export class ControlPush {
         .map((r) => r.id),
     );
     const plain = accountIds.filter((id) => quiet.has(id));
-    const told = accountIds.filter((id) => !quiet.has(id));
-    const preview = { title: previewTitle(notice.title), body: previewBody(notice.body) };
+    // Each person reads the notice in their own language: one push per language.
+    const localeOf = new Map(rows.map((r) => [r.id, localeOfPreferences(r.preferences)]));
+    const byLocale = new Map<string, string[]>();
+    for (const id of accountIds) {
+      if (quiet.has(id)) continue;
+      const locale = localeOf.get(id) ?? '';
+      byLocale.set(locale, [...(byLocale.get(locale) ?? []), id]);
+    }
     const quarantine = options.evenInQuarantine ? { evenInQuarantine: true } : {};
-    if (told.length) await this.forAccounts(told, kind, what, { preview }, quarantine);
+    for (const [locale, told] of byLocale) {
+      const said = noticeIn(notice, locale || null);
+      const preview = { title: previewTitle(said.title), body: previewBody(said.body) };
+      await this.forAccounts(told, kind, what, { preview }, quarantine);
+    }
     if (plain.length) await this.forAccounts(plain, kind, what, {}, quarantine);
-    // By email too when the owner chose it: the same fixed lines, to the Link account's own address.
+    // By email too when the owner chose it: the same fixed lines in the owner's language, to the Link account's own
+    // address.
     await linkEmailOf(this.services)
-      ?.notice(what, notice, options)
+      ?.notice(what, noticeIn(notice, await burrowLocale(this.services)), options)
       .catch((err) => this.services.log.warn({ err: String(err) }, 'link: the notice wasn’t emailed'));
   }
 

@@ -11,15 +11,22 @@ import type { Services } from '../services';
 
 type LocaleListener = (accountId: string, locale: string | null) => void;
 
-const cache = new WeakMap<Services, Map<string, string | null>>();
-const boxCache = new WeakMap<Services, string | null>();
+// Keyed by the database handle rather than the `Services` object, so parts that hold only the database (the hosts
+// client) read the same cached locale as the rest of the server.
+const cache = new WeakMap<object, Map<string, string | null>>();
+const boxCache = new WeakMap<object, string | null>();
 const listeners = new WeakMap<Services, Set<LocaleListener>>();
 
-function accountMap(services: Services): Map<string, string | null> {
-  let map = cache.get(services);
+type LocaleReader = Pick<Services, 'db'>;
+
+const keyOf = (services: LocaleReader): object => (services.db as object | undefined) ?? services;
+
+function accountMap(services: LocaleReader): Map<string, string | null> {
+  const key = keyOf(services);
+  let map = cache.get(key);
   if (!map) {
     map = new Map();
-    cache.set(services, map);
+    cache.set(key, map);
   }
   return map;
 }
@@ -45,7 +52,7 @@ export function notifyLocaleChanged(
 ): void {
   const configured = safeLocaleOrNull(rawLocale);
   accountMap(services).set(accountId, configured);
-  boxCache.set(services, configured);
+  boxCache.set(keyOf(services), configured);
   const set = listeners.get(services);
   if (set) {
     for (const fn of [...set]) {
@@ -59,7 +66,10 @@ export function notifyLocaleChanged(
 }
 
 /** Reads an account's explicitly stored BCP-47 locale tag, or null when unset (default). */
-export async function configuredAccountLocale(services: Services, accountId: string): Promise<string | null> {
+export async function configuredAccountLocale(
+  services: LocaleReader,
+  accountId: string,
+): Promise<string | null> {
   const map = accountMap(services);
   if (map.has(accountId)) return map.get(accountId) ?? null;
   const [row] = await services.db
@@ -68,19 +78,20 @@ export async function configuredAccountLocale(services: Services, accountId: str
     .where(eq(accounts.id, accountId));
   const raw = safeLocaleOrNull((row?.preferences as { locale?: unknown } | null)?.locale);
   map.set(accountId, raw);
-  boxCache.set(services, raw);
+  boxCache.set(keyOf(services), raw);
   return raw;
 }
 
 /** Reads an account's resolved BCP-47 formatting locale (`en-GB`, `nl-NL`, ...). */
-export async function accountLocale(services: Services, accountId: string): Promise<string> {
+export async function accountLocale(services: LocaleReader, accountId: string): Promise<string> {
   const raw = await configuredAccountLocale(services, accountId);
   return raw ? formatLocaleOf(raw) : DEFAULT_LOCALE;
 }
 
 /** Reads the box owner's explicitly stored locale tag, or null when unset (default). */
-export async function configuredBoxLocale(services: Services): Promise<string | null> {
-  if (boxCache.has(services)) return boxCache.get(services) ?? null;
+export async function configuredBoxLocale(services: LocaleReader): Promise<string | null> {
+  const key = keyOf(services);
+  if (boxCache.has(key)) return boxCache.get(key) ?? null;
   const [row] = await services.db
     .select({ id: accounts.id, preferences: accounts.preferences })
     .from(accounts)
@@ -89,7 +100,7 @@ export async function configuredBoxLocale(services: Services): Promise<string | 
   if (!row) return null;
   const raw = safeLocaleOrNull((row.preferences as { locale?: unknown } | null)?.locale);
   accountMap(services).set(row.id, raw);
-  boxCache.set(services, raw);
+  boxCache.set(key, raw);
   return raw;
 }
 
@@ -97,18 +108,44 @@ export async function configuredBoxLocale(services: Services): Promise<string | 
  * Reads the single owner's BCP-47 locale for box-wide background work (console, desk, Link emails,
  * security pushes, unattended turns) where no specific viewer session is active.
  */
-export async function boxLocale(services: Services): Promise<string> {
+export async function boxLocale(services: LocaleReader): Promise<string> {
   const raw = await configuredBoxLocale(services);
   return raw ? formatLocaleOf(raw) : DEFAULT_LOCALE;
 }
 
 /** Convenience helper returning the box owner's resolved UI/agent language (`'en' | 'nl'`). */
-export async function boxLanguage(services: Services): Promise<Language> {
+export async function boxLanguage(services: LocaleReader): Promise<Language> {
   return resolveLanguage(await boxLocale(services));
 }
 
 /** Clears cached locales for a `Services` instance (used in tests or restores). */
-export function clearLocaleCache(services: Services): void {
-  cache.delete(services);
-  boxCache.delete(services);
+export function clearLocaleCache(services: LocaleReader): void {
+  cache.delete(keyOf(services));
+  boxCache.delete(keyOf(services));
+}
+
+/**
+ * The burrow's (this box's) owner locale for what the server renders without a viewer session: Home and Needs you,
+ * desk screens, emails, pushes and notices. A box has one person, so the burrow's locale is the box's. Never throws:
+ * a read that fails (a test without a database, a restore in progress) renders English.
+ */
+export async function burrowLocale(
+  services: LocaleReader | null | undefined,
+  _burrowId?: string,
+): Promise<string> {
+  if (!services?.db) return DEFAULT_LOCALE;
+  try {
+    return await boxLocale(services);
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
+/** The locale an explicit tag names, else the burrow's: a caller's own choice wins (a viewer who picked a language). */
+export async function resolveBurrowLocale(
+  services: LocaleReader | null | undefined,
+  explicit?: string | null,
+): Promise<string> {
+  const own = safeLocaleOrNull(explicit);
+  return own ? formatLocaleOf(own) : burrowLocale(services);
 }

@@ -2,11 +2,13 @@
  * A guest's Tasks on the phone (proxmox-mobile.md AP-1497): what ran for it, newest first, each with how it went. A
  * task opens its sheet with the log, read again every 2 seconds while it runs, and Stop it while it runs.
  */
+
 import { taskPlatform, taskRows, taskSheetLine, taskStatus, taskWord } from '@whombat/client/hosts/mobile';
 import { useHostManageRead, useHostTask } from '@whombat/client/hosts/react';
 import type { HostGuestDetail, HostTask } from '@whombat/core';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard, OneRow, toneOf } from '../../ui/assistant';
@@ -30,6 +32,8 @@ export function GuestTasks({
   timeZone: string;
   canChange: boolean;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const q = useHostManageRead(
     {
@@ -44,11 +48,12 @@ export function GuestTasks({
   );
   const [open, setOpen] = useState<HostTask | null>(null);
   const rows = q.data?.op === 'task.list' ? taskRows(q.data.items, now, timeZone) : [];
-  if (q.isPending) return <SkeletonRows count={4} lines={2} label="Loading the tasks" />;
-  if (q.isError) return <ErrorState text="The tasks didn’t load." onRetry={() => void q.refetch()} />;
+  if (q.isPending) return <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-tasks')} />;
+  if (q.isError)
+    return <ErrorState text={tMobile('screens.the-tasks-didnt-load')} onRetry={() => void q.refetch()} />;
   return (
     <>
-      <OneCard label="Tasks">
+      <OneCard label={tClient('workLine.who.tasks')}>
         {rows.length ? (
           rows.map((r) => (
             <OneRow
@@ -67,12 +72,12 @@ export function GuestTasks({
               }
               chevron
               label={r.label}
-              hint="Shows its log"
+              hint={tMobile('screens.shows-its-log')}
               onPress={() => setOpen(r.task)}
             />
           ))
         ) : (
-          <CardQuiet>No tasks yet.</CardQuiet>
+          <CardQuiet>{tMobile('screens.no-tasks-yet')}</CardQuiet>
         )}
       </OneCard>
       {open ? (

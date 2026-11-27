@@ -153,14 +153,17 @@ func macHints(s *ServerState, now time.Time) []rules.Hint {
 	var out []rules.Hint
 	if !m.Screen.Sharing {
 		out = append(out, rules.Hint{Kind: HintMacSharingOff, Severity: rules.HintInfo, Entity: "screen", Link: LinkScreen,
+			Code:  HintMacSharingOff,
 			Title: "Screen Sharing is off", Detail: "Turn it on in System Settings → General → Sharing so Whombat can see the screen"})
 	}
 	if m.Screen.SignIn == "failed" {
 		out = append(out, rules.Hint{Kind: HintMacScreenSignIn, Severity: rules.HintWarning, Entity: "screen", Link: LinkScreen,
+			Code:  HintMacScreenSignIn,
 			Title: "Whombat can’t sign in to the Mac’s screen", Detail: "The Mac’s password was refused; set it again"})
 	}
 	if m.AgentFolder != "" {
 		out = append(out, rules.Hint{Kind: HintMacAgentFolder, Severity: rules.HintInfo, Entity: "agent", Link: rules.LinkAgent,
+			Code: HintMacAgentFolder, Params: map[string]any{"folder": m.AgentFolder},
 			Title:  "Whombat’s agent is in a folder others can change",
 			Detail: "Run the Mac’s install command again to move it out of " + m.AgentFolder})
 	}
@@ -168,6 +171,7 @@ func macHints(s *ServerState, now time.Time) []rules.Hint {
 	switch {
 	case h.Running && h.Accessibility != nil && !*h.Accessibility:
 		out = append(out, rules.Hint{Kind: HintMacHelperNoAccess, Severity: rules.HintInfo, Entity: "helper", Link: LinkScreen,
+			Code:  HintMacHelperNoAccess,
 			Title: "Whombat Helper needs Accessibility", Detail: "Switch it on in Privacy & Security → Accessibility"})
 	case !s.MacHelperOffSince.IsZero() && now.Sub(s.MacHelperOffSince) >= HelperOffAfter:
 		d := "It starts when someone logs in to the Mac"
@@ -175,6 +179,7 @@ func macHints(s *ServerState, now time.Time) []rules.Hint {
 			d = "It isn’t running for " + m.ConsoleUser
 		}
 		out = append(out, rules.Hint{Kind: HintMacHelperOff, Severity: rules.HintInfo, Entity: "helper", Link: LinkScreen,
+			Code: HintMacHelperOff, Params: map[string]any{"user": m.ConsoleUser},
 			Title: "Whombat Helper isn’t running", Detail: d})
 	}
 	return out

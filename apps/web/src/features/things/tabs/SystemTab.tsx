@@ -10,7 +10,6 @@
  */
 import {
   AGENT_UPDATE_POLL_MS,
-  AGENT_UPDATE_WORDS,
   type AgentUpdatesView,
   agentSwitchesLine,
   agentUpdateNeed,
@@ -56,11 +55,11 @@ import { api } from '@whombat/core/contracts';
 import {
   HOST_ASKS_FIRST,
   HOST_ASKS_FIRST_DEFAULT,
-  HOST_ASKS_FIRST_WORDS,
   type HostAsksFirst,
   type HostInspectResult,
   type HostRemoteToggles,
   type HostServerDetail,
+  hostAsksFirstWords,
 } from '@whombat/core/domain';
 import { ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -71,6 +70,8 @@ import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { Toggle } from '../../../components/Toggle';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
+import { useAgentUpdateWords, useLocaleWords } from '../../../i18n/words';
 import { TechnicalDetails } from '../dashboard/Verdict';
 import wc from '../HostFleet.module.css';
 import { IncusSystem } from '../incus/IncusSystem';
@@ -523,6 +524,7 @@ function Cluster({ detail }: { detail: HostServerDetail }) {
 
 /** Proxmox's failed and running tasks of the last 48 hours, replication and Ceph (Rackoon's ProxmoxActivity). */
 function ProxmoxActivity({ detail, now }: { detail: HostServerDetail; now: number }) {
+  const { tag: uiLocale } = useWebI18n();
   const tasks = pveActivity(detail, now);
   const replication = detail.health?.pveReplication ?? [];
   const ceph = detail.health?.ceph ?? null;
@@ -533,7 +535,7 @@ function ProxmoxActivity({ detail, now }: { detail: HostServerDetail; now: numbe
     ),
   );
   const nameOf = (id: string | null | undefined) => (id ? (guests.get(id) ?? id.replace(/^pve:/, '')) : null);
-  const ago = (iso: string | null | undefined) => (iso ? formatAgoIso(iso, now) : '');
+  const ago = (iso: string | null | undefined) => (iso ? formatAgoIso(iso, now, uiLocale) : '');
   // Nothing failed, ran or copies: no card (less-is-more.md AP-1752).
   if (!tasks.length && !replication.length && !ceph) return null;
   return (
@@ -718,7 +720,7 @@ function AgentCard({
                 text={
                   a.connected === false
                     ? 'Isn’t checking in'
-                    : `Checking in${a.lastSyncSAgo != null ? `, last ${formatAgo(a.lastSyncSAgo)}` : ''}`
+                    : `Checking in${a.lastSyncSAgo != null ? `, last ${formatAgo(a.lastSyncSAgo, currentLocale())}` : ''}`
                 }
               />
             </small>
@@ -841,6 +843,7 @@ function AsksFirstRow({
   value: HostAsksFirst;
   self: boolean;
 }) {
+  const HOST_ASKS_FIRST_WORDS = useLocaleWords(hostAsksFirstWords);
   const W = HOST_ASKS_FIRST_WORDS;
   const update = useHostsChange(api.hosts.updateServer);
   const { run, busy } = useChangeRunner();
@@ -1006,6 +1009,7 @@ function AgentUpdatesRow({
   install?: string | null;
   view: AgentUpdatesView;
 }) {
+  const AGENT_UPDATE_WORDS = useAgentUpdateWords();
   const W = AGENT_UPDATE_WORDS;
   const update = useHostsChange(api.hosts.updateAgent);
   const { run, busy } = useChangeRunner();

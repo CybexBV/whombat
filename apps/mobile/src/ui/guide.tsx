@@ -52,6 +52,7 @@ import {
   missingFields,
   toggleOption,
 } from '../data/guides';
+import { useI18n } from '../i18n';
 import { holdPhoneConnect } from '../managed/connectReturn';
 import { useManaged } from '../managed/context';
 import { openAppUrl } from '../navigation/hooks';
@@ -279,6 +280,7 @@ function ChoicesBlock({
   act: (input: GuideActInput) => Promise<GuideActOutcome>;
   busy: boolean;
 }) {
+  const { tClient } = useI18n();
   const [ticked, setTicked] = useState<string[]>([]);
   const multi = block.mode === 'multi';
   const selected = locked ? chosen : ticked;
@@ -300,7 +302,7 @@ function ChoicesBlock({
       ))}
       {multi && !locked ? (
         <Button
-          label={block.submitLabel ?? 'Continue'}
+          label={block.submitLabel ?? tClient('connectAi.continue')}
           disabled={ticked.length === 0}
           busy={busy}
           onPress={() => void act({ actionId: block.id, optionIds: ticked })}
@@ -482,6 +484,8 @@ function ConnectOAuthActionButton({
   busy: boolean;
   onProblem: (text: string | null) => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const managed = useManaged();
   const { slug } = useBurrow();
   const startOAuth = useConnectionWrite(api.connections.startOAuth, slug);
@@ -501,7 +505,7 @@ function ConnectOAuthActionButton({
       }
       openUrl(result.data.authorizeUrl);
     } catch (err) {
-      onProblem(connectProblem(err).message ?? problemText(err, CONNECT_FORM_TEXT.cantStart));
+      onProblem(connectProblem(err).message ?? problemText(err, CONNECT_FORM_TEXT.cantStart, rawLocale));
     }
   }
 
@@ -916,6 +920,8 @@ function FormBlock({
  * Email (IMAP) opens its screen. A self-hosted Whombat's sign-in still happens on its web page (the DM there).
  */
 function ConnectBlock({ block, web }: { block: GuideConnectBlock; web: GuideWeb }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const managed = useManaged();
   const startGoogle = useStartGoogleConnection((url) => void Linking.openURL(url).catch(() => {}));
@@ -940,7 +946,7 @@ function ConnectBlock({ block, web }: { block: GuideConnectBlock; web: GuideWeb 
         if (result.status === 'ok') void Linking.openURL(result.data.authorizeUrl).catch(() => {});
       }
     } catch (err) {
-      setProblem(problemText(err, connectStartProblem(block)));
+      setProblem(problemText(err, connectStartProblem(block), rawLocale));
     }
   }
 

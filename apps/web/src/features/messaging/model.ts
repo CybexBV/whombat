@@ -12,6 +12,7 @@ import {
   type MessagePage,
   type Principal,
 } from '@whombat/core';
+import { currentLocale } from '../../i18n/provider';
 
 export type PrincipalLookup = (id: string) => Principal | undefined;
 
@@ -78,7 +79,12 @@ export function groupByDay(messages: readonly Message[], now: Date | number, tim
     const key = dayKey(m.createdAt, timeZone);
     const last = groups[groups.length - 1];
     if (last && last.key === key) last.messages.push(m);
-    else groups.push({ key, label: formatDayDivider(m.createdAt, now, timeZone), messages: [m] });
+    else
+      groups.push({
+        key,
+        label: formatDayDivider(m.createdAt, now, timeZone, currentLocale()),
+        messages: [m],
+      });
   }
   return groups;
 }

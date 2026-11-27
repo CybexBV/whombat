@@ -11,6 +11,7 @@ import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../component
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { useWebI18n } from '../../i18n/provider';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import styles from './CreatePlanModal.module.css';
 import { planErrorText, planTitleFrom } from './planModel';
@@ -51,6 +52,7 @@ export function CreatePlanModal(props: CreatePlanModalProps) {
 }
 
 function CreatePlanForm({ burrow, conversationId, onOpenChange, source, onCreated }: CreatePlanModalProps) {
+  const { tag: uiLocale } = useWebI18n();
   const ids = useId();
   const toast = useToast();
   const viewer = useBurrowViewer(burrow);
@@ -88,7 +90,7 @@ function CreatePlanForm({ burrow, conversationId, onOpenChange, source, onCreate
         },
       });
     } catch (err) {
-      setError(licenceRefusalText(err) ?? planErrorText(err));
+      setError(licenceRefusalText(err, uiLocale) ?? planErrorText(err));
       return;
     }
     if (result.status !== 'ok') {

@@ -16,6 +16,7 @@ import { api } from '@whombat/core/contracts';
 import type { HostConsoleProtocol, HostConsoleSession } from '@whombat/core/domain';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOptionalAppServices } from '../../../app/providers';
+import { currentLocale } from '../../../i18n/provider';
 import { ConsoleTransport } from './transport';
 
 export type SessionPhase =
@@ -129,7 +130,7 @@ export function useConsoleSession({
         setPhase({ kind: 'connecting', transport: tr, session: s });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setPhase({ kind: 'ended', message: hostErrorInfo(err).message });
+        if (!cancelled) setPhase({ kind: 'ended', message: hostErrorInfo(err, currentLocale()).message });
       });
     return () => {
       cancelled = true;

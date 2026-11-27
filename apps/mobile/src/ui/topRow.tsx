@@ -7,8 +7,8 @@
 import { type ReactNode, useContext } from 'react';
 import { View } from 'react-native';
 import { placeOfScreen } from '../data/places';
-import { SEARCH_COPY } from '../data/search';
-import { TAB_WORDS } from '../data/shell';
+import { TAB_WORDS, tabWords } from '../data/shell';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -34,7 +34,10 @@ export function TabTop({
   const theme = useTheme();
   const navigation = useAppNavigation();
   const tab = useContext(TabRootContext);
-  const here = tab ? TAB_WORDS[tab] : title;
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
+  const here = tab ? tabWords(rawLocale)[tab] : title;
+  const heading = tab && title === TAB_WORDS[tab] ? here : title;
   return (
     <View
       style={{
@@ -57,7 +60,7 @@ export function TabTop({
         accessibilityRole="header"
         style={{ flex: 1, minWidth: 56, marginLeft: 2 }}
       >
-        {title}
+        {heading}
       </Text>
       {right}
       {tab ? (
@@ -66,7 +69,7 @@ export function TabTop({
           feedback="wash"
           ringRadius={SHELL_TARGET / 2}
           accessibilityRole="link"
-          accessibilityLabel={SEARCH_COPY.title}
+          accessibilityLabel={t('places.search')}
           style={{
             minHeight: SHELL_TARGET,
             minWidth: SHELL_TARGET,

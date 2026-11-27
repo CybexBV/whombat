@@ -3,10 +3,12 @@
  * snapshot (with memory for a running VM). A snapshot opens its sheet: Go back to it, or Remove it — both asked
  * first, then sent with `confirm`; each says when it started and when it ended.
  */
+
 import { snapshotRows } from '@whombat/client/hosts/mobile';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
+import { useI18n, useMobileT } from '../../i18n';
 import { BigButton, OneCard, OneRow } from '../../ui/assistant';
 import { OneSheet } from '../../ui/oneSheet';
 import { ErrorState, SkeletonRows } from '../../ui/primitives';
@@ -38,6 +40,8 @@ export function GuestSnapshots({
   schedule?: { text: string; onChange: (() => void) | null };
   onTake: () => void;
 }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const q = useHostManageRead(
     {
       params: { burrow: slug, serverId },
@@ -57,23 +61,29 @@ export function GuestSnapshots({
         <OneCard>
           <SettingLine
             first
-            label="Schedule"
+            label={tClient('automations.source.schedule')}
             value={schedule.text}
             action={
               schedule.onChange ? (
-                <RowAction label="Change" spoken="Change the snapshot schedule" onPress={schedule.onChange} />
+                <RowAction
+                  label={tMobile('screens.change')}
+                  spoken="Change the snapshot schedule"
+                  onPress={schedule.onChange}
+                />
               ) : null
             }
           />
         </OneCard>
       ) : null}
-      {canChange ? <BigButton label="Take a snapshot" variant="secondary" onPress={onTake} /> : null}
+      {canChange ? (
+        <BigButton label={tMobile('screens.take-a-snapshot')} variant="secondary" onPress={onTake} />
+      ) : null}
       {q.isPending ? (
-        <SkeletonRows count={3} lines={2} label="Loading the snapshots" />
+        <SkeletonRows count={3} lines={2} label={tMobile('screens.loading-the-snapshots')} />
       ) : q.isError ? (
-        <ErrorState text="The snapshots didn’t load." onRetry={() => void q.refetch()} />
+        <ErrorState text={tMobile('screens.the-snapshots-didnt-load')} onRetry={() => void q.refetch()} />
       ) : (
-        <OneCard label="Snapshots">
+        <OneCard label={tMobile('screens.snapshots')}>
           {rows.length ? (
             rows.map((r) => (
               <OneRow
@@ -93,7 +103,7 @@ export function GuestSnapshots({
               />
             ))
           ) : (
-            <CardQuiet>No snapshots yet.</CardQuiet>
+            <CardQuiet>{tMobile('screens.no-snapshots-yet')}</CardQuiet>
           )}
         </OneCard>
       )}
@@ -126,6 +136,7 @@ function SnapshotAsk({
   onAsk: (a: Ask) => void;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { send, busy } = useGuestAction(serverId, guest);
   const [error, setError] = useState<string | null>(null);
   if (ask.step === 'choose')
@@ -167,7 +178,7 @@ function SnapshotAsk({
       body={
         restore
           ? `Everything that changed on ${guest.name} since then is lost.`
-          : 'The snapshot goes; the guest stays as it is now.'
+          : tMobile('screens.the-snapshot-goes-the-guest-stays-as-it')
       }
       busy={busy}
       buttons={[

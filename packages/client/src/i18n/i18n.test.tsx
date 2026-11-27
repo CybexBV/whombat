@@ -1,13 +1,23 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
+import type { NeedsYouItem } from '@whombat/core';
 import { describe, expect, it, vi } from 'vitest';
 import { agentFaceLabelIn, agentFaceStyleIn } from '../agentFace';
 import { agentWords } from '../agentName';
 import { permissionsText, serverPermission } from '../agentPermissions';
 import { connectionWords } from '../connections/words';
+import { arrangeWords, overviewPageWords } from '../home/arrange';
 import { homeGreeting, homeStatus, homeWidgetStatus, widgetAsOfLabel } from '../home/greeting';
 import { quietEndWords } from '../home/monitoring';
-import { needsYouGroupLabel, needsYouWords } from '../home/needsYouList';
+import {
+  needsYouApprovalCard,
+  needsYouGroupLabel,
+  needsYouListRow,
+  needsYouListView,
+  needsYouMore,
+  needsYouSettledText,
+  needsYouWords,
+} from '../home/needsYouList';
 import { usedPhrase } from '../home/sections';
 import { statusSummary } from '../home/statusLevel';
 import { overviewWords } from '../home/tabs';
@@ -20,13 +30,91 @@ import { formatEuro, planCardText } from '../managed/billing';
 import { claimAppliance } from '../managed/claim';
 import { licenceDay } from '../managed/licence';
 import { pushText } from '../managed/push';
+import { updateStateWords, updateText, whatsNewText } from '../managed/updates';
 import { daysText, dndSetText, quietHoursText } from '../notifications';
 import { settingsGroupText, settingsHomeRows, themeWords } from '../settingsGroups';
+import { teamReportWords } from '../teamReports';
 import { usageCost, usageView } from '../usageView';
 import { countryName, newsSuggestedTitle, placeRowText } from '../weatherNews';
 import { createCatalogHook, I18nProvider, useI18n } from './react';
 
 describe('@whombat/client i18n', () => {
+  it('draws Dutch Inbox groups, times, actions and approval cards', () => {
+    const options = {
+      locale: 'nl-NL',
+      now: Date.parse('2026-10-02T14:00:00Z'),
+      timeZone: 'Europe/Amsterdam',
+      assistant: 'Dusty',
+    };
+    const approval: NeedsYouItem = {
+      id: 'approval:1',
+      ref: { kind: 'approval', id: '1' },
+      kind: 'approval',
+      group: 'you',
+      severity: 'warn',
+      title: 'Server opnieuw opstarten?',
+      body: 'De server is kort offline.',
+      at: '2026-10-01T14:00:00Z',
+      actions: [
+        { id: 'approve', kind: 'approve', style: 'primary', label: 'Yes, do it' },
+        {
+          id: 'later',
+          kind: 'approve_later',
+          style: 'secondary',
+          label: 'Tonight',
+          at: '2026-10-03T01:00:00Z',
+        },
+        { id: 'decline', kind: 'decline', style: 'secondary', label: 'No' },
+      ],
+    };
+    const reminder: NeedsYouItem = {
+      ...approval,
+      id: 'hint:1',
+      ref: { kind: 'hint', id: '1' },
+      kind: 'hint',
+      group: 'fyi',
+      actions: [],
+    };
+    const inbox = needsYouListView({ needsYou: [], needsYouList: [approval, reminder] }, options);
+    expect(inbox.groups.map(({ label }) => label)).toEqual(['Actie nodig', 'Meldingen', 'Afgehandeld']);
+    expect(inbox.groups.find(({ key }) => key === 'fyi')?.fold).toMatchObject({ show: 'Toon 1 melding' });
+    expect(inbox.groups[0]?.rows[0]?.meta).toBe('1 dag geleden');
+
+    const row = needsYouListRow(approval, options);
+    expect(row.buttons.filter((button) => !button.more).map(({ label }) => label)).toEqual([
+      'Ja, nu',
+      'Ja, vannacht',
+      'Nee',
+    ]);
+    expect(needsYouMore(row, options.locale).map(({ label }) => label)).toEqual(['Praat met Dusty hierover']);
+    expect(needsYouSettledText(approval.ref, options.locale)).toBe(needsYouWords(options.locale).settledOwn);
+    expect(needsYouApprovalCard(row, options)).toMatchObject({
+      status: 'Dusty heeft je akkoord nodig',
+      permission: 'Niet opgegeven in dit verzoek',
+      tonight: { label: 'Ja, vannacht', at: 'zaterdag 3 oktober 2026 om 03:00 · Europe/Amsterdam' },
+    });
+  });
+
+  it('translates Overview, arranging, updates and team reports into Dutch', () => {
+    const locale = 'nl-NL';
+    expect(overviewPageWords(locale).watching('Dusty', 1, 2)).toBe(
+      'Dusty houdt 1 server en 2 koppelingen in de gaten.',
+    );
+    expect(overviewPageWords(locale).todayLine(1, 2)).toBe('1 ding tot nu toe · 2 gepland');
+    expect(arrangeWords(locale)).toMatchObject({
+      arrange: 'Indelen',
+      ownNames: { needsYou: 'Actie nodig' },
+      ranges: { '24h': '24 uur' },
+    });
+    expect(updateStateWords(locale)).toEqual({ upToDate: 'Bijgewerkt', ready: 'Update klaar' });
+    expect(updateText(locale).blocker(2, 'backup')).toBe('2 back-ups bezig');
+    expect(whatsNewText(locale).link).toBe('Wat is er nieuw?');
+    expect(teamReportWords(locale)).toMatchObject({
+      entry: 'Meld een probleem of idee',
+      title: 'Jouw meldingen',
+    });
+  });
+
   it('translates agent, settings and permissions copy into Dutch while keeping English defaults', () => {
     expect(agentWords('Dusty').ask).toBe('Ask Dusty');
     expect(agentWords('Dusty', 'nl-NL').ask).toBe('Vraag Dusty');

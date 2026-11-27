@@ -6,6 +6,7 @@
  */
 import type { ThingSummary } from '@whombat/core';
 import type { HostServer } from '@whombat/core/domain';
+import { agentWords } from '../agentName';
 import { overviewServersLine } from '../hosts/overview';
 import { clientTranslator } from '../i18n/catalog';
 import { thingStateWords } from './monitoring';
@@ -78,12 +79,13 @@ export function serverQuietWords(
   things: readonly Pick<ThingSummary, 'id' | 'kind' | 'quietUntil'>[] | null | undefined,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): Map<string, string> {
   const out = new Map<string, string>();
   const at = typeof now === 'number' ? now : now.getTime();
   for (const t of things ?? []) {
     if (t.kind !== 'server' || !t.quietUntil || Date.parse(t.quietUntil) <= at) continue;
-    const words = thingStateWords({ quietUntil: t.quietUntil }, now, timeZone);
+    const words = thingStateWords({ quietUntil: t.quietUntil }, now, timeZone, locale);
     if (words) out.set(t.id, words);
   }
   return out;
@@ -126,13 +128,6 @@ export interface OverviewTile {
   held: 'cause' | 'quiet' | null;
 }
 
-/** What a tile says when the Whombat didn't say why: something the person can act on. A tile's line has no full stop. */
-const NO_REASON: Partial<Record<HomeThingRow['status'], string>> = {
-  offline: 'Whombat can’t reach it right now',
-  bad: 'It isn’t working. Open it to see why',
-  warn: 'Open it to see what needs a look',
-};
-
 const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A reason as a tile's line: its first letter up, without a closing full stop (“4 things need a look”). */
@@ -141,8 +136,10 @@ function tileReason(text: string): string {
 }
 
 /** A thing being learned: “Dusty is still learning it”. */
-export function learningLine(assistant: string | null | undefined): string {
-  return `${assistant?.trim() || 'Your agent'} is still learning it`;
+export function learningLine(assistant: string | null | undefined, locale?: string | null): string {
+  return clientTranslator(locale).t('overview.learningLine', {
+    assistant: assistant?.trim() || agentWords(null, locale).Name,
+  });
 }
 
 /**
@@ -155,34 +152,41 @@ export function overviewTiles(
   now: Date | number,
   timeZone: string,
   assistantName: string | null | undefined,
+  locale?: string | null,
 ): OverviewTile[] {
+  const tr = clientTranslator(locale);
   const byId = new Map(things.map((t) => [t.id, t]));
   return sortByStatusLevel(rows, (r) => r.level).map((row) => {
     let line: OverviewTile['line'];
     let usedSubtitle = false;
     const thing = byId.get(row.id);
     const heldWords =
-      thing && (thing.causedBy || thing.quietUntil) ? thingStateWords(thing, now, timeZone) : null;
+      thing && (thing.causedBy || thing.quietUntil) ? thingStateWords(thing, now, timeZone, locale) : null;
     // Its cause's grey only when the cause's words are what it says: a window someone chose comes first.
     const held = heldWords ? (heldWords === thing?.causedBy?.words ? 'cause' : 'quiet') : null;
     if (heldWords) {
       line = { text: heldWords, tone: 'mut' };
     } else if (row.level === 'notWorking' || row.level === 'needsLook') {
       const tone: OverviewTileTone = row.tone === 'bad' ? 'bad' : row.tone === 'warn' ? 'warn' : 'mut';
-      const text = row.reason ? tileReason(row.reason) : (NO_REASON[row.status] ?? row.word);
+      const status = row.status;
+      const fallback =
+        status === 'offline' || status === 'bad' || status === 'warn'
+          ? tr.t(`overview.noReason.${status}`)
+          : row.word;
+      const text = row.reason ? tileReason(row.reason) : fallback;
       line = { text, tone };
     } else if (row.level === 'learning') {
-      line = { text: learningLine(assistantName), tone: 'mut' };
+      line = { text: learningLine(assistantName, locale), tone: 'mut' };
     } else if (row.figures.length) {
       line = { text: row.figures.slice(0, 2).map(thingFigurePhrase).join(' · '), tone: 'plain' };
     } else if (row.subtitle) {
       line = { text: row.subtitle, tone: 'plain' };
       usedSubtitle = true;
     } else {
-      line = { text: 'Connected', tone: 'plain' };
+      line = { text: tr.t('statusLevel.connected'), tone: 'plain' };
     }
     const at = thing?.usedAt;
-    const used = at ? upFirst(usedPhrase(at, now, timeZone)) : null;
+    const used = at ? upFirst(usedPhrase(at, now, timeZone, locale)) : null;
     // The held words are the line already: the foot doesn't say them again (a thing down because of something else
     // has them as its own line too).
     const what = usedSubtitle

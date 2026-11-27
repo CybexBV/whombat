@@ -7,6 +7,7 @@
  * pools are on the Summary (`serverDashboard`), the containers' updates on Guests. Unraid's own settings, shares and
  * OS updates stay in Unraid's page, and the screens say so.
  */
+
 import {
   parityView,
   unraidAbilities,
@@ -28,6 +29,7 @@ import {
 import type { HostGuest, HostServerDetail, HostUnraidDetail } from '@whombat/core';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
+import { useI18n, useMobileT } from '../../i18n';
 import { Meter } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -72,6 +74,7 @@ export function ArrayCard({
   guests = [],
   full = false,
 }: UnraidBase & { guests?: readonly HostGuest[]; full?: boolean }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   // The web's words and rules (`unraid.ts`): the state, the parity line, what may be done now.
   const a = unraidArrayView(u.array);
@@ -128,7 +131,10 @@ export function ArrayCard({
   }
   const why = full && canChange ? [can.checkReason, can.moverReason].filter(Boolean).join(' ') : '';
   return (
-    <OneCard label="Array" right={<ToneBadge text={a.stateText} tone={a.tone === 'mut' ? 'mut' : a.tone} />}>
+    <OneCard
+      label={tMobile('screens.array')}
+      right={<ToneBadge text={a.stateText} tone={a.tone === 'mut' ? 'mut' : a.tone} />}
+    >
       <View
         accessible
         accessibilityLabel={[`Array ${a.stateText}`, a.trouble, a.useText].filter(Boolean).join(', ')}
@@ -167,7 +173,7 @@ export function ArrayCard({
         {p.pct != null ? <Meter pct={p.pct} /> : null}
         {u.array.moverRunning ? (
           <Text size={13} color={theme.colors.mut}>
-            The mover is running.
+            {tMobile('screens.the-mover-is-running')}
           </Text>
         ) : null}
       </View>
@@ -222,17 +228,19 @@ export function ArrayCard({
 
 /** unRAID's unread notifications: each opens its text with Archive; Archive all. */
 export function NotificationsCard({ serverId, serverName, unraid: u, now, timeZone, canChange }: UnraidBase) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const rows = notificationRows(u, now, timeZone);
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [open, setOpen] = useState<NotificationRow | null>(null);
   if (!rows.length) return null;
   return (
     <OneCard
-      label="Notifications"
+      label={tClient('settings.you.notifications')}
       right={
         canChange && rows.length > 1 ? (
           <RowAction
-            label={busy ? 'Archiving…' : 'Archive all'}
+            label={busy ? tMobile('screens.archiving') : tMobile('screens.archive-all')}
             spoken="Archive all notifications"
             onPress={() =>
               void run('notification.archive', {
@@ -252,7 +260,7 @@ export function NotificationsCard({ serverId, serverName, unraid: u, now, timeZo
           meta={r.meta}
           chevron
           label={r.label}
-          hint={canChange ? 'Read it or archive it' : 'Reads it whole'}
+          hint={canChange ? tMobile('screens.read-it-or-archive-it') : tMobile('screens.reads-it-whole')}
           onPress={() => setOpen(r)}
         />
       ))}
@@ -274,6 +282,8 @@ export function NotificationsCard({ serverId, serverName, unraid: u, now, timeZo
  * dashboards-mobile.md AP-2130), the disks by group, the parity history and schedule.
  */
 export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; manageOff: string | null }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const { serverId, serverName, detail, unraid: u, now, timeZone, canChange, manageOff } = props;
   const theme = useTheme();
   const [disk, setDisk] = useState<DiskRowView | null>(null);
@@ -314,14 +324,22 @@ export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; 
               }
               chevron
               label={r.label}
-              hint={canChange && r.canSpin ? 'Its details, spin it up or down' : 'Its details'}
+              hint={
+                canChange && r.canSpin
+                  ? tMobile('screens.its-details-spin-it-up-or-down')
+                  : tMobile('screens.its-details')
+              }
               onPress={() => setDisk(r)}
             />
           ))}
         </OneCard>
       ))}
-      <OneCard label="Parity checks">
-        <SettingLine first label="Schedule" value={u.array.parity.schedule?.trim() || 'No schedule'} />
+      <OneCard label={tMobile('screens.parity-checks')}>
+        <SettingLine
+          first
+          label={tClient('automations.source.schedule')}
+          value={u.array.parity.schedule?.trim() || 'No schedule'}
+        />
         {history.length ? (
           history.map((h) => (
             <OneRow
@@ -333,11 +351,11 @@ export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; 
             />
           ))
         ) : (
-          <CardQuiet>No checks yet.</CardQuiet>
+          <CardQuiet>{tMobile('screens.no-checks-yet')}</CardQuiet>
         )}
       </OneCard>
       <WebLine
-        text="Shares, the array’s and the disks’ settings and the parity schedule: in Unraid’s own page."
+        text={tMobile('screens.shares-the-arrays-and-the-disks-settings-and')}
         url={unraidPageUrl(detail, 'Main')}
       />
       {disk ? (
@@ -355,6 +373,7 @@ export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; 
 
 /** The Plugins segment: the Unraid version, Check for updates, Update all, each plugin. */
 export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChange }: UnraidBase) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const rows = pluginPhoneRows(u);
   const updates = rows.filter((r) => r.update).length;
@@ -368,13 +387,13 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
       <OneCard label="Unraid">
         <SettingLine
           first
-          label="Version"
+          label={tMobile('screens.version')}
           value={version.text}
           sub={os}
           action={
             os && page ? (
               <RowAction
-                label="Update in Unraid"
+                label={tMobile('screens.update-in-unraid')}
                 spoken="Update in Unraid"
                 onPress={() => void Linking.openURL(page)}
               />
@@ -385,7 +404,7 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
       {canChange ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Button
-            label="Check for updates"
+            label={tMobile('screens.check-for-updates')}
             variant="secondary"
             busy={busy}
             onPress={() => void run('plugin.check')}
@@ -402,7 +421,7 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
           ) : null}
         </View>
       ) : null}
-      <OneCard label="Plugins">
+      <OneCard label={tMobile('screens.plugins')}>
         {rows.length ? (
           rows.map((r) => (
             <OneRow
@@ -414,7 +433,7 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
               trailing={
                 r.update ? (
                   <Text size={12} weight={500} mono color={theme.colors.warn}>
-                    update
+                    {tMobile('screens.update-2')}
                   </Text>
                 ) : undefined
               }
@@ -425,11 +444,11 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
             />
           ))
         ) : (
-          <CardQuiet>No plugins installed.</CardQuiet>
+          <CardQuiet>{tMobile('screens.no-plugins-installed')}</CardQuiet>
         )}
       </OneCard>
       <Text size={13} lh={1.45} color={theme.colors.mut}>
-        Installing plugins and apps: in Unraid’s own page.
+        {tMobile('screens.installing-plugins-and-apps-in-unraids-own-page')}
       </Text>
       {open ? (
         <PluginUpdateSheet

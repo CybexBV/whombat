@@ -24,6 +24,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { Tag } from '../../components/Tag';
 import { Toggle } from '../../components/Toggle';
+import { currentLocale } from '../../i18n/provider';
 import { backupErrorText } from './BackupDestination';
 import styles from './BackupOverview.module.css';
 import { draftInput, draftKeep, draftLimit, draftOf, type PolicyDraft } from './backupOptionsModel';
@@ -176,8 +177,8 @@ export function BackupOptionsDialog({
                 </span>
                 <span className={styles.choiceMeta}>
                   {limit === null
-                    ? D.limitOff(placeName, free === null ? null : formatBytes(free))
-                    : D.limitOn(formatBytes(limit))}
+                    ? D.limitOff(placeName, free === null ? null : formatBytes(free, currentLocale()))
+                    : D.limitOn(formatBytes(limit, currentLocale()))}
                 </span>
               </span>
               <Toggle

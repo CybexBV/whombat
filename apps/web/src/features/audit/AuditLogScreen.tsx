@@ -1,13 +1,13 @@
 import { useAuditLogInfinite, useBootstrap, useTheAgent, useWhombat } from '@whombat/client/react';
 import {
-  AUDIT_ACTOR_LABELS,
-  AUDIT_KIND_FILTER_LABELS,
   AUDIT_KIND_FILTERS,
   type AuditActorFilter,
   AuditActorFilter as AuditActorFilterSchema,
   type AuditDisplayContext,
   type AuditKindFilter,
+  auditActorLabels,
   auditCsvFileName,
+  auditKindFilterLabels,
   auditSubtitle,
   exportToast,
   groupAuditByDay,
@@ -22,6 +22,8 @@ import { ErrorNote, SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { saveBlob } from '../../lib/saveBlob';
 import styles from './AuditLogScreen.module.css';
 import { AuditRow } from './AuditRow';
@@ -61,6 +63,9 @@ const DEFAULT_OPEN_EVENT_ID = 'evt_9f18';
 
 /** Audit log (TODO 13): append-only, signed, filterable, exportable. */
 export function AuditLogScreen({ burrow, actor, kind, who, open, onChange }: AuditLogScreenProps) {
+  const AUDIT_KIND_FILTER_LABELS = useLocaleWords(auditKindFilterLabels);
+  const AUDIT_ACTOR_LABELS = useLocaleWords(auditActorLabels);
+  const { tag: uiLocale } = useWebI18n();
   const { client } = useWhombat();
   const toast = useToast();
   const navigate = useNavigateHref();
@@ -117,11 +122,11 @@ export function AuditLogScreen({ burrow, actor, kind, who, open, onChange }: Aud
         bootstrap.burrow.timeZone,
       );
       downloadCsv(csv, fileName);
-      toast.show(exportToast(countCsvRows(csv)));
+      toast.show(exportToast(countCsvRows(csv), uiLocale));
     } finally {
       setExporting(false);
     }
-  }, [client, burrow, actor, kind, who, bootstrap, toast]);
+  }, [client, burrow, actor, kind, who, bootstrap, toast, uiLocale]);
 
   if (!bootstrap || !ctx) return null;
 
@@ -131,7 +136,7 @@ export function AuditLogScreen({ burrow, actor, kind, who, open, onChange }: Aud
         <div className={styles.header}>
           <div className={styles.heading}>
             <h1 className={styles.title}>Audit log</h1>
-            <p className={styles.subtitle}>{auditSubtitle(bootstrap.burrow.name, words.name)}</p>
+            <p className={styles.subtitle}>{auditSubtitle(bootstrap.burrow.name, words.name, uiLocale)}</p>
           </div>
           <Button variant="secondary" size="xl" onClick={() => void handleExport()} disabled={exporting}>
             Export CSV

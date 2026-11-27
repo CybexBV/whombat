@@ -9,6 +9,7 @@
  * screen does; *Remove from this page* and *Done*. Every button 44dp and named for TalkBack with the widget's name.
  * Changes go into the draft.
  */
+
 import {
   DESK_SCREENS_TEXT,
   DESK_WIDGET_LIMITS,
@@ -28,9 +29,10 @@ import {
   type ViewOf,
   widgetSize,
 } from '@whombat/client/desk';
-import { type Grid, SERVER_SHOW_VIEWS, serverShow } from '@whombat/screen';
+import { type Grid, SERVER_SHOW_VIEWS, serverShow, serverShowWords } from '@whombat/screen';
 import { type ReactNode, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import {
@@ -547,6 +549,8 @@ function ShowsPart({
   onChoose: (item: DeskCatalogItem) => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const labels = serverShowWords(rawLocale);
   if (choices.length < 2 && !reading) return null;
   return (
     <View style={{ gap: 6 }}>
@@ -554,6 +558,8 @@ function ShowsPart({
       <View accessibilityRole="radiogroup" accessibilityLabel={E.shows} style={{ gap: 6 }}>
         {choices.map((item) => {
           const on = sameWidget(widget, item);
+          const { name, line } =
+            item.type === 'server' && labels !== serverShowWords() ? labels[serverShow(item.opts)] : item;
           return (
             <Touchable
               key={`${item.type}|${item.opts.panel ?? ''}|${item.opts.show ?? ''}`}
@@ -563,7 +569,7 @@ function ShowsPart({
               feedback="wash"
               ringRadius={12}
               accessibilityRole="radio"
-              accessibilityLabel={item.line ? `${item.name}, ${item.line}` : item.name}
+              accessibilityLabel={line ? `${name}, ${line}` : name}
               accessibilityState={{ selected: on }}
               style={{
                 minHeight: 44,
@@ -578,11 +584,11 @@ function ShowsPart({
               }}
             >
               <Text size={14.5} weight={500} lh={1.35}>
-                {item.name}
+                {name}
               </Text>
-              {item.line ? (
+              {line ? (
                 <Text size={12.5} lh={1.4} color={theme.colors.mut} numberOfLines={2}>
-                  {item.line}
+                  {line}
                 </Text>
               ) : null}
             </Touchable>

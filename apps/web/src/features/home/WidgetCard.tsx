@@ -8,6 +8,7 @@ import { LineChart } from '../../components/charts';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { useToast } from '../../components/Toast';
+import { currentLocale } from '../../i18n/provider';
 import { useNow } from '../messaging/useRoom';
 import styles from './Home.module.css';
 
@@ -45,7 +46,7 @@ export function WidgetCard({
 }) {
   const clock = useNow(30_000);
   const at = now ?? clock;
-  const model = useMemo(() => widgetChart(widget, timeZone, at), [widget, timeZone, at]);
+  const model = useMemo(() => widgetChart(widget, timeZone, at, currentLocale()), [widget, timeZone, at]);
   const headId = useId();
   const series = useMemo(
     () =>

@@ -130,6 +130,9 @@ type FleetServer struct {
 	Parent      *string    `json:"parent"` // the enrolled host this one runs on
 	// HostsThisWhombat: one of the host's guests is this Whombat (IU-02).
 	HostsThisWhombat bool `json:"hosts_this_whombat,omitempty"`
+
+	StatusNoteCode   string         `json:"status_note_code,omitempty"`
+	StatusNoteParams map[string]any `json:"status_note_params,omitempty"`
 }
 
 // MaintJSON is an active maintenance window of a host.
@@ -227,6 +230,11 @@ type Alert struct {
 	Muted        bool     `json:"muted"`         // the host is in maintenance
 	SuppressedBy *string  `json:"suppressed_by"` // the host it runs on is offline
 	Attention    bool     `json:"attention"`     // open and none of the above
+
+	Code             string         `json:"code,omitempty"`
+	Params           map[string]any `json:"params,omitempty"`
+	StatusNoteCode   string         `json:"status_note_code,omitempty"`
+	StatusNoteParams map[string]any `json:"status_note_params,omitempty"`
 }
 
 // AckJSON is an acknowledgement (Until: a snooze that lapses).
@@ -375,6 +383,9 @@ type DetailServer struct {
 	Parent        *string       `json:"parent"`
 	// HostsThisWhombat: one of the host's guests is this Whombat (IU-02).
 	HostsThisWhombat bool `json:"hosts_this_whombat,omitempty"`
+
+	StatusNoteCode   string         `json:"status_note_code,omitempty"`
+	StatusNoteParams map[string]any `json:"status_note_params,omitempty"`
 }
 
 // OSInfo is the operating system field.
@@ -459,6 +470,11 @@ type Banner struct {
 	Link     *string `json:"link"`
 	Rule     string  `json:"rule"`
 	AlertID  string  `json:"alert_id"`
+
+	Code             string         `json:"code,omitempty"`
+	Params           map[string]any `json:"params,omitempty"`
+	StatusNoteCode   string         `json:"status_note_code,omitempty"`
+	StatusNoteParams map[string]any `json:"status_note_params,omitempty"`
 }
 
 // Sensor is a temperature table row.

@@ -1,3 +1,4 @@
+import { localeTag } from '../i18n/locale';
 /**
  * The desk display's state (Whombat desk-display.md DK-01…DK-30, DK-60…DK-65, DK-70…DK-74): what the runtime gives
  * the paired screen, passed through by the console server as `/api/state`'s `desk` (contracts 0.116.0
@@ -329,6 +330,7 @@ export interface DeskPresence {
 }
 
 export interface DeskPaired {
+  locale?: string;
   person: { name: string; initial: string; tone: 1 | 2 | 3 | 4 | 5 };
   /** False: no PIN chosen yet, only the phone unlocks (DK-18); an older runtime sends none, which is true. */
   hasPin: boolean;
@@ -762,7 +764,9 @@ function parsePaired(v: unknown): DeskPaired | null {
   if (!name || !assistant) return null;
   const tz = typeof v.timeZone === 'string' && validZone(v.timeZone) ? v.timeZone : 'UTC';
   const tone = int(v.person.tone, 1, 5) ?? 1;
+  const locale = localeTag(v.locale);
   return {
+    ...(locale ? { locale } : {}),
     person: {
       name,
       initial: text(v.person.initial, 2) ?? ([...name][0] ?? '?').toUpperCase(),

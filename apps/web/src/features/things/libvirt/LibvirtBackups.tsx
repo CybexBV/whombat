@@ -19,6 +19,7 @@ import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { Card, Empty, ErrorLine } from '../parts';
 import { useThingSearch } from '../search';
 import styles from '../Things.module.css';
@@ -94,8 +95,8 @@ export function LvBackupTable({
                   </td>
                 ) : null}
                 <td className={styles.num}>
-                  <span title={t != null ? formatDayTime(t, timeZone) : undefined}>
-                    {t != null ? formatRelativeDay(t, now, timeZone) : DASH}
+                  <span title={t != null ? formatDayTime(t, timeZone, currentLocale()) : undefined}>
+                    {t != null ? formatRelativeDay(t, now, timeZone, currentLocale()) : DASH}
                   </span>
                 </td>
                 <td className={styles.num}>{b.sizeBytes != null ? formatBytesBinary(b.sizeBytes) : DASH}</td>
@@ -184,7 +185,7 @@ export function LvGuestBackups({
         title="Backups"
         meta={
           t != null
-            ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(t, Date.parse(detail.asOf), timeZone)}`
+            ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(t, Date.parse(detail.asOf), timeZone, currentLocale())}`
             : undefined
         }
         link={

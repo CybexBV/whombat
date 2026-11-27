@@ -5,23 +5,25 @@ import {
   connectionPermission,
   keptSitesText,
   keptSiteUntil,
-  PERMISSION_WORDS,
   type PermissionRow,
   type PermissionServer,
   permissionsText,
+  permissionWords,
   serverPermission,
 } from '@whombat/client';
 import { useHostsChange, useHostsFleet, useHostsStatus } from '@whombat/client/hosts/react';
 import { useCatalogConnections, useKeptSites, useStopKeptSite, useVault } from '@whombat/client/react';
 import { catalogEntry, thingHref } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
-import { HOST_ASKS_FIRST_WORDS, type HostAsksFirst } from '@whombat/core/domain';
+import { type HostAsksFirst, hostAsksFirstWords } from '@whombat/core/domain';
 import { useId, useState } from 'react';
 import { Button, ButtonLink } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { AppLink } from '../../files/AppLink';
 import { useBurrowViewer } from '../../runs/useBurrowViewer';
 import { AgentsNetworkSection } from '../../settings/AgentsNetworkSection';
@@ -49,7 +51,7 @@ export function PermissionsTab({
   showKey,
 }: SettingsTabProps & { showKey?: string | undefined }) {
   const name = profile.agent.name;
-  const t = permissionsText(name);
+  const t = permissionsText(name, currentLocale());
   return (
     <>
       <p className={styles.intro}>{t.intro}</p>
@@ -90,6 +92,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 /** A row's word in plain text (a thing whose level isn't changed here): words, not a chip. */
 function WordTag({ row }: { row: PermissionRow }) {
+  const PERMISSION_WORDS = useLocaleWords(permissionWords);
   return (
     <span className={styles.word} data-word={row.word}>
       {PERMISSION_WORDS[row.word]}
@@ -99,7 +102,8 @@ function WordTag({ row }: { row: PermissionRow }) {
 
 /** SERVERS: each with Ask me first · Go ahead; a server Whombat only watches says so. */
 function ServersSection({ burrow, agent }: { burrow: string; agent: string }) {
-  const t = permissionsText(agent);
+  const { tag: uiLocale } = useWebI18n();
+  const t = permissionsText(agent, uiLocale);
   const status = useHostsStatus({ params: { burrow } }, { retry: false });
   const present = status.data?.present === true;
   const fleet = useHostsFleet(present ? { params: { burrow }, query: {} } : null, { retry: 1 });
@@ -122,9 +126,12 @@ function ServersSection({ burrow, agent }: { burrow: string; agent: string }) {
 }
 
 function ServerRow({ burrow, server, agent }: { burrow: string; server: PermissionServer; agent: string }) {
+  const PERMISSION_WORDS = useLocaleWords(permissionWords);
+  const HOST_ASKS_FIRST_WORDS = useLocaleWords(hostAsksFirstWords);
+  const { tag: uiLocale } = useWebI18n();
   const W = HOST_ASKS_FIRST_WORDS;
-  const t = permissionsText(agent);
-  const row = serverPermission(server, agent);
+  const t = permissionsText(agent, uiLocale);
+  const row = serverPermission(server, agent, uiLocale);
   const update = useHostsChange(api.hosts.updateServer);
   const { run, busy } = useChangeRunner();
   const [confirming, setConfirming] = useState(false);
@@ -194,7 +201,8 @@ function ServerRow({ burrow, server, agent }: { burrow: string; server: Permissi
 
 /** CONNECTIONS: each at the level it was connected with (Look only is Just watch, Manage is Go ahead). */
 function ConnectionsSection({ burrow, agent }: { burrow: string; agent: string }) {
-  const t = permissionsText(agent);
+  const { tag: uiLocale } = useWebI18n();
+  const t = permissionsText(agent, uiLocale);
   const list = useCatalogConnections({ params: { burrow } }, { retry: false });
   if (list.error && !list.data) return null;
   const connections = list.data?.connections ?? [];
@@ -208,7 +216,7 @@ function ConnectionsSection({ burrow, agent }: { burrow: string; agent: string }
         ) : (
           connections.map((c) => {
             const name = c.label || catalogEntry(c.catalogId)?.name || c.catalogId;
-            const row = connectionPermission({ id: c.id, name, access: c.access }, agent);
+            const row = connectionPermission({ id: c.id, name, access: c.access }, agent, uiLocale);
             return (
               <div key={c.id} className={settings.row} data-connection={c.id}>
                 <span className={settings.rowMain}>
@@ -287,7 +295,8 @@ function KeptSitesSection({ burrow, agent }: { burrow: string; agent: string }) 
 
 /** WHAT {ASSISTANT} CAN SIGN IN TO: how many Vault sign-ins it may use, and the way to them. */
 function SignInSection({ burrow, agent }: { burrow: string; agent: string }) {
-  const t = permissionsText(agent);
+  const { tag: uiLocale } = useWebI18n();
+  const t = permissionsText(agent, uiLocale);
   const { data } = useVault({ params: { burrow } });
   if (!data) return null;
   const mine = agentVaultEntries(data.entries);

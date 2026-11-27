@@ -5,6 +5,7 @@
  * facts, its summary, the deployed site and where it was posted. Both read again on
  * `deployment.recorded` (the shared client) and on pull (the screen's `onRefresh`).
  */
+
 import { queryHook } from '@whombat/client/react';
 import { api, type Deployment } from '@whombat/core';
 import { useState } from 'react';
@@ -18,6 +19,7 @@ import {
   deployDetail,
   deployHistory,
 } from '../data/deploys';
+import { useMobileT } from '../i18n';
 import { useAppNavigation, useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -58,6 +60,7 @@ export function useDeploys() {
 }
 
 export function DeploysPanel({ deploys }: { deploys: ReturnType<typeof useDeploys> }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const ctx = useViewContext();
   const [open, setOpen] = useState<Deployment | null>(null);
@@ -67,7 +70,7 @@ export function DeploysPanel({ deploys }: { deploys: ReturnType<typeof useDeploy
 
   if (environments.error && history.error && !board && !rows)
     return <ErrorState text={DEPLOYS_TEXT.loadFailed} onRetry={deploys.refetch} />;
-  if (!board || !rows) return <SkeletonRows count={4} lines={2} label="Loading deploys" />;
+  if (!board || !rows) return <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-deploys')} />;
   if (board.length === 0 && rows.length === 0) return <QuietText>{DEPLOYS_TEXT.empty}</QuietText>;
 
   /** “DEPLOYED Banjo · 2 h ago · GitHub Actions · 7be20f”: a mono label in its tone, then who, when, how, what. */
@@ -150,13 +153,19 @@ export function DeploysPanel({ deploys }: { deploys: ReturnType<typeof useDeploy
 }
 
 function DeployDetailSheet({ deployment, onClose }: { deployment: Deployment | null; onClose: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const ctx = useViewContext();
   const navigation = useAppNavigation();
   const openUrl = useOpenUrl();
   const detail = deployment ? deployDetail(deployment, ctx) : null;
   return (
-    <Sheet visible={detail !== null} onClose={onClose} title="DEPLOY" label={detail?.title ?? 'Deploy'}>
+    <Sheet
+      visible={detail !== null}
+      onClose={onClose}
+      title={tMobile('screens.deploy')}
+      label={detail?.title ?? tMobile('screens.deploy-2')}
+    >
       {detail ? (
         <View style={{ paddingHorizontal: 22, gap: 12, paddingBottom: 8 }}>
           <View style={{ gap: 4 }}>

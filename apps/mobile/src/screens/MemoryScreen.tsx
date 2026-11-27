@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -52,10 +53,12 @@ export function MemoryScreen({ navigation }: Props) {
 
 /** The memory files' cards, Forget everything and the entry sheet; the part around them scrolls and refreshes. */
 export function MemoryFiles() {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const words = useAgentWords();
-  const copy = memoryCopy(words.name);
+  const copy = memoryCopy(words.name, rawLocale);
   const query = useMyMemory({ params: { burrow: slug } });
   const write = useMemoryWrite(api.memory.write, slug);
   const clear = useMemoryWrite(api.memory.clear, slug);

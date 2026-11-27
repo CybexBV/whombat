@@ -1,6 +1,8 @@
 /** The console's logic (CG-06…CG-09): which scene a state shows, the backoff countdown, the burrow count. */
+
+import { english, type Translate } from '../i18n/translate';
 import type { ClaimState, ClaimStateName, ConsoleState, ReachLink, StartProblem } from './api';
-import { WORD } from './copy';
+import { wordCopy } from './copy';
 
 export type ConsoleScene = ClaimStateName;
 
@@ -92,9 +94,9 @@ export function countdown(retryAt: string | null, now: number): string {
 }
 
 /** “+ 1 more burrow”, “+ 3 more burrows”; nothing for none. */
-export function moreBurrows(more: number): string | null {
+export function moreBurrows(more: number, t: Translate = english): string | null {
   if (!Number.isFinite(more) || more < 1) return null;
-  return more === 1 ? '+ 1 more burrow' : `+ ${Math.floor(more)} more burrows`;
+  return t('console.moreBurrows', { count: more, shown: Math.floor(more) });
 }
 
 /** True when the claim turned `claimed` while the page was watching (not on the first state it saw). */
@@ -181,20 +183,33 @@ export type ReachNote =
   | { kind: 'linkGrace'; day: string }
   | { kind: 'linkEnded' };
 
-export function reachNotes(s: ConsoleState): ReachNote[] {
+export function reachNotes(s: ConsoleState, locale = 'en-GB'): ReachNote[] {
   const out: ReachNote[] = [];
   const t = s.reach?.tailscale;
   // Only Tailscale's first note carries the number: the claim is the second step.
   if (t?.loginUrl) out.push({ kind: 'tailscaleLogin', url: t.loginUrl, qr: t.loginQr, first: t.first });
   if (t?.needsHttps) out.push({ kind: 'tailscaleHttps', first: t.first && !t.loginUrl });
   const l = s.reach?.link;
-  if (l?.state === 'grace' && l.graceEndsOn) out.push({ kind: 'linkGrace', day: l.graceEndsOn });
-  else if (l?.state === 'ended') out.push({ kind: 'linkEnded' });
+  if (l?.state === 'grace') {
+    let day = l.graceEndsOn;
+    if (l.graceEndsAt && locale !== 'en-GB' && locale !== 'pseudo') {
+      const year = Number(l.graceEndsAt.slice(0, 4));
+      day = new Intl.DateTimeFormat(locale, {
+        timeZone: 'UTC',
+        day: 'numeric',
+        month: 'long',
+        ...(year !== new Date(s.now).getFullYear() ? { year: 'numeric' } : {}),
+      }).format(new Date(l.graceEndsAt));
+    }
+    if (day) out.push({ kind: 'linkGrace', day });
+  } else if (l?.state === 'ended') out.push({ kind: 'linkEnded' });
   return out;
 }
 
 /** What the starting screen says about a start problem, after its title (the text console's `StartWords`, CG-409). */
-export function startWords(start: StartProblem): string {
+export function startWords(start: StartProblem, t: Translate = english): string {
+  const WORD = wordCopy(t);
+
   switch (start.problem) {
     case 'release-missing':
       return start.release ? WORD.startReleaseMissing(start.release) : WORD.startReleaseMissingNoId;

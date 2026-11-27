@@ -57,7 +57,7 @@ import {
   useDeskScreenViews,
   useDeskWidgets,
 } from '@whombat/client/desk/react';
-import { NEWS_WORDS, WEATHER_WORDS } from '@whombat/core';
+import { newsWords, weatherWords } from '@whombat/core';
 import { cellRect, type Grid, screenGrid, serverShow, sizeOf, type WidgetSize } from '@whombat/screen';
 import { WidgetPreview } from '@whombat/screen/react';
 import {
@@ -96,6 +96,7 @@ import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
+import { useLocaleWords } from '../../../i18n/words';
 import { GroupLabel, LevelRow, OptionMark, ServerRows } from '../../desk/ShowsPart';
 import { AppLink } from '../../things/parts';
 import e from './Editor.module.css';
@@ -683,6 +684,8 @@ function ChosenPanel({
   onOpen,
   widget,
 }: WidgetPanelProps & { widget: DeskWidget }) {
+  const WEATHER_WORDS = useLocaleWords(weatherWords);
+  const NEWS_WORDS = useLocaleWords(newsWords);
   const view = views.get(widget.id);
   const group = catalogGroupOf(catalog, widget);
   const found = catalogFind(catalog, widget);

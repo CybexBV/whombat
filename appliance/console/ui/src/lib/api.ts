@@ -5,6 +5,7 @@
  * page: anything it doesn't understand becomes `null` (the page keeps the last good screen).
  */
 
+import { localeTag } from '../i18n/locale';
 import { type BluetoothSummary, parseBluetoothSummary } from './bluetooth';
 import { type DeskState, parseDesk } from './desk';
 import { type NetworkSummary, parseNetworkSummary } from './network';
@@ -81,9 +82,11 @@ export interface StartProblem {
 
 export interface ConsoleState {
   mode: 'console';
+  locale?: string;
   now: string;
   claim: ClaimState | null;
   footer: string;
+  standardFooter?: boolean;
   /** The desk display (CG-37): null when the box has none or the page doesn't understand it. */
   desk: DeskState | null;
   /** How the box is connected (CG-101): null without a desk socket or an answer (no chip, no Wi-Fi sheet). */
@@ -121,6 +124,7 @@ export interface ReachLink {
   inApp: string;
   /** Grace: the day it ends as the text console says it (“25 November”); else ''. */
   graceEndsOn: string;
+  graceEndsAt?: string;
 }
 
 /** What Tailscale needs from the person: its sign-in page (without the scheme, shown as text) and HTTPS. */
@@ -166,6 +170,7 @@ export interface Check {
   id: CheckId;
   status: CheckStatus;
   value: string;
+  count?: number;
 }
 
 export type DiskReason = '' | 'too-small' | 'installer-medium' | 'in-use' | 'usb';
@@ -197,6 +202,7 @@ export type InstallStatus = 'idle' | 'running' | 'done' | 'failed';
 
 export interface InstallerState {
   mode: 'installer';
+  locale?: string;
   platform: 'self-installed' | 'factory';
   storage: 'host-encrypted' | 'luks-tpm2';
   environment: 'prod' | 'dev';
@@ -326,11 +332,14 @@ function signIn(v: unknown): { signIn?: SignIn } {
 }
 
 function parseConsole(v: Obj): ConsoleState {
+  const locale = localeTag(v.locale);
   return {
     mode: 'console',
+    ...(locale ? { locale } : {}),
     now: str(v.now),
     claim: parseClaim(v.claim),
     footer: str(v.footer),
+    ...(v.standardFooter === true ? { standardFooter: true } : {}),
     desk: parseDesk(v.desk),
     ...network(v.network),
     ...bluetooth(v.bluetooth),
@@ -364,6 +373,11 @@ function reach(v: unknown): { reach?: ConsoleReach } {
       inApp:
         l.waitingForAddress === true && typeof l.inApp === 'string' && l.inApp.length <= 64 ? l.inApp : '',
       graceEndsOn: typeof l.graceEndsOn === 'string' && l.graceEndsOn.length <= 40 ? l.graceEndsOn : '',
+      ...(typeof l.graceEndsAt === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(l.graceEndsAt) &&
+      Number.isFinite(Date.parse(l.graceEndsAt))
+        ? { graceEndsAt: l.graceEndsAt }
+        : {}),
     };
   }
   const t = v.tailscale;
@@ -400,6 +414,7 @@ function bluetooth(v: unknown): { bluetooth?: BluetoothSummary } {
 }
 
 function parseInstaller(v: Obj): InstallerState {
+  const locale = localeTag(v.locale);
   const pre = isObj(v.preflight) ? v.preflight : {};
   const inst = isObj(v.install) ? v.install : {};
   const checks: Check[] = (Array.isArray(pre.checks) ? pre.checks : []).filter(isObj).flatMap((c) =>
@@ -409,6 +424,9 @@ function parseInstaller(v: Obj): InstallerState {
             id: c.id as CheckId,
             status: oneOf(c.status, ['running', 'ok', 'warn', 'fail'] as const, 'running'),
             value: str(c.value),
+            ...(c.id === 'cpu' && typeof c.count === 'number' && Number.isSafeInteger(c.count) && c.count >= 0
+              ? { count: c.count }
+              : {}),
           },
         ]
       : [],
@@ -438,6 +456,7 @@ function parseInstaller(v: Obj): InstallerState {
   );
   return {
     mode: 'installer',
+    ...(locale ? { locale } : {}),
     platform: v.platform === 'self-installed' ? 'self-installed' : 'factory',
     storage: v.storage === 'host-encrypted' ? 'host-encrypted' : 'luks-tpm2',
     environment: v.environment === 'dev' ? 'dev' : 'prod',

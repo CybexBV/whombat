@@ -7,15 +7,17 @@
  * address. Leave them goes back and changes nothing. On a Whombat without `hosts.repoint` it says it needs an update.
  * The state and the words are the web's (`@whombat/client/hosts`: `useRepointServers`, `repointView`).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { REPOINT_TEXT, type RepointRow, repointRowLabel } from '@whombat/client/hosts';
 import { useHostsLive, useRepointServers } from '@whombat/client/hosts/react';
-import { HOST_REPOINT_WORDS } from '@whombat/core';
+import { hostRepointWords } from '@whombat/core';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { OVERVIEW_TITLE } from '../data/shell';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -55,6 +57,10 @@ function Repoint({
   /** “Point it here”: Add a server filled in; `title` names this screen on its back bar. */
   onAddServer: (address: string, title: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const hostRepointWordsHere = hostRepointWords(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const repoint = useRepointServers(slug);
@@ -67,7 +73,7 @@ function Repoint({
       >
         <Title>{view.title}</Title>
         {view.step === 'loading' && !repoint.error ? (
-          <SkeletonRows count={3} lines={2} label="Loading" />
+          <SkeletonRows count={3} lines={2} label={tMobile('managed.loading')} />
         ) : (
           <>
             {view.lead ? (
@@ -109,7 +115,7 @@ function Repoint({
               busy={repoint.starting}
               onPress={() => void repoint.start()}
             />
-            <Button label={HOST_REPOINT_WORDS.leaveThem} size="lg" variant="secondary" onPress={onBack} />
+            <Button label={hostRepointWordsHere.leaveThem} size="lg" variant="secondary" onPress={onBack} />
           </>
         ) : view.step === 'running' ? (
           <Button label={REPOINT_TEXT.hide} size="lg" variant="secondary" onPress={onBack} />
@@ -161,6 +167,9 @@ function ServerRow({
   first: boolean;
   onAddServer: (address: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const hostRepointWordsHere = hostRepointWords(rawLocale);
+
   const theme = useTheme();
   const mark = (() => {
     switch (row.state) {
@@ -224,9 +233,9 @@ function ServerRow({
       </View>
       {add ? (
         <Button
-          label={HOST_REPOINT_WORDS.pointItHere}
+          label={hostRepointWordsHere.pointItHere}
           variant="secondary"
-          accessibilityLabel={`${HOST_REPOINT_WORDS.pointItHere}: ${row.name}`}
+          accessibilityLabel={`${hostRepointWordsHere.pointItHere}: ${row.name}`}
           style={{ marginLeft: 34 }}
           onPress={() => onAddServer(add.address)}
         />

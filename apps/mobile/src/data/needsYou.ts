@@ -8,41 +8,58 @@
  */
 
 import {
+  type AgentWords,
+  agentWords,
   type InboxGroup,
   type LookResearchView,
   lookThreadHref,
-  NEEDS_YOU_WORDS,
   type NeedsYouApprovalCard,
   type NeedsYouButton,
   type NeedsYouListGroupView,
   type NeedsYouListRow,
+  type NeedsYouListView,
   needsYouApprovalCard,
   needsYouGroupLabel,
+  needsYouListView,
   needsYouMore,
   needsYouStatusLevel,
   needsYouSwipe,
+  needsYouWhen,
+  needsYouWords,
   teamReportDraftOfHref,
+  untilText,
 } from '@whombat/client';
 import {
-  DESK_WORDS,
+  aheadWords,
+  deskWords,
   fillDeskWords,
+  fillQuietWords,
   formatPowerLeft,
   type HomeOverview,
   type HomeSeverity,
+  quietWords,
 } from '@whombat/core';
+import { approvalAskWords } from '@whombat/core/approvals';
+import { resolveDisplayLanguage } from '@whombat/core/i18n';
 import { formatClock } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
 
 /** The tab's own words; the list's are the shared `NEEDS_YOU_WORDS`. */
-export const NEEDS_YOU_TAB = {
-  title: NEEDS_YOU_WORDS.title,
-  loading: NEEDS_YOU_WORDS.loading,
-  failed: NEEDS_YOU_WORDS.readFailed,
-  /** What TalkBack calls a row's More sheet. */
-  moreLabel: 'Inbox actions',
-  opensSheet: 'Shows what you can do',
-  opensThread: 'Opens its thread',
-  opensPlace: 'Opens its page',
-} as const;
+export function needsYouTab(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  const copy = needsYouWords(locale);
+  return {
+    title: copy.title,
+    loading: copy.loading,
+    failed: copy.readFailed,
+    /** What TalkBack calls a row's More sheet. */
+    moreLabel: t('needsYou.needsYouTab.moreLabel'),
+    opensSheet: t('needsYou.needsYouTab.opensSheet'),
+    opensThread: t('needsYou.needsYouTab.opensThread'),
+    opensPlace: t('needsYou.needsYouTab.opensPlace'),
+  } as const;
+}
+export const NEEDS_YOU_TAB = needsYouTab();
 
 /** Where a row goes when tapped: its sheet, an address (its thread, its place), or nowhere. */
 export type PhoneRowOpens = { to: 'sheet' } | { to: 'href'; href: string } | null;
@@ -67,10 +84,11 @@ export function phoneRowOpens(row: Pick<NeedsYouListRow, 'group' | 'item' | 'hre
 }
 
 /** What TalkBack hears after the row: what tapping it does. */
-export function phoneRowHint(opens: PhoneRowOpens, group: InboxGroup): string | undefined {
+export function phoneRowHint(opens: PhoneRowOpens, group: InboxGroup, locale?: string): string | undefined {
   if (!opens) return undefined;
-  if (opens.to === 'sheet') return NEEDS_YOU_TAB.opensSheet;
-  return group === 'assistant' ? NEEDS_YOU_TAB.opensThread : NEEDS_YOU_TAB.opensPlace;
+  const copy = needsYouTab(locale);
+  if (opens.to === 'sheet') return copy.opensSheet;
+  return group === 'assistant' ? copy.opensThread : copy.opensPlace;
 }
 
 export interface PhoneSheetButton {
@@ -108,10 +126,10 @@ export interface PhoneSheetView {
 export function phoneSheet(
   row: NeedsYouListRow,
   words: { Name: string },
-  when?: { now: number; timeZone: string },
+  when?: { now: number; timeZone: string; locale?: string },
 ): PhoneSheetView {
   const where = row.item.subject?.name;
-  const label = needsYouGroupLabel(row.group, words);
+  const label = needsYouGroupLabel(row.group, words, when?.locale);
   const ordered = [...row.buttons.filter((b) => !b.more), ...needsYouMore(row)];
   const approval = row.item.kind === 'approval';
   return {
@@ -122,9 +140,9 @@ export function phoneSheet(
     says: row.says,
     since:
       row.says && row.says.state === 'found' && when
-        ? fillDeskWords(DESK_WORDS.calm.since, {
+        ? fillDeskWords(deskWords(when.locale).calm.since, {
             clock: formatClock(row.item.at, when.timeZone),
-            ago: formatPowerLeft((when.now - Date.parse(row.item.at)) / 60_000),
+            ago: formatPowerLeft((when.now - Date.parse(row.item.at)) / 60_000, when.locale),
           })
         : null,
     note: row.state,
@@ -171,8 +189,8 @@ export function phoneRowSwipe(row: Pick<NeedsYouListRow, 'buttons'>): PhoneRowSw
 }
 
 /** The swipe's word at the edge: Settle, or the short Bring back. */
-export function swipeEdgeLabel(edge: NeedsYouButton): string {
-  return edge.kind === 'back' ? NEEDS_YOU_WORDS.backShort : edge.label;
+export function swipeEdgeLabel(edge: NeedsYouButton, locale?: string): string {
+  return edge.kind === 'back' ? needsYouWords(locale).backShort : edge.label;
 }
 
 /** What a screen reader gets for a row it can't swipe: the edge's action and More's, by the button's id. */
@@ -240,4 +258,99 @@ export function sheetOffersButtons(
   busy: boolean,
 ): boolean {
   return busy || !listed || listed.some((i) => i.id === itemId);
+}
+
+/** Apply the phone's language to the controls around box-rendered inbox rows. */
+export function phoneInboxRow(
+  row: NeedsYouListRow,
+  words: AgentWords,
+  now: Date | number,
+  timeZone: string,
+  locale: string,
+): NeedsYouListRow {
+  if (resolveDisplayLanguage(locale) === 'en') return row;
+  const copy = needsYouWords(locale);
+  const approval = approvalAskWords(locale);
+  const ahead = aheadWords(locale);
+  const { item } = row;
+  const later = row.buttons.some((button) => button.action?.kind === 'approve_later');
+  const label = (button: NeedsYouButton) => {
+    switch (button.kind) {
+      case 'talk':
+        return copy.talk(words);
+      case 'handle':
+        return copy.handle(words);
+      case 'askFix':
+        return copy.askFix(words);
+      case 'see':
+        return copy.see;
+      case 'settle':
+        return copy.settle;
+      case 'snooze':
+        return copy.snooze;
+      case 'back':
+        return copy.back;
+      case 'stop':
+        return item.watch?.subject
+          ? fillQuietWords(quietWords(locale).stop, { name: item.watch.subject.name })
+          : quietWords(locale).stopThis;
+      case 'notUseful':
+        return ahead.notUsefulAction;
+      case 'stopAhead':
+        return item.ahead?.matter ? ahead.stopMatterAction : ahead.stopCheckingAction;
+      case 'action':
+        if (item.kind === 'approval') {
+          if (button.action?.kind === 'approve') return later ? approval.now : approval.yes;
+          if (button.action?.kind === 'approve_later') return approval.later;
+          if (button.action?.kind === 'decline') return approval.no;
+        }
+        return button.label;
+      default:
+        return button.label;
+    }
+  };
+  const when = needsYouWhen(item.at, now, timeZone, locale);
+  const where = item.subject?.name;
+  const state =
+    row.group === 'later' && item.snoozedUntil
+      ? untilText(item.snoozedUntil, now, timeZone, locale)
+      : row.state;
+  const said =
+    row.says?.state === 'looking'
+      ? copy.looking(words)
+      : row.says?.state === 'fixing'
+        ? copy.fixing(words)
+        : row.says?.text;
+  return {
+    ...row,
+    meta: where && !row.title.includes(where) ? `${where} · ${when}` : when,
+    state: state ? state.charAt(0).toUpperCase() + state.slice(1) : state,
+    says: row.says && said ? { ...row.says, text: said } : row.says,
+    buttons: row.buttons.map((button) => ({ ...button, label: label(button) })),
+  };
+}
+
+export function phoneInboxList(
+  overview: Parameters<typeof needsYouListView>[0],
+  options: Parameters<typeof needsYouListView>[1],
+  locale: string,
+): NeedsYouListView {
+  const { now, timeZone, assistant } = options;
+  const view = needsYouListView(overview, options);
+  if (resolveDisplayLanguage(locale) === 'en') return view;
+  const words = agentWords(assistant, locale);
+  const copy = needsYouWords(locale);
+  return {
+    ...view,
+    groups: view.groups.map((group) => ({
+      ...group,
+      label: needsYouGroupLabel(group.key, words, locale),
+      rows: group.rows.map((row) => phoneInboxRow(row, words, now, timeZone, locale)),
+      fold:
+        group.fold &&
+        (group.key === 'fyi'
+          ? { show: copy.showHeadsUps(group.rows.length), hide: copy.hideHeadsUps }
+          : { show: copy.showSettled(group.rows.length), hide: copy.hideSettled }),
+    })),
+  };
 }

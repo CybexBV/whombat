@@ -3,6 +3,7 @@
  * tone, heads-ups, then the quiet ones greyed at the bottom with who quieted them and until when), the head's status
  * and badge from the active lines, the server-only parts left out, and `ignore` only for who may manage the thing.
  */
+
 import {
   type KeptQuiet,
   type NoticeQuiet,
@@ -20,6 +21,7 @@ import { inArray } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { Db } from '../../db/client';
 import { principals } from '../../db/schema/index';
+import { localizePhrase } from '../../i18n/phrases';
 import { applyQuiet, inPageOrder, natureOf, type QuietRow, type Skipped, type StateRow } from './apply';
 import { notWatched } from './defaults';
 import type { ThingQuiet } from './store';
@@ -46,10 +48,14 @@ export function quietOf(
   names: ReadonlyMap<string, string>,
   now: Date,
   timeZone: string,
+  locale?: string | null,
 ): WireQuiet {
   const name = row.byId ? names.get(row.byId) : undefined;
+  // A row keeps the check's English Ignore words; they are said in the reader's language here.
   const words =
-    row.state === 'snoozed' && row.until ? untilWords(row.until, now, timeZone) : lowerWords(row.words);
+    row.state === 'snoozed' && row.until
+      ? untilWords(row.until, now, timeZone, locale)
+      : lowerWords(row.words ? localizePhrase(row.words, locale) : row.words, locale);
   return {
     state: row.state,
     words,

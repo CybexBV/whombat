@@ -214,23 +214,27 @@ export function homeThingRows(
   things: readonly ThingSummary[],
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): HomeThingRow[] {
+  const labels = locale ? thingStatusLabels(locale) : THING_STATUS_LABELS;
   const listed = listedThings(things).filter((t) => t.kind !== 'server');
   const ordered = [
     ...listed.filter((t) => t.facts.length > 0),
     ...listed.filter((t) => t.facts.length === 0),
   ];
   return ordered.map((t) => {
-    const title = thingTileTitle(t);
+    const title = thingTileTitle(t, locale);
     const subtitle = [title === t.name ? null : title, t.line ?? null].filter(Boolean).join(' · ') || null;
     const figures = t.facts.slice(0, HOME_THING_FIGURES).map((f) => ({
       label: f.label,
       value: f.unit ? `${f.value} ${f.unit}` : f.value,
       note: f.note ?? null,
     }));
-    const state = t.status === 'ok' || t.status === 'unknown' ? null : THING_STATUS_LABELS[t.status];
-    const used = t.usedAt ? usedShort(t.usedAt, now, timeZone) : null;
-    const said = figures.length ? figures.map(thingFigurePhrase) : [connectedState(t.status).toLowerCase()];
+    const state = t.status === 'ok' || t.status === 'unknown' ? null : labels[t.status];
+    const used = t.usedAt ? usedShort(t.usedAt, now, timeZone, locale) : null;
+    const said = figures.length
+      ? figures.map(thingFigurePhrase)
+      : [connectedState(t.status, locale).toLowerCase()];
     return {
       id: t.id,
       name: t.name,
@@ -238,24 +242,26 @@ export function homeThingRows(
       state,
       tone: THING_TONES[t.status],
       figures,
-      plain: state ? '—' : connectedState(t.status),
+      plain: state ? '—' : connectedState(t.status, locale),
       used,
       line: figures.length
         ? (subtitle ?? '')
         : state
-          ? [subtitle, t.usedAt ? usedPhrase(t.usedAt, now, timeZone) : null].filter(Boolean).join(' · ')
-          : connectedLine(t, now, timeZone),
+          ? [subtitle, t.usedAt ? usedPhrase(t.usedAt, now, timeZone, locale) : null]
+              .filter(Boolean)
+              .join(' · ')
+          : connectedLine(t, now, timeZone, locale),
       glyph: thingGlyph(t),
       mark: thingMark(t),
       status: t.status,
       href: t.href,
-      ...thingStatusView(t),
+      ...thingStatusView(t, locale),
       notAnswering: notAnswering(t, now),
       label: [
         t.name,
         figures.length ? state?.toLowerCase() : null,
         ...said,
-        t.usedAt ? usedPhrase(t.usedAt, now, timeZone) : null,
+        t.usedAt ? usedPhrase(t.usedAt, now, timeZone, locale) : null,
       ]
         .filter(Boolean)
         .join(', '),
@@ -300,6 +306,7 @@ export interface HomeSectionsOptions {
   servers: boolean;
   /** The viewer may add a connection: Your things offers “Add a connection”. */
   canAddConnection: boolean;
+  locale?: string | null | undefined;
 }
 
 /**
@@ -308,20 +315,20 @@ export interface HomeSectionsOptions {
  * there are any.
  */
 export function homeSections(overview: HomeInput, options: HomeSectionsOptions): HomeSection[] {
-  const { now, timeZone } = options;
+  const { now, timeZone, locale } = options;
   const sections: HomeSection[] = [];
   if (overview.needsYou.length > 0) {
     sections.push({
       kind: 'needsYou',
       count: Math.max(overview.summary.needsYou, overview.needsYou.length),
       items: [...overview.needsYou],
-      rows: needsYouRows(overview.needsYou, now, timeZone),
+      rows: needsYouRows(overview.needsYou, now, timeZone, undefined, locale),
     });
   }
   if (options.servers) {
     sections.push({ kind: 'servers', servers: overview.things.filter((t) => t.kind === 'server') });
   }
-  const things = homeThingRows(overview.things, now, timeZone);
+  const things = homeThingRows(overview.things, now, timeZone, locale);
   if (things.length > 0 || options.canAddConnection) {
     sections.push({ kind: 'things', rows: things, add: options.canAddConnection });
   }

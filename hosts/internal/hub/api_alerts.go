@@ -218,7 +218,7 @@ func (h *Hub) expireAcks(ctx context.Context) {
 
 // RuleDeniedRequests is the hub-level alert for a user whose console or
 // power requests keep being refused (REMOTE-CONSOLE.md 6.13).
-const RuleDeniedRequests = "security.denied_requests"
+const RuleDeniedRequests = rules.HubRuleDeniedRequests
 
 // deniedAlertThreshold is how many authorization denials in the throttle
 // window open the alert.
@@ -235,7 +235,8 @@ func (h *Hub) evaluateHubAlerts(ctx context.Context) {
 			StatusNote: "denied requests",
 			Render: func(time.Duration) rules.Text {
 				d := user + " tried " + strconv.Itoa(n) + " times in 10 minutes to use a console or power button they aren’t allowed to"
-				return rules.Text{Title: "Someone keeps being refused", Detail: d, BannerTitle: "Someone keeps being refused", BannerDetail: d + "."}
+				return rules.Text{Title: "Someone keeps being refused", Detail: d, BannerTitle: "Someone keeps being refused", BannerDetail: d + ".",
+					Code: RuleDeniedRequests, Params: map[string]any{"user": user, "count": n}}
 			},
 		})
 	}

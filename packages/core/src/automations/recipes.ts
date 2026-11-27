@@ -31,7 +31,7 @@ import { type TrackerItemKind, type TrackerRecipeWords, UNKNOWN_TRACKER_WORDS } 
 import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
 import { mailRecipeName, mailTriggerProblems, mailWhenText } from './mail.js';
 import { describeSchedule } from './schedule.js';
-import { triggerSummary } from './validate.js';
+import { trackerItemKind, triggerSummary } from './validate.js';
 
 export type RecipeWhenKind = RecipeWhen['kind'];
 
@@ -749,10 +749,11 @@ export interface RecipeNames {
 export const UNKNOWN_TRACKER_CONNECTION = 'a tracker connection';
 
 /** “report”, “bug report”, “feature request”: the reports a tracker trigger listens to, in the singular. */
-export function trackerItemNoun(kinds: readonly TrackerItemKind[] | undefined): string {
-  const set = new Set(kinds ?? ['bug', 'feature']);
-  if (set.size !== 1) return 'report';
-  return set.has('bug') ? 'bug report' : 'feature request';
+export function trackerItemNoun(
+  kinds: readonly TrackerItemKind[] | undefined,
+  locale?: string | null,
+): string {
+  return coreTranslator(locale).t(`recipe.tracker.item.${trackerItemKind(kinds)}`);
 }
 
 function list(parts: readonly string[], last: 'or' | 'and'): string {

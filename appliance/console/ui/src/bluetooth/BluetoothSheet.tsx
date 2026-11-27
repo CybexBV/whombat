@@ -5,8 +5,10 @@
  * Bluetooth now (`mayChange`); when it may not, the sheet shows the paired devices read-only and says how to change
  * them. The console server's `/api/bluetooth…` ask the runtime (§2.4).
  */
+
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import deskStyles from '../desk/desk.module.css';
+import { useT } from '../i18n/react';
 import {
   type BluetoothAnswer,
   type BluetoothDevice,
@@ -21,7 +23,7 @@ import {
   SHEET_IDLE_MS,
   sortDevices,
 } from '../lib/bluetooth';
-import { BT, pairingView, refusalText } from '../lib/bluetoothCopy';
+import { btCopy, pairingView, refusalText } from '../lib/bluetoothCopy';
 import type { Client } from '../lib/client';
 import { deskErrorCode } from '../lib/desk';
 import { useHoldFocus, useLastInput, useNow } from '../ui/hooks';
@@ -52,6 +54,9 @@ export function BluetoothSheet({
   onClose: () => void;
   initial?: BluetoothSheetInitial;
 }) {
+  const t = useT();
+  const BT = btCopy(t);
+
   const [answer, setAnswer] = useState<BluetoothAnswer | null>(null);
   const [unreadable, setUnreadable] = useState(false);
   const [step, setStep] = useState<BluetoothStep>(initial?.step ?? { kind: 'list' });
@@ -96,9 +101,9 @@ export function BluetoothSheet({
     setBusy(null);
     const s = res?.status === 200 ? parseScan((res.body as { scan?: unknown } | null)?.scan) : null;
     if (s) setFound(s.devices);
-    else setError(refusalText(res ? deskErrorCode(res.body) : null));
+    else setError(refusalText(res ? deskErrorCode(res.body) : null, t));
     void load();
-  }, [client, load]);
+  }, [client, load, t]);
 
   // The pairing this sheet follows, as Whombat reports it; while the screen may change Bluetooth, a pairing that runs
   // while the list shows (one started in the app, or before the page reloaded) is followed too (CG-207).
@@ -158,7 +163,7 @@ export function BluetoothSheet({
     }
     const named =
       code === 'locked' || (code !== null && code !== 'unavailable' && BT.errors[code] !== undefined);
-    setError(named || !fallback ? refusalText(code) : fallback);
+    setError(named || !fallback ? refusalText(code, t) : fallback);
   };
 
   const pick = async (d: BluetoothDevice) => {
@@ -237,7 +242,7 @@ export function BluetoothSheet({
 
   if (step.kind === 'pairing') {
     const p = followed;
-    const v = p ? pairingView(p) : null;
+    const v = p ? pairingView(p, t) : null;
     if (p && (p.phase === 'code' || p.phase === 'confirm') && p.code) {
       body = (
         <>
@@ -474,6 +479,9 @@ export function BluetoothSheet({
 }
 
 function CancelButton({ busy, onCancel }: { busy: boolean; onCancel: () => void }) {
+  const t = useT();
+  const BT = btCopy(t);
+
   return (
     <>
       <span className={wifiStyles.grow} />
@@ -492,6 +500,9 @@ function CancelButton({ busy, onCancel }: { busy: boolean; onCancel: () => void 
 
 /** The sheet's head: the kicker, the title, a line under it. */
 function Head({ title, line }: { title: string; line?: string | null }) {
+  const t = useT();
+  const BT = btCopy(t);
+
   return (
     <div className={wifiStyles.head}>
       <span className={wifiStyles.kicker}>{BT.kicker}</span>

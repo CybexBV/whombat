@@ -54,6 +54,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { SYNC_LOG_TEXT, syncLog, syncLogFile } from '../data/syncLog';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { showNotice } from '../screens/feedback';
@@ -69,7 +70,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 import { AskFirstRow } from './AskFirstRow';
 import { APP_BUILD } from './config';
 import { useManagedOrThrow } from './context';
-import { COPY, MANAGED_TEXT } from './copy';
+import { managedCopy, managedText } from './copy';
 import { phoneClient } from './env';
 import { HardwareSummary } from './HardwareSection';
 import { openSignInPage } from './openSignInPage';
@@ -84,6 +85,11 @@ import { useRemoteHelpHere } from './useRemoteHelpHere';
 import { WHATS_NEW_ROW, WHATS_NEW_URL } from './whatsNew';
 
 export function WhombatAboutScreen() {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+  const managedTextHere = managedText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const navigation = useAppNavigation();
@@ -105,7 +111,10 @@ export function WhombatAboutScreen() {
       },
       (e) => {
         setInstalling(null);
-        Alert.alert('That didn’t go through', e instanceof OperationError ? e.message : UPDATE_TEXT.failed);
+        Alert.alert(
+          tMobile('managed.that-didnt-go-through'),
+          e instanceof OperationError ? e.message : UPDATE_TEXT.failed,
+        );
         reload();
       },
     );
@@ -147,7 +156,7 @@ export function WhombatAboutScreen() {
   }, [at, navigation]);
   const back = (
     <BackBar
-      label={COPY.whombat.title}
+      label={managedCopyHere.whombat.title}
       onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Whombat'))}
     />
   );
@@ -155,7 +164,7 @@ export function WhombatAboutScreen() {
     return (
       <Screen>
         {back}
-        <ErrorState text={MANAGED_TEXT.loadError} onRetry={reload} />
+        <ErrorState text={managedTextHere.loadError} onRetry={reload} />
       </Screen>
     );
   if (!status)
@@ -230,8 +239,8 @@ export function WhombatAboutScreen() {
                 {floor.length > 0 ? (
                   <Row
                     dot="mut"
-                    title={MANAGED_TEXT.clientFloor}
-                    meta={MANAGED_TEXT.clientFloorMeta(floor)}
+                    title={managedTextHere.clientFloor}
+                    meta={managedTextHere.clientFloorMeta(floor)}
                   />
                 ) : null}
               </>
@@ -248,7 +257,7 @@ export function WhombatAboutScreen() {
             connection={{
               ok: managed.connection.status === 'open',
               title: managed.applianceName ?? 'Your Whombat',
-              meta: `${MANAGED_TEXT.connected} · ${MANAGED_TEXT.fingerprint(managed.applianceFingerprint)}`,
+              meta: `${managedTextHere.connected} · ${managedTextHere.fingerprint(managed.applianceFingerprint)}`,
             }}
             {...(target === 'reach' ? { onLayout: place.onCard } : {})}
           />
@@ -289,7 +298,7 @@ export function WhombatAboutScreen() {
           <Diagnostics />
 
           <Text size={12} mono color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-            {`This phone · ${MANAGED_TEXT.fingerprint(managed.deviceFingerprint)}`}
+            {`This phone · ${managedTextHere.fingerprint(managed.deviceFingerprint)}`}
           </Text>
         </View>
       </ScrollView>
@@ -309,9 +318,11 @@ function OwnAddressCard({
   own: NonNullable<ApplianceStatus['ownAddress']>;
   onChanged: () => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const managed = useManagedOrThrow();
   const theme = useTheme();
-  const v = ownAddressView(own);
+  const v = ownAddressView(own, undefined, rawLocale);
   const t = OWN_ADDRESS_TEXT.settings;
   const leaving = ownAddressLeavingView(own);
   const cloudflare = ownAddressCloudflareLine(own.host);
@@ -468,9 +479,12 @@ function floors(status: ApplianceStatus): { platform: string; minBuild: number }
  * then Make the file (the checklist folds again once it is made).
  */
 function Diagnostics() {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const { session, applianceName } = useManagedOrThrow();
   const theme = useTheme();
-  const t = COPY.diagnostics;
+  const t = managedCopyHere.diagnostics;
   const [list, setList] = useState<DiagnosticBundleSummary[] | null>(null);
   const [making, setMaking] = useState(false);
   const [chosen, setChosen] = useState<Set<DiagnosticScope>>(() => new Set(['versions', 'health']));
@@ -626,7 +640,7 @@ function Diagnostics() {
             dot="mut"
             title={d.scopes.map((x) => t.scopeNames[x] ?? x).join(' · ')}
             meta={[
-              ago(d.createdAt),
+              ago(d.createdAt, rawLocale),
               `${Math.max(1, Math.round(d.size / 1024))} KB`,
               t.downloads(d.downloads),
             ].join(' · ')}

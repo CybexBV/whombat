@@ -36,6 +36,7 @@ import {
   topics,
 } from '@whombat/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { currentLocale } from '../../i18n/provider';
 import type { TypingLine } from './MessageList';
 import {
   historyMessages,
@@ -332,7 +333,7 @@ function outcomeNotice(
 
 function errorNotice(err: unknown, fallback: string): string {
   // The appliance's subscription ended, or the plan's limit is reached (LC-14).
-  const licence = licenceRefusalText(err);
+  const licence = licenceRefusalText(err, currentLocale());
   if (licence) return licence;
   if (err instanceof ApiError) {
     if (err.status === 404 || err.status === 501) return 'That isn’t available here yet.';

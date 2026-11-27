@@ -5,8 +5,9 @@
  * audit log and a Whombat's diagnostics (its About) open the screens the phone had. Nothing here needs changing for
  * Whombat to work. The keys are drawn here too, as a page under What it may do (its “Change them”).
  */
+
 import { type RouteProp, StackActions, useRoute } from '@react-navigation/native';
-import { type AdvancedSection, advancedRows, agentKeysText, SETTINGS_GROUP_TEXT } from '@whombat/client';
+import { type AdvancedSection, advancedRows, agentKeysText, settingsGroupText } from '@whombat/client';
 import { useAgent, useHostInfo } from '@whombat/client/react';
 import { useEffect } from 'react';
 import { View } from 'react-native';
@@ -14,6 +15,7 @@ import { agentLoadProblem } from '../data/agentLoad';
 import { agentKeyParam } from '../data/agentPage';
 import { useBurrow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { NeedsNewerApp } from '../managed/NeedsNewerApp';
 import { type AppNavigation, useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
@@ -38,6 +40,9 @@ function go(navigation: AppNavigation, route: AdvancedRoute) {
 }
 
 export function SettingsAdvancedScreen() {
+  const { rawLocale } = useI18n();
+  const settingsGroupTextHere = settingsGroupText(rawLocale);
+
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { slug, mode } = useBurrow();
@@ -46,11 +51,11 @@ export function SettingsAdvancedScreen() {
   const host = useHostInfo({ params: { burrow: slug } }, { retry: false });
   const services = host.data ? true : host.error ? false : undefined;
   const rows = advancedRowsOnPhone(words.name, { mode, ...(services === undefined ? {} : { services }) });
-  const labels = SETTINGS_GROUP_TEXT.advanced.sections(words.name);
+  const labels = settingsGroupTextHere.advanced.sections(words.name);
   return (
-    <SettingsPage title={SETTINGS_GROUP_TEXT.groups(words.name).advanced}>
+    <SettingsPage title={settingsGroupTextHere.groups(words.name).advanced}>
       <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-        {SETTINGS_GROUP_TEXT.advanced.intro}
+        {settingsGroupTextHere.advanced.intro}
       </Text>
       {SECTIONS.map((section) => {
         const mine = rows.filter((r) => r.section === section);
@@ -92,15 +97,18 @@ export function SettingsAdvancedScreen() {
  * Advanced's list instead.
  */
 export function SettingsAdvancedPartScreen() {
+  const { rawLocale } = useI18n();
+  const settingsGroupTextHere = settingsGroupText(rawLocale);
+
   const navigation = useAppNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsAdvancedPart'>>();
   const words = useAgentWords();
   const part = isAdvancedPagePart(route.params?.part) ? route.params.part : null;
   const row =
     part === 'keys'
-      ? agentKeysText(words.name)
+      ? agentKeysText(words.name, rawLocale)
       : part
-        ? advancedRows(words.name).find((r) => r.key === part)
+        ? advancedRows(words.name, rawLocale).find((r) => r.key === part)
         : undefined;
   useEffect(() => {
     if (!part) navigation.dispatch(StackActions.replace('SettingsAdvanced'));
@@ -108,7 +116,7 @@ export function SettingsAdvancedPartScreen() {
   if (!part || !row) return <Screen>{null}</Screen>;
   if (part === 'ai')
     return (
-      <SettingsPage title={row.title} back={SETTINGS_GROUP_TEXT.advanced.back}>
+      <SettingsPage title={row.title} back={settingsGroupTextHere.advanced.back}>
         <PartLine line={row.line} />
         <AiOnThisWhombat />
       </SettingsPage>
@@ -144,6 +152,9 @@ function ProfilePartPage({
   line: string;
   showKey: string | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const settingsGroupTextHere = settingsGroupText(rawLocale);
+
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { slug } = useBurrow();
@@ -153,7 +164,7 @@ function ProfilePartPage({
   const guard = useUnsavedGuard(profile?.agent.name ?? words.name, title);
   // The keys are a page under What it may do; the rest are Advanced's.
   const back =
-    part === 'keys' ? SETTINGS_GROUP_TEXT.agent(words.name).may : SETTINGS_GROUP_TEXT.advanced.back;
+    part === 'keys' ? settingsGroupTextHere.agent(words.name).may : settingsGroupTextHere.advanced.back;
   const goBack = () =>
     navigation.canGoBack()
       ? navigation.goBack()

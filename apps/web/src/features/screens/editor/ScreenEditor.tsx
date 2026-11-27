@@ -8,13 +8,11 @@
  * Changes are a draft until *Save*; *Try on the screen* shows the draft there for a minute; *Undo* goes back a step.
  */
 
-import { toggleDay, WEEKDAY_LABELS } from '@whombat/client';
+import { toggleDay, weekdayLabels } from '@whombat/client';
 import {
-  DESK_SCREEN_WORDS,
   DESK_SCREENS_TEXT,
   DESK_SIZES,
   DESK_TURNS,
-  DESK_WORDS,
   type DeskApi,
   type DeskCatalogItem,
   type DeskPageShow,
@@ -48,7 +46,7 @@ import {
   useDeskWidgets,
 } from '@whombat/client/desk/react';
 import { useChatRooms, useTheAgent } from '@whombat/client/react';
-import { WEEKDAY_KEYS } from '@whombat/core';
+import { deskScreenWords, deskWords, WEEKDAY_KEYS } from '@whombat/core';
 import { cellAt, cellRect, GAP, type Grid } from '@whombat/screen';
 import { Screen, WidgetBox } from '@whombat/screen/react';
 import { ChevronLeft, Clock, MessageCircle, MoreHorizontal, X } from 'lucide-react';
@@ -72,6 +70,8 @@ import { Kbd } from '../../../components/Kbd';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
+import { useWebI18n } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { useDeskHere } from '../../desk/useDeskHere';
 import { draftKey, writeDraft } from '../../messaging/drafts';
 import { NO_ATTENTION, useScreenImages } from '../drawing';
@@ -164,6 +164,9 @@ function Editor({
   timeZone: string;
   onBack: () => void;
 }) {
+  const { tag: uiLocale } = useWebI18n();
+  const DESK_SCREEN_WORDS = useLocaleWords(deskScreenWords);
+  const DESK_WORDS = useLocaleWords(deskWords);
   const toast = useToast();
   const actions = useDeskScreenActions(api);
   const { words } = useTheAgent(burrow);
@@ -558,6 +561,7 @@ function Editor({
                     name={name}
                     assistant={assistant}
                     timeZone={timeZone}
+                    locale={uiLocale}
                     now={now}
                     loadImage={loadImage}
                     editing
@@ -1090,6 +1094,7 @@ function PageTimesDialog({
   /** Saves the times (null: always); the words of a refusal, else null. */
   onSave: (show: DeskPageShow | null) => string | null;
 }) {
+  const WEEKDAY_LABELS = useLocaleWords(weekdayLabels);
   const id = useId();
   const start = show ?? PAGE_TIMES_DEFAULT;
   const [from, setFrom] = useState(start.from);

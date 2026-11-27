@@ -5,6 +5,7 @@
  */
 import type { FindMyTrigger } from '../domain/automation.js';
 import { type FindMyPlaceChanged, findMyPlaceKey } from '../domain/hosts-findmy.js';
+import { coreTranslator } from '../i18n/catalog.js';
 
 /** Who a Find My trigger is about in its words when it doesn't name them (“When someone arrives at Home”). */
 export const UNKNOWN_FIND_MY_PERSON = 'someone';
@@ -50,14 +51,19 @@ export function findMyTriggerMatches(trigger: FindMyTrigger, facts: FindMyTrigge
  * “When Mara Visser arrives at Home”, “When Mara Visser leaves Work”: the trigger in a few words, for rows, plan cards
  * and automation pages, as a mail trigger's.
  */
-export function findMyWhenText(trigger: Pick<FindMyTrigger, 'name' | 'change' | 'place'>): string {
-  const who = trigger.name ?? UNKNOWN_FIND_MY_PERSON;
-  return trigger.change === 'arrives'
-    ? `When ${who} arrives at ${trigger.place}`
-    : `When ${who} leaves ${trigger.place}`;
+export function findMyWhenText(
+  trigger: Pick<FindMyTrigger, 'name' | 'change' | 'place'>,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  const who = trigger.name ?? tr.t('findMyWhen.someone');
+  return tr.t(trigger.change === 'arrives' ? 'findMyWhen.arrives' : 'findMyWhen.leaves', {
+    who,
+    place: trigger.place,
+  });
 }
 
 /** Which Find My connection it listens to, under the plan card's line (“On Find My · Studio”); null when unknown. */
-export function findMyTriggerDetail(connection?: string): string | null {
-  return connection ? `On ${connection}` : null;
+export function findMyTriggerDetail(connection?: string, locale?: string | null): string | null {
+  return connection ? coreTranslator(locale).t('findMyWhen.detail', { connection }) : null;
 }

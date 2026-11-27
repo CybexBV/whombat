@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Whombat gebruikt je camera voor foto’s die je bij een bericht voegt en om QR-codes te scannen: op de pagina van je Whombat, bij het inloggen op je computer en op de kaart van je Whombat.",
+    "NSMicrophoneUsageDescription": "Whombat gebruikt je microfoon voor spraaktypen. Je Whombat zet wat je zegt om in tekst.",
+    "NSLocalNetworkUsageDescription": "Op hetzelfde netwerk maakt de app rechtstreeks verbinding met je Whombat. Dat gaat sneller dan via internet.",
+    "NSPhotoLibraryUsageDescription": "Whombat opent je foto’s alleen als je er een bij een bericht voegt.",
+    "NSPhotoLibraryAddUsageDescription": "Whombat slaat een afbeelding alleen bij je foto’s op als je ‘Bewaar afbeelding’ kiest."
+  }
+}

@@ -224,7 +224,7 @@ func (e *Engine) evaluate(server string, conds []Condition, managed func(rule, e
 		txt := c.Render(now.Sub(tr[k].since))
 		if a := open[k]; a != nil {
 			a.ClearAfter = c.ClearAfter
-			if a.Text != txt || a.Severity != c.Severity || a.Link != c.Link || a.StatusNote != c.StatusNote {
+			if !a.Text.Equal(txt) || a.Severity != c.Severity || a.Link != c.Link || a.StatusNote != c.StatusNote {
 				sevChanged := a.Severity != c.Severity
 				// Worse than what was acknowledged: it asks for attention
 				// again (HS-193).

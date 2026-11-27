@@ -3,16 +3,19 @@
  * and how many have a new answer, opening Your reports. Only where the person may send one or has some.
  */
 import { createLink } from '@tanstack/react-router';
-import { TEAM_REPORT_WORDS, teamReportsSummary } from '@whombat/client';
+import { teamReportsSummary, teamReportWords } from '@whombat/client';
 import { useTeamReports } from '@whombat/client/react';
 import { useId } from 'react';
 import { ButtonLink } from '../../components/Button';
 import { SectionLabel } from '../../components/SectionLabel';
+import { useWebI18n } from '../../i18n/provider';
 import styles from '../settings/SettingsScreen.module.css';
 
 const RouterButtonLink = createLink(ButtonLink);
 
 export function TeamReportsAbout({ burrow }: { burrow: string }) {
+  const { tag: uiLocale } = useWebI18n();
+  const words = teamReportWords(uiLocale);
   const list = useTeamReports(burrow);
   const id = useId();
   if (!list.shown || !list.data) return null;
@@ -25,18 +28,18 @@ export function TeamReportsAbout({ burrow }: { burrow: string }) {
       <div className={styles.card}>
         <div className={styles.row}>
           <span className={styles.rowMain}>
-            <span className={styles.rowTitle}>{TEAM_REPORT_WORDS.entry}</span>
+            <span className={styles.rowTitle}>{words.entry}</span>
             <span className={styles.rowMeta}>
-              {reports.length ? teamReportsSummary(reports) : TEAM_REPORT_WORDS.empty}
+              {reports.length ? teamReportsSummary(reports, uiLocale) : words.empty}
             </span>
           </span>
           {reports.length || !list.data.available ? (
             <RouterButtonLink to="/reports" variant="secondary" size="sm">
-              {TEAM_REPORT_WORDS.title}
+              {words.title}
             </RouterButtonLink>
           ) : (
             <RouterButtonLink to="/reports/new" variant="secondary" size="sm">
-              {TEAM_REPORT_WORDS.newReport}
+              {words.newReport}
             </RouterButtonLink>
           )}
         </div>

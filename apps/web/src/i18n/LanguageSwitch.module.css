@@ -1,0 +1,34 @@
+/* The language choice on pages before an account: quiet text buttons, the shown one in ink. Tokens only. */
+
+.switch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 20px;
+}
+
+.option {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--mut);
+  font: var(--type-secondary);
+  cursor: pointer;
+}
+
+.option[aria-pressed="true"] {
+  background: var(--sf2);
+  color: var(--ink);
+}
+
+.option:hover {
+  color: var(--ink);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}

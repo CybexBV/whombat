@@ -6,14 +6,10 @@
 import { z } from 'zod';
 import { Count, Timestamp } from '../domain/common.js';
 import type { NoticeNature } from '../domain/quiet.js';
+import { coreWords, tCore, tpCore } from '../i18n/catalog.js';
 import { ConnectionId, VaultEntryId } from '../ids.js';
 import { type DateInput, formatAgo, formatClock } from '../text/time.js';
-import {
-  ONEPASSWORD_NOT_IN_VAULT_MAX,
-  ONEPASSWORD_SKIP_TEXT,
-  OnePasswordItemId,
-  OnePasswordSkipReason,
-} from './onepassword.js';
+import { ONEPASSWORD_NOT_IN_VAULT_MAX, OnePasswordItemId, OnePasswordSkipReason } from './onepassword.js';
 import { VAULT_ENTRIES_MAX, VAULT_NAME_MAX, type VaultEntrySource } from './schemas.js';
 
 /* The connection page's part ----------------------------------------------------------------------- */
@@ -175,46 +171,65 @@ export const ONEPASSWORD_WORDS = {
   removeArchives: 'Its item in 1Password goes to 1Password’s archive.',
 } as const;
 
+/** `ONEPASSWORD_WORDS` in a locale (English when none is given). */
+export function onePasswordWords(locale?: string | null): Record<keyof typeof ONEPASSWORD_WORDS, string> {
+  return coreWords(
+    locale,
+    'onePassword.word',
+    Object.keys(ONEPASSWORD_WORDS) as (keyof typeof ONEPASSWORD_WORDS)[],
+  );
+}
+
 /** Why an item isn't in the Vault, in the person's words. */
-export function onePasswordSkipText(reason: OnePasswordSkipReason): string {
-  return ONEPASSWORD_SKIP_TEXT[reason];
+export function onePasswordSkipText(reason: OnePasswordSkipReason, locale?: string | null): string {
+  return tCore(locale, `onePassword.skip.${reason}`);
 }
 
 /** “12 logins and API tokens kept in step”. */
-export function onePasswordKeptLine(kept: number): string {
-  if (kept <= 0) return 'No logins or API tokens kept in step yet';
-  if (kept === 1) return '1 login or API token kept in step';
-  return `${kept} logins and API tokens kept in step`;
+export function onePasswordKeptLine(kept: number, locale?: string | null): string {
+  if (kept <= 0) return tCore(locale, 'onePassword.keptNone');
+  return tpCore(locale, 'onePassword.kept', kept);
 }
 
 /** “Last checked 3 min ago”, or “Not checked yet”. */
-export function onePasswordCheckedLine(checkedAt: string | null, now: DateInput, timeZone: string): string {
+export function onePasswordCheckedLine(
+  checkedAt: string | null,
+  now: DateInput,
+  timeZone: string,
+  locale?: string | null,
+): string {
   return checkedAt === null
-    ? ONEPASSWORD_WORDS.notChecked
-    : `Last checked ${formatAgo(checkedAt, now, timeZone)}`;
+    ? tCore(locale, 'onePassword.word.notChecked')
+    : tCore(locale, 'onePassword.checked', { ago: formatAgo(checkedAt, now, timeZone, locale) });
 }
 
 /** The guard's card and line: “1Password says 4 items are gone”. */
-export function onePasswordGoneTitle(count: number): string {
-  return count === 1 ? '1Password says 1 item is gone' : `1Password says ${count} items are gone`;
+export function onePasswordGoneTitle(count: number, locale?: string | null): string {
+  return tpCore(locale, 'onePassword.gone', count);
 }
 
 /** The entries the guard holds, by name: “Bank”, “Bank and Mail”, “Bank, Mail and Shop”, “Bank, Mail, Shop and 2 more”. */
-export function onePasswordHeldNames(names: readonly string[]): string {
-  if (names.length > 3) return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+export function onePasswordHeldNames(names: readonly string[], locale?: string | null): string {
+  if (names.length > 3)
+    return tCore(locale, 'onePassword.heldMore', {
+      names: names.slice(0, 3).join(', '),
+      n: names.length - 3,
+    });
   if (names.length <= 1) return names[0] ?? '';
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return tCore(locale, 'recipe.and', {
+    items: names.slice(0, -1).join(', '),
+    last: names[names.length - 1] ?? '',
+  });
 }
 
 /** The guard's Inbox card: which entries Whombat kept, and the two ways on. */
-export function onePasswordRemovalsBody(names: readonly string[]): string {
-  const them = names.length === 1 ? 'it' : 'them';
-  return `Whombat kept ${onePasswordHeldNames(names)} in your Vault for now. Remove ${them} here too, or keep ${them} only in Whombat.`;
+export function onePasswordRemovalsBody(names: readonly string[], locale?: string | null): string {
+  return tpCore(locale, 'onePassword.removals', names.length, { names: onePasswordHeldNames(names, locale) });
 }
 
 /** “Waiting for 1Password’s limit. Next try at 14:20.” */
-export function onePasswordWaitingLine(nextTryAt: string, timeZone: string): string {
-  return `Waiting for 1Password’s limit. Next try at ${formatClock(nextTryAt, timeZone)}.`;
+export function onePasswordWaitingLine(nextTryAt: string, timeZone: string, locale?: string | null): string {
+  return tCore(locale, 'onePassword.waiting', { clock: formatClock(nextTryAt, timeZone) });
 }
 
 /**
@@ -224,22 +239,29 @@ export function onePasswordWaitingLine(nextTryAt: string, timeZone: string): str
 export function onePasswordStatusLines(
   view: Pick<OnePasswordSyncView, 'outcome' | 'problem' | 'nextTryAt' | 'readOnly' | 'removals'>,
   timeZone: string,
+  locale?: string | null,
 ): string[] {
   const lines: string[] = [];
   if (view.outcome === 'waiting' && view.nextTryAt !== null)
-    lines.push(onePasswordWaitingLine(view.nextTryAt, timeZone));
-  else if (view.outcome === 'failing') lines.push(view.problem ?? ONEPASSWORD_WORDS.unreachable);
+    lines.push(onePasswordWaitingLine(view.nextTryAt, timeZone, locale));
+  else if (view.outcome === 'failing')
+    lines.push(view.problem ?? tCore(locale, 'onePassword.word.unreachable'));
   else if (view.outcome === 'paused' && view.removals)
-    lines.push(onePasswordGoneTitle(view.removals.entries.length));
-  if (view.readOnly) lines.push(ONEPASSWORD_WORDS.readOnly);
+    lines.push(onePasswordGoneTitle(view.removals.entries.length, locale));
+  if (view.readOnly) lines.push(tCore(locale, 'onePassword.word.readOnly'));
   return lines;
 }
 
 /** A synced entry's page: “Kept in step with 1Password · 2 min ago”, the waiting line, or the problem. */
-export function onePasswordEntryLine(source: VaultEntrySource, now: DateInput, timeZone: string): string {
-  if (source.state === 'problem') return source.problem ?? ONEPASSWORD_WORDS.unreachable;
-  if (source.state === 'pending') return ONEPASSWORD_WORDS.pending;
+export function onePasswordEntryLine(
+  source: VaultEntrySource,
+  now: DateInput,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  if (source.state === 'problem') return source.problem ?? tCore(locale, 'onePassword.word.unreachable');
+  if (source.state === 'pending') return tCore(locale, 'onePassword.word.pending');
   return source.syncedAt === null
-    ? 'Kept in step with 1Password'
-    : `Kept in step with 1Password · ${formatAgo(source.syncedAt, now, timeZone)}`;
+    ? tCore(locale, 'onePassword.entry')
+    : tCore(locale, 'onePassword.entryAgo', { ago: formatAgo(source.syncedAt, now, timeZone, locale) });
 }

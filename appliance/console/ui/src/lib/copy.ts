@@ -6,245 +6,251 @@
  * The guide is Hazel, the wombat who gives the tips in the app's sign-in and claim pages (CG-35): an illustration,
  * not the Whombat's agent, which is made at the claim and named in setup (CG-338).
  */
-import { LINK_OFFER_TEXT } from '../../vendor/whombat-contracts/link-price';
+
+import { english, localized, type Translate } from '../i18n/translate';
 import type { CheckId, CheckStatus, Disk, DiskPart, DiskReason, InstallStep } from './api';
 import { formatSize } from './installer';
 
 /** The text console's words (render.go), unchanged. */
-export const WORD = {
-  starting: 'Starting Whombat…',
-  waiting: 'Connecting to Whombat…',
-  waitingHint: 'Check the network cable. The claim code appears once this Whombat is online.',
-  claimTitle: 'Claim this Whombat',
-  // The claim link is the box's own address (or its tailnet name, below): it opens from anywhere.
-  claimOpen: (url: string) => `On a computer or phone, open ${url} and enter`,
-  claimRotates: 'The code changes after a wrong try.',
-  // A browser has the claim link open: only where to type the letters.
-  claimPageOpen: 'Type these letters on the page that just opened',
-  // No address a person can open (the server sends no claimUrl/appUrl; Whombat LNK-55).
-  claimNoAddress: 'The code appears once this Whombat has a secure address: Whombat Link or Tailscale.',
-  // While Tailscale asks for a sign-in or HTTPS (the Expert choice), the claim line names only Tailscale's steps.
-  claimAfterTailscale: 'After you sign in to Tailscale and turn on HTTPS, the code appears here.',
-  claimAfterHttps: 'After you turn on HTTPS in Tailscale, the code appears here.',
-  // No address to open, but one on this network: the Whombat app there claims it.
-  claimInApp: (address: string) => `In the Whombat app on this network, type ${address} and enter`,
-  // Only an IPv6 address on this network: the app takes an IPv4 one, so that is another way, under the line above.
-  claimIpv4:
-    'This network gave this Whombat only an IPv6 address. If it also gets an IPv4 address, the code appears here and you can claim it in the Whombat app.',
-  // Under the claim link at the box's own address, which others on the internet can keep busy: a way they can't reach.
-  claimElseInApp: (address: string) =>
-    `If that page doesn’t open: in the Whombat app on this network, type ${address}.`,
-  claimElseTailnet: (url: string) => `If that page doesn’t open: on a device on your tailnet, open ${url}.`,
-  // New letters were asked for at this screen: they stay for a while, whatever is tried.
-  claimStays: (min: number) => `These letters stay for ${min} min.`,
-  backoff: (min: number) => `Too many wrong codes. Try again in ${min} min.`,
-  claimed: 'This Whombat is set up.',
-  claimedOpen: (url: string) => `Open ${url} to use it.`,
-  claimedApp: 'Use it in the Whombat app on this network.',
-  // A device waiting to sign in at this screen (Whombat BX-06, CG-150), over every claimed scene.
-  signInKicker: 'NEW DEVICE',
-  signInTitle: (name: string) => `${name} wants to sign in`,
-  signInType: 'Type these letters on that device.',
-  signInIgnore: (min: number) => `Didn’t ask for this? Ignore it: the code goes away in ${min} min.`,
-  // Whombat Link and Tailscale (contracts 4.4, CG-402, CG-404). A claim link on the box's tailnet name says where.
-  claimOpenTailnet: (url: string) => `On a device on your tailnet, open ${url} and enter`,
-  linkTitle: 'Turn on Whombat Link',
-  linkOpen: (url: string) => `On a computer or phone, open ${url} and enter`,
-  linkConfirm: 'Sign in or create an account there, then confirm this Whombat.',
-  linkRotates: (min: number) => `The code changes in ${min} min.`,
-  linkWaiting: 'Waiting for this Whombat’s web address…',
-  linkWaitingHint:
-    'Whombat Link is on. The web address usually comes within a minute, and this screen changes by itself.',
-  // Under the wait for the web address once it took long: the Whombat app on this network claims the box already.
-  linkWaitingInApp: (address: string, letters: string) =>
-    `Taking long? Claim it in the Whombat app on this network: type ${address} and enter ${letters}.`,
-  linkStarting: 'Starting Whombat Link…',
-  linkGrace: (day: string) =>
-    `Whombat Link ends on ${day}. Turn on Tailscale in the Whombat app to keep a way in, and check your paper backup details.`,
-  linkEnded:
-    'Whombat Link has ended. Subscribe again at app.whombat.com, or turn on Tailscale: in the Whombat app at home, or in the recovery menu (hold Space at power-on).',
-  tailscaleLogin: (url: string) => `Sign in to Tailscale: open ${url} on a computer or phone.`,
-  tailscaleHttps:
-    'Turn on HTTPS in Tailscale: in the Tailscale admin console, open DNS and turn on HTTPS Certificates. This Whombat checks again by itself.',
-  // Tailscale's step and the claim, numbered while Tailscale asks for something and the claim has no address to open:
-  // the sign-in first, and the claim's line says the app on this network works right away.
-  stepOne: '1 · ',
-  stepTwo: '2 · ',
-  claimInAppNow: (address: string) =>
-    `You can do this now: in the Whombat app on this network, type ${address} and enter`,
-  // Why the first start can't finish (CG-409), in place of “Starting Whombat…”.
-  startTitle: 'Whombat can’t start yet',
-  startReleaseMissing: (release: string) =>
-    `This Whombat can’t find its version, ${release}, on the update server. Install it again with the newest Whombat installer.`,
-  startReleaseMissingNoId:
-    'This Whombat can’t find its version on the update server. Install it again with the newest Whombat installer.',
-  startOffline: 'This Whombat can’t reach the update server. Check the network cable.',
-  startFailed: 'Something went wrong while this Whombat set itself up.',
-  startRetry: 'It tries again by itself. To try now, restart it.',
-} as const;
+export const wordCopy = localized(
+  (t) =>
+    ({
+      starting: t('claim.starting'),
+      waiting: t('claim.waiting'),
+      waitingHint: t('claim.waitingHint'),
+      claimTitle: t('claim.claimTitle'),
+      // The claim link is the box's own address (or its tailnet name, below): it opens from anywhere.
+      claimOpen: (url: string) => t('claim.claimOpen', { url }),
+      claimRotates: t('claim.claimRotates'),
+      // A browser has the claim link open: only where to type the letters.
+      claimPageOpen: t('claim.claimPageOpen'),
+      // No address a person can open (the server sends no claimUrl/appUrl; Whombat LNK-55).
+      claimNoAddress: t('claim.claimNoAddress'),
+      // While Tailscale asks for a sign-in or HTTPS (the Expert choice), the claim line names only Tailscale's steps.
+      claimAfterTailscale: t('claim.claimAfterTailscale'),
+      claimAfterHttps: t('claim.claimAfterHttps'),
+      // No address to open, but one on this network: the Whombat app there claims it.
+      claimInApp: (address: string) => t('claim.claimInApp', { address }),
+      // Only an IPv6 address on this network: the app takes an IPv4 one, so that is another way, under the line above.
+      claimIpv4: t('claim.claimIpv4'),
+      // Under the claim link at the box's own address, which others on the internet can keep busy: a way they can't reach.
+      claimElseInApp: (address: string) => t('claim.claimElseInApp', { address }),
+      claimElseTailnet: (url: string) => t('claim.claimElseTailnet', { url }),
+      // New letters were asked for at this screen: they stay for a while, whatever is tried.
+      claimStays: (min: number) => t('claim.claimStays', { min }),
+      backoff: (min: number) => t('claim.backoff', { min }),
+      claimed: t('claim.claimed'),
+      claimedOpen: (url: string) => t('claim.claimedOpen', { url }),
+      claimedApp: t('claim.claimedApp'),
+      // A device waiting to sign in at this screen (Whombat BX-06, CG-150), over every claimed scene.
+      signInKicker: t('claim.signInKicker'),
+      signInTitle: (name: string) => t('claim.signInTitle', { name }),
+      signInType: t('claim.signInType'),
+      signInIgnore: (min: number) => t('claim.signInIgnore', { min }),
+      // Whombat Link and Tailscale (contracts 4.4, CG-402, CG-404). A claim link on the box's tailnet name says where.
+      claimOpenTailnet: (url: string) => t('claim.claimOpenTailnet', { url }),
+      linkTitle: t('claim.linkTitle'),
+      linkOpen: (url: string) => t('claim.claimOpen', { url }),
+      linkConfirm: t('claim.linkConfirm'),
+      linkRotates: (min: number) => t('claim.linkRotates', { min }),
+      linkWaiting: t('claim.linkWaiting'),
+      linkWaitingHint: t('claim.linkWaitingHint'),
+      // Under the wait for the web address once it took long: the Whombat app on this network claims the box already.
+      linkWaitingInApp: (address: string, letters: string) =>
+        t('claim.linkWaitingInApp', { address, letters }),
+      linkStarting: t('claim.linkStarting'),
+      linkGrace: (day: string) => t('claim.linkGrace', { day }),
+      linkEnded: t('claim.linkEnded'),
+      tailscaleLogin: (url: string) => t('claim.tailscaleLogin', { url }),
+      tailscaleHttps: t('claim.tailscaleHttps'),
+      // Tailscale's step and the claim, numbered while Tailscale asks for something and the claim has no address to open:
+      // the sign-in first, and the claim's line says the app on this network works right away.
+      stepOne: '1 · ',
+      stepTwo: '2 · ',
+      claimInAppNow: (address: string) => t('claim.claimInAppNow', { address }),
+      // Why the first start can't finish (CG-409), in place of “Starting Whombat…”.
+      startTitle: t('claim.startTitle'),
+      startReleaseMissing: (release: string) => t('claim.startReleaseMissing', { release }),
+      startReleaseMissingNoId: t('claim.startReleaseMissingNoId'),
+      startOffline: t('claim.startOffline'),
+      startFailed: t('claim.startFailed'),
+      startRetry: t('claim.startRetry'),
+    }) as const,
+);
+export const WORD = wordCopy();
 
 export const GUIDE = 'Hazel';
 /** The guide's alt text: who she is on this screen. */
-export const GUIDE_LABEL = `${GUIDE}, your guide`;
+export const guideLabelCopy = localized((t) => t('guide.label'));
+export const GUIDE_LABEL = guideLabelCopy();
 
 /** What the wombats say on the console's screens. */
-export const SAY = {
-  starting: 'Just waking up. This takes a minute.',
-  startProblem: 'Hmm. Something’s in my way.',
-  waiting: 'Sniffing for the way out to the internet…',
-  claimable: 'Four letters. I’ll hold the sign.',
-  backoff: 'Let’s take a little break.',
-  celebrate: 'Welcome home!',
-  link: 'I’ll hold the sign while you type it.',
-  linkWaiting: 'Digging a new front door. Almost there.',
-  linkStarting: 'Getting the tunnel ready…',
-} as const;
+export const sayCopy = localized(
+  (t) =>
+    ({
+      starting: t('claim.guide.starting'),
+      startProblem: t('claim.guide.startProblem'),
+      waiting: t('claim.guide.waiting'),
+      claimable: t('claim.guide.claimable'),
+      backoff: t('claim.guide.backoff'),
+      celebrate: t('claim.guide.celebrate'),
+      link: t('claim.guide.link'),
+      linkWaiting: t('claim.guide.linkWaiting'),
+      linkStarting: t('claim.guide.linkStarting'),
+    }) as const,
+);
 
-export const CONSOLE = {
-  claimCode: 'Claim code',
-  /** The button that asks for new claim letters (the text console says “Press N for new letters.”). */
-  newLetters: 'New letters',
-  /** The key that does the same, shown on the button. */
-  newLettersKey: 'N',
-  linkCode: 'Whombat Link code',
-  /** A QR code's name for a screen reader: the address it opens. */
-  qr: (url: string) => `QR code for ${url}`,
-  /** Under every QR code: what to do with it. */
-  scan: 'Scan with your phone',
-  notes: 'How to reach this Whombat',
-  retryIn: 'Try again in',
-  claimed: 'Claimed!',
-  factKicker: 'WOMBAT FACT',
-  connecting: 'Connecting to this Whombat’s console…',
-  reconnecting: 'Reconnecting…',
-  /**
-   * A certificate for the box's own address it didn't ask for (contracts 4.3 `own_address_foreign`), in the words of
-   * the runtime's notice (Whombat OWA-10). The page knows no address, so it names none.
-   */
-  alertForeignTitle: 'Don’t use this Whombat’s address for now',
-  alertForeign:
-    'Someone got a security certificate for your Whombat’s address that your Whombat didn’t ask for. Until you know why, don’t use that address. Use the app on your phone or your home network.',
-} as const;
+export const consoleCopy = localized(
+  (t) =>
+    ({
+      claimCode: t('console.claimCode'),
+      /** The button that asks for new claim letters (the text console says “Press N for new letters.”). */
+      newLetters: t('console.newLetters'),
+      /** The key that does the same, shown on the button. */
+      newLettersKey: 'N',
+      linkCode: t('console.linkCode'),
+      /** A QR code's name for a screen reader: the address it opens. */
+      qr: (url: string) => t('console.qr', { url }),
+      /** Under every QR code: what to do with it. */
+      scan: t('console.scan'),
+      notes: t('console.notes'),
+      retryIn: t('console.retryIn'),
+      claimed: t('console.claimed'),
+      factKicker: t('console.factKicker'),
+      connecting: t('console.connecting'),
+      reconnecting: t('console.reconnecting'),
+      /**
+       * A certificate for the box's own address it didn't ask for (contracts 4.3 `own_address_foreign`), in the words of
+       * the runtime's notice (Whombat OWA-10). The page knows no address, so it names none.
+       */
+      alertForeignTitle: t('console.alertForeignTitle'),
+      alertForeign: t('console.alertForeign'),
+    }) as const,
+);
+export const CONSOLE = consoleCopy();
 
-export const INSTALLER = {
-  kicker: 'WHOMBAT INSTALLER',
-  step: (n: number, of: number) => `INSTALL · STEP ${n} OF ${of}`,
-  back: 'Back',
-  continue: 'Continue',
+export const installerCopy = localized(
+  (t) =>
+    ({
+      kicker: t('installer.kicker'),
+      step: (n: number, of: number) => t('installer.step', { n, of }),
+      back: t('bluetooth.back'),
+      continue: t('installer.continue'),
 
-  welcomeTitle: 'Let’s set up your Whombat',
-  welcomeSub:
-    'This installs Whombat on this machine. It takes a few minutes, and everything on the disk you choose is erased.',
-  welcomeNext: 'After a restart, the screen shows what to do next.',
-  start: 'Start',
-  welcomeSay: `Hi, I’m ${GUIDE}. I’ll show you the way. It’s mostly digging.`,
+      welcomeTitle: t('installer.welcomeTitle'),
+      welcomeSub: t('installer.welcomeSub'),
+      welcomeNext: t('installer.welcomeNext'),
+      start: t('installer.start'),
+      welcomeSay: t('installer.welcomeSay'),
 
-  // How the box will be reached (Whombat LNK-12, ONE-12): Easy or Expert, the same words as Settings → This Whombat →
-  // Reach; the offer sentence is the contracts' (LINK_OFFER_TEXT, ONE-07).
-  reachTitle: 'How will you reach this Whombat?',
-  reachSub: 'You can change this later in Settings.',
-  reachSay: 'Pick how you’ll find your way back to the burrow.',
-  reachEasy: 'Easy',
-  reachLink: 'Whombat Link',
-  reachRecommended: 'Recommended',
-  reachLinkPrice: LINK_OFFER_TEXT,
-  reachLinkPoints: [
-    'Open your Whombat from anywhere, without port forwarding',
-    'Its own secure web address',
-    'Notifications on your iPhone and Android phone',
-    'The Whombat apps away from home',
-    'Sign-ins like Google work',
-    'Supports Whombat’s open-source work',
-  ],
-  reachExpert: 'Expert',
-  reachTailscale: 'Tailscale or Headscale',
-  reachFree: 'Free',
-  reachTailscaleNote: 'You set up Tailscale on each of your devices.',
-  reachTailscalePoints: [
-    'No notifications on your phone while the app is closed',
-    'Some sign-ins, like Google, aren’t available',
-  ],
-  reachLoginServer: 'Your own login server (optional)',
-  reachLoginServerHint: 'For Headscale. Leave it empty to use Tailscale’s own.',
-  reachLoginServerBad: 'Enter an https address, like https://headscale.example.com.',
+      // How the box will be reached (Whombat LNK-12, ONE-12): Easy or Expert, the same words as Settings → This Whombat →
+      // Reach; the offer sentence is the contracts' (LINK_OFFER_TEXT, ONE-07).
+      reachTitle: t('installer.reachTitle'),
+      reachSub: t('installer.reachSub'),
+      reachSay: t('installer.reachSay'),
+      reachEasy: t('installer.reachEasy'),
+      reachLink: 'Whombat Link',
+      reachRecommended: t('installer.reachRecommended'),
+      reachLinkPrice: t('installer.reachLinkPrice'),
+      reachLinkPoints: [
+        t('installer.reachLinkPoints.openYourWhombat'),
+        t('installer.reachLinkPoints.itsOwnSecureHint'),
+        t('installer.reachLinkPoints.notificationsOnYourHint'),
+        t('installer.reachLinkPoints.theWhombatAppsHint'),
+        t('installer.reachLinkPoints.signInsLikeHint'),
+        t('installer.reachLinkPoints.supportsWhombatsOpenHint'),
+      ],
+      reachExpert: t('installer.reachExpert'),
+      reachTailscale: t('installer.reachTailscale'),
+      reachFree: t('installer.reachFree'),
+      reachTailscaleNote: t('installer.reachTailscaleNote'),
+      reachTailscalePoints: [
+        t('installer.reachTailscalePoints.noNotificationsOn'),
+        t('installer.reachTailscalePoints.someSignInsHint'),
+      ],
+      reachLoginServer: t('installer.reachLoginServer'),
+      reachLoginServerHint: t('installer.reachLoginServerHint'),
+      reachLoginServerBad: t('installer.reachLoginServerBad'),
 
-  checksTitle: 'Checking this machine',
-  checksSub:
-    'Whombat looks at this machine’s memory and disks, and at the internet it needs after the restart.',
-  checkAgain: 'Check again',
-  checksRunning: 'Checking…',
-  checksOk: 'All good.',
-  /** Every check passed: one line, the rows behind Details. */
-  checksAllGood: 'All good. This machine is ready for Whombat.',
-  checksLooking: 'Looking at this machine and the internet…',
-  /** The rows that passed, folded under the line or under a problem. */
-  checksDetails: 'Details',
-  checksHideDetails: 'Hide details',
-  checksWarn: 'Read the warnings, then continue.',
-  checksFail: 'Fix the marked items first.',
-  checksSay: {
-    running: 'Sniffing around…',
-    ok: 'Everything looks good to me.',
-    warn: 'A few things to know. We can still go on.',
-    fail: 'We can’t dig here yet.',
-  },
+      checksTitle: t('installer.checksTitle'),
+      checksSub: t('installer.checksSub'),
+      checkAgain: t('installer.checkAgain'),
+      checksRunning: t('installer.checksRunning'),
+      checksOk: t('installer.checksOk'),
+      /** Every check passed: one line, the rows behind Details. */
+      checksAllGood: t('installer.checksAllGood'),
+      checksLooking: t('installer.checksLooking'),
+      /** The rows that passed, folded under the line or under a problem. */
+      checksDetails: t('installer.checksDetails'),
+      checksHideDetails: t('installer.checksHideDetails'),
+      checksWarn: t('installer.checksWarn'),
+      checksFail: t('installer.checksFail'),
+      checksSay: {
+        running: t('installer.checksSay.running'),
+        ok: t('installer.checksSay.ok'),
+        warn: t('installer.checksSay.warn'),
+        fail: t('installer.checksSay.fail'),
+      },
 
-  diskTitle: 'Choose a disk',
-  diskSub: 'Whombat takes the whole disk. Everything on it is erased.',
-  diskSay: 'Pick a spot. I need at least 110 GiB.',
-  diskNone: 'No disk is big enough. Whombat needs one of 110 GiB or more.',
+      diskTitle: t('installer.diskTitle'),
+      diskSub: t('installer.diskSub'),
+      diskSay: t('installer.diskSay'),
+      diskNone: t('installer.diskNone'),
 
-  eraseTitle: 'Erase and install',
-  /**
-   * The disk by its size and model, as a person knows it; its device name (sda) only where it must be typed. `model` is
-   * “ (QEMU HARDDISK)” with its space, or nothing.
-   */
-  eraseSub: (size: string, model: string) =>
-    `Everything on the ${size} disk${model} is erased. This can’t be undone.`,
-  /** An empty disk: nothing to lose, so a button press confirms. */
-  eraseEmptySub: (size: string, model: string) =>
-    `The ${size} disk${model} is empty, so nothing on it is lost.`,
-  eraseLabel: (name: string) => `Type ${name} to confirm`,
-  erase: (name: string) => `Erase ${name} and install`,
-  eraseEmpty: 'Erase and install',
-  erasing: 'Starting…',
-  eraseSay: 'Last chance to change your mind. After this, I dig.',
-  eraseRefused: 'That didn’t work. Check the disk and the checks, then try again.',
-  eraseBusy: 'An installation is already running.',
+      eraseTitle: t('installer.eraseTitle'),
+      /**
+       * The disk by its size and model, as a person knows it; its device name (sda) only where it must be typed. `model` is
+       * “ (QEMU HARDDISK)” with its space, or nothing.
+       */
+      eraseSub: (size: string, model: string) => t('installer.eraseSub', { size, model }),
+      /** An empty disk: nothing to lose, so a button press confirms. */
+      eraseEmptySub: (size: string, model: string) => t('installer.eraseEmptySub', { size, model }),
+      eraseLabel: (name: string) => t('installer.eraseLabel', { name }),
+      erase: (name: string) => t('installer.erase', { name }),
+      eraseEmpty: t('installer.eraseTitle'),
+      erasing: t('installer.erasing'),
+      eraseSay: t('installer.eraseSay'),
+      eraseRefused: t('installer.eraseRefused'),
+      eraseBusy: t('installer.eraseBusy'),
 
-  installingTitle: 'Installing Whombat',
-  installingSub: 'This takes a few minutes. Keep this machine running.',
-  showDetails: 'Show details',
-  hideDetails: 'Hide details',
-  progressLabel: 'Installation progress',
+      installingTitle: t('installer.installingTitle'),
+      installingSub: t('installer.installingSub'),
+      showDetails: t('installer.showDetails'),
+      hideDetails: t('installer.checksHideDetails'),
+      progressLabel: t('installer.progressLabel'),
 
-  doneTitle: 'Whombat is installed',
-  doneSub: 'Restart to start it. The screen then shows what to do next.',
-  doneMedium:
-    'If the installer starts again after the restart, remove the USB stick or detach the ISO, then restart.',
-  restart: 'Restart',
-  restarting: 'Restarting…',
-  doneSay: 'Burrow dug. See you on the other side!',
+      doneTitle: t('installer.doneTitle'),
+      doneSub: t('installer.doneSub'),
+      doneMedium: t('installer.doneMedium'),
+      restart: t('installer.restart'),
+      restarting: t('installer.restarting'),
+      doneSay: t('installer.doneSay'),
 
-  failedTitle: 'The installation didn’t finish',
-  failedSub: (step: string | null) =>
-    step ? `It stopped while ${step.toLowerCase()}.` : 'It stopped before it could begin.',
-  failedLog: 'What happened',
-  tryAgain: 'Try again',
-  failedSay: 'Hmm. That didn’t work. Let’s look at it together.',
-} as const;
+      failedTitle: t('installer.failedTitle'),
+      failedSub: (step: string | null) =>
+        step
+          ? t('installer.failedSub.WithValue', { step: step.toLowerCase() })
+          : t('installer.failedSub.Fallback'),
+      failedLog: t('installer.failedLog'),
+      tryAgain: t('bluetooth.tryAgain'),
+      failedSay: t('installer.failedSay'),
+    }) as const,
+);
+export const INSTALLER = installerCopy();
 
-export const CHECK_LABEL: Record<CheckId, string> = {
-  uefi: 'UEFI firmware',
-  cpu: 'Processor',
-  memory: 'Memory',
-  disk: 'Disk',
-  network: 'Network',
-  'reach-api': 'Whombat service',
-  'reach-updates': 'Updates',
-  'reach-relay': 'Relay',
-  'reach-login': 'Tailscale login',
-};
+export const checkLabelCopy = localized(
+  (t): Record<CheckId, string> => ({
+    uefi: t('installer.check.uefi'),
+    cpu: t('installer.check.cpu'),
+    memory: t('installer.check.memory'),
+    disk: t('installer.check.disk'),
+    network: t('installer.check.network'),
+    'reach-api': t('installer.check.reach-api'),
+    'reach-updates': t('installer.check.reach-updates'),
+    'reach-relay': t('installer.check.reach-relay'),
+    'reach-login': t('installer.check.reach-login'),
+  }),
+);
 
 /**
  * A line under a check that isn't ok. `value` is the server's plain value (a host, “2 cores”, …); `disks` what the disk
@@ -255,78 +261,79 @@ export function checkNote(
   status: CheckStatus,
   value: string,
   disks: Disk[] = [],
+  t: Translate = english,
 ): string | null {
   if (status === 'ok' || status === 'running') return null;
   const warn = status === 'warn';
   switch (id) {
     case 'uefi':
-      return 'This machine started in BIOS mode. Switch its firmware to UEFI and start the installer again.';
+      return t('copy.thisMachineStartedInBios');
     case 'cpu':
-      return warn ? 'Fewer than 4 cores. Whombat runs, but slowly.' : 'Whombat needs at least 2 cores.';
+      return warn ? t('copy.fewerThanCoresWhombatRuns') : t('copy.whombatNeedsAtLeastCores');
     case 'memory':
-      return warn
-        ? 'Less than 8 GiB. Agents may run short of memory.'
-        : 'Whombat needs at least 4 GiB of memory.';
+      return warn ? t('copy.lessThanGibAgentsMay') : t('copy.whombatNeedsAtLeastGib');
     case 'disk':
-      return diskNote(disks);
+      return diskNote(disks, t);
     case 'network':
-      return 'No network address yet. Whombat needs the network after the restart.';
+      return t('copy.noNetworkAddressYetWhombat');
     default:
-      return value
-        ? `Can’t reach ${value}. Whombat needs it when it first starts.`
-        : 'Can’t reach it. Whombat needs it when it first starts.';
+      return value ? t('copy.cantReachWhombatNeedsIt', { value }) : t('copy.cantReachItWhombatNeeds');
   }
 }
 
 /** Why no disk can take Whombat, in one line: what stops each disk the installer found. */
-export function diskNote(disks: Disk[]): string {
+export function diskNote(disks: Disk[], t: Translate = english): string {
   const refused = disks.filter((d) => !d.eligible && d.reason !== '');
-  if (refused.length === 0) return 'No disk found to install on.';
-  return `No disk to install on: ${refused.map(diskWhy).join('; ')}.`;
+  if (refused.length === 0) return t('copy.noDiskFoundToInstall');
+  return t('copy.noDiskToInstallOn', { value: refused.map((disk) => diskWhy(disk, t)).join('; ') });
 }
 
 /** Each disk by its size first, as a person knows it, with its device name quiet after it. */
-function diskWhy(d: Disk): string {
-  const disk = `the ${formatSize(d.sizeBytes)} disk (${d.name})`;
+function diskWhy(d: Disk, t: Translate = english): string {
+  const disk = t('copy.theDisk', { value: formatSize(d.sizeBytes, t.locale), name: d.name });
   switch (d.reason) {
     case 'too-small':
-      return `${disk} is smaller than the 110 GiB Whombat needs`;
+      return t('copy.isSmallerThanTheGib', { disk });
     case 'installer-medium':
-      return `${disk} holds this installer`;
+      return t('copy.holdsThisInstaller', { disk });
     case 'in-use':
-      return `${disk} is in use`;
+      return t('copy.isInUse', { disk });
     default:
-      return `${disk} is connected by USB`;
+      return t('copy.isConnectedByUsb', { disk });
   }
 }
 
 /** What a file system says to a person: what made it, in everyday words. */
-const FS_WORDS: Record<string, string> = {
-  ntfs: 'Windows files',
-  BitLocker: 'Windows files (locked with BitLocker)',
-  vfat: 'FAT files',
-  exfat: 'exFAT files',
-  ext2: 'Linux files',
-  ext3: 'Linux files',
-  ext4: 'Linux files',
-  btrfs: 'Linux files',
-  xfs: 'Linux files',
-  f2fs: 'Linux files',
-  apfs: 'Mac files',
-  hfsplus: 'Mac files',
-  crypto_LUKS: 'encrypted data',
-  LVM2_member: 'Linux volumes',
-  zfs_member: 'ZFS data',
-  linux_raid_member: 'RAID data',
-  swap: 'swap space',
-  iso9660: 'a disc image',
-};
+const fsWordsCopy = localized(
+  (t): Record<string, string> => ({
+    ntfs: t('installer.fileSystem.ntfs'),
+    BitLocker: t('installer.fileSystem.BitLocker'),
+    vfat: t('installer.fileSystem.vfat'),
+    exfat: t('installer.fileSystem.exfat'),
+    ext2: t('installer.fileSystem.ext2'),
+    ext3: t('installer.fileSystem.ext2'),
+    ext4: t('installer.fileSystem.ext2'),
+    btrfs: t('installer.fileSystem.ext2'),
+    xfs: t('installer.fileSystem.ext2'),
+    f2fs: t('installer.fileSystem.ext2'),
+    apfs: t('installer.fileSystem.apfs'),
+    hfsplus: t('installer.fileSystem.apfs'),
+    crypto_LUKS: t('installer.fileSystem.crypto_LUKS'),
+    LVM2_member: t('installer.fileSystem.LVM2_member'),
+    zfs_member: t('installer.fileSystem.zfs_member'),
+    linux_raid_member: t('installer.fileSystem.linux_raid_member'),
+    swap: t('installer.fileSystem.swap'),
+    iso9660: t('installer.fileSystem.iso9660'),
+  }),
+);
 
-function partWords(p: DiskPart): string {
-  const what = FS_WORDS[p.fsType] ?? 'other data';
+function partWords(p: DiskPart, t: Translate = english): string {
+  const FS_WORDS = fsWordsCopy(t);
+
+  const what = FS_WORDS[p.fsType] ?? t('copy.otherData');
   const size =
     p.sizeBytes >= 1024 ** 3
-      ? formatSize(p.sizeBytes)
+      ? formatSize(p.sizeBytes, t.locale)
       : `${Math.max(1, Math.round(p.sizeBytes / 1024 ** 2))} MiB`;
   return p.label ? `${what} (“${p.label}”, ${size})` : `${what} (${size})`;
 }
@@ -335,35 +342,44 @@ function partWords(p: DiskPart): string {
  * What is on a disk that isn't empty, in plain words, for the erase step: “It isn’t empty: it holds Windows files
  * (“OS”, 475 GiB), FAT files (100 MiB) and 2 more parts.” Null when the page doesn't know (an older server).
  */
-export function diskHolds(d: Disk): string | null {
+export function diskHolds(d: Disk, t: Translate = english): string | null {
   const parts = d.parts ?? [];
   if (d.empty || parts.length === 0) return null;
-  const named = parts.slice(0, 3).map(partWords);
+  const named = parts.slice(0, 3).map((item) => partWords(item, t));
   const more = parts.length - named.length;
-  if (more > 0) named.push(more === 1 ? '1 more part' : `${more} more parts`);
-  const list = named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
-  return `It isn’t empty: it holds ${list}.`;
+  if (more > 0) named.push(more === 1 ? t('copy.morePart') : t('copy.moreParts', { more }));
+  const list =
+    named.length === 1
+      ? named[0]
+      : t('copy.and', { value: named.slice(0, -1).join(', '), named: named.at(-1) });
+  return t('copy.itIsntEmptyItHolds', { list });
 }
 
-export const DISK_REASON: Record<Exclude<DiskReason, ''>, string> = {
-  'too-small': 'Smaller than 110 GiB',
-  'installer-medium': 'The installer runs from it',
-  'in-use': 'In use',
-  usb: 'Connected by USB',
-};
+export const diskReasonCopy = localized(
+  (t): Record<Exclude<DiskReason, ''>, string> => ({
+    'too-small': t('installer.diskReason.too-small'),
+    'installer-medium': t('installer.diskReason.installer-medium'),
+    'in-use': t('installer.diskReason.in-use'),
+    usb: t('installer.diskReason.usb'),
+  }),
+);
 
-export const STEP_LABEL: Record<InstallStep, string> = {
-  partition: 'Partitioning the disk',
-  filesystems: 'Creating file systems',
-  copy: 'Copying the system',
-  boot: 'Setting up the boot loader',
-  finish: 'Finishing',
-};
+export const stepLabelCopy = localized(
+  (t): Record<InstallStep, string> => ({
+    partition: t('installer.installStep.partition'),
+    filesystems: t('installer.installStep.filesystems'),
+    copy: t('installer.installStep.copy'),
+    boot: t('installer.installStep.boot'),
+    finish: t('installer.installStep.finish'),
+  }),
+);
 
-export const STEP_SAY: Record<InstallStep, string> = {
-  partition: 'Marking out the burrow…',
-  filesystems: 'Shoring up the walls…',
-  copy: 'Carrying everything in…',
-  boot: 'Hanging the front door…',
-  finish: 'Sweeping up…',
-};
+export const stepSayCopy = localized(
+  (t): Record<InstallStep, string> => ({
+    partition: t('installer.installGuide.partition'),
+    filesystems: t('installer.installGuide.filesystems'),
+    copy: t('installer.installGuide.copy'),
+    boot: t('installer.installGuide.boot'),
+    finish: t('installer.installGuide.finish'),
+  }),
+);

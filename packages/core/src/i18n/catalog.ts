@@ -16,7 +16,9 @@ import {
 import { AI } from './messages/ai.js';
 import { APPROVALS } from './messages/approvals.js';
 import { AUDIT } from './messages/audit.js';
+import { AUTOMATION_VIEWS } from './messages/automation-views.js';
 import { BACKUP } from './messages/backup.js';
+import { BACKUP_FILES } from './messages/backup-files.js';
 import { CONNECTION_MESSAGES } from './messages/connections.js';
 import { DESK_MESSAGES } from './messages/desk.js';
 import { DOMAIN_MESSAGES } from './messages/domain.js';
@@ -24,9 +26,11 @@ import { GATEWAY } from './messages/gateway.js';
 import { HOST_WATCH } from './messages/host-watch.js';
 import { KEYS } from './messages/keys.js';
 import { NEWS_MESSAGES } from './messages/news.js';
+import { ONEPASSWORD } from './messages/onepassword.js';
 import { PROTOCOL } from './messages/protocol.js';
 import { RECIPES } from './messages/recipes.js';
 import { SCHEDULE } from './messages/schedule.js';
+import { SPEND } from './messages/spend.js';
 import { STATUS } from './messages/status.js';
 import { TEXT } from './messages/text.js';
 import { TIME_EN, TIME_NL } from './messages/time.js';
@@ -40,9 +44,13 @@ export type Catalog = MessageCatalog;
 export const EN = {
   ...TIME_EN,
   ...BACKUP.en,
+  ...BACKUP_FILES.en,
   ...RECIPES.en,
+  ...AUTOMATION_VIEWS.en,
   ...SCHEDULE.en,
+  ...SPEND.en,
   ...VAULT.en,
+  ...ONEPASSWORD.en,
   ...AUDIT.en,
   ...APPROVALS.en,
   ...KEYS.en,
@@ -65,9 +73,13 @@ export type CoreMessageKey = keyof typeof EN;
 export const NL: { [K in CoreMessageKey]: MessageValue } = {
   ...TIME_NL,
   ...BACKUP.nl,
+  ...BACKUP_FILES.nl,
   ...RECIPES.nl,
+  ...AUTOMATION_VIEWS.nl,
   ...SCHEDULE.nl,
+  ...SPEND.nl,
   ...VAULT.nl,
+  ...ONEPASSWORD.nl,
   ...AUDIT.nl,
   ...APPROVALS.nl,
   ...KEYS.nl,

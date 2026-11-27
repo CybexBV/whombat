@@ -42,7 +42,7 @@ import { ApiError } from '../../lib/errors';
 import type { Services } from '../../services';
 import { largeImageRef } from '../../things/images';
 import { kindOf } from '../../things/kinds/index';
-import { thingPage } from '../../things/page';
+import { thingPageInEnglish } from '../../things/page';
 import { displayName } from '../../things/part-of';
 import type { PageRange } from '../../things/series';
 import { calmMark } from '../calm';
@@ -149,7 +149,8 @@ async function homeThings(services: Services, ctx: WidgetCtx): Promise<ThingEntr
 export function runtimeDeps(services: Services): ThingWidgetsDeps {
   return {
     things: (ctx) => homeThings(services, ctx),
-    page: (ctx, thing, range) => thingPage(services, ctx.viewer, thing, ctx.timeZone, range),
+    // In English: the views below read its words, and the screen says the finished view in the person's language.
+    page: (ctx, thing, range) => thingPageInEnglish(services, ctx.viewer, thing, ctx.timeZone, range),
     async serverDown(ctx) {
       const fleet = await deskFleet(services, ctx.viewer.burrowId, 3_000).catch(() => null);
       const rows = fleet ? [...fleet.rows.values()] : null;

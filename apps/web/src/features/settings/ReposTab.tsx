@@ -15,6 +15,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { GitHubSignInRow, useGitHubRefresh, useSignInsStatus } from '../ai';
 import { GitHubNotice } from '../github/GitHubNotice';
 import { useConnectGitHub } from '../github/useGitHub';
@@ -36,6 +37,7 @@ const FRESH_MS = 2_400;
  *   a Git repository on this Whombat, first commit by you.
  */
 export function ReposTab({ burrow }: { burrow: string }) {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const { words } = useTheAgent(burrow);
   const qc = useQueryClient();
@@ -74,7 +76,7 @@ export function ReposTab({ burrow }: { burrow: string }) {
   async function handleConnect() {
     setConnectProblem(null);
     const result = await connect();
-    if (result.ok) toast.show(githubConnectedToast(words.name));
+    if (result.ok) toast.show(githubConnectedToast(words.name, uiLocale));
     else setConnectProblem({ message: result.message });
   }
 
@@ -310,10 +312,13 @@ function RepoRow({
   const local = repoSourceOf(repo) === 'local';
   const since = repo.createdAt ?? repo.pushedAt;
   const meta = local
-    ? [repo.description || null, since ? `created ${formatUpdated(since, now, timeZone)}` : null]
+    ? [
+        repo.description || null,
+        since ? `created ${formatUpdated(since, now, timeZone, currentLocale())}` : null,
+      ]
         .filter(Boolean)
         .join(' · ')
-    : formatRepoMeta(repo.language, repo.pushedAt, now, timeZone);
+    : formatRepoMeta(repo.language, repo.pushedAt, now, timeZone, currentLocale());
   return (
     <div className={cx(base.row, styles.repoRow, fresh && styles.fresh)}>
       <span className={cx(styles.tile, local ? styles.localTile : styles.githubTile)}>

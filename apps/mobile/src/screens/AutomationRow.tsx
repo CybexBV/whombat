@@ -14,13 +14,14 @@ import { SCHEDULE_STATUS_LABELS } from '@whombat/core';
 import { useState } from 'react';
 import { Image, Platform, View } from 'react-native';
 import {
-  AUTOMATION_LIST_TEXT,
   type AutomationTileView,
+  automationListText,
   type OnlyTellsYouRow,
   type RunBarTone,
 } from '../data/automations';
 import { useBurrowBase } from '../data/BurrowProvider';
 import type { ScheduleAction, ScheduleRow } from '../data/schedules';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Facts } from '../ui/facts';
@@ -350,6 +351,9 @@ export function WaitingLine({
   /** Under the tile's column (a run's line); false inside a row's footer, which is already there. */
   indent?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const automationListTextHere = automationListText(rawLocale);
+
   const theme = useTheme();
   return (
     <Touchable
@@ -374,7 +378,7 @@ export function WaitingLine({
         {waiting.text}
       </Text>
       <Text size={13.5} weight={600} color={theme.colors.ink} style={{ paddingHorizontal: 8 }}>
-        {AUTOMATION_LIST_TEXT.open}
+        {automationListTextHere.open}
       </Text>
     </Touchable>
   );

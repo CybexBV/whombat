@@ -3,6 +3,7 @@ import { formatDigestLabel } from '@whombat/core/text';
 import { useId, useState } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n } from '../../i18n/provider';
 import styles from './Card.module.css';
 import digest from './DigestCard.module.css';
 
@@ -80,6 +81,7 @@ function Section({ section }: { section: DigestSection }) {
  * titles with “Show N”. Same frame and rhythm as the research card.
  */
 export function DigestCard({ card }: DigestCardProps) {
+  const { tag: uiLocale } = useWebI18n();
   return (
     <section
       className={cx(styles.card, digest.card)}
@@ -87,7 +89,7 @@ export function DigestCard({ card }: DigestCardProps) {
       data-card="digest"
     >
       <div className={styles.header}>
-        <span className={styles.label}>{formatDigestLabel(card.title, card.summary)}</span>
+        <span className={styles.label}>{formatDigestLabel(card.title, card.summary, uiLocale)}</span>
       </div>
       {card.sections.map((section, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: sections are positional and never reorder

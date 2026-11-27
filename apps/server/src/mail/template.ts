@@ -5,6 +5,7 @@
  * variables and `<style>` support varies, so styles are inline and the colors are the @whombat/tokens values
  * (light theme; dark mode where the client honours `prefers-color-scheme`).
  */
+import { languageOf, tServer } from '../i18n/catalog';
 import { LOGO_CID, LOGO_HEIGHT, LOGO_WIDTH } from './logo';
 
 export type EmailBlock =
@@ -33,6 +34,8 @@ export interface EmailTemplate {
   footer?: readonly (string | { text: string; link: { href: string; label: string } })[];
   /** Where it came from, under the footer: “Sent by the Whombat at acme.example”. */
   sender?: string;
+  /** The reader's locale (`en-GB`, `nl-NL`): the page's `lang` and the layout's own words. Absent: English. */
+  locale?: string | null;
 }
 
 // @whombat/tokens: brandColors and themeColors (light; `dark` in DARK_CSS). Lines are solid: rgba borders render
@@ -75,7 +78,7 @@ const esc = (t: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-function block(b: EmailBlock): string {
+function block(b: EmailBlock, locale?: string | null): string {
   if (typeof b === 'string')
     return `<p class="wb-text" style="margin:0 0 16px;font:15px/1.6 ${SANS};color:${C.ink2};">${esc(b)}</p>`;
   if ('button' in b)
@@ -83,14 +86,14 @@ function block(b: EmailBlock): string {
   if ('code' in b)
     return `${b.caption ? `<p class="wb-mut" style="margin:0 0 8px;font:13px/1.5 ${SANS};color:${C.mut};">${esc(b.caption)}</p>` : ''}<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;"><tr><td class="wb-chip" style="padding:14px 22px;background:${C.chip};border:1px solid ${C.line};border-radius:12px;font:600 30px/1 ${MONO};letter-spacing:6px;color:${C.ink};">${esc(b.code)}</td></tr></table>`;
   if ('link' in b)
-    return `<p class="wb-mut" style="margin:0 0 16px;font:12px/1.5 ${SANS};color:${C.mut};">If the button doesn’t work, paste this link into your browser:<br><a class="wb-link" href="${esc(b.link)}" target="_blank" style="color:${C.brand};word-break:break-all;">${esc(b.link)}</a></p>`;
+    return `<p class="wb-mut" style="margin:0 0 16px;font:12px/1.5 ${SANS};color:${C.mut};">${esc(tServer(locale, 'mail.template.linkFallback'))}<br><a class="wb-link" href="${esc(b.link)}" target="_blank" style="color:${C.brand};word-break:break-all;">${esc(b.link)}</a></p>`;
   if ('note' in b)
     return `<p class="wb-mut" style="margin:0 0 16px;font:13px/1.55 ${SANS};color:${C.mut};">${esc(b.note)}</p>`;
   if ('items' in b)
     return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">${b.items
       .map(
         (i) =>
-          `<tr><td class="wb-rule" style="padding:12px 0;border-top:1px solid ${C.line};"><a class="wb-title" href="${esc(i.href)}" target="_blank" style="font:600 15px/1.45 ${SANS};color:${C.ink};text-decoration:none;">${esc(i.title)}</a>${i.quote ? `<div class="wb-mut" style="margin-top:4px;font:14px/1.5 ${SANS};color:${C.mut};">${esc(i.quote)}</div>` : ''}<div style="margin-top:6px;"><a class="wb-link" href="${esc(i.href)}" target="_blank" style="font:600 13px/1.4 ${SANS};color:${C.brand};text-decoration:none;">Open →</a></div></td></tr>`,
+          `<tr><td class="wb-rule" style="padding:12px 0;border-top:1px solid ${C.line};"><a class="wb-title" href="${esc(i.href)}" target="_blank" style="font:600 15px/1.45 ${SANS};color:${C.ink};text-decoration:none;">${esc(i.title)}</a>${i.quote ? `<div class="wb-mut" style="margin-top:4px;font:14px/1.5 ${SANS};color:${C.mut};">${esc(i.quote)}</div>` : ''}<div style="margin-top:6px;"><a class="wb-link" href="${esc(i.href)}" target="_blank" style="font:600 13px/1.4 ${SANS};color:${C.brand};text-decoration:none;">${esc(tServer(locale, 'mail.template.open'))}</a></div></td></tr>`,
       )
       .join('')}</table>`;
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">${b.facts
@@ -110,11 +113,11 @@ function footerLine(l: NonNullable<EmailTemplate['footer']>[number]): string {
 }
 
 /** “Sent by the Whombat at acme.example”: a self-hosted Whombat's emails name it. */
-export function sentBy(origin: string): string {
+export function sentBy(origin: string, locale?: string | null): string {
   try {
-    return `Sent by the Whombat at ${new URL(origin).host}`;
+    return tServer(locale, 'mail.template.sentByAt', { host: new URL(origin).host });
   } catch {
-    return 'Sent by your Whombat';
+    return tServer(locale, 'mail.template.sentByYours');
   }
 }
 
@@ -122,7 +125,7 @@ export function sentBy(origin: string): string {
 export function renderEmailHtml(t: EmailTemplate): string {
   const footer = [...(t.footer ?? []), ...(t.sender ? [t.sender] : [])];
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="${languageOf(t.locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${esc(t.title)}</title><style>${DARK_CSS}</style></head>
 <body class="wb-ground" style="margin:0;padding:0;background:${C.ground};">
@@ -136,7 +139,7 @@ ${t.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0
 </tr></table></td></tr>
 <tr><td class="wb-card" bgcolor="${C.card}" style="background:${C.card};border:1px solid ${C.line};border-top:0;border-radius:0 0 16px 16px;padding:32px 28px 16px;">
 <h1 class="wb-title" style="margin:0 0 16px;font:700 22px/1.3 ${SANS};color:${C.ink};">${esc(t.title)}</h1>
-${t.blocks.map(block).join('\n')}
+${t.blocks.map((b) => block(b, t.locale)).join('\n')}
 </td></tr>
 ${footer.length ? `<tr><td align="center" style="padding:20px 28px 0;">${footer.map(footerLine).join('')}</td></tr>` : ''}
 </table></td></tr></table>

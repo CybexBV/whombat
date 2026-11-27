@@ -1,12 +1,14 @@
 import {
   TURN_FAILURE_LABELS,
-  TURN_RETRY_LABEL,
   type TurnFailedCard as TurnFailedCardData,
   turnRetriedText,
+  turnRetryLabel,
 } from '@whombat/core';
 import type { ReactNode } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
+import { currentLocale } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import styles from './Card.module.css';
 import { CardAction, type NavigateHandler, TONE_CLASS } from './parts';
 import turn from './TurnFailedCard.module.css';
@@ -49,10 +51,13 @@ export function TurnFailedCard({
   onNavigate,
   note,
 }: TurnFailedCardProps) {
+  const TURN_RETRY_LABEL = useLocaleWords(turnRetryLabel);
   const retried = card.retriedAt !== null;
   const label = TURN_FAILURE_LABELS[card.code] ?? TURN_FAILURE_LABELS.internal;
   const action = retried ? (
-    <span className={turn.retried}>{turnRetriedText(card.retriedAt as string, timeZone)}</span>
+    <span className={turn.retried}>
+      {turnRetriedText(card.retriedAt as string, timeZone, currentLocale())}
+    </span>
   ) : canRetry ? (
     <Button
       variant="primary"

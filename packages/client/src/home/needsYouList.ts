@@ -10,25 +10,24 @@
 
 import {
   type AheadKind,
+  aheadWords,
   type ChatSubject,
   fillQuietWords,
   type HomeOverview,
   type HomeRef,
-  LOOKS_AHEAD_WORDS,
   type NeedsYouAction,
   type NeedsYouGroup,
   type NeedsYouItem,
   type NeedsYouWatch,
   needsYouCount,
   needsYouGroupOf,
-  QUIET_WORDS,
-  stopWatchingLabel,
+  quietWords,
   type ThingSummary,
   thingId,
 } from '@whombat/core';
 import {
-  APPROVAL_ASK_WORDS,
   type ApprovalTonightView,
+  approvalAskWords,
   approvalPermissionText,
   approvalTonight,
 } from '@whombat/core/approvals';
@@ -83,7 +82,7 @@ export function needsYouWords(locale?: string | null) {
     settledLine: tr.t('inbox.settledLine'),
     settledOwn: tr.t('inbox.settledOwn'),
     handling: (w: Pick<AgentWords, 'Name'>) => tr.t('inbox.handling', { Name: w.Name }),
-    stopped: (name: string) => fillQuietWords(QUIET_WORDS.toastStopped, { name }),
+    stopped: (name: string) => fillQuietWords(quietWords(locale).toastStopped, { name }),
     backDone: tr.t('inbox.backDone'),
     undo: tr.t('inbox.ignore.undo'),
     failed: tr.t('inbox.failed'),
@@ -206,8 +205,8 @@ const actionButton = (a: NeedsYouAction, look?: NeedsYouButton['look']): NeedsYo
  * An approval's answers in the one order and words every place uses (core's `APPROVAL_ASK_WORDS`): Yes, now · Yes,
  * tonight · No where it offers a later time, Yes, do it · No where it doesn't, whatever an older Whombat called them.
  */
-function approvalAnswers(actions: readonly NeedsYouAction[]): NeedsYouAction[] {
-  const W = APPROVAL_ASK_WORDS;
+function approvalAnswers(actions: readonly NeedsYouAction[], locale?: string | null): NeedsYouAction[] {
+  const W = approvalAskWords(locale);
   const later = actions.some((a) => a.kind === 'approve_later');
   const rank = (a: NeedsYouAction) =>
     a.kind === 'approve' ? 0 : a.kind === 'approve_later' ? 1 : a.kind === 'decline' ? 2 : 3;
@@ -247,11 +246,23 @@ export function needsYouButtons(
   group: InboxGroup,
   words: Pick<AgentWords, 'name'>,
   research: LookResearchView | null,
+  locale?: string | null,
 ): NeedsYouButton[] {
-  const W = NEEDS_YOU_WORDS;
+  const W = needsYouWords(locale);
+  const quiet = quietWords(locale);
   // Something set up so on purpose: switch its check off (on-purpose.md); a settled one too.
   const stop: NeedsYouButton[] = item.watch
-    ? [{ id: 'stop', kind: 'stop', label: stopWatchingLabel(item.watch.subject), look: 'quiet', more: true }]
+    ? [
+        {
+          id: 'stop',
+          kind: 'stop',
+          label: item.watch.subject
+            ? fillQuietWords(quiet.stop, { name: item.watch.subject.name })
+            : quiet.stopThis,
+          look: 'quiet',
+          more: true,
+        },
+      ]
     : [];
   // A question opens the thread it was asked in with its own Answer: no second way there.
   const talk: NeedsYouButton[] =
@@ -268,17 +279,18 @@ export function needsYouButtons(
     more: true,
   };
   if (item.kind === 'ahead' && item.ahead) {
+    const ahead = aheadWords(locale);
     const notUseful: NeedsYouButton = {
       id: 'not_useful',
       kind: 'notUseful',
-      label: LOOKS_AHEAD_WORDS.notUsefulAction,
+      label: ahead.notUsefulAction,
       look: 'quiet',
       more: true,
     };
     const stopAhead: NeedsYouButton = {
       id: 'stop_ahead',
       kind: 'stopAhead',
-      label: item.ahead.matter ? LOOKS_AHEAD_WORDS.stopMatterAction : LOOKS_AHEAD_WORDS.stopCheckingAction,
+      label: item.ahead.matter ? ahead.stopMatterAction : ahead.stopCheckingAction,
       look: 'quiet',
       more: true,
     };
@@ -294,7 +306,7 @@ export function needsYouButtons(
   if (group === 'assistant') return talk;
   if (group === 'fyi') return [settle, handle, ...talk, snooze, ...stop];
   if (isNeedsYouWaiting(item)) {
-    const own = item.kind === 'approval' ? approvalAnswers(item.actions) : ownActions(item);
+    const own = item.kind === 'approval' ? approvalAnswers(item.actions, locale) : ownActions(item);
     // An approval is reminded of only where its Whombat offers that (inbox.md IBX-04).
     const remind = item.kind !== 'approval' || item.actions.some((a) => a.kind === 'snooze');
     return [...own.map((a) => actionButton(a)), ...talk, ...(remind ? [snooze] : [])];
@@ -348,8 +360,11 @@ export function needsYouSwipe(row: Pick<NeedsYouListRow, 'buttons'>): NeedsYouBu
   return row.buttons.find((b) => b.kind === 'settle' || b.kind === 'back') ?? null;
 }
 
-/** What a row's More holds: the buttons behind its ⋯ (web) or its swipe's More (phone). */
-export function needsYouMore(row: Pick<NeedsYouListRow, 'buttons'>): NeedsYouButton[] {
+/** What a row's More holds: the buttons behind its ⋯ (web) or its swipe's More (phone). The row already has their words. */
+export function needsYouMore(
+  row: Pick<NeedsYouListRow, 'buttons'>,
+  _locale?: string | null,
+): NeedsYouButton[] {
   return row.buttons.filter((b) => b.more);
 }
 
@@ -397,12 +412,6 @@ export interface NeedsYouListView {
   empty: boolean;
 }
 
-const SEVERITY_WORDS: Record<NeedsYouItem['severity'], string | null> = {
-  bad: 'Problem',
-  warn: 'Needs a look',
-  info: null,
-};
-
 /** Which items the list draws: the server's list, or an older Whombat's Needs you items. */
 export function needsYouListItems(overview: Pick<HomeOverview, 'needsYou' | 'needsYouList'>): NeedsYouItem[] {
   return overview.needsYouList ?? overview.needsYou;
@@ -420,11 +429,12 @@ export function groupOf(item: NeedsYouItem): NeedsYouGroup {
 export function needsYouSays(
   item: Pick<NeedsYouItem, 'research'>,
   words: Pick<AgentWords, 'name' | 'Name'>,
+  locale?: string | null,
 ): LookResearchView | null {
-  const view = lookResearchView(item.research, words.name);
+  const view = lookResearchView(item.research, words.name, undefined, locale);
   if (!view) return null;
-  if (view.state === 'looking') return { ...view, text: NEEDS_YOU_WORDS.looking(words) };
-  if (view.state === 'fixing') return { ...view, text: NEEDS_YOU_WORDS.fixing(words) };
+  if (view.state === 'looking') return { ...view, text: needsYouWords(locale).looking(words) };
+  if (view.state === 'fixing') return { ...view, text: needsYouWords(locale).fixing(words) };
   return view;
 }
 
@@ -434,11 +444,12 @@ function rowOf(
   names: ReadonlyMap<string, string>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): NeedsYouListRow {
   const group = inboxGroupOf(item);
   // Its face says what it found on what needs the person, and what it is doing on its own group's rows; a line only
   // the person can do keeps its own words while the assistant looks into the rest of that thing.
-  const view = needsYouSays(item, words);
+  const view = needsYouSays(item, words, locale);
   const says = group === 'assistant' || (group === 'you' && view?.state === 'found') ? view : null;
   const found = says && says.state !== 'looking';
   const title = found ? says.title || item.title : item.title;
@@ -447,13 +458,18 @@ function rowOf(
     ? (names.get(`${item.subject.kind}:${item.subject.id}`) ?? item.subject.name)
     : item.kind === 'ahead' && item.ahead
       ? item.ahead.source === 'calendar'
-        ? LOOKS_AHEAD_WORDS.inboxCalendar
-        : LOOKS_AHEAD_WORDS.inboxMail
+        ? aheadWords(locale).inboxCalendar
+        : aheadWords(locale).inboxMail
       : null;
-  const when = needsYouWhen(item.at, now, timeZone);
+  const when = needsYouWhen(item.at, now, timeZone, locale);
   const state =
-    group === 'later' && item.snoozedUntil ? capitalized(untilText(item.snoozedUntil, now, timeZone)) : null;
-  const severity = group === 'you' && !says?.fixed ? SEVERITY_WORDS[item.severity] : null;
+    group === 'later' && item.snoozedUntil
+      ? capitalized(untilText(item.snoozedUntil, now, timeZone, locale))
+      : null;
+  const severity =
+    group === 'you' && !says?.fixed && item.severity !== 'info'
+      ? clientTranslator(locale).t(`inbox.severity.${item.severity}`)
+      : null;
   const spoken = [title, body, says?.text ?? ''].map((s) => s.trim()).filter(Boolean);
   return {
     id: item.id,
@@ -467,7 +483,7 @@ function rowOf(
     state,
     says,
     href: item.href ?? null,
-    buttons: needsYouButtons(item, group, words, found ? says : null),
+    buttons: needsYouButtons(item, group, words, found ? says : null, locale),
     label: `${severity ? `${severity}: ` : ''}${spoken.map(sentence).join(' ')}`,
   };
 }
@@ -478,10 +494,10 @@ const sentence = (s: string) => (/[.?!…:]$/.test(s) ? s : `${s}.`);
 const ORDER: readonly InboxGroup[] = ['you', 'assistant', 'fyi', 'later', 'settled'];
 
 /** The folded groups' rows. */
-function foldOf(key: InboxGroup, count: number): NeedsYouListGroupView['fold'] {
-  if (key === 'fyi') return { show: NEEDS_YOU_WORDS.showHeadsUps(count), hide: NEEDS_YOU_WORDS.hideHeadsUps };
-  if (key === 'settled')
-    return { show: NEEDS_YOU_WORDS.showSettled(count), hide: NEEDS_YOU_WORDS.hideSettled };
+function foldOf(key: InboxGroup, count: number, locale?: string | null): NeedsYouListGroupView['fold'] {
+  const words = needsYouWords(locale);
+  if (key === 'fyi') return { show: words.showHeadsUps(count), hide: words.hideHeadsUps };
+  if (key === 'settled') return { show: words.showSettled(count), hide: words.hideSettled };
   return null;
 }
 
@@ -495,20 +511,28 @@ export function needsYouListView(
   overview: Pick<HomeOverview, 'needsYou' | 'needsYouList'> & {
     things?: readonly Pick<ThingSummary, 'id' | 'name'>[];
   },
-  options: { now: Date | number; timeZone: string; assistant: string | null | undefined },
+  options: {
+    now: Date | number;
+    timeZone: string;
+    assistant: string | null | undefined;
+    locale?: string | null;
+  },
 ): NeedsYouListView {
-  const words = agentWords(options.assistant);
+  const { locale } = options;
+  const words = agentWords(options.assistant, locale);
   const names = new Map((overview.things ?? []).map((t) => [t.id, t.name]));
   const items = needsYouListItems(overview);
-  const rows = items.map((item) => rowOf(item, words, names, options.now, options.timeZone));
+  const rows = items.map((item) => rowOf(item, words, names, options.now, options.timeZone, locale));
   const groups = ORDER.flatMap((key): NeedsYouListGroupView[] => {
     const inGroup = rows.filter((r) => r.group === key);
     // Not working comes first in Needs you (a stable sort keeps the server's order otherwise).
     if (key === 'you') inGroup.sort((a, b) => Number(b.tone === 'bad') - Number(a.tone === 'bad'));
     // Settled is always there, last: where to look for what was put away, even before anything was.
     if (!inGroup.length && key !== 'settled') return [];
-    const fold = inGroup.length ? foldOf(key, inGroup.length) : null;
-    return [{ key, label: needsYouGroupLabel(key, words), rows: inGroup, folded: fold !== null, fold }];
+    const fold = inGroup.length ? foldOf(key, inGroup.length, locale) : null;
+    return [
+      { key, label: needsYouGroupLabel(key, words, locale), rows: inGroup, folded: fold !== null, fold },
+    ];
   });
   return {
     groups,
@@ -524,11 +548,13 @@ export function needsYouListRow(
     now: Date | number;
     timeZone: string;
     assistant: string | null | undefined;
+    locale?: string | null;
     things?: readonly Pick<ThingSummary, 'id' | 'name'>[];
   },
 ): NeedsYouListRow {
   const names = new Map((options.things ?? []).map((t) => [t.id, t.name]));
-  return rowOf(item, agentWords(options.assistant), names, options.now, options.timeZone);
+  const { assistant, now, timeZone, locale } = options;
+  return rowOf(item, agentWords(assistant, locale), names, now, timeZone, locale);
 }
 
 /**
@@ -551,19 +577,20 @@ export interface NeedsYouApprovalCard {
 
 export function needsYouApprovalCard(
   row: Pick<NeedsYouListRow, 'item' | 'title' | 'body'>,
-  options: { timeZone: string; assistant: string | null | undefined },
+  options: { timeZone: string; assistant: string | null | undefined; locale?: string | null },
 ): NeedsYouApprovalCard | null {
   const { item } = row;
   if (item.kind !== 'approval') return null;
   const later = item.actions.find((a) => a.kind === 'approve_later');
+  const { timeZone, assistant, locale } = options;
   return {
-    status: APPROVAL_ASK_WORDS.needs.replace('{name}', agentWords(options.assistant).Name),
-    asked: formatClock(item.at, options.timeZone),
+    status: approvalAskWords(locale).needs.replace('{name}', agentWords(assistant, locale).Name),
+    asked: formatClock(item.at, timeZone),
     title: row.title,
     subject: item.subject?.name.trim() || null,
     happens: row.body ? [row.body] : [],
-    permission: approvalPermissionText(null),
-    tonight: approvalTonight(later?.at, options.timeZone),
+    permission: approvalPermissionText(null, locale),
+    tonight: approvalTonight(later?.at, timeZone, locale),
   };
 }
 
@@ -630,13 +657,18 @@ export function askTitle(item: Pick<NeedsYouItem, 'title' | 'subject'>): string 
 }
 
 /** What *Ask {assistant} to handle it* says in the thing's thread when there is no look to hand over: its title, then the ask. */
-export function askText(item: Pick<NeedsYouItem, 'title' | 'subject'>): string {
-  return `${askTitle(item)}\nCan you look into it?`;
+export function askText(item: Pick<NeedsYouItem, 'title' | 'subject'>, locale?: string | null): string {
+  return `${askTitle(item)}\n${clientTranslator(locale).t('inbox.askText')}`;
 }
 
 /** What *Ask {assistant} to fix it* says: its title, what it says (which guests, what to do), then the ask. */
-export function askFixText(item: Pick<NeedsYouItem, 'title' | 'body' | 'subject'>): string {
-  return [askTitle(item), item.body.trim(), 'Can you fix it?'].filter(Boolean).join('\n');
+export function askFixText(
+  item: Pick<NeedsYouItem, 'title' | 'body' | 'subject'>,
+  locale?: string | null,
+): string {
+  return [askTitle(item), item.body.trim(), clientTranslator(locale).t('inbox.askFixText')]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function needsYouListIntent(
@@ -644,12 +676,13 @@ export function needsYouListIntent(
   button: Pick<NeedsYouButton, 'kind' | 'action'>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): NeedsYouListIntent | null {
   switch (button.kind) {
     case 'fix':
       return item.research ? { type: 'fix' } : null;
     case 'handle': {
-      const text = askText(item);
+      const text = askText(item, locale);
       // About a server, a connection or a device: the assistant takes on everything there; else the question.
       return item.subject
         ? { type: 'handle', key: thingId(item.subject.kind, item.subject.id), text, subject: item.subject }
@@ -687,7 +720,7 @@ export function needsYouListIntent(
           }
         : null;
     case 'askFix':
-      return { type: 'ask', text: askFixText(item), subject: item.subject ?? null };
+      return { type: 'ask', text: askFixText(item, locale), subject: item.subject ?? null };
     case 'see':
       return item.href ? { type: 'open', href: item.href } : null;
     case 'action':
@@ -707,10 +740,11 @@ export function needsYouListIntent(
 }
 
 /** Settle's toast: on a line Whombat watches it comes back when it happens again; anything else simply settles. */
-export function needsYouSettledText(ref: Pick<HomeRef, 'kind'>): string {
+export function needsYouSettledText(ref: Pick<HomeRef, 'kind'>, locale?: string | null): string {
+  const words = needsYouWords(locale);
   return ['alert', 'hint', 'connection', 'device', 'automation_run'].includes(ref.kind)
-    ? NEEDS_YOU_WORDS.settledLine
-    : NEEDS_YOU_WORDS.settledOwn;
+    ? words.settledLine
+    : words.settledOwn;
 }
 
 /**

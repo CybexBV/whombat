@@ -23,7 +23,7 @@ scripts/                 build-android.mjs (local Gradle build), publish-apk.mjs
                          device-harness/ (the secure session on a device against a stand-in relay); icons come from
                          packages/brand
 plugins/                 Android config plugins: the dark window background, plain sockets to the Whombat's direct
-                         routes (network security config), English resources only, no contrast film over the
+                         routes (network security config), English and Dutch resources, no contrast film over the
                          navigation bar
 modules/whombat-live/    live activities and home-screen status widget: Android Live Update notifications + FCM + RemoteViews widget, iOS ActivityKit + WidgetKit
 modules/whombat-crypto/  ChaCha20-Poly1305 and SHA-256 from the phone (javax.crypto, CryptoKit) for the session, sealed files, downloads

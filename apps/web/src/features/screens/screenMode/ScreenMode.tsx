@@ -22,6 +22,7 @@ import { Lock, LockOpen, Maximize, Minimize } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { useWebI18n } from '../../../i18n/provider';
 import { NO_ATTENTION, useScreenModeImages } from '../drawing';
 import {
   assistantOf,
@@ -216,6 +217,7 @@ function useWakeLock() {
 }
 
 function LiveScreen({ deps, onRemoved }: { deps: ScreenModeDeps; onRemoved: () => void }) {
+  const { tag: uiLocale } = useWebI18n();
   const size = useWindowSize();
   const [state, setState] = useState<ScreenState | null>(null);
   const [online, setOnline] = useState(true);
@@ -331,6 +333,7 @@ function LiveScreen({ deps, onRemoved }: { deps: ScreenModeDeps; onRemoved: () =
         name={state.whombat}
         assistant={assistantOf(state)}
         timeZone={state.timeZone ?? deps.timeZone}
+        locale={uiLocale}
         now={now}
         chips={chips}
         onlyTime={state.grid === null}

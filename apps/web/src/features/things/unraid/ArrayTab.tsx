@@ -30,6 +30,7 @@ import type { HostServerDetail, HostUnraidDetail, HostUnraidDisk } from '@whomba
 import { type ReactNode, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
+import { useWebI18n } from '../../../i18n/provider';
 import { Card, Dot, Empty, StateCell } from '../parts';
 import { useServerEndQuiet } from '../quiet/KeepQuiet';
 import { useServerQuiet } from '../quiet/useQuiet';
@@ -459,6 +460,7 @@ function toneText(tone: HostTone | null): string | undefined {
 
 /** The parity checks so far (newest first) and when the next one runs. */
 function ParityHistory({ u, now, timeZone }: { u: HostUnraidDetail; now: number; timeZone?: string }) {
+  const { tag: uiLocale } = useWebI18n();
   const p = u.array.parity;
   return (
     <Card
@@ -493,7 +495,7 @@ function ParityHistory({ u, now, timeZone }: { u: HostUnraidDetail; now: number;
                   <td className={styles.num}>{parityRunWhen(r.at, now, timeZone)}</td>
                   <td className={styles.cellMain}>{w.action}</td>
                   <td className={cx(styles.num, styles.dropS)}>
-                    {r.durationS != null ? formatDuration(r.durationS) : DASH}
+                    {r.durationS != null ? formatDuration(r.durationS, uiLocale) : DASH}
                   </td>
                   <td className={cx(styles.num, styles.dropM)}>
                     {r.speedMbs != null ? `${Math.round(r.speedMbs)} MB/s` : DASH}

@@ -4,11 +4,12 @@
  * with its moments under it.
  */
 import { Link } from '@tanstack/react-router';
-import { ARRANGE_WORDS, type FigureFace, OVERVIEW_PAGE_WORDS, type TodayMoment } from '@whombat/client';
+import { arrangeWords, type FigureFace, overviewPageWords, type TodayMoment } from '@whombat/client';
 import { ChevronRight, Settings } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { INBOX_PATH } from '../../app/shell/location';
 import { Icon } from '../../components/Icon';
+import { useLocaleWords } from '../../i18n/words';
 import { AppLink } from '../things/parts';
 import s from './Arranged.module.css';
 import { Spark } from './Spark';
@@ -42,6 +43,7 @@ export function OverviewPulse({
   editing,
   onGear,
 }: PulseProps) {
+  const words = useLocaleWords(overviewPageWords);
   return (
     <section
       className={`${s.card} ${s.pulse}`}
@@ -54,7 +56,7 @@ export function OverviewPulse({
           <div className={s.greet}>
             <span className={s.live}>
               <i aria-hidden="true" />
-              {OVERVIEW_PAGE_WORDS.live}
+              {words.live}
             </span>
             <span>{greeting}</span>
           </div>
@@ -81,12 +83,13 @@ export function FigureCell({
   editing: boolean;
   onGear?: () => void;
 }) {
+  const arrange = useLocaleWords(arrangeWords);
   const { face } = figure;
   const total = face.parts?.reduce((n, p) => n + p.n, 0) ?? 0;
   return (
     <div className={s.fig} style={figure.color ? { ['--c' as string]: figure.color } : undefined}>
       {editing && onGear ? (
-        <button type="button" className={s.gear} aria-label={ARRANGE_WORDS.changeFigure} onClick={onGear}>
+        <button type="button" className={s.gear} aria-label={arrange.changeFigure} onClick={onGear}>
           <Icon icon={Settings} size={17} />
         </button>
       ) : null}
@@ -136,6 +139,7 @@ export function OverviewToday({
   done: number;
   planned: number;
 }) {
+  const words = useLocaleWords(overviewPageWords);
   const [hot, setHot] = useState<string | null>(null);
   const [all, setAll] = useState(false);
   const pct = (m: number) => `${((m / 1440) * 100).toFixed(2)}%`;
@@ -148,10 +152,10 @@ export function OverviewToday({
   return (
     <section className={`${s.card} ${s.today}`} aria-labelledby="overview-today" data-overview="today">
       <div className={s.sech}>
-        <h2 id="overview-today">{OVERVIEW_PAGE_WORDS.today}</h2>
-        <span className={s.meta}>{OVERVIEW_PAGE_WORDS.todayLine(done, planned)}</span>
+        <h2 id="overview-today">{words.today}</h2>
+        <span className={s.meta}>{words.todayLine(done, planned)}</span>
         <span className={s.links}>
-          <Link to={INBOX_PATH}>{OVERVIEW_PAGE_WORDS.allActivity}</Link>
+          <Link to={INBOX_PATH}>{words.allActivity}</Link>
         </span>
       </div>
       <div className={s.track} aria-hidden="true">
@@ -163,7 +167,7 @@ export function OverviewToday({
           </span>
         ))}
         <div className={s.nowm} style={{ left: pct(now) }}>
-          <span>{OVERVIEW_PAGE_WORDS.now}</span>
+          <span>{words.now}</span>
         </div>
         {moments.map((m) => (
           <span
@@ -209,7 +213,7 @@ export function OverviewToday({
         })}
         {moments.length > 3 ? (
           <button type="button" className={s.moreChips} onClick={() => setAll((a) => !a)} aria-expanded={all}>
-            {all ? OVERVIEW_PAGE_WORDS.showFewer : OVERVIEW_PAGE_WORDS.showAll(moments.length)}
+            {all ? words.showFewer : words.showAll(moments.length)}
           </button>
         ) : null}
       </div>

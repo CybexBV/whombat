@@ -6,10 +6,10 @@
  */
 import { BrandMark } from '@whombat/brand/react';
 import {
-  ARRANGE_WORDS,
   type ArrangedTile,
+  arrangeWords,
   type OverviewTile,
-  STATUS_LEVEL_WORDS,
+  statusLevelWords,
   viewFace,
 } from '@whombat/client';
 import type { DeskWidgetView } from '@whombat/core';
@@ -18,6 +18,7 @@ import { type DragEvent, useState } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { StatusMark } from '../../components/StatusMark';
+import { useLocaleWords } from '../../i18n/words';
 import { AppLink } from '../things/parts';
 import type { ThingLinkProps } from '../things/prefetch';
 import { THING_ICONS } from '../things/thingIcons';
@@ -71,6 +72,8 @@ export interface TileCardProps {
 }
 
 export function TileCard({ entry, view, editing, preview = false, linkProps, onGear, drag }: TileCardProps) {
+  const words = useLocaleWords(arrangeWords);
+  const STATUS_LEVEL_WORDS = useLocaleWords(statusLevelWords);
   const { tile, item } = entry;
   const r = item.row;
   // A view that only says it has nothing to show leaves the tile its own line.
@@ -110,12 +113,7 @@ export function TileCard({ entry, view, editing, preview = false, linkProps, onG
           )}
         </span>
         {editing && !preview ? (
-          <button
-            type="button"
-            className={s.gear}
-            aria-label={ARRANGE_WORDS.changeTile(r.name)}
-            onClick={onGear}
-          >
+          <button type="button" className={s.gear} aria-label={words.changeTile(r.name)} onClick={onGear}>
             <Icon icon={Settings} size={17} />
           </button>
         ) : null}
@@ -200,6 +198,7 @@ export function ArrangedTiles({
   onAdd,
   onDrop,
 }: ArrangedTilesProps) {
+  const words = useLocaleWords(arrangeWords);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const end = () => {
@@ -262,8 +261,8 @@ export function ArrangedTiles({
           onDrop={dropOn(null)}
         >
           <Icon icon={Plus} size={18} />
-          <span>{ARRANGE_WORDS.add}</span>
-          <small>{ARRANGE_WORDS.addLine(removed)}</small>
+          <span>{words.add}</span>
+          <small>{words.addLine(removed)}</small>
         </button>
       ) : null}
     </div>

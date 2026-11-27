@@ -6,6 +6,7 @@
  * meanwhile — review again.” over the review of what is there now. Devices, profiles, images, volumes, networks and
  * moving stay on the web, and the screen says so with a link.
  */
+
 import { CHANGED_MEANWHILE, isEmptyDraft } from '@whombat/client/hosts';
 import {
   expiryChoices,
@@ -22,6 +23,7 @@ import {
 import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
+import { useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -43,6 +45,7 @@ export function IncusSettings({
   webUrl: string | null;
   onEdit: (kind: IncusEditKind) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   return (
     <>
       {incusSettingGroups(config).map((group) => (
@@ -60,7 +63,7 @@ export function IncusSettings({
                 action={
                   canChange && edit ? (
                     <RowAction
-                      label="Change"
+                      label={tMobile('screens.change')}
                       spoken={`Change ${r.label.toLowerCase()}`}
                       onPress={() => onEdit(edit)}
                     />
@@ -78,6 +81,7 @@ export function IncusSettings({
 
 /** What stays on the web, as a line; a link where there is a web to open. */
 export function WebLine({ text, url }: { text: string; url: string | null }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   if (!url)
     return (
@@ -91,7 +95,7 @@ export function WebLine({ text, url }: { text: string; url: string | null }) {
       feedback="fade"
       accessibilityRole="link"
       accessibilityLabel={text}
-      accessibilityHint="Opens whombat on the web"
+      accessibilityHint={tMobile('screens.opens-whombat-on-the-web')}
       style={{ minHeight: 44, justifyContent: 'center' }}
     >
       <Text size={13.5} lh={1.45} color={theme.colors.brand}>
@@ -115,6 +119,7 @@ export function IncusEditSheet({
   kind: IncusEditKind;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const spec = incusEditSpec(kind, guest.name);
   const [input, setInput] = useState(() => incusEditStart(config, kind));
   const [step, setStep] = useState<'edit' | 'review'>('edit');
@@ -208,7 +213,7 @@ export function IncusEditSheet({
             />
             {input.schedule ? (
               <Choices
-                label="Keep them"
+                label={tMobile('screens.keep-them')}
                 options={expiryChoices(config)}
                 value={input.expiry}
                 onChange={(expiry) => setInput({ ...input, expiry })}

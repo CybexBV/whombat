@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { PUSH_TEXT } from '@whombat/client/managed';
+import { PUSH_TEXT, pushText } from '@whombat/client/managed';
 import { describe, expect, it, vi } from 'vitest';
 
 /** `public/sw.js` in a fake worker scope: what it shows and closes for a push (AP-808). */
@@ -43,6 +43,16 @@ describe('the web push worker', () => {
       [...block.matchAll(/(\w+): '([^']+)'/g)].map((m) => [m[1] as string, m[2] as string]),
     );
     expect(words).toEqual(PUSH_TEXT);
+  });
+
+  it('has exactly the shared Dutch words per kind', () => {
+    const { source } = worker();
+    const start = source.indexOf('const GENERIC_TEXT_NL');
+    const block = source.slice(start, source.indexOf('};', start) + 2);
+    const words = Object.fromEntries(
+      [...block.matchAll(/(\w+): '([^']+)'/g)].map((m) => [m[1] as string, m[2] as string]),
+    );
+    expect(words).toEqual(pushText('nl-NL'));
   });
 
   it('shows a managed push’s preview under its tag, quietly replacing the one before', async () => {

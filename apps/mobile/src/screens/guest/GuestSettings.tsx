@@ -6,6 +6,7 @@
  * “Changed meanwhile — review again.” over the review of what is there now. Adding hardware, the firewall rules, HA
  * and replication stay on the web (AP-1367, PX-06), and the screen says so with a link.
  */
+
 import { CHANGED_MEANWHILE, formatBytesBinary, isEmptyDraft } from '@whombat/client/hosts';
 import {
   editDraft,
@@ -20,6 +21,7 @@ import {
 import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
+import { useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -47,6 +49,7 @@ export function GuestSettings({
   onEdit: (kind: GuestEditKind) => void;
   onGrow: (disk: string) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const groups = guestSettingGroups(config, guest.name);
   return (
@@ -67,12 +70,16 @@ export function GuestSettings({
                 action={
                   canChange && edit ? (
                     <RowAction
-                      label="Change"
+                      label={tMobile('screens.change')}
                       spoken={`Change ${r.label.toLowerCase()}`}
                       onPress={() => onEdit(edit)}
                     />
                   ) : canChange && grow ? (
-                    <RowAction label="Grow" spoken={`Grow ${r.label}`} onPress={() => onGrow(grow)} />
+                    <RowAction
+                      label={tMobile('screens.grow')}
+                      spoken={`Grow ${r.label}`}
+                      onPress={() => onGrow(grow)}
+                    />
                   ) : null
                 }
               />
@@ -86,7 +93,7 @@ export function GuestSettings({
           feedback="fade"
           accessibilityRole="link"
           accessibilityLabel={WEB_ONLY}
-          accessibilityHint="Opens whombat on the web"
+          accessibilityHint={tMobile('screens.opens-whombat-on-the-web')}
           style={{ minHeight: 44, justifyContent: 'center' }}
         >
           <Text size={13.5} lh={1.45} color={theme.colors.brand}>
@@ -226,6 +233,7 @@ export function GrowSheet({
   disk: string;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const [add, setAdd] = useState('8');
   const [step, setStep] = useState<'edit' | 'review'>('edit');
   const [notice, setNotice] = useState<string | null>(null);
@@ -294,7 +302,7 @@ export function GrowSheet({
     >
       <View style={{ marginTop: 16 }}>
         <FormField
-          label="Add (GB)"
+          label={tMobile('screens.add-gb')}
           value={add}
           onChangeText={setAdd}
           error={add.trim() ? grow.error : null}

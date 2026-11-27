@@ -8,6 +8,7 @@
  * `data/dashboard.ts`. What the assistant found out about what needs a look here is a card at the top of the Summary
  * (`thingLookCard`; Whombat look-research.md LR-09, look-research-mobile.md AP-5923).
  */
+
 import {
   doneWhen,
   heldLine,
@@ -48,49 +49,54 @@ import {
   type ThingPagePanel,
   type ThingRunsOn,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { AccountPage } from '../navigation/connectionLinks';
 import { OVERVIEW_TITLE } from './shell';
 
-export const THING_PAGE_COPY = {
-  back: OVERVIEW_TITLE,
-  loading: 'Loading its page',
-  failed: 'This page didn’t load.',
-  notFound: 'That isn’t one of your connections.',
-  openSettings: 'Open its settings',
-  tabs: (name: string) => `${name}: what to show`,
-  settingsHint: 'Opens its settings',
-  runsOn: 'Runs on',
-  runsOnHint: 'Opens the machine it runs on',
-  alsoConnected: 'Also connected',
-  ask: (name: string) => `Ask about ${name}`,
-  open: (label: string) => `Opens ${label.replace(/^Open /, '')} in your browser`,
-  /** The Open button's word; its full name (“Open Home Assistant”) is what screen readers say. */
-  openWord: 'Open',
-  moreDetail: 'More detail',
-  addressCopied: 'Address copied.',
-  copyAddress: (address: string) => `Copy the address ${address}`,
-  change: 'Change',
-  changeHint: 'Opens its settings',
-  lookOnly: 'Look only: every change is refused.',
-  showAll: (n: number) => `Show all ${n}`,
-  showEverything: 'Show all',
-  showEverythingHint: 'Opens Activity',
-  showOlder: 'Show older',
-  undo: 'Undo',
-  undone: 'Undone',
-  review: 'Review',
-  undoAsked: 'Undo waits for a person’s approval.',
-  undoDone: 'Undone.',
-  remove: 'Remove',
-  removeHint: (title: string) => `Takes “${title}” off this page`,
-  activityEmpty: (name: string) => `Nothing was changed on ${name} yet.`,
-  activityFailed: 'What changed here didn’t load.',
-  cancel: 'Cancel',
-  /** A service's ⋯ in its back bar (Restart, its own buttons), and the sheet's way out. */
-  more: (name: string) => `More for ${name}`,
-  close: 'Close',
-  figuresFrom: (when: string) => `Figures from ${when}.`,
-} as const;
+export function thingPageCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    back: OVERVIEW_TITLE,
+    loading: t('thingPage.thingPageCopy.loading'),
+    failed: t('thingPage.thingPageCopy.failed'),
+    notFound: t('thingPage.thingPageCopy.notFound'),
+    openSettings: t('thingPage.thingPageCopy.openSettings'),
+    tabs: (name: string) => t('thingPage.thingPageCopy.tabs', { name }),
+    settingsHint: t('thingPage.thingPageCopy.settingsHint'),
+    runsOn: t('thingPage.thingPageCopy.runsOn'),
+    runsOnHint: t('thingPage.thingPageCopy.runsOnHint'),
+    alsoConnected: t('thingPage.thingPageCopy.alsoConnected'),
+    ask: (name: string) => t('thingPage.thingPageCopy.ask', { name }),
+    open: (label: string) => `Opens ${label.replace(/^Open /, '')} in your browser`,
+    /** The Open button's word; its full name (“Open Home Assistant”) is what screen readers say. */
+    openWord: t('thingPage.thingPageCopy.openWord'),
+    moreDetail: t('thingPage.thingPageCopy.moreDetail'),
+    addressCopied: t('thingPage.thingPageCopy.addressCopied'),
+    copyAddress: (address: string) => t('thingPage.thingPageCopy.copyAddress', { address }),
+    change: t('thingPage.thingPageCopy.change'),
+    changeHint: t('thingPage.thingPageCopy.changeHint'),
+    lookOnly: t('thingPage.thingPageCopy.lookOnly'),
+    showAll: (n: number) => t('thingPage.thingPageCopy.showAll', { n }),
+    showEverything: t('thingPage.thingPageCopy.showEverything'),
+    showEverythingHint: t('thingPage.thingPageCopy.showEverythingHint'),
+    showOlder: t('thingPage.thingPageCopy.showOlder'),
+    undo: t('thingPage.thingPageCopy.undo'),
+    undone: t('thingPage.thingPageCopy.undone'),
+    review: t('thingPage.thingPageCopy.review'),
+    undoAsked: t('thingPage.thingPageCopy.undoAsked'),
+    undoDone: t('thingPage.thingPageCopy.undoDone'),
+    remove: t('thingPage.thingPageCopy.remove'),
+    removeHint: (title: string) => t('thingPage.thingPageCopy.removeHint', { title }),
+    activityEmpty: (name: string) => t('thingPage.thingPageCopy.activityEmpty', { name }),
+    activityFailed: t('thingPage.thingPageCopy.activityFailed'),
+    cancel: t('thingPage.thingPageCopy.cancel'),
+    /** A service's ⋯ in its back bar (Restart, its own buttons), and the sheet's way out. */
+    more: (name: string) => t('thingPage.thingPageCopy.more', { name }),
+    close: t('thingPage.thingPageCopy.close'),
+    figuresFrom: (when: string) => t('thingPage.thingPageCopy.figuresFrom', { when }),
+  } as const;
+}
+export const THING_PAGE_COPY = thingPageCopy();
 
 /** How many rows a table or list shows before “Show all” (a long Integrations table stays quick). */
 export const PANEL_ROWS_FIRST = 25;
@@ -376,12 +382,16 @@ export interface NoticeRowView {
 const NOTICE_TONE_WORDS = { bad: 'Problem', warn: 'Needs a look', info: null } as const;
 
 /** The words a quiet line's Undo and ⋯ button are read with. */
-export const QUIET_LINE_COPY = {
-  /** “Undo: Hallway AP is offline”. */
-  undoLabel: (title: string) => `Undo: ${title}`,
-  undoHint: 'It asks again',
-  menuHint: 'Ignore, remind you tomorrow or stop watching',
-} as const;
+export function quietLineCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** “Undo: Hallway AP is offline”. */
+    undoLabel: (title: string) => t('thingPage.quietLineCopy.undoLabel', { title }),
+    undoHint: t('thingPage.quietLineCopy.undoHint'),
+    menuHint: t('thingPage.quietLineCopy.menuHint'),
+  } as const;
+}
+export const QUIET_LINE_COPY = quietLineCopy();
 
 /**
  * Worth a look's lines on the phone (QN-01…QN-14; quiet-notices-mobile.md AP-4860…AP-4862): each line's way out by its

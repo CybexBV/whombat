@@ -22,6 +22,7 @@ import {
   zonedInstant,
 } from '@whombat/core';
 import { daysAgo, formatClock, formatDate, formatShortWeekday, toDate, zonedParts } from '@whombat/core/text';
+import { clientTranslator } from '../i18n/catalog';
 import { localAt, untilText } from './time';
 
 /* Keep quiet… --------------------------------------------------------------------------------------------- */
@@ -269,9 +270,12 @@ export function thingStateWords(
   thing: Pick<ThingSummary, 'causedBy' | 'quietUntil' | 'line'>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): string | null {
   if (thing.quietUntil && Date.parse(thing.quietUntil) > toDate(now).getTime())
-    return `Quiet until ${quietEndWords(thing.quietUntil, now, timeZone)}`;
+    return clientTranslator(locale).t('overview.quietUntil', {
+      until: quietEndWords(thing.quietUntil, now, timeZone, locale),
+    });
   if (thing.causedBy) return thing.causedBy.words;
   return thing.line ?? null;
 }

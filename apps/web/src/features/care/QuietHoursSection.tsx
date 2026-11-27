@@ -1,18 +1,19 @@
 import { ApiError } from '@whombat/client';
 import { useChangeWindowView, useSetChangeWindow, useTheAgent } from '@whombat/client/react';
-import { CHANGE_WINDOW_WORDS, type ChangeWindow, minutesClock } from '@whombat/core';
-import { useId } from 'react';
+import { type ChangeWindow, changeWindowWords, minutesClock } from '@whombat/core';
+import { useId, useMemo } from 'react';
 import { cx } from '../../components/cx';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import styles from '../settings/SettingsScreen.module.css';
 import q from './QuietHours.module.css';
 
-/** The section's label and its words (Whombat care-plan.md). */
-export const QUIET_HOURS_TEXT = {
-  label: 'CHANGES',
-  ...CHANGE_WINDOW_WORDS,
-} as const;
+/** The section's label and its words (Whombat care-plan.md), in the page's language. */
+function useQuietHoursText() {
+  const { t, tag } = useWebI18n();
+  return useMemo(() => ({ label: t('quietHours.label'), ...changeWindowWords(tag) }), [t, tag]);
+}
 
 /** Every half hour of the day: what the two times offer. */
 const TIMES = Array.from({ length: 48 }, (_, i) => minutesClock(i * 30));
@@ -29,6 +30,8 @@ const fill = (text: string, values: Record<string, string>) =>
 export function QuietHoursSection({ burrow }: { burrow: string }) {
   const ids = useId();
   const toast = useToast();
+  const { t } = useWebI18n();
+  const QUIET_HOURS_TEXT = useQuietHoursText();
   const { words } = useTheAgent(burrow);
   const view = useChangeWindowView({ params: { burrow } }, { retry: false, staleTime: 60_000 });
   const set = useSetChangeWindow(burrow);
@@ -78,7 +81,8 @@ export function QuietHoursSection({ burrow }: { burrow: string }) {
           <span className={styles.rowMain}>
             <span className={styles.rowTitle}>{QUIET_HOURS_TEXT.title}</span>
             <span className={styles.rowMeta} id={`${ids}-hint`}>
-              {fill(QUIET_HOURS_TEXT.about, { assistant: words.Name })} {timeZone.replace(/_/g, ' ')} time.
+              {fill(QUIET_HOURS_TEXT.about, { assistant: words.Name })}{' '}
+              {t('quietHours.zoneTime', { zone: timeZone.replace(/_/g, ' ') })}
             </span>
           </span>
           <span className={q.times}>

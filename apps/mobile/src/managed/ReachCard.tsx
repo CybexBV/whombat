@@ -6,6 +6,7 @@
  * site) and off, with the offer sentence; on the iPhone only its state and what it gives are said: no price, no sign-up,
  * no way to buy (LNK-44).
  */
+
 import {
   addressRowView,
   CHANNEL_TEXT,
@@ -21,6 +22,7 @@ import {
 import { type ApplianceSession, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { Alert, type LayoutChangeEvent, Linking, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -83,6 +85,7 @@ export function ReachCard({
   /** Lets About scroll to REACH (a connection that needs a secure address opens it there). */
   onLayout?: (e: LayoutChangeEvent) => void;
 }) {
+  const { tClient } = useI18n();
   const theme = useTheme();
   const tailscaleOn = useTailscaleTurnOn(session);
   const [now, setNow] = useState(() => Date.now());
@@ -176,7 +179,10 @@ export function ReachCard({
             body={tailscale.on ? null : C.expert.line}
             action={
               tailscaleOn.signInUrl ? (
-                <Button label="Sign in" onPress={() => void Linking.openURL(tailscaleOn.signInUrl ?? '')} />
+                <Button
+                  label={tClient('managed.signIn.useLink')}
+                  onPress={() => void Linking.openURL(tailscaleOn.signInUrl ?? '')}
+                />
               ) : !tailscale.on ? (
                 <Button
                   label={T.tailscale.turnOn}

@@ -6,6 +6,8 @@
  * assistant works in the conversation one row at the bottom says so. Without a conversation from Whombat (a runtime
  * from before 0.108) only the page's own last question and answer show, as before. Pure.
  */
+
+import { english, localized, type Translate } from '../i18n/translate';
 import type {
   DeskServer,
   DeskSession,
@@ -14,7 +16,7 @@ import type {
   DeskSessionTask,
   DeskTalk,
 } from './desk';
-import { DESK, DESK_WORDS, fill } from './deskCopy';
+import { deskCopy, deskWordsCopy, fill } from './deskCopy';
 import { type TalkUi, talkId, talkView } from './talk';
 
 export type RowTone = 'text' | 'thinking' | 'prompt' | 'error';
@@ -83,10 +85,14 @@ export function conversation(
   talk: DeskTalk | null,
   assistant: string,
   voice: boolean,
+  t: Translate = english,
 ): Convo {
+  const DESK = deskCopy(t);
+  const DESK_WORDS = deskWordsCopy(t);
+
   const msgs = session?.open ? session.messages : [];
   const rows = msgs.map(fromMessage);
-  const view = talkView(s, talk, assistant, voice);
+  const view = talkView(s, talk, assistant, voice, t);
   const id = talkId(s);
   const you = id === null ? -1 : msgs.findIndex((m) => m.from === 'you' && m.talk === id);
   const answered = id !== null && msgs.some((m) => m.from === 'assistant' && m.talk === id);
@@ -143,11 +149,13 @@ export function conversation(
 }
 
 /** What an inline ask says became of it (DK-63). */
-export const ASK_STATE_WORDS: Record<DeskSessionAsk['state'], string> = {
-  waiting: DESK.askWaiting,
-  approved: DESK.askApproved,
-  denied: DESK.askDenied,
-};
+export const askStateWordsCopy = localized(
+  (t): Record<DeskSessionAsk['state'], string> => ({
+    waiting: deskCopy(t).askWaiting,
+    approved: deskCopy(t).askApproved,
+    denied: deskCopy(t).askDenied,
+  }),
+);
 
 /** The key of the newest row (the conversation scrolls to it, or says a new message came). */
 export const lastKey = (c: Convo): string | null => c.rows.at(-1)?.key ?? null;

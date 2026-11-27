@@ -5,8 +5,10 @@
  * 90 s is `working`: not final, the page keeps following it (“Neo is working on it…”) until it is answered, or failed
  * after 30 minutes.
  */
+
+import { english, localized, type Translate } from '../i18n/translate';
 import type { DeskServer, DeskTalk } from './desk';
-import { DESK, DESK_WORDS, fill } from './deskCopy';
+import { deskCopy, deskWordsCopy, fill } from './deskCopy';
 
 export type TalkError = 'busy' | 'off' | 'failed' | 'locked';
 
@@ -114,11 +116,13 @@ export interface TalkView {
   audio: boolean;
 }
 
-const ERROR_TEXT: Record<Exclude<TalkError, 'locked'>, string> = {
-  busy: DESK.talkBusy,
-  off: DESK_WORDS.voiceUnavailable,
-  failed: DESK_WORDS.talkFailed,
-};
+const errorTextCopy = localized(
+  (t): Record<Exclude<TalkError, 'locked'>, string> => ({
+    busy: deskCopy(t).talkBusy,
+    off: deskWordsCopy(t).voiceUnavailable,
+    failed: deskWordsCopy(t).talkFailed,
+  }),
+);
 
 /** The talk the page follows that has its answer (or failed): the thread changed then too (CG-54). */
 export const settledId = (s: TalkUi): string | null => (s.phase === 'done' ? s.id : null);
@@ -127,7 +131,18 @@ export const settledId = (s: TalkUi): string | null => (s.phase === 'done' ? s.i
  * What Talk shows for the page's state and Whombat's talk (`talk` is the one with the followed id, if any). Without
  * `voice` (Talk off, no microphone or no speech here) typing still asks (DK-T12): at rest it says so (CG-53).
  */
-export function talkView(s: TalkUi, talk: DeskTalk | null, assistant: string, voice = true): TalkView {
+export function talkView(
+  s: TalkUi,
+  talk: DeskTalk | null,
+  assistant: string,
+  voice = true,
+  t: Translate = english,
+): TalkView {
+  const DESK = deskCopy(t);
+  const DESK_WORDS = deskWordsCopy(t);
+  const thinking = thinkingCopy(t);
+  const ERROR_TEXT = errorTextCopy(t);
+
   const none = { thing: null, audio: false };
   switch (s.phase) {
     case 'ready':
@@ -148,43 +163,45 @@ export function talkView(s: TalkUi, talk: DeskTalk | null, assistant: string, vo
       };
     case 'waiting':
     case 'done': {
-      const t = talk && talk.id === s.id ? talk : null;
-      const question = t?.question ?? s.typed;
-      if (!t || t.state === 'transcribing' || t.state === 'thinking') {
+      const current = talk && talk.id === s.id ? talk : null;
+      const question = current?.question ?? s.typed;
+      if (!current || current.state === 'transcribing' || current.state === 'thinking') {
         return { question, answer: thinking, ...none };
       }
-      if (t.state === 'working') {
+      if (current.state === 'working') {
         return {
           question,
           answer: { kind: 'thinking', text: fill(DESK_WORDS.working, { assistant }) },
           ...none,
         };
       }
-      if (t.state === 'failed') {
+      if (current.state === 'failed') {
         return {
           question,
           answer: {
             kind: 'error',
-            text: failedText(t, assistant),
-            ...(t.reason === 'slow' && { slow: true }),
+            text: failedText(current, assistant, t),
+            ...(current.reason === 'slow' && { slow: true }),
           },
           ...none,
         };
       }
       return {
         question,
-        answer: { kind: 'answer', text: t.answer ?? '' },
-        thing: t.thing,
-        audio: t.audio,
+        answer: { kind: 'answer', text: current.answer ?? '' },
+        thing: current.thing,
+        audio: current.audio,
       };
     }
   }
 }
 
-const thinking: TalkAnswer = { kind: 'thinking', text: DESK_WORDS.thinking };
+const thinkingCopy = localized((t): TalkAnswer => ({ kind: 'thinking', text: deskWordsCopy(t).thinking }));
 
-function failedText(t: DeskTalk, assistant: string): string {
-  switch (t.reason) {
+function failedText(talk: DeskTalk, assistant: string, t: Translate = english): string {
+  const DESK_WORDS = deskWordsCopy(t);
+
+  switch (talk.reason) {
     case 'not_heard':
       return DESK_WORDS.notHeard;
     case 'slow':

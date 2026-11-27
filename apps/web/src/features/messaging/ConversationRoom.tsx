@@ -1,4 +1,4 @@
-import { composerMentionTargets, SETTLE_WORDS, type ThreadWork, type WorkLine } from '@whombat/client';
+import { composerMentionTargets, type ThreadWork, type WorkLine } from '@whombat/client';
 import { isOptimisticMessage } from '@whombat/client/query';
 import { useTheAgent } from '@whombat/client/react';
 import {
@@ -18,6 +18,7 @@ import { useOptionalAppServices } from '../../app/providers';
 import { useSearchUpdate } from '../../app/routing/navigation';
 import { Button } from '../../components/Button';
 import { SkeletonRows } from '../../components/ListState';
+import { SETTLE_WORDS } from '../../i18n/shared';
 import { MessageCard } from '../cards';
 import { CardLookContext } from '../cards/cardLook';
 import { RanOnMarkedProvider } from '../chats/runtime/RanOn';

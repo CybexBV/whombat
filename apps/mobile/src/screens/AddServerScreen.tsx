@@ -8,6 +8,7 @@
  * (Home's “wants to be added” opens here). A Whombat without `hosts.install` gets the command alone, as before. Rules and words are the web's (`@whombat/client/hosts` `install.ts`). Opened from Things, Home and the
  * assistant's card (`whombat://servers/add?address=…&user=…&control=…`), which fill it in and never send anything.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   addServerPrefill,
@@ -47,12 +48,12 @@ import {
 import { useVault, useVaultWrite } from '@whombat/client/react';
 import {
   api,
-  HOST_CONTROL_LEVEL_WORDS,
   HOST_CONTROL_LEVELS,
   type HostControlLevel,
   type HostEnrollment,
   type HostInstall,
   type HostPendingEnrollment,
+  hostControlLevelWords,
   thingId,
 } from '@whombat/core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -70,6 +71,7 @@ import {
   stepSpoken,
 } from '../data/addServer';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -106,6 +108,7 @@ function backLabel(navigation: Props['navigation'], key: string): string {
 }
 
 export function AddServerScreen({ route, navigation }: Props) {
+  const { t: tMobile } = useMobileT();
   const insets = useSafeAreaInsets();
   const { slug, currentBootstrap } = useBurrowBase();
   const now = useNow().getTime();
@@ -185,7 +188,7 @@ export function AddServerScreen({ route, navigation }: Props) {
             {refusal ? (
               <QuietText>{refusal}</QuietText>
             ) : (
-              <SkeletonRows count={4} lines={2} label="Loading" />
+              <SkeletonRows count={4} lines={2} label={tMobile('managed.loading')} />
             )}
           </ScrollView>
         ) : way === 'signIn' ? (
@@ -301,6 +304,9 @@ function LevelControl({
   value: HostControlLevel;
   onChange: (v: HostControlLevel) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const hostControlLevelWordsHere = hostControlLevelWords(rawLocale);
+
   const theme = useTheme();
   return (
     <View style={{ gap: 8 }}>
@@ -320,7 +326,7 @@ function LevelControl({
       >
         {HOST_CONTROL_LEVELS.map((level) => {
           const selected = level === value;
-          const words = HOST_CONTROL_LEVEL_WORDS[level];
+          const words = hostControlLevelWordsHere[level];
           return (
             <Touchable
               key={level}
@@ -359,7 +365,7 @@ function LevelControl({
         })}
       </View>
       <Text size={13} lh={1.45} color={theme.colors.mut} accessibilityLiveRegion="polite">
-        {HOST_CONTROL_LEVEL_WORDS[value].line}
+        {hostControlLevelWordsHere[value].line}
       </Text>
     </View>
   );
@@ -397,6 +403,9 @@ function SignInOnce({
   bottomInset: number;
   onStarted: (job: HostInstall) => void;
 }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const start = useHostsChange(api.hosts.startInstall);
   const [errors, setErrors] = useState<SignInErrors>({});
@@ -424,9 +433,9 @@ function SignInOnce({
     try {
       const r = await start.mutateAsync({ params: { burrow: slug }, body: installBody(g, control) });
       if (r.status === 'ok') onStarted(r.data);
-      else setRefusal(commitOutcomeText(r));
+      else setRefusal(commitOutcomeText(r, rawLocale));
     } catch (err) {
-      const info = hostErrorInfo(err);
+      const info = hostErrorInfo(err, rawLocale);
       const fields: SignInErrors = {};
       for (const k of ['address', 'username', 'name'] as const)
         if (info.fields[k]) fields[k] = info.fields[k];
@@ -505,7 +514,7 @@ function SignInOnce({
               {SIGN_IN_COPY.key}
             </Text>
             {vault.isPending ? (
-              <SkeletonRows count={2} lines={1} label="Loading your keys" />
+              <SkeletonRows count={2} lines={1} label={tMobile('screens.loading-your-keys')} />
             ) : keys.length ? (
               <KeyChoices
                 label={SIGN_IN_COPY.key}
@@ -759,6 +768,8 @@ function useCommand(
   made: HostEnrollment | undefined,
   onMade: (e: HostEnrollment) => void,
 ): string | null {
+  const { rawLocale } = useI18n();
+
   const create = useHostsChange(api.hosts.createEnrollment);
   const createRef = useRef(create.mutateAsync);
   createRef.current = create.mutateAsync;
@@ -775,13 +786,13 @@ function useCommand(
       .current(control ? { params: { burrow: slug }, body: { control } } : { params: { burrow: slug } })
       .then((r) => {
         if (r.status === 'ok') onMadeRef.current(r.data);
-        else setError(commitOutcomeText(r) ?? ADD_SERVER_COPY.commandFailed);
+        else setError(commitOutcomeText(r, rawLocale) ?? ADD_SERVER_COPY.commandFailed);
       })
       .catch((err: unknown) => {
         asked.current.delete(key);
-        setError(hostErrorInfo(err).message);
+        setError(hostErrorInfo(err, rawLocale).message);
       });
-  }, [slug, key, control, made]);
+  }, [slug, key, control, made, rawLocale]);
   return error;
 }
 
@@ -879,6 +890,9 @@ function WaitingForYou({
 }
 
 function PendingRow({ slug, row }: { slug: string; row: PendingRowView }) {
+  const { rawLocale } = useI18n();
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const approve = useHostsChange(api.hosts.approveEnrollment);
   const reject = useHostsChange(api.hosts.rejectEnrollment);
@@ -890,9 +904,9 @@ function PendingRow({ slug, row }: { slug: string; row: PendingRowView }) {
     try {
       const r = await go();
       if (r.status === 'ok') showNotice(done);
-      else Alert.alert('Not yet', commitOutcomeText(r) ?? '');
+      else Alert.alert(tMobile('screens.not-yet'), commitOutcomeText(r, rawLocale) ?? '');
     } catch (err) {
-      Alert.alert('That didn’t go through', hostErrorInfo(err).message);
+      Alert.alert(tMobile('managed.that-didnt-go-through'), hostErrorInfo(err, rawLocale).message);
     } finally {
       setBusy(false);
     }
@@ -985,6 +999,8 @@ function JobView({
   onCommand: () => void;
   onOpen: (serverId: string, name: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+
   const theme = useTheme();
   const followed = useHostInstall(slug, initial.id);
   const fleet = useHostsFleet({ params: { burrow: slug } }, { retry: false });
@@ -995,7 +1011,7 @@ function JobView({
   const steps = installSteps(view);
   const note = installHostKeyNote(view);
   const outcome = installOutcome(view, names);
-  const lost = followed.error && !followed.data ? hostErrorInfo(followed.error).message : null;
+  const lost = followed.error && !followed.data ? hostErrorInfo(followed.error, rawLocale).message : null;
   const failed = lost ? { text: lost, detail: null } : outcome?.kind === 'failed' ? outcome : null;
   const added = outcome && outcome.kind !== 'failed' ? outcome : null;
   // One plain card with the one step that helps (connect-in-chat.md); a lost job only says so.

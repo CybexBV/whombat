@@ -6,6 +6,7 @@
  * and the phone; pure.
  */
 import type { HostCpu, HostServer } from '@whombat/core';
+import { clientTranslator } from '../i18n/catalog';
 import { DASH, formatNum, formatUptimeShort, plural } from './format';
 import { serverHref, shortOs } from './model';
 import { diskUsedLevel, type HostTone, hostTone, sensorLevel } from './thresholds';
@@ -31,10 +32,15 @@ export function cpuLine(cpu: HostCpu | null | undefined): { name: string; detail
 }
 
 /** The line under a server's name: “Proxmox VE 9.2 · up 55 d” (what runs it and for how long). */
-export function serverOsLine(s: Pick<HostServer, 'os' | 'uptimeS' | 'status'>): string {
+export function serverOsLine(
+  s: Pick<HostServer, 'os' | 'uptimeS' | 'status'>,
+  locale?: string | null,
+): string {
   const offline = s.status === 'offline' || s.status === 'pending';
   const up =
-    !offline && s.uptimeS != null && Number.isFinite(s.uptimeS) ? `up ${formatUptimeShort(s.uptimeS)}` : null;
+    !offline && s.uptimeS != null && Number.isFinite(s.uptimeS)
+      ? clientTranslator(locale).t('hosts.overview.uptime', { when: formatUptimeShort(s.uptimeS, locale) })
+      : null;
   return [shortOs(s.os), up].filter(Boolean).join(' · ');
 }
 
@@ -85,41 +91,44 @@ function band(pct: number, bands: readonly [number, string][], last: string): st
 }
 
 /** How busy a processor is, in words (Overview's card and the server's Summary). */
-export function processorWords(pct: number): string {
+export function processorWords(pct: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   return band(
     pct,
     [
-      [40, 'Quiet'],
-      [80, 'Busy'],
-      [95, 'Very busy'],
+      [40, tr.t('hosts.overview.figure.quiet')],
+      [80, tr.t('hosts.overview.figure.busy')],
+      [95, tr.t('hosts.overview.figure.veryBusy')],
     ],
-    'Flat out',
+    tr.t('hosts.overview.figure.flatOut'),
   );
 }
 
 /** How full memory is, in words. */
-export function memoryFullWords(pct: number): string {
+export function memoryFullWords(pct: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   return band(
     pct,
     [
-      [70, 'Plenty free'],
-      [85, 'Getting full'],
-      [95, 'Nearly full'],
+      [70, tr.t('hosts.overview.figure.plentyFree')],
+      [85, tr.t('hosts.overview.figure.gettingFull')],
+      [95, tr.t('hosts.overview.figure.nearlyFull')],
     ],
-    'Full',
+    tr.t('hosts.overview.figure.full'),
   );
 }
 
 /** How full a disk or storage is, in words (the same bands as its warnings: 80 % and 90 %). */
-export function spaceWords(pct: number): string {
+export function spaceWords(pct: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   return band(
     pct,
     [
-      [70, 'Plenty free'],
-      [80, 'Filling up'],
-      [95, 'Nearly full'],
+      [70, tr.t('hosts.overview.figure.plentyFree')],
+      [80, tr.t('hosts.overview.figure.fillingUp')],
+      [95, tr.t('hosts.overview.figure.nearlyFull')],
     ],
-    'Full',
+    tr.t('hosts.overview.figure.full'),
   );
 }
 
@@ -143,12 +152,14 @@ const fullTone = (pct: number): HostTone => (pct >= 90 ? 'warn' : 'ok');
 const levelTone = (t: HostTone): HostTone => (t === 'warn' || t === 'bad' ? t : 'ok');
 
 /** “76 of 118 GB”, “1.2 of 1.5 TB”, “420 GB of 1.8 TB”: both in the total's unit unless the used part is small. */
-export function amountOf(usedGb: number | null, totalGb: number): string {
+export function amountOf(usedGb: number | null, totalGb: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  const num = (n: number) => formatNum(n, locale);
   const tb = totalGb >= 1000;
-  const total = tb ? `${formatNum(totalGb / 1000)}${NBSP}TB` : `${formatNum(totalGb)}${NBSP}GB`;
-  if (usedGb == null) return `${DASH} of ${total}`;
-  if (tb && usedGb < 100) return `${formatNum(usedGb)}${NBSP}GB of ${total}`;
-  return `${formatNum(tb ? usedGb / 1000 : usedGb)} of ${total}`;
+  const total = tb ? `${num(totalGb / 1000)}${NBSP}TB` : `${num(totalGb)}${NBSP}GB`;
+  if (usedGb == null) return tr.t('hosts.overview.of', { a: DASH, b: total });
+  if (tb && usedGb < 100) return tr.t('hosts.overview.of', { a: `${num(usedGb)}${NBSP}GB`, b: total });
+  return tr.t('hosts.overview.of', { a: num(tb ? usedGb / 1000 : usedGb), b: total });
 }
 
 function mean(values: readonly (number | null)[]): number | null {
@@ -179,7 +190,7 @@ export interface ServerFigures {
   limit: number | null;
 }
 
-export function serverFigures(s: HostServer): ServerFigures {
+export function serverFigures(s: HostServer, locale?: string | null): ServerFigures {
   const mem = s.memory;
   const memTotal = finite(mem.totalGb) && mem.totalGb > 0 ? mem.totalGb : null;
   const memUsed = finite(mem.usedGb)
@@ -209,9 +220,9 @@ export function serverFigures(s: HostServer): ServerFigures {
     memTotal,
     memUsed,
     memPct,
-    memAmount: memTotal ? amountOf(memUsed, memTotal) : '',
+    memAmount: memTotal ? amountOf(memUsed, memTotal, locale) : '',
     diskPct,
-    diskAmount: capGb ? amountOf(usedGb, capGb) : '',
+    diskAmount: capGb ? amountOf(usedGb, capGb, locale) : '',
     maxC: temp && finite(temp.maxC) ? temp.maxC : null,
     limit: temp && finite(temp.limitC) && temp.limitC > 0 ? temp.limitC : null,
   };

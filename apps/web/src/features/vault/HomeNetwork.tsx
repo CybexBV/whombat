@@ -10,7 +10,7 @@ import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import { useVaultNetworkWrite } from '@whombat/client/react';
 import { api, type VaultNetworksResponse } from '@whombat/core/contracts';
 import { formatAgo } from '@whombat/core/text';
-import { canonicalCidr, VAULT_COPY, VAULT_NETWORK_NOTE_MAX, vaultNetworkProblem } from '@whombat/core/vault';
+import { canonicalCidr, VAULT_NETWORK_NOTE_MAX, vaultCopy, vaultNetworkProblem } from '@whombat/core/vault';
 import { type FormEvent, useId, useState } from 'react';
 import { useOpenBurrow } from '../../app/routing/openBurrow';
 import { Button } from '../../components/Button';
@@ -18,6 +18,7 @@ import { Input } from '../../components/Input';
 import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { useLocaleWords } from '../../i18n/words';
 import { portsText, VAULT_TEXT } from './copy';
 import { type FieldProblems, parsePorts } from './model';
 import { useVaultWords } from './useVaultWords';
@@ -33,6 +34,7 @@ export function HomeNetwork({
   /** The add row behind “Add network” once the list has a network (What it may do). */
   addBehindButton?: boolean;
 }) {
+  const VAULT_COPY = useLocaleWords(vaultCopy);
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const remove = useVaultNetworkWrite(api.vaultNetworks.remove);

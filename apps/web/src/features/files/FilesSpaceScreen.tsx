@@ -53,6 +53,7 @@ import { Icon } from '../../components/Icon';
 import { EmptyNote, SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import composer from '../messaging/Composer.module.css';
 import { AttachmentViewer, useDownloadAttachment, viewable } from '../messaging/MessageAttachments';
 import { PrincipalAvatar } from '../messaging/PrincipalAvatar';
@@ -172,6 +173,7 @@ function kindIcon(entry: FileEntry): LucideIcon {
 }
 
 function Space(props: FilesSpaceScreenProps & { conversationId: string; row: FilesConversationRow }) {
+  const { tag: uiLocale } = useWebI18n();
   const { burrow, folder: rawFolder, conversationId, row } = props;
   const link = row.link as NonNullable<FilesConversationRow['link']>;
   const home = isHome(props.place);
@@ -404,7 +406,7 @@ function Space(props: FilesSpaceScreenProps & { conversationId: string; row: Fil
                 </span>
                 <span className={cx(styles.cell, styles.fileWho)} />
                 <span className={cx(styles.cell, styles.cellEnd, styles.fileWhen)}>
-                  {f.lastAddedAt ? formatRecent(f.lastAddedAt, now, viewer.timeZone) : ''}
+                  {f.lastAddedAt ? formatRecent(f.lastAddedAt, now, viewer.timeZone, uiLocale) : ''}
                 </span>
                 <span />
               </li>
@@ -454,7 +456,7 @@ function Space(props: FilesSpaceScreenProps & { conversationId: string; row: Fil
                     </span>
                   </span>
                   <span className={cx(styles.cell, styles.cellEnd, styles.fileWhen)} title={entry.addedAt}>
-                    {formatRecent(entry.addedAt, now, viewer.timeZone)}
+                    {formatRecent(entry.addedAt, now, viewer.timeZone, uiLocale)}
                   </span>
                   <button
                     type="button"
@@ -550,6 +552,7 @@ function useOtherConversations(burrow: string, except: string | null): FilesConv
  * size and when the last was added. A task chat the sidebar doesn't list is named from the conversation itself.
  */
 function OtherConversation({ burrow, row, now }: { burrow: string; row: FilesConversationRow; now: number }) {
+  const { tag: uiLocale } = useWebI18n();
   const viewer = useBurrowViewer(burrow);
   const named = useConversationNaming(burrow, row.kind === 'unknown' ? row.conversationId : null);
   const shown = named
@@ -570,7 +573,7 @@ function OtherConversation({ burrow, row, now }: { burrow: string; row: FilesCon
       <span className={cx(styles.cell, styles.cellEnd)}>{formatFileSize(shown.bytes)}</span>
       <span className={cx(styles.cell, styles.fileWho)} />
       <span className={cx(styles.cell, styles.cellEnd, styles.fileWhen)}>
-        {formatRecent(shown.lastAddedAt, now, viewer.timeZone)}
+        {formatRecent(shown.lastAddedAt, now, viewer.timeZone, uiLocale)}
       </span>
       <span />
     </li>

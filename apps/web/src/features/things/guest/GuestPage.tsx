@@ -37,6 +37,7 @@ import { useEffect, useRef, useState } from 'react';
 import { type ContextMenuItem, useRowMenu } from '../../../app/shell/ContextMenu';
 import { Icon } from '../../../components/Icon';
 import { Tabs } from '../../../components/Tabs';
+import { currentLocale } from '../../../i18n/provider';
 import { AskButton } from '../AskPane';
 import { TechnicalDetails, VerdictLine } from '../dashboard/Verdict';
 import { IncusConfigTab } from '../incus/IncusConfigTab';
@@ -496,7 +497,7 @@ function guestFacts(g: HostGuestDetail): { label: string; value: string; mono?: 
       label: 'Memory',
       value: formatMemPair(on ? g.memoryUsedMb : null, g.memoryLimitMb).replace(/^— \/ /, ''),
     });
-  if (on && g.uptimeS != null) rows.push({ label: 'Up', value: formatDuration(g.uptimeS) });
+  if (on && g.uptimeS != null) rows.push({ label: 'Up', value: formatDuration(g.uptimeS, currentLocale()) });
   if (g.addresses?.length) rows.push({ label: 'Address', value: g.addresses.join(', ') || DASH, mono: true });
   return rows;
 }

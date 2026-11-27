@@ -3,6 +3,8 @@
  * and line, the four figures (the card's while the first answer comes), the chart's times, the storage and guests'
  * lines, and where a swipe goes. Pure: the page's clock and the person's time zone come in.
  */
+
+import { english, localized, type Translate } from '../i18n/translate';
 import {
   type DeskGuest,
   type DeskServer,
@@ -12,9 +14,9 @@ import {
   type ServerRange,
   type Tone,
 } from './desk';
-import { clockText, DESK_WORDS, fill, localTime, percent, weekdayText } from './deskCopy';
+import { clockText, deskWordsCopy, fill, localTime, percent, weekdayText } from './deskCopy';
 
-const W = DESK_WORDS.server;
+const wCopy = localized((t) => deskWordsCopy(t).server);
 
 /** A swipe goes to the next or the previous server past this (layout px), when it is more across than down (DK-83). */
 export const SWIPE_PX = 60;
@@ -45,7 +47,13 @@ export interface HeadState {
   tone: Tone | 'off';
 }
 
-export function headState(server: DeskServer, alerts: DeskServerPage['alerts'] | null): HeadState | null {
+export function headState(
+  server: DeskServer,
+  alerts: DeskServerPage['alerts'] | null,
+  t: Translate = english,
+): HeadState | null {
+  const W = wCopy(t);
+
   if (alerts && alerts.count > 0) {
     const bad = server.state === 'bad' || alerts.items.some((a) => a.tone === 'bad');
     return {
@@ -58,7 +66,9 @@ export function headState(server: DeskServer, alerts: DeskServerPage['alerts'] |
 }
 
 /** The line under the name: “Proxmox VE 9.0.10 · 16 cores · up 41 d”, what is known of it. */
-export function subLine(page: DeskServerPage | null): string {
+export function subLine(page: DeskServerPage | null, t: Translate = english): string {
+  const W = wCopy(t);
+
   if (!page) return '';
   const n = page.cpu?.cores;
   const cores = n === 1 ? W.coresOne : n ? fill(W.cores, { n }) : '';
@@ -74,7 +84,9 @@ export interface Figure {
   bar: { value: number; max: number } | null;
 }
 
-const NONE: Figure = { value: DESK_WORDS.card.none, unit: '', note: '', tone: 'ok', bar: null };
+const noneCopy = localized(
+  (t): Figure => ({ value: deskWordsCopy(t).card.none, unit: '', note: '', tone: 'ok', bar: null }),
+);
 
 export interface Figures {
   cpu: Figure;
@@ -87,7 +99,11 @@ export interface Figures {
  * The four figures (DK-83): the page's, or while its first answer comes the card's (no spinner: the percentages and
  * the temperature the glance had). An off server's are “–”.
  */
-export function figuresOf(server: DeskServer, page: DeskServerPage | null): Figures {
+export function figuresOf(server: DeskServer, page: DeskServerPage | null, t: Translate = english): Figures {
+  const NONE = noneCopy(t);
+  const W = wCopy(t);
+  const DESK_WORDS = deskWordsCopy(t);
+
   if (server.state === 'off' && (!page || page.server.state === 'off'))
     return { cpu: NONE, memory: NONE, disk: NONE, temp: NONE };
   if (!page) {
@@ -178,7 +194,15 @@ const CHAR_PX = 7.5;
 const FOOT_GAP = 16;
 
 /** The chart's times for a range ending at `nowMs`, on the person's clock. */
-export function chartFoot(range: ServerRange, nowMs: number, timeZone: string): ChartFoot {
+export function chartFoot(
+  range: ServerRange,
+  nowMs: number,
+  timeZone: string,
+  t: Translate = english,
+): ChartFoot {
+  const DESK_WORDS = deskWordsCopy(t);
+  const W = wCopy(t);
+
   const span = RANGE_S[range] * 1000;
   const start = nowMs - span;
   const startLabel =
@@ -186,14 +210,14 @@ export function chartFoot(range: ServerRange, nowMs: number, timeZone: string): 
       ? DESK_WORDS.box.hourAgo
       : range === '24h'
         ? fill(W.yesterday, { time: clockText(start, timeZone) })
-        : `${weekdayText(start, timeZone)} ${clockText(start, timeZone)}`;
+        : `${weekdayText(start, timeZone, t.locale)} ${clockText(start, timeZone)}`;
   const end = DESK_WORDS.box.now;
   const step = range === '1h' ? 60_000 : 15 * 60_000;
   const ticks: Tick[] = [];
   let free = startLabel.length * CHAR_PX + FOOT_GAP;
   const last = FOOT_PX - end.length * CHAR_PX - FOOT_GAP;
-  for (let t = Math.ceil(start / step) * step; t <= nowMs; t += step) {
-    const { hour, minute } = localTime(t, timeZone);
+  for (let tick = Math.ceil(start / step) * step; tick <= nowMs; tick += step) {
+    const { hour, minute } = localTime(tick, timeZone);
     const due =
       range === '1h'
         ? minute % 15 === 0
@@ -201,8 +225,8 @@ export function chartFoot(range: ServerRange, nowMs: number, timeZone: string): 
           ? minute === 0 && hour % 6 === 0
           : minute === 0 && hour === 0;
     if (!due) continue;
-    const label = range === '7d' ? weekdayText(t, timeZone) : clockText(t, timeZone);
-    const at = (t - start) / span;
+    const label = range === '7d' ? weekdayText(tick, timeZone, t.locale) : clockText(tick, timeZone);
+    const at = (tick - start) / span;
     const half = (label.length * CHAR_PX) / 2;
     if (at * FOOT_PX - half < free || at * FOOT_PX + half > last) continue;
     ticks.push({ at, label });
@@ -212,25 +236,36 @@ export function chartFoot(range: ServerRange, nowMs: number, timeZone: string): 
 }
 
 /** When the processor peaked: its clock time, with the day on the week's chart. */
-export function peakTime(range: ServerRange, atMs: number, timeZone: string): string {
+export function peakTime(range: ServerRange, atMs: number, timeZone: string, locale = 'en-GB'): string {
   const clock = clockText(atMs, timeZone);
-  return range === '7d' ? `${weekdayText(atMs, timeZone)} ${clock}` : clock;
+  return range === '7d' ? `${weekdayText(atMs, timeZone, locale)} ${clock}` : clock;
 }
 
 /** The chart's legend: “CPU · peak 61 % at 03:10”, “Memory · avg 52 %”, or the bare names without points. */
-export function legend(page: DeskServerPage, timeZone: string): { cpu: string; memory: string } {
+export function legend(
+  page: DeskServerPage,
+  timeZone: string,
+  t: Translate = english,
+): { cpu: string; memory: string } {
+  const W = wCopy(t);
+
   const h = page.history;
   return {
     cpu: h.cpuPeak
-      ? fill(W.cpuPeak, { n: h.cpuPeak.percent, time: peakTime(h.range, Date.parse(h.cpuPeak.at), timeZone) })
+      ? fill(W.cpuPeak, {
+          n: h.cpuPeak.percent,
+          time: peakTime(h.range, Date.parse(h.cpuPeak.at), timeZone, t.locale),
+        })
       : W.cpu,
     memory: h.memoryAvg === null ? W.memory : fill(W.memoryAvg, { n: h.memoryAvg }),
   };
 }
 
 /** A volume's line on the right: “nvme mirror · 41 %”, or “1.2 TB of 3.6 TB · 41 %” without a note. */
-export const volumeNote = (v: DeskVolume): string =>
-  `${v.note || fill(W.diskOf, { used: v.used, total: v.total })} · ${percent(v.percent)}`;
+export const volumeNote = (v: DeskVolume, t: Translate = english): string => {
+  const W = wCopy(t);
+  return `${v.note || fill(W.diskOf, { used: v.used, total: v.total })} · ${percent(v.percent)}`;
+};
 
 /** A guest's dot: running green, unhealthy amber, stopped or paused grey. */
 export function guestTone(g: DeskGuest): 'ok' | 'warn' | 'off' {
@@ -239,6 +274,8 @@ export function guestTone(g: DeskGuest): 'ok' | 'warn' | 'off' {
 }
 
 /** A guest's processor column: its share, else its state's word (“off”, “paused”) as the contracts say. */
-export function guestCpu(g: DeskGuest): string {
+export function guestCpu(g: DeskGuest, t: Translate = english): string {
+  const W = wCopy(t);
+
   return g.cpu === null || g.state === 'stopped' ? W.guestStates[g.state] : percent(g.cpu);
 }

@@ -6,7 +6,7 @@
  * `hosts:<burrowId>`.
  */
 import { BrandMark } from '@whombat/brand/react';
-import { CHAT_WORDS, OVERVIEW_WORDS, serverQuietWords } from '@whombat/client';
+import { serverQuietWords } from '@whombat/client';
 import {
   isHostsUnavailable,
   litSegments,
@@ -27,6 +27,9 @@ import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { LevelPill } from '../../components/StatusMark';
+import { useWebI18n } from '../../i18n/provider';
+import { CHAT_WORDS } from '../../i18n/shared';
+import { useOverviewWords } from '../../i18n/words';
 import { useBurrowContext } from '../messaging/useRoom';
 import { AppLink } from '../things/parts';
 import styles from './Overview.module.css';
@@ -165,6 +168,7 @@ function RunningCell({ c }: { c: OverviewRunningCell }) {
  * quiet, then the five figures.
  */
 export function ServerRow({ row, quiet = null }: { row: OverviewServerRow; quiet?: string | null }) {
+  const OVERVIEW_WORDS = useOverviewWords();
   return (
     <li
       className={cx(
@@ -221,6 +225,7 @@ export function ServerRow({ row, quiet = null }: { row: OverviewServerRow; quiet
 
 /** The column heads, also each figure's label on a narrow card. */
 function ColumnHead() {
+  const OVERVIEW_WORDS = useOverviewWords();
   const c = OVERVIEW_WORDS.columns;
   return (
     <li className={cx(styles.srvhead, styles.srvgrid)} aria-hidden="true">
@@ -236,21 +241,18 @@ function ColumnHead() {
 
 /** “A server is waiting to be added” after the rows, with Review (Add a server's waiting list). */
 function WaitingRow({ pending, onReview }: { pending: number; onReview: () => void }) {
+  const { t, tp } = useWebI18n();
   return (
     <li className={cx(styles.srv, styles.waiting)} data-server-waiting={pending}>
       <span className={styles.logo} aria-hidden="true">
         <Icon icon={Server} size={20} />
       </span>
       <div className={styles.nm}>
-        <div className={styles.waitingName}>
-          {pending === 1 ? 'A server is waiting to be added' : `${pending} servers are waiting to be added`}
-        </div>
-        <div className={styles.os}>
-          It ran the install command. Add it, or turn it away if you don’t know it.
-        </div>
+        <div className={styles.waitingName}>{tp('overview.servers.waiting', pending)}</div>
+        <div className={styles.os}>{t('overview.servers.waitingHint')}</div>
       </div>
       <Button size="sm" variant="primary" className={styles.waitingButton} onClick={onReview}>
-        Review
+        {t('overview.servers.review')}
       </Button>
     </li>
   );
@@ -278,13 +280,21 @@ export function OverviewServers({
   /** Overview already says its refresh failed: no second note here. */
   savedNoteShown: boolean;
 }) {
+  const OVERVIEW_WORDS = useOverviewWords();
+  const { t, tag: uiLocale } = useWebI18n();
   const { status, fleet, servers } = useOverviewFleet(burrow);
-  const rows = useMemo(() => overviewServerRows(servers ?? [], now, timeZone), [servers, now, timeZone]);
-  const quiet = useMemo(() => serverQuietWords(things, now, timeZone), [things, now, timeZone]);
+  const rows = useMemo(
+    () => overviewServerRows(servers ?? [], now, timeZone, uiLocale),
+    [servers, now, timeZone, uiLocale],
+  );
+  const quiet = useMemo(
+    () => serverQuietWords(things, now, timeZone, uiLocale),
+    [things, now, timeZone, uiLocale],
+  );
   const pending = fleet.data?.pendingEnrollments ?? 0;
   const down =
     isHostsUnavailable(status.error) || isHostsUnavailable(fleet.error) || status.data?.healthy === false;
-  if (down && !rows.length) return <p className={styles.note}>Servers aren’t reachable right now.</p>;
+  if (down && !rows.length) return <p className={styles.note}>{t('overview.servers.unreachable')}</p>;
   if (!fleet.data && !rows.length)
     return (
       <div role="status" aria-busy="true" className={styles.ph}>
@@ -305,7 +315,7 @@ export function OverviewServers({
           onRetry={() => void fleet.refetch()}
         />
       ) : null}
-      <ul className={cx(styles.card, styles.srvlist)} aria-label="Servers">
+      <ul className={cx(styles.card, styles.srvlist)} aria-label={t('sidebar.servers')}>
         {rows.length ? <ColumnHead /> : null}
         {rows.map((row) => (
           <ServerRow key={row.id} row={row} quiet={quiet.get(thingId('server', row.id)) ?? null} />
@@ -313,7 +323,7 @@ export function OverviewServers({
         {pending ? <WaitingRow pending={pending} onReview={onAdd} /> : null}
         {!rows.length && !pending ? (
           <li className={cx(styles.note, styles.empty)}>
-            No servers yet.{' '}
+            {t('overview.servers.empty')}{' '}
             <button type="button" className={styles.inlineLink} onClick={onAdd}>
               {OVERVIEW_WORDS.addServer}
             </button>

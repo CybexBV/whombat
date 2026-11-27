@@ -7,6 +7,7 @@ import {
 import { formatRecent, plural } from '@whombat/core/text';
 import { type ReactNode, useId } from 'react';
 import { cx } from '../../components/cx';
+import { currentLocale } from '../../i18n/provider';
 import styles from './Card.module.css';
 import report from './ReportCard.module.css';
 
@@ -58,7 +59,9 @@ export function ReportCard({
     >
       <div className={cx(styles.header, report.header)}>
         <span className={styles.label}>{label}</span>
-        <span className={styles.metaMono}>Received {formatRecent(card.submittedAt, now, timeZone)}</span>
+        <span className={styles.metaMono}>
+          Received {formatRecent(card.submittedAt, now, timeZone, currentLocale())}
+        </span>
       </div>
       {card.contentRemoved ? (
         <p className={report.removed}>Content removed</p>

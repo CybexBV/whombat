@@ -13,6 +13,7 @@ import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Modal, ModalTitle } from '../../../components/Modal';
+import { currentLocale } from '../../../i18n/provider';
 import { Dot } from '../parts';
 import things from '../Things.module.css';
 import styles from './Console.module.css';
@@ -327,10 +328,10 @@ export function PasteDialog({
         />
         <div id={infoId} className={cx(styles.pasteHint, tooLarge && styles.pasteHintBad)} aria-live="polite">
           {tooLarge
-            ? `That’s ${formatBytes(cur?.bytes ?? 0)}; up to ${formatBytes(PASTE_LIMIT_BYTES)} can be pasted.`
+            ? `That’s ${formatBytes(cur?.bytes ?? 0, currentLocale())}; up to ${formatBytes(PASTE_LIMIT_BYTES, currentLocale())} can be pasted.`
             : cur?.controlCount
-              ? `${formatBytes(cur.bytes)} of ${formatBytes(PASTE_LIMIT_BYTES)} · control characters are left out`
-              : `Up to ${formatBytes(PASTE_LIMIT_BYTES)} of text.`}
+              ? `${formatBytes(cur.bytes, currentLocale())} of ${formatBytes(PASTE_LIMIT_BYTES, currentLocale())} · control characters are left out`
+              : `Up to ${formatBytes(PASTE_LIMIT_BYTES, currentLocale())} of text.`}
         </div>
       </div>
       <div className={things.dialogActions}>

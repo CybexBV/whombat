@@ -15,6 +15,7 @@
  * gateway (Fusebox or the generic one, Whombat ai-gateway.md AIG-01; AP-1123) has none of the agent's parts — no tools
  * or guide — but which tools go through it, and its switches (`ConnectionScreen`).
  */
+
 import { type BrandMarkName, isBrandMark } from '@whombat/brand';
 import { withBurrow } from '@whombat/client';
 import {
@@ -58,47 +59,52 @@ import type {
   GitHubStatusResponse,
 } from '@whombat/core/contracts';
 import { formatAgo } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
 import { type AccountPage, isAccountPage } from '../navigation/connectionLinks';
 
 /* Words ------------------------------------------------------------------------------------------ */
 
-export const CONNECTIONS_TEXT = {
-  kicker: 'SETTINGS',
-  title: 'Connections',
-  /** The same line as the web's Settings → Connections (sidebar-tabs.md). */
-  intro: SETTINGS_CONNECTIONS_TEXT.intro,
-  /** The button under the intro, and the Add a connection screen's title (AP-1170). */
-  add: 'Add a connection',
-  needsYou: SETTINGS_CONNECTIONS_TEXT.needsYou,
-  accounts: SETTINGS_CONNECTIONS_TEXT.accounts,
-  apps: SETTINGS_CONNECTIONS_TEXT.apps,
-  connected: 'CONNECTED',
-  nothingConnected: 'Nothing connected yet.',
-  /** A NEEDS YOU row's action word (AP-1171). */
-  connectAgain: 'Sign in again',
-  openRow: 'Open',
-  notSetUp: 'Not set up on this Whombat yet',
-  tools: 'TOOLS',
-  noTools: 'No tools yet.',
-  /** The guide's label: “FOR NEO”. */
-  guide: (assistant: string) => `FOR ${assistant.toUpperCase()}`,
-  connection: 'CONNECTION',
-  notChecked: 'Not checked yet',
-  loadFailed: 'Your connections didn’t load.',
-  loading: 'Loading your connections',
-  detailFailed: 'This connection didn’t load.',
-  notFound: 'This connection isn’t here any more.',
-  loadingDetail: 'Loading the connection',
-  truncated: 'The service lists more tools; only the first 128 are used.',
-  /** GitHub's row: how many of its repositories Whombat works in (the web's overview). */
-  reposOn: (n: number) => (n === 1 ? '1 repository on' : `${n} repositories on`),
-  /** Website feedback's row: its one site's name, else how many. */
-  sites: (n: number) => (n === 1 ? '1 site' : `${n} sites`),
-  reports: (n: number) =>
-    n === 0 ? 'No reports in the last 24 h' : `${n} ${n === 1 ? 'report' : 'reports'} in the last 24 h`,
-  /** Website feedback's state when it's fine: it takes reports. */
-  on: 'On',
-} as const;
+export function connectionsText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    kicker: t('connections.connectionsText.kicker'),
+    title: t('connections.connectionsText.title'),
+    /** The same line as the web's Settings → Connections (sidebar-tabs.md). */
+    intro: SETTINGS_CONNECTIONS_TEXT.intro,
+    /** The button under the intro, and the Add a connection screen's title (AP-1170). */
+    add: t('connections.connectionsText.add'),
+    needsYou: SETTINGS_CONNECTIONS_TEXT.needsYou,
+    accounts: SETTINGS_CONNECTIONS_TEXT.accounts,
+    apps: SETTINGS_CONNECTIONS_TEXT.apps,
+    connected: t('connections.connectionsText.connected'),
+    nothingConnected: t('connections.connectionsText.nothingConnected'),
+    /** A NEEDS YOU row's action word (AP-1171). */
+    connectAgain: t('connections.connectionsText.connectAgain'),
+    openRow: t('connections.connectionsText.openRow'),
+    notSetUp: t('connections.connectionsText.notSetUp'),
+    tools: t('connections.connectionsText.tools'),
+    noTools: t('connections.connectionsText.noTools'),
+    /** The guide's label: “FOR NEO”. */
+    guide: (assistant: string) => `FOR ${assistant.toUpperCase()}`,
+    connection: t('connections.connectionsText.connection'),
+    notChecked: t('connections.connectionsText.notChecked'),
+    loadFailed: t('connections.connectionsText.loadFailed'),
+    loading: t('connections.connectionsText.loading'),
+    detailFailed: t('connections.connectionsText.detailFailed'),
+    notFound: t('connections.connectionsText.notFound'),
+    loadingDetail: t('connections.connectionsText.loadingDetail'),
+    truncated: t('connections.connectionsText.truncated'),
+    /** GitHub's row: how many of its repositories Whombat works in (the web's overview). */
+    reposOn: (n: number) => (n === 1 ? '1 repository on' : `${n} repositories on`),
+    /** Website feedback's row: its one site's name, else how many. */
+    sites: (n: number) => (n === 1 ? '1 site' : `${n} sites`),
+    reports: (n: number) =>
+      n === 0 ? 'No reports in the last 24 h' : `${n} ${n === 1 ? 'report' : 'reports'} in the last 24 h`,
+    /** Website feedback's state when it's fine: it takes reports. */
+    on: t('connections.connectionsText.on'),
+  } as const;
+}
+export const CONNECTIONS_TEXT = connectionsText();
 
 /* Where things open on the web ------------------------------------------------------------------- */
 
@@ -453,18 +459,22 @@ export function connectionsLine(rows: readonly ConnectedRow[]): {
 
 /* Add a connection (AP-1173…AP-1176) ------------------------------------------------------------------------------- */
 
-export const ADD_CONNECTION_TEXT = {
-  title: CONNECTIONS_TEXT.add,
-  all: 'All',
-  connected: 'Connected',
-  setUp: 'Set up',
-  footer: 'Not in the list?',
-  connect: 'Connect',
-  mcp: 'any MCP server',
-  or: 'or',
-  api: 'any HTTP API',
-  loading: 'Loading the services',
-} as const;
+export function addConnectionText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    title: CONNECTIONS_TEXT.add,
+    all: t('connections.addConnectionText.all'),
+    connected: t('connections.addConnectionText.connected'),
+    setUp: t('connections.addConnectionText.setUp'),
+    footer: t('connections.addConnectionText.footer'),
+    connect: t('connections.addConnectionText.connect'),
+    mcp: t('connections.addConnectionText.mcp'),
+    or: t('connections.addConnectionText.or'),
+    api: t('connections.addConnectionText.api'),
+    loading: t('connections.addConnectionText.loading'),
+  } as const;
+}
+export const ADD_CONNECTION_TEXT = addConnectionText();
 
 /** “Search 31 services”: the field's placeholder and label, with how many entries are offered here. */
 export function addSearchPlaceholder(count: number): string {

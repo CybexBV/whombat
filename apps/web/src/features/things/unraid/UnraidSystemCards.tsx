@@ -22,6 +22,7 @@ import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { Button, ButtonLink } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { Card, Dot, Empty, StateCell } from '../parts';
 import { useThingSearch } from '../search';
 import styles from '../Things.module.css';
@@ -209,7 +210,7 @@ function NotificationsCard({
                 <b>{notificationTitle(n)}</b>
                 {n.description ? <span>{n.description}</span> : null}
                 <small>
-                  {n.event} · {formatAgoIso(n.at, now)}
+                  {n.event} · {formatAgoIso(n.at, now, currentLocale())}
                 </small>
               </div>
               {access.can ? (

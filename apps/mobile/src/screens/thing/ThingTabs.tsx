@@ -4,10 +4,12 @@
  * edges when there are more than fit a phone. Connection (its own settings, SST-06) opens the Connection screen (an
  * account's own screen), so it is no tab: a button with a chevron on the right, outside the scrolling tabs, 44dp tall.
  */
+
 import { useMemo } from 'react';
 import { View } from 'react-native';
 import type { PhoneThingTab } from '../../data/thingPage';
-import { THING_PAGE_COPY } from '../../data/thingPage';
+import { thingPageCopy } from '../../data/thingPage';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ChevronRight } from '../../ui/icons';
@@ -30,6 +32,9 @@ export function ThingTabs({
   /** The screen's side padding: the tabs' hairline runs to the screen's edges. */
   inset: number;
 }) {
+  const { rawLocale } = useI18n();
+  const thingPageCopyHere = thingPageCopy(rawLocale);
+
   const theme = useTheme();
   const shown = useMemo(() => tabs.filter((t) => !t.settings), [tabs]);
   const settings = tabs.find((t) => t.settings);
@@ -44,7 +49,7 @@ export function ThingTabs({
         settings ? (
           <Touchable
             accessibilityLabel={settings.spoken}
-            accessibilityHint={THING_PAGE_COPY.settingsHint}
+            accessibilityHint={thingPageCopyHere.settingsHint}
             onPress={onSettings}
             feedback="wash"
             style={{ minHeight: 44, paddingLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}

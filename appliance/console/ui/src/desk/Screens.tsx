@@ -6,14 +6,16 @@
  * side of it: the chips, the pictures (fetched through the console server, which asks the runtime), what the modal's
  * buttons do (the ask's card, the look's step, a server's screen), and telling the runtime which outputs there are.
  */
+
 import type { ScreenCalm } from '@whombat/screen';
 import { type AskView, Screen, type ScreenProps } from '@whombat/screen/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useT } from '../i18n/react';
 import type { DeskCalm } from '../lib/calm';
 import { DEFAULT_BAR } from '../lib/calm';
 import type { Client } from '../lib/client';
 import type { AgentFace, DeskFound } from '../lib/desk';
-import { clockText, DESK, DESK_WORDS, dateText } from '../lib/deskCopy';
+import { clockText, dateText, deskCopy, deskWordsCopy } from '../lib/deskCopy';
 import type { DeskAttentionItem, DeskGrid, DeskImage, DeskOutputGrid } from '../lib/grid';
 import { type PlacedOutput, SIZE_AGAIN_MS, sizeReport } from '../lib/outputs';
 import { useStageSize } from '../ui/Stage';
@@ -199,6 +201,9 @@ export interface GridGlanceProps extends Omit<ChipsProps, 'calm'>, ScreenActions
 
 /** The glance as a screen of widgets: the grid at the stage's size, the console's chips in its top bar. */
 export function GridGlance(props: GridGlanceProps) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+
   const stage = useStageSize();
   const [sheet, setSheet] = useState<'status' | 'done' | null>(null);
   const bar = props.calmGlance ?? { bar: DEFAULT_BAR, update: null };
@@ -215,6 +220,7 @@ export function GridGlance(props: GridGlanceProps) {
         name={props.name}
         assistant={props.paired.assistant.name}
         timeZone={props.paired.timeZone}
+        locale={t.locale}
         now={props.now}
         chips={<BarChips {...props} calm={bar} onSheet={() => setSheet('status')} />}
         loadImage={props.loadImage}
@@ -263,6 +269,10 @@ export type MonitorMode = 'screen' | 'dim' | 'dark';
 
 /** A monitor's chips: whether the box is online, and whether it is locked; it only shows them. */
 function MonitorChips({ unlocked }: { unlocked: boolean }) {
+  const t = useT();
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   const { summary } = useNetwork();
   return (
     <>
@@ -314,6 +324,7 @@ export function MonitorScreens({
   onlyTime: boolean;
   loadImage: (image: DeskImage) => Promise<string>;
 }) {
+  const { locale } = useT();
   const screenCalmOf = useMemo(() => screenCalm(calm), [calm]);
   const renderFace = useCallback((size: number) => (face ? <Face face={face} size={size} /> : null), [face]);
   return (
@@ -338,6 +349,7 @@ export function MonitorScreens({
                 name={name}
                 assistant={assistant}
                 timeZone={timeZone}
+                locale={locale}
                 now={now}
                 chips={<MonitorChips unlocked={unlocked} />}
                 loadImage={loadImage}
@@ -351,7 +363,7 @@ export function MonitorScreens({
                 <div className={styles.timeClock}>
                   <ClockText text={clockText(now, timeZone)} />
                 </div>
-                <div className={styles.timeDate}>{dateText(now, timeZone)}</div>
+                <div className={styles.timeDate}>{dateText(now, timeZone, locale)}</div>
               </div>
             )}
           </div>

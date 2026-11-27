@@ -15,6 +15,7 @@
  * whether the entries stay in the Vault; KEPT IN STEP and NOT IN YOUR VAULT are its page's own 1Password tab
  * (`connect/OnePassword.tsx`), not here. The Vault entry screen's language.
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   aiGatewayOf,
@@ -31,10 +32,11 @@ import type { GatewayProvider } from '@whombat/core/domain';
 import { useMemo, useRef, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrow, useViewContext } from '../data/BurrowProvider';
-import { CONNECTIONS_TEXT, connectionDetail } from '../data/connections';
+import { connectionDetail, connectionsText } from '../data/connections';
 import { QUIET_COPY, quietNote } from '../data/quiet';
 import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -53,6 +55,10 @@ import { WhatWhombatWatches } from './thing/WhatWhombatWatches';
 type Props = NativeStackScreenProps<RootStackParamList, 'Connection'>;
 
 export function ConnectionScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const connectionsTextHere = connectionsText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
@@ -96,7 +102,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
           if (text) return Alert.alert(text.title, text.body);
           showNotice(gatewaySavedText(provider, model.title, on));
         },
-        onError: (error) => Alert.alert('That didn’t go through', errorText(error)),
+        onError: (error) => Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(error)),
       },
     );
   };
@@ -152,7 +158,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
         >
           <View style={{ paddingHorizontal: 22, paddingBottom: 14, gap: 4 }}>
             <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-              {CONNECTIONS_TEXT.title.toUpperCase()}
+              {connectionsTextHere.title.toUpperCase()}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               {model ? <ConnectionLogo logo={model.logo} /> : null}
@@ -177,15 +183,15 @@ export function ConnectionScreen({ route, navigation }: Props) {
           {!model ? (
             notFound ? (
               // A personal connection of someone else's is a plain 404, like one that was removed (CX-25).
-              <ErrorState text={CONNECTIONS_TEXT.notFound} />
+              <ErrorState text={connectionsTextHere.notFound} />
             ) : query.error ? (
-              <ErrorState text={CONNECTIONS_TEXT.detailFailed} onRetry={() => void query.refetch()} />
+              <ErrorState text={connectionsTextHere.detailFailed} onRetry={() => void query.refetch()} />
             ) : (
-              <SkeletonRows count={4} lines={2} label={CONNECTIONS_TEXT.loadingDetail} />
+              <SkeletonRows count={4} lines={2} label={connectionsTextHere.loadingDetail} />
             )
           ) : (
             <>
-              <Section title={CONNECTIONS_TEXT.connection}>
+              <Section title={connectionsTextHere.connection}>
                 <ListRow
                   title={model.detail ?? model.title}
                   titleMono={!!model.detail}
@@ -264,8 +270,8 @@ export function ConnectionScreen({ route, navigation }: Props) {
               ) : null}
 
               {model.gateway || model.vaultSync ? null : (
-                <Section title={CONNECTIONS_TEXT.tools}>
-                  {model.tools.length === 0 ? <CardNote>{CONNECTIONS_TEXT.noTools}</CardNote> : null}
+                <Section title={connectionsTextHere.tools}>
+                  {model.tools.length === 0 ? <CardNote>{connectionsTextHere.noTools}</CardNote> : null}
                   {model.tools.map((t) => (
                     <ListRow
                       key={t.name}
@@ -293,7 +299,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
               )}
 
               {model.guide ? (
-                <Section title={CONNECTIONS_TEXT.guide(words.Name)}>
+                <Section title={connectionsTextHere.guide(words.Name)}>
                   <CardNote>{model.guide}</CardNote>
                 </Section>
               ) : null}

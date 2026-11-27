@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { BrandMark } from '@whombat/brand/react';
-import { type AppPlace, agentFaceOf, appPath, hasLooksAhead, SEARCH_WORDS } from '@whombat/client';
+import { type AppPlace, agentFaceOf, appPath, hasLooksAhead } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
 import {
   placeNewsShown,
@@ -17,10 +17,10 @@ import {
   type AnswerAction,
   api,
   type Principal,
-  SEARCH_FILTER_LABELS,
   SEARCH_FILTERS,
   type SearchAnswer,
   type SearchFilter,
+  searchFilterLabels,
 } from '@whombat/core';
 import {
   Bot,
@@ -51,6 +51,9 @@ import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { EmptyNote, ErrorNote, SkeletonRows } from '../../components/ListState';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
+import { SEARCH_WORDS } from '../../i18n/shared';
+import { useLocaleWords } from '../../i18n/words';
 import { viewerTimeZone } from '../messaging/model';
 import { useDeveloperTools } from '../settings/useDeveloperTools';
 import { THING_ICONS } from '../things/thingIcons';
@@ -137,6 +140,8 @@ function writeReturn(value: SearchReturn | null) {
  * query in the address; Back brings the query, the scroll and the focus on that result again.
  */
 export function SearchScreen({ burrow, q, type, filters: asked = {}, onChange }: SearchScreenProps) {
+  const SEARCH_FILTER_LABELS = useLocaleWords(searchFilterLabels);
+  const { tag: uiLocale } = useWebI18n();
   const { client, queries } = useWhombat();
   const navigate = useNavigateHref();
   const ids = useId();
@@ -246,7 +251,7 @@ export function SearchScreen({ burrow, q, type, filters: asked = {}, onChange }:
           // Asking again is allowed after a failure.
           askedFor.current = null;
           // AI search is an agent turn: paused while the subscription has ended (LC-10, LC-14).
-          const licence = licenceRefusalText(err);
+          const licence = licenceRefusalText(err, uiLocale);
           if (licence) toast.show(licence);
         },
       },

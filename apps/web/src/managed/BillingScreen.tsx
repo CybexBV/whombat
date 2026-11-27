@@ -12,7 +12,6 @@ import {
   billingPageOf,
   billingStateLine,
   billingTone,
-  COPY,
   canClaimMore,
   clampWhombats,
   planCardText,
@@ -23,6 +22,8 @@ import { type FormEvent, useId, useState } from 'react';
 import { AuthLayout } from '../app/auth/AuthLayout';
 import { Button } from '../components/Button';
 import { StatusDot } from '../components/StatusDot';
+import { COPY } from '../i18n/managed';
+import { useWebI18n } from '../i18n/provider';
 import styles from './managed.module.css';
 import { ErrorLine } from './screens';
 
@@ -214,6 +215,7 @@ function Subscribed({ view, onPortal, onClaim, onBack }: BillingScreenProps & { 
  * hard-coded), the Whombats stepper (1…50), the total, and the trial or Subscribe button, which goes to Stripe.
  */
 function ChoosePlan({ view, info, onCheckout, onBack }: BillingScreenProps & { view: BillingView }) {
+  const { tag: uiLocale } = useWebI18n();
   const plans = info?.plans ?? [];
   const [plan, setPlan] = useState(() => plans[0]?.id ?? '');
   const [count, setCount] = useState(() => clampWhombats(Math.max(1, view.whombats.claimed)));
@@ -247,7 +249,7 @@ function ChoosePlan({ view, info, onCheckout, onBack }: BillingScreenProps & { v
         <fieldset className={styles.plans}>
           <legend className={styles.visuallyHidden}>{T.plans}</legend>
           {plans.map((p) => {
-            const text = planCardText(p);
+            const text = planCardText(p, uiLocale);
             return (
               <label key={p.id} className={styles.plan} data-selected={p.id === plan}>
                 <input
@@ -291,7 +293,7 @@ function ChoosePlan({ view, info, onCheckout, onBack }: BillingScreenProps & { v
             >
               +
             </Button>
-            {chosen && <span className={styles.total}>{planTotalText(chosen, count)}</span>}
+            {chosen && <span className={styles.total}>{planTotalText(chosen, count, uiLocale)}</span>}
           </div>
         </fieldset>
         <ErrorLine text={error} />

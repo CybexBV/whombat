@@ -15,6 +15,7 @@ import {
   scheduleActions,
 } from '@whombat/core';
 import type { DotTone } from '../../components/StatusDot';
+import { currentLocale } from '../../i18n/provider';
 
 /**
  * A run's status and its colour. Red says something doesn't work now, so a failed run, or one that needs a look, is
@@ -56,8 +57,8 @@ export function nextRunWords(nextRunAt: string, now: Date, timeZone: string): st
   const days = -daysAgo(nextRunAt, now, timeZone);
   const clock = formatClock(nextRunAt, timeZone);
   if (days <= 0) return `Next run ${clock}`;
-  if (days < 7) return `Next run ${formatShortWeekday(nextRunAt, timeZone)} ${clock}`;
-  return `Next run ${formatDate(nextRunAt, timeZone, { now })}`;
+  if (days < 7) return `Next run ${formatShortWeekday(nextRunAt, timeZone, currentLocale())} ${clock}`;
+  return `Next run ${formatDate(nextRunAt, timeZone, { now }, currentLocale())}`;
 }
 
 /* The overview (docs/app/decisions/automation-chat.md) --------------------------------------------------------------- */

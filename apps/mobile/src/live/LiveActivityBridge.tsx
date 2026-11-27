@@ -20,6 +20,7 @@ import {
   WhombatLive,
 } from '../../modules/whombat-live';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { phoneNotifications } from '../push/phoneNotifications';
 import { liveViewer } from './viewer';
 
@@ -29,6 +30,7 @@ const RELOAD_GAP_MS = 10_000;
 const KEEPALIVE_MS = 5 * 60_000;
 
 export function LiveActivityBridge() {
+  const { rawLocale, locale } = useI18n();
   // The viewer from the bootstrap as it is when an event comes: following it would draw this again for every message.
   const { slug, people, currentBootstrap } = useBurrowBase();
   const viewerRef = useRef(() => liveViewer(currentBootstrap(), people));
@@ -49,15 +51,16 @@ export function LiveActivityBridge() {
       }
       WhombatLive.show(state.display, {
         burrow: slug,
+        locale,
         attributes: liveActivityAttributes(state.activity, slug),
       }).catch(() => {});
     },
-    [slug],
+    [slug, locale],
   );
 
-  useRealtimeEvent('run.updated', ({ run }) => render(runLiveFor(run, viewerRef.current())));
+  useRealtimeEvent('run.updated', ({ run }) => render(runLiveFor(run, viewerRef.current(), rawLocale)));
   useRealtimeEvent('approval.updated', ({ approval }) =>
-    render(approvalLiveFor(approval, viewerRef.current())),
+    render(approvalLiveFor(approval, viewerRef.current(), rawLocale)),
   );
 
   const runs = useRuns({ params: { burrow: slug }, query: {} });
@@ -137,8 +140,8 @@ export function LiveActivityBridge() {
     let alive = true;
     const viewer = viewerRef.current();
     const current = [
-      ...r.runs.map((run) => runLiveFor(run, viewer)),
-      ...a.approvals.map((approval) => approvalLiveFor(approval, viewer)),
+      ...r.runs.map((run) => runLiveFor(run, viewer, rawLocale)),
+      ...a.approvals.map((approval) => approvalLiveFor(approval, viewer, rawLocale)),
     ].filter((s): s is LiveActivityState => s !== null);
     void Promise.all([WhombatLive.active(), WhombatLive.recent()]).then(([onScreen, recent]) => {
       if (!alive) return;
@@ -156,7 +159,7 @@ export function LiveActivityBridge() {
     return () => {
       alive = false;
     };
-  }, [loads, slug, render]);
+  }, [loads, slug, render, rawLocale]);
 
   return null;
 }

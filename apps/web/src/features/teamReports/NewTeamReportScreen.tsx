@@ -11,11 +11,11 @@ import { useNavigate } from '@tanstack/react-router';
 import {
   browserDeviceWords,
   TEAM_REPORT_SECURITY_URL,
-  TEAM_REPORT_WORDS,
   teamReportClientContext,
   teamReportSentWith,
   teamReportSentWithLine,
   teamReportsUnavailableText,
+  teamReportWords,
 } from '@whombat/client';
 import { readUpdatesChannel } from '@whombat/client/managed';
 import {
@@ -31,6 +31,7 @@ import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
+import { useWebI18n } from '../../i18n/provider';
 import { PlacePage } from '../settings/Place';
 import { appVersions, useWhombatVersions } from '../settings/version';
 import { BackToReports, KindIcon } from './parts';
@@ -63,6 +64,8 @@ function webContext() {
 }
 
 export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draftId?: string | undefined }) {
+  const { tag: uiLocale } = useWebI18n();
+  const words = teamReportWords(uiLocale);
   const navigate = useNavigate();
   const ids = useId();
   const list = useTeamReports(burrow);
@@ -93,7 +96,8 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
     setExpected(shownDraft.expected);
   }, [shownDraft]);
 
-  const unavailable = list.data && !list.data.available ? teamReportsUnavailableText(list.data.reason) : null;
+  const unavailable =
+    list.data && !list.data.available ? teamReportsUnavailableText(list.data.reason, uiLocale) : null;
   const canSend = list.supported && !unavailable && text.trim().length > 0 && !create.isPending;
 
   const send = async (event: FormEvent) => {
@@ -121,17 +125,17 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
   };
 
   return (
-    <PlacePage title={TEAM_REPORT_WORDS.formTitle} back={<BackToReports />} screen="team-report-new">
+    <PlacePage title={words.formTitle} back={<BackToReports />} screen="team-report-new">
       {!list.supported ? (
-        <p className={styles.quiet}>{TEAM_REPORT_WORDS.updateFirst}</p>
+        <p className={styles.quiet}>{words.updateFirst}</p>
       ) : unavailable ? (
         <p className={styles.quiet}>{unavailable}</p>
       ) : null}
-      {shownDraft?.done ? <p className={styles.quiet}>{TEAM_REPORT_WORDS.draftDone}</p> : null}
-      {draftId && draft.isError ? <p className={styles.quiet}>{TEAM_REPORT_WORDS.draftFailed}</p> : null}
+      {shownDraft?.done ? <p className={styles.quiet}>{words.draftDone}</p> : null}
+      {draftId && draft.isError ? <p className={styles.quiet}>{words.draftFailed}</p> : null}
       <form className={styles.form} onSubmit={(e) => void send(e)} aria-busy={create.isPending || undefined}>
         <fieldset className={styles.fieldset}>
-          <legend className={styles.label}>{TEAM_REPORT_WORDS.kindQuestion}</legend>
+          <legend className={styles.label}>{words.kindQuestion}</legend>
           <div className={styles.kinds}>
             {KINDS.map((k) => (
               <label key={k} className={styles.kind} data-kind={k}>
@@ -146,8 +150,8 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
                   <KindIcon kind={k} />
                 </span>
                 <span className={styles.kindText}>
-                  <span className={styles.kindTitle}>{TEAM_REPORT_WORDS.kinds[k].title}</span>
-                  <span className={styles.kindHint}>{TEAM_REPORT_WORDS.kinds[k].hint}</span>
+                  <span className={styles.kindTitle}>{words.kinds[k].title}</span>
+                  <span className={styles.kindHint}>{words.kinds[k].hint}</span>
                 </span>
               </label>
             ))}
@@ -155,7 +159,7 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
         </fieldset>
         <div className={styles.field}>
           <label className={styles.label} htmlFor={`${ids}-text`}>
-            {TEAM_REPORT_WORDS.textLabel[kind]}
+            {words.textLabel[kind]}
           </label>
           <textarea
             id={`${ids}-text`}
@@ -171,8 +175,8 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
         {kind === 'bug' ? (
           <div className={styles.field}>
             <label className={styles.label} htmlFor={`${ids}-expected`}>
-              {TEAM_REPORT_WORDS.expectedLabel}
-              <span className={styles.optional}>{TEAM_REPORT_WORDS.optional}</span>
+              {words.expectedLabel}
+              <span className={styles.optional}>{words.optional}</span>
             </label>
             <textarea
               id={`${ids}-expected`}
@@ -192,35 +196,35 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
             aria-controls={`${ids}-sent-with`}
             onClick={() => setSentWithOpen((was) => !was)}
           >
-            <span>{TEAM_REPORT_WORDS.sentWith}</span>
+            <span>{words.sentWith}</span>
             {sentWithOpen ? null : (
-              <span className={styles.sentWithSummary}>{teamReportSentWithLine(sentWith)}</span>
+              <span className={styles.sentWithSummary}>{teamReportSentWithLine(sentWith, uiLocale)}</span>
             )}
             <Icon icon={sentWithOpen ? ChevronUp : ChevronDown} size={15} />
           </button>
           {sentWithOpen ? (
             <div id={`${ids}-sent-with`}>
               <dl className={styles.sentWithList}>
-                {teamReportSentWith(sentWith).map((row) => (
+                {teamReportSentWith(sentWith, uiLocale).map((row) => (
                   <div key={row.label}>
                     <dt>{row.label}</dt>
                     <dd>{row.value}</dd>
                   </div>
                 ))}
               </dl>
-              <p className={cx(styles.quiet, styles.sentWithNote)}>{TEAM_REPORT_WORDS.sentWithNothingElse}</p>
+              <p className={cx(styles.quiet, styles.sentWithNote)}>{words.sentWithNothingElse}</p>
             </div>
           ) : null}
         </div>
         <p className={styles.quiet} data-report-warning="">
           <Icon icon={ShieldCheck} size={15} />
-          <span>{TEAM_REPORT_WORDS.warning}</span>
+          <span>{words.warning}</span>
         </p>
         <p className={styles.quiet}>
           <span>
-            {TEAM_REPORT_WORDS.securityQuestion}{' '}
+            {words.securityQuestion}{' '}
             <a className={styles.inlineLink} href={TEAM_REPORT_SECURITY_URL} target="_blank" rel="noreferrer">
-              {TEAM_REPORT_WORDS.securityLink}
+              {words.securityLink}
             </a>
           </span>
         </p>
@@ -231,7 +235,7 @@ export function NewTeamReportScreen({ burrow, draftId }: { burrow: string; draft
         ) : null}
         <div className={styles.actions}>
           <Button type="submit" variant="primary" size="lg" disabled={!canSend}>
-            {create.isPending ? TEAM_REPORT_WORDS.sending : TEAM_REPORT_WORDS.send}
+            {create.isPending ? words.sending : words.send}
           </Button>
         </div>
       </form>

@@ -21,6 +21,7 @@ import {
   type PushPayload,
   topics,
 } from '@whombat/core';
+import { formatLocaleOf, safeLocaleOrNull } from '@whombat/core/i18n';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { TxSession } from '../commit/types';
 import { accounts, approvals, burrows, messages, notifications, principals } from '../db/schema/index';
@@ -88,7 +89,11 @@ export type QuietLookup = (principalId: string) => boolean;
 async function recipientsOf(
   services: Services,
   drafts: readonly NotificationDraft[],
-): Promise<{ quiet: QuietLookup; noPreviews: Set<string> }> {
+): Promise<{
+  quiet: QuietLookup;
+  noPreviews: Set<string>;
+  localeOf: (principalId: string) => string | null;
+}> {
   const ids = [...new Set(drafts.map((d) => d.principalId))];
   const rows = await services.db
     .select({
@@ -103,13 +108,16 @@ async function recipientsOf(
   const now = services.clock();
   const quiet = new Map<string, boolean>();
   const noPreviews = new Set<string>();
+  const locales = new Map<string, string>();
   for (const r of rows) {
     if (!r.preferences) continue;
+    const locale = safeLocaleOrNull((r.preferences as { locale?: unknown }).locale);
+    if (locale) locales.set(r.id, formatLocaleOf(locale));
     const prefs = notificationPreferencesOf(r.preferences);
     quiet.set(r.id, isQuietNow(prefs, now, zoneOf(r.preferences.timeZone, r.burrowZone)));
     if (prefs.previews === false) noPreviews.add(r.id);
   }
-  return { quiet: (id) => quiet.get(id) ?? false, noPreviews };
+  return { quiet: (id) => quiet.get(id) ?? false, noPreviews, localeOf: (id) => locales.get(id) ?? null };
 }
 
 /** The actors' short names (“Dusty”), for push titles. */
@@ -257,7 +265,7 @@ interface PendingPush {
 }
 
 async function preparePush(services: Services, drafts: readonly NotificationDraft[]) {
-  const { quiet, noPreviews } = await recipientsOf(services, drafts);
+  const { quiet, noPreviews, localeOf } = await recipientsOf(services, drafts);
   const names = await actorNames(services, drafts);
   const presence = presenceFor(services);
   return (draft: NotificationDraft, row: NotificationRow): PendingPush | null => {
@@ -268,6 +276,7 @@ async function preparePush(services: Services, drafts: readonly NotificationDraf
     if (draft.pushHeld || quiet(row.principalId)) return null;
     // Someone who used a client in the last minute sees it there (NT-17); what needs them always buzzes.
     if (row.kind !== 'needs_you' && presence.activeWithin(row.principalId, PUSH_HOLD_ACTIVE_MS)) return null;
+    const locale = localeOf(row.principalId);
     const preview = noPreviews.has(row.principalId)
       ? null
       : buildPushPreview({
@@ -275,18 +284,22 @@ async function preparePush(services: Services, drafts: readonly NotificationDraf
           actor: names.get(row.actorId) ?? GENERIC_PUSH_TITLE,
           where: row.where,
           text: draft.previewText ?? row.text,
+          locale,
         });
+    const payload: PushPayload & { preview?: false } = {
+      burrow: burrowSlug,
+      notificationId: row.id,
+      kind: row.kind,
+      // Previews off: the same generic words the phone shows.
+      title: preview?.title ?? GENERIC_PUSH_TITLE,
+      body: preview?.body ?? genericPushText(row.kind, locale),
+      path: linkPath(burrowSlug, row.link),
+      // Says “no preview” outright, so a client never has to recognise the generic words in some language.
+      ...(preview ? {} : { preview: false as const }),
+    };
     return {
       principalId: row.principalId,
-      payload: {
-        burrow: burrowSlug,
-        notificationId: row.id,
-        kind: row.kind,
-        // Previews off: the same generic words the phone shows (NT-14).
-        title: preview?.title ?? GENERIC_PUSH_TITLE,
-        body: preview?.body ?? genericPushText(row.kind),
-        path: linkPath(burrowSlug, row.link),
-      },
+      payload,
       options: {
         ...(draft.group ? { group: draft.group } : {}),
         ...(preview ? { preview } : {}),

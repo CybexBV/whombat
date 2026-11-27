@@ -28,7 +28,6 @@ import {
   CHANNEL_TEXT,
   type CheckedPreview,
   COMMUNITY_TEXT,
-  COPY,
   channelErrorText,
   channelView,
   coverageGaps,
@@ -55,14 +54,14 @@ import {
   previewDiagnostics,
   readOwnAddress,
   readUpdatesChannel,
-  SCOPE_LABELS,
+  scopeLabels,
   THIS_WHOMBAT_TEXT,
-  UPDATE_TEXT,
   updateCheckNotice,
   updatePollMs,
+  updateText,
   updateView,
   WHATS_NEW_PATH,
-  WHATS_NEW_TEXT,
+  whatsNewText,
 } from '@whombat/client/managed';
 import { useBackupCheckpoints, useSessionProtocol } from '@whombat/client/react';
 import {
@@ -94,6 +93,9 @@ import { StatusDot } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { COPY } from '../../i18n/managed';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { saveBlob } from '../../lib/saveBlob';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { BOX_PAGE_TEXT } from '../../managed/pageText';
@@ -249,6 +251,7 @@ export function ManagedBackups({
   agentName: string;
   burrow?: string;
 }) {
+  const SCOPE_LABELS = useLocaleWords(scopeLabels);
   const { managed, session } = useAppServices();
   const [backupOpen, setBackupOpen] = useState(setUp);
   const shown = useBackupOptionsShown();
@@ -309,9 +312,11 @@ export function ManagedBackups({
           meta={
             b.state === 'unprotected'
               ? // What a missing destination blocks (UP-F1): breaking updates wait for a checkpoint.
-                `${MANAGED_TEXT.backup.unprotectedMeta} ${backupBlocksText(status) ?? ''}`.trim()
+                `${MANAGED_TEXT.backup.unprotectedMeta} ${backupBlocksText(status, currentLocale()) ?? ''}`.trim()
               : [
-                  b.lastSuccessAt ? MANAGED_TEXT.backup.last(ago(b.lastSuccessAt)) : MANAGED_TEXT.backup.none,
+                  b.lastSuccessAt
+                    ? MANAGED_TEXT.backup.last(ago(b.lastSuccessAt, currentLocale()))
+                    : MANAGED_TEXT.backup.none,
                   b.lastFailure?.reason,
                   b.recoverable ? MANAGED_TEXT.backup.recoverable : null,
                 ]
@@ -424,9 +429,12 @@ export function ManagedAbout({
   /** CONNECTION with the box's fingerprint; false where it is Advanced's (the signing keys). */
   connection?: boolean;
 }) {
+  const newsWords = useLocaleWords(whatsNewText);
+  const updateWords = useLocaleWords(updateText);
   const { managed, session } = useAppServices();
   const toast = useToast();
-  const updates = updateView(status);
+  const { tag: uiLocale } = useWebI18n();
+  const updates = updateView(status, { locale: uiLocale });
   const summary = useReleaseSummary(updates.summaryOf);
   const [installing, setInstalling] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -438,8 +446,8 @@ export function ManagedAbout({
     sessionOps
       .applianceUpdateCheck(session)
       .then(
-        ({ outcome }) => toast.show(updateCheckNotice(outcome, status.update?.askFirst)),
-        (e) => toast.show(e instanceof OperationError ? e.message : UPDATE_TEXT.failed),
+        ({ outcome }) => toast.show(updateCheckNotice(outcome, status.update?.askFirst, uiLocale)),
+        (e) => toast.show(e instanceof OperationError ? e.message : updateWords.failed),
       )
       .finally(() => {
         setChecking(false);
@@ -451,12 +459,12 @@ export function ManagedAbout({
     setInstalling(release);
     sessionOps.applianceUpdateInstall(session, release).then(
       () => {
-        toast.show(UPDATE_TEXT.installing);
+        toast.show(updateWords.installing);
         onChanged?.();
       },
       (e) => {
         setInstalling(null);
-        toast.show(e instanceof OperationError ? e.message : UPDATE_TEXT.failed);
+        toast.show(e instanceof OperationError ? e.message : updateWords.failed);
         onChanged?.();
       },
     );
@@ -474,7 +482,7 @@ export function ManagedAbout({
               action={
                 row.action === 'backup' ? (
                   <Button variant="secondary" size="sm" onClick={onSetUpBackups}>
-                    {UPDATE_TEXT.setUpBackups}
+                    {updateWords.setUpBackups}
                   </Button>
                 ) : row.action === 'install' && row.release ? (
                   <Button
@@ -483,12 +491,12 @@ export function ManagedAbout({
                     disabled={installing === row.release}
                     onClick={() => row.release && install(row.release)}
                   >
-                    {UPDATE_TEXT.install}
+                    {updateWords.install}
                   </Button>
                 ) : i === 0 && canCheck ? (
                   // The label says it is checking: a spinner would change the button’s width under the pointer.
                   <Button variant="secondary" size="sm" disabled={checking} onClick={check}>
-                    {checking ? UPDATE_TEXT.checking : UPDATE_TEXT.check}
+                    {checking ? updateWords.checking : updateWords.check}
                   </Button>
                 ) : undefined
               }
@@ -496,8 +504,8 @@ export function ManagedAbout({
           ))}
           {/* What changed, in plain words (the plain-language changelog, `/settings/whats-new`). */}
           <Row
-            title={WHATS_NEW_TEXT.link}
-            meta={WHATS_NEW_TEXT.linkMeta}
+            title={newsWords.link}
+            meta={newsWords.linkMeta}
             action={
               <RouterButtonLink
                 variant="secondary"
@@ -505,7 +513,7 @@ export function ManagedAbout({
                 to={WHATS_NEW_PATH as never}
                 reloadDocument={whatsNewOpensFresh()}
               >
-                {WHATS_NEW_TEXT.open}
+                {newsWords.open}
               </RouterButtonLink>
             }
           />
@@ -543,10 +551,12 @@ export function ManagedAbout({
  * manager says it keeps it. Saved at once; shows the choice until the box's next status agrees.
  */
 function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; onChanged?: () => void }) {
+  const updateWords = useLocaleWords(updateText);
   const ids = useId();
   const toast = useToast();
   const { session } = useAppServices();
-  const view = askFirstView(status);
+  const { tag: uiLocale } = useWebI18n();
+  const view = askFirstView(status, uiLocale);
   const [wanted, setWanted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const shown = view?.on;
@@ -563,12 +573,12 @@ function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; onChanged
       .then(
         (r) => {
           setWanted(r.askFirst);
-          toast.show(r.askFirst === next ? UPDATE_TEXT.askSwitched(r.askFirst) : UPDATE_TEXT.failed);
+          toast.show(r.askFirst === next ? updateWords.askSwitched(r.askFirst) : updateWords.failed);
           onChanged?.();
         },
         (e) => {
           setWanted(null);
-          toast.show(e instanceof OperationError ? e.message : UPDATE_TEXT.failed);
+          toast.show(e instanceof OperationError ? e.message : updateWords.failed);
         },
       )
       .finally(() => setBusy(false));
@@ -580,7 +590,7 @@ function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; onChanged
           {view.title}
         </label>
         <span className={styles.rowMeta} id={`${ids}-hint`}>
-          {on ? UPDATE_TEXT.askOn : UPDATE_TEXT.askOff}
+          {on ? updateWords.askOn : updateWords.askOff}
         </span>
       </span>
       <Toggle
@@ -708,6 +718,7 @@ function floors(status: ApplianceStatus): { platform: string; minBuild: number }
 /* Diagnostic bundles (CT-52) ------------------------------------------------------------------------ */
 
 export function DiagnosticsSection() {
+  const { tag: uiLocale } = useWebI18n();
   const { session } = useAppServices();
   const t = COPY.diagnostics;
   const [list, setList] = useState<DiagnosticBundleSummary[] | null>(null);
@@ -828,7 +839,11 @@ export function DiagnosticsSection() {
             <Row
               dot="mut"
               title={d.scopes.map((sc) => t.scopeNames[sc] ?? sc).join(' · ')}
-              meta={[ago(d.createdAt), formatBytes(d.size), t.downloads(d.downloads)].join(' · ')}
+              meta={[
+                ago(d.createdAt, uiLocale),
+                formatBytes(d.size, uiLocale),
+                t.downloads(d.downloads),
+              ].join(' · ')}
               action={
                 <span style={{ display: 'flex', gap: 8 }}>
                   <Button
@@ -1037,7 +1052,7 @@ export function DevicesTab({
           <Row
             dot="ok"
             title={`${mine.label} · ${MANAGED_TEXT.thisBrowser}`}
-            meta={MANAGED_TEXT.seen(ago(mine.lastSeenAt))}
+            meta={MANAGED_TEXT.seen(ago(mine.lastSeenAt, currentLocale()))}
           />
         )}
         {others.map((d) => (
@@ -1051,8 +1066,8 @@ export function DevicesTab({
                 : d.revocation === 'applied'
                   ? MANAGED_TEXT.removedApplied
                   : byPasskey.has(d.endpointId)
-                    ? `${PASSKEY_COPY.newDeviceMeta} · ${MANAGED_TEXT.seen(ago(d.lastSeenAt))}`
-                    : MANAGED_TEXT.seen(ago(d.lastSeenAt))
+                    ? `${PASSKEY_COPY.newDeviceMeta} · ${MANAGED_TEXT.seen(ago(d.lastSeenAt, currentLocale()))}`
+                    : MANAGED_TEXT.seen(ago(d.lastSeenAt, currentLocale()))
             }
             action={
               d.revocation === 'none' ? (

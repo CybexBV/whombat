@@ -4,8 +4,10 @@
  * look's card and *Ask {assistant} to look into it* use, which buttons a look's card has, and *Ignore* and *Not now*'s
  * request and answer; since 3.5 (Whombat look-research.md, CG-374…) what the assistant found out and its step. Pure.
  */
+
+import { english, type Translate } from '../i18n/translate';
 import { type DeskAsk, type DeskGlance, type DeskLook, deskErrorCode, type LookQuietHow } from './desk';
-import { DESK, DESK_WORDS, fill } from './deskCopy';
+import { deskCopy, deskWordsCopy, fill } from './deskCopy';
 
 /** One row of Needs you: an ask, or something that needs a look. */
 export type NeedRow = { kind: 'ask'; ask: DeskAsk } | { kind: 'look'; look: DeskLook };
@@ -27,8 +29,10 @@ export function needRows(g: DeskGlance): NeedRow[] {
 }
 
 /** “pve-02 is down.”, “Home Assistant needs a look.” */
-export const lookTitle = (l: DeskLook): string =>
-  fill(l.state === 'down' ? DESK_WORDS.status.down : DESK_WORDS.status.look, { server: l.name });
+export const lookTitle = (l: DeskLook, t: Translate = english): string => {
+  const DESK_WORDS = deskWordsCopy(t);
+  return fill(l.state === 'down' ? DESK_WORDS.status.down : DESK_WORDS.status.look, { server: l.name });
+};
 
 /** A reason as a sentence on the card: with its full stop. */
 export const lookDetail = (l: DeskLook): string | null =>
@@ -38,7 +42,9 @@ export const lookDetail = (l: DeskLook): string | null =>
  * What *Ask {assistant} to look into it* sends as the person's words: the line's own question (QN-20), else DK-96's
  * “Please take a look at {name}: {reason}.”; at most a question's 500.
  */
-export function lookQuestion(l: DeskLook): string {
+export function lookQuestion(l: DeskLook, t: Translate = english): string {
+  const DESK_WORDS = deskWordsCopy(t);
+
   if (l.question) return l.question.slice(0, 500);
   const reason = l.reason?.replace(/[.\s]+$/, '');
   const words = reason
@@ -63,9 +69,9 @@ export const lookStep = (l: DeskLook): string | null =>
   (l.research?.state === 'found' && l.research.fix) || null;
 
 /** A look's title: the assistant's once it found out (“Zigbee stopped working in Home Assistant”), else the usual. */
-export function researchTitle(l: DeskLook): string {
+export function researchTitle(l: DeskLook, t: Translate = english): string {
   const stage = lookStage(l);
-  return stage && stage !== 'looking' && l.research?.title ? l.research.title : lookTitle(l);
+  return stage && stage !== 'looking' && l.research?.title ? l.research.title : lookTitle(l, t);
 }
 
 /**
@@ -73,7 +79,14 @@ export function researchTitle(l: DeskLook): string {
  * it.” with the reason so far, while taking the step “I’m on it.”, else its summary (or `fallback`, what the screen
  * said before).
  */
-export function researchSays(l: DeskLook | undefined, stage: LookStage, fallback: string | null): string {
+export function researchSays(
+  l: DeskLook | undefined,
+  stage: LookStage,
+  fallback: string | null,
+  t: Translate = english,
+): string {
+  const DESK_WORDS = deskWordsCopy(t);
+
   if (stage === 'looking') {
     const reason = l?.reason?.replace(/[.\s]+$/, '');
     return reason ? fill(DESK_WORDS.looks.lookingSoFar, { reason }) : DESK_WORDS.looks.looking;
@@ -149,14 +162,23 @@ export function parseStepAnswer(status: number, body: unknown): StepAnswer {
 export const STEP_WAIT_MS = 10_000;
 
 /** What the card says after Ignore or Not now (QN-20), before it closes. */
-export const quietDone = (how: LookQuietHow): string =>
-  how === 'ignore' ? DESK_WORDS.looks.ignored : DESK_WORDS.looks.snoozed;
+export const quietDone = (how: LookQuietHow, t: Translate = english): string => {
+  const DESK_WORDS = deskWordsCopy(t);
+  return how === 'ignore' ? DESK_WORDS.looks.ignored : DESK_WORDS.looks.snoozed;
+};
 
 /** How long the card shows that before it closes (CG-334). */
 export const QUIET_DONE_MS = 2500;
 
 /** A refusal in plain words on the card (CG-334, CG-376); `locked` says nothing: the PIN pad says it. */
-export function quietRefusal(a: QuietAnswer | StepAnswer, name: string): string | null {
+export function quietRefusal(
+  a: QuietAnswer | StepAnswer,
+  name: string,
+  t: Translate = english,
+): string | null {
+  const DESK = deskCopy(t);
+  const DESK_WORDS = deskWordsCopy(t);
+
   if (a === 'notAllowed') return fill(DESK.lookNotAllowed, { name });
   if (a === 'gone') return DESK.lookChanged;
   if (a === 'failed') return DESK_WORDS.talkFailed;
@@ -175,7 +197,10 @@ export interface AssistantLine {
  * The line while something needs the person, else none: a look's title with the offer to look into it, an ask's “{title}
  * needs a decision.” with “Touch to answer”, or on a locked screen without titles how many things need the person.
  */
-export function assistantLine(g: DeskGlance | null): AssistantLine | null {
+export function assistantLine(g: DeskGlance | null, t: Translate = english): AssistantLine | null {
+  const DESK_WORDS = deskWordsCopy(t);
+  const DESK = deskCopy(t);
+
   if (!g || needsTotal(g) === 0) return null;
   const first = needRows(g)[0];
   const s = DESK_WORDS.status;
@@ -193,7 +218,7 @@ export function assistantLine(g: DeskGlance | null): AssistantLine | null {
             : lookActions(first.look).fix
               ? DESK_WORDS.looks.offer
               : DESK.youOffer;
-    return { text: researchTitle(first.look), more, opens: first };
+    return { text: researchTitle(first.look, t), more, opens: first };
   }
   if (first?.kind === 'ask') {
     const about = first.ask.title.trim().replace(/[?.]+$/, '');

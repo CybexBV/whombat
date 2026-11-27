@@ -34,7 +34,7 @@ import {
   type WatchItem,
   type WorkingTask,
 } from '@whombat/core';
-import { APPROVAL_ASK_WORDS } from '@whombat/core/approvals';
+import { APPROVAL_ASK_WORDS, approvalAskWords } from '@whombat/core/approvals';
 import { and, desc, eq, gt, gte, inArray, isNull, ne, or, type SQL, sql } from 'drizzle-orm';
 import { windowStartOf } from '../care/window';
 import { chatListTitle, chatRowsOf } from '../chats/read';
@@ -52,6 +52,9 @@ import {
   needsYouSnoozes,
   plans,
 } from '../db/schema/index';
+import { tServer } from '../i18n/catalog';
+import { burrowLocale } from '../i18n/locale';
+import { localizeTree } from '../i18n/phrases';
 import { liveResearches } from '../looks/research';
 import type { PrincipalRow } from '../read/principals';
 import { loadAgentRow } from '../read/principals';
@@ -59,7 +62,7 @@ import type { Services } from '../services';
 import { TEAM_REPORT_ACTION, teamReportDraftHref } from '../team-reports/commands';
 import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
-import { connectionVerdict, withNotice } from '../things/quiet/connection';
+import { carryNotice, connectionVerdict, withNotice } from '../things/quiet/connection';
 import { NO_QUIET, type QuietBook, quietBook, type ThingQuiet } from '../things/quiet/store';
 import { activeWindow, thingCause } from '../things/quiet/windows';
 import { causeHref } from '../things/quiet/wire';
@@ -184,6 +187,7 @@ const BODY_MAX = 600;
 
 async function approvalItems(ctx: SourceCtx, viewer: PrincipalRow, burrow: BurrowRow): Promise<Sourced[]> {
   const rows = await decidableApprovals(ctx.db, burrow.id, viewer);
+  const locale = ctx.locale;
   const start = windowStartOf(burrow);
   const later = nextLocalTime(ctx.now, burrow.timeZone, start.hour, start.minute);
   return rows.map((r) => {
@@ -196,11 +200,11 @@ async function approvalItems(ctx: SourceCtx, viewer: PrincipalRow, burrow: Burro
       body: clip(r.explainer || r.summary || '', BODY_MAX),
       at: new Date(r.created_at).toISOString(),
       approvalNumber: r.number,
-      actions: approvalActions(later),
+      actions: approvalActions(later, locale),
     };
     return {
       conversationId: r.conversation_id,
-      item: r.action_name === TEAM_REPORT_ACTION ? draftItem(item, r.action_data) : item,
+      item: r.action_name === TEAM_REPORT_ACTION ? draftItem(item, r.action_data, locale) : item,
     };
   });
 }
@@ -210,7 +214,7 @@ async function approvalItems(ctx: SourceCtx, viewer: PrincipalRow, burrow: Burro
  * be sent, and its form is where the person changes it (Edit). A draft too long for the item can't be read there in
  * full, so it isn't sent from there either: its card, which holds all of it, takes the yes.
  */
-function draftItem(item: NeedsYouItem, data: unknown): NeedsYouItem {
+function draftItem(item: NeedsYouItem, data: unknown, locale?: string): NeedsYouItem {
   const words = teamReportDraftWords(data);
   const draftId = (data as { draftId?: unknown } | null)?.draftId;
   const fits = words !== null && words.length <= BODY_MAX;
@@ -218,7 +222,7 @@ function draftItem(item: NeedsYouItem, data: unknown): NeedsYouItem {
     ...item,
     ...(words ? { body: fits ? words : clip(words, BODY_MAX) } : {}),
     ...(typeof draftId === 'string' ? { href: teamReportDraftHref(draftId) } : {}),
-    actions: approvalActions(null).filter((a) => fits || a.kind !== 'approve'),
+    actions: approvalActions(null, locale).filter((a) => fits || a.kind !== 'approve'),
   };
 }
 
@@ -226,11 +230,13 @@ function draftItem(item: NeedsYouItem, data: unknown): NeedsYouItem {
  * The approval's words everywhere (needs-you-list.md): a yes, a yes for `later` (tonight), a no; without a later
  * time a yes and a no.
  */
-function approvalActions(later: Date | null): NeedsYouItem['actions'] {
+function approvalActions(later: Date | null, locale?: string): NeedsYouItem['actions'] {
+  const ask = locale ? approvalAskWords(locale) : APPROVAL_ASK_WORDS;
+  const words = { yes: ask.now, yesOnly: ask.yes, tonight: ask.later, no: ask.no };
   return [
     {
       id: 'approve',
-      label: later ? APPROVAL_WORDS.yes : APPROVAL_WORDS.yesOnly,
+      label: later ? words.yes : words.yesOnly,
       style: 'primary',
       kind: 'approve',
     },
@@ -238,14 +244,14 @@ function approvalActions(later: Date | null): NeedsYouItem['actions'] {
       ? [
           {
             id: 'later',
-            label: APPROVAL_WORDS.tonight,
+            label: words.tonight,
             style: 'secondary',
             kind: 'approve_later',
             at: later.toISOString(),
           } as const,
         ]
       : []),
-    { id: 'decline', label: APPROVAL_WORDS.no, style: 'secondary', kind: 'decline' },
+    { id: 'decline', label: words.no, style: 'secondary', kind: 'decline' },
   ];
 }
 
@@ -306,12 +312,14 @@ async function questionItems(ctx: SourceCtx, viewer: PrincipalRow, chats: Viewer
   const rows = await (inThreads && inTasks
     ? inThreads.unionAll(inTasks).orderBy(desc(messages.createdAt)).limit(10)
     : (inThreads ?? inTasks ?? []));
+  const locale = ctx.locale;
   return rows.map((r) => {
     const first =
       r.text
         .split('\n')
         .find((l) => l.trim())
-        ?.trim() ?? `${assistantCalled(name)} asked you something.`;
+        ?.trim() ??
+      tServer(locale, 'home.question.asked', { assistant: assistantCalled(name, true, locale) });
     const room = rooms.get(r.conversationId);
     return {
       conversationId: r.conversationId,
@@ -323,15 +331,17 @@ async function questionItems(ctx: SourceCtx, viewer: PrincipalRow, chats: Viewer
         title: clip(first.replace(/[*_`#>]/g, ''), 200),
         body:
           room === 'feedback'
-            ? 'In Feedback'
+            ? tServer(locale, 'home.question.inFeedback')
             : r.chatTitle && !room
-              ? clip(`In “${r.chatTitle}”`, 600)
-              : `In your chat with ${assistantCalled(name, false)}`,
+              ? clip(tServer(locale, 'home.question.inChat', { chat: r.chatTitle }), 600)
+              : tServer(locale, 'home.question.inYourChat', {
+                  assistant: assistantCalled(name, false, locale),
+                }),
         at: r.createdAt.toISOString(),
         actions: [
           {
             id: 'answer',
-            label: 'Answer',
+            label: tServer(locale, 'home.action.answer'),
             style: 'primary',
             kind: 'open',
             // The thread it asks in (CHT-08); a task chat from before Chat opens as itself.
@@ -365,7 +375,7 @@ export function homeShowsConnection(catalogId: string): boolean {
  * Connections that need connecting again; not when the person ignored it, snoozed it or Whombat doesn't watch its sign-in
  * (quiet-notices.md QN-21, QN-22).
  */
-async function connectionItems(reads: HomeReads, now: Date): Promise<NeedsYouItem[]> {
+async function connectionItems(reads: HomeReads, now: Date, locale?: string): Promise<NeedsYouItem[]> {
   const [all, book] = await Promise.all([reads.connections(), reads.quiet()]);
   const rows = all.filter(
     (r) =>
@@ -373,7 +383,7 @@ async function connectionItems(reads: HomeReads, now: Date): Promise<NeedsYouIte
       connectionVerdict(r, book.of(thingId('connection', r.id)), now)?.status !== 'ok',
   );
   if (!rows.length) return [];
-  const assistant = assistantCalled(await reads.assistantName());
+  const assistant = assistantCalled(await reads.assistantName(), true, locale);
   return rows.map((r) => ({
     id: `connection:${r.id}`,
     ref: { kind: 'connection', id: r.id },
@@ -381,17 +391,17 @@ async function connectionItems(reads: HomeReads, now: Date): Promise<NeedsYouIte
     severity: 'bad',
     // Only a person can sign in again (QN-01).
     nature: 'you',
-    title: clip(`${r.label} needs you to sign in again`, 200),
+    title: clip(tServer(locale, 'home.connection.signInTitle', { name: r.label }), 200),
     // A gateway carries turns with Whombat's own key; what stops is reading its limits (FP-01).
     body: isGatewayConnection(r.catalogId)
-      ? 'Whombat can’t read its limits until then.'
-      : `${assistant} can’t use it until then.`,
+      ? tServer(locale, 'home.connection.gatewayUntil')
+      : tServer(locale, 'home.connection.assistantUntil', { assistant }),
     at: (r.checkedAt ?? r.updatedAt).toISOString(),
     subject: { kind: 'connection', id: r.id, name: clip(r.label, 120) },
     actions: [
       {
         id: 'reconnect',
-        label: 'Sign in again',
+        label: tServer(locale, 'home.action.signInAgain'),
         style: 'primary',
         kind: 'open',
         href: thingHref('connection', r.id),
@@ -448,6 +458,7 @@ export function connectionThing(
   timeZone: string,
   partOf?: string | null,
   quiet: { of: ThingQuiet; now: Date } = { of: NO_QUIET, now: new Date() },
+  locale?: string,
 ): ThingSummary {
   const glance = row.glance as ConnectionGlance | null;
   // The dot from the lines that aren't quiet (quiet-notices.md QN-14, QN-S07); the line on the card stays true.
@@ -472,8 +483,8 @@ export function connectionThing(
       {
         ...base,
         status,
-        line: 'Needs you to sign in again',
-        ...(status !== 'ok' ? { reason: 'Needs you to sign in again' } : {}),
+        line: tServer(locale, 'home.connection.signInLine'),
+        ...(status !== 'ok' ? { reason: tServer(locale, 'home.connection.signInLine') } : {}),
         facts: [],
         ...quietUntil,
       },
@@ -502,7 +513,11 @@ export function connectionThing(
           : glance.line
             ? { line: clip(glance.line, 160) }
             : row.glanceAt
-              ? { line: `Last checked ${localTime(row.glanceAt, timeZone)}` }
+              ? {
+                  line: tServer(locale, 'home.connection.lastChecked', {
+                    time: localTime(row.glanceAt, timeZone),
+                  }),
+                }
               : {}),
         facts: glance.facts.slice(0, 8),
         ...(cause ? { causedBy: cause } : {}),
@@ -512,7 +527,13 @@ export function connectionThing(
       v?.asking,
     );
   }
-  return { ...base, status: 'unknown', line: 'Not checked yet', facts: [], ...quietUntil };
+  return {
+    ...base,
+    status: 'unknown',
+    line: tServer(locale, 'home.connection.notChecked'),
+    facts: [],
+    ...quietUntil,
+  };
 }
 
 const KIND_ORDER = { server: 0, connection: 1, device: 2 } as const;
@@ -712,6 +733,7 @@ export function homeReads(
   let quiet: Promise<QuietBook> | undefined;
   let chats: Promise<ViewerChats> | undefined;
   let research: Promise<Map<string, LookResearch>> | undefined;
+  let locale: Promise<string> | undefined;
   const agentRow = () =>
     (agent ??= known.agent ? Promise.resolve(known.agent) : loadAgentRow(db, person.burrowId));
   const quietRows = () => (quiet ??= quietBook(db, [person.burrowId]));
@@ -738,6 +760,8 @@ export function homeReads(
     quiet: quietRows,
     /** The viewer's chats with the agent, for Needs you, Working on and Chats. */
     chats: () => (chats ??= viewerChats(db, person, true, agentRow())),
+    /** The locale this read renders in: the burrow's (one person per box). */
+    locale: () => (locale ??= burrowLocale(services)),
     /** What the assistant found out about each look; none when it can't be read. */
     research: () =>
       (research ??= liveResearches(db, viewer.burrow.id).catch(() => new Map<string, LookResearch>())),
@@ -762,14 +786,15 @@ async function needsYouOf(
   waiting: Map<string, Date>;
   research: Map<string, LookResearch>;
 }> {
-  const ctx = reads.ctx;
+  const locale = await reads.locale();
+  const ctx = { ...reads.ctx, locale };
   const chats = reads.chats();
   const [approvals, asked, features, reconnect, others, marks, mine, name] = await Promise.all([
     approvalItems(ctx, viewer.principal, viewer.burrow),
     chats.then((c) => questionItems(ctx, viewer.principal, c)),
     // Tracker feature requests waiting for the person's answer (report-trackers.md TA-44).
     featureRequestItems(services.db, viewer.burrow.id),
-    connectionItems(reads, now),
+    connectionItems(reads, now, locale),
     collectNeedsYou(ctx),
     reads.marks(),
     chats,
@@ -785,14 +810,14 @@ async function needsYouOf(
     if (!seen || seen.getTime() < at.getTime()) waiting.set(conversationId, at);
   }
   const research = await reads.research();
-  const ask = askWord(name);
+  const ask = askWord(name, locale);
   const all = [
     ...approvals.map((a) => a.item),
     ...questions.map((q) => q.item),
     ...reconnect,
     ...others.items,
   ]
-    .map((i) => withAskWord(i, ask))
+    .map((i) => homeWords(withAskWord(i, ask), locale))
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.at.localeCompare(a.at));
   const items = all
     .filter((i) => !marks.has(refKey(i.ref)))
@@ -812,8 +837,27 @@ async function needsYouOf(
 }
 
 /** *Ask {assistant}* (needs-you-list.md NYL-07): the word the apps and an older app's *Look into it* button say. */
-function askWord(name: string | null): string {
-  return `Ask ${assistantCalled(name, false)}`.slice(0, 60);
+function askWord(name: string | null, locale?: string): string {
+  return tServer(locale, 'home.action.ask', { assistant: assistantCalled(name, false, locale) }).slice(0, 60);
+}
+
+/** The limits of Home's own shapes, so a Dutch title or body may be longer than its English. */
+const HOME_LIMITS = {
+  title: 200,
+  body: 600,
+  label: 60,
+  line: 160,
+  reason: 160,
+  note: 80,
+  text: 500,
+} as const;
+
+/**
+ * An item or thing in the reader's language: what a source wrote in English (a connection's stored glance line, a
+ * server's or device's words) through the phrasebook; ids, links and refs stay as they are.
+ */
+export function homeWords<T>(value: T, locale: string | undefined): T {
+  return localizeTree(value, locale, { max: HOME_LIMITS });
 }
 
 /** An item's *Look into it* says *Ask {assistant}*: it asks in the thing's own thread now. */
@@ -858,10 +902,11 @@ export async function things(
 }
 
 async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads: HomeReads) {
+  const locale = await reads.locale();
   const [connections, book, others] = await Promise.all([
     reads.connections(),
     reads.quiet(),
-    collectThings(reads.ctx),
+    collectThings({ ...reads.ctx, locale }),
   ]);
   const [partOf, mail, github, feedback] = await Promise.all([
     partOfMap(services, viewer.burrow.id, connections).catch(() => new Map<string, string>()),
@@ -874,18 +919,31 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
     const window = activeWindow(book.of(thing.id).windows, now);
     return window ? { ...thing, quietUntil: window.endsAt.toISOString() } : thing;
   };
-  return sortThings([
+  const list = sortThings([
     ...connections.map((r) =>
-      connectionThing(r, viewer.burrow.timeZone, partOf.get(r.id), {
-        of: book.of(thingId('connection', r.id)),
-        now,
-      }),
+      connectionThing(
+        r,
+        viewer.burrow.timeZone,
+        partOf.get(r.id),
+        {
+          of: book.of(thingId('connection', r.id)),
+          now,
+        },
+        locale,
+      ),
     ),
     ...mail.map(kept),
     ...(github ? [kept(github)] : []),
     ...(feedback ? [kept(feedback)] : []),
     ...others.items,
   ]).slice(0, 200);
+  const said = homeWords(list, locale);
+  // The lines behind each thing's dot are kept beside the summary itself; the said copy keeps them too.
+  said.forEach((thing, i) => {
+    const before = list[i];
+    if (before && before !== thing) carryNotice(before, thing);
+  });
+  return said;
 }
 
 /**
@@ -911,6 +969,7 @@ async function watchListOf(
   reads: HomeReads,
 ): Promise<WatchItem[]> {
   const since = new Date(now.getTime() - 24 * 3600_000);
+  const locale = await reads.locale();
   const [connections, failedRuns, others, marks, assistantName, book] = await Promise.all([
     reads.connections(),
     services.db
@@ -936,7 +995,7 @@ async function watchListOf(
       )
       .orderBy(desc(automationRuns.createdAt))
       .limit(20),
-    collectWatch(reads.ctx),
+    collectWatch({ ...reads.ctx, locale }),
     reads.marks(),
     reads.assistantName(),
     reads.quiet(),
@@ -969,22 +1028,24 @@ async function watchListOf(
       nature: v?.worst?.nature === 'you' || (!v && r.status === 'needs_reauth') ? 'you' : 'problem',
       title: clip(
         r.status === 'needs_reauth'
-          ? `${r.label} needs you to sign in again`
+          ? tServer(locale, 'home.connection.signInTitle', { name: r.label })
           : said
-            ? `${r.label}: ${said}`
-            : `${r.label} isn’t answering`,
+            ? tServer(locale, 'home.connection.said', { name: r.label, said })
+            : tServer(locale, 'home.connection.notAnswering', { name: r.label }),
         200,
       ),
       body: clip(
         r.status === 'needs_reauth'
           ? gateway
-            ? 'Whombat can’t read its limits until then.'
-            : `${assistantCalled(assistantName)} can’t use it until then.`
+            ? tServer(locale, 'home.connection.gatewayUntil')
+            : tServer(locale, 'home.connection.assistantUntil', {
+                assistant: assistantCalled(assistantName, true, locale),
+              })
           : said
             ? gateway
-              ? 'Its page says what is left and when it comes back.'
-              : 'Its page says more.'
-            : (glance?.line ?? 'The last check got no answer.'),
+              ? tServer(locale, 'home.connection.pageSaysLeft')
+              : tServer(locale, 'home.connection.pageSaysMore')
+            : (glance?.line ?? tServer(locale, 'home.connection.noAnswer')),
         600,
       ),
       at: (r.glanceAt ?? r.checkedAt ?? r.updatedAt).toISOString(),
@@ -1010,8 +1071,8 @@ async function watchListOf(
       source: 'automation',
       severity: 'warn',
       nature: 'problem',
-      title: clip(`“${run.name}” didn’t finish`, 200),
-      body: clip(run.error ? (run.error.split('\n')[0] ?? '') : 'Its run stopped before the end.', 600),
+      title: clip(tServer(locale, 'home.run.didntFinish', { name: run.name }), 200),
+      body: clip(run.error ? (run.error.split('\n')[0] ?? '') : tServer(locale, 'home.run.stopped'), 600),
       at: (run.at ?? run.createdAt).toISOString(),
       state: 'open',
       href: `/automations/${run.automationId}`,
@@ -1025,7 +1086,7 @@ async function watchListOf(
       ? { ...i, state: 'acknowledged' }
       : { ...i, state: 'snoozed', ...(mark.until ? { snoozedUntil: mark.until.toISOString() } : {}) };
   });
-  return marked
+  return homeWords(marked, locale)
     .filter((i) => options.state === 'all' || i.state === 'open')
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.at.localeCompare(a.at))
     .slice(0, 200);

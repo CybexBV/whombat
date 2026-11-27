@@ -6,6 +6,7 @@
  * screen title, the paste button (the clipboard and a file, where the web has a box to drop on) and the browser where
  * the web has a tab. Pure: `ConnectScreen` renders it and the tests read it.
  */
+
 import {
   addressReasonOf,
   addressReasonText,
@@ -39,24 +40,29 @@ import type {
   StartNextcloudLoginResponse,
   StartServiceLoginResponse,
 } from '@whombat/core/contracts';
+import { mobileTranslator } from '../i18n/translate';
 
 /** The phone's own words around the web's form. */
-export const CONNECT_SCREEN_TEXT = {
-  /** The screen's title (PC-03). */
-  title: (name: string) => `Connect ${name}`,
-  documentation: 'Documentation',
-  /** The guided token's link (the web's). */
-  open: (name: string) => `Open ${name}`,
-  /** The paste button: the clipboard, read when pressed (the web's paste box, without the drop). */
-  paste: (name: string) => `Paste what ${name} shows`,
-  /** An address the phone doesn't know as a connectable entry (an older phone, a mistyped link). */
-  unknown: 'Whombat can’t connect that here.',
-  loading: 'Loading',
-  /** A self-hosted Whombat signs in elsewhere on its web page (PC-05): the browser opens there. */
-  onTheWeb: 'This sign-in finishes in your browser, on your Whombat’s page.',
-  /** The demo world can't sign in anywhere. */
-  demo: 'The demo can’t sign in to a service.',
-} as const;
+export function connectScreenText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The screen's title (PC-03). */
+    title: (name: string) => t('connectForm.connectScreenText.title', { name }),
+    documentation: t('connectForm.connectScreenText.documentation'),
+    /** The guided token's link (the web's). */
+    open: (name: string) => t('connectForm.connectScreenText.open', { name }),
+    /** The paste button: the clipboard, read when pressed (the web's paste box, without the drop). */
+    paste: (name: string) => t('connectForm.connectScreenText.paste', { name }),
+    /** An address the phone doesn't know as a connectable entry (an older phone, a mistyped link). */
+    unknown: t('connectForm.connectScreenText.unknown'),
+    loading: t('connectForm.connectScreenText.loading'),
+    /** A self-hosted Whombat signs in elsewhere on its web page (PC-05): the browser opens there. */
+    onTheWeb: t('connectForm.connectScreenText.onTheWeb'),
+    /** The demo world can't sign in anywhere. */
+    demo: t('connectForm.connectScreenText.demo'),
+  } as const;
+}
+export const CONNECT_SCREEN_TEXT = connectScreenText();
 
 /** Why this entry can't be connected here, in the web's words; null when it can (ConnectPage's gates). */
 export function connectGate(input: {

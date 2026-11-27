@@ -6,6 +6,7 @@
  * and log links (`routeForLink`), and `whombat://log?who=&open=`; a link's `open` event starts opened. Older pages load
  * with Load more. Export CSV stays on the web (a file download).
  */
+
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuditLogInfinite } from '@whombat/client/react';
 import { type AuditEvent, type AuditTone, auditSubtitle, groupAuditByDay } from '@whombat/core';
@@ -13,19 +14,20 @@ import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { PrincipalAvatar } from '../avatars/Avatars';
 import {
-  AUDIT_ACTOR_OPTIONS,
-  AUDIT_TEXT,
   type AuditFilters,
+  auditActorOptions,
   auditContext,
   auditDetail,
   auditFilters,
   auditKindChips,
   auditRouteParams,
   auditRow,
+  auditText,
   auditWhoName,
 } from '../data/audit';
 import { useBurrow, useNow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { useOpenLink } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -39,6 +41,10 @@ import { Touchable } from '../ui/Touchable';
 type Props = NativeStackScreenProps<RootStackParamList, 'AuditLog'>;
 
 export function AuditLogScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const auditTextHere = auditText(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const agent = useAgentWords();
   const theme = useTheme();
@@ -53,12 +59,15 @@ export function AuditLogScreen({ route, navigation }: Props) {
   // The opened row: the link's event at first, then whichever the person taps.
   const [open, setOpen] = useState<string | undefined>(filters.open);
   const ctx = useMemo(
-    () => auditContext(bootstrap.principals, now, timeZone),
-    [bootstrap.principals, now, timeZone],
+    () => auditContext(bootstrap.principals, now, timeZone, rawLocale),
+    [bootstrap.principals, now, timeZone, rawLocale],
   );
   const events = useMemo(() => query.data?.pages.flatMap((p) => p.events) ?? [], [query.data]);
   const counts = query.data?.pages[0]?.counts;
-  const days = useMemo(() => groupAuditByDay(events, now, timeZone), [events, now, timeZone]);
+  const days = useMemo(
+    () => groupAuditByDay(events, now, timeZone, rawLocale),
+    [events, now, timeZone, rawLocale],
+  );
   const whoName = auditWhoName(filters.who, bootstrap.principals);
   // `setParams` merges: a filter back at its default is set to undefined so it leaves the params.
   const change = (next: Partial<AuditFilters>) =>
@@ -139,7 +148,7 @@ export function AuditLogScreen({ route, navigation }: Props) {
                 <Button
                   label={link.label}
                   variant="secondary"
-                  onPress={() => openLink(link.ref, AUDIT_TEXT.title)}
+                  onPress={() => openLink(link.ref, auditTextHere.title)}
                   style={{ paddingHorizontal: 16 }}
                 />
               </View>
@@ -152,7 +161,7 @@ export function AuditLogScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <BackBar label="Back" onPress={goBack} />
+      <BackBar label={tMobile('managed.back')} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 28 + bottomRoom }}
@@ -167,22 +176,26 @@ export function AuditLogScreen({ route, navigation }: Props) {
       >
         <View style={{ paddingHorizontal: 22, paddingBottom: 12, gap: 6 }}>
           <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
-            {AUDIT_TEXT.title}
+            {auditTextHere.title}
           </Text>
           <Text size={14} lh={1.5} color={theme.colors.ink2}>
-            {auditSubtitle(bootstrap.burrow.name, agent.name)}
+            {auditSubtitle(bootstrap.burrow.name, agent.name, rawLocale)}
           </Text>
         </View>
         <View style={{ paddingHorizontal: 16, gap: 12, paddingBottom: 14 }}>
           <Segmented
-            options={AUDIT_ACTOR_OPTIONS}
+            options={auditActorOptions(rawLocale)}
             value={filters.actor}
             onChange={(actor) => change({ actor })}
-            label="Actor"
+            label={tMobile('screens.actor')}
           />
           {whoName ? (
             <View style={{ alignSelf: 'flex-start' }}>
-              <Chip label={`Only ${whoName} ×`} active onPress={() => change({ who: undefined })} />
+              <Chip
+                label={tMobile('audit.only', { name: whoName })}
+                active
+                onPress={() => change({ who: undefined })}
+              />
             </View>
           ) : null}
           <ScrollView
@@ -191,7 +204,7 @@ export function AuditLogScreen({ route, navigation }: Props) {
             accessibilityRole="tablist"
             contentContainerStyle={{ gap: 6, paddingVertical: 7 }}
           >
-            {auditKindChips(filters.kind, counts).map((c) => (
+            {auditKindChips(filters.kind, counts, rawLocale).map((c) => (
               <Chip
                 key={c.value}
                 label={c.label}
@@ -203,11 +216,16 @@ export function AuditLogScreen({ route, navigation }: Props) {
           </ScrollView>
         </View>
         {query.error && !query.data ? (
-          <ErrorState text={AUDIT_TEXT.loadFailed} onRetry={() => void query.refetch()} />
+          <ErrorState text={auditTextHere.loadFailed} onRetry={() => void query.refetch()} />
         ) : !query.data ? (
-          <SkeletonRows count={8} lines={2} avatarSize={28} label="Loading the audit log" />
+          <SkeletonRows
+            count={8}
+            lines={2}
+            avatarSize={28}
+            label={tMobile('screens.loading-the-audit-log')}
+          />
         ) : events.length === 0 ? (
-          <QuietText>{AUDIT_TEXT.empty}</QuietText>
+          <QuietText>{auditTextHere.empty}</QuietText>
         ) : (
           days.map((day) => (
             <View key={day.key} style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
@@ -229,7 +247,7 @@ export function AuditLogScreen({ route, navigation }: Props) {
         {query.hasNextPage ? (
           <View style={{ paddingHorizontal: 16 }}>
             <Button
-              label={query.isFetchingNextPage ? AUDIT_TEXT.loading : AUDIT_TEXT.loadMore}
+              label={query.isFetchingNextPage ? auditTextHere.loading : auditTextHere.loadMore}
               variant="secondary"
               disabled={query.isFetchingNextPage}
               onPress={() => void query.fetchNextPage()}

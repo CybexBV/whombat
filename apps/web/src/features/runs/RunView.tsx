@@ -15,6 +15,7 @@ import { type MouseEvent, type ReactNode, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { SectionLabel } from '../../components/SectionLabel';
+import { currentLocale } from '../../i18n/provider';
 import styles from './RunView.module.css';
 import {
   type RunNotice,
@@ -224,7 +225,11 @@ export function RunView({
         {activity}
 
         <div className={styles.cards}>
-          <Card title={runKeysTitle(agent.name)} meta={runKeysScope(run.branch)} metaClass={styles.scope}>
+          <Card
+            title={runKeysTitle(agent.name, currentLocale())}
+            meta={runKeysScope(run.branch, currentLocale())}
+            metaClass={styles.scope}
+          >
             <ul className={styles.keys}>
               {keys.map((k) => (
                 <li key={k.keyId} className={styles.key}>

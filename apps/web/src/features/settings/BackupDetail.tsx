@@ -21,6 +21,7 @@ import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
+import { currentLocale } from '../../i18n/provider';
 import { backupErrorText } from './BackupDestination';
 import styles from './BackupOverview.module.css';
 import { BringBack } from './BringBack';
@@ -57,7 +58,11 @@ export function BackupDetail({
           <div className={tw.dialogHead}>
             <ModalTitle className={styles.detailTitle}>{backupWhen(cp.createdAt)}</ModalTitle>
             <p className={tw.dialogLead}>
-              {D.meta(row.label, cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded), placeName)}
+              {D.meta(
+                row.label,
+                cp.bytesAdded === null ? null : formatBytes(cp.bytesAdded, currentLocale()),
+                placeName,
+              )}
             </p>
           </div>
           {cp.check ? (

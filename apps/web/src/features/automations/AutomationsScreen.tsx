@@ -5,7 +5,7 @@ import {
   automationListRows,
   automationOverview,
   problemText,
-  SCHEDULE_TEXT,
+  scheduleText,
   splitConfirm,
 } from '@whombat/client';
 import { useFindMyHome } from '@whombat/client/hosts/react';
@@ -23,6 +23,8 @@ import { Icon } from '../../components/Icon';
 import { SkeletonRows } from '../../components/ListState';
 import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
+import { useLocaleWords } from '../../i18n/words';
 import { AskBox } from '../chats/AskBox';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
 import { AutomationRow, ScheduleRow } from './AutomationRow';
@@ -58,7 +60,7 @@ function usePhoneWidth(): boolean {
 
 /** “11:22 on 23 Sep”: when the list on screen was read. */
 function savedWhen(at: number, now: Date, timeZone: string): string {
-  return `${formatClock(at, timeZone)} on ${formatDate(at, timeZone, { now })}`;
+  return `${formatClock(at, timeZone)} on ${formatDate(at, timeZone, { now }, currentLocale())}`;
 }
 
 /**
@@ -69,6 +71,7 @@ function savedWhen(at: number, now: Date, timeZone: string): string {
  * what will show here; a list that didn't load says so, and one that didn't refresh stays with the time it was read.
  */
 export function AutomationsScreen({ burrow, asking = false, onAsked }: AutomationsScreenProps) {
+  const { tag: uiLocale } = useWebI18n();
   const { data, error, isPending, refetch, isRefetching, dataUpdatedAt } = useAutomations({
     params: { burrow },
   });
@@ -114,7 +117,7 @@ export function AutomationsScreen({ burrow, asking = false, onAsked }: Automatio
     <ReadProblem
       title={data ? page.refreshFailed : page.readFailed}
       text={data ? page.savedAt(savedWhen(dataUpdatedAt, now, viewer.timeZone)) : page.readFailedText}
-      detail={problemText(error)}
+      detail={problemText(error, undefined, uiLocale)}
       words={page}
       busy={isRefetching}
       onRetry={() => void refetch()}
@@ -243,6 +246,7 @@ function OverviewList({
   /** Nothing yet: “Tell Neo…” puts the focus in the field. */
   onTell: () => void;
 }) {
+  const SCHEDULE_TEXT = useLocaleWords(scheduleText);
   const toast = useToast();
   const talk = useTalk(burrow);
   const pause = useScheduleAction(api.schedules.pause);

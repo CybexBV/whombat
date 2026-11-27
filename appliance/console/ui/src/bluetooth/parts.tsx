@@ -3,8 +3,10 @@
  * a pairing's code in very large digits (CG-205…CG-207). Rows, actions and the list are the Wi-Fi sheet's (64 px rows,
  * 44 px actions), so both sheets feel the same.
  */
+
+import { useT } from '../i18n/react';
 import { type BluetoothDevice, typedDigits } from '../lib/bluetooth';
-import { BT, deviceLine, foundLabel } from '../lib/bluetoothCopy';
+import { btCopy, deviceLine, foundLabel } from '../lib/bluetoothCopy';
 import wifiStyles from '../wifi/wifi.module.css';
 import styles from './bluetooth.module.css';
 import { Icon, KIND_ICON, SignalBars } from './icons';
@@ -38,6 +40,9 @@ export function PairedList({
   onToggle: ((d: BluetoothDevice) => void) | null;
   onRemove: ((d: BluetoothDevice) => void) | null;
 }) {
+  const t = useT();
+  const BT = btCopy(t);
+
   return (
     // The list scrolls: rows below its end are not outside the screen (the shots' check).
     <ul className={`${wifiStyles.list} ${styles.list}`} aria-label={BT.yourDevices} data-overflow-ok>
@@ -52,7 +57,7 @@ export function PairedList({
               <span className={wifiStyles.rowText}>
                 <span className={wifiStyles.rowName}>{d.name}</span>
                 <span className={wifiStyles.rowMeta} data-connected={d.connected || undefined}>
-                  {running ? (d.connected ? BT.disconnecting : BT.connecting) : deviceLine(d)}
+                  {running ? (d.connected ? BT.disconnecting : BT.connecting) : deviceLine(d, t)}
                 </span>
               </span>
             </div>
@@ -97,6 +102,9 @@ export function FoundList({
   /** null: nothing may be chosen now (a pairing is starting). */
   onPick: ((d: BluetoothDevice) => void) | null;
 }) {
+  const t = useT();
+  const BT = btCopy(t);
+
   return (
     <ul className={`${wifiStyles.list} ${styles.found}`} aria-label={BT.add} data-overflow-ok>
       {devices.map((d) => {
@@ -116,7 +124,7 @@ export function FoundList({
               <button
                 type="button"
                 className={wifiStyles.rowMain}
-                aria-label={foundLabel(d)}
+                aria-label={foundLabel(d, t)}
                 onClick={() => onPick(d)}
               >
                 {body}

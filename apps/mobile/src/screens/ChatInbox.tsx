@@ -13,6 +13,7 @@
  * phone's own (`useSettleThread`), marking the shared hooks'. Over old rows the quiet “Updating…” or “Couldn’t update ·
  * Try again” floats as over a conversation (`ReadStatePill`); a pull spins until its reads have answered.
  */
+
 import { useQueryClient } from '@tanstack/react-query';
 import {
   INBOX_WORDS,
@@ -44,7 +45,7 @@ import {
   inboxSwipe,
   parseInboxAction,
 } from '../data/chatInbox';
-import { CHAT_COPY } from '../data/chatRoom';
+import { chatCopy } from '../data/chatRoom';
 import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, plainMenu } from '../data/nativeMenu';
 import { pullSettled, pullTargets } from '../data/pullRefresh';
@@ -55,6 +56,7 @@ import { useAgentWords } from '../data/useAgent';
 import { usePrefetchThread } from '../data/useThreadOpening';
 import { useSettleThread } from '../data/useThreadSettle';
 import { useWebUrl } from '../data/useWebUrl';
+import { useI18n, useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
 import { useAppNavigation } from '../navigation/hooks';
 import { isBesideThread, useBeside } from '../navigation/panes';
@@ -105,6 +107,10 @@ export function ChatInbox({
   /** The New chat button: what a screen reader calls it, whether the new chat shows beside the list, what it opens. */
   newChat: { label: string; selected: boolean; onPress: () => void };
 }) {
+  const { rawLocale } = useI18n();
+  const chatCopyHere = chatCopy(rawLocale);
+
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const navigation = useAppNavigation();
   // The list runs on under iOS's tab bar or to the window's edge; the button and the last row stay clear of that.
@@ -235,11 +241,12 @@ export function ChatInbox({
   };
 
   let empty: ReactNode = null;
-  if (threads.isLoading) empty = <SkeletonRows count={6} lines={2} label="Loading the threads" />;
+  if (threads.isLoading)
+    empty = <SkeletonRows count={6} lines={2} label={tMobile('screens.loading-the-threads')} />;
   else if (threads.error)
     empty = (
       <ErrorState
-        text={room === 'chat' ? CHAT_COPY.failed : CHAT_COPY.feedbackFailed}
+        text={room === 'chat' ? chatCopyHere.failed : chatCopyHere.feedbackFailed}
         onRetry={threads.refetch}
       />
     );

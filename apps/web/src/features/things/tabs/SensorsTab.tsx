@@ -12,7 +12,7 @@ import {
   formatTemp1,
   formatTempDense,
   formatTooltipTime,
-  HOST_RANGE_WORDS,
+  hostRangeWords,
   hostTone,
   sensorLevel,
   serverNoticeOptions,
@@ -27,6 +27,8 @@ import { useState } from 'react';
 import { TimeChart } from '../../../components/charts';
 import { cx } from '../../../components/cx';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { useWebI18n } from '../../../i18n/provider';
+import { useLocaleWords } from '../../../i18n/words';
 import { Card, Empty, StateCell } from '../parts';
 import { useServerEndQuiet } from '../quiet/KeepQuiet';
 import { useServerQuiet } from '../quiet/useQuiet';
@@ -38,6 +40,8 @@ const COLORS = ['var(--chart2)', 'var(--chart1)', 'var(--chart3)', 'var(--face-d
 const RANGES: HostSeriesRange[] = ['6h', '24h', '7d'];
 
 export function SensorsTab({ burrow, serverId, detail, timeZone }: TabProps) {
+  const HOST_RANGE_WORDS = useLocaleWords(hostRangeWords);
+  const { tag: uiLocale } = useWebI18n();
   const [range, setRange] = useState<HostSeriesRange>('24h');
   const sensors = detail.sensors.slice(0, 4);
   const keys = sensors.map((s) => `temp_${s.id}_c`);
@@ -110,7 +114,7 @@ export function SensorsTab({ burrow, serverId, detail, timeZone }: TabProps) {
                 tickLabel={formatTempDense}
                 timeTicks={timeTicks(data.timestamps, data.range, timeZone)}
                 pointLabel={(i) =>
-                  formatTooltipTime(data.range, Date.parse(data.timestamps[i] ?? ''), timeZone)
+                  formatTooltipTime(data.range, Date.parse(data.timestamps[i] ?? ''), timeZone, uiLocale)
                 }
                 formatValue={formatTemp1}
                 lines={hottest ? [{ value: warmFrom(hottest.limitC), color: 'var(--warn)' }] : undefined}

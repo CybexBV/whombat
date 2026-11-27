@@ -1,5 +1,4 @@
 /** Query hooks and small shared helpers of the automations screens. */
-import { CHAT_WORDS } from '@whombat/client';
 import {
   queryHook,
   useCatalogConnections,
@@ -10,6 +9,7 @@ import {
 import type { ChatRoom, PlanNames } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useMemo } from 'react';
+import { CHAT_WORDS } from '../../i18n/shared';
 
 export { useAutomation, useAutomationRun, useAutomationRuns, useAutomations } from '@whombat/client/react';
 

@@ -5,6 +5,7 @@
  * queries and decrypted files on account/permission change, revocation, sign-out, switch), push for this
  * appliance, a quiet connection strip, and the full-page states a session can end in.
  */
+
 import NetInfo from '@react-native-community/netinfo';
 import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -73,7 +74,11 @@ import { wipeShares } from '../data/shareInbox';
 import { SYNC_LOG_NAME, type SyncEntry, syncLog, watchReads } from '../data/syncLog';
 import { createNoteSender, noteLine } from '../errors/errorNotes';
 import { errorNotes, noteListenerError } from '../errors/nativeErrorNotes';
+import { useI18n, useMobileT } from '../i18n';
+import { readBoxLocale } from '../i18n/locale';
+import { BoxI18nProvider, MobileI18nProvider } from '../i18n/provider';
 import { sharedFiles } from '../lib/sharedCache';
+import { secureStore } from '../lib/storage';
 import { LiveActivityBridge } from '../live/LiveActivityBridge';
 import { StatusWidgetBridge } from '../live/StatusWidgetBridge';
 import { RootNavigator } from '../navigation/RootNavigator';
@@ -102,7 +107,7 @@ import {
   type ManagedContextValue,
   type PushTaps,
 } from './context';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { type EndpointKey, type ManagedEnvironment, phoneClient, phoneLabel } from './env';
 import { expoFileApi } from './expoFiles';
 import { clearResourceFiles } from './files';
@@ -126,6 +131,7 @@ const REAL_CLOCK = () => new Date();
 const liveActivityShown = async () => (await WhombatLive.active()).length > 0;
 
 interface Setup {
+  initialLocale: Promise<string | null>;
   raw: ApplianceSession;
   session: ApplianceSession;
   client: WhombatClient;
@@ -215,7 +221,9 @@ function createSetup(input: {
     { clear: () => syncLog.clear() },
   ]);
   const storageScope = storageScopeOf(input.orgId, input.appliance.device);
+  const initialLocale = readBoxLocale(secureStore, storageScope);
   const persister = createQueryPersister({
+    initialLocale,
     qc: queryClient,
     box: deviceBox(),
     scope: storageScope,
@@ -226,6 +234,7 @@ function createSetup(input: {
     log: syncLog.note,
   });
   return {
+    initialLocale,
     raw,
     session: raw,
     client,
@@ -290,6 +299,7 @@ export interface ApplianceRootProps {
 
 export function ApplianceRoot(props: ApplianceRootProps) {
   const { env, orgId, appliance, keyPair } = props;
+  const [cachedLocale, setCachedLocale] = useState<string | undefined>();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [state, setState] = useState<ConnectionState>({ status: 'idle' });
   const callbacks = useRef(props);
@@ -309,6 +319,10 @@ export function ApplianceRoot(props: ApplianceRootProps) {
       direct: () => current.current.direct,
       own: () => current.current.ownAddress,
       community: callbacks.current.community === true,
+    });
+    let live = true;
+    void s.initialLocale.then((tag) => {
+      if (live) setCachedLocale(tag ?? undefined);
     });
     const offGuard = s.guard.watch(s.raw, orgId);
     const offState = s.raw.onState(setState);
@@ -418,6 +432,7 @@ export function ApplianceRoot(props: ApplianceRootProps) {
       await clearPush(env.control, pushStore, s.raw.state().status === 'open' ? s.raw : null);
     });
     return () => {
+      live = false;
       stopReadBack();
       stopPersist();
       offReads();
@@ -485,7 +500,12 @@ export function ApplianceRoot(props: ApplianceRootProps) {
     };
   }, [setup, opened, keepOwnAddress]);
 
-  if (state.status === 'closed') return <Gate state={state} {...props} />;
+  if (!setup && state.status === 'closed')
+    return (
+      <MobileI18nProvider {...(cachedLocale && { locale: cachedLocale })}>
+        <Gate state={state} {...props} />
+      </MobileI18nProvider>
+    );
   if (!setup)
     return (
       <StartHold>
@@ -497,7 +517,19 @@ export function ApplianceRoot(props: ApplianceRootProps) {
   return (
     <QueryClientProvider client={setup.queryClient}>
       <WhombatClientProvider client={setup.client} realtime={setup.realtime}>
-        <Shell setup={setup} state={state} keepOwnAddress={keepOwnAddress} {...props} />
+        <BoxI18nProvider
+          key={setup.storageScope}
+          scope={setup.storageScope}
+          connected={opened}
+          initialLocale={cachedLocale}
+          persister={setup.persister}
+        >
+          {state.status === 'closed' ? (
+            <Gate state={state} {...props} />
+          ) : (
+            <Shell setup={setup} state={state} keepOwnAddress={keepOwnAddress} {...props} />
+          )}
+        </BoxI18nProvider>
       </WhombatClientProvider>
     </QueryClientProvider>
   );
@@ -663,6 +695,7 @@ function OutboxHold({ holds }: { holds: Setup['holds'] }) {
  * bootstrap. Another burrow is another app underneath (keyed), so its screens start afresh.
  */
 function ManagedBurrow({ orgName, children }: { orgName: string | null; children: ReactNode }) {
+  const { t: tMobile } = useMobileT();
   const me = useMe({});
   const [wanted, setWanted] = useState<string | null>(null);
   const memberships = me.data?.memberships;
@@ -680,7 +713,7 @@ function ManagedBurrow({ orgName, children }: { orgName: string | null; children
       <Screen>
         {me.error ? (
           <ErrorState
-            text="Your Whombat didn’t load. Try again in a moment."
+            text={tMobile('managed.your-whombat-didnt-load-try-again-in-a')}
             onRetry={() => void me.refetch()}
           />
         ) : (
@@ -701,7 +734,7 @@ function ManagedBurrow({ orgName, children }: { orgName: string | null; children
         renderState={({ error, retry }) => (
           <Screen>
             {error ? (
-              <ErrorState text="Your Whombat didn’t load. Try again in a moment." onRetry={retry} />
+              <ErrorState text={tMobile('managed.your-whombat-didnt-load-try-again-in-a')} onRetry={retry} />
             ) : (
               <StartHold>
                 <Loading />
@@ -724,6 +757,8 @@ function ManagedBurrow({ orgName, children }: { orgName: string | null; children
  * organization's name (AP-75). The tip is the agent's, Dusty until the Whombat exists.
  */
 function FirstBurrow({ suggestedName, onCreated }: { suggestedName: string | null; onCreated: () => void }) {
+  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
   const { client } = useWhombat();
   const [name, setName] = useState(suggestedName?.trim() ?? '');
   const [busy, setBusy] = useState(false);
@@ -743,13 +778,25 @@ function FirstBurrow({ suggestedName, onCreated }: { suggestedName: string | nul
   return (
     <Frame
       kicker={`STEP 1 OF ${ONBOARDING_STEP_COUNT}`}
-      title="Name your Whombat"
+      title={tMobile('managed.name-your-whombat')}
       sub="This is where you and your assistant work. It shows at the top of the sidebar."
       tip={`Hi, I’m ${DEFAULT_AGENT_NAME}. I’ll stick around in case you get stuck.`}
     >
-      <Field label="Its name" value={name} onChangeText={setName} autoCapitalize="words" maxLength={60} />
+      <Field
+        label={tMobile('managed.its-name')}
+        value={name}
+        onChangeText={setName}
+        autoCapitalize="words"
+        maxLength={60}
+      />
       <ErrorLine text={error} />
-      <Button label="Continue" size="lg" busy={busy} disabled={!name.trim()} onPress={() => void create()} />
+      <Button
+        label={tClient('connectAi.continue')}
+        size="lg"
+        busy={busy}
+        disabled={!name.trim()}
+        onPress={() => void create()}
+      />
     </Frame>
   );
 }
@@ -910,6 +957,9 @@ function useStrip({
   updates: AppUpdateSource;
   note: string | null;
 }): Strip | null {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [shown, setShown] = useState(false);
   const trouble = state.status === 'reconnecting' && state.reason !== 'rekey';
   useEffect(() => {
@@ -941,7 +991,7 @@ function useStrip({
   }, [open, session]);
   const tailscale = useTailscaleTurnOn(session);
   const linkBanner = open
-    ? linkBannerView(reach && (tailscale.state ? { ...reach, tailscale: tailscale.state } : reach))
+    ? linkBannerView(reach && (tailscale.state ? { ...reach, tailscale: tailscale.state } : reach), rawLocale)
     : null;
   const banner = linkBanner ? { text: tailscale.note ?? linkBanner.text, tone: linkBanner.tone } : null;
   // Whether a newer build of this app is out (AP-701): asked as a session opens and back in front (AP-2971).
@@ -954,20 +1004,20 @@ function useStrip({
       : left.needsNewer
         ? PART_NEEDS_NEWER_APP
         : left.items > 0
-          ? itemsNeedNewerApp(left.items)
+          ? itemsNeedNewerApp(left.items, rawLocale)
           : null;
-  const leftText = leftOutText && !newer ? `${leftOutText} ${COPY.update.soon}` : leftOutText;
+  const leftText = leftOutText && !newer ? `${leftOutText} ${managedCopyHere.update.soon}` : leftOutText;
   const text =
     trouble && shown && state.status === 'reconnecting'
       ? state.reason === 'offline'
-        ? COPY.connection.offline
+        ? managedCopyHere.connection.offline
         : state.reason === 'appliance_offline'
-          ? COPY.connection.applianceOffline
+          ? managedCopyHere.connection.applianceOffline
           : state.reason === 'appliance_unlisted'
-            ? COPY.connection.unlisted
+            ? managedCopyHere.connection.unlisted
             : state.reason === 'busy'
-              ? COPY.connection.busy
-              : COPY.connection.reconnecting
+              ? managedCopyHere.connection.busy
+              : managedCopyHere.connection.reconnecting
       : note
         ? note
         : leftText
@@ -997,6 +1047,9 @@ function useStrip({
 }
 
 function StripLine({ line, onRetry }: { line: Strip; onRetry: () => void }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const theme = useTheme();
   // “Turn on Tailscale” is too long to sit beside the Link sentence on a phone: it goes under it.
   const below = line.action === 'tailscale';
@@ -1034,7 +1087,7 @@ function StripLine({ line, onRetry }: { line: Strip; onRetry: () => void }) {
         {line.text}
       </Text>
       {line.action === 'retry' ? (
-        <Button label={COPY.connection.retry} variant="quiet" onPress={onRetry} />
+        <Button label={managedCopyHere.connection.retry} variant="quiet" onPress={onRetry} />
       ) : line.action === 'store' ? (
         <StoreButton variant="quiet" />
       ) : line.action === 'tailscale' ? (
@@ -1064,8 +1117,13 @@ function Gate({
   onForget,
   hasOthers,
 }: ApplianceRootProps & { state: ConnectionState }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   if (state.status !== 'closed') return null;
-  const back = <Button label={COPY.connection.back} variant="secondary" size="lg" onPress={onSwitch} />;
+  const back = (
+    <Button label={managedCopyHere.connection.back} variant="secondary" size="lg" onPress={onSwitch} />
+  );
   switch (state.reason) {
     case 'client_too_old':
       return <VersionGate who="client" back={back} />;
@@ -1073,8 +1131,8 @@ function Gate({
       // Below the appliance's security floor (CT-53): only a newer build of this app helps, from the store (AP-261).
       return (
         <GateScreen
-          title={COPY.connection.belowFloorTitle}
-          text={COPY.connection.belowFloor}
+          title={managedCopyHere.connection.belowFloorTitle}
+          text={managedCopyHere.connection.belowFloor}
           actions={
             <>
               <StoreButton />
@@ -1092,17 +1150,17 @@ function Gate({
       // A revoked key stays revoked (MA-04 §6): being let in again needs a new key (AP-39), as on the web.
       return (
         <GateScreen
-          title={COPY.connection.revokedTitle}
+          title={managedCopyHere.connection.revokedTitle}
           text={
             hasOthers
-              ? `${COPY.connection.revoked} ${COPY.connection.revokedOthers}`
-              : COPY.connection.revoked
+              ? `${managedCopyHere.connection.revoked} ${managedCopyHere.connection.revokedOthers}`
+              : managedCopyHere.connection.revoked
           }
           actions={
             <>
               <SetUpAgain onSetUpAgain={onSetUpAgain} />
               <Button
-                label={COPY.recover.entry}
+                label={managedCopyHere.recover.entry}
                 variant="secondary"
                 size="lg"
                 onPress={() => void onSetUpAgain('recover')}
@@ -1115,9 +1173,9 @@ function Gate({
     case 'ticket_denied':
       return (
         <GateScreen
-          title={COPY.connection.signedOutTitle}
-          text={COPY.connection.signedOut}
-          actions={<Button label={COPY.connection.signIn} size="lg" onPress={onSignOut} />}
+          title={managedCopyHere.connection.signedOutTitle}
+          text={managedCopyHere.connection.signedOut}
+          actions={<Button label={managedCopyHere.connection.signIn} size="lg" onPress={onSignOut} />}
         />
       );
     default:
@@ -1137,10 +1195,13 @@ function StoreButton({ variant = 'primary' }: { variant?: 'primary' | 'quiet' })
 }
 
 function SetUpAgain({ onSetUpAgain }: { onSetUpAgain: (then: 'pair') => Promise<void> }) {
+  const { rawLocale } = useI18n();
+  const managedCopyHere = managedCopy(rawLocale);
+
   const [busy, setBusy] = useState(false);
   return (
     <Button
-      label={busy ? COPY.connection.settingUp : COPY.connection.setUpAgain}
+      label={busy ? managedCopyHere.connection.settingUp : managedCopyHere.connection.setUpAgain}
       size="lg"
       busy={busy}
       onPress={() => {

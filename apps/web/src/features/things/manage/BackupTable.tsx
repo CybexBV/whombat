@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useRowMenu } from '../../../app/shell/ContextMenu';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
+import { currentLocale } from '../../../i18n/provider';
 import { GuestKindIcon } from '../GuestName';
 import { Badge, StateCell } from '../parts';
 import styles from '../Things.module.css';
@@ -118,7 +119,9 @@ export function BackupTable({
                 <td className={cx(styles.num, showGuest ? styles.dropXs : styles.cellMain)}>
                   <span
                     className={wb.wbCell}
-                    title={b.created ? formatDayTime(Date.parse(b.created), timeZone) : undefined}
+                    title={
+                      b.created ? formatDayTime(Date.parse(b.created), timeZone, currentLocale()) : undefined
+                    }
                   >
                     {backupMade(b, now, timeZone) || DASH}
                     {b.protected ? (

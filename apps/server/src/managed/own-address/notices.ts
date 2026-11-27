@@ -16,7 +16,8 @@
  */
 import type { NeedsYouItem } from '@whombat/core';
 import { OWN_ADDRESS_LEAVING_DAYS } from '@whombat/protocol/own-address';
-import { registerNeedsYouSource, type SourceCtx } from '../../home/registry';
+import { registerNeedsYouSource, type SourceCtx, sourceLocale } from '../../home/registry';
+import { isEnglish, type ServerMessageKey, tServer } from '../../i18n/catalog';
 import { loadPrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
 import { checkStartsOn, registerChecks } from '../../things/quiet/defaults';
@@ -49,35 +50,41 @@ const DAY_MS = 86_400_000;
 export const EXPIRING_WITHIN_MS = 7 * DAY_MS;
 export const FAILING_AFTER_MS = DAY_MS;
 
-/** The words, one place each (CLAUDE.md: short and plain). */
-export const OWN_ADDRESS_WORDS = {
-  foreignTitle: 'A certificate you didn’t ask for',
-  foreignBody: (address: string) =>
-    `Someone got a security certificate for your Whombat’s address that your Whombat didn’t ask for. Until you know why, don’t use ${address}. Use the app on your phone or your home network.`,
-  uncheckedTitle: 'Certificates not checked',
-  uncheckedBody: (since: string) =>
-    `Whombat couldn’t check certificates for its address since ${since}. It keeps trying.`,
-  expiringTitle: 'Your Whombat’s address ends soon',
-  expiringBody: (date: string) =>
-    `The certificate for your Whombat’s address ends on ${date} and no new one came yet. Keep your Whombat on so it can renew it.`,
-  failingTitle: 'Your Whombat’s address isn’t working',
-  failingBody:
-    'Your Whombat couldn’t get a certificate for its address for a day. It keeps trying, but it can’t while it keeps restarting.',
-  missed: (from: string, to: string) => `Whombat couldn’t check certificates from ${from} to ${to}.`,
-  movedTitle: 'Your Whombat has a new address',
-  movedBody: (host: string, until: string) =>
-    `Your Whombat’s address is now ${host}. The old one works until ${until}.`,
-  leavingTitle: 'Your Whombat’s old address stops soon',
-  leavingBody: (old: string, until: string, host: string) =>
-    `${old} stops working on ${until}. Open ${host} on each browser or phone that signs in with a passkey, and add one there.`,
-} as const;
+/** The words in a locale, one place each (CLAUDE.md: short and plain). */
+export function ownAddressWords(locale?: string | null) {
+  const t = (key: ServerMessageKey, vars?: Record<string, string>) => tServer(locale, key, vars);
+  return {
+    open: t('managed.ownAddress.open'),
+    foreignTitle: t('managed.ownAddress.foreignTitle'),
+    foreignBody: (address: string) => t('managed.ownAddress.foreignBody', { address }),
+    uncheckedTitle: t('managed.ownAddress.uncheckedTitle'),
+    uncheckedBody: (since: string) => t('managed.ownAddress.uncheckedBody', { since }),
+    expiringTitle: t('managed.ownAddress.expiringTitle'),
+    expiringBody: (date: string) => t('managed.ownAddress.expiringBody', { date }),
+    failingTitle: t('managed.ownAddress.failingTitle'),
+    failingBody: t('managed.ownAddress.failingBody'),
+    missed: (from: string, to: string) => t('managed.ownAddress.missed', { from, to }),
+    movedTitle: t('managed.ownAddress.movedTitle'),
+    movedBody: (host: string, until: string) => t('managed.ownAddress.movedBody', { host, until }),
+    leavingTitle: t('managed.ownAddress.leavingTitle'),
+    leavingBody: (old: string, until: string, host: string) =>
+      t('managed.ownAddress.leavingBody', { old, until, host }),
+  };
+}
+
+export const OWN_ADDRESS_WORDS = ownAddressWords(null);
 
 /** How long before the old address stops the person hears about passkeys that only work there. */
 export const LEAVING_WARN_MS = 3 * DAY_MS;
 
+/** English dates stay `en-GB` (day first); Dutch ones are `nl-NL`. */
+function dateLocale(locale?: string | null): string {
+  return isEnglish(locale) ? 'en-GB' : 'nl-NL';
+}
+
 /** A day as the person reads it (UTC, which the box's other notices use when no time zone is known). */
-export function dayText(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', {
+export function dayText(iso: string, locale?: string | null): string {
+  return new Date(iso).toLocaleDateString(dateLocale(locale), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -86,13 +93,21 @@ export function dayText(iso: string): string {
 }
 
 /** A day and month as the person reads them (“23 December”). */
-export function dayMonthText(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+export function dayMonthText(iso: string, locale?: string | null): string {
+  return new Date(iso).toLocaleDateString(dateLocale(locale), {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
 }
 
 /** The missed windows as the person reads them. */
-export function missedWindowsText(missed: readonly { from: string; to: string }[]): string[] {
-  return missed.map((m) => OWN_ADDRESS_WORDS.missed(dayText(m.from), dayText(m.to)));
+export function missedWindowsText(
+  missed: readonly { from: string; to: string }[],
+  locale?: string | null,
+): string[] {
+  const w = ownAddressWords(locale);
+  return missed.map((m) => w.missed(dayText(m.from, locale), dayText(m.to, locale)));
 }
 
 /** When the box first saw itself without a certificate while it had a label (memory; a restart starts again). */
@@ -108,8 +123,10 @@ export async function ownAddressItems(
   own: OwnAddressService,
   now: Date,
   passkeys?: OwnAddressPasskeys | null,
+  locale?: string | null,
 ): Promise<NeedsYouItem[]> {
   const items: NeedsYouItem[] = [];
+  const words = ownAddressWords(locale);
   const host = own.host();
   if (!host) return items;
   const item = (
@@ -129,22 +146,13 @@ export async function ownAddressItems(
     title,
     body,
     at,
-    actions: [{ id: 'open', label: 'Open', style: 'primary', kind: 'open', href: ABOUT_HREF }],
+    actions: [{ id: 'open', label: words.open, style: 'primary', kind: 'open', href: ABOUT_HREF }],
     href: ABOUT_HREF,
   });
   const foreign = await own.validForeign();
   if (foreign.length && checkStartsOn('own_address.foreign')) {
     const first = foreign.map((f) => f.firstSeenAt).sort()[0] as string;
-    items.push(
-      item(
-        'own_address.foreign',
-        first,
-        'bad',
-        OWN_ADDRESS_WORDS.foreignTitle,
-        OWN_ADDRESS_WORDS.foreignBody(host),
-        first,
-      ),
-    );
+    items.push(item('own_address.foreign', first, 'bad', words.foreignTitle, words.foreignBody(host), first));
   }
   const watch = own.watch();
   const unchecked = watch ? uncheckedSince(watch, now) : null;
@@ -154,8 +162,8 @@ export async function ownAddressItems(
         'own_address.unchecked',
         unchecked,
         'warn',
-        OWN_ADDRESS_WORDS.uncheckedTitle,
-        OWN_ADDRESS_WORDS.uncheckedBody(dayText(unchecked)),
+        words.uncheckedTitle,
+        words.uncheckedBody(dayText(unchecked, locale)),
         unchecked,
       ),
     );
@@ -168,8 +176,8 @@ export async function ownAddressItems(
           'own_address.expiring',
           served.serial,
           'warn',
-          OWN_ADDRESS_WORDS.expiringTitle,
-          OWN_ADDRESS_WORDS.expiringBody(dayText(served.notAfter.toISOString())),
+          words.expiringTitle,
+          words.expiringBody(dayText(served.notAfter.toISOString(), locale)),
           new Date(served.notAfter.getTime() - EXPIRING_WITHIN_MS).toISOString(),
         ),
       );
@@ -183,8 +191,8 @@ export async function ownAddressItems(
           'own_address.moved',
           host,
           'info',
-          OWN_ADDRESS_WORDS.movedTitle,
-          OWN_ADDRESS_WORDS.movedBody(host, dayMonthText(until)),
+          words.movedTitle,
+          words.movedBody(host, dayMonthText(until, locale)),
           // From when the address changed: the old one's date less the 30 days it works (never later than now).
           new Date(
             Math.min(leaving.until.getTime() - OWN_ADDRESS_LEAVING_DAYS * DAY_MS, now.getTime()),
@@ -203,8 +211,8 @@ export async function ownAddressItems(
           'own_address.leaving',
           leaving.host,
           'warn',
-          OWN_ADDRESS_WORDS.leavingTitle,
-          OWN_ADDRESS_WORDS.leavingBody(leaving.host, dayMonthText(until), host),
+          words.leavingTitle,
+          words.leavingBody(leaving.host, dayMonthText(until, locale), host),
           new Date(warnAt).toISOString(),
         ),
       );
@@ -219,8 +227,8 @@ export async function ownAddressItems(
           'own_address.failing',
           String(since),
           'bad',
-          OWN_ADDRESS_WORDS.failingTitle,
-          OWN_ADDRESS_WORDS.failingBody,
+          words.failingTitle,
+          words.failingBody,
           new Date(since).toISOString(),
         ),
       );
@@ -238,7 +246,7 @@ export function registerOwnAddressSource(
     if (!service) return [];
     const person = ctx.reads?.person ?? (await loadPrincipalRow(ctx.db, ctx.personId));
     if (person?.kind !== 'person') return [];
-    return ownAddressItems(service, ctx.now, passkeys?.() ?? null);
+    return ownAddressItems(service, ctx.now, passkeys?.() ?? null, await sourceLocale(ctx));
   });
 }
 

@@ -1,4 +1,5 @@
 /** The installer's flow (CG-14): which screen shows, which wizard steps exist, what each one needs. */
+import { formatLocale } from '../i18n/locale';
 import {
   type Check,
   type Disk,
@@ -189,8 +190,13 @@ const GiB = 1024 ** 3;
 const TiB = 1024 ** 4;
 
 /** Disk sizes as the checks state them (binary units): “128 GiB”, “1.8 TiB”. */
-export function formatSize(bytes: number): string {
-  if (bytes >= TiB) return `${(bytes / TiB).toFixed(1).replace(/\.0$/, '')} TiB`;
+export function formatSize(bytes: number, locale = 'en-GB'): string {
+  const decimal = (value: number) =>
+    Number(value.toFixed(1)).toLocaleString(formatLocale(locale), {
+      useGrouping: false,
+      maximumFractionDigits: 1,
+    });
+  if (bytes >= TiB) return `${decimal(bytes / TiB)} TiB`;
   if (bytes >= 10 * GiB) return `${Math.round(bytes / GiB)} GiB`;
-  return `${(bytes / GiB).toFixed(1).replace(/\.0$/, '')} GiB`;
+  return `${decimal(bytes / GiB)} GiB`;
 }

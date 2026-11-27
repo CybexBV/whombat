@@ -10,6 +10,7 @@ import { thingSeriesToken } from '@whombat/client';
 import { formatTick, formatTooltipTime } from '@whombat/client/hosts';
 import type { HostSeriesRange, ThingPagePanel, ThingSeriesColor } from '@whombat/core';
 import { toDate } from '@whombat/core/text';
+import { currentLocale } from '../../../i18n/provider';
 
 export type ChartPanel = Extract<ThingPagePanel, { kind: 'chart' }>;
 
@@ -182,7 +183,7 @@ export function roundTimeTicks(
   const out: { index: number; label: string }[] = [];
   for (let i = 1; i < n - 1; i++)
     if (slot(times[i] as number) > slot(times[i - 1] as number))
-      out.push({ index: i, label: formatTick(range, times[i] as number, timeZone) });
+      out.push({ index: i, label: formatTick(range, times[i] as number, timeZone, currentLocale()) });
   // Too many words: every second or third.
   const keep = Math.ceil(out.length / 6);
   const ticks = out.filter((_, k) => k % keep === 0);
@@ -270,10 +271,10 @@ export function chartModel(panel: ChartPanel, timeZone?: string): ChartModel {
     for (const k of [0.5, 1])
       ticks.push({
         index: n - 1 + extend * k,
-        label: formatTick('30d', lastTime + extend * k * step, timeZone),
+        label: formatTick('30d', lastTime + extend * k * step, timeZone, currentLocale()),
       });
   const pointLabel = (i: number) =>
-    labels?.[i] ?? formatTooltipTime(range, (times[0] ?? 0) + i * step, timeZone);
+    labels?.[i] ?? formatTooltipTime(range, (times[0] ?? 0) + i * step, timeZone, currentLocale());
 
   return {
     lines,

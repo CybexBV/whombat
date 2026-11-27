@@ -13,11 +13,9 @@ import { Link } from '@tanstack/react-router';
 import {
   agentGroupParts,
   hasLooksAhead,
-  SETTINGS_HOME_TEXT,
   type SettingsHomeGroup,
   settingsHomeRows,
   THEME_CHOICES,
-  THEME_WORDS,
 } from '@whombat/client';
 import { DESK_TEXT } from '@whombat/client/desk';
 import { whombatOverview } from '@whombat/client/managed';
@@ -43,6 +41,8 @@ import { useTheme } from '../../app/theme';
 import { cx } from '../../components/cx';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { useWebI18n } from '../../i18n/provider';
+import { useSettingsHomeText, useThemeWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { useDeskUnlockHere } from '../desk/useDeskHere';
 import { useApplianceStatus } from './ManagedTabs';
@@ -73,9 +73,9 @@ const GROUP_SEARCH: Record<SettingsHomeGroup, Record<string, string>> = {
   advanced: { tab: 'advanced' },
 };
 
-const THEMES = THEME_CHOICES.map((value) => ({ value, label: THEME_WORDS.choices[value] }));
-
 export function SettingsHome({ burrow }: { burrow: string }) {
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
+  const { tag: uiLocale } = useWebI18n();
   const { words } = useTheAgent(burrow);
   const { managed } = useAppServices();
   const prefs = usePreferences({}, { staleTime: 0 });
@@ -84,7 +84,7 @@ export function SettingsHome({ burrow }: { burrow: string }) {
   const protocol = useSessionProtocol();
   const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(protocol) });
   const news = placeNewsShown(protocol);
-  const rows = settingsHomeRows(words.name, you, agentParts).filter(
+  const rows = settingsHomeRows(words.name, you, agentParts, uiLocale).filter(
     (r) => (r.key !== 'screens' || screen.shown) && (r.key !== 'news' || news),
   );
   const needs = useApplianceNeeds(burrow, words.name);
@@ -247,6 +247,7 @@ function useApplianceNeeds(burrow: string, agent: string): { known: boolean; ite
 
 /** The first thing that needs you, in its dot's colour, and how many more. */
 function NeedsLine({ items }: { items: readonly NeedsItem[] }) {
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const first = items[0];
   if (!first) return null;
   return (
@@ -288,6 +289,7 @@ function useSignedInPhones(burrow: string): { known: boolean; names: string[] } 
  * (which can't scan its own code) getting the app there or signing in another phone.
  */
 function PhoneAppLine({ qr, phones }: { qr: boolean; phones: readonly string[] }): ReactNode {
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const t = SETTINGS_HOME_TEXT.phoneApp;
   if (phones.length > 0) return <>{t.signedIn(phones)}</>;
   if (!qr) return <>{t.line(false)}</>;
@@ -304,6 +306,8 @@ function PhoneAppLine({ qr, phones }: { qr: boolean; phones: readonly string[] }
  * open), kept on this device and in your account like the account menu's.
  */
 function ThemeRow() {
+  const THEME_WORDS = useThemeWords();
+  const SETTINGS_HOME_TEXT = useSettingsHomeText();
   const { choice, setChoice } = useTheme();
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -330,7 +334,7 @@ function ThemeRow() {
             label={SETTINGS_HOME_TEXT.theme.title}
             value={choice}
             onChange={setChoice}
-            options={THEMES}
+            options={THEME_CHOICES.map((value) => ({ value, label: THEME_WORDS.choices[value] }))}
           />
         </div>
       ) : null}

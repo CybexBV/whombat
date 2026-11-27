@@ -2,10 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AVATAR_COPY,
   avatarErrorText,
-  INBOX_WORDS,
   quietChoiceOf,
   SETTLE_QUIET_CHOICES,
-  SETTLE_WORDS,
   settleNote,
 } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
@@ -27,20 +25,25 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { useWebI18n } from '../../i18n/provider';
+import { INBOX_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { PersonAvatar } from '../messaging/PersonAvatar';
+import { LanguageSection } from './LanguageSection';
 import { photoFromFile } from './photo';
 import styles from './SettingsScreen.module.css';
 import { useDeveloperTools } from './useDeveloperTools';
 
 /**
  * Settings → You → Profile (the default; settings-groups.md; was General and About you, SS-01): PROFILE —
- * your name, title and photo — then CHAT (when threads settle by themselves, chat-settle.md AP-6156). What the
+ * your name, title and photo — then LANGUAGE (`LanguageSection`), then CHAT (when threads settle by themselves,
+ * chat-settle.md AP-6156). What the
  * assistant remembers is its own group's Memory; your signing key is in Advanced.
  */
 export function ProfileTab({ burrow }: { burrow: string }) {
   return (
     <>
       <ProfileSection burrow={burrow} />
+      <LanguageSection burrow={burrow} />
       <ChatSection burrow={burrow} />
     </>
   );
@@ -60,10 +63,11 @@ function ChatSection({ burrow }: { burrow: string }) {
   const save = useSaveChatPreferences(burrow);
   // Pull requests are a developer's: the switch shows only where GitHub or website feedback is connected.
   const developer = useDeveloperTools(burrow);
+  const { t } = useWebI18n();
   const change = (next: ChatPreferences) =>
     void save(next).then(
-      (ok) => ok || toast.show('Couldn’t save that. Try again.'),
-      () => toast.show('Couldn’t save that. Try again.'),
+      (ok) => ok || toast.show(t('common.couldntSave')),
+      () => toast.show(t('common.couldntSave')),
     );
   // A day count set elsewhere (the assistant may set 1–90) shows as the nearest choice until one is picked here.
   const quiet = quietChoiceOf(prefs.settleQuietDays);
@@ -135,6 +139,7 @@ function ProfileSection({ burrow }: { burrow: string }) {
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const { t } = useWebI18n();
 
   // Start from (and follow) the saved profile until the person edits a field.
   const savedName = me?.name ?? '';
@@ -150,12 +155,12 @@ function ProfileSection({ burrow }: { burrow: string }) {
     event.preventDefault();
     const parsedName = PersonName.safeParse(name);
     if (!parsedName.success) {
-      setError(parsedName.error.issues[0]?.message ?? 'Tell us your name.');
+      setError(parsedName.error.issues[0]?.message ?? t('profile.nameMissing'));
       return;
     }
     const parsedTitle = PersonTitle.safeParse(title);
     if (!parsedTitle.success) {
-      setError(parsedTitle.error.issues[0]?.message ?? 'That title is too long.');
+      setError(parsedTitle.error.issues[0]?.message ?? t('profile.titleTooLong'));
       return;
     }
     setError(null);
@@ -164,7 +169,7 @@ function ProfileSection({ burrow }: { burrow: string }) {
     });
     if (result.status === 'ok') {
       refreshProfile();
-      toast.show('Profile saved.');
+      toast.show(t('profile.saved'));
     }
   }
 
@@ -203,7 +208,7 @@ function ProfileSection({ burrow }: { burrow: string }) {
 
   return (
     <section className={styles.section}>
-      <SectionLabel as="h2">PROFILE</SectionLabel>
+      <SectionLabel as="h2">{t('profile.section')}</SectionLabel>
       <div className={styles.card}>
         <form className={`${styles.row} ${styles.profileRow}`} onSubmit={handleSave} noValidate>
           {me ? (
@@ -230,7 +235,7 @@ function ProfileSection({ burrow }: { burrow: string }) {
           )}
           <div className={styles.profileFields}>
             <label className={styles.profileField} htmlFor={`${ids}-name`}>
-              <span className={styles.fieldLabel}>NAME</span>
+              <span className={styles.fieldLabel}>{t('profile.nameLabel')}</span>
               <Input
                 id={`${ids}-name`}
                 size="lg"
@@ -246,13 +251,13 @@ function ProfileSection({ burrow }: { burrow: string }) {
               />
             </label>
             <label className={styles.profileField} htmlFor={`${ids}-title`}>
-              <span className={styles.fieldLabel}>TITLE</span>
+              <span className={styles.fieldLabel}>{t('profile.titleLabel')}</span>
               <Input
                 id={`${ids}-title`}
                 size="lg"
                 autoComplete="organization-title"
                 maxLength={80}
-                placeholder="Engineering lead"
+                placeholder={t('profile.titlePlaceholder')}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
@@ -269,15 +274,13 @@ function ProfileSection({ burrow }: { burrow: string }) {
             size="lg"
             disabled={!me || !dirty || !name.trim() || updateProfile.isPending}
           >
-            Save
+            {t('common.save')}
           </Button>
         </form>
         <div className={styles.row} data-photo-row="">
           <span className={styles.rowMain}>
-            <span className={styles.rowTitle}>Photo</span>
-            <span className={styles.rowMeta}>
-              Shown with your name. Any picture works: it’s cropped to a square.
-            </span>
+            <span className={styles.rowTitle}>{t('profile.photo')}</span>
+            <span className={styles.rowMeta}>{t('profile.photoHint')}</span>
           </span>
 
           {me?.avatarUrl ? (
@@ -315,15 +318,16 @@ function ProfileSection({ burrow }: { burrow: string }) {
  */
 export function SigningKeyRow({ burrow }: { burrow: string }) {
   const { data: bootstrap } = useBootstrap({ params: { burrow } });
+  const { t } = useWebI18n();
   return (
     <div className={styles.row}>
       <span className={styles.rowMain}>
-        <span className={styles.rowTitle}>Your signing key</span>
+        <span className={styles.rowTitle}>{t('profile.signingKey')}</span>
         <span className={styles.rowMeta}>
-          Everything you do on {bootstrap?.burrow.name ?? 'this Whombat'} is signed with it.
+          {t('profile.signingKeyHint', { name: bootstrap?.burrow.name ?? t('profile.thisWhombat') })}
         </span>
       </span>
-      <span className={styles.fingerprint} title="Key fingerprint">
+      <span className={styles.fingerprint} title={t('profile.fingerprint')}>
         {bootstrap?.me.fingerprint ?? ''}
       </span>
     </div>

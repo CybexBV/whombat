@@ -4,6 +4,7 @@
  * object and time; a row with evidence opens its input and the tail of its output in a code block. Rows update live
  * from `activity.updated` on the run's topic (the run screen subscribes to it).
  */
+
 import { useActivity } from '@whombat/client/react';
 import { useState } from 'react';
 import { View } from 'react-native';
@@ -14,6 +15,7 @@ import {
   activitySection,
 } from '../data/activity';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Section } from '../ui/primitives';
@@ -88,6 +90,7 @@ function Evidence({ evidence }: { evidence: NonNullable<ActivityRowView['evidenc
 }
 
 function RowBody({ row, open }: { row: ActivityRowView; open: boolean }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -123,7 +126,7 @@ function RowBody({ row, open }: { row: ActivityRowView; open: boolean }) {
             </View>
           ) : (
             <Text size={12} weight={500} color={theme.colors.brand}>
-              Show details
+              {tMobile('screens.show-details')}
             </Text>
           )
         ) : null}
@@ -133,6 +136,7 @@ function RowBody({ row, open }: { row: ActivityRowView; open: boolean }) {
 }
 
 function ActivityRow({ row, nested }: { row: ActivityRowView; nested?: boolean }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const style = {
@@ -154,7 +158,9 @@ function ActivityRow({ row, nested }: { row: ActivityRowView; nested?: boolean }
       onPress={() => setOpen((o) => !o)}
       feedback="wash"
       accessibilityLabel={row.accessibilityLabel}
-      accessibilityHint={open ? 'Hides the details' : 'Shows the input and output'}
+      accessibilityHint={
+        open ? tMobile('screens.hides-the-details') : tMobile('screens.shows-the-input-and-output')
+      }
       accessibilityState={{ expanded: open }}
       style={style}
     >
@@ -199,6 +205,7 @@ function ActivityGroup({ title, time, rows }: { title: string; time: string; row
 }
 
 export function RunActivity({ runNumber }: { runNumber: number }) {
+  const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const ctx = useViewContext();
   const query = useActivity({ params: { burrow: slug }, query: { runNumber } }, { retry: false });
@@ -207,7 +214,7 @@ export function RunActivity({ runNumber }: { runNumber: number }) {
   const model = activitySection(query.data, ctx.now, ctx.timeZone);
   if (model.entries.length === 0) return null;
   return (
-    <Section title="ACTIVITY">
+    <Section title={tMobile('screens.activity')}>
       {model.entries.map((e) =>
         e.type === 'row' ? (
           <ActivityRow key={e.key} row={e.row} />

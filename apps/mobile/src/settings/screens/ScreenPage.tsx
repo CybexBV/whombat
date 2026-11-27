@@ -8,6 +8,7 @@
  * (`?part=night` opens one). A screen elsewhere ends with *Remove*, a monitor on the box with forgetting its layout,
  * each asked first.
  */
+
 import { type RouteProp, useRoute } from '@react-navigation/native';
 import {
   DESK_DOORBELL,
@@ -37,6 +38,7 @@ import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { toasts } from '../../data/toast';
 import { useAgentWords } from '../../data/useAgent';
+import { useMobileT } from '../../i18n';
 import { DeskLockCard, DeskNightCard, DeskSwitchCard, DeskTalkCard } from '../../managed/DeskSection';
 import { DeskUnlockCard } from '../../managed/DeskUnlockCard';
 import { Card, Field, LinkRow } from '../../managed/ui';
@@ -208,6 +210,7 @@ function NameCard({ api, screen }: { api: DeskApi; screen: DeskScreenDetail }) {
  * the screen is paired, as before.
  */
 function BoxParts({ api, asked }: { api: DeskApi; asked?: string | undefined }) {
+  const { t: tMobile } = useMobileT();
   const desk = useDesk(api);
   const actions = useDeskActions(api);
   const screen = desk.data;
@@ -219,7 +222,7 @@ function BoxParts({ api, asked }: { api: DeskApi; asked?: string | undefined }) 
   const save = (patch: DeskShowPatch) =>
     void actions
       .update({ show: patch })
-      .catch((e: unknown) => Alert.alert('That didn’t go through', deskErrorText(e)));
+      .catch((e: unknown) => Alert.alert(tMobile('managed.that-didnt-go-through'), deskErrorText(e)));
   return (
     <>
       <View style={{ marginTop: -2 }}>

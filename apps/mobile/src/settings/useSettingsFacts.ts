@@ -4,6 +4,7 @@
  * what it runs on) with the AI sign-ins (once, no polling), the box's screen (`desk.get`, AP-5860), and a managed
  * Whombat's status (`appliance.status`, read when the list shows and every five minutes for the dot).
  */
+
 import { useQuery } from '@tanstack/react-query';
 import { deskScreenLine, deskSectionShown } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
@@ -15,6 +16,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { connectionsLine } from '../data/connections';
 import { useTheAgentHere } from '../data/useAgent';
 import { useConnections } from '../data/useConnections';
+import { useI18n } from '../i18n';
 import { useManaged } from '../managed/context';
 import { overviewInput } from '../managed/thisWhombat';
 import { applianceStatusQuery } from '../managed/useApplianceStatus';
@@ -80,6 +82,7 @@ export function useSettingsTabDot(): 'ok' | 'warn' | 'bad' | null {
 
 /** The list's rows with their lines, as far as each part has answered. */
 export function useSettingsRows(): SettingsRowView[] {
+  const { rawLocale: locale } = useI18n();
   const { mode } = useBurrowBase();
   const { agent, ai } = useAssistantFacts();
   const appliance = useApplianceLine();
@@ -100,16 +103,19 @@ export function useSettingsRows(): SettingsRowView[] {
       : null;
   return useMemo(
     () =>
-      settingsRows({
-        mode,
-        agent,
-        ai,
-        appliance,
-        connections,
-        screen: screenLine === null ? null : { value: screenLine, tone: null },
-        screens: screens !== undefined,
-        news,
-      }),
-    [screenLine, screens, mode, agent, ai, appliance, connections, news],
+      settingsRows(
+        {
+          mode,
+          agent,
+          ai,
+          appliance,
+          connections,
+          screen: screenLine === null ? null : { value: screenLine, tone: null },
+          screens: screens !== undefined,
+          news,
+        },
+        locale,
+      ),
+    [screenLine, screens, mode, agent, ai, appliance, connections, news, locale],
   );
 }

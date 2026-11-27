@@ -10,6 +10,7 @@ import { type Plan, type PlanStep, stepGoesAhead } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useState } from 'react';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import { planErrorText } from './planModel';
 
 export type PlanChange =
@@ -44,6 +45,7 @@ export interface PlanActions {
 }
 
 export function usePlanActions(burrow: string): PlanActions {
+  const { tag: uiLocale } = useWebI18n();
   const toast = useToast();
   const [pending, setPending] = useState<string | null>(null);
   const update = usePlanWrite(api.plans.update);
@@ -74,7 +76,7 @@ export function usePlanActions(burrow: string): PlanActions {
       else toast.show(text);
       return null;
     } catch (error) {
-      const text = licenceRefusalText(error) ?? planErrorText(error);
+      const text = licenceRefusalText(error, uiLocale) ?? planErrorText(error);
       if (onRefusal) onRefusal(text);
       else toast.show(text);
       return null;

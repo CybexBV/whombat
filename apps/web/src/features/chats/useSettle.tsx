@@ -1,14 +1,9 @@
-import {
-  SETTLE_UNDO_MS,
-  SETTLE_WORDS,
-  settleFinishedToast,
-  settleRefusalText,
-  wentThrough,
-} from '@whombat/client';
+import { SETTLE_UNDO_MS, settleFinishedToast, settleRefusalText, wentThrough } from '@whombat/client';
 import { useSettleFinished, useSettleThread } from '@whombat/client/react';
 import type { ChatRoom } from '@whombat/core';
 import { useCallback } from 'react';
 import { useToast } from '../../components/Toast';
+import { SETTLE_WORDS } from '../../i18n/shared';
 
 /**
  * Settling a thread of Chat or Feedback, and opening it again (Whombat chat-settle.md CHS-01, CHS-05; app chat-settle.md
