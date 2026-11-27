@@ -8,7 +8,12 @@
  * definition (its summary and glance still say what it does) — and a newer app gets everything.
  */
 import type { Automation, AutomationExport, AutomationRun, Message, RealtimeEvent } from '@whombat/core';
-import { FIND_MY_MINOR, T3_REVIEW_ROUNDS_MINOR, THING_AUTOMATIONS_MINOR } from '@whombat/protocol/session';
+import {
+  FIND_MY_MINOR,
+  T3_REVIEW_MORE_ROUNDS_MINOR,
+  T3_REVIEW_ROUNDS_MINOR,
+  THING_AUTOMATIONS_MINOR,
+} from '@whombat/protocol/session';
 import { ApiError } from '../lib/errors';
 import { newerDefinition, startedByFindMy } from './release-gate';
 
@@ -20,6 +25,12 @@ export const FIND_MY_AUTOMATIONS_MINOR = FIND_MY_MINOR;
 
 /** The protocol minor that accepts `t3Review.maxRounds` on a recipe's strict `t3Review` object. */
 export const T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR = T3_REVIEW_ROUNDS_MINOR;
+
+/** The protocol minor that accepts `t3Review.maxRounds` up to 10; the two minors before it take 1–3. */
+export const T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR = T3_REVIEW_MORE_ROUNDS_MINOR;
+
+/** The most review rounds an app below `T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR` accepts. */
+const ROUNDS_BEFORE_MORE = 3;
 
 /** Whether a session at `minor` reads mail automations; outside a session (`undefined`), it does. */
 export const readsMailAutomations = (minor: number | undefined) =>
@@ -35,14 +46,21 @@ export const readsThingAutomations = (minor: number | undefined) =>
 export const readsT3ReviewRounds = (minor: number | undefined) =>
   minor === undefined || minor >= T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR;
 
-function hasT3ReviewMaxRounds(definition: unknown): boolean {
+/** Whether a session at `minor` reads every automation (up to 10 review rounds too); outside a session, it does. */
+export const readsMoreT3ReviewRounds = (minor: number | undefined) =>
+  minor === undefined || minor >= T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR;
+
+/** Whether an app at `minor` can't read this many review rounds: none before rounds came, at most three after. */
+function unreadableRounds(definition: unknown, minor: number | undefined): boolean {
   const recipe = (definition as { recipe?: { t3Review?: { maxRounds?: unknown } } } | null)?.recipe;
-  return recipe?.t3Review?.maxRounds !== undefined;
+  const rounds = recipe?.t3Review?.maxRounds;
+  if (rounds === undefined || readsMoreT3ReviewRounds(minor)) return false;
+  return !readsT3ReviewRounds(minor) || typeof rounds !== 'number' || rounds > ROUNDS_BEFORE_MORE;
 }
 
 /** Whether an app at `minor` can't read this definition (or draft). */
 function unreadable(definition: unknown, minor: number | undefined): boolean {
-  if (!readsT3ReviewRounds(minor) && hasT3ReviewMaxRounds(definition)) return true;
+  if (unreadableRounds(definition, minor)) return true;
   const triggers = (definition as { triggers?: { kind?: string }[] } | null)?.triggers;
   if (!readsThingAutomations(minor) && Array.isArray(triggers) && triggers.some((t) => t?.kind === 'thing'))
     return true;
@@ -54,7 +72,7 @@ function unreadable(definition: unknown, minor: number | undefined): boolean {
 
 /** An automation as an app at `minor` reads it. */
 export function automationFor(automation: Automation, minor: number | undefined): Automation {
-  if (readsT3ReviewRounds(minor)) return automation;
+  if (readsMoreT3ReviewRounds(minor)) return automation;
   const source = automation.glance?.source;
   const older =
     (source === 'thing' && !readsThingAutomations(minor)) ||
@@ -148,7 +166,7 @@ for (const op of [
 
 /** An op's answer as an app at `minor` reads it (every other op's as it is). */
 export function answerFor(op: string, body: unknown, minor: number | undefined): unknown {
-  if (readsT3ReviewRounds(minor) || !body || typeof body !== 'object') return body;
+  if (readsMoreT3ReviewRounds(minor) || !body || typeof body !== 'object') return body;
   const to = ANSWERS[op];
   return to
     ? to(body as Answer, minor)
@@ -159,7 +177,7 @@ export function answerFor(op: string, body: unknown, minor: number | undefined):
 
 /** A live update as an app at `minor` reads it. */
 export function eventFor(event: RealtimeEvent, minor: number | undefined): RealtimeEvent {
-  if (readsT3ReviewRounds(minor)) return event;
+  if (readsMoreT3ReviewRounds(minor)) return event;
   if (!readsThingAutomations(minor) && (event.type === 'message.created' || event.type === 'message.updated'))
     return { ...event, message: messageFor(event.message) };
   if (event.type === 'automation.updated')
