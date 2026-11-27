@@ -1524,15 +1524,17 @@ export const continueAutomationRun = defineCommand({
     const fromRow = chosenId ? stepRows.find((s) => s.stepId === chosenId && s.idx >= fixRow.idx) : undefined;
     if (!fromRow)
       throw badRequest(`This run has no "${input.fromStepId ?? 'review'}" step at or after its fix step.`);
-    // Past a review that didn't approve nothing can land: the merge reads that verdict and leaves the pull request for
-    // the person, so the run would only stop again one step later. The turn hears it instead of promising a merge.
+    // Past a review that asked for changes nothing can land: the merge reads that verdict and leaves the pull request
+    // for the person, so the run would only stop again one step later. Past one that never finished the merge would
+    // have no review to go by. The turn hears it instead of promising a merge. A review step that gives no verdict
+    // (a definition of the person's own) holds nothing back.
     const reviewRow = stepRows.find((s) => s.stepId === 'review' && s.idx > fixRow.idx);
     if (
       reviewRow &&
       fromRow.idx > reviewRow.idx &&
       reviewRow.state !== 'skipped' &&
       (reviewRow.state !== 'succeeded' ||
-        (reviewRow.output as { verdict?: unknown } | null)?.verdict !== 'approve')
+        (reviewRow.output as { verdict?: unknown } | null)?.verdict === 'changes_needed')
     )
       throw conflict(
         'This run’s review hasn’t approved the fix, and Whombat merges nothing past it. Continue from "review" so it reads the newest review; if the person wants it merged without that, they merge the pull request themselves.',

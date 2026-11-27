@@ -266,7 +266,7 @@
       "class": "expand",
       "readers": "0000_baseline",
       "writers": "0000_baseline",
-      "note": "A report's T3 Code thread stays the report's (docs/decisions/outsiders-turns.md OT-27): two nullable text columns on t3_watches (report_conversation_id, report_thread_root_id), the Chat thread of the report whose turn started the thread. The release before it reads and writes past them; a thread it starts has none and counts as the report's while it is still as that turn left it, as before."
+      "note": "A report's T3 Code thread stays the report's (docs/decisions/outsiders-turns.md OT-27): two nullable text columns on t3_watches (report_conversation_id, report_thread_root_id), the Chat thread of the report whose turn started the thread. The release before it reads and writes past them; a thread it starts has none and counts as the report's while it is still as that turn left it, as before, and one a person's turn takes while that release runs stays the person's."
     }
   }
 }

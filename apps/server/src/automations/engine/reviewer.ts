@@ -5,7 +5,7 @@
  * the relay: its verdict, the commit its verdict's line names, when it began and which model it was.
  */
 import { type AutomationVerdict, parseVerdict, renderTemplate, T3_REVIEW_TITLE } from '@whombat/core';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { catalogConnections, t3Watches } from '../../db/schema/index';
 import type { Services } from '../../services';
 import { answerArgs, lastAnswerOf } from '../../t3code/threads';
@@ -123,10 +123,9 @@ export function reviewBinds(
 }
 
 /**
- * What the reviewer of this run's fix last said: found through the T3 Code threads handed work from the run's thread
- * (its watches, on each T3 Code connection they are on) — also one its report started that a person's turn last
- * handed work from another thread — and their `subagent` children. Null when there is none to read, or T3 Code didn't
- * answer (logged).
+ * What the reviewer of this run's fix last said: found through the T3 Code threads the run's own turns started (its
+ * watches, on each T3 Code connection they are on) and their `subagent` children. Null when there is none to read, or
+ * T3 Code didn't answer (logged).
  */
 export async function reviewerVerdict(
   services: Services,
@@ -140,17 +139,9 @@ export async function reviewerVerdict(
     .from(t3Watches)
     .innerJoin(catalogConnections, eq(catalogConnections.id, t3Watches.connectionId))
     .where(
-      or(
-        and(
-          eq(t3Watches.conversationId, run.conversationId),
-          run.threadRootId ? eq(t3Watches.threadRootId, run.threadRootId) : isNull(t3Watches.threadRootId),
-        ),
-        and(
-          eq(t3Watches.reportConversationId, run.conversationId),
-          run.threadRootId
-            ? eq(t3Watches.reportThreadRootId, run.threadRootId)
-            : isNull(t3Watches.reportThreadRootId),
-        ),
+      and(
+        eq(t3Watches.conversationId, run.conversationId),
+        run.threadRootId ? eq(t3Watches.threadRootId, run.threadRootId) : isNull(t3Watches.threadRootId),
       ),
     );
   const connections = new Map(watched.map((w) => [w.connection.id, w.connection]));

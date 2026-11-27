@@ -6,7 +6,8 @@
  * - list projects and AI programs, to find where to start;
  * - start a thread, always in a new worktree, never in the project folder itself or an existing worktree;
  * - wait for, read, message, answer or stop only the threads its own turns started from this report's thread, also
- *   after a person's turn handed one of them more work (a follow-up the run's review must still read);
+ *   after a person's turn handed one of them more work from that thread (a follow-up the run's review must still
+ *   read);
  * - find and read the reviews those threads hand to another model (their `subagent` children): a fix's review is how
  *   the run knows it may merge, so the report turn reads the reviewer's own words.
  *
@@ -67,10 +68,11 @@ export interface ReportTurnPlace {
 
 /**
  * The watches of the T3 Code threads that are this report's own: the ones its turns started from its Chat thread
- * (`report_conversation_id`, `report_thread_root_id`, written when a report's turn hands a thread work). The mark
- * stays when a person's turn later hands the thread more work, from here or anywhere: a follow-up the person asked for
- * must not take the thread from the run that still has to read its review. A thread a person's turn started in the
- * same Chat thread has no mark and stays theirs. A watch from before the mark counts while it is still as a report's
+ * (`report_conversation_id`, `report_thread_root_id`, written when a report's turn hands a thread work) and that were
+ * last handed work from there. The mark stays when a person's turn hands the thread more work from this Chat thread:
+ * a follow-up the person asked for here must not take the thread from the run that still has to read its review
+ * (`t3code/follow.ts`). A hand-over from anywhere else ends it, and a thread a person's turn started in this Chat
+ * thread never had it: those are the person's. A watch from before the mark counts while it is still as a report's
  * turn left it: handed over here, for nobody and with no wake. Never a council's or a checklist's thread.
  */
 export function reportThreads(place: Pick<ReportTurnPlace, 'agentId' | 'conversationId' | 'threadRootId'>) {
@@ -78,6 +80,9 @@ export function reportThreads(place: Pick<ReportTurnPlace, 'agentId' | 'conversa
     eq(t3Watches.agentId, place.agentId),
     isNull(t3Watches.councilId),
     isNull(t3Watches.delegationTaskId),
+    // Where it was last handed work, whatever a release without the mark wrote meanwhile.
+    eq(t3Watches.conversationId, place.conversationId),
+    place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
     or(
       and(
         eq(t3Watches.reportConversationId, place.conversationId),
@@ -85,13 +90,7 @@ export function reportThreads(place: Pick<ReportTurnPlace, 'agentId' | 'conversa
           ? eq(t3Watches.reportThreadRootId, place.threadRootId)
           : isNull(t3Watches.reportThreadRootId),
       ),
-      and(
-        isNull(t3Watches.reportConversationId),
-        isNull(t3Watches.personId),
-        eq(t3Watches.wakes, false),
-        eq(t3Watches.conversationId, place.conversationId),
-        place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
-      ),
+      and(isNull(t3Watches.reportConversationId), isNull(t3Watches.personId), eq(t3Watches.wakes, false)),
     ),
   );
 }

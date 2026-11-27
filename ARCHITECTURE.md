@@ -645,9 +645,11 @@ Automations. Code finds it by kind
   worktree and follow its report’s own hand-overs. The turn’s context lists those hand-overs, and the same ownership
   checks apply to every call. A thread is the report's own when its turn started it: the watch keeps the report's Chat
   thread (`t3_watches.report_conversation_id`, `report_thread_root_id`), also after a person's turn hands that thread
-  a follow-up, which only changes who is woken. The person's threads, schedules, environments
-  and projects are refused before T3 Code is asked (`connections/report-turn.ts`). A fix step's message that asks
-  for a review also tells the thread to keep the commits a review read (`t3code/follow.ts`
+  a follow-up from the report's own Chat thread, which only changes who is woken; a hand-over from anywhere else makes
+  it the person's, and a report's turn never takes a hand-over a person still waits for. The person's threads,
+  schedules, environments and projects are refused before T3 Code is asked (`connections/report-turn.ts`). A message
+  that hands over an automation's fix and asks for a review (its fix step's, or a person's follow-up on a fix that
+  didn't land) also tells the thread to keep the commits a review read (`t3code/follow.ts`
   `withReviewedCommitRules`): the fix merges only when the commit the last review names is on the pushed branch.
 
 - **Settings for the person** (`apps/server/src/settings/`): in the person's own turns (never an automation's step or an
