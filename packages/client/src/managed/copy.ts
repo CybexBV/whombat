@@ -4,6 +4,7 @@
  * “your Whombat”; a browser or phone is a “device”. Curly quotes and the middle dot as in the mocks.
  */
 import { VERSION_REFUSAL_COPY } from '@whombat/protocol/session';
+import { clientTranslator } from '../i18n/catalog';
 import { claimStepKicker } from './claim-steps';
 
 export const COPY = {
@@ -587,13 +588,14 @@ export const COPY = {
 } as const;
 
 /** “3 hours ago”, “2 days ago” from epoch seconds. */
-export function agoText(epochS: number, now: number = Date.now()): string {
+export function agoText(epochS: number, now: number = Date.now(), locale?: string | null): string {
+  const tr = clientTranslator(locale);
   const s = Math.max(0, Math.round(now / 1000 - epochS));
-  if (s < 90) return 'just now';
+  if (s < 90) return tr.t('managed.ago.justNow');
   const m = Math.round(s / 60);
-  if (m < 90) return `${m} minutes ago`;
+  if (m < 90) return tr.tp('managed.ago.minutes', m);
   const h = Math.round(m / 60);
-  if (h < 36) return `${h} hour${h === 1 ? '' : 's'} ago`;
+  if (h < 36) return tr.tp('managed.ago.hours', h);
   const d = Math.round(h / 24);
-  return `${d} day${d === 1 ? '' : 's'} ago`;
+  return tr.tp('managed.ago.days', d);
 }

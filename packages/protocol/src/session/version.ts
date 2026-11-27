@@ -8,6 +8,7 @@
  * differ freely: a newer minor only adds (CT-14), and an op a box doesn't have yet is `unknown_op`. There are no
  * feature lists, API levels or windows.
  */
+import { coreTranslator } from '@whombat/core/i18n';
 import { z } from 'zod';
 import { SESSION_MAX_CAPABILITIES } from '../limits.js';
 
@@ -261,3 +262,9 @@ export const VERSION_REFUSAL_COPY = {
   client: 'Update the app to use this Whombat.',
   appliance: 'This Whombat needs an update to work with this app.',
 } as const;
+
+/** `VERSION_REFUSAL_COPY` in the person's language (English when the locale is absent or unknown). */
+export function versionRefusalCopy(locale?: string | null): { client: string; appliance: string } {
+  const tr = coreTranslator(locale);
+  return { client: tr.t('version.refusal.client'), appliance: tr.t('version.refusal.appliance') };
+}

@@ -6,17 +6,23 @@
  */
 import type { HomeSeverity, NeedsYouItem, ThingStatus, ThingSummary } from '@whombat/core';
 import type { HostServerStatus } from '@whombat/core/domain';
+import { clientTranslator } from '../i18n/catalog';
 
 export const STATUS_LEVELS = ['notWorking', 'needsLook', 'learning', 'connected'] as const;
 export type StatusLevel = (typeof STATUS_LEVELS)[number];
 
 /** The pill's word for each level; a thing that is offline says “Offline” (its own word) instead of “Not working”. */
-export const STATUS_LEVEL_WORDS: Record<StatusLevel, string> = {
-  notWorking: 'Not working',
-  needsLook: 'Needs a look',
-  learning: 'Learning',
-  connected: 'Connected',
-};
+export function statusLevelWords(locale?: string | null): Record<StatusLevel, string> {
+  const tr = clientTranslator(locale);
+  return {
+    notWorking: tr.t('statusLevel.notWorking'),
+    needsLook: tr.t('statusLevel.needsLook'),
+    learning: tr.t('statusLevel.learning'),
+    connected: tr.t('statusLevel.connected'),
+  };
+}
+
+export const STATUS_LEVEL_WORDS: Record<StatusLevel, string> = statusLevelWords();
 
 /** The longest reason a mark's name or a card's line carries; the rest is on the thing's page. */
 export const STATUS_REASON_MAX = 60;
@@ -82,11 +88,15 @@ export function statusReason(reason: string | null | undefined): string | null {
 }
 
 /** A thing's status as the sidebar and Overview show it: “Offline” or “Not working”, “Needs a look”, … and why. */
-export function thingStatusView(thing: Pick<ThingSummary, 'status' | 'reason'>): StatusView {
+export function thingStatusView(
+  thing: Pick<ThingSummary, 'status' | 'reason'>,
+  locale?: string | null,
+): StatusView {
   const level = thingStatusLevel(thing.status);
+  const words = statusLevelWords(locale);
   return {
     level,
-    word: thing.status === 'offline' ? 'Offline' : STATUS_LEVEL_WORDS[level],
+    word: thing.status === 'offline' ? clientTranslator(locale).t('thing.status.offline') : words[level],
     reason: level === 'connected' ? null : statusReason(thing.reason),
   };
 }
@@ -123,16 +133,23 @@ export function sortByStatusLevel<T>(items: readonly T[], levelOf: (item: T) => 
  * more are down because of something else (not among `levels`): “1 not answering” after what isn't working. Empty for
  * none.
  */
-export function statusSummary(levels: readonly StatusLevel[], notAnswering = 0): string {
+export function statusSummary(
+  levels: readonly StatusLevel[],
+  notAnswering = 0,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   const count = (level: StatusLevel) => levels.filter((l) => l === level).length;
   const notWorking = count('notWorking');
   const look = count('needsLook');
+  const connected = count('connected');
+  const learning = count('learning');
   return [
-    notWorking ? `${notWorking} not working` : null,
-    notAnswering ? `${notAnswering} not answering` : null,
-    count('connected') ? `${count('connected')} connected` : null,
-    look ? `${look} ${look === 1 ? 'needs' : 'need'} a look` : null,
-    count('learning') ? `${count('learning')} learning` : null,
+    notWorking ? tr.t('statusLevel.summary.notWorking', { count: notWorking }) : null,
+    notAnswering ? tr.t('statusLevel.summary.notAnswering', { count: notAnswering }) : null,
+    connected ? tr.t('statusLevel.summary.connected', { count: connected }) : null,
+    look ? tr.tp('statusLevel.summary.needsLook', look) : null,
+    learning ? tr.t('statusLevel.summary.learning', { count: learning }) : null,
   ]
     .filter(Boolean)
     .join(' · ');

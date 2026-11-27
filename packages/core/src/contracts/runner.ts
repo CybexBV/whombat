@@ -108,7 +108,7 @@ import {
   UsageWindow,
 } from '../domain/usage.js';
 import { WEB_SEARCH_KEY_MAX, WebSearchProvider } from '../domain/web-search.js';
-import { LocaleTag } from '../i18n/locale.js';
+import { LocaleTag } from '../i18n/schema.js';
 import {
   AccountId,
   AgentScheduleId,

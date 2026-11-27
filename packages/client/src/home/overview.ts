@@ -7,10 +7,11 @@
 import type { ThingSummary } from '@whombat/core';
 import type { HostServer } from '@whombat/core/domain';
 import { overviewServersLine } from '../hosts/overview';
+import { clientTranslator } from '../i18n/catalog';
 import { thingStateWords } from './monitoring';
 import { type HomeSection, type HomeThingRow, thingFigurePhrase, usedPhrase } from './sections';
 import { sortByStatusLevel, statusSummary } from './statusLevel';
-import { type ConnectionsTab, type ConnectionsTabView, connectionsTabs, OVERVIEW_WORDS } from './tabs';
+import { type ConnectionsTab, type ConnectionsTabView, connectionsTabs, overviewWords } from './tabs';
 
 /* Sections and jump links ------------------------------------------------------------------------------------------ */
 
@@ -35,8 +36,11 @@ const ANCHORS: Record<ConnectionsTab, string> = {
 export function overviewSections(
   sections: readonly HomeSection[],
   fleet?: readonly HostServer[] | null,
+  locale?: string | null,
 ): OverviewSectionView[] {
-  return connectionsTabs(sections).map((tab) => {
+  const tr = clientTranslator(locale);
+  const words = overviewWords(locale);
+  return connectionsTabs(sections, locale).map((tab) => {
     if (tab.key === 'servers') {
       if (!fleet) return { ...tab, anchor: ANCHORS.servers, summary: '' };
       const tone = fleet.some((s) => s.status === 'bad' || s.status === 'offline')
@@ -49,19 +53,20 @@ export function overviewSections(
         ...tab,
         count,
         tone,
-        spoken: [tab.label, String(count), tone ? 'something needs a look' : null].filter(Boolean).join(', '),
+        spoken: [tab.label, String(count), tone ? tr.t('overview.tab.spokenWarn') : null]
+          .filter(Boolean)
+          .join(', '),
         anchor: ANCHORS.servers,
-        summary: overviewServersLine(fleet),
+        summary: overviewServersLine(fleet, locale),
       };
     }
     if (tab.key === 'services') {
       const rows = sections.find((s) => s.kind === 'things')?.rows ?? [];
-      // One down because of something else is grey, but it isn't connected: the line says so as the count does.
       const down = rows.filter((r) => r.notAnswering && r.level === 'connected');
       const rest = rows.filter((r) => !down.includes(r)).map((r) => r.level);
-      return { ...tab, anchor: ANCHORS.services, summary: statusSummary(rest, down.length) };
+      return { ...tab, anchor: ANCHORS.services, summary: statusSummary(rest, down.length, locale) };
     }
-    return { ...tab, anchor: ANCHORS.pinned, summary: OVERVIEW_WORDS.fromYourChats };
+    return { ...tab, anchor: ANCHORS.pinned, summary: words.fromYourChats };
   });
 }
 

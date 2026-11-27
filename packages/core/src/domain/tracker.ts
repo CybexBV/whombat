@@ -5,7 +5,9 @@
  * step. Its name and words come from its driver (`TrackerWords`); the vocabulary of statuses, assessments and
  * priorities below is the one every driver maps its tracker's own onto.
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { ConnectionId } from '../ids.js';
 import type { AutomationAssessment } from './automation.js';
 import { Timestamp } from './common.js';
@@ -29,8 +31,16 @@ export const TrackerWords = z.object({
 });
 export type TrackerWords = z.infer<typeof TrackerWords>;
 
+const UNKNOWN_TRACKER_WORDS_KEYS = ['product', 'team'] as const;
+
 /** The words of a tracker whose driver isn't there (or a viewer who can't see its connection). */
-export const UNKNOWN_TRACKER_WORDS: TrackerWords = { product: 'the tracker', team: 'the team' };
+export function unknownTrackerWords(
+  locale?: string | null,
+): Readonly<Record<(typeof UNKNOWN_TRACKER_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'tracker.unknown', UNKNOWN_TRACKER_WORDS_KEYS);
+}
+
+export const UNKNOWN_TRACKER_WORDS: TrackerWords = unknownTrackerWords('en');
 
 /**
  * A tracker recipe's words (`RecipeWhen` of kind `tracker`): the driver's `TrackerWords` and its own lines for the
@@ -64,36 +74,56 @@ export const TrackerUpdateStatus = z.enum([
 ]);
 export type TrackerUpdateStatus = z.infer<typeof TrackerUpdateStatus>;
 
+const TRACKER_STATUS_LABELS_KEYS = [
+  'new',
+  'investigating',
+  'needs_information',
+  'planned',
+  'in_progress',
+  'awaiting_release',
+  'available',
+  'confirmed',
+  'closed',
+  'not_planned',
+  'duplicate',
+] as const;
+
 /** A status's words, for every status of the tracker vocabulary (`trackerStatusLabel` for one a tracker adds). */
-export const TRACKER_STATUS_LABELS: Readonly<Record<string, string>> = {
-  new: 'New',
-  investigating: 'Investigating',
-  needs_information: 'Needs information',
-  planned: 'Planned',
-  in_progress: 'In progress',
-  awaiting_release: 'Fixed, waiting for a release',
-  available: 'Available',
-  confirmed: 'Confirmed',
-  closed: 'Closed',
-  not_planned: 'Not planned',
-  duplicate: 'Duplicate',
-};
+export function trackerStatusLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof TRACKER_STATUS_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'tracker.status', TRACKER_STATUS_LABELS_KEYS);
+}
+
+export const TRACKER_STATUS_LABELS: Readonly<Record<string, string>> = trackerStatusLabels('en');
+
+const TRACKER_ASSESSMENT_LABELS_KEYS = [
+  'likely_bug',
+  'reproduced',
+  'needs_information',
+  'duplicate',
+  'feature_request',
+] as const;
 
 /** The assessments a tracker keeps on a report, in words (TA-11; `reproduced` only ever by a person there). */
-export const TRACKER_ASSESSMENT_LABELS: Readonly<Record<string, string>> = {
-  likely_bug: 'Likely bug',
-  reproduced: 'Reproduced',
-  needs_information: 'Needs information',
-  duplicate: 'Duplicate',
-  feature_request: 'Feature request',
-};
+export function trackerAssessmentLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof TRACKER_ASSESSMENT_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'tracker.assessment', TRACKER_ASSESSMENT_LABELS_KEYS);
+}
 
-export const TRACKER_PRIORITY_LABELS: Readonly<Record<string, string>> = {
-  urgent: 'Urgent',
-  high: 'High',
-  normal: 'Normal',
-  low: 'Low',
-};
+export const TRACKER_ASSESSMENT_LABELS: Readonly<Record<string, string>> = trackerAssessmentLabels('en');
+
+const TRACKER_PRIORITY_LABELS_KEYS = ['urgent', 'high', 'normal', 'low'] as const;
+
+/** `TRACKER_PRIORITY_LABELS` in a locale. */
+export function trackerPriorityLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof TRACKER_PRIORITY_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'tracker.priority', TRACKER_PRIORITY_LABELS_KEYS);
+}
+
+export const TRACKER_PRIORITY_LABELS: Readonly<Record<string, string>> = trackerPriorityLabels('en');
 
 /** “In progress”; a status this version doesn't know in the tracker's own words (`on_hold` → “On hold”). */
 export function trackerStatusLabel(status: string): string {

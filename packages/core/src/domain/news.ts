@@ -7,7 +7,9 @@
  * (`news.importSites`, an OPML file read on the device). Up to `NEWS_SOURCES_MAX` per burrow (`news.sources`,
  * `news.setSources`, `news.addSite`).
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { Timestamp } from './common.js';
 import { NEWS_SUGGESTIONS, type NewsSuggestionRow } from './news-suggestions.js';
 import { Place } from './place.js';
@@ -419,88 +421,105 @@ export function newsOpml(
   ].join('\n');
 }
 
-/** The words Settings → News and weather shows about the news (web and phone alike). */
-export const NEWS_WORDS = {
-  title: 'News',
+const NEWS_WORDS_KEYS = [
+  'title',
   /** Settings' own page for the place and the news, and its line. */
-  page: 'News and weather',
-  pageLine: 'Where this Whombat is, for the weather, and the sources your headlines come from.',
+  'page',
+  'pageLine',
   /** The home's row for it. */
-  homeLine: 'Your place, the weather and your headlines',
-  about: 'Headlines come straight from these sources to this Whombat. Nothing is read until you turn one on.',
-  chosen: 'Your sources',
+  'homeLine',
+  'about',
+  'chosen',
   /** How many are on, beside YOUR SOURCES: “5 of 30”. */
-  count: '{n} of {max}',
-  none: 'No sources on yet.',
-  suggested: 'Suggested for {where}',
-  findMore: 'Find more',
-  tabSuggested: 'Suggested',
-  tabOwn: 'Add your own',
-  tabImport: 'Import',
-  country: 'Country',
-  allTopics: 'All',
-  nearYou: 'Near you',
-  national: 'National',
-  regional: 'Regional',
-  addedByYou: 'added by you',
-  turnOn: 'Turn on',
-  turnOff: 'Turn off',
-  remove: 'Remove',
-  add: 'Add your own',
-  addField: 'A website, feed, YouTube channel, subreddit or podcast',
-  addButton: 'Add',
-  added: '{name} is on.',
-  importLine: 'Moving from another news reader? Choose the OPML file it saved.',
-  importButton: 'Choose a file',
-  importNone: 'That file has no feeds in it.',
-  importedOne: 'One source added.',
-  importedMany: '{n} sources added.',
-  importSkipped: '{n} couldn’t be added.',
+  'count',
+  'none',
+  'suggested',
+  'findMore',
+  'tabSuggested',
+  'tabOwn',
+  'tabImport',
+  'country',
+  'allTopics',
+  'nearYou',
+  'national',
+  'regional',
+  'addedByYou',
+  'turnOn',
+  'turnOff',
+  'remove',
+  'add',
+  'addField',
+  'addButton',
+  'added',
+  'importLine',
+  'importButton',
+  'importNone',
+  'importedOne',
+  'importedMany',
+  'importSkipped',
   /** Saving the list for another reader. */
-  export: 'Save as OPML',
+  'export',
   /** The news tile's gear on a screen, and its tooltip. */
-  gear: 'Choose sources',
-  full: 'Up to {n} sources. Turn one off first.',
-  notHttps: 'Use the site’s https address.',
-  notFeed: 'That page doesn’t name a feed Whombat can read.',
-  unreachable: 'Couldn’t reach that site just now. Try again in a moment.',
-  problem: 'Couldn’t read it just now',
+  'gear',
+  'full',
+  'notHttps',
+  'notFeed',
+  'unreachable',
+  'problem',
   /** The `news` widget with no site on, and with none read. */
-  widgetEmpty: 'Choose your news in Settings',
-  widgetProblem: 'Can’t read the news just now',
+  'widgetEmpty',
+  'widgetProblem',
   // web
   /** Find more's row for a site that is on already. */
-  on: 'On',
+  'on',
   /** A source's buttons beside its grip, for the keyboard and touch. */
-  moveUp: 'Move {name} up',
-  moveDown: 'Move {name} down',
+  'moveUp',
+  'moveDown',
   /** After a source's problem: Add your own with its address, to add it as it is now. */
-  findAgain: 'Find it again',
+  'findAgain',
   /** Find more for a country without suggestions. */
-  browseNone: 'No suggestions here yet. Add your own instead.',
+  'browseNone',
   // phone
   /** YOUR SOURCES' order on the phone: a mode with Move up and Move down on each row. */
-  order: 'Change order',
-  orderDone: 'Done',
-} as const;
+  'order',
+  'orderDone',
+] as const;
+
+/** The words Settings → News and weather shows about the news (web and phone alike). */
+export function newsWords(
+  locale?: string | null,
+): Readonly<Record<(typeof NEWS_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'news', NEWS_WORDS_KEYS);
+}
+
+export const NEWS_WORDS = newsWords('en');
+
+const NEWS_TOPIC_WORDS_KEYS = ['news', 'tech', 'business', 'sport', 'science', 'culture'] as const;
 
 /** A topic's name (“Tech”). */
-export const NEWS_TOPIC_WORDS: Readonly<Record<NewsTopic, string>> = {
-  news: 'News',
-  tech: 'Tech',
-  business: 'Business',
-  sport: 'Sport',
-  science: 'Science',
-  culture: 'Culture',
-};
+export function newsTopicWords(
+  locale?: string | null,
+): Readonly<Record<(typeof NEWS_TOPIC_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'news.topic', NEWS_TOPIC_WORDS_KEYS);
+}
+
+export const NEWS_TOPIC_WORDS: Readonly<Record<NewsTopic, string>> = newsTopicWords('en');
+
+const NEWS_KIND_WORDS_KEYS = [
+  'site',
+  'youtube',
+  'reddit',
+  'mastodon',
+  'bluesky',
+  'podcast',
+  'github',
+] as const;
 
 /** What a source is, in the line under its name (“YouTube · added by you”). */
-export const NEWS_KIND_WORDS: Readonly<Record<NewsSourceKind, string>> = {
-  site: 'Website',
-  youtube: 'YouTube',
-  reddit: 'Reddit',
-  mastodon: 'Mastodon',
-  bluesky: 'Bluesky',
-  podcast: 'Podcast',
-  github: 'GitHub',
-};
+export function newsKindWords(
+  locale?: string | null,
+): Readonly<Record<(typeof NEWS_KIND_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'news.kind', NEWS_KIND_WORDS_KEYS);
+}
+
+export const NEWS_KIND_WORDS: Readonly<Record<NewsSourceKind, string>> = newsKindWords('en');

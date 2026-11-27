@@ -3,15 +3,15 @@
  * Each package owns its own declarative English and translated catalogs; this registry lets
  * `scripts/i18n/check.ts` and `scripts/i18n/po.ts` validate and export all of them together.
  */
-import type { Catalog, SupportedLanguage } from '../../packages/core/src/i18n/index';
+import type { MessageCatalog, SupportedLanguage } from '../../packages/core/src/i18n/index';
 
 export interface CatalogEntry {
   /** Package / surface identifier, e.g. `core`, `client`, `web`, `server`. */
   name: string;
   /** Canonical English messages. */
-  en: Catalog;
+  en: MessageCatalog;
   /** Translations keyed by non-English supported language. */
-  locales: Record<Exclude<SupportedLanguage, 'en'>, Catalog>;
+  locales: Record<Exclude<SupportedLanguage, 'en'>, MessageCatalog>;
   /** Optional translator context notes keyed by message key. */
   context?: Readonly<Record<string, string>>;
 }
@@ -62,8 +62,8 @@ export async function loadCatalogs(): Promise<CatalogEntry[]> {
 async function tryLoad(name: string, specifier: string): Promise<CatalogEntry | null> {
   try {
     const mod = (await import(specifier)) as {
-      EN?: Catalog;
-      NL?: Catalog;
+      EN?: MessageCatalog;
+      NL?: MessageCatalog;
       CONTEXT?: Readonly<Record<string, string>>;
     };
     if (!mod.EN || !mod.NL) return null;

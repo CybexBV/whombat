@@ -4,6 +4,7 @@
  * person's views add the detail.
  */
 import type { MessageVaultSave } from '../domain/message.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { type DateInput, formatAgo, formatRecent, toDate } from '../text/time.js';
 import { vaultEntryAddress } from './network.js';
 import { VAULT_FAILURE_TEXT } from './request.js';
@@ -62,6 +63,53 @@ export const VAULT_COPY = {
     `${n} more ${n === 1 ? 'tool was' : 'tools were'} ignored: an entry keeps at most 64.`,
   setBy: (name: string) => `Set by ${name}`,
 } as const;
+
+const VAULT_COPY_KEYS = [
+  'title',
+  'intro',
+  'entries',
+  'noEntries',
+  'add',
+  'homeNetwork',
+  'homeNetworkIntro',
+  'noNetworks',
+  'descriptionLabel',
+  'secret',
+  'connection',
+  'tools',
+  'keys',
+  'recentUse',
+  'manage',
+  'replace',
+  'checkAgain',
+  'newBadge',
+  'remove',
+  'notSet',
+  'notChecked',
+  'queryWarning',
+  'httpWarning',
+  'secretsOnWeb',
+] as const;
+
+/** `VAULT_COPY` in a locale. */
+export function vaultCopy(locale?: string | null): {
+  [K in (typeof VAULT_COPY_KEYS)[number]]: string;
+} & {
+  keysNote: (agentName: string) => string;
+  toolsIgnored: (n: number) => string;
+  setBy: (name: string) => string;
+} {
+  const tr = coreTranslator(locale);
+  const words = Object.fromEntries(VAULT_COPY_KEYS.map((key) => [key, tr.t(`vault.copy.${key}`)])) as {
+    [K in (typeof VAULT_COPY_KEYS)[number]]: string;
+  };
+  return {
+    ...words,
+    keysNote: (agentName: string) => tr.t('vault.copy.keysNote', { agent: agentName }),
+    toolsIgnored: (n: number) => tr.tp('vault.copy.toolsIgnored', n),
+    setBy: (name: string) => tr.t('vault.copy.setBy', { name }),
+  };
+}
 
 /* Signed audit text (VT-51) --------------------------------------------------------------------- */
 
@@ -147,20 +195,41 @@ export function vaultAuditDetailText(event: {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** A use's outcome in a locale (“done”, “klaar”). */
+function outcomeLabel(outcome: VaultUse['outcome'], locale?: string | null): string {
+  return coreTranslator(locale).language === 'en'
+    ? VAULT_USE_OUTCOME_LABELS[outcome]
+    : coreTranslator(locale).t(`vault.outcome.${outcome}`);
+}
+
 /**
  * What kind of entry it is, in a person's words (“Connection”, “Sign-in key”, “Password”, “Website login”, “Server
  * key”, “Secret”): the template's label, the same on the web and the phone.
  */
-export function vaultEntryLabel(entry: {
-  kind: VaultEntryKind;
-  auth: Pick<VaultAuth, 'type'> | null;
-}): string {
-  return VAULT_TEMPLATE_DEFS[vaultTemplateOf(entry.kind, entry.auth)].label;
+export function vaultEntryLabel(
+  entry: {
+    kind: VaultEntryKind;
+    auth: Pick<VaultAuth, 'type'> | null;
+  },
+  locale?: string | null,
+): string {
+  const template = vaultTemplateOf(entry.kind, entry.auth);
+  const tr = coreTranslator(locale);
+  return tr.language === 'en'
+    ? VAULT_TEMPLATE_DEFS[template].label
+    : tr.t(`vault.template.${template}.label`);
 }
 
 /** A template's description with the agent by its name (“A website Dusty signs in to in its browser. …”). */
-export function vaultTemplateDescription(template: VaultTemplate, agentName: string): string {
-  return VAULT_TEMPLATE_DEFS[template].description.split('the agent').join(agentName);
+export function vaultTemplateDescription(
+  template: VaultTemplate,
+  agentName: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en')
+    return VAULT_TEMPLATE_DEFS[template].description.split('the agent').join(agentName);
+  return tr.t(`vault.template.${template}.description`).split('de assistent').join(agentName);
 }
 
 /**
@@ -171,18 +240,21 @@ export function vaultTemplateDescription(template: VaultTemplate, agentName: str
 export function vaultEntryMeta(
   entry: Pick<VaultEntry, 'kind' | 'auth' | 'url' | 'agentOn'> & { serverCount?: number },
   agentName: string,
+  locale?: string | null,
 ): string {
-  const label = vaultEntryLabel(entry);
-  const agent = `${entry.agentOn ? 'on' : 'off'} for ${agentName}`;
+  const tr = coreTranslator(locale);
+  const label = vaultEntryLabel(entry, locale);
+  const agent = tr.t(entry.agentOn ? 'vault.meta.on' : 'vault.meta.off', { agent: agentName });
   if (entry.kind === 'ssh') {
     const servers = entry.serverCount ?? 0;
-    return [label, vaultSshServerCount(servers), agent].join(' · ');
+    return [label, vaultSshServerCount(servers, locale), agent].join(' · ');
   }
-  if (entry.kind === 'secret') return `${label} · nothing uses it`;
+  if (entry.kind === 'secret') return tr.t('vault.meta.unused', { label });
   return [label, entry.url ? vaultEntryAddress(entry.url) : null, agent].filter(Boolean).join(' · ');
 }
 
-const vaultSshServerCount = (n: number) => (n === 0 ? 'no servers' : plural(n, 'server', 'servers'));
+const vaultSshServerCount = (n: number, locale?: string | null) =>
+  n === 0 ? coreTranslator(locale).t('vault.noServers') : coreTranslator(locale).tp('vault.servers', n);
 
 /**
  * The card's quieter line: where the entry points (“192.168.1.10:8123”) or how many servers a key has (“2 servers”);
@@ -190,8 +262,9 @@ const vaultSshServerCount = (n: number) => (n === 0 ? 'no servers' : plural(n, '
  */
 export function vaultEntryWhere(
   entry: Pick<VaultEntry, 'kind' | 'url'> & { serverCount?: number },
+  locale?: string | null,
 ): string | null {
-  if (entry.kind === 'ssh') return vaultSshServerCount(entry.serverCount ?? 0);
+  if (entry.kind === 'ssh') return vaultSshServerCount(entry.serverCount ?? 0, locale);
   return entry.url ? vaultEntryAddress(entry.url) : null;
 }
 
@@ -200,32 +273,62 @@ export function vaultEntryWhere(
  * `vaultCheckSummary` and `vaultSshEntryCheck`): “The password stopped working.”, “Whombat can’t reach it right now.”,
  * “One of its servers isn’t working.”. Null unless the entry is failing.
  */
-export function vaultEntryProblem(entry: {
-  kind: VaultEntryKind;
-  auth: Pick<VaultAuth, 'type'> | null;
-  check: Pick<VaultCheck, 'status' | 'summary'>;
-}): string | null {
+export function vaultEntryProblem(
+  entry: {
+    kind: VaultEntryKind;
+    auth: Pick<VaultAuth, 'type'> | null;
+    check: Pick<VaultCheck, 'status' | 'summary'>;
+  },
+  locale?: string | null,
+): string | null {
   if (entry.check.status !== 'failing') return null;
   const summary = entry.check.summary.trim();
+  const problem = vaultProblemOf(entry, summary);
+  const tr = coreTranslator(locale);
+  if (problem === null) {
+    if (!summary) return null;
+    // A summary Whombat didn't write in a known form is the check's own words: shown as they are in English.
+    return tr.language === 'en' ? summary : tr.t('vault.problem.other');
+  }
+  if (problem.kind === 'servers') return tr.tp('vault.problem.servers', problem.count);
+  return tr.t(`vault.problem.${problem.kind}`);
+}
+
+type VaultProblem =
+  | {
+      kind:
+        | 'password'
+        | 'key'
+        | 'unreachable'
+        | 'timeout'
+        | 'notAllowed'
+        | 'badAnswer'
+        | 'sshRejected'
+        | 'hostChanged';
+    }
+  | { kind: 'servers'; count: number };
+
+/**
+ * What a failing check's summary says went wrong. The summaries are Whombat's own English (`vaultCheckSummary`,
+ * `vaultSshEntryCheck`), stored with the check, so they are read here once and the words come from the catalog.
+ */
+function vaultProblemOf(
+  entry: { kind: VaultEntryKind; auth: Pick<VaultAuth, 'type'> | null },
+  summary: string,
+): VaultProblem | null {
   if (summary.startsWith('The server rejected the secret'))
-    return entry.auth?.type === 'basic' || entry.auth?.type === 'form'
-      ? 'The password stopped working.'
-      : 'The sign-in key stopped working.';
-  if (summary === VAULT_FAILURE_TEXT.unreachable) return 'Whombat can’t reach it right now.';
-  if (summary === VAULT_FAILURE_TEXT.timeout) return 'It didn’t answer in time.';
-  if (summary.startsWith('Not allowed:')) return 'Whombat isn’t allowed to reach its address.';
-  if (summary.startsWith('It answered, but not as')) return 'It answered, but not the way Whombat expected.';
+    return { kind: entry.auth?.type === 'basic' || entry.auth?.type === 'form' ? 'password' : 'key' };
+  if (summary === VAULT_FAILURE_TEXT.unreachable) return { kind: 'unreachable' };
+  if (summary === VAULT_FAILURE_TEXT.timeout) return { kind: 'timeout' };
+  if (summary.startsWith('Not allowed:')) return { kind: 'notAllowed' };
+  if (summary.startsWith('It answered, but not as')) return { kind: 'badAnswer' };
   if (entry.kind === 'ssh') {
     const several = /^(\d+) of \d+ servers failing$/.exec(summary);
-    if (several) {
-      const n = Number(several[1]);
-      return n === 1 ? 'One of its servers isn’t working.' : `${n} of its servers aren’t working.`;
-    }
-    if (summary === VAULT_FAILURE_TEXT.rejected) return 'The server didn’t take the key.';
-    if (/host key changed|look like the same server/.test(summary))
-      return 'The server doesn’t look like the same server any more.';
+    if (several) return { kind: 'servers', count: Number(several[1]) };
+    if (summary === VAULT_FAILURE_TEXT.rejected) return { kind: 'sshRejected' };
+    if (/host key changed|look like the same server/.test(summary)) return { kind: 'hostChanged' };
   }
-  return summary || null;
+  return null;
 }
 
 /**
@@ -270,9 +373,18 @@ export function vaultCheckSummary(
 }
 
 /** CONNECTION: “Checked 3 min ago · Reached · 12 tools”, or “Not checked yet”. */
-export function vaultCheckLine(check: VaultCheck, now: DateInput, timeZone: string): string {
-  if (check.status === 'unchecked' || !check.checkedAt) return VAULT_COPY.notChecked;
-  return `Checked ${formatAgo(check.checkedAt, now, timeZone)} · ${check.summary}`;
+export function vaultCheckLine(
+  check: VaultCheck,
+  now: DateInput,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  if (check.status === 'unchecked' || !check.checkedAt) return tr.t('vault.copy.notChecked');
+  return tr.t('vault.checkLine', {
+    ago: formatAgo(check.checkedAt, now, timeZone, locale),
+    summary: check.summary,
+  });
 }
 
 /** SECRET: “Set · replaced 2 days ago”, “Set · added just now”, “Not set”. */
@@ -280,11 +392,15 @@ export function vaultSecretLine(
   entry: Pick<VaultEntry, 'secret' | 'createdAt'>,
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
   const { set, setAt } = entry.secret;
-  if (!set || !setAt) return VAULT_COPY.notSet;
+  if (!set || !setAt) return tr.t('vault.copy.notSet');
   const replaced = toDate(setAt).getTime() - toDate(entry.createdAt).getTime() > 1000;
-  return `Set · ${replaced ? 'replaced' : 'added'} ${formatAgo(setAt, now, timeZone)}`;
+  return tr.t(replaced ? 'vault.secretLine.replaced' : 'vault.secretLine.added', {
+    ago: formatAgo(setAt, now, timeZone, locale),
+  });
 }
 
 /**
@@ -299,8 +415,8 @@ export function vaultTurnUseWhat(kind: VaultEntryKind, agentName: string): strin
 }
 
 /** A use's outcome: “done”, “failed”, “refused”, “timed out”. */
-export function vaultUseOutcomeText(use: Pick<VaultUse, 'outcome'>): string {
-  return VAULT_USE_OUTCOME_LABELS[use.outcome];
+export function vaultUseOutcomeText(use: Pick<VaultUse, 'outcome'>, locale?: string | null): string {
+  return outcomeLabel(use.outcome, locale);
 }
 
 /**
@@ -313,11 +429,12 @@ export function vaultUseRow(
     names: (principalId: string) => { shortName: string } | undefined;
     now: DateInput;
     timeZone: string;
+    locale?: string | null;
   },
 ): { agent: string; what: string; when: string; outcome: string; line: string } {
-  const agent = ctx.names(use.agentId)?.shortName ?? 'The agent';
-  const when = formatRecent(use.at, ctx.now, ctx.timeZone);
-  const outcome = vaultUseOutcomeText(use);
+  const agent = ctx.names(use.agentId)?.shortName ?? coreTranslator(ctx.locale).t('vault.theAgent');
+  const when = formatRecent(use.at, ctx.now, ctx.timeZone, ctx.locale);
+  const outcome = vaultUseOutcomeText(use, ctx.locale);
   const what = use.what;
   return {
     agent,
@@ -333,8 +450,11 @@ export function vaultLastUsedText(
   lastUsedAt: string | null,
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string | null {
-  return lastUsedAt ? `Used ${formatRecent(lastUsedAt, now, timeZone)}` : null;
+  return lastUsedAt
+    ? coreTranslator(locale).t('vault.lastUsed', { when: formatRecent(lastUsedAt, now, timeZone, locale) })
+    : null;
 }
 
 /* SSH keys (VT-S05, VT-S12, VT-S13) -------------------------------------------------------------- */
@@ -512,17 +632,21 @@ export type VaultAgentAccess = (typeof VAULT_AGENT_ACCESS)[number];
  * The one row an entry shows for the agent (CT-786, CT-1240; VS-03; OA-09): “Dusty can use this”, On / Off, and the line
  * under the chosen one.
  */
-export function vaultAgentAccessCopy(agentName: string): {
+export function vaultAgentAccessCopy(
+  agentName: string,
+  locale?: string | null,
+): {
   title: string;
   choices: Record<VaultAgentAccess, string>;
   hints: Record<VaultAgentAccess, string>;
 } {
+  const tr = coreTranslator(locale);
   return {
-    title: `${agentName} can use this`,
-    choices: { on: 'On', off: 'Off' },
+    title: tr.t('vault.access.title', { agent: agentName }),
+    choices: { on: tr.t('vault.access.on'), off: tr.t('vault.access.off') },
     hints: {
-      on: `${agentName} uses it when it works for you, never for anyone else.`,
-      off: `${agentName} can’t use it.`,
+      on: tr.t('vault.access.hintOn', { agent: agentName }),
+      off: tr.t('vault.access.hintOff', { agent: agentName }),
     },
   };
 }
@@ -535,18 +659,25 @@ export const VAULT_SAVED_INTRO =
   'When you send {agent} a password in your chat, it keeps it here and hides it in your message. The AI service it runs on has still seen that one message.';
 
 /** `VAULT_SAVED_INTRO` with the agent's name. */
-export function vaultSavedIntro(agentName: string): string {
-  return VAULT_SAVED_INTRO.split('{agent}').join(agentName);
+export function vaultSavedIntro(agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('vault.savedIntro', { agent: agentName });
 }
 
 /**
  * The line under a message for each `vaultSaved` item (CT-783; VS-07, VS-11): “Saved to your Vault · Plex”, “Used once
  * to put “Servers” on web-1, not kept”.
  */
-export function vaultSavedLine(save: Pick<MessageVaultSave, 'name' | 'how' | 'server'>): string {
+export function vaultSavedLine(
+  save: Pick<MessageVaultSave, 'name' | 'how' | 'server'>,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   if (save.how === 'used_once')
-    return `Used once to put “${save.name}” on ${save.server ?? 'a server'}, not kept`;
-  return `Saved to your Vault · ${save.name}`;
+    return tr.t('vault.saved.usedOnce', {
+      name: save.name,
+      server: save.server ?? tr.t('vault.saved.aServer'),
+    });
+  return tr.t('vault.saved.kept', { name: save.name });
 }
 
 /* Entries off for the agent (0.33.0, Whombat vault.md VT-G01…VT-G05) ---------------------------------------------- */

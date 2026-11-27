@@ -7,9 +7,11 @@
  * The runtime is the one authority for what the screen shows and does; the console page draws what it is given (the
  * desk socket, `@whombat/control-contracts/local`). Pure: no I/O.
  */
+
 import { z } from 'zod';
 import { classifyCommand, type ShellSimpleCommand, shellSimpleCommands } from '../commands/classify.js';
 import type { CommandCategory } from '../commands/commands.js';
+import { coreTranslator, coreTree } from '../i18n/catalog.js';
 import { PrincipalId } from '../ids.js';
 import { keyTierRowOf } from '../keys/grants.js';
 import { formatBytes, hostDiskUsedPct } from '../text/host.js';
@@ -739,62 +741,70 @@ export function deskMayDecide(
 
 const NBSP = '\u00a0';
 
-/**
- * The words of the desk screen and its Settings, shared by the console page (which copies them: it can't import), the
- * web app and the phone. `{name}`, `{n}`, `{m}`, `{assistant}`, … are filled with `fillDeskWords`; a number and `%`
- * are joined by a no-break space. The assistant's name always comes from the runtime, never written in.
- */
-export const DESK_WORDS = {
+const DESK_WORDS_SHAPE = {
   /* The lock (mockups 1–3). */
-  locked: 'Locked · touch to use',
-  unlockedAs: 'Unlocked as {name} · locks in {n} min',
+  locked: 0,
+  unlockedAs: 0,
   /** While the camera sees someone (0.103, DK-28, DK-30). */
-  unlockedHere: 'Unlocked as {name} · stays unlocked while you’re here',
+  unlockedHere: 0,
   /** The camera mark's label while the camera is on (DK-30). */
-  cameraOn: 'The camera is on while the screen is unlocked',
+  cameraOn: 0,
   /** The chip of a screen that stays unlocked until Lock (0.107, DK-74): no minutes. */
-  unlockedStays: 'Unlocked as {name}',
+  unlockedStays: 0,
   /** The camera mark's label on the glance and the clock while the camera looks for someone (0.107, DK-73). */
-  cameraLooking: 'The camera is on to see when you’re here',
-  lock: 'Lock',
+  cameraLooking: 0,
+  lock: 0,
   /* The glance (mockup 1). */
-  needsYou: 'Needs you',
-  touchToAnswer: 'Touch to answer',
-  workingOn: 'Working on',
-  doneToday: 'Done today',
-  steps: { done: 'Done', now: 'Now', next: 'Next' },
-  cpu: 'CPU',
-  memory: 'Memory',
-  temp: 'Temp',
-  moreServers: '+{n} more',
+  needsYou: 0,
+  touchToAnswer: 0,
+  workingOn: 0,
+  doneToday: 0,
+  steps: {
+    done: 0,
+    now: 0,
+    next: 0,
+  },
+  cpu: 0,
+  memory: 0,
+  temp: 0,
+  moreServers: 0,
   /**
    * A server card's three lines (0.115, DK-80): the labels, `none` for a figure the runtime doesn't send (DK-88),
    * and `open` the card's label as a button (DK-83).
    */
-  card: { cpu: 'CPU', memory: 'MEM', disk: 'DISK', none: '–', open: 'Open {name}' },
+  card: {
+    cpu: 0,
+    memory: 0,
+    disk: 0,
+    none: 0,
+    open: 0,
+  },
   /** The runtime's note for a server whose hottest sensor is warm or hot (0.115, DK-81). */
-  hot: 'hot · {n}°',
+  hot: 0,
   /** All the servers (0.115, DK-86): opened by “+N more” (`moreServers`); `more` counts those beyond `DESK_SERVERS`. */
-  servers: { title: 'Servers', more: '{n} more in the app' },
+  servers: {
+    title: 0,
+    more: 0,
+  },
   /** `deskStatusLine`. */
   status: {
-    fine: 'Everything’s fine.',
-    needsYouOne: '1 thing needs you.',
-    needsYouMany: '{n} things need you.',
-    look: '{server} needs a look.',
-    down: '{server} is down.',
-    doing: 'I’m {doing}.',
-    decision: '{title} needs a decision.',
+    fine: 0,
+    needsYouOne: 0,
+    needsYouMany: 0,
+    look: 0,
+    down: 0,
+    doing: 0,
+    decision: 0,
     /** *Only the time* and the quiet hours' dim clock (DK-03, mockup 4). */
-    allFine: 'All fine.',
-    somethingNeedsYou: 'Something needs you.',
+    allFine: 0,
+    somethingNeedsYou: 0,
     /** A new box (DK-23): nothing needs the person, nothing worked on, no servers, no tiles; `connectHint` its `more`. */
-    ready: 'All fine. I’m ready when you are.',
-    connectHint: 'Connect a server or your home, and I’ll keep an eye on it here.',
+    ready: 0,
+    connectHint: 0,
   },
   /** The calm Needs you card when nothing needs the person (DK-23). */
-  nothingNeedsYou: 'Nothing needs you.',
-  nothingNeedsYouHint: 'When I need a decision, it shows here.',
+  nothingNeedsYou: 0,
+  nothingNeedsYouHint: 0,
   /**
    * Needs you's looks (0.118, CT-971; DK-93…DK-96): a server, connection or device that is down or needs a look. Its row
    * and its card's title are `status.down` and `status.look` with `{server}` the look's name; `offer` follows that on the
@@ -808,55 +818,62 @@ export const DESK_WORDS = {
    * `ignored` or `snoozed` before it closes.
    */
   looks: {
-    offer: 'Shall I look into it?',
-    noticed: '{assistant} noticed',
+    offer: 0,
+    noticed: 0,
     kinds: {
-      server: 'A server',
-      connection: 'A connection',
-      device: 'A device',
-    } satisfies Record<DeskLookKind, string>,
-    noReason: 'I don’t know why yet.',
-    fix: 'Ask {assistant} to look into it',
-    open: 'Open {name}',
-    fine: 'It looks fine again.',
-    question: 'Please take a look at {name}: {reason}.',
-    questionBare: 'Please take a look at {name}.',
-    ignore: 'Ignore',
-    notNow: 'Not now',
-    ignored: 'Ignored. You’ll hear if it changes.',
-    snoozed: 'I’ll remind you tomorrow.',
+      server: 0,
+      connection: 0,
+      device: 0,
+    } satisfies Record<DeskLookKind, 0>,
+    noReason: 0,
+    fix: 0,
+    open: 0,
+    fine: 0,
+    question: 0,
+    questionBare: 0,
+    ignore: 0,
+    notNow: 0,
+    ignored: 0,
+    snoozed: 0,
     /**
      * What the assistant found out (3.5; Whombat look-research.md): `looking` while it finds out (`lookingSoFar` with
      * the reason Whombat already knows, without its last full stop), `fixing` while it takes the step the person let it
      * take, `ask` the button that asks about it in Talk once it said what is wrong.
      */
-    looking: 'I’m looking into it.',
-    lookingSoFar: 'I’m looking into it. So far: {reason}.',
-    fixing: 'I’m on it.',
-    ask: 'Ask {assistant}',
+    looking: 0,
+    lookingSoFar: 0,
+    fixing: 0,
+    ask: 0,
   },
   /** This Whombat (DK-22, mockup `new-box.html`): the page fills the holes from `DeskGlance.box`. */
   box: {
-    title: 'This Whombat',
-    lastHour: 'Last hour',
-    processor: 'Processor · {n} cores',
-    memory: 'Memory · of {total}',
-    storage: 'Storage',
+    title: 0,
+    lastHour: 0,
+    processor: 0,
+    memory: 0,
+    storage: 0,
     /** “812” big, “GB free” small. */
-    free: '{unit} free',
-    used: `{n}${NBSP}% used`,
-    ofTotal: 'of {total}',
-    temperature: 'Temperature',
-    tempNote: 'Processor · {tone}',
-    tones: { ok: 'cool', warn: 'warm', bad: 'hot' } satisfies Record<DeskBoxTone, string>,
-    network: 'Network ↓ {down} · ↑ {up}',
-    hourAgo: '1 h ago',
-    now: 'now',
+    free: 0,
+    used: 0,
+    ofTotal: 0,
+    temperature: 0,
+    tempNote: 0,
+    tones: {
+      ok: 0,
+      warn: 0,
+      bad: 0,
+    } satisfies Record<DeskBoxTone, 0>,
+    network: 0,
+    hourAgo: 0,
+    now: 0,
     /** The chart's scale lines. */
-    scale: `{n}${NBSP}%`,
-    hint: 'Your servers and home show here once you connect them.',
+    scale: 0,
+    hint: 0,
     /** The storage parts' names; the agent's is its name (`{assistant}`). */
-    parts: { whombat: 'Whombat', agent: '{assistant}' } satisfies Record<DeskBoxPartKey, string>,
+    parts: {
+      whombat: 0,
+      agent: 0,
+    } satisfies Record<DeskBoxPartKey, 0>,
   },
   /**
    * A server's own screen (0.115, DK-83…DK-85, mockup 2): the page fills the holes from `DeskServerPage`. The
@@ -864,135 +881,139 @@ export const DESK_WORDS = {
    * `box.scale`, the chart's last time `box.now`. A guest without a CPU figure shows its state's word (`guestStates`).
    */
   server: {
-    back: 'Back',
-    allFine: 'All fine',
-    cores: '{n} cores',
-    coresOne: '1 core',
-    cpu: 'CPU',
-    load: 'load {n}',
-    memory: 'Memory',
-    memoryOf: 'of {total}',
-    disk: 'Disk',
-    diskOf: '{used} of {total}',
-    temperature: 'Temperature',
-    tempNote: '{tone} · limit {n}°',
-    ranges: { '1h': 'Last hour', '24h': 'Last 24 hours', '7d': 'Last 7 days' } satisfies Record<
-      DeskServerRange,
-      string
-    >,
-    rangeChips: { '1h': '1 h', '24h': '24 h', '7d': '7 d' } satisfies Record<DeskServerRange, string>,
+    back: 0,
+    allFine: 0,
+    cores: 0,
+    coresOne: 0,
+    cpu: 0,
+    load: 0,
+    memory: 0,
+    memoryOf: 0,
+    disk: 0,
+    diskOf: 0,
+    temperature: 0,
+    tempNote: 0,
+    ranges: {
+      '1h': 0,
+      '24h': 0,
+      '7d': 0,
+    } satisfies Record<DeskServerRange, 0>,
+    rangeChips: {
+      '1h': 0,
+      '24h': 0,
+      '7d': 0,
+    } satisfies Record<DeskServerRange, 0>,
     /** The chart's first time on 24 hours, “yesterday 14:30”. */
-    yesterday: 'yesterday {time}',
-    cpuPeak: `CPU · peak {n}${NBSP}% at {time}`,
-    memoryAvg: `Memory · avg {n}${NBSP}%`,
-    storage: 'Storage',
-    guests: 'Guests',
-    guestsCount: '{running} running · {off} off',
+    yesterday: 0,
+    cpuPeak: 0,
+    memoryAvg: 0,
+    storage: 0,
+    guests: 0,
+    guestsCount: 0,
     guestStates: {
-      running: 'running',
-      stopped: 'off',
-      unhealthy: 'needs a look',
-      paused: 'paused',
-    } satisfies Record<DeskGuestState, string>,
-    alertsOne: '1 thing to look at',
-    alertsMany: '{n} things to look at',
-    ask: 'Ask {assistant} about {server}',
-    off: '{server} is off.',
-    unavailable: 'I can’t reach your servers right now.',
-    noFigures: 'No figures yet.',
+      running: 0,
+      stopped: 0,
+      unhealthy: 0,
+      paused: 0,
+    } satisfies Record<DeskGuestState, 0>,
+    alertsOne: 0,
+    alertsMany: 0,
+    ask: 0,
+    off: 0,
+    unavailable: 0,
+    noFigures: 0,
   },
   /* An ask (mockup 2). */
   /** Since 0.116 (TF-15) `{assistant}` is the ask's requester (`DeskAsk.from`) when the ask names one. */
-  asks: '{assistant} asks',
-  notNow: 'Not now',
-  ask: 'Ask',
-  approve: 'Approve',
-  onPhone: 'Answer this on your phone.',
+  asks: 0,
+  notNow: 0,
+  ask: 0,
+  approve: 0,
+  onPhone: 0,
   /** 0.108 (DK-61, DK-62): the person's no; Approve of a risky ask after the PIN; on a screen without a PIN. */
-  deny: 'Deny',
-  approveWithPin: 'Type your PIN to approve this.',
-  approveOnPhone: 'Approve this on your phone.',
+  deny: 0,
+  approveWithPin: 0,
+  approveOnPhone: 0,
   /**
    * 0.116 (CT-890; TF-14): the PIN pad's line for one of an ask's wider choices (`DeskAsk.choices`, every one needs the
    * PIN), `{choice}` its label; and the words for `not_offered` (the choice isn't the person's to make, or not any more).
    */
-  choiceWithPin: 'Type your PIN for “{choice}”.',
-  notOffered: 'That choice isn’t available here any more.',
+  choiceWithPin: 0,
+  notOffered: 0,
   phoneReasons: {
-    money: 'It’s about money.',
-    release: 'It deploys or changes main.',
-    delete: 'It deletes something.',
-    keys: 'It gives {assistant} a key.',
-    outside: 'It reaches people outside.',
-  } satisfies Record<DeskPhoneReason, string>,
+    money: 0,
+    release: 0,
+    delete: 0,
+    keys: 0,
+    outside: 0,
+  } satisfies Record<DeskPhoneReason, 0>,
   /* Unlocking (mockup 2). */
   /** The pad of a screen without a PIN (DK-18): “Unlock as {name}”, only *Confirm on your phone*, and this. */
-  noPinYet: 'Choose a PIN in Settings to unlock here.',
-  unlockAs: 'Unlock as {name}',
-  confirmOnPhone: 'Confirm on your phone',
-  orConfirmOnPhone: 'or confirm on your phone',
-  checkPhone: 'Check your phone',
-  phoneSaidNo: 'Not unlocked.',
-  wrongPin: 'Wrong PIN. {n} tries left.',
-  wrongPinOne: 'Wrong PIN. 1 try left.',
-  tooManyPins: 'Too many wrong PINs. Try again in {m} min.',
-  cancel: 'Cancel',
-  delete: 'Delete',
+  noPinYet: 0,
+  unlockAs: 0,
+  confirmOnPhone: 0,
+  orConfirmOnPhone: 0,
+  checkPhone: 0,
+  phoneSaidNo: 0,
+  wrongPin: 0,
+  wrongPinOne: 0,
+  tooManyPins: 0,
+  cancel: 0,
+  delete: 0,
   /* Pairing (DK-02). */
-  pairThisScreen: 'Pair this screen',
-  pairHint: 'Type these letters in Settings → Screen.',
+  pairThisScreen: 0,
+  pairHint: 0,
   /* Talking (mockup 3). */
-  typeToAsk: 'Type to ask {assistant}',
+  typeToAsk: 0,
   /**
    * 3.3 (Whombat docs/decisions/dictation.md): Talk's mic is voice typing — tap, speak, *Done*, and the words wait in
    * the box until *Send*. The recording bar's words are voice typing's (`VOICE_WORDS.composer`, `VOICE_WORDS.errors`),
    * the same strings written out so the screen can copy them.
    */
-  tapToTalk: 'Tap to talk',
-  wordsFirst: 'You see the words before they’re sent',
+  tapToTalk: 0,
+  wordsFirst: 0,
   dictation: {
-    cancel: 'Cancel',
-    done: 'Done',
-    preparing: 'Starting…',
-    recording: 'Recording {time}',
-    transcribing: 'Turning speech into text…',
-    send: 'Send',
-    nothing: 'Nothing was heard.',
-    busy: 'This Whombat is busy with another recording. Try again in a moment.',
-    badAudio: 'That recording didn’t work. Try again.',
-    tooLong: 'That was longer than 5 minutes. Try a shorter one.',
-    failed: 'Couldn’t turn that into text. Try again.',
+    cancel: 0,
+    done: 0,
+    preparing: 0,
+    recording: 0,
+    transcribing: 0,
+    send: 0,
+    nothing: 0,
+    busy: 0,
+    badAudio: 0,
+    tooLong: 0,
+    failed: 0,
   },
-  listening: 'Listening…',
-  thinking: 'Thinking…',
-  youAsked: 'You asked',
-  onThisWhombat: 'Heard and spoken on this Whombat',
-  notHeard: 'I didn’t catch that. Try again?',
-  slow: '{assistant} is still working on it. The answer will be in Chat.',
+  listening: 0,
+  thinking: 0,
+  youAsked: 0,
+  onThisWhombat: 0,
+  notHeard: 0,
+  slow: 0,
   /**
    * 0.116 (CT-893, CT-894; TF-16, TF-17): a talk that is `working`, and the conversation's working row when it has no
    * `doing`.
    */
-  working: '{assistant} is working on it…',
+  working: 0,
   /** 0.116 (CT-895; TF-17): a task row's state in the conversation, the card's labels (`TASK_CARD_WORDS.states`). */
-  tasks: TASK_CARD_WORDS.states,
-  voiceUnavailable: 'Talking doesn’t work right now. You can type instead.',
-  talkFailed: 'That didn’t work. Try again?',
+  voiceUnavailable: 0,
+  talkFailed: 0,
   /* Power (DK-10, mockups 1 and 4; `hostPowerText`). */
   power: {
-    pluggedKept: `Plugged in · battery kept at {n}${NBSP}%`,
-    pluggedCharging: `Plugged in · charging · {n}${NBSP}%`,
-    plugged: `Plugged in · {n}${NBSP}%`,
-    onBattery: `On battery · {n}${NBSP}% · about {time} left`,
-    onBatteryNoTime: `On battery · {n}${NBSP}%`,
-    outSince: 'The power has been out since {clock}.',
-    outBanner: `Whombat is on battery, about {time} left. {assistant} shuts it down safely at 10${NBSP}%.`,
-    outBannerNoTime: `Whombat is on battery. {assistant} shuts it down safely at 10${NBSP}%.`,
+    pluggedKept: 0,
+    pluggedCharging: 0,
+    plugged: 0,
+    onBattery: 0,
+    onBatteryNoTime: 0,
+    outSince: 0,
+    outBanner: 0,
+    outBannerNoTime: 0,
     /** The assistant's Chat messages to the person. */
-    out: 'The power is out. Whombat is running on its battery, about {time} left.',
-    outNoTime: 'The power is out. Whombat is running on its battery.',
-    back: 'The power is back.',
-    low: `The battery is at {n}${NBSP}%. I’ll shut Whombat down at 10${NBSP}% to keep your data safe.`,
+    out: 0,
+    outNoTime: 0,
+    back: 0,
+    low: 0,
   },
   /**
    * The calm glance (3.2, CT-1624; DK-101…DK-124): the sentence by the clock and its muted line, the hero's buttons,
@@ -1001,297 +1022,370 @@ export const DESK_WORDS = {
    */
   calm: {
     headline: {
-      fine: 'All fine',
-      wrongOne: '1 thing is wrong',
-      wrongMany: '{n} things are wrong',
-      lookOne: '1 thing to look at',
-      lookMany: '{n} things to look at',
-      askOne: '{assistant} has a question',
-      askMany: '{n} questions for you',
-      busy: '{assistant} is busy',
+      fine: 0,
+      wrongOne: 0,
+      wrongMany: 0,
+      lookOne: 0,
+      lookMany: 0,
+      askOne: 0,
+      askMany: 0,
+      busy: 0,
     },
     /** The muted line: what runs, and whether anything needs the person. */
-    running: '{things} are running.',
-    runningOne: '{things} is running.',
-    and: '{a} and {b}',
-    servers: { one: '1 server', many: '{n} servers' },
-    services: { one: '1 service', many: '{n} services' },
-    nothingNeedsYou: 'Nothing needs you.',
+    running: 0,
+    runningOne: 0,
+    and: 0,
+    servers: {
+      one: 0,
+      many: 0,
+    },
+    services: {
+      one: 0,
+      many: 0,
+    },
+    nothingNeedsYou: 0,
     /** The busy line under the work's title: how far along. */
-    stepsDone: '{n} of {m} done.',
+    stepsDone: 0,
     /** The hero (DK-113). */
-    since: 'Since {clock} · {ago}',
-    fix: 'Ask {assistant} to fix it',
-    open: 'Open {name}',
-    answer: 'Answer',
-    notNow: 'Not now',
+    since: 0,
+    fix: 0,
+    open: 0,
+    answer: 0,
+    notNow: 0,
     /** A look's hero offers Ignore where it offered *Not now* (3.5; look-research.md). */
-    ignore: 'Ignore',
-    look: 'Look',
-    moreNeeds: '+{n} more',
+    ignore: 0,
+    look: 0,
+    moreNeeds: 0,
     /** A down server's hero detail (DK-113): what runs on it. */
-    runsOnOne: '{a} runs on it, so it’s down too.',
-    runsOnTwo: '{a} and {b} run on it, so they’re down too.',
-    runsOnMore: '{a}, {b} and {n} more run on it, so they’re down too.',
-    notAnswering: '{name} isn’t answering',
-    isOff: '{name} is off',
+    runsOnOne: 0,
+    runsOnTwo: 0,
+    runsOnMore: 0,
+    notAnswering: 0,
+    isOff: 0,
     /** A disk filling up (DK-114). */
-    diskFull: `disk is {n}${NBSP}% full`,
-    diskForecast: `disk is {n}${NBSP}% full; at this rate it’s full in about {days} days`,
-    diskForecastSoon: `disk is {n}${NBSP}% full; at this rate it’s full within a day`,
+    diskFull: 0,
+    diskForecast: 0,
+    diskForecastSoon: 0,
     /** The middle (DK-115). */
-    now: 'Now',
-    doneOne: '{assistant} did 1 thing today',
-    doneMany: '{assistant} did {n} things today',
-    comingUp: 'Coming up',
-    pinned: 'Pinned',
+    now: 0,
+    doneOne: 0,
+    doneMany: 0,
+    comingUp: 0,
+    pinned: 0,
     /** The strip (DK-116, DK-117). */
     strip: {
-      notAnswering: 'not answering',
-      off: 'off',
-      disk: `disk {n}${NBSP}%`,
-      cpu: `CPU {n}${NBSP}%`,
-      memory: `memory {n}${NBSP}%`,
-      updating: 'updating',
-      done: '✓ done',
-      next: 'next',
-      more: '+{n}',
+      notAnswering: 0,
+      off: 0,
+      disk: 0,
+      cpu: 0,
+      memory: 0,
+      updating: 0,
+      done: 0,
+      next: 0,
+      more: 0,
     },
     /** *Welcome back* (DK-120…DK-122). */
     welcome: {
-      title: 'Welcome back.',
-      away: 'You were away for {time}. Meanwhile:',
-      asks: '{assistant} asks: {title}',
-      askOne: '{assistant} has a question for you',
-      asksCount: '{n} questions wait for you',
-      doneOne: '{assistant} finished 1 thing',
-      doneCount: '{assistant} finished {n} things',
+      title: 0,
+      away: 0,
+      asks: 0,
+      askOne: 0,
+      asksCount: 0,
+      doneOne: 0,
+      doneCount: 0,
       /** What happened to a server or a connection while nobody was there. */
-      down: '{name} went down',
-      trouble: '{name} ran into trouble',
-      look: '{name} needs a look',
-      up: '{name} is fine again',
-      back: 'Back to the glance in a minute',
+      down: 0,
+      trouble: 0,
+      look: 0,
+      up: 0,
+      back: 0,
     },
     /** The top bar (DK-110, DK-111). */
     bar: {
-      cable: 'Cable',
-      noNetwork: 'No network',
-      online: 'Online',
-      offline: 'No internet',
-      remoteOn: 'Remote help on',
-      remoteLive: 'Support is connected',
+      cable: 0,
+      noNetwork: 0,
+      online: 0,
+      offline: 0,
+      remoteOn: 0,
+      remoteLive: 0,
       updates: {
-        downloading: 'Getting an update',
-        installing: 'Updating',
-        restarting: 'Restarting',
-      } satisfies Record<DeskUpdateStateName, string>,
-      charge: `{n}${NBSP}%`,
-      onBattery: 'On battery · {time}',
-      onBatteryNoTime: `On battery · {n}${NBSP}%`,
-      low: `{n}${NBSP}% · plug me in`,
-      locked: 'Locked',
+        downloading: 0,
+        installing: 0,
+        restarting: 0,
+      } satisfies Record<DeskUpdateStateName, 0>,
+      charge: 0,
+      onBattery: 0,
+      onBatteryNoTime: 0,
+      low: 0,
+      locked: 0,
     },
     /** The status sheet the top bar opens (DK-110). */
     sheet: {
-      title: 'This Whombat',
-      network: 'Network',
-      internet: 'Internet',
-      battery: 'Battery',
-      remoteHelp: 'Remote help',
-      updates: 'Updates',
-      close: 'Close',
+      title: 0,
+      network: 0,
+      internet: 0,
+      battery: 0,
+      remoteHelp: 0,
+      updates: 0,
+      close: 0,
     },
     /** *Try it on the screen* (DK-124). */
-    sample: 'Preview from Settings',
+    sample: 0,
     /** The work in Settings' preview “{assistant} at work” (DK-123). */
-    sampleWork: 'Updating your servers',
+    sampleWork: 0,
     /** What the assistant found on Settings' preview's server that isn't answering (3.5; look-research.md LR-09). */
     sampleFound: {
-      title: '{name} is stuck after its updates',
-      summary:
-        'It installed updates and didn’t come back, so what runs on it is down too. A restart usually fixes this.',
-      fix: 'Restart {name}',
+      title: 0,
+      summary: 0,
+      fix: 0,
     },
   },
   /* Settings → Screen (web and phone). */
   settings: {
-    screen: 'Screen',
-    intro: 'Show Whombat on this machine’s own screen.',
-    pairTheScreen: 'Pair the screen',
-    typeLetters: 'Type the 4 letters on the screen',
+    screen: 0,
+    intro: 0,
+    pairTheScreen: 0,
+    typeLetters: 0,
     /** 0.103 (DK-26); was “Choose a 6-digit PIN”. */
-    choosePin: 'Choose a PIN of 4 to 6 digits',
-    repeatPin: 'Type it again',
-    pinsDiffer: 'The PINs don’t match.',
-    replaces: 'The screen is paired with {name}. Pairing it again replaces that.',
-    pairedWith: 'Paired with {name} · since {date}',
-    pin: 'PIN',
-    changePin: 'Change PIN',
-    unpair: 'Unpair',
-    unpairConfirm: 'Unpair the screen? It goes back to showing only the clock and the Whombat’s name.',
-    whileLocked: 'While locked it shows',
-    lockedViews: { time: 'Only the time', summary: 'A summary', everything: 'Everything' } satisfies Record<
-      DeskLockedView,
-      string
-    >,
-    quietHours: 'Quiet hours',
-    from: 'From',
-    to: 'To',
-    atNight: 'At night',
-    nights: { dim: 'Dim clock', black: 'Black' } satisfies Record<DeskNight, string>,
-    talkTo: 'Talk to {assistant}',
-    noMicrophone: 'This machine has no microphone.',
-    noVoice: 'Talking isn’t available on this Whombat.',
-    unlockRequest: 'Your desk screen wants to unlock.',
-    unlock: 'Unlock',
-    no: 'No',
-    wrongPins: 'Someone typed a wrong PIN on your desk screen five times.',
+    choosePin: 0,
+    repeatPin: 0,
+    pinsDiffer: 0,
+    replaces: 0,
+    pairedWith: 0,
+    pin: 0,
+    changePin: 0,
+    unpair: 0,
+    unpairConfirm: 0,
+    whileLocked: 0,
+    lockedViews: {
+      time: 0,
+      summary: 0,
+      everything: 0,
+    } satisfies Record<DeskLockedView, 0>,
+    quietHours: 0,
+    from: 0,
+    to: 0,
+    atNight: 0,
+    nights: {
+      dim: 0,
+      black: 0,
+    } satisfies Record<DeskNight, 0>,
+    talkTo: 0,
+    noMicrophone: 0,
+    noVoice: 0,
+    unlockRequest: 0,
+    unlock: 0,
+    no: 0,
+    wrongPins: 0,
     /* The switch and the screen line (0.101, DK-17…DK-20). */
-    showOnScreen: 'Show Whombat on this screen',
-    screenNamed: '{name} · connected',
-    builtIn: 'Built-in screen',
-    connectedUnnamed: 'A screen is connected',
-    noScreenNow: 'No screen is connected right now.',
-    virtualHint: 'This looks like a virtual machine’s screen, so it stays off unless you turn it on.',
-    offHint: 'When it’s off, the screen shows only the Whombat’s name and goes dark after 10 minutes.',
-    noPin: 'No PIN yet. Choose one to unlock the screen by touch.',
-    choosePinButton: 'Choose a PIN',
-    pairToMe: 'Pair to me instead',
+    showOnScreen: 0,
+    screenNamed: 0,
+    builtIn: 0,
+    connectedUnnamed: 0,
+    noScreenNow: 0,
+    virtualHint: 0,
+    offHint: 0,
+    noPin: 0,
+    choosePinButton: 0,
+    pairToMe: 0,
     /** The assistant's one message in the person's DM after the screen paired itself (DK-19). */
-    selfPaired:
-      'I’m on this Whombat’s screen now. To unlock it by touch, choose a PIN in Settings → Screen. You can turn the screen off there too.',
+    selfPaired: 0,
     /** The log's words when the screen paired itself (DK-17): not as if the person did it. */
-    pairedItself: 'The screen paired itself with {name}.',
+    pairedItself: 0,
     /* Stay unlocked while you’re here (0.103, DK-28, DK-31): only where `DeskScreen.presenceAvailable`. */
-    presence: 'Stay unlocked while you’re here',
-    presenceHint:
-      'While the screen is unlocked, the camera checks that someone is in front of it, and the screen locks 30 seconds after you leave. It doesn’t recognize faces and keeps no pictures.',
+    presence: 0,
+    presenceHint: 0,
     /*
      * Lock again (0.107, DK-74): replaces the `presence` row where `DeskScreen.lockAgain` lists the choices; `away` only
      * where it lists it (a camera that works). `{assistant}` in `never`'s hint.
      */
-    lockAgain: 'Lock again',
+    lockAgain: 0,
     lockAgainChoices: {
-      idle: 'After 2 minutes',
-      away: 'When you leave',
-      never: 'When you press Lock',
-    } satisfies Record<DeskLockAgain, string>,
+      idle: 0,
+      away: 0,
+      never: 0,
+    } satisfies Record<DeskLockAgain, 0>,
     lockAgainHints: {
-      idle: 'The screen locks 2 minutes after you last touch it.',
-      away: 'The camera checks that you’re still there, and the screen locks 30 seconds after you leave. It doesn’t recognize faces and keeps no pictures.',
-      never:
-        'The screen stays unlocked until you press Lock or the machine restarts. Anyone at it can see what it shows, answer everyday asks and talk to {assistant} as you.',
-    } satisfies Record<DeskLockAgain, string>,
+      idle: 0,
+      away: 0,
+      never: 0,
+    } satisfies Record<DeskLockAgain, 0>,
     /* Use the camera to see when you’re here (0.107, DK-72): only where `DeskScreen.cameraWakeAvailable`. */
-    cameraWake: 'Use the camera to see when you’re here',
-    cameraWakeHint:
-      'The screen shows Whombat while you’re in front of it and only the clock when you’re not. The camera stays on outside quiet hours. It doesn’t recognize faces and keeps no pictures.',
+    cameraWake: 0,
+    cameraWakeHint: 0,
     /* The voice (0.105, DK-50…DK-53): only where `DeskScreen.voices` has two or more this client knows. */
-    voice: 'Voice',
-    voiceHint: 'How {assistant} sounds when it answers out loud.',
+    voice: 0,
+    voiceHint: 0,
     voices: {
-      heart: 'Heart',
-      bella: 'Bella',
-      michael: 'Michael',
-      fenrir: 'Fenrir',
-      emma: 'Emma',
-      george: 'George',
-    } satisfies Record<DeskVoice, string>,
+      heart: 0,
+      bella: 0,
+      michael: 0,
+      fenrir: 0,
+      emma: 0,
+      george: 0,
+    } satisfies Record<DeskVoice, 0>,
     voiceKinds: {
-      heart: 'American · woman',
-      bella: 'American · woman',
-      michael: 'American · man',
-      fenrir: 'American · man',
-      emma: 'British · woman',
-      george: 'British · man',
-    } satisfies Record<DeskVoice, string>,
-    listen: 'Listen',
-    listening: 'Playing…',
+      heart: 0,
+      bella: 0,
+      michael: 0,
+      fenrir: 0,
+      emma: 0,
+      george: 0,
+    } satisfies Record<DeskVoice, 0>,
+    listen: 0,
+    listening: 0,
     /** What *Listen* says, in the voice chosen (`desk.voiceSample`). */
-    sample: 'Hi, I’m {assistant}. This is how I’ll sound on your desk.',
-    sampleFailed: 'The voice couldn’t play. Try again.',
+    sample: 0,
+    sampleFailed: 0,
     /*
      * Settings → Screen (3.2, CT-1625; DK-125): the tab, its four parts and *What it shows*. A choice's three words are
      * `levels`; `{assistant}` the assistant's name.
      */
-    tab: 'Screen',
-    parts: { shows: 'What it shows', lock: 'Lock and PIN', night: 'Night', talk: 'Talk' },
-    preview: 'Preview',
-    scenarios: { now: 'Now', wrong: 'Something’s wrong', busy: '{assistant} at work' } satisfies Record<
-      DeskPreviewScenario,
-      string
-    >,
-    previewNote: 'Changes show here straight away, and on the screen within a few seconds.',
-    tryOnScreen: 'Try “{scenario}” on the screen',
-    trying: 'On the screen for a minute.',
-    levels: { always: 'Always', matters: 'When it matters', off: 'Off' } satisfies Record<
-      DeskShowLevel,
-      string
-    >,
-    bar: 'Top bar',
-    barHint: 'Always across the top. “When it matters” keeps it out of the way until something’s off.',
+    tab: 0,
+    parts: {
+      shows: 0,
+      lock: 0,
+      night: 0,
+      talk: 0,
+    },
+    preview: 0,
+    scenarios: {
+      now: 0,
+      wrong: 0,
+      busy: 0,
+    } satisfies Record<DeskPreviewScenario, 0>,
+    previewNote: 0,
+    tryOnScreen: 0,
+    trying: 0,
+    levels: {
+      always: 0,
+      matters: 0,
+      off: 0,
+    } satisfies Record<DeskShowLevel, 0>,
+    bar: 0,
+    barHint: 0,
     barItems: {
-      network: { name: 'Network', line: 'Wi-Fi name, or Cable' },
-      internet: { name: 'Internet', line: 'Online, or No internet' },
-      battery: { name: 'Battery', line: 'Charge, and time left during a power cut' },
-      updates: { name: 'Updates', line: 'While Whombat updates itself' },
-    } satisfies Record<DeskBarItem, { name: string; line: string }>,
-    alwaysShown: 'Remote help and camera',
-    alwaysShownHint: 'Always show while they’re on, so you know',
-    middle: 'The middle',
-    middleHint:
-      'Questions from {assistant} and problems always come first. Your “Always” things fill the rest, then whatever’s happening; three at most.',
-    groups: { assistant: '{assistant}', connection: 'From your connections', widget: 'From Home' },
-    work: { name: '{assistant}’s work', line: 'What {assistant} is doing and how far along' },
-    coming: { name: 'Coming up', line: 'Automations in the next few hours' },
-    servers: 'Servers',
-    serversHint:
-      'The strip along the bottom. Drag to change the order. “When it matters” hides a server until something’s up with it.',
-    moveUp: 'Move {name} up',
-    moveDown: 'Move {name} down',
-    box: { name: 'This Whombat', line: 'Its own processor, memory and disk' },
-    around: 'Around it',
-    clock: { name: 'Clock', line: 'Big when nothing’s going on, small when something is' },
-    clocks: { big: 'Big', small: 'Small' } satisfies Record<DeskClock, string>,
-    welcomeBack: { name: 'Welcome back', line: 'After 30 minutes away, start with what happened' },
-    doneToday: { name: 'Done today', line: '“{assistant} did 3 things today”, touch to see them' },
-    openScreen: 'Screen settings',
+      network: {
+        name: 0,
+        line: 0,
+      },
+      internet: {
+        name: 0,
+        line: 0,
+      },
+      battery: {
+        name: 0,
+        line: 0,
+      },
+      updates: {
+        name: 0,
+        line: 0,
+      },
+    } satisfies Record<DeskBarItem, { name: 0; line: 0 }>,
+    alwaysShown: 0,
+    alwaysShownHint: 0,
+    middle: 0,
+    middleHint: 0,
+    groups: {
+      assistant: 0,
+      connection: 0,
+      widget: 0,
+    },
+    work: {
+      name: 0,
+      line: 0,
+    },
+    coming: {
+      name: 0,
+      line: 0,
+    },
+    servers: 0,
+    serversHint: 0,
+    moveUp: 0,
+    moveDown: 0,
+    box: {
+      name: 0,
+      line: 0,
+    },
+    around: 0,
+    clock: {
+      name: 0,
+      line: 0,
+    },
+    clocks: {
+      big: 0,
+      small: 0,
+    } satisfies Record<DeskClock, 0>,
+    welcomeBack: {
+      name: 0,
+      line: 0,
+    },
+    doneToday: {
+      name: 0,
+      line: 0,
+    },
+    openScreen: 0,
     /** The switch's line once the screen is paired: `{name}` the screen line (“Built-in screen”), then since when. */
-    pairedLine: '{name} · paired with you since {date}',
+    pairedLine: 0,
   },
   /** The `desk.*` session errors' words (`DESK_ERROR_CODES` of `@whombat/protocol/session`). */
   errors: {
-    wrong_code: 'Those letters don’t match the screen. {n} tries left.',
-    pairing_expired: 'The letters ran out. Start again.',
-    not_paired: 'The screen isn’t paired.',
-    request_expired: 'The screen stopped waiting. Try again on the screen.',
-    no_screen: 'No screen is connected to this Whombat.',
-    no_pin: 'This screen has no PIN yet.',
+    wrong_code: 0,
+    pairing_expired: 0,
+    not_paired: 0,
+    request_expired: 0,
+    no_screen: 0,
+    no_pin: 0,
     /** 0.103 (DK-27). */
-    easy_pin: 'That PIN is too easy to guess. Choose another.',
+    easy_pin: 0,
     /** 0.105 (DK-52). */
-    no_voice: 'That voice isn’t available on this Whombat.',
-    unknown_screen: 'That screen isn’t there any more.',
-    screens_full: 'This Whombat has as many screens as it can show. Remove one first.',
-    bad_layout: 'That layout can’t be saved: a widget is outside the screen or on another one.',
+    no_voice: 0,
+    unknown_screen: 0,
+    screens_full: 0,
+    bad_layout: 0,
   },
 } as const;
 
+/**
+ * The words of the desk screen and its Settings, shared by the console page (which copies them: it can't import), the
+ * web app and the phone. `{name}`, `{n}`, `{m}`, `{assistant}`, … are filled with `fillDeskWords`; a number and `%`
+ * are joined by a no-break space. The assistant's name always comes from the runtime, never written in.
+ */
+export function deskWords(locale?: string | null) {
+  const words = coreTree(locale, 'desk', DESK_WORDS_SHAPE);
+  return {
+    ...words,
+    tasks: TASK_CARD_WORDS.states,
+  };
+}
+
+export const DESK_WORDS = deskWords('en');
+
 /** The words the calm glance's planner uses (`deskCalm`, DK-112…DK-118). */
-export const DESK_CALM_WORDS: DeskCalmWords = {
-  ...DESK_WORDS.calm,
-  down: DESK_WORDS.status.down,
-  look: DESK_WORDS.status.look,
-  comingAt: DESK_WORDS.calm.comingUp,
-  looking: DESK_WORDS.looks.looking,
-  lookingSoFar: DESK_WORDS.looks.lookingSoFar,
-  fixing: DESK_WORDS.looks.fixing,
-};
+/** The calm glance's words in a locale, from the desk's own (`DESK_WORDS.calm` and a few neighbours). */
+export function deskCalmWords(locale?: string | null): DeskCalmWords {
+  const w = locale === undefined || locale === null ? DESK_WORDS : deskWords(locale);
+  return {
+    ...w.calm,
+    down: w.status.down,
+    look: w.status.look,
+    comingAt: w.calm.comingUp,
+    looking: w.looks.looking,
+    lookingSoFar: w.looks.lookingSoFar,
+    fixing: w.looks.fixing,
+  };
+}
+
+export const DESK_CALM_WORDS: DeskCalmWords = deskCalmWords('en');
 
 /** The calm glance with the desk's own words (DK-112…DK-118): `deskCalm` with `DESK_CALM_WORDS`. */
-export function deskCalmFor(input: DeskCalmInput, show: DeskShow, view: DeskCalmView): DeskCalm {
-  return deskCalm(input, show, view, DESK_CALM_WORDS);
+export function deskCalmFor(
+  input: DeskCalmInput,
+  show: DeskShow,
+  view: DeskCalmView,
+  locale?: string | null,
+): DeskCalm {
+  return deskCalm(input, show, view, locale ? deskCalmWords(locale) : DESK_CALM_WORDS);
 }
 
 /** What needs the person on a screen of widgets, with the desk's own words (DK-135…DK-138). */
@@ -1300,8 +1394,9 @@ export function deskAttentionFor(
   show: Pick<DeskShow, 'items'>,
   view: DeskCalmView,
   popups: DeskPopups,
+  locale?: string | null,
 ): DeskAttention {
-  return deskAttention(input, show, view, popups, DESK_CALM_WORDS);
+  return deskAttention(input, show, view, popups, locale ? deskCalmWords(locale) : DESK_CALM_WORDS);
 }
 
 /** Fills `{name}`-style holes in one of `DESK_WORDS`; a hole without a value stays as it is. */
@@ -1312,8 +1407,9 @@ export function fillDeskWords(template: string, values: Readonly<Record<string, 
 }
 
 /** “Wrong PIN. 3 tries left.”, “Wrong PIN. 1 try left.” */
-export function deskWrongPinText(triesLeft: number): string {
-  return triesLeft === 1 ? DESK_WORDS.wrongPinOne : fillDeskWords(DESK_WORDS.wrongPin, { n: triesLeft });
+export function deskWrongPinText(triesLeft: number, locale?: string | null): string {
+  const w = locale ? deskWords(locale) : DESK_WORDS;
+  return triesLeft === 1 ? w.wrongPinOne : fillDeskWords(w.wrongPin, { n: triesLeft });
 }
 
 /**
@@ -1352,6 +1448,8 @@ export interface DeskStatusInput {
    * and `everything` the line is “All fine. I’m ready when you are.” with the hint to connect something as `more`.
    */
   fresh?: boolean;
+  /** The person's language (English when absent). */
+  locale?: string | null;
 }
 
 /** `DeskGlance.status`: the sentence and its muted second part. */
@@ -1373,7 +1471,7 @@ const lowerFirst = (s: string) =>
  * counts win over the flag). At most 200 code points each.
  */
 export function deskStatusLine(input: DeskStatusInput): DeskStatusLine {
-  const s = DESK_WORDS.status;
+  const s = input.locale ? deskWords(input.locale).status : DESK_WORDS.status;
   const worst = input.worst ?? null;
   const server = worst ? fillDeskWords(worst.down ? s.down : s.look, { server: worst.name }) : null;
   if (input.view === 'time') return { text: input.needsYou > 0 || worst ? s.somethingNeedsYou : s.allFine };
@@ -1416,11 +1514,12 @@ export const DESK_BATTERY_LOW_PERCENT = 15;
 export const DESK_BATTERY_SHUTDOWN_PERCENT = 10;
 
 /** `3 h 10 min`, `45 min`, `2 h` — minutes left on the battery (at least 1 min). */
-export function formatPowerLeft(minutes: number): string {
+export function formatPowerLeft(minutes: number, locale?: string | null): string {
+  const tr = coreTranslator(locale);
   const m = Math.max(1, Math.round(minutes));
-  if (m < 60) return `${m} min`;
+  if (m < 60) return tr.t('usage.minutes', { m });
   const h = Math.floor(m / 60);
-  return m % 60 === 0 ? `${h} h` : `${h} h ${m % 60} min`;
+  return m % 60 === 0 ? tr.t('usage.hours', { h }) : tr.t('usage.hoursMinutes', { h, m: m % 60 });
 }
 
 /**
@@ -1429,12 +1528,12 @@ export function formatPowerLeft(minutes: number): string {
  */
 export const hostPowerText = {
   /** “Plugged in · battery kept at 80 %”, “Plugged in · charging · 64 %”, “On battery · 72 % · about 3 h left”. */
-  line(p: DeskPowerReading): string {
-    const w = DESK_WORDS.power;
+  line(p: DeskPowerReading, locale?: string | null): string {
+    const w = locale ? deskWords(locale).power : DESK_WORDS.power;
     if (p.source === 'battery')
       return p.minutesLeft === null
         ? fillDeskWords(w.onBatteryNoTime, { n: p.percent })
-        : fillDeskWords(w.onBattery, { n: p.percent, time: formatPowerLeft(p.minutesLeft) });
+        : fillDeskWords(w.onBattery, { n: p.percent, time: formatPowerLeft(p.minutesLeft, locale) });
     if (p.charging) return fillDeskWords(w.pluggedCharging, { n: p.percent });
     if (p.chargeLimit !== null) return fillDeskWords(w.pluggedKept, { n: p.chargeLimit });
     return fillDeskWords(w.plugged, { n: p.percent });
@@ -1442,30 +1541,33 @@ export const hostPowerText = {
   /** “The power has been out since 02:14.” and “Whombat is on battery, about 3 h 10 min left. Neo shuts …” */
   banner(
     p: DeskPowerReading,
-    at: { assistant: string; timeZone: string },
+    at: { assistant: string; timeZone: string; locale?: string | null },
   ): { title: string | null; text: string } {
-    const w = DESK_WORDS.power;
+    const w = at.locale ? deskWords(at.locale).power : DESK_WORDS.power;
     const title = p.since ? fillDeskWords(w.outSince, { clock: formatClock(p.since, at.timeZone) }) : null;
     const text =
       p.minutesLeft === null
         ? fillDeskWords(w.outBannerNoTime, { assistant: at.assistant })
-        : fillDeskWords(w.outBanner, { assistant: at.assistant, time: formatPowerLeft(p.minutesLeft) });
+        : fillDeskWords(w.outBanner, {
+            assistant: at.assistant,
+            time: formatPowerLeft(p.minutesLeft, at.locale),
+          });
     return { title, text };
   },
   /** “The power is out. Whombat is running on its battery, about 3 h left.” */
-  out(p: Pick<DeskPowerReading, 'minutesLeft'>): string {
-    const w = DESK_WORDS.power;
+  out(p: Pick<DeskPowerReading, 'minutesLeft'>, locale?: string | null): string {
+    const w = locale ? deskWords(locale).power : DESK_WORDS.power;
     return p.minutesLeft === null
       ? w.outNoTime
-      : fillDeskWords(w.out, { time: formatPowerLeft(p.minutesLeft) });
+      : fillDeskWords(w.out, { time: formatPowerLeft(p.minutesLeft, locale) });
   },
   /** “The power is back.” */
-  back(): string {
-    return DESK_WORDS.power.back;
+  back(locale?: string | null): string {
+    return (locale ? deskWords(locale) : DESK_WORDS).power.back;
   },
   /** “The battery is at 15 %. I’ll shut Whombat down at 10 % to keep your data safe.” */
-  low(p: Pick<DeskPowerReading, 'percent'>): string {
-    return fillDeskWords(DESK_WORDS.power.low, { n: p.percent });
+  low(p: Pick<DeskPowerReading, 'percent'>, locale?: string | null): string {
+    return fillDeskWords((locale ? deskWords(locale) : DESK_WORDS).power.low, { n: p.percent });
   },
 } as const;
 

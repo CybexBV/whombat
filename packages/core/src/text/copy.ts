@@ -12,47 +12,56 @@ import {
   type ProviderSetup,
 } from '../domain/providers.js';
 import type { RunStatus } from '../domain/run.js';
-import { formatDiffStat, formatOf, plural } from './format.js';
+import { coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleOf } from '../i18n/locale.js';
+import { formatDiffStat, formatOf } from './format.js';
 import { type DateInput, formatAgo, formatClock, formatSeconds, formatUpdated } from './time.js';
 
-const upper = (s: string) => s.toUpperCase();
+const upper = (s: string, locale?: string | null) => s.toLocaleUpperCase(formatLocaleOf(locale));
 
 /** `PLAN · 4 STEPS` */
-export function formatPlanLabel(steps: number): string {
-  return `PLAN · ${upper(plural(steps, 'step'))}`;
+export function formatPlanLabel(steps: number, locale?: string | null): string {
+  return coreTranslator(locale).tp('copy.planLabel', steps);
 }
 
 /** `RESEARCH · PDF LIBRARIES` */
-export function formatResearchLabel(topic: string): string {
-  return `RESEARCH · ${upper(topic)}`;
+export function formatResearchLabel(topic: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.researchLabel', { topic: upper(topic, locale) });
 }
 
 /** `14 sources · 3 tested` */
-export function formatResearchMeta(sources: number, tested: number): string {
-  return `${plural(sources, 'source')} · ${tested} tested`;
+export function formatResearchMeta(sources: number, tested: number, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return tr.t('copy.researchMeta', { sources: tr.tp('copy.researchSources', sources), tested });
 }
 
 /** `INBOX · 7 UNREAD`, `TODAY` */
-export function formatDigestLabel(title: string, summary: string | null): string {
-  return upper(summary ? `${title} · ${summary}` : title);
+export function formatDigestLabel(title: string, summary: string | null, locale?: string | null): string {
+  return upper(summary ? `${title} · ${summary}` : title, locale);
 }
 
 /** `REVIEW · 2 CHANGES REQUESTED` */
-export function formatReviewLabel(changesRequested: number): string {
-  return `REVIEW · ${upper(plural(changesRequested, 'change'))} REQUESTED`;
+export function formatReviewLabel(changesRequested: number, locale?: string | null): string {
+  return coreTranslator(locale).tp('copy.reviewLabel', changesRequested);
 }
 
-export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
-  live: 'LIVE',
-  paused: 'PAUSED',
-  done: 'DONE',
-  failed: 'FAILED',
-  taken_over: 'TAKEN OVER',
-};
+const RUN_STATUSES: readonly RunStatus[] = ['live', 'paused', 'done', 'failed', 'taken_over'];
+
+/** Run status pills in a locale (`LIVE`, `KLAAR`). */
+export function runStatusLabels(locale?: string | null): Record<RunStatus, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(RUN_STATUSES.map((s) => [s, tr.t(`copy.runStatus.${s}`)])) as Record<
+    RunStatus,
+    string
+  >;
+}
+
+export const RUN_STATUS_LABELS: Record<RunStatus, string> = runStatusLabels('en');
 
 /** `RUN · LIVE`, `RUN · DONE` */
-export function formatRunLabel(status: RunStatus): string {
-  return `RUN · ${RUN_STATUS_LABELS[status]}`;
+export function formatRunLabel(status: RunStatus, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return tr.t('copy.runLabel', { status: tr.t(`copy.runStatus.${status}`) });
 }
 
 /** Run page kicker: `RUN · LIVE · BANJO · STARTED 11:22`. */
@@ -61,19 +70,28 @@ export function formatRunKicker(
   agentName: string,
   startedAt: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string {
-  return `${formatRunLabel(status)} · ${upper(agentName)} · STARTED ${formatClock(startedAt, timeZone)}`;
+  return coreTranslator(locale).t('copy.runKicker', {
+    label: formatRunLabel(status, locale),
+    agent: upper(agentName, locale),
+    time: formatClock(startedAt, timeZone),
+  });
 }
 
 /** Run card line under the progress bar: `Now: Editing billing/pdf/format.ts` while live, the summary when done. */
-export function runNowText(run: { status: RunStatus; activity: string; summary: string | null }): string {
+export function runNowText(
+  run: { status: RunStatus; activity: string; summary: string | null },
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   switch (run.status) {
     case 'live':
-      return `Now: ${run.activity}`;
+      return tr.t('copy.runNow', { activity: run.activity });
     case 'paused':
-      return `Paused: ${run.activity}`;
+      return tr.t('copy.runPaused', { activity: run.activity });
     case 'taken_over':
-      return run.summary ?? `Taken over: ${run.activity}`;
+      return run.summary ?? tr.t('copy.runTakenOver', { activity: run.activity });
     default:
       return run.summary ?? run.activity;
   }
@@ -91,93 +109,113 @@ export function logLineTone(text: string): 'ok' | 'bad' | 'command' | 'plain' {
 export const RUN_LOG_VISIBLE_LINES = 12;
 
 /** `Banjo’s keys for this run` */
-export function runKeysTitle(agentName: string): string {
-  return `${agentName}’s keys for this run`;
+export function runKeysTitle(agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.runKeysTitle', { agent: agentName });
 }
 
 /** `scoped to feat/invoice-pdf` */
-export function runKeysScope(branch: string): string {
-  return `scoped to ${branch}`;
+export function runKeysScope(branch: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.runKeysScope', { branch });
 }
 
 /** Typing indicator: `Banjo is thinking`. */
-export function typingLabel(name: string): string {
-  return `${name} is thinking`;
+export function typingLabel(name: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.typing', { name });
 }
 
 /** Empty Chat heading. */
-export function dmEmptyTitle(agentName: string): string {
-  return `This is the start of your chat with ${agentName}`;
+export function dmEmptyTitle(agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.dmEmpty', { agent: agentName });
 }
 
 /** Composer placeholder: `Comment on PR #482`, `Message Dusty`. */
 export function composerPlaceholder(
   c: { kind: 'branch'; prNumber: number } | { kind: 'dm'; agentName: string },
+  locale?: string | null,
 ): string {
-  return c.kind === 'branch' ? `Comment on PR #${c.prNumber}` : `Message ${c.agentName}`;
+  const tr = coreTranslator(locale);
+  return c.kind === 'branch'
+    ? tr.t('copy.composerBranch', { number: c.prNumber })
+    : tr.t('copy.composerDm', { agent: c.agentName });
 }
 
 /** Commits card footer: `+214 −12 · 6 files · signed by Banjo`. */
 export function formatCommitsFooter(
   diff: { add: number; del: number; files: number },
   signerName: string,
+  locale?: string | null,
 ): string {
-  return `${formatDiffStat(diff)} · signed by ${signerName}`;
+  return coreTranslator(locale).t('copy.commitsFooter', {
+    diff: formatDiffStat(diff, locale),
+    signer: signerName,
+  });
 }
 
 /** Search answer meta: `answered from 3 receipts · 1.8s`. */
-export function formatAnswerMeta(receipts: number, durationMs: number | null): string {
-  const base = `answered from ${plural(receipts, 'receipt')}`;
-  return durationMs === null ? base : `${base} · ${formatSeconds(durationMs)}`;
+export function formatAnswerMeta(
+  receipts: number,
+  durationMs: number | null,
+  locale?: string | null,
+): string {
+  const base = coreTranslator(locale).tp('copy.answerReceipts', receipts);
+  return durationMs === null ? base : `${base} · ${formatSeconds(durationMs, locale)}`;
 }
 
 /** Search result marker: `receipt 1`. */
-export function receiptMarker(n: number): string {
-  return `receipt ${n}`;
+export function receiptMarker(n: number, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.receiptMarker', { n });
 }
 
 /** Audit log subtitle. */
-export function auditSubtitle(burrowName: string, agentName: string): string {
-  return `Every action in ${burrowName}, signed by whoever took it. People and ${agentName} write to the same log, and entries can’t be edited afterwards.`;
+export function auditSubtitle(burrowName: string, agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.auditSubtitle', { burrow: burrowName, agent: agentName });
 }
 
 /** Toast after Export CSV. */
-export function exportToast(count: number): string {
-  return `Exported ${count} signed ${count === 1 ? 'event' : 'events'} as CSV.`;
+export function exportToast(count: number, locale?: string | null): string {
+  return coreTranslator(locale).tp('copy.exportToast', count);
 }
 
 /** Toast after finishing onboarding. */
-export function welcomeToast(burrowName: string, agentName: string): string {
-  return `Welcome to ${burrowName}. ${agentName} is already here.`;
+export function welcomeToast(burrowName: string, agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.welcomeToast', { burrow: burrowName, agent: agentName });
 }
 
 /** Toast after merging. */
-export function mergeToast(prNumber: number): string {
-  return `Merged PR #${prNumber}. Nice digging, everyone.`;
+export function mergeToast(prNumber: number, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.mergeToast', { number: prNumber });
 }
 
 /** Branch pane note under Merge into main, while the agent holds no merge key. */
-export function mergeNote(agentName: string): string {
-  return `Merging is for people. ${agentName} doesn’t hold a merge key.`;
+export function mergeNote(agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.mergeNote', { agent: agentName });
 }
 
 /** Files tab footnote. */
-export function filesNote(agentName: string): string {
-  return `Every patch here is a signed event from ${agentName}’s key. Open any file to comment on a line.`;
+export function filesNote(agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.filesNote', { agent: agentName });
 }
 
 /** Onboarding footer buttons. */
-export function onboardingBackLabel(step: number): string {
-  return step === 0 ? 'Skip for now' : 'Back';
+export function onboardingBackLabel(step: number, locale?: string | null): string {
+  return coreTranslator(locale).t(step === 0 ? 'copy.onboardingSkip' : 'copy.onboardingBack');
 }
 
-export function onboardingNextLabel(step: number, lastStep: number, burrowName: string): string {
-  return step === lastStep ? `Open ${burrowName || 'the burrow'}` : 'Continue';
+export function onboardingNextLabel(
+  step: number,
+  lastStep: number,
+  burrowName: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  return step === lastStep
+    ? tr.t('copy.onboardingOpen', { burrow: burrowName || tr.t('copy.onboardingTheBurrow') })
+    : tr.t('copy.onboardingContinue');
 }
 
 /** `STEP 2 OF 4` */
-export function onboardingStepLabel(step: number, count: number): string {
-  return `STEP ${step + 1} OF ${count}`;
+export function onboardingStepLabel(step: number, count: number, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.onboardingStep', { step: step + 1, count });
 }
 
 /** Onboarding repo row: `TypeScript · updated 2 hours ago`. */
@@ -186,14 +224,18 @@ export function formatRepoMeta(
   pushedAt: DateInput | null,
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string {
-  const updated = pushedAt ? `updated ${formatUpdated(pushedAt, now, timeZone)}` : 'not updated yet';
+  const tr = coreTranslator(locale);
+  const updated = pushedAt
+    ? tr.t('copy.repoUpdated', { when: formatUpdated(pushedAt, now, timeZone, locale) })
+    : tr.t('copy.repoNotUpdated');
   return language ? `${language} · ${updated}` : updated;
 }
 
 /** Canvas presence: `2 here`. */
-export function formatPresence(n: number): string {
-  return `${n} here`;
+export function formatPresence(n: number, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.presence', { n });
 }
 
 /**
@@ -205,10 +247,16 @@ export function formatCanvasProvenance(
   updatedAt: DateInput,
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string {
-  const parts = [`Drafted by ${p.createdBy}${p.requestedBy ? ` from ${p.requestedBy}’s request` : ''}`];
-  if (p.editors.length) parts.push(`edited by ${p.editors.join(', ')}`);
-  parts.push(formatAgo(updatedAt, now, timeZone));
+  const tr = coreTranslator(locale);
+  const parts = [
+    p.requestedBy
+      ? tr.t('copy.draftedByFrom', { name: p.createdBy, requester: p.requestedBy })
+      : tr.t('copy.draftedBy', { name: p.createdBy }),
+  ];
+  if (p.editors.length) parts.push(tr.t('copy.editedBy', { names: p.editors.join(', ') }));
+  parts.push(formatAgo(updatedAt, now, timeZone, locale));
   return parts.join(' · ');
 }
 
@@ -218,10 +266,18 @@ export function threadContext(where: string, topic: string | null): string {
 }
 
 /** Deploy check/test summary pill: `38 of 41 passed · 3 failing in invoice_format_test`. */
-export function formatChecksPill(passed: number, total: number, failingIn?: string): string {
-  const base = `${formatOf(passed, total)} passed`;
+export function formatChecksPill(
+  passed: number,
+  total: number,
+  failingIn?: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  const base = tr.t('copy.checksPassed', { of: formatOf(passed, total, locale) });
   if (passed >= total) return base;
-  return `${base} · ${total - passed} failing${failingIn ? ` in ${failingIn}` : ''}`;
+  return failingIn
+    ? tr.t('copy.checksFailingIn', { base, count: total - passed, where: failingIn })
+    : tr.t('copy.checksFailing', { base, count: total - passed });
 }
 
 /** Search shortcut hint: ⌘K on macOS, Ctrl K elsewhere (DECISIONS B-03). */
@@ -235,13 +291,13 @@ export function needsYouToast(where: string, text: string): string {
 }
 
 /** Toast after connecting GitHub. */
-export function githubConnectedToast(agentName: string): string {
-  return `GitHub connected. Switch on the repos ${agentName} should see.`;
+export function githubConnectedToast(agentName: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.githubConnectedToast', { agent: agentName });
 }
 
 /** "Connected as @acme": the GitHub account every GitHub action is performed as. */
-export function githubConnectedAs(login: string): string {
-  return `Connected as @${login}`;
+export function githubConnectedAs(login: string, locale?: string | null): string {
+  return coreTranslator(locale).t('copy.githubConnectedAs', { login });
 }
 
 /* AI providers (docs/decisions/agent-setup.md) ------------------------------------------------------- */
@@ -253,28 +309,28 @@ export function githubConnectedAs(login: string): string {
  */
 export function providerStateLabel(
   setup: Pick<ProviderSetup, 'state' | 'version'> & { provider?: LiveProvider },
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
   if (setup.provider === 'codex') {
-    if (setup.state === 'ready') return 'Ready';
-    if (setup.state === 'missing' || setup.state === 'logged_out') return 'Not ready';
+    if (setup.state === 'ready') return tr.t('copy.provider.ready');
+    if (setup.state === 'missing' || setup.state === 'logged_out') return tr.t('copy.provider.notReady');
   }
   switch (setup.state) {
     case 'ready':
-      return setup.version ? `Ready · ${setup.version}` : 'Ready';
+      return setup.version
+        ? tr.t('copy.provider.readyVersion', { version: setup.version })
+        : tr.t('copy.provider.ready');
     case 'logged_out':
-      return 'Installed, not logged in';
+      return tr.t('copy.provider.loggedOut');
     case 'missing':
-      return 'Not installed';
+      return tr.t('copy.provider.missing');
     case 'error':
-      return 'Can’t start';
+      return tr.t('copy.provider.error');
     case 'unknown':
-      return 'Not checked yet';
+      return tr.t('copy.provider.unknown');
   }
 }
-
-/** ChatGPT isn't ready: Hermes, which runs it, isn't (CT-1451). */
-const CHATGPT_NOT_READY_FIX =
-  'ChatGPT needs nothing installed. It works once this Whombat is running; restarting this Whombat usually fixes it.';
 
 /**
  * What to run on the host to make a provider ready; `command` is shown as code (GitHubNotice). ChatGPT has nothing to
@@ -282,7 +338,9 @@ const CHATGPT_NOT_READY_FIX =
  */
 export function providerFix(
   setup: Pick<ProviderSetup, 'provider' | 'state' | 'detail'>,
+  locale?: string | null,
 ): { text: string; command: string | null } | null {
+  const tr = coreTranslator(locale);
   const claude = setup.provider === 'claude';
   switch (setup.state) {
     case 'ready':
@@ -290,46 +348,43 @@ export function providerFix(
       return null;
     case 'missing':
       return claude
-        ? {
-            text: 'Install it on the host with npm i -g @anthropic-ai/claude-code, then run claude there and sign in with /login.',
-            command: 'npm i -g @anthropic-ai/claude-code',
-          }
-        : { text: CHATGPT_NOT_READY_FIX, command: null };
+        ? { text: tr.t('copy.provider.claudeInstall'), command: 'npm i -g @anthropic-ai/claude-code' }
+        : { text: tr.t('copy.provider.chatgptFix'), command: null };
     case 'logged_out':
       return claude
-        ? { text: 'On the host, run claude and sign in with /login.', command: 'claude' }
-        : { text: CHATGPT_NOT_READY_FIX, command: null };
+        ? { text: tr.t('copy.provider.claudeLogin'), command: 'claude' }
+        : { text: tr.t('copy.provider.chatgptFix'), command: null };
     case 'error':
       return {
-        text: `${setup.detail ?? 'It didn’t start.'} Run whombat doctor on the host for details.`,
+        text: tr.t('copy.provider.doctor', { detail: setup.detail ?? tr.t('copy.provider.didntStart') }),
         command: 'whombat doctor',
       };
   }
 }
 
+/** Where people set the providers up after onboarding, in a locale. */
+export function aiProviderSettingsPath(locale?: string | null): string {
+  return coreTranslator(locale).t('copy.providerSettings');
+}
+
 /** Where people set the providers up after onboarding. */
-export const AI_PROVIDER_SETTINGS = 'Settings → AI sign-in';
+export const AI_PROVIDER_SETTINGS = aiProviderSettingsPath('en');
 
 /**
  * Why the agent can't start on this Whombat (Hermes isn't ready, CT-1160), in words owners can act on: what to do on
  * this Whombat, never the engine's name (concise-replies.md). Settings → AI and the shell notice show it.
  */
-export const ENGINE_PROBLEM_COPY: Readonly<Record<HermesProblem, string>> = {
-  missing: 'Part of this Whombat is missing. Updating this Whombat puts it back.',
-  outdated: 'Part of this Whombat is out of date. Updating this Whombat fixes it.',
-  broken: 'Part of this Whombat didn’t start. Restarting this Whombat usually fixes it.',
-  storage: 'This Whombat’s disk is full or can’t be written. Free some space, then restart it.',
-};
+export function engineProblemCopy(locale?: string | null): Readonly<Record<HermesProblem, string>> {
+  const tr = coreTranslator(locale);
+  return {
+    missing: tr.t('copy.engine.missing'),
+    outdated: tr.t('copy.engine.outdated'),
+    broken: tr.t('copy.engine.broken'),
+    storage: tr.t('copy.engine.storage'),
+  };
+}
 
-/** The agent's own words when it can't start (the agent's quiet reply, `unrunnableReply`). */
-const ENGINE_PROBLEM_REPLY: Readonly<Record<HermesProblem, string>> = {
-  missing: 'I can’t reply yet: part of this Whombat is missing. Once it’s updated, ask me again.',
-  outdated: 'I can’t reply yet: part of this Whombat is out of date. Once it’s updated, ask me again.',
-  broken:
-    'I can’t reply yet: part of this Whombat didn’t start. Restarting it usually fixes that; then ask me again.',
-  storage:
-    'I can’t reply yet: this Whombat’s disk is full or can’t be written. Once there’s room again, ask me again.',
-};
+export const ENGINE_PROBLEM_COPY: Readonly<Record<HermesProblem, string>> = engineProblemCopy('en');
 
 /** Why an agent's turn can't run on this Whombat right now (the agent's quiet reply). */
 export type UnrunnableCause =
@@ -341,18 +396,23 @@ export type UnrunnableCause =
   | { kind: 'local' }
   | { kind: 'no_provider' };
 
-export function unrunnableReply(cause: UnrunnableCause): string {
+/** The agent's own words when it can't run, in the person's locale (the agent's quiet reply). */
+export function unrunnableReply(cause: UnrunnableCause, locale?: string | null): string {
+  const tr = coreTranslator(locale);
   switch (cause.kind) {
     case 'no_runner':
-      return 'I can’t reply right now: part of Whombat is restarting. Ask me again in a minute.';
+      return tr.t('copy.unrunnable.noRunner');
     case 'engine':
-      return ENGINE_PROBLEM_REPLY[cause.problem];
+      return tr.t(`copy.engineReply.${cause.problem}`);
     case 'provider':
-      return `I can’t reply yet: ${PROVIDER_LABELS[cause.provider]} isn’t set up on this Whombat. Once it is (${AI_PROVIDER_SETTINGS}), ask me again.`;
+      return tr.t('copy.unrunnable.provider', {
+        provider: PROVIDER_LABELS[cause.provider],
+        settings: aiProviderSettingsPath(locale),
+      });
     case 'local':
-      return `I can’t reply yet: the custom AI model isn’t set up. Once it’s set up (${AI_PROVIDER_SETTINGS}), ask me again.`;
+      return tr.t('copy.unrunnable.local', { settings: aiProviderSettingsPath(locale) });
     case 'no_provider':
-      return 'I can’t reply yet: I’m not connected to Claude Code or ChatGPT. Pick one in Settings → AI sign-in, then ask me again.';
+      return tr.t('copy.unrunnable.noProvider');
   }
 }
 
@@ -360,14 +420,19 @@ export function unrunnableReply(cause: UnrunnableCause): string {
 export function agentsBlockedNotice(
   status: Pick<AgentSetupStatus, 'runner' | 'hermes' | 'providers'>,
   agentName: string,
+  locale?: string | null,
 ): string {
-  if (!status.runner.connected) return `${agentName} can’t reply right now: part of Whombat is restarting.`;
-  if (!status.hermes) return `${agentName} can’t reply yet: this Whombat is still starting.`;
+  const tr = coreTranslator(locale);
+  if (!status.runner.connected) return tr.t('copy.blocked.restarting', { agent: agentName });
+  if (!status.hermes) return tr.t('copy.blocked.starting', { agent: agentName });
   if (!status.hermes.ready) {
-    const text = ENGINE_PROBLEM_COPY[status.hermes.problem ?? 'broken'];
-    return `${agentName} can’t reply yet: ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+    const text = engineProblemCopy(locale)[status.hermes.problem ?? 'broken'];
+    return tr.t('copy.blocked.engine', {
+      agent: agentName,
+      reason: `${text.charAt(0).toLowerCase()}${text.slice(1)}`,
+    });
   }
-  return `${agentName} can’t reply yet: neither Claude Code nor ChatGPT is ready on this Whombat.`;
+  return tr.t('copy.blocked.noProvider', { agent: agentName });
 }
 
 /* The agent's working line (whombat-app ui-improvements item 2, CT-158) ------------------------------------------ */
@@ -379,10 +444,12 @@ export function agentsBlockedNotice(
 export function agentWorkingText(
   agent: { status: AgentStatus; doing: string },
   liveActivity?: string | null,
+  locale?: string | null,
 ): string | null {
+  const tr = coreTranslator(locale);
   const live = liveActivity?.trim();
-  if (live) return `Working: ${live}`;
+  if (live) return tr.t('copy.working', { what: live });
   const doing = agent.doing.trim();
   if (agent.status !== 'working' || !doing) return null;
-  return `Working: ${doing}`;
+  return tr.t('copy.working', { what: doing });
 }

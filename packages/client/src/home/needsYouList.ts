@@ -34,6 +34,7 @@ import {
 } from '@whombat/core/approvals';
 import { formatClock } from '@whombat/core/text';
 import { type AgentWords, agentWords } from '../agentName';
+import { clientTranslator } from '../i18n/catalog';
 import { type LookResearchView, lookResearchView, lookThreadHref } from './lookResearch';
 import { type NeedsYouGlyph, needsYouGlyph } from './needsYou';
 import { needsYouWhen, tomorrowMorning, untilText } from './time';
@@ -46,76 +47,70 @@ import { needsYouWhen, tomorrowMorning, untilText } from './time';
  */
 export type InboxGroup = Exclude<NeedsYouGroup, 'quiet'> | 'later' | 'settled';
 
-export const NEEDS_YOU_WORDS = {
-  title: 'Inbox',
-  /** The page's line under its title. */
-  subtitle: (w: Pick<AgentWords, 'Name'>) => `What only you can decide, and what ${w.Name} is on.`,
-  empty: 'All good. Nothing needs you.',
-  /** Above the other groups when nothing needs the person. */
-  nothing: 'Nothing needs you right now.',
-  groups: {
-    you: 'Needs you',
-    assistant: '{Name}’s on it',
-    fyi: 'Heads-ups',
-    later: 'Later',
-    settled: 'Settled',
-  } satisfies Record<InboxGroup, string>,
-  /** The folded groups' rows. */
-  showHeadsUps: (n: number) => `Show ${n} heads-up${n === 1 ? '' : 's'}`,
-  hideHeadsUps: 'Hide heads-ups',
-  showSettled: (n: number) => `Show ${n} settled`,
-  hideSettled: 'Hide settled',
-  /** Settled with nothing in it (it is always shown, last). */
-  noneSettled: 'Nothing settled. What you settle waits here, and comes back if it happens again.',
-  ask: (w: Pick<AgentWords, 'name'>) => `Ask ${w.name}`,
-  /** A problem's one verb, whether the assistant looks into it or fixes what only the person could. */
-  askFix: (w: Pick<AgentWords, 'name'>) => `Ask ${w.name} to handle it`,
-  handle: (w: Pick<AgentWords, 'name'>) => `Ask ${w.name} to handle it`,
-  talk: (w: Pick<AgentWords, 'name'>) => `Talk to ${w.name} about it`,
-  looking: (w: Pick<AgentWords, 'Name'>) => `${w.Name} is looking into it`,
-  fixing: (w: Pick<AgentWords, 'Name'>) => `${w.Name} is on it`,
-  see: 'See it',
-  settle: 'Settle',
-  snooze: 'Remind me tomorrow',
-  back: 'Bring it back',
-  /** A settled or later row's swipe. */
-  backShort: 'Bring back',
-  more: 'More',
-  /** What a screen reader calls a row's More: “More for blackbox’s disk array failed”. */
-  moreFor: (title: string) => `More for ${title}`,
-  /** The toasts. */
-  snoozed: 'I’ll remind you tomorrow morning.',
-  /** Settle on a line Whombat watches: it comes back when it happens again. */
-  settledLine: 'Settled. It comes back if it happens again.',
-  settledOwn: 'Settled.',
-  /** *Ask {assistant} to handle it* went through: the row moves to its group. */
-  handling: (w: Pick<AgentWords, 'Name'>) => `${w.Name} is on it.`,
-  /** Stop watching this: “Whombat stopped watching “Plex can’t be reached…”.”, with Undo. */
-  stopped: (name: string) => fillQuietWords(QUIET_WORDS.toastStopped, { name }),
-  backDone: 'It’s back.',
-  undo: QUIET_WORDS.undo,
-  failed: 'That didn’t work. Try again in a moment.',
-  /** An item's page once it has left the list. */
-  gone: 'This doesn’t need you any more.',
-  /** The list's read states: loading, nothing in it, a first read that failed, a refresh that failed. */
-  loading: 'Loading the Inbox…',
-  emptyBody: 'New questions and things that need you appear here.',
-  backToChat: 'Back to Chat',
-  readFailed: 'Couldn’t read the Inbox.',
-  refreshFailed: 'Couldn’t refresh the Inbox.',
-  noSaved: 'There’s no saved copy to show on this device yet.',
-  saved: 'Showing the saved details already on this device.',
-  retry: 'Try again',
-  moreDetail: 'More detail',
-  /** An approval row's Details: the approval itself, with its target and lasting yes. */
-  openApproval: 'Open approval',
-  /** What *Ask {assistant}* says when the list couldn't be read. */
-  readFailedAsk: 'Please check why I couldn’t read the Inbox.',
-} as const;
+export function needsYouWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.t('inbox.title'),
+    subtitle: (w: Pick<AgentWords, 'Name'>) => tr.t('inbox.subtitle', { Name: w.Name }),
+    empty: tr.t('inbox.empty'),
+    nothing: tr.t('inbox.nothing'),
+    groups: {
+      you: tr.t('inbox.group.you'),
+      assistant: tr.t('inbox.group.assistant'),
+      fyi: tr.t('inbox.group.fyi'),
+      later: tr.t('inbox.group.later'),
+      settled: tr.t('inbox.group.settled'),
+    } satisfies Record<InboxGroup, string>,
+    showHeadsUps: (n: number) => tr.tp('inbox.showHeadsUps', n),
+    hideHeadsUps: tr.t('inbox.hideHeadsUps'),
+    showSettled: (n: number) => tr.t('inbox.showSettled', { count: n }),
+    hideSettled: tr.t('inbox.hideSettled'),
+    noneSettled: tr.t('inbox.noneSettled'),
+    ask: (w: Pick<AgentWords, 'name'>) => tr.t('inbox.ask', { name: w.name }),
+    askFix: (w: Pick<AgentWords, 'name'>) => tr.t('inbox.handle', { name: w.name }),
+    handle: (w: Pick<AgentWords, 'name'>) => tr.t('inbox.handle', { name: w.name }),
+    talk: (w: Pick<AgentWords, 'name'>) => tr.t('inbox.talk', { name: w.name }),
+    looking: (w: Pick<AgentWords, 'Name'>) => tr.t('inbox.looking', { Name: w.Name }),
+    fixing: (w: Pick<AgentWords, 'Name'>) => tr.t('inbox.fixing', { Name: w.Name }),
+    see: tr.t('inbox.see'),
+    settle: tr.t('inbox.settle'),
+    snooze: tr.t('inbox.snooze'),
+    back: tr.t('inbox.back'),
+    backShort: tr.t('inbox.backShort'),
+    more: tr.t('inbox.more'),
+    moreFor: (title: string) => tr.t('inbox.moreFor', { title }),
+    snoozed: tr.t('inbox.snoozed'),
+    settledLine: tr.t('inbox.settledLine'),
+    settledOwn: tr.t('inbox.settledOwn'),
+    handling: (w: Pick<AgentWords, 'Name'>) => tr.t('inbox.handling', { Name: w.Name }),
+    stopped: (name: string) => fillQuietWords(QUIET_WORDS.toastStopped, { name }),
+    backDone: tr.t('inbox.backDone'),
+    undo: tr.t('inbox.ignore.undo'),
+    failed: tr.t('inbox.failed'),
+    gone: tr.t('inbox.gone'),
+    loading: tr.t('inbox.loading'),
+    emptyBody: tr.t('inbox.emptyBody'),
+    backToChat: tr.t('inbox.backToChat'),
+    readFailed: tr.t('inbox.readFailed'),
+    refreshFailed: tr.t('inbox.refreshFailed'),
+    noSaved: tr.t('inbox.noSaved'),
+    saved: tr.t('inbox.saved'),
+    retry: tr.t('inbox.retry'),
+    moreDetail: tr.t('inbox.moreDetail'),
+    openApproval: tr.t('inbox.openApproval'),
+    readFailedAsk: tr.t('inbox.readFailedAsk'),
+  };
+}
+
+export const NEEDS_YOU_WORDS = needsYouWords();
 
 /** A group's heading, with the assistant's name. */
-export function needsYouGroupLabel(group: InboxGroup, words: Pick<AgentWords, 'Name'>): string {
-  return NEEDS_YOU_WORDS.groups[group].replace('{Name}', words.Name);
+export function needsYouGroupLabel(
+  group: InboxGroup,
+  words: Pick<AgentWords, 'Name'>,
+  locale?: string | null,
+): string {
+  return needsYouWords(locale).groups[group].replace('{Name}', words.Name);
 }
 
 /** Where an item sits in the Inbox: the server's group, its quiet ones by whether they come back tomorrow. */

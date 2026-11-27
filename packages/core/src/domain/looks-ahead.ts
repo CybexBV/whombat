@@ -12,6 +12,7 @@
  */
 
 import { z } from 'zod';
+import { coreTranslator, coreTree, coreWords } from '../i18n/catalog.js';
 import { type DateInput, daysAgo, toDate, zonedParts } from '../text/time.js';
 import type { CalendarEvent } from './workspace.js';
 
@@ -173,19 +174,27 @@ export const AHEAD_KINDS = [
 export const AheadKind = z.enum(AHEAD_KINDS);
 export type AheadKind = z.infer<typeof AheadKind>;
 
+const AHEAD_KIND_WORDS_KEYS = [
+  'time',
+  'place',
+  'cancelled',
+  'tickets',
+  'crowds',
+  'travel',
+  'conflict',
+  'missing_event',
+  'deadline',
+  'other',
+] as const;
+
 /** Each kind in plain words, as a list in Settings and in the assistant's lines: “changed times”. */
-export const AHEAD_KIND_WORDS: Readonly<Record<AheadKind, string>> = {
-  time: 'Changed times',
-  place: 'A changed or moved place',
-  cancelled: 'Cancelled or postponed plans',
-  tickets: 'Missing tickets or confirmations',
-  crowds: 'Crowds and closures nearby',
-  travel: 'Travel disruptions',
-  conflict: 'Overlaps and tight travel',
-  missing_event: 'Bookings missing from your calendar',
-  deadline: 'Deadlines and things waiting on you',
-  other: 'Anything else worth knowing',
-};
+export function aheadKindWords(
+  locale?: string | null,
+): Readonly<Record<(typeof AHEAD_KIND_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'ahead.kind', AHEAD_KIND_WORDS_KEYS);
+}
+
+export const AHEAD_KIND_WORDS: Readonly<Record<AheadKind, string>> = aheadKindWords('en');
 
 /* Which events -------------------------------------------------------------------------------------------------------- */
 
@@ -1741,68 +1750,81 @@ export type AheadInboxFeedbackResponse = z.infer<typeof AheadInboxFeedbackRespon
 
 /* Words --------------------------------------------------------------------------------------------------------------- */
 
-export const LOOKS_AHEAD_WORDS = {
-  title: 'Looks ahead',
+const LOOKS_AHEAD_WORDS_SHAPE = {
+  title: 0,
   /** With the assistant's name. */
-  explainFor: (assistant: string) =>
-    `${assistant} quietly checks your upcoming plans and looks through your new mail a few times a day, and tells you only when something needs you.`,
-  calendars: 'Calendars',
-  noCalendar: 'Connect a Google or Microsoft 365 account to check your calendar.',
-  calendarsUnread: 'Your calendars can’t be read right now.',
-  mail: 'Incoming mail',
-  mailLine:
-    'Spot what’s waiting on you: someone who needs an answer, a deadline, a booking that isn’t on your calendar, or news you asked about.',
-  noMail: 'Connect Google, Microsoft 365 or Email to check incoming mail.',
-  rules: 'What to watch for',
-  rulesHint:
-    'Short notes you own that guide every check — for example where you live, how you travel, or what to skip.',
-  rulesPlaceholder: 'e.g. I live in Utrecht and usually drive to venues',
-  addRule: 'Add',
-  removeRule: 'Remove',
-  stopped: 'Not checked any more',
-  turnBackOn: 'Check again',
-  recent: 'Recent checks',
-  recentEmpty: 'No checks yet.',
-  checkNow: 'Check now',
-  checkingNow: 'Checking…',
-  checkStarted: 'Started a check.',
-  nothingDue: 'Everything up to date — nothing due to check right now.',
-  week: (checked: number, told: number) =>
-    checked === 0
-      ? 'Nothing checked in the last seven days.'
-      : `${checked} checked in the last seven days, ${told === 0 ? 'nothing worth telling you' : `${told} worth telling you`}.`,
-  switched: (on: boolean) => (on ? 'Looks ahead is on.' : 'Looks ahead is off.'),
-  mailSwitched: (on: boolean) => (on ? 'Incoming mail is checked.' : 'Incoming mail isn’t checked any more.'),
-  calendarSwitched: (name: string, on: boolean) =>
-    on ? `${name} is checked.` : `${name} isn’t checked any more.`,
-  kindSwitched: (kind: AheadKind, on: boolean) =>
-    on
-      ? `“${AHEAD_KIND_WORDS[kind]}” is checked again.`
-      : `“${AHEAD_KIND_WORDS[kind]}” isn’t checked any more.`,
-  ruleAdded: 'Added to what to watch for.',
-  ruleRemoved: 'Removed from what to watch for.',
-  matters: 'Keeping an eye on',
+  calendars: 0,
+  noCalendar: 0,
+  calendarsUnread: 0,
+  mail: 0,
+  mailLine: 0,
+  noMail: 0,
+  rules: 0,
+  rulesHint: 0,
+  rulesPlaceholder: 0,
+  addRule: 0,
+  removeRule: 0,
+  stopped: 0,
+  turnBackOn: 0,
+  recent: 0,
+  recentEmpty: 0,
+  checkNow: 0,
+  checkingNow: 0,
+  checkStarted: 0,
+  nothingDue: 0,
+  ruleAdded: 0,
+  ruleRemoved: 0,
+  matters: 0,
   /** With the assistant's name. */
-  mattersEmpty: (assistant: string) =>
-    `Nothing right now. Ask ${assistant} to tell you when something arrives, like “tell me when the notary replies”.`,
-  matterWaiting: { you: 'Waiting on you', them: 'Waiting for an answer' } as Readonly<
-    Record<AheadWaitingOn, string>
-  >,
-  matterDue: (date: string) => `by ${date}`,
-  removeMatter: 'Remove',
-  matterRemoved: 'Not keeping an eye on it any more.',
-  recentTriage: (count: number, picked: number) =>
-    `Looked through ${count} new ${count === 1 ? 'mail' : 'mails'}, ${picked === 0 ? 'nothing to check' : `${picked} to check`}`,
-  recentMatter: 'Follow-up',
-  openInInbox: 'Open in Inbox',
-  notUsefulAction: 'Not useful',
-  stopCheckingAction: 'Stop checking for this',
-  stopMatterAction: 'Stop keeping an eye on this',
-  replyPlaceholder: (assistant: string) => `Reply to ${assistant}…`,
-  sendReply: 'Send',
-  markedNotUseful: 'Marked not useful.',
-  stoppedKindToast: (kind: AheadKind) => `Stopped checking for “${AHEAD_KIND_WORDS[kind]}”.`,
-  stoppedMatterToast: 'Stopped keeping an eye on it.',
-  inboxCalendar: 'Calendar',
-  inboxMail: 'Mail',
+  matterWaiting: {
+    you: 0,
+    them: 0,
+  },
+  removeMatter: 0,
+  matterRemoved: 0,
+  recentMatter: 0,
+  openInInbox: 0,
+  notUsefulAction: 0,
+  stopCheckingAction: 0,
+  stopMatterAction: 0,
+  sendReply: 0,
+  markedNotUseful: 0,
+  stoppedMatterToast: 0,
+  inboxCalendar: 0,
+  inboxMail: 0,
 } as const;
+
+/** `LOOKS_AHEAD_WORDS` in a locale. */
+export function aheadWords(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  const words = coreTree(locale, 'ahead', LOOKS_AHEAD_WORDS_SHAPE);
+  const kind = (k: AheadKind) => tr.t(`ahead.kind.${k}`);
+  return {
+    ...words,
+    explainFor: (assistant: string) => tr.t('ahead.fn.explainFor', { assistant }),
+    week: (checked: number, told: number) =>
+      checked === 0
+        ? tr.t('ahead.fn.weekNone')
+        : tr.t('ahead.fn.week', {
+            checked,
+            told: told === 0 ? tr.t('ahead.fn.weekToldNone') : tr.t('ahead.fn.weekTold', { told }),
+          }),
+    switched: (on: boolean) => tr.t(on ? 'ahead.fn.switchedOn' : 'ahead.fn.switchedOff'),
+    mailSwitched: (on: boolean) => tr.t(on ? 'ahead.fn.mailOn' : 'ahead.fn.mailOff'),
+    calendarSwitched: (name: string, on: boolean) =>
+      tr.t(on ? 'ahead.fn.calendarOn' : 'ahead.fn.calendarOff', { name }),
+    kindSwitched: (k: AheadKind, on: boolean) =>
+      tr.t(on ? 'ahead.fn.kindOn' : 'ahead.fn.kindOff', { kind: kind(k) }),
+    mattersEmpty: (assistant: string) => tr.t('ahead.fn.mattersEmpty', { assistant }),
+    matterDue: (date: string) => tr.t('ahead.fn.matterDue', { date }),
+    recentTriage: (count: number, picked: number) =>
+      tr.t('ahead.fn.recentTriage', {
+        mails: tr.tp('ahead.fn.mails', count),
+        picked: picked === 0 ? tr.t('ahead.fn.pickedNone') : tr.t('ahead.fn.picked', { picked }),
+      }),
+    replyPlaceholder: (assistant: string) => tr.t('ahead.fn.replyPlaceholder', { assistant }),
+    stoppedKindToast: (k: AheadKind) => tr.t('ahead.fn.stoppedKind', { kind: kind(k) }),
+  };
+}
+
+export const LOOKS_AHEAD_WORDS = aheadWords('en');

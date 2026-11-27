@@ -8,6 +8,7 @@
  * until 09:00; Stop watching: the rule switched off for the server or one item). Hints are quieted in Whombat, by their
  * kind and item. Rule and hint ids are the hosts service's (`whombat-hosts` `internal/rules`, `internal/hub`).
  */
+import { coreTranslator, hasCoreMessage, isEnglishLocale } from '../i18n/catalog.js';
 import { BACKUP_PLACE_TEXT } from './backup-places.js';
 import { NOTICE_CHECK_RE, type NoticeCheck, type NoticeNature, type QuietLifts } from './quiet.js';
 
@@ -524,4 +525,28 @@ export function hostNoticeSubjectId(c: HostWatchCheck, entity: string | undefine
 export function hostEntityName(entity: string): string {
   const m = /^[a-z][a-z-]*:(.+)$/.exec(entity);
   return (m ? (m[1] as string) : entity).slice(0, 80);
+}
+
+/**
+ * A check's name and Ignore words in a locale. A check this version doesn't know reads as “Other alerts” or “Other
+ * hints”; English keeps the check's own words.
+ */
+export function hostWatchCheckWords(
+  c: Pick<HostWatchCheck, 'check' | 'name' | 'words' | 'hint'>,
+  locale?: string | null,
+): { name: string; words: string } {
+  if (isEnglishLocale(locale)) return { name: c.name, words: c.words };
+  const tr = coreTranslator(locale);
+  const own = `hostWatch.name.${c.check}`;
+  const id = hasCoreMessage(own)
+    ? c.check
+    : c.hint !== undefined
+      ? HOST_OTHER_HINT_CHECK
+      : HOST_OTHER_ALERT_CHECK;
+  const name = `hostWatch.name.${id}`;
+  const words = `hostWatch.words.${id}`;
+  return {
+    name: hasCoreMessage(name) ? tr.t(name) : c.name,
+    words: hasCoreMessage(words) ? tr.t(words) : c.words,
+  };
 }

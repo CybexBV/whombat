@@ -4,6 +4,7 @@
  * apps run (`claims.start` → enrollment session → CPace → `enroll.claim` → the appliance's confirmation), and the
  * words for what can go wrong on the way.
  */
+import { normalizeLocaleTag } from '@whombat/core/i18n';
 import {
   type ClaimConfirmTags,
   claimConfirmEqual,
@@ -16,7 +17,9 @@ import {
   claimCardPassword,
   claimVerifier,
   isClaimSecret,
+  LOCALE_MINOR,
   normalizeClaimSecret,
+  protocolAtLeast,
 } from '@whombat/protocol/session';
 import { type EnrolledOutput, OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
@@ -178,10 +181,20 @@ export interface ClaimCeremonyInput {
   clientPeerId: string;
   account: { name: string; email: string };
   endpoint: { label: string; platform: 'web' | 'android' | 'ios' | 'desktop' | 'cli' };
+  /** Preferred BCP-47 locale tag; only sent when the box speaks session minor >= LOCALE_MINOR. */
+  locale?: string | null;
   randomBytes?: (n: number) => Uint8Array;
 }
 
 const cryptoRandom = (n: number) => crypto.getRandomValues(new Uint8Array(n));
+
+function claimLocaleFor(session: ApplianceSession, locale?: string | null): string | undefined {
+  const normalized = normalizeLocaleTag(locale);
+  if (!normalized) return undefined;
+  const st = typeof session.state === 'function' ? session.state() : null;
+  const protocol = st?.status === 'open' ? st.info.protocol : null;
+  return protocolAtLeast(protocol, LOCALE_MINOR) ? normalized : undefined;
+}
 
 /**
  * CPace over the enrollment session (CC-06, CC-07): `enroll.claim.begin` with this side's share, `enroll.claim` with
@@ -209,6 +222,7 @@ export async function runClaimCeremony(input: ClaimCeremonyInput): Promise<Enrol
     // A share that isn't a ristretto255 element: whatever answered can't be the box.
     throw new ClaimMismatchError();
   }
+  const locale = claimLocaleFor(session, input.locale);
   const out = await sessionOps.claim(session, {
     // Control's claim id: the appliance reports exactly this claim as completed (CT-27).
     claimId: claim.claim,
@@ -216,6 +230,7 @@ export async function runClaimCeremony(input: ClaimCeremonyInput): Promise<Enrol
     confirm: tags.client,
     account: input.account,
     endpoint: input.endpoint,
+    ...(locale ? { locale } : {}),
   });
   if (!claimConfirmEqual(tags.appliance, out.confirm)) throw new ClaimMismatchError();
   return out;
@@ -244,6 +259,7 @@ export async function claimAppliance(deps: {
   clientPeerId: string;
   account: { name: string; email: string };
   endpoint: ClaimCeremonyInput['endpoint'];
+  locale?: string | null;
   randomBytes?: (n: number) => Uint8Array;
 }): Promise<ClaimResult> {
   const { claim } = await deps.control.startClaim({
@@ -260,6 +276,7 @@ export async function claimAppliance(deps: {
       clientPeerId: deps.clientPeerId,
       account: deps.account,
       endpoint: deps.endpoint,
+      ...(deps.locale !== undefined ? { locale: deps.locale } : {}),
       ...(deps.randomBytes && { randomBytes: deps.randomBytes }),
     });
     return { device: claim.device, peerId: claim.contentPeerId, accountId: output.accountId, output };

@@ -4,7 +4,7 @@
  * a new key and closes when its items are gone. The pill counts everything and opens the modal with all of it.
  */
 import type { DeskAttention, DeskAttentionItem, DeskAttentionTone } from './types';
-import { fillWords, SCREEN_WORDS } from './words';
+import { fillWords, screenWords } from './words';
 
 /** `pops` the modal opened by itself, `all` the pill opened it with everything. */
 export type ModalMode = 'pops' | 'all';
@@ -51,12 +51,16 @@ export function notNow(view: ModalView): { away: string[]; state: ModalState } {
 }
 
 /** The pill (DK-136): its words and colour while anything needs the person; null otherwise. */
-export function pill(attention: DeskAttention): { text: string; tone: DeskAttentionTone } | null {
+export function pill(
+  attention: DeskAttention,
+  locale?: string | null,
+): { text: string; tone: DeskAttentionTone } | null {
   const n = attention.items.length + attention.more;
   if (n === 0) return null;
   const tone = attention.tone ?? (attention.items.some((i) => i.tone === 'bad') ? 'bad' : 'warn');
+  const words = screenWords(locale).pill;
   return {
-    text: n === 1 ? SCREEN_WORDS.pill.one : fillWords(SCREEN_WORDS.pill.many, { n }),
+    text: n === 1 ? words.one : fillWords(words.many, { n }),
     tone,
   };
 }

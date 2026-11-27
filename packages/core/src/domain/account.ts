@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LocaleTag } from '../i18n/locale.js';
+import { LocaleTag } from '../i18n/schema.js';
 import { AccountId, BurrowId, PrincipalId } from '../ids.js';
 import { Email, Timestamp } from './common.js';
 import { AssistantPreferences } from './guides.js';

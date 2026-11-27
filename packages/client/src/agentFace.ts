@@ -5,6 +5,7 @@
  * AP-5500). Shared by the web and the phone.
  */
 import { AGENT_CHARACTERS, type AgentFace, agentCharacter, DEFAULT_AGENT_FACE } from '@whombat/core';
+import { clientTranslator } from './i18n/catalog';
 
 /** The drawing the agent wears: its face, else Dusty's. */
 export function agentFaceOf(agent: { face?: AgentFace | null | undefined } | null | undefined): AgentFace {
@@ -18,7 +19,12 @@ export function agentFaceBackground(face: AgentFace): string {
 
 /** A face in the picker: “Neo’s face”, after the character whose drawing it is. */
 export function agentFaceLabel(face: AgentFace): string {
-  return `${agentCharacter(face).name}’s face`;
+  return agentFaceLabelIn(face);
+}
+
+/** Localized face label (“Neo’s face” / “Gezicht van Neo”). */
+export function agentFaceLabelIn(face: AgentFace, locale?: string | null): string {
+  return clientTranslator(locale).t('agent.face.label', { name: agentCharacter(face).name });
 }
 
 /**
@@ -36,7 +42,12 @@ export const AGENT_FACE_STYLES: Readonly<Record<AgentFace, string>> = {
 
 /** What a face's character is like: “Calm and a little mysterious, with the odd line from The Matrix.” */
 export function agentFaceStyle(face: AgentFace): string {
-  return AGENT_FACE_STYLES[face];
+  return agentFaceStyleIn(face);
+}
+
+/** Localized character style description. */
+export function agentFaceStyleIn(face: AgentFace, locale?: string | null): string {
+  return clientTranslator(locale).t(`agent.face.style.${face}`);
 }
 
 /**

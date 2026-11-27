@@ -520,7 +520,12 @@ describe('power (CT-521)', () => {
     expect(hostPowerText.line({ ...ac, chargeLimit: null, percent: 100 })).toBe(`Plugged in · 100${nbsp}%`);
     expect(hostPowerText.line(battery)).toBe(`On battery · 72${nbsp}% · about 3 h 10 min left`);
     expect(hostPowerText.line({ ...battery, minutesLeft: null })).toBe(`On battery · 72${nbsp}%`);
-    expect([45, 60, 190, 0.2].map(formatPowerLeft)).toEqual(['45 min', '1 h', '3 h 10 min', '1 min']);
+    expect([45, 60, 190, 0.2].map((m) => formatPowerLeft(m))).toEqual([
+      '45 min',
+      '1 h',
+      '3 h 10 min',
+      '1 min',
+    ]);
   });
 
   it('tells owners in Chat and shows the banner of mockup 4', () => {

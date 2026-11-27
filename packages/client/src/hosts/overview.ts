@@ -10,6 +10,7 @@ import { HOST_STATUS_LABELS, type HostServer, type HostServerStatus } from '@who
 import { type StatusLevel, serverStatusLevel } from '../home/statusLevel';
 import { OVERVIEW_WORDS } from '../home/tabs';
 import { readingTime } from '../home/time';
+import { clientTranslator } from '../i18n/catalog';
 import { DASH, formatAgoIso, formatPct, formatTemp, formatUptimeShort } from './format';
 import { ALL_GUESTS_HREF, serverHref, serverRow } from './model';
 import type { HostTone } from './thresholds';
@@ -456,17 +457,18 @@ export function overviewServerRows(
  * A server that needs a look still runs; offline and waiting ones are counted apart. The noun follows what the servers
  * run: machines, apps (Docker only), or both. Empty without servers.
  */
-export function overviewServersLine(servers: readonly HostServer[]): string {
+export function overviewServersLine(servers: readonly HostServer[], locale?: string | null): string {
   if (!servers.length) return '';
+  const tr = clientTranslator(locale);
   const count = (...st: HostServerStatus[]) => servers.filter((s) => st.includes(s.status)).length;
   const up = count('ok', 'warn');
   const parts: string[] = [];
-  if (up === servers.length) parts.push('All running');
+  if (up === servers.length) parts.push(tr.t('hosts.overview.allRunning'));
   else {
-    if (up) parts.push(`${up} running`);
-    if (count('bad')) parts.push(`${count('bad')} not working`);
-    if (count('offline')) parts.push(`${count('offline')} offline`);
-    if (count('pending')) parts.push(`${count('pending')} waiting`);
+    if (up) parts.push(tr.t('hosts.overview.running', { count: up }));
+    if (count('bad')) parts.push(tr.t('hosts.overview.notWorking', { count: count('bad') }));
+    if (count('offline')) parts.push(tr.t('hosts.overview.offline', { count: count('offline') }));
+    if (count('pending')) parts.push(tr.t('hosts.overview.waiting', { count: count('pending') }));
   }
   let running = 0;
   let total = 0;
@@ -482,8 +484,14 @@ export function overviewServersLine(servers: readonly HostServer[]): string {
       }
     }
   if (total) {
-    const noun = machines && apps ? 'machines and apps' : apps ? 'apps' : 'machines';
-    parts.push(`${running} of ${total} ${noun} running`);
+    const noun = tr.t(
+      machines && apps
+        ? 'hosts.overview.noun.both'
+        : apps
+          ? 'hosts.overview.noun.apps'
+          : 'hosts.overview.noun.machines',
+    );
+    parts.push(tr.t('hosts.overview.guestsRunning', { running, total, noun }));
   }
   return parts.join(' · ');
 }

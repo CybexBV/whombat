@@ -9,13 +9,14 @@ import { FEEDBACK_CONTEXT_LIMITS as LIMITS } from '@whombat/core/feedback/saniti
 export const BRIDGE_TAG = 'whombat-feedback/1';
 /** `WIDGET_READY_EVENT` of `@whombat/core/feedback/install`. */
 export const READY_EVENT = 'whombat-feedback:ready';
-/** `WIDGET_ATTRIBUTES` of `@whombat/core/feedback/install`. */
+/** Attributes understood by the loader. */
 export const ATTRS = {
   site: 'data-site',
   theme: 'data-theme',
   position: 'data-position',
   launcher: 'data-launcher',
   label: 'data-label',
+  lang: 'data-lang',
   trigger: 'data-whombat-feedback',
   key: 'data-key',
   trail: 'data-trail',

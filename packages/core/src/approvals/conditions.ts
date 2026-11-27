@@ -2,6 +2,7 @@
  * Approval conditions: evaluated from live state (checks on the head commit, the PR review, a person's
  * decision). The person condition is met exactly while the approval is `approved`.
  */
+
 import type {
   Approval,
   ApprovalCondition,
@@ -10,6 +11,7 @@ import type {
   ChecksState,
   ReviewApprovedCondition,
 } from '../domain/approval.js';
+import { coreTranslator } from '../i18n/catalog.js';
 
 export interface LiveChecks {
   headSha: string | null;
@@ -111,19 +113,21 @@ export function readyToExecute(approval: Approval): boolean {
   );
 }
 
-/** Default desktop labels the server writes when it creates conditions. */
+/** Default desktop labels the server writes when it creates conditions (stored in English; `locale` for display). */
 export function defaultConditionLabel(
   cond:
     | { kind: 'checks_pass' }
     | { kind: 'review_approved'; reviewerName: string }
     | { kind: 'person_approves' },
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
   switch (cond.kind) {
     case 'checks_pass':
-      return 'Checks pass on the latest commit';
+      return tr.t('approval.condition.checks_pass');
     case 'review_approved':
-      return `${cond.reviewerName} approves the PR`;
+      return tr.t('approval.condition.review_approved', { name: cond.reviewerName });
     case 'person_approves':
-      return 'A person says yes';
+      return tr.t('approval.condition.person_approves');
   }
 }

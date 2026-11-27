@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BRIDGE_TAG, randomToken } from '../shared/protocol';
-import { connectBridge, type FrameWindowLike, frameParams } from './bridge';
+import { connectBridge, type FrameWindowLike, frameLanguage, frameParams } from './bridge';
 
 const SITE = 'fbs_abcdefghijklmnopqrstuvwx';
 const PARENT = 'https://shop.example.com';
@@ -77,6 +77,24 @@ describe('frameParams', () => {
     for (const w of refused)
       expect(frameParams(w), `${w.location.search} ${w.location.hash}`).toHaveProperty('refused');
   });
+});
+
+describe('frameLanguage', () => {
+  it.each([
+    ['?lang=nl-BE', ['en-US'], 'en-US', 'nl-BE'],
+    ['?lang=en', ['nl-NL'], 'nl-NL', 'en'],
+    ['?lang=pseudo', ['nl-NL'], 'nl-NL', 'pseudo'],
+    ['?lang=fr-FR', ['de-DE', 'nl-NL', 'en'], 'en', 'nl-NL'],
+    ['', ['de-DE'], 'nl', 'nl'],
+    ['', ['de-DE'], 'fr-FR', 'en'],
+  ] as const)(
+    'resolves %s with browser preferences %j and %s to %s',
+    (search, languages, language, expected) => {
+      expect(frameLanguage({ location: { search, hash: '' }, navigator: { languages, language } })).toBe(
+        expected,
+      );
+    },
+  );
 });
 
 describe('connectBridge', () => {

@@ -15,14 +15,14 @@ import type { FeedbackSiteCard } from '@whombat/core/domain';
 import {
   FEEDBACK_REPORTER_RESEND_S,
   normalizeReporterEmail,
-  REPORTER_STATUS_COPY,
-  REPORTER_TYPE_COPY,
   reporterSummaryOf,
 } from '@whombat/core/feedback/reporters';
+import { type EN, type WidgetTranslator, widgetTranslator } from '../i18n/catalog';
 import type { HostMessage, ReportType, WidgetContext } from '../shared/protocol';
+import { supportedVisitorLanguage } from '../shared/visitor-language';
 import type { FrameBridge, FrameParams } from './bridge';
 import { formatBytes, type PublicConfig, parseConfig } from './config';
-import { focusables, h, ICONS, icon } from './dom';
+import { focusables, h, ICONS, icon, translatedParts } from './dom';
 import {
   buildSubmission,
   type DraftFile,
@@ -63,9 +63,9 @@ import {
   type ReporterEndpoints,
   type ReporterOutcome,
   type ReportRow,
+  reportStatusText,
   requestCode,
   retryText,
-  SIGNIN_MESSAGES,
   startSession,
 } from './reporters';
 import {
@@ -80,19 +80,10 @@ import {
 
 export const CONFIG_TIMEOUT_MS = 15_000;
 
-const TYPE_LABELS: Record<ReportType, string> = { bug: 'Report a problem', feature: 'Suggest an idea' };
-const DESCRIPTION_LABELS: Record<ReportType, string> = {
-  bug: 'What went wrong?',
-  feature: 'What would you like?',
-};
-const DESCRIPTION_HINTS: Record<ReportType, string> = {
-  bug: 'Describe what you were doing and what happened. Please don’t include passwords or other private details.',
-  feature:
-    'Describe what you’re trying to do and what would help. Please don’t include passwords or other private details.',
-};
-const UNAVAILABLE = 'Feedback isn’t available on this site right now.';
-const SIGNIN_UNAVAILABLE = 'Signing in isn’t available on this site right now.';
-const REPORTS_UNAVAILABLE = 'Your reports can’t be shown right now. Try again later.';
+const TYPE_COPY = {
+  bug: { label: 'reportProblem', description: 'problemDescription', hint: 'problemHint' },
+  feature: { label: 'suggestIdea', description: 'ideaDescription', hint: 'ideaHint' },
+} as const satisfies Record<ReportType, Record<'label' | 'description' | 'hint', keyof typeof EN>>;
 
 type View = 'loading' | 'unavailable' | 'form' | 'receipt' | 'signin' | 'reports';
 
@@ -118,11 +109,10 @@ export interface FrameAppOptions {
   /** Where the frame's own URL resolves `./sites/…` from (tests pass the frame URL). */
   baseUrl: string;
   root: HTMLElement;
+  lang?: string;
   /** Drop mode's environment (control's origin, the ancestors); used only when `params.key` is set. */
   drop?: DropEnvironment;
 }
-
-const nf = (n: number) => n.toLocaleString('en-US');
 
 export class FrameApp {
   readonly root: HTMLElement;
@@ -152,6 +142,7 @@ export class FrameApp {
   private codeSentAt = 0;
   private reportsSeq = 0;
   private readonly opts: FrameAppOptions;
+  private readonly words: WidgetTranslator;
   private dialog!: HTMLElement;
   private body!: HTMLElement;
   private foot!: HTMLElement;
@@ -185,6 +176,9 @@ export class FrameApp {
   constructor(opts: FrameAppOptions) {
     this.opts = opts;
     this.root = opts.root;
+    const lang = supportedVisitorLanguage(opts.lang) ?? 'en';
+    this.words = widgetTranslator(lang);
+    applyFrameLanguage(this.root.ownerDocument, lang, this.words);
     const control = opts.drop?.control ?? null;
     this.submitter = this.dropMode
       ? new Submitter<unknown>(
@@ -384,10 +378,15 @@ export class FrameApp {
 
   private renderShell(): void {
     this.eyebrow = h('p', { class: 'eyebrow' });
-    this.titleEl = h('h1', { id: 'wb-title', class: 'title', tabindex: '-1' }, 'Send feedback');
+    this.titleEl = h('h1', { id: 'wb-title', class: 'title', tabindex: '-1' }, this.words.t('sendFeedback'));
     const close = h(
       'button',
-      { type: 'button', class: 'icon-button', 'aria-label': 'Close', onclick: () => this.requestClose() },
+      {
+        type: 'button',
+        class: 'icon-button',
+        'aria-label': this.words.t('close'),
+        onclick: () => this.requestClose(),
+      },
       icon([...ICONS.close]),
     );
     this.body = h('div', { class: 'body' });
@@ -396,16 +395,16 @@ export class FrameApp {
     this.tabNew = h(
       'button',
       { type: 'button', class: 'tab', 'aria-pressed': 'true', onclick: () => this.showNewReport() },
-      'New report',
+      this.words.t('newReport'),
     );
     this.tabReports = h(
       'button',
       { type: 'button', class: 'tab', 'aria-pressed': 'false', onclick: () => this.showYourReports() },
-      'Your reports',
+      this.words.t('yourReports'),
     );
     this.tabs = h(
       'div',
-      { class: 'tabs', role: 'group', 'aria-label': 'Feedback', hidden: true },
+      { class: 'tabs', role: 'group', 'aria-label': this.words.t('feedback'), hidden: true },
       this.tabNew,
       this.tabReports,
     );
@@ -464,13 +463,13 @@ export class FrameApp {
         class: primary ? 'button primary' : 'button secondary',
         onclick: () => this.requestClose(),
       },
-      'Close',
+      this.words.t('close'),
     );
   }
 
   showLoading(): void {
     this.clearForm();
-    this.setBody('loading', [h('p', { class: 'loading', role: 'status' }, 'Loading…')], []);
+    this.setBody('loading', [h('p', { class: 'loading', role: 'status' }, this.words.t('loading'))], []);
   }
 
   showUnavailable(): void {
@@ -478,7 +477,7 @@ export class FrameApp {
     this.revokeAll();
     this.setBody(
       'unavailable',
-      [h('p', { class: 'notice', role: 'status' }, UNAVAILABLE)],
+      [h('p', { class: 'notice', role: 'status' }, this.words.t('unavailable'))],
       [this.closeButton(true)],
     );
     this.focusStart();
@@ -492,7 +491,7 @@ export class FrameApp {
   }
 
   private labelText(text: string, optional: boolean): (Node | string)[] {
-    return optional ? [text, ' ', h('span', { class: 'optional' }, 'optional')] : [text];
+    return optional ? [text, ' ', h('span', { class: 'optional' }, this.words.t('optional'))] : [text];
   }
 
   private textField(
@@ -581,7 +580,7 @@ export class FrameApp {
       const group = h(
         'fieldset',
         { class: 'types', 'data-field': 'type' },
-        h('legend', { class: 'sr-only' }, 'Kind of feedback'),
+        h('legend', { class: 'sr-only' }, this.words.t('kindOfFeedback')),
       );
       const segmented = h('div', { class: 'segmented' });
       for (const type of config.reportTypes) {
@@ -596,7 +595,12 @@ export class FrameApp {
         input.addEventListener('change', () => input.checked && this.setType(type));
         this.typeInputs.set(type, input);
         segmented.append(
-          h('label', { for: input.id, class: 'segment' }, input, h('span', {}, TYPE_LABELS[type])),
+          h(
+            'label',
+            { for: input.id, class: 'segment' },
+            input,
+            h('span', {}, this.words.t(TYPE_COPY[type].label)),
+          ),
         );
       }
       group.append(segmented);
@@ -607,18 +611,18 @@ export class FrameApp {
     }
 
     parts.push(
-      this.textField('description', DESCRIPTION_LABELS[v.type], {
+      this.textField('description', this.words.t(TYPE_COPY[v.type].description), {
         optional: false,
         multiline: true,
         rows: 5,
-        hint: DESCRIPTION_HINTS[v.type],
+        hint: this.words.t(TYPE_COPY[v.type].hint),
         counter: true,
       }),
     );
     this.bugOnly = h(
       'div',
       { class: 'group' },
-      this.textField('expected', 'What did you expect to happen?', {
+      this.textField('expected', this.words.t('expected'), {
         optional: true,
         multiline: true,
         rows: 3,
@@ -634,14 +638,16 @@ export class FrameApp {
     if (config.contactFields.name === 'optional' || emailField || this.reportersOn) {
       const contact = h('div', { class: 'group', 'data-group': 'contact' });
       if (config.contactFields.name === 'optional')
-        contact.append(this.textField('name', 'Your name', { optional: true, autocomplete: 'name' }));
+        contact.append(
+          this.textField('name', this.words.t('yourName'), { optional: true, autocomplete: 'name' }),
+        );
       if (emailField)
         contact.append(
-          this.textField('email', 'Email', {
+          this.textField('email', this.words.t('email'), {
             optional: true,
             type: 'email',
             autocomplete: 'email',
-            hint: 'Only used if the team needs to ask you something about this report.',
+            hint: this.words.t('contactHint'),
           }),
         );
       if (signedIn) contact.append(this.signedInLine());
@@ -662,7 +668,7 @@ export class FrameApp {
                   this.body.querySelector<HTMLInputElement>('input')?.focus();
                 },
               },
-              'Sign in to follow your reports',
+              this.words.t('signInToFollow'),
             ),
           ),
         );
@@ -674,18 +680,14 @@ export class FrameApp {
     const details = h(
       'details',
       { class: 'preview' },
-      h('summary', {}, 'What will be sent'),
+      h('summary', {}, this.words.t('whatWillBeSent')),
       h(
         'div',
         { class: 'preview-body' },
-        h('p', {}, 'Your answers above, and:'),
+        h('p', {}, this.words.t('answersAnd')),
         this.previewList,
         this.trailPreview,
-        h(
-          'p',
-          { class: 'hint' },
-          'Nothing else from the page is sent: no cookies, stored data or form contents.',
-        ),
+        h('p', { class: 'hint' }, this.words.t('privacyHint')),
       ),
     );
     details.addEventListener('toggle', () => {
@@ -701,8 +703,8 @@ export class FrameApp {
           h(
             'a',
             { href: config.privacyUrl, target: '_blank', rel: 'noopener noreferrer' },
-            'Privacy notice',
-            h('span', { class: 'sr-only' }, ' (opens in a new tab)'),
+            this.words.t('privacyNotice'),
+            h('span', { class: 'sr-only' }, this.words.t('newTab')),
             icon([...ICONS.external], 14),
           ),
         ),
@@ -711,12 +713,16 @@ export class FrameApp {
     // In the footer, next to Send: always visible, however far the form is scrolled.
     this.alertBox = h('div', { class: 'alert', role: 'alert', hidden: true });
 
-    this.submitButton = h('button', { type: 'submit', class: 'button primary', form: 'wb-form' }, 'Send');
+    this.submitButton = h(
+      'button',
+      { type: 'submit', class: 'button primary', form: 'wb-form' },
+      this.words.t('send'),
+    );
     this.submitButton.disabled = this.awaitingBridge();
     const cancel = h(
       'button',
       { type: 'button', class: 'button secondary', onclick: () => this.requestClose() },
-      'Cancel',
+      this.words.t('cancel'),
     );
     this.form = h(
       'form',
@@ -761,20 +767,31 @@ export class FrameApp {
         onclick: () => this.fileInput?.click(),
       },
       icon([...ICONS.image], 16),
-      max > 1 ? 'Add screenshots' : 'Add a screenshot',
+      this.words.tp('addScreenshots', max),
     );
-    const kinds = config.attachments.types.map((t) => (t === 'image/png' ? 'PNG' : 'JPEG')).join(' or ');
+    const [first, second] = [...new Set(config.attachments.types)].map((t) =>
+      t === 'image/png' ? 'PNG' : 'JPEG',
+    );
+    const kinds = first && second ? this.words.t('eitherImageType', { first, second }) : (first ?? '');
     const hint = h(
       'p',
       { id: ids.hint, class: 'hint' },
-      `${kinds} · up to ${max} · ${formatBytes(config.attachments.maxBytes)} each. Check they show nothing private.`,
+      this.words.t('imageLimits', {
+        kinds,
+        max: max.toLocaleString(this.words.locale),
+        size: formatBytes(config.attachments.maxBytes, this.words.locale),
+      }),
     );
-    this.fileList = h('ul', { class: 'files', 'aria-label': 'Screenshots' });
+    this.fileList = h('ul', { class: 'files', 'aria-label': this.words.t('screenshots') });
     const error = h('p', { id: ids.error, class: 'error', hidden: true });
     const wrap = h(
       'div',
       { class: 'field', 'data-field': 'attachments' },
-      h('p', { class: 'label', id: 'wb-attachments-label' }, ...this.labelText('Screenshots', true)),
+      h(
+        'p',
+        { class: 'label', id: 'wb-attachments-label' },
+        ...this.labelText(this.words.t('screenshots'), true),
+      ),
       hint,
       this.fileList,
       h('div', { class: 'file-actions' }, this.addFiles),
@@ -792,10 +809,10 @@ export class FrameApp {
     const problems: string[] = [];
     for (const file of files) {
       if (this.values.files.length >= config.attachments.max) {
-        problems.push(tooManyFiles(config));
+        problems.push(tooManyFiles(config, this.words));
         break;
       }
-      const problem = fileProblem(file, config);
+      const problem = fileProblem(file, config, this.words);
       if (problem) {
         problems.push(problem);
         continue;
@@ -828,7 +845,8 @@ export class FrameApp {
     this.setError('attachments', undefined);
     this.renderFiles();
     this.renderPreview();
-    this.live.textContent = `Removed ${displayName(removed?.name ?? '')}.`;
+    const name = displayName(removed?.name ?? '', this.words.t('screenshotFileName'));
+    this.live.textContent = this.words.t('removedFile', { name });
     this.addFiles?.focus();
   }
 
@@ -857,7 +875,7 @@ export class FrameApp {
     if (!list || !config) return;
     list.replaceChildren(
       ...this.values.files.map((file, i) => {
-        const name = displayName(file.name);
+        const name = displayName(file.name, this.words.t('screenshotFileName'));
         const error = this.errors[`attachments.${i}`];
         const errorId = `wb-attachments-${i}-error`;
         return h(
@@ -868,7 +886,7 @@ export class FrameApp {
             'div',
             { class: 'file-text' },
             h('span', { class: 'file-name' }, name),
-            h('span', { class: 'file-size' }, formatBytes(file.size)),
+            h('span', { class: 'file-size' }, formatBytes(file.size, this.words.locale)),
             error ? h('span', { class: 'error', id: errorId }, error) : null,
           ),
           h(
@@ -876,7 +894,7 @@ export class FrameApp {
             {
               type: 'button',
               class: 'icon-button',
-              'aria-label': `Remove “${name}”`,
+              'aria-label': this.words.t('removeFile', { name }),
               'aria-describedby': error ? errorId : undefined,
               onclick: () => this.removeFile(file.key),
             },
@@ -894,14 +912,14 @@ export class FrameApp {
     const config = this.config;
     if (!list || !config) return;
     const context = submissionContext(this.context, config);
-    const rows = previewRows(context, this.values.files);
+    const rows = previewRows(context, this.values.files, this.words);
     list.replaceChildren(...rows.flatMap((row) => [h('dt', {}, row.label), h('dd', {}, row.value)]));
-    if (rows.length === 0) list.replaceChildren(h('dd', {}, 'Nothing else.'));
+    if (rows.length === 0) list.replaceChildren(h('dd', {}, this.words.t('nothingElse')));
     const trail = context.trail ?? [];
     if (this.trailPreview) {
       this.trailPreview.hidden = trail.length === 0;
       this.trailPreview.replaceChildren(
-        h('p', { id: 'wb-trail-label' }, 'Pages you visited on this site before reporting (up to 10):'),
+        h('p', { id: 'wb-trail-label' }, this.words.t('trail')),
         h(
           'ol',
           { class: 'trail-list', 'aria-labelledby': 'wb-trail-label' },
@@ -922,7 +940,7 @@ export class FrameApp {
     if (!this.counter || !this.config) return;
     const n = this.values.description.trim().length;
     const limit = this.config.text.description;
-    this.counter.textContent = `${nf(n)} / ${nf(limit)}`;
+    this.counter.textContent = `${n.toLocaleString(this.words.locale)} / ${limit.toLocaleString(this.words.locale)}`;
     this.counter.dataset.over = n > limit ? 'true' : 'false';
   }
 
@@ -930,8 +948,9 @@ export class FrameApp {
     this.values.type = type;
     const input = this.typeInputs.get(type);
     if (input && !input.checked) input.checked = true;
-    if (this.descriptionLabel) this.descriptionLabel.replaceChildren(DESCRIPTION_LABELS[type]);
-    if (this.descriptionHint) this.descriptionHint.textContent = DESCRIPTION_HINTS[type];
+    if (this.descriptionLabel)
+      this.descriptionLabel.replaceChildren(this.words.t(TYPE_COPY[type].description));
+    if (this.descriptionHint) this.descriptionHint.textContent = this.words.t(TYPE_COPY[type].hint);
     if (this.bugOnly) this.bugOnly.hidden = type !== 'bug';
     if (this.errors.description) this.setError('description', undefined);
   }
@@ -1001,7 +1020,7 @@ export class FrameApp {
     if (this.form) this.form.setAttribute('aria-busy', busy ? 'true' : 'false');
     if (this.submitButton) {
       this.submitButton.disabled = busy || this.awaitingBridge();
-      this.submitButton.textContent = busy ? 'Sending…' : 'Send';
+      this.submitButton.textContent = this.words.t(busy ? 'sending' : 'send');
     }
   }
 
@@ -1011,11 +1030,11 @@ export class FrameApp {
     if (!config || this.view !== 'form' || this.submitter.state !== 'editing') return null;
     if (this.awaitingBridge()) return null;
     const signedInEmail = this.reportersOn ? (this.session?.email ?? null) : null;
-    const errors = validateDraft(this.values, config, signedInEmail !== null);
+    const errors = validateDraft(this.values, config, signedInEmail !== null, this.words);
     const count = Object.keys(errors).length;
     if (count > 0) {
       this.showErrors(errors);
-      this.showAlert(count === 1 ? 'Check the highlighted field.' : `Check the ${count} highlighted fields.`);
+      this.showAlert(this.words.tp('checkHighlighted', count));
       this.focusFirstInvalid();
       return null;
     }
@@ -1121,69 +1140,57 @@ export class FrameApp {
         const errors = this.serverFieldErrors(outcome.fields);
         this.showErrors(errors);
         this.showAlert(
-          Object.keys(errors).length
-            ? 'Some details couldn’t be accepted. Check the highlighted fields.'
-            : 'Some details couldn’t be accepted. Check the form and try again.',
+          Object.keys(errors).length ? this.words.t('invalidFields') : this.words.t('invalidForm'),
         );
         this.focusFirstInvalid();
         return;
       }
       case 'conflict':
-        this.showAlert(
-          'This report was already sent. If you changed it since, you can send it as a new report.',
-          {
-            label: 'Send as a new report',
-            run: () => {
-              this.submitter.newDraft();
-              void this.submit();
-            },
+        this.showAlert(this.words.t('alreadySent'), {
+          label: this.words.t('sendAsNew'),
+          run: () => {
+            this.submitter.newDraft();
+            void this.submit();
           },
-        );
+        });
         return;
       case 'attachments': {
         const per = outcome.fields.filter((f) => /^attachments\.\d+$/.test(f));
         const errors: FieldErrors = {};
-        for (const f of per)
-          errors[f as FieldKey] =
-            `This screenshot couldn’t be used. Try a PNG or JPEG under ${formatBytes(config.attachments.maxBytes)}.`;
+        const size = formatBytes(config.attachments.maxBytes, this.words.locale);
+        for (const f of per) errors[f as FieldKey] = this.words.t('screenshotRefusedHint', { size });
         this.showErrors(errors);
         this.showAlert(
           outcome.reason === 'too_large' && per.length === 0
-            ? 'The screenshots are too large to send together. Remove one and try again.'
-            : per.length === 1
-              ? 'One screenshot couldn’t be used. Remove it and try again.'
-              : 'Some screenshots couldn’t be used. Remove them and try again.',
+            ? this.words.t('screenshotsTooLarge')
+            : this.words.tp('screenshotsRefused', per.length),
         );
         this.focusFirstInvalid();
         return;
       }
-      case 'rate_limited': {
-        const minutes = outcome.retryAfter ? Math.max(1, Math.ceil(outcome.retryAfter / 60)) : null;
+      case 'rate_limited':
         this.showAlert(
-          `Too many reports were sent from here recently. Try again ${
-            minutes === null ? 'later' : minutes === 1 ? 'in a minute' : `in ${minutes} minutes`
-          }.`,
-          { label: 'Try again', run: this.retry },
+          this.words.t('reportsRateLimited', { retry: retryText(outcome.retryAfter, this.words) }),
+          { label: this.words.t('tryAgain'), run: this.retry },
         );
         return;
-      }
       case 'unavailable':
-        this.showAlert(UNAVAILABLE);
+        this.showAlert(this.words.t('unavailable'));
         return;
       case 'server':
-        this.showAlert('Something went wrong on our side, so your report wasn’t sent. Please try again.', {
-          label: 'Try again',
+        this.showAlert(this.words.t('submitServer'), {
+          label: this.words.t('tryAgain'),
           run: this.retry,
         });
         return;
       case 'network':
-        this.showAlert('Your report wasn’t sent. Check your connection and try again.', {
-          label: 'Try again',
+        this.showAlert(this.words.t('submitNetwork'), {
+          label: this.words.t('tryAgain'),
           run: this.retry,
         });
         return;
       case 'unreadable':
-        this.showAlert('A screenshot couldn’t be read any more. Remove it, add it again and try again.');
+        this.showAlert(this.words.t('unreadableImage'));
         return;
     }
   }
@@ -1192,16 +1199,14 @@ export class FrameApp {
   private serverFieldErrors(fields: string[]): FieldErrors {
     const errors: FieldErrors = {};
     for (const field of fields) {
-      if (field === 'description') errors.description = 'This couldn’t be accepted. Check it and try again.';
-      else if (field === 'expected') errors.expected = 'This couldn’t be accepted.';
-      else if (field === 'type') errors.type = 'Choose what kind of feedback this is.';
-      else if (field === 'reporter.name' || field === 'reporter')
-        errors.name = 'This name couldn’t be accepted.';
-      else if (field === 'reporter.email')
-        errors.email = 'Enter an email address like name@example.com, or leave it empty.';
+      if (field === 'description') errors.description = this.words.t('descriptionRefused');
+      else if (field === 'expected') errors.expected = this.words.t('expectedRefused');
+      else if (field === 'type') errors.type = this.words.t('chooseKind');
+      else if (field === 'reporter.name' || field === 'reporter') errors.name = this.words.t('nameRefused');
+      else if (field === 'reporter.email') errors.email = this.words.t('optionalEmailInvalid');
       else if (/^attachments\.\d+/.test(field)) {
         const key = field.match(/^attachments\.\d+/)?.[0] as FieldKey;
-        errors[key] = 'This screenshot couldn’t be used.';
+        errors[key] = this.words.t('screenshotRefused');
       }
     }
     if (errors.name && !this.fields.has('name')) delete errors.name;
@@ -1215,23 +1220,19 @@ export class FrameApp {
   showReceipt(receipt: Receipt): void {
     this.clearForm();
     this.revokeAll();
-    const heading = h(
-      'h2',
-      { class: 'receipt-title', tabindex: '-1' },
-      'Thanks — we’ve received your report.',
-    );
+    const heading = h('h2', { class: 'receipt-title', tabindex: '-1' }, this.words.t('receiptTitle'));
     const code = h('span', { class: 'reference', id: 'wb-reference' }, receipt.reference);
     const status = h('p', { class: 'copy-status', role: 'status' });
     const copy = h(
       'button',
       { type: 'button', class: 'button secondary small', 'aria-describedby': 'wb-reference' },
-      'Copy',
+      this.words.t('copy'),
     );
     copy.addEventListener('click', () => void this.copyReference(receipt.reference, code, status));
     const another = h(
       'button',
       { type: 'button', class: 'button secondary', onclick: () => this.startNewDraft(true) },
-      'Send another',
+      this.words.t('sendAnother'),
     );
     this.setBody(
       'receipt',
@@ -1241,18 +1242,18 @@ export class FrameApp {
           { class: 'receipt', 'aria-labelledby': 'wb-receipt-title' },
           h('div', { class: 'receipt-mark' }, icon([...ICONS.check], 22)),
           heading,
-          h('p', { class: 'reference-label', id: 'wb-receipt-title' }, 'Your reference'),
+          h('p', { class: 'reference-label', id: 'wb-receipt-title' }, this.words.t('yourReference')),
           h('div', { class: 'reference-row' }, code, copy),
-          h('p', { class: 'hint' }, 'Mention it if you get in touch with the team about this report.'),
+          h('p', { class: 'hint' }, this.words.t('referenceHint')),
           this.reportersOn && this.session
-            ? h('p', { class: 'hint follow' }, 'You can follow it under Your reports.')
+            ? h('p', { class: 'hint follow' }, this.words.t('followHint'))
             : null,
           status,
         ),
       ],
       [another, this.closeButton(true)],
     );
-    this.live.textContent = `Report sent. Your reference is ${receipt.reference}.`;
+    this.live.textContent = this.words.t('reportSent', { reference: receipt.reference });
     heading.focus();
   }
 
@@ -1289,7 +1290,7 @@ export class FrameApp {
         copied = false;
       }
     }
-    status.textContent = copied ? 'Copied.' : 'Selected: press Ctrl+C (⌘C on a Mac) to copy it.';
+    status.textContent = copied ? this.words.t('copied') : this.words.t('copySelection');
   }
 
   // ------------------------------------------------------------------------------------------------------
@@ -1320,9 +1321,19 @@ export class FrameApp {
     return h(
       'p',
       { class: 'signed-in', id: 'wb-signed-in', tabindex: '-1' },
-      h('span', {}, 'Signed in as ', h('span', { class: 'signed-in-email' }, this.session?.email ?? '')),
+      h(
+        'span',
+        {},
+        ...translatedParts(this.words.raw('signedInAs'), {
+          email: h('span', { class: 'signed-in-email' }, this.session?.email ?? ''),
+        }),
+      ),
       h('span', { class: 'dot', 'aria-hidden': 'true' }, '·'),
-      h('button', { type: 'button', class: 'link', onclick: () => void this.signOut() }, 'Sign out'),
+      h(
+        'button',
+        { type: 'button', class: 'link', onclick: () => void this.signOut() },
+        this.words.t('signOut'),
+      ),
     );
   }
 
@@ -1388,7 +1399,7 @@ export class FrameApp {
     const heading = h(
       'h2',
       { class: 'view-title', id: 'wb-signin-title', tabindex: '-1' },
-      'Follow your reports',
+      this.words.t('followReports'),
     );
     const form = h('form', {
       id: 'wb-signin',
@@ -1400,32 +1411,24 @@ export class FrameApp {
     const back = h(
       'button',
       { type: 'button', class: 'button secondary', onclick: () => this.leaveSignin() },
-      'Back',
+      this.words.t('back'),
     );
     if (step === 'email') {
-      const email = this.plainField('wb-signin-email', 'Email', {
+      const email = this.plainField('wb-signin-email', this.words.t('email'), {
         type: 'email',
         autocomplete: 'email',
         spellcheck: 'false',
         'aria-required': 'true',
       });
       email.input.value = this.signinEmail || this.values.email.trim();
-      submit.textContent = 'Send code';
-      form.append(
-        heading,
-        h(
-          'p',
-          { class: 'lead' },
-          'We’ll email you a 6-digit code. Signed in, you can see the reports you send on this site and how they’re going.',
-        ),
-        email.wrap,
-      );
+      submit.textContent = this.words.t('sendCode');
+      form.append(heading, h('p', { class: 'lead' }, this.words.t('signInHint')), email.wrap);
       form.addEventListener('submit', (event) => {
         event.preventDefault();
         void this.sendCode(email, submit, false);
       });
     } else {
-      const code = this.plainField('wb-signin-code', 'Code', {
+      const code = this.plainField('wb-signin-code', this.words.t('code'), {
         type: 'text',
         inputmode: 'numeric',
         autocomplete: 'one-time-code',
@@ -1435,19 +1438,23 @@ export class FrameApp {
         'aria-required': 'true',
       });
       code.input.classList.add('code-input');
-      const resend = h('button', { type: 'button', class: 'link', disabled: true }, 'Send a new code');
+      const resend = h(
+        'button',
+        { type: 'button', class: 'link', disabled: true },
+        this.words.t('resendCode'),
+      );
       const status = h('p', { class: 'hint signin-status', role: 'status' });
       resend.addEventListener('click', () => void this.sendCode(null, resend, true, status));
       this.armResend(resend);
-      submit.textContent = 'Sign in';
+      submit.textContent = this.words.t('signIn');
       form.append(
         heading,
         h(
           'p',
           { class: 'lead' },
-          'Enter the code we sent to ',
-          h('span', { class: 'signed-in-email' }, this.signinEmail),
-          '.',
+          ...translatedParts(this.words.raw('enterCodeAt'), {
+            email: h('span', { class: 'signed-in-email' }, this.signinEmail),
+          }),
         ),
         code.wrap,
         h(
@@ -1463,7 +1470,7 @@ export class FrameApp {
                 this.body.querySelector<HTMLInputElement>('input')?.focus();
               },
             },
-            'Use a different email',
+            this.words.t('differentEmail'),
           ),
           resend,
         ),
@@ -1509,14 +1516,14 @@ export class FrameApp {
   /** The alert of a failed reporter call (404 handled by the caller). */
   private reporterAlert(outcome: ReporterOutcome<unknown>, retry?: () => void): void {
     if (outcome.kind === 'rate_limited')
-      this.showAlert(`Too many sign-in attempts from here. ${retryText(outcome.retryAfter)}`);
+      this.showAlert(this.words.t('signInRateLimited', { retry: retryText(outcome.retryAfter, this.words) }));
     else if (outcome.kind === 'network')
-      this.showAlert('Check your connection and try again.', retry && { label: 'Try again', run: retry });
-    else
       this.showAlert(
-        'Something went wrong on our side. Please try again.',
-        retry && { label: 'Try again', run: retry },
+        this.words.t('connectionError'),
+        retry && { label: this.words.t('tryAgain'), run: retry },
       );
+    else
+      this.showAlert(this.words.t('serverError'), retry && { label: this.words.t('tryAgain'), run: retry });
   }
 
   /** Asks for a code (the email step's submit, or “Send a new code”). */
@@ -1528,14 +1535,14 @@ export class FrameApp {
   ): Promise<void> {
     const email = normalizeReporterEmail(field ? field.input.value : this.signinEmail);
     if (field && (!email || email.length > 254 || !EMAIL.test(email))) {
-      field.setError('Enter an email address like name@example.com.');
+      field.setError(this.words.t('emailInvalid'));
       field.input.focus();
       return;
     }
     this.showAlert(null);
     const label = button.textContent;
     button.disabled = true;
-    if (!resend) button.textContent = 'Sending…';
+    if (!resend) button.textContent = this.words.t('sending');
     const outcome = await requestCode(this.opts.fetch, this.endpoints, {
       email,
       parent: this.opts.params.parent,
@@ -1549,11 +1556,11 @@ export class FrameApp {
       if (resend) {
         // Only the newest code works (control and the runtime end the earlier one).
         this.armResend(button);
-        if (status) status.textContent = 'We sent a new code. Earlier codes no longer work.';
+        if (status) status.textContent = this.words.t('resentCode');
         return;
       }
       this.showSignin(this.signinReturn, null, 'code');
-      this.live.textContent = `We sent a code to ${email}.`;
+      this.live.textContent = this.words.t('codeSentTo', { email });
       this.body.querySelector<HTMLInputElement>('#wb-signin-code')?.focus();
       return;
     }
@@ -1561,9 +1568,9 @@ export class FrameApp {
     if (outcome.kind === 'unavailable') {
       this.signinUnavailable();
       button.disabled = true;
-      this.showAlert(SIGNIN_UNAVAILABLE);
+      this.showAlert(this.words.t('signInUnavailable'));
     } else if (outcome.kind === 'invalid' && field) {
-      field.setError('Enter an email address like name@example.com.');
+      field.setError(this.words.t('emailInvalid'));
       field.input.focus();
     } else this.reporterAlert(outcome);
   }
@@ -1572,13 +1579,13 @@ export class FrameApp {
   async signIn(field: PlainField, button: HTMLButtonElement): Promise<void> {
     const code = field.input.value.replace(/\s+/g, '');
     if (!/^[0-9]{6}$/.test(code)) {
-      field.setError('Enter the 6-digit code from the email.');
+      field.setError(this.words.t('codeInvalid'));
       field.input.focus();
       return;
     }
     this.showAlert(null);
     button.disabled = true;
-    button.textContent = 'Signing in…';
+    button.textContent = this.words.t('signingIn');
     const outcome = await startSession(this.opts.fetch, this.endpoints, {
       email: this.signinEmail,
       code,
@@ -1586,12 +1593,12 @@ export class FrameApp {
     });
     if (this.view !== 'signin') return;
     button.disabled = false;
-    button.textContent = 'Sign in';
+    button.textContent = this.words.t('signIn');
     if (outcome.kind === 'ok') {
       const name = this.config?.contactFields.name === 'optional' ? this.values.name.trim() : '';
       this.session = { ...outcome.value, name, sent: [] };
       this.persist();
-      this.live.textContent = `Signed in as ${outcome.value.email}.`;
+      this.live.textContent = this.words.t('signedInStatus', { email: outcome.value.email });
       if (this.signinReturn === 'reports') {
         await this.showReports();
         this.body.querySelector<HTMLElement>('#wb-reports-title')?.focus();
@@ -1602,12 +1609,12 @@ export class FrameApp {
       return;
     }
     if (outcome.kind === 'code_refused') {
-      field.setError(SIGNIN_MESSAGES.code_refused);
+      field.setError(this.words.t('codeRefused'));
       field.input.focus();
     } else if (outcome.kind === 'unavailable') {
       this.signinUnavailable();
       button.disabled = true;
-      this.showAlert(SIGNIN_UNAVAILABLE);
+      this.showAlert(this.words.t('signInUnavailable'));
     } else this.reporterAlert(outcome);
   }
 
@@ -1618,7 +1625,7 @@ export class FrameApp {
     this.session = null;
     clearSession(this.opts.params.site);
     this.reportRows = null;
-    this.live.textContent = 'Signed out.';
+    this.live.textContent = this.words.t('signedOut');
     if (this.view === 'reports') {
       this.showSignin('reports');
       this.body.querySelector<HTMLInputElement>('input')?.focus();
@@ -1638,7 +1645,7 @@ export class FrameApp {
     const refresh = h(
       'button',
       { type: 'button', class: 'button secondary', onclick: () => void this.loadReports(list, true) },
-      'Refresh',
+      this.words.t('refresh'),
     );
     this.setBody(
       'reports',
@@ -1646,7 +1653,7 @@ export class FrameApp {
         h(
           'section',
           { class: 'reports-view', 'aria-labelledby': 'wb-reports-title' },
-          h('h2', { class: 'sr-only', id: 'wb-reports-title', tabindex: '-1' }, 'Your reports'),
+          h('h2', { class: 'sr-only', id: 'wb-reports-title', tabindex: '-1' }, this.words.t('yourReports')),
           this.signedInLine(),
           list,
         ),
@@ -1662,7 +1669,7 @@ export class FrameApp {
     const seq = ++this.reportsSeq;
     this.showAlert(null);
     list.setAttribute('aria-busy', 'true');
-    if (!this.reportRows) list.replaceChildren(h('p', { class: 'loading' }, 'Loading your reports…'));
+    if (!this.reportRows) list.replaceChildren(h('p', { class: 'loading' }, this.words.t('loadingReports')));
     else this.renderReports(list);
     const outcome = await fetchReports(this.opts.fetch, this.endpoints, session.token);
     if (seq !== this.reportsSeq || this.view !== 'reports') return;
@@ -1670,14 +1677,14 @@ export class FrameApp {
     if (outcome.kind === 'ok') {
       this.reportRows = mergeReports(outcome.value, session.sent, Date.now());
       this.renderReports(list);
-      if (announce) this.live.textContent = 'Your reports are up to date.';
+      if (announce) this.live.textContent = this.words.t('reportsRefreshed');
       return;
     }
     if (outcome.kind === 'signed_out') {
       this.session = null;
       this.reportRows = null;
       clearSession(this.opts.params.site);
-      this.showSignin('reports', SIGNIN_MESSAGES.signed_out);
+      this.showSignin('reports', this.words.t('sessionEnded'));
       this.body.querySelector<HTMLInputElement>('input')?.focus();
       return;
     }
@@ -1685,23 +1692,21 @@ export class FrameApp {
     const retry = () => void this.loadReports(list, true);
     // 404: the site's sign-in or drop is off for now (control); the session is kept for when it's back.
     if (outcome.kind === 'unavailable')
-      this.showAlert(REPORTS_UNAVAILABLE, { label: 'Try again', run: retry });
+      this.showAlert(this.words.t('reportsUnavailable'), { label: this.words.t('tryAgain'), run: retry });
     else this.reporterAlert(outcome, retry);
   }
 
   private renderReports(list: HTMLElement): void {
     const rows = this.reportRows ?? [];
     if (rows.length === 0) {
-      list.replaceChildren(
-        h('p', { class: 'empty' }, 'No reports yet. Reports you send while signed in appear here.'),
-      );
+      list.replaceChildren(h('p', { class: 'empty' }, this.words.t('noReports')));
       return;
     }
     const now = new Date();
     list.replaceChildren(
       h(
         'ul',
-        { class: 'report-list', 'aria-label': 'Your reports' },
+        { class: 'report-list', 'aria-label': this.words.t('yourReports') },
         ...rows.map((row) =>
           h(
             'li',
@@ -1709,15 +1714,19 @@ export class FrameApp {
             h(
               'p',
               { class: 'report-top' },
-              h('span', { class: 'report-type' }, REPORTER_TYPE_COPY[row.type]),
+              h(
+                'span',
+                { class: 'report-type' },
+                this.words.t(row.type === 'bug' ? 'reportTypeProblem' : 'reportTypeIdea'),
+              ),
               h('span', { class: 'report-ref' }, row.reference),
-              h('span', { class: 'report-date' }, formatDay(row.receivedAt, now)),
+              h('span', { class: 'report-date' }, formatDay(row.receivedAt, now, this.words.locale)),
             ),
             row.summary ? h('p', { class: 'report-summary' }, row.summary) : null,
             h(
               'p',
               { class: 'report-status', 'data-status': row.status },
-              REPORTER_STATUS_COPY[row.type][row.status],
+              reportStatusText(row.type, row.status, this.words),
             ),
           ),
         ),
@@ -1758,6 +1767,11 @@ export class FrameApp {
       this.foot.querySelector<HTMLElement>('button')?.focus();
     }
   }
+}
+
+export function applyFrameLanguage(doc: Document, lang: string, words: WidgetTranslator): void {
+  doc.documentElement.lang = lang;
+  doc.title = words.t('frameTitle');
 }
 
 /** Sets `data-theme` on `<html>`: fixed, or following `prefers-color-scheme` for `auto`. */

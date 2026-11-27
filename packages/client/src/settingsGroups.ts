@@ -7,8 +7,8 @@
  * pages that stays folded until one is opened. Every setting that was in Settings before is in one of them. Pure: the
  * groups, their parts, their words, and where an old address goes.
  */
-import { NEWS_WORDS } from '@whombat/core';
 import { agentWords } from './agentName';
+import { clientTranslator } from './i18n/catalog';
 
 export type SettingsGroup = 'you' | 'agent' | 'connections' | 'appliance' | 'news' | 'advanced';
 
@@ -89,51 +89,51 @@ export function isMovedAdvancedPart(value: unknown): value is MovedAdvancedPart 
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export const SETTINGS_GROUP_TEXT = {
-  title: 'Settings',
-  /** The page's line under its title. */
-  subtitle: (agent: string) =>
-    `You, ${agentWords(agent).Name} and this Whombat. Expert settings are under Advanced.`,
-  groups: (agent: string): Record<SettingsGroup, string> => ({
-    you: 'You',
-    agent: agentWords(agent).Name,
-    connections: 'Connections',
-    appliance: 'This Whombat',
-    news: NEWS_WORDS.page,
-    advanced: 'Advanced',
-  }),
-  you: {
-    profile: 'Profile',
-    notifications: 'Notifications',
-    devices: 'Devices',
-    links: 'Shared links',
-    prompts: 'Prompts',
-  } satisfies Record<YouPart, string>,
-  /** The assistant's parts, by its name. */
-  agent: (agent: string): Record<AgentGroupPart, string> => ({
-    profile: 'Name and face',
-    ai: 'AI sign-in',
-    memory: 'Memory',
-    may: `What ${agentWords(agent).Name} may do`,
-    ahead: 'Looks ahead',
-    council: 'Council',
-  }),
-  /** The parts' group, for screen readers. */
-  partsLabel: (group: string) => `Parts of ${group}`,
-  advanced: {
-    intro:
-      'Settings for people who like to look under the hood. Nothing here needs changing for Whombat to work.',
-    sections: (agent: string): Record<AdvancedSection, string> => {
-      const N = agentWords(agent).Name.toUpperCase();
-      return {
-        ai: `${N}’S AI`,
-        work: `${N}’S WORK`,
-        whombat: 'THIS WHOMBAT',
-      };
+export function settingsGroupText(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.t('settings.title'),
+    subtitle: (agent: string) => tr.t('settings.subtitle', { Name: agentWords(agent, locale).Name }),
+    groups: (agent: string): Record<SettingsGroup, string> => ({
+      you: tr.t('settings.group.you'),
+      agent: agentWords(agent, locale).Name,
+      connections: tr.t('settings.group.connections'),
+      appliance: tr.t('settings.group.appliance'),
+      news: tr.t('settings.group.news'),
+      advanced: tr.t('settings.group.advanced'),
+    }),
+    you: {
+      profile: tr.t('settings.you.profile'),
+      notifications: tr.t('settings.you.notifications'),
+      devices: tr.t('settings.you.devices'),
+      links: tr.t('settings.you.links'),
+      prompts: tr.t('settings.you.prompts'),
+    } satisfies Record<YouPart, string>,
+    agent: (agent: string): Record<AgentGroupPart, string> => ({
+      profile: tr.t('settings.agent.profile'),
+      ai: tr.t('settings.agent.ai'),
+      memory: tr.t('settings.agent.memory'),
+      may: tr.t('settings.agent.may', { Name: agentWords(agent, locale).Name }),
+      ahead: tr.t('settings.agent.ahead'),
+      council: tr.t('settings.agent.council'),
+    }),
+    partsLabel: (group: string) => tr.t('settings.partsLabel', { group }),
+    advanced: {
+      intro: tr.t('settings.advanced.intro'),
+      sections: (agent: string): Record<AdvancedSection, string> => {
+        const NAME = agentWords(agent, locale).Name.toUpperCase();
+        return {
+          ai: tr.t('settings.advanced.section.ai', { NAME }),
+          work: tr.t('settings.advanced.section.work', { NAME }),
+          whombat: tr.t('settings.advanced.section.whombat'),
+        };
+      },
+      back: tr.t('settings.group.advanced'),
     },
-    back: 'Advanced',
-  },
-} as const;
+  };
+}
+
+export const SETTINGS_GROUP_TEXT = settingsGroupText();
 
 /**
  * The Settings home (the final design, docs/decisions/final-settings-vault-files-usage.md; settings-phone-link.md):
@@ -159,38 +159,39 @@ export const SETTINGS_HOME_GROUPS: readonly SettingsHomeGroup[] = [
   'advanced',
 ];
 
-export const SETTINGS_HOME_TEXT = {
-  title: 'Settings',
-  subtitle: (agent: string) => `You, ${agentWords(agent).Name} and this Whombat.`,
-  oftenUsed: 'Often used',
-  allSettings: 'All settings',
-  notifications: { title: 'Notifications', line: 'When this device alerts you' },
-  theme: { title: 'Theme', line: 'Light and dark on this device' },
-  /** The theme row once it knows which one is on (the web: “Light on this device”). */
-  themeNow: (name: string) => `${name} on this device`,
-  /** Often used's way to the Mobile app page: by QR code where the box signs phones in, else the download. */
-  phoneApp: {
-    title: 'Phone app',
-    line: (qr: boolean) => (qr ? 'Sign your phone in with a QR code' : 'Get Whombat on your phone'),
-    /** On a phone's own screen, which can't scan its own code. */
-    lineHere: 'Get the app here, or sign in another phone',
-    /** Once phones are signed in: which, or how many. */
-    signedIn: (phones: readonly string[]) =>
-      phones.length === 1 ? `${phones[0]} is signed in` : `${phones.length} phones are signed in`,
-    /** What Search also finds it by. */
-    terms: 'phone mobile app QR code Android iPhone sign in download',
-  },
-  /** This Whombat's row while its Overview has something under NEEDS YOU: the first, and how many more. */
-  needsYou: (first: string, more: number) => (more > 0 ? `${first} · ${more} more` : first),
-  /** A group's page: the way back to the home. */
-  back: 'Back to Settings',
-  /** This Whombat's Screen part, opened from the home's Screens row, by that name. */
-  screensTitle: 'Screens',
-  loading: 'Loading settings…',
-  failedTitle: 'Couldn’t read your settings',
-  failedLine: 'There’s no saved copy to show on this device yet.',
-  retry: 'Try again',
-} as const;
+export function settingsHomeText(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.t('settings.title'),
+    subtitle: (agent: string) => tr.t('settings.homeSubtitle', { Name: agentWords(agent, locale).Name }),
+    oftenUsed: tr.t('settings.oftenUsed'),
+    allSettings: tr.t('settings.allSettings'),
+    notifications: { title: tr.t('settings.notifications.title'), line: tr.t('settings.notifications.line') },
+    theme: { title: tr.t('settings.theme.title'), line: tr.t('settings.theme.line') },
+    themeNow: (name: string) => tr.t('settings.theme.now', { name }),
+    language: { title: tr.t('settings.language.title'), line: tr.t('settings.language.line') },
+    phoneApp: {
+      title: tr.t('settings.phoneApp.title'),
+      line: (qr: boolean) => tr.t(qr ? 'settings.phoneApp.lineQr' : 'settings.phoneApp.lineDownload'),
+      lineHere: tr.t('settings.phoneApp.lineHere'),
+      signedIn: (phones: readonly string[]) =>
+        phones.length === 1
+          ? tr.t('settings.phoneApp.signedInOne', { phone: phones[0] ?? '' })
+          : tr.tp('settings.phoneApp.signedInMany', phones.length),
+      terms: tr.t('settings.phoneApp.terms'),
+    },
+    needsYou: (first: string, more: number) =>
+      more > 0 ? tr.t('settings.needsYouMore', { first, more }) : first,
+    back: tr.t('settings.back'),
+    screensTitle: tr.t('settings.group.screens'),
+    loading: tr.t('settings.loading'),
+    failedTitle: tr.t('settings.failedTitle'),
+    failedLine: tr.t('settings.failedLine'),
+    retry: tr.t('settings.retry'),
+  };
+}
+
+export const SETTINGS_HOME_TEXT = settingsHomeText();
 
 /** A group's row on the home: its name and what it holds, in one line. */
 export interface SettingsHomeRow {
@@ -207,50 +208,65 @@ export function settingsHomeRows(
   agent: string,
   you: readonly YouPart[],
   agentParts: readonly AgentGroupPart[] = AGENT_GROUP_PARTS,
+  locale?: string | null,
 ): SettingsHomeRow[] {
-  const N = agentWords(agent).Name;
+  const tr = clientTranslator(locale);
+  const text = settingsGroupText(locale);
+  const N = agentWords(agent, locale).Name;
   const rows: Record<SettingsHomeGroup, Omit<SettingsHomeRow, 'key'>> = {
-    you: { title: 'You', line: you.map((p) => SETTINGS_GROUP_TEXT.you[p]).join(' · ') },
-    // Every part the assistant's page has, as You's line names its parts.
-    agent: { title: N, line: agentParts.map((p) => SETTINGS_GROUP_TEXT.agent(agent)[p]).join(' · ') },
-    // What This Whombat's parts hold: the Overview is how it's doing and its network; Screen has a row of its own.
-    connections: { title: 'Connections', line: 'Accounts and services this Whombat uses' },
-    appliance: { title: 'This Whombat', line: 'How it’s doing · Network · Backups · About' },
-    // Where the Whombat is and the news it reads: a page of its own (shown where the Whombat answers them).
-    news: { title: NEWS_WORDS.page, line: NEWS_WORDS.homeLine },
-    screens: { title: 'Screens', line: 'Displays linked to this Whombat' },
-    advanced: { title: 'Advanced', line: 'Expert settings' },
+    you: { title: tr.t('settings.group.you'), line: you.map((p) => text.you[p]).join(' · ') },
+    agent: { title: N, line: agentParts.map((p) => text.agent(agent)[p]).join(' · ') },
+    connections: {
+      title: tr.t('settings.group.connections'),
+      line: tr.t('settings.homeLine.connections'),
+    },
+    appliance: { title: tr.t('settings.group.appliance'), line: tr.t('settings.homeLine.appliance') },
+    news: { title: tr.t('settings.group.news'), line: tr.t('settings.homeLine.news') },
+    screens: { title: tr.t('settings.group.screens'), line: tr.t('settings.homeLine.screens') },
+    advanced: { title: tr.t('settings.group.advanced'), line: tr.t('settings.homeLine.advanced') },
   };
   return SETTINGS_HOME_GROUPS.map((key) => ({ key, ...rows[key] }));
 }
 
 /** Advanced's rows, in order, with the assistant by its name. */
-export function advancedRows(agent: string): AdvancedRow[] {
-  const N = agentWords(agent).Name;
+export function advancedRows(agent: string, locale?: string | null): AdvancedRow[] {
+  const tr = clientTranslator(locale);
+  const N = agentWords(agent, locale).Name;
   const rows: Record<AdvancedPart, Omit<AdvancedRow, 'key'>> = {
     model: {
       section: 'ai',
-      title: 'Model and effort',
-      line: `Which AI model ${N} uses and how hard it thinks.`,
+      title: tr.t('settings.advanced.model.title'),
+      line: tr.t('settings.advanced.model.line', { Name: N }),
     },
     ai: {
       section: 'ai',
-      title: 'AI on this Whombat',
-      line: 'The AI programs installed here, the AI gateway, a custom AI model and web search.',
+      title: tr.t('settings.advanced.ai.title'),
+      line: tr.t('settings.advanced.ai.line'),
     },
-    // The Spend report, called Usage everywhere (docs/decisions/final-settings-vault-files-usage.md).
-    spend: { section: 'ai', title: 'Usage', line: `What it cost and how much ${N} worked.` },
-    running: { section: 'work', title: 'Running', line: `What ${N} keeps running on this Whombat.` },
-    skills: { section: 'work', title: 'Skills', line: `What ${N} knows how to do, skill by skill.` },
+    spend: {
+      section: 'ai',
+      title: tr.t('settings.advanced.spend.title'),
+      line: tr.t('settings.advanced.spend.line', { Name: N }),
+    },
+    running: {
+      section: 'work',
+      title: tr.t('settings.advanced.running.title'),
+      line: tr.t('settings.advanced.running.line', { Name: N }),
+    },
+    skills: {
+      section: 'work',
+      title: tr.t('settings.advanced.skills.title'),
+      line: tr.t('settings.advanced.skills.line', { Name: N }),
+    },
     audit: {
       section: 'whombat',
-      title: 'Audit log and signing keys',
-      line: 'Everything signed on this Whombat, your signing key and its fingerprint.',
+      title: tr.t('settings.advanced.audit.title'),
+      line: tr.t('settings.advanced.audit.line'),
     },
     diagnostics: {
       section: 'whombat',
-      title: 'Diagnostics',
-      line: 'A file for support when something’s wrong.',
+      title: tr.t('settings.advanced.diagnostics.title'),
+      line: tr.t('settings.advanced.diagnostics.line'),
     },
   };
   return ADVANCED_PARTS.map((key) => ({ key, ...rows[key] }));
@@ -274,8 +290,8 @@ export function youParts(here: SettingsHere): YouPart[] {
 }
 
 /** Advanced's rows that show (Running where the host runs services, Spend where it answers, Diagnostics on a box). */
-export function advancedRowsHere(agent: string, here: SettingsHere): AdvancedRow[] {
-  return advancedRows(agent).filter((row) => {
+export function advancedRowsHere(agent: string, here: SettingsHere, locale?: string | null): AdvancedRow[] {
+  return advancedRows(agent, locale).filter((row) => {
     if (row.key === 'running') return here.services !== false;
     if (row.key === 'spend') return here.spend !== false;
     if (row.key === 'diagnostics') return here.managed;
@@ -328,11 +344,12 @@ export function agentPartPlace(part: string | undefined): SettingsPlace {
 }
 
 /** The keys' page, a part of What the assistant may do (the phone draws it as a page of its own, opened from there). */
-export function agentKeysText(agent: string): { title: string; line: string } {
-  const N = agentWords(agent).Name;
+export function agentKeysText(agent: string, locale?: string | null): { title: string; line: string } {
+  const tr = clientTranslator(locale);
+  const N = agentWords(agent, locale).Name;
   return {
-    title: 'Keys and allowed commands',
-    line: `Exactly what ${N} may do, key by key, and the commands you always allow.`,
+    title: tr.t('settings.agentKeys.title'),
+    line: tr.t('settings.agentKeys.line', { Name: N }),
   };
 }
 
@@ -344,10 +361,10 @@ export function whombatSectionPlace(section: string | undefined): SettingsPlace 
 }
 
 /** The title of a group's part for a heading or a back link: “Dusty”, “Advanced · Spend”. */
-export function settingsPlaceTitle(place: SettingsPlace, agent: string): string {
-  const groups = SETTINGS_GROUP_TEXT.groups(agent);
+export function settingsPlaceTitle(place: SettingsPlace, agent: string, locale?: string | null): string {
+  const groups = settingsGroupText(locale).groups(agent);
   if (place.group === 'advanced' && isAdvancedPart(place.part)) {
-    const row = advancedRows(agent).find((r) => r.key === place.part);
+    const row = advancedRows(agent, locale).find((r) => r.key === place.part);
     return row ? `${groups.advanced} · ${row.title}` : groups.advanced;
   }
   return capital(groups[place.group]);
@@ -359,7 +376,15 @@ export function settingsPlaceTitle(place: SettingsPlace, agent: string): string 
  */
 export const THEME_CHOICES = ['light', 'dark', 'system'] as const;
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
-export const THEME_WORDS = {
-  title: 'Theme',
-  choices: { light: 'Light', dark: 'Dark', system: 'Auto' } satisfies Record<ThemeChoice, string>,
-} as const;
+export function themeWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.t('settings.theme.title'),
+    choices: {
+      light: tr.t('settings.theme.light'),
+      dark: tr.t('settings.theme.dark'),
+      system: tr.t('settings.theme.system'),
+    } satisfies Record<ThemeChoice, string>,
+  };
+}
+export const THEME_WORDS = themeWords();

@@ -89,8 +89,10 @@ describe('parseHostMessage', () => {
 describe('the trail in the context (CT-161)', () => {
   const step = { url: 'https://shop.example.com/cart', title: 'Cart', at: '2026-09-30T10:00:00.000Z' };
 
-  it('the attributes equal core’s', () => {
-    expect(ATTRS).toEqual(WIDGET_ATTRIBUTES);
+  it('recognizes the snippet attributes and the visitor’s language override', () => {
+    const { lang, ...snippet } = ATTRS;
+    expect(snippet).toEqual(WIDGET_ATTRIBUTES);
+    expect(lang).toBe('data-lang');
   });
 
   it('accepts up to 10 steps that core accepts, copied', () => {

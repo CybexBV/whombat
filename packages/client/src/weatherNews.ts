@@ -3,28 +3,22 @@
  * weather-news.md; app weather-news-apps.md): the Place row's words, a search result's second line, the news part's
  * “Suggested for …”, the ids a *Turn on* or *Turn off* sends, and the field's own problem from a refused write. Pure.
  */
-import {
-  NEWS_SOURCES_MAX,
-  NEWS_WORDS,
-  type NewsSourcesView,
-  PLACE_SETTING_WORDS,
-  type Place,
-  placeLabel,
-} from '@whombat/core';
+import { NEWS_SOURCES_MAX, type NewsSourcesView, type Place, placeLabel } from '@whombat/core';
+import { formatLocaleOf, resolveLanguage } from '@whombat/core/i18n';
 import { ApiError, InvalidRequestError } from './http/errors';
-
-const fill = (text: string, values: Record<string, string | number>) =>
-  text.replace(/\{(\w+)\}/g, (all, key: string) => (key in values ? String(values[key]) : all));
+import { clientTranslator } from './i18n/catalog';
 
 /** The Place row's line: “Amsterdam · guessed from the time zone”, “Eindhoven, Noord-Brabant”, or “Not set”. */
-export function placeRowText(place: Place | null | undefined): string {
-  if (!place) return PLACE_SETTING_WORDS.none;
-  return place.guessed ? fill(PLACE_SETTING_WORDS.guessed, { place: placeLabel(place) }) : placeLabel(place);
+export function placeRowText(place: Place | null | undefined, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  if (!place) return tr.t('place.none');
+  return place.guessed ? tr.t('place.guessed', { place: placeLabel(place) }) : placeLabel(place);
 }
 
 /** What saving a place says: “Saved. The weather and news are for Eindhoven now.” */
-export function placeSavedText(place: Place | null | undefined): string {
-  return fill(PLACE_SETTING_WORDS.saved, { place: place ? place.name : PLACE_SETTING_WORDS.none });
+export function placeSavedText(place: Place | null | undefined, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  return tr.t('place.saved', { place: place ? place.name : tr.t('place.none') });
 }
 
 /** Countries English names with “the”: “the Netherlands”. */
@@ -45,37 +39,70 @@ const WITH_THE = new Set([
   'SB',
 ]);
 
-let regionNames: { of(code: string): string | undefined } | null | undefined;
+/** Countries Dutch names with an article ("de Verenigde Staten", "het Verenigd Koninkrijk"). Note: Nederland has none. */
+const DUTCH_ARTICLE: Readonly<Record<string, 'de' | 'het'>> = {
+  US: 'de',
+  GB: 'het',
+  PH: 'de',
+  AE: 'de',
+  DO: 'de',
+  BS: 'de',
+  CF: 'de',
+  KM: 'de',
+  MV: 'de',
+  MH: 'de',
+  SB: 'de',
+};
 
-/** A country's English name (“Netherlands”), its code where the device can't name it. */
-export function countryName(code: string, opts: { the?: boolean } = {}): string {
-  if (regionNames === undefined) {
-    try {
-      const Names = (Intl as unknown as { DisplayNames?: new (l: string[], o: object) => typeof regionNames })
-        .DisplayNames;
-      regionNames = Names ? new Names(['en'], { type: 'region' }) : null;
-    } catch {
-      regionNames = null;
-    }
+const regionNamesCache = new Map<string, { of(code: string): string | undefined } | null>();
+
+function getRegionDisplayNames(locale: string): { of(code: string): string | undefined } | null {
+  if (regionNamesCache.has(locale)) return regionNamesCache.get(locale) ?? null;
+  try {
+    const Names = (
+      Intl as unknown as {
+        DisplayNames?: new (l: string[], o: object) => { of(code: string): string | undefined };
+      }
+    ).DisplayNames;
+    const inst = Names ? new Names([locale], { type: 'region' }) : null;
+    regionNamesCache.set(locale, inst);
+    return inst;
+  } catch {
+    regionNamesCache.set(locale, null);
+    return null;
   }
+}
+
+/** A country's localized name (“Netherlands” / “Nederland”), its code where the device can't name it. */
+export function countryName(code: string, opts: { the?: boolean } = {}, locale?: string | null): string {
+  const lang = resolveLanguage(locale);
+  const fmtLocale = locale ? formatLocaleOf(locale) : 'en';
+  const regionNames = getRegionDisplayNames(fmtLocale);
   let name = code;
   try {
     name = regionNames?.of(code) ?? code;
   } catch {
     // An unknown code stays a code.
   }
-  return opts.the && WITH_THE.has(code) && name !== code ? `the ${name}` : name;
+  if (!opts.the || name === code) return name;
+  if (lang === 'nl') {
+    const art = DUTCH_ARTICLE[code];
+    return art ? `${art} ${name}` : name;
+  }
+  return WITH_THE.has(code) ? `the ${name}` : name;
 }
 
-/** A found place's second line: its country (“Netherlands”). */
-export function placeResultMeta(place: Pick<Place, 'country'>): string {
-  return countryName(place.country);
+/** A found place's second line: its country (“Netherlands” / “Nederland”). */
+export function placeResultMeta(place: Pick<Place, 'country'>, locale?: string | null): string {
+  return countryName(place.country, {}, locale);
 }
 
 /** “Suggested for Noord-Brabant” where the region is known, else “Suggested for the Netherlands”; null without a place. */
-export function newsSuggestedTitle(place: Place | null | undefined): string | null {
+export function newsSuggestedTitle(place: Place | null | undefined, locale?: string | null): string | null {
   if (!place) return null;
-  return fill(NEWS_WORDS.suggested, { where: place.regionName ?? countryName(place.country, { the: true }) });
+  return clientTranslator(locale).t('news.suggested', {
+    where: place.regionName ?? countryName(place.country, { the: true }, locale),
+  });
 }
 
 /** Whether another site can be turned on. */
@@ -84,8 +111,8 @@ export function newsHasRoom(view: Pick<NewsSourcesView, 'chosen'>): boolean {
 }
 
 /** “Up to 12 news sites. Turn one off first.” */
-export function newsFullText(): string {
-  return fill(NEWS_WORDS.full, { n: NEWS_SOURCES_MAX });
+export function newsFullText(locale?: string | null): string {
+  return clientTranslator(locale).t('news.full', { n: NEWS_SOURCES_MAX });
 }
 
 /** The ids `news.setSources` takes to turn one more on, at the end. */
@@ -99,8 +126,8 @@ export function newsIdsWithout(view: Pick<NewsSourcesView, 'chosen'>, id: string
 }
 
 /** “Omroep Brabant is on.” */
-export function newsAddedText(name: string): string {
-  return fill(NEWS_WORDS.added, { name });
+export function newsAddedText(name: string, locale?: string | null): string {
+  return clientTranslator(locale).t('news.added', { name });
 }
 
 /**

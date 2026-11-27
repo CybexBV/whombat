@@ -10,6 +10,7 @@
  * `KEY_IDS` order is the display order of key rows (Settings → Agent, run page).
  */
 import { z } from 'zod';
+import { coreTranslator, hasCoreMessage } from '../i18n/catalog.js';
 
 export const KEY_IDS = [
   'repos.read_all',
@@ -123,6 +124,15 @@ export const KEY_GROUP_LABELS: Record<KeyGroup, string> = {
   personal: 'Personal accounts',
   connections: 'Connected services',
 };
+
+/** `KEY_GROUP_LABELS` in a locale. */
+export function keyGroupLabels(locale?: string | null): Record<KeyGroup, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(KeyGroup.options.map((group) => [group, tr.t(`key.group.${group}`)])) as Record<
+    KeyGroup,
+    string
+  >;
+}
 
 /**
  * Scope restrictions on a key or grant. A restricted dimension only matches requests that name a value
@@ -622,10 +632,10 @@ export const ALWAYS_ASKS_KEYS: readonly KeyId[] = KEY_IDS.filter((id) => agentMa
  * Note shown on locked rows (Settings → Agent → Keys): "people only" / "always asks a person". Since 0.34 (CT-211) no
  * risk row is capped: Merge and Deploy are three-state rows (`KeyOption.defaultTier`).
  */
-export function lockedNote(id: KeyId): string | null {
+export function lockedNote(id: KeyId, locale?: string | null): string | null {
   const max = agentMaxTier(id);
-  if (max === 'never') return 'people only';
-  if (max === 'ask') return 'always asks a person';
+  if (max === 'never') return coreTranslator(locale).t('key.locked.never');
+  if (max === 'ask') return coreTranslator(locale).t('key.locked.ask');
   return null;
 }
 
@@ -647,28 +657,42 @@ export function impliedBy(keyId: KeyId, onKeys: readonly KeyId[]): KeyId | null 
 }
 
 /** The short name of a bundle key for its “included with …” notes (“the browser”), else its lowercased label. */
-const BUNDLE_SHORT: Partial<Record<KeyId, string>> = { 'browser.use': 'the browser' };
-function bundleShort(id: KeyId): string {
-  return BUNDLE_SHORT[canonicalKey(id)] ?? keyLabel(canonicalKey(id)).toLowerCase();
+function bundleShort(id: KeyId, locale?: string | null): string {
+  const key = canonicalKey(id);
+  const short = `key.bundle.${key}`;
+  if (hasCoreMessage(short)) return coreTranslator(locale).t(short);
+  return keyLabel(key, locale).toLowerCase();
 }
 
 /** A locked Keys row that a bundle brings in: “included with the browser”. */
-export function includedNote(bundleKey: KeyId): string {
-  return `included with ${bundleShort(bundleKey)}`;
+export function includedNote(bundleKey: KeyId, locale?: string | null): string {
+  return coreTranslator(locale).t('key.includedWith', { name: bundleShort(bundleKey, locale) });
 }
 
 /** A profile row that a bundle brings in: “with the browser” (shown after the implied key's label). */
-export function impliedWithNote(bundleKey: KeyId): string {
-  return `with ${bundleShort(bundleKey)}`;
+export function impliedWithNote(bundleKey: KeyId, locale?: string | null): string {
+  return coreTranslator(locale).t('key.with', { name: bundleShort(bundleKey, locale) });
 }
 
-/** "#a", "#a and #b", "#a, #b and #c". */
-export function joinWithAnd(items: readonly string[]): string {
+/** "#a", "#a and #b", "#a, #b and #c" (“en” in Dutch). */
+export function joinWithAnd(items: readonly string[], locale?: string | null): string {
   if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+  const last = items[items.length - 1] ?? '';
+  return coreTranslator(locale).t('key.and', { items: items.slice(0, -1).join(', '), last });
 }
 
 /** Label of a key as shown on screen. */
-export function keyLabel(id: KeyId): string {
-  return KEY_CATALOG[id].label;
+export function keyLabel(id: KeyId, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  const key = `key.label.${id}`;
+  if (tr.language === 'en' || !hasCoreMessage(key)) return KEY_CATALOG[id].label;
+  return tr.t(key);
+}
+
+/** The line under a key's label, in a locale. */
+export function keyDescription(id: KeyId, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  const key = `key.description.${id}`;
+  if (tr.language === 'en' || !hasCoreMessage(key)) return KEY_CATALOG[id].description;
+  return tr.t(key);
 }

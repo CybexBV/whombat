@@ -11,6 +11,7 @@
  *   of the direct connection to the PeerId the link names.
  * - The words of the setup and the links (`COMMUNITY_TEXT`, `LINK_TEXT`).
  */
+import { normalizeLocaleTag } from '@whombat/core/i18n';
 import {
   type ClaimConfirmTags,
   claimConfirmEqual,
@@ -23,8 +24,10 @@ import {
   type Edition,
   type EditionPart,
   editionHas,
+  LOCALE_MINOR,
   type LocalLinkParts,
   parseLocalLink,
+  protocolAtLeast,
 } from '@whombat/protocol/session';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import {
@@ -74,6 +77,8 @@ export interface LocalClaimInput {
    * there only with it. Left out elsewhere.
    */
   link?: string | null;
+  /** Preferred BCP-47 locale tag; sent only when the box speaks session minor >= LOCALE_MINOR. */
+  locale?: string | null;
   randomBytes?: (n: number) => Uint8Array;
 }
 
@@ -155,12 +160,17 @@ export async function runLocalClaim(input: LocalClaimInput): Promise<LocalClaime
     { tie },
   );
   if (!claimConfirmEqual(tags.appliance, proved.confirm)) throw new ClaimMismatchError();
+  const normalizedLocale = normalizeLocaleTag(input.locale);
+  const st = typeof session.state === 'function' ? session.state() : null;
+  const protocol = st?.status === 'open' ? st.info.protocol : null;
+  const locale = normalizedLocale && protocolAtLeast(protocol, LOCALE_MINOR) ? normalizedLocale : undefined;
   return sessionOps.claimLocal(
     session,
     {
       claimId: start.claimId,
       account: { name: input.account.name.trim(), email: input.account.email.trim() },
       endpoint: input.endpoint,
+      ...(locale ? { locale } : {}),
     },
     { tie },
   );

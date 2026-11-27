@@ -3,10 +3,11 @@
  * from a file”) and of what Whombat says about backup files in conversations and the log (BF-08). Plain English, curly
  * quotes, the middle dot.
  */
+import { coreTranslator } from '../i18n/catalog.js';
 import { DOT } from '../text/format.js';
 import {
-  BACKUP_CATEGORY_LABELS,
   type BackupCategoryId,
+  backupCategoryLabels,
   backupIncludesSecrets,
   formatBackupSize,
 } from './categories.js';
@@ -51,9 +52,35 @@ export const BACKUP_COPY = {
   },
 } as const;
 
+/** `BACKUP_COPY` in a locale. */
+export function backupCopy(locale?: string | null): {
+  tab: string;
+  breadcrumb: string;
+  download: { [K in keyof (typeof BACKUP_COPY)['download']]: string };
+  restore: { [K in keyof (typeof BACKUP_COPY)['restore']]: string };
+} {
+  const tr = coreTranslator(locale);
+  const section = <S extends 'download' | 'restore'>(name: S) =>
+    Object.fromEntries(
+      Object.keys(BACKUP_COPY[name]).map((key) => [
+        key,
+        tr.t(`backup.copy.${name}.${key}` as 'backup.copy.download.title', {
+          min: BACKUP_PASSWORD_MIN,
+          hours: BACKUP_FILE_TTL_HOURS,
+        }),
+      ]),
+    ) as { [K in keyof (typeof BACKUP_COPY)[S]]: string };
+  return {
+    tab: tr.t('backup.copy.tab'),
+    breadcrumb: tr.t('backup.copy.breadcrumb'),
+    download: section('download'),
+    restore: section('restore'),
+  };
+}
+
 /** “Download · 1.8 MB”: the button with the chosen categories' estimated size. */
-export function backupDownloadLabel(bytes: number): string {
-  return `Download ${DOT} ${formatBackupSize(bytes)}`;
+export function backupDownloadLabel(bytes: number, locale?: string | null): string {
+  return coreTranslator(locale).t('backup.downloadLabel', { size: formatBackupSize(bytes, locale) });
 }
 
 /** Progress of a job, 0–100, whole percent (`done` of `total`, never 100 before it is done). */
@@ -64,23 +91,29 @@ export function backupProgressPct(progress: { done: number; total: number }, fin
 }
 
 /** “Making the file · 42 %”, or with the category: “Making the file · Messages · 42 %”. */
-export function backupMakingText(progress: {
-  done: number;
-  total: number;
-  step?: BackupCategoryId | null;
-}): string {
-  const step = progress.step ? ` ${DOT} ${BACKUP_CATEGORY_LABELS[progress.step]}` : '';
-  return `Making the file${step} ${DOT} ${backupProgressPct(progress)} %`;
+export function backupMakingText(
+  progress: {
+    done: number;
+    total: number;
+    step?: BackupCategoryId | null;
+  },
+  locale?: string | null,
+): string {
+  const step = progress.step ? ` ${DOT} ${backupCategoryLabels(locale)[progress.step]}` : '';
+  return coreTranslator(locale).t('backup.making', { step, pct: backupProgressPct(progress) });
 }
 
 /** “Restoring · Automations · 42 %”. */
-export function backupRestoringText(progress: {
-  done: number;
-  total: number;
-  step?: BackupCategoryId | null;
-}): string {
-  const step = progress.step ? ` ${DOT} ${BACKUP_CATEGORY_LABELS[progress.step]}` : '';
-  return `Restoring${step} ${DOT} ${backupProgressPct(progress)} %`;
+export function backupRestoringText(
+  progress: {
+    done: number;
+    total: number;
+    step?: BackupCategoryId | null;
+  },
+  locale?: string | null,
+): string {
+  const step = progress.step ? ` ${DOT} ${backupCategoryLabels(locale)[progress.step]}` : '';
+  return coreTranslator(locale).t('backup.restoring', { step, pct: backupProgressPct(progress) });
 }
 
 /**
@@ -88,13 +121,21 @@ export function backupRestoringText(progress: {
  * backup file that includes connection sign-ins.”, “… connection sign-ins, your Vault and the keys to your servers.”
  * Keep it somewhere safe. Null when it holds none (nothing to say). Since 3.0 (CT-1512) for the person, not other owners.
  */
-export function backupFileNoticeText(categories: readonly BackupCategoryId[]): string | null {
+export function backupFileNoticeText(
+  categories: readonly BackupCategoryId[],
+  locale?: string | null,
+): string | null {
+  const tr = coreTranslator(locale);
   const parts: string[] = [];
-  if (categories.includes('connections')) parts.push('connection sign-ins');
-  if (categories.includes('vault')) parts.push('your Vault');
-  if (categories.includes('servers')) parts.push('the keys to your servers');
+  if (categories.includes('connections')) parts.push(tr.t('backup.notice.connections'));
+  if (categories.includes('vault')) parts.push(tr.t('backup.notice.vault'));
+  if (categories.includes('servers')) parts.push(tr.t('backup.notice.servers'));
   if (parts.length === 0) return null;
-  return `You made a backup file that includes ${joinAnd(parts)}. Keep it somewhere safe.`;
+  const list =
+    tr.language === 'en' || parts.length <= 1
+      ? joinAnd(parts)
+      : tr.t('backup.and', { items: parts.slice(0, -1).join(', '), last: parts[parts.length - 1] ?? '' });
+  return tr.t('backup.notice', { parts: list });
 }
 
 /** The signed event of making a file (BF-08), for the log: “Made a backup file” (“… with sign-ins in it”). */

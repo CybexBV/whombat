@@ -5,7 +5,9 @@
 import { z } from 'zod';
 import type { AuditEvent, AuditKind } from '../domain/audit.js';
 import type { LinkRef } from '../domain/links.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { formatEventRef } from '../ids.js';
+import { KEY_CATALOG, keyLabel } from '../keys/catalog.js';
 import {
   type DateInput,
   dayKey,
@@ -31,6 +33,15 @@ export const AUDIT_ACTOR_LABELS: Record<AuditActorFilter, string> = {
   agents: 'Agent',
 };
 
+/** `AUDIT_ACTOR_LABELS` in a locale. */
+export function auditActorLabels(locale?: string | null): Record<AuditActorFilter, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(AuditActorFilter.options.map((a) => [a, tr.t(`audit.actor.${a}`)])) as Record<
+    AuditActorFilter,
+    string
+  >;
+}
+
 /** Kind chips: All / Code / Asks / Keys / Vault / Messages / Blocked (URL `kind=`). */
 export const AUDIT_KIND_FILTERS = ['all', 'code', 'asks', 'keys', 'vault', 'messages', 'blocked'] as const;
 export const AuditKindFilter = z.enum(AUDIT_KIND_FILTERS);
@@ -45,6 +56,15 @@ export const AUDIT_KIND_FILTER_LABELS: Record<AuditKindFilter, string> = {
   messages: 'Messages',
   blocked: 'Blocked',
 };
+
+/** `AUDIT_KIND_FILTER_LABELS` in a locale. */
+export function auditKindFilterLabels(locale?: string | null): Record<AuditKindFilter, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(AUDIT_KIND_FILTERS.map((k) => [k, tr.t(`audit.kind.${k}`)])) as Record<
+    AuditKindFilter,
+    string
+  >;
+}
 
 const KIND_OF_FILTER: Record<Exclude<AuditKindFilter, 'all'>, AuditKind> = {
   code: 'Code',
@@ -131,13 +151,14 @@ export function groupAuditByDay<E extends Pick<AuditEvent, 'createdAt'>>(
   events: readonly E[],
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): AuditDay<E>[] {
   const days: AuditDay<E>[] = [];
   for (const e of events) {
     const key = dayKey(e.createdAt, timeZone);
     let day = days.find((d) => d.key === key);
     if (!day) {
-      day = { key, label: formatLogDay(e.createdAt, now, timeZone), events: [] };
+      day = { key, label: formatLogDay(e.createdAt, now, timeZone, locale), events: [] };
       days.push(day);
     }
     day.events.push(e);
@@ -159,20 +180,28 @@ export interface AuditDisplayContext {
   principal: (id: string) => AuditPrincipalInfo | undefined;
   now: DateInput;
   timeZone: string;
+  /** The reader's language for the viewer's words (English when absent); the CSV export is always English. */
+  locale?: string | null;
 }
 
 const UNKNOWN: AuditPrincipalInfo = { kind: 'person', name: 'Someone', shortName: 'Someone' };
 
+function unknownIn(locale?: string | null): AuditPrincipalInfo {
+  const name = coreTranslator(locale).t('audit.someone');
+  return { kind: 'person', name, shortName: name };
+}
+
 /** Tag next to the name: "AGENT" for the agent, "PERSON" for people. */
-export function auditTag(p: AuditPrincipalInfo): string {
-  return p.kind === 'agent' ? 'AGENT' : 'PERSON';
+export function auditTag(p: AuditPrincipalInfo, locale?: string | null): string {
+  return coreTranslator(locale).t(p.kind === 'agent' ? 'audit.tag.agent' : 'audit.tag.person');
 }
 
 /** SIGNED BY: "Banjo’s agent key · 3fa9 c1d2" / "Mara Okafor · personal key · 3fa9 c1d2". */
-export function signedByText(p: AuditPrincipalInfo, fingerprint: string): string {
-  return p.kind === 'agent'
-    ? `${p.name}’s agent key · ${fingerprint}`
-    : `${p.name} · personal key · ${fingerprint}`;
+export function signedByText(p: AuditPrincipalInfo, fingerprint: string, locale?: string | null): string {
+  return coreTranslator(locale).t(p.kind === 'agent' ? 'audit.signed.agent' : 'audit.signed.person', {
+    name: p.name,
+    fingerprint,
+  });
 }
 
 /** Mono line under the text: "whombat/billing · PR #482 · e-9f31". */
@@ -183,11 +212,18 @@ export function auditMeta(event: Pick<AuditEvent, 'where' | 'id'>): string {
 export type AuditTone = 'ok' | 'warn' | 'bad' | 'neutral';
 
 function decidedAtText(at: string, ctx: AuditDisplayContext): string {
+  const tr = coreTranslator(ctx.locale);
   const seconds = (toDate(ctx.now).getTime() - toDate(at).getTime()) / 1000;
-  if (seconds >= 0 && seconds < 60) return 'just now';
+  if (seconds >= 0 && seconds < 60) return tr.t('audit.when.justNow');
   const clock = formatClock(at, ctx.timeZone);
-  if (daysAgo(at, ctx.now, ctx.timeZone) <= 1) return `at ${clock}`;
-  return `on ${formatDate(at, ctx.timeZone, { now: ctx.now })} at ${clock}`;
+  if (daysAgo(at, ctx.now, ctx.timeZone) <= 1) return tr.t('audit.when.at', { clock });
+  return tr.t('audit.when.on', { date: formatDate(at, ctx.timeZone, { now: ctx.now }, ctx.locale), clock });
+}
+
+/** A key's label as the event recorded it, in the reader's words when the key is one Whombat knows. */
+function keyUsedLabel(key: { id: string; label: string }, locale?: string | null): string {
+  if (coreTranslator(locale).language === 'en' || !(key.id in KEY_CATALOG)) return key.label;
+  return keyLabel(key.id as keyof typeof KEY_CATALOG, locale);
 }
 
 /**
@@ -209,14 +245,16 @@ export function auditPill(
   event: AuditEvent,
   ctx: AuditDisplayContext,
 ): { text: string; tone: AuditTone } | null {
-  if (event.kind === 'Blocked') return { text: 'BLOCKED', tone: 'bad' };
+  const tr = coreTranslator(ctx.locale);
+  if (event.kind === 'Blocked') return { text: tr.t('audit.pill.blocked'), tone: 'bad' };
   const d = decisionOf(event);
   if (!d) return null;
-  if (d.state === 'pending') return { text: 'WAITING ON A PERSON', tone: 'warn' };
-  const who = (d.byId ? ctx.principal(d.byId) : undefined) ?? UNKNOWN;
+  if (d.state === 'pending') return { text: tr.t('audit.pill.waiting'), tone: 'warn' };
+  const who = (d.byId ? ctx.principal(d.byId) : undefined) ?? unknownIn(ctx.locale);
+  const name = who.shortName.toLocaleUpperCase(tr.language === 'nl' ? 'nl-NL' : 'en-US');
   return d.state === 'approved'
-    ? { text: `APPROVED BY ${who.shortName.toUpperCase()}`, tone: 'ok' }
-    : { text: `DECLINED BY ${who.shortName.toUpperCase()}`, tone: 'bad' };
+    ? { text: tr.t('audit.pill.approved', { name }), tone: 'ok' }
+    : { text: tr.t('audit.pill.declined', { name }), tone: 'bad' };
 }
 
 export interface AuditField {
@@ -228,75 +266,94 @@ export interface AuditField {
 
 /** Expanded row fields, in the mock's order. */
 export function auditFields(event: AuditEvent, ctx: AuditDisplayContext): AuditField[] {
-  const actor = ctx.principal(event.actorId) ?? UNKNOWN;
+  const tr = coreTranslator(ctx.locale);
+  const actor = ctx.principal(event.actorId) ?? unknownIn(ctx.locale);
   const fields: AuditField[] = [
-    { label: 'SIGNED BY', value: signedByText(actor, event.fingerprint), tone: 'neutral' },
+    {
+      label: tr.t('audit.field.signedBy'),
+      value: signedByText(actor, event.fingerprint, ctx.locale),
+      tone: 'neutral',
+    },
   ];
   const blocked = event.kind === 'Blocked';
   if (event.keyUsed) {
     fields.push({
-      label: blocked ? 'KEY IT NEEDED' : 'KEY USED',
-      value: event.keyUsed.label + (event.keyNote ? ` · ${event.keyNote}` : ''),
+      label: tr.t(blocked ? 'audit.field.keyNeeded' : 'audit.field.keyUsed'),
+      value: keyUsedLabel(event.keyUsed, ctx.locale) + (event.keyNote ? ` · ${event.keyNote}` : ''),
       tone: blocked ? 'bad' : 'neutral',
     });
   }
-  if (event.onBehalfOf) fields.push({ label: 'ON BEHALF OF', value: event.onBehalfOf, tone: 'neutral' });
+  if (event.onBehalfOf)
+    fields.push({ label: tr.t('audit.field.onBehalfOf'), value: event.onBehalfOf, tone: 'neutral' });
   // The person sees which entry and what was done (vault.md VT-52).
   const vault = vaultAuditDetailText(event);
-  if (vault) fields.push({ label: 'VAULT', value: vault, tone: 'neutral' });
+  if (vault) fields.push({ label: tr.t('audit.field.vault'), value: vault, tone: 'neutral' });
   const d = decisionOf(event);
   if (d) {
     if (d.state === 'pending') {
-      const holding = event.keyUsed?.id.startsWith('deploy') ? 'is holding the deploy' : 'is waiting';
-      fields.push({ label: 'DECIDED', value: `Nobody yet. ${actor.shortName} ${holding}.`, tone: 'warn' });
-    } else {
-      const who = (d.byId ? ctx.principal(d.byId) : undefined) ?? UNKNOWN;
+      const holding = event.keyUsed?.id.startsWith('deploy')
+        ? 'audit.decided.nobodyDeploy'
+        : 'audit.decided.nobody';
       fields.push({
-        label: 'DECIDED',
-        value: `${who.name} ${d.state} ${d.at ? decidedAtText(d.at, ctx) : 'just now'}`,
+        label: tr.t('audit.field.decided'),
+        value: tr.t(holding, { name: actor.shortName }),
+        tone: 'warn',
+      });
+    } else {
+      const who = (d.byId ? ctx.principal(d.byId) : undefined) ?? unknownIn(ctx.locale);
+      fields.push({
+        label: tr.t('audit.field.decided'),
+        value: tr.t(d.state === 'approved' ? 'audit.decided.approved' : 'audit.decided.declined', {
+          name: who.name,
+          when: d.at ? decidedAtText(d.at, ctx) : tr.t('audit.when.justNow'),
+        }),
         tone: 'neutral',
       });
     }
   }
   fields.push({
-    label: 'EVENT',
-    value: `${formatEventRef(event.id)} · ${event.verified ? 'signature verified' : 'signature does not verify'}`,
+    label: tr.t('audit.field.event'),
+    value: `${formatEventRef(event.id)} · ${tr.t(event.verified ? 'audit.verified' : 'audit.notVerified')}`,
     tone: event.verified ? 'ok' : 'bad',
   });
   return fields;
 }
 
 /** Deep-link button label in the expanded row. */
-export function auditLinkLabel(link: LinkRef, options: { approvalPending?: boolean } = {}): string {
+export function auditLinkLabel(
+  link: LinkRef,
+  options: { approvalPending?: boolean; locale?: string | null } = {},
+): string {
+  const tr = coreTranslator(options.locale);
   switch (link.type) {
     case 'pr':
-      return `Open PR #${link.number}`;
+      return tr.t('audit.link.pr', { n: link.number });
     case 'run':
-      return 'Open run';
+      return tr.t('audit.link.run');
     case 'approval':
-      return options.approvalPending ? 'Review the request' : 'Open the request';
+      return tr.t(options.approvalPending ? 'audit.link.review' : 'audit.link.request');
     case 'dm':
-      return link.room === 'feedback' ? 'Open Feedback' : 'Open the chat';
+      return tr.t(link.room === 'feedback' ? 'audit.link.feedback' : 'audit.link.chat');
     case 'chat':
-      return 'Open the chat';
+      return tr.t('audit.link.chat');
     case 'canvas':
-      return 'Open canvas';
+      return tr.t('audit.link.canvas');
     case 'agent':
-      return 'Open the agent’s settings';
+      return tr.t('audit.link.agent');
     case 'message':
-      return link.threadRootId ? 'Open thread' : 'Open message';
+      return tr.t(link.threadRootId ? 'audit.link.thread' : 'audit.link.message');
     case 'log':
-      return 'Open in log';
+      return tr.t('audit.link.log');
     case 'search':
-      return 'Open search';
+      return tr.t('audit.link.search');
     case 'external':
-      return 'Open link';
+      return tr.t('audit.link.external');
     case 'plan':
-      return link.stepId ? 'Open step' : 'Open plan';
+      return tr.t(link.stepId ? 'audit.link.step' : 'audit.link.plan');
     case 'automation_run':
-      return 'Open automation run';
+      return tr.t('audit.link.automation_run');
     case 'work':
-      return 'Open Work';
+      return tr.t('audit.link.work');
   }
 }
 
@@ -340,9 +397,11 @@ export function toCsv(rows: readonly (readonly (string | number | boolean | null
 
 /** CSV export of the current filter (header row + one row per event). */
 export function auditCsv(events: readonly AuditEvent[], ctx: AuditDisplayContext): string {
+  // The export is a record: always in English, whatever language the viewer reads.
+  const english: AuditDisplayContext = { ...ctx, locale: null };
   const rows = events.map((e) => {
     const actor = ctx.principal(e.actorId) ?? UNKNOWN;
-    const decided = auditFields(e, ctx).find((f) => f.label === 'DECIDED')?.value ?? '';
+    const decided = auditFields(e, english).find((f) => f.label === 'DECIDED')?.value ?? '';
     return [
       formatEventRef(e.id),
       e.createdAt,

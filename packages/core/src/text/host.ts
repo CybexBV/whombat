@@ -5,58 +5,66 @@
  * space. Times are the burrow's clock, 24-hour (`formatClock`).
  */
 import { formatTokenCount } from '../domain/spend.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { type DateInput, formatClock } from './time.js';
 import { formatUsagePct, NBSP } from './usage.js';
 
 /** The chart ranges (`HostMetricsRange` of `@whombat/protocol/session`), shortest first. */
 export type HostRange = 'hour' | 'day' | 'week' | 'month';
-export const HOST_RANGE_LABELS: Readonly<Record<HostRange, string>> = {
-  hour: 'Last hour',
-  day: '24 hours',
-  week: '7 days',
-  month: '30 days',
-};
+const HOST_RANGES: readonly HostRange[] = ['hour', 'day', 'week', 'month'];
+
+/** The chart range labels in a locale. */
+export function hostRangeLabels(locale?: string | null): Readonly<Record<HostRange, string>> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(HOST_RANGES.map((r) => [r, tr.t(`host.range.${r}`)])) as Record<
+    HostRange,
+    string
+  >;
+}
+export const HOST_RANGE_LABELS: Readonly<Record<HostRange, string>> = hostRangeLabels('en');
 
 /** What the data disk holds (`HostDiskPartKey`): a legend row's label and the same words inside a sentence. */
 export type HostDiskPart = 'containers' | 'whombat' | 'work' | 'database';
-export const HOST_DISK_PART_LABELS: Readonly<Record<HostDiskPart, string>> = {
-  containers: 'The agent’s containers',
-  whombat: 'Whombat’s own data',
-  work: 'Work folders',
-  database: 'Conversations and history',
-};
-const HOST_DISK_PART_PHRASES: Readonly<Record<HostDiskPart, string>> = {
-  containers: 'the agent’s containers',
-  whombat: 'the Whombat’s own data',
-  work: 'work folders',
-  database: 'conversations and history',
-};
+const HOST_DISK_PARTS: readonly HostDiskPart[] = ['containers', 'whombat', 'work', 'database'];
+
+/** The disk legend's labels in a locale. */
+export function hostDiskPartLabels(locale?: string | null): Readonly<Record<HostDiskPart, string>> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(HOST_DISK_PARTS.map((p) => [p, tr.t(`host.part.${p}`)])) as Record<
+    HostDiskPart,
+    string
+  >;
+}
+export const HOST_DISK_PART_LABELS: Readonly<Record<HostDiskPart, string>> = hostDiskPartLabels('en');
 
 /** Days in the Data per day and Tokens columns. */
 export const HOST_CHART_DAYS = 14;
 
-const trim1 = (n: number) => String(Number(n.toFixed(1)));
+const trim1 = (n: number, locale?: string | null) => {
+  const text = String(Number(n.toFixed(1)));
+  return coreTranslator(locale).language === 'nl' ? text.replace('.', ',') : text;
+};
 
 /**
  * Bytes as people read them: `0 B`, `850 KB`, `41 MB`, `2.2 GB`, `22.9 GB`, `87 GB`, `140 GB`, `1.2 TB`. One decimal below
  * 100 GB (none when it's .0), whole numbers for KB and MB.
  */
-export function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number, locale?: string | null): string {
   const b = Math.max(0, Math.round(bytes));
   if (b < 1_000) return `${b}${NBSP}B`;
   if (b < 999_500) return `${Math.round(b / 1_000)}${NBSP}KB`;
   if (b < 999_500_000) return `${Math.round(b / 1_000_000)}${NBSP}MB`;
-  if (b < 99_950_000_000) return `${trim1(b / 1_000_000_000)}${NBSP}GB`;
+  if (b < 99_950_000_000) return `${trim1(b / 1_000_000_000, locale)}${NBSP}GB`;
   if (b < 999_500_000_000) return `${Math.round(b / 1_000_000_000)}${NBSP}GB`;
-  return `${trim1(b / 1_000_000_000_000)}${NBSP}TB`;
+  return `${trim1(b / 1_000_000_000_000, locale)}${NBSP}TB`;
 }
 
 /** A speed in megabits per second, the chart's unit: `0`, `0.4`, `3.2`, `48` (no unit; one decimal below 10). */
-export function formatMbits(bitsPerSecond: number): string {
+export function formatMbits(bitsPerSecond: number, locale?: string | null): string {
   const m = Math.max(0, bitsPerSecond) / 1_000_000;
   if (m === 0) return '0';
-  if (m < 0.05) return '<0.1';
-  return m < 10 ? trim1(m) : String(Math.round(m));
+  if (m < 0.05) return coreTranslator(locale).language === 'nl' ? '<0,1' : '<0.1';
+  return m < 10 ? trim1(m, locale) : String(Math.round(m));
 }
 
 /** Megabits per second of `bytes` moved in `stepS` seconds. */
@@ -79,64 +87,73 @@ export function cacheReadPct(input: {
   return (Math.min(input.cacheReadTokens ?? 0, input.inputTokens) / input.inputTokens) * 100;
 }
 
-export const HOST_STATUS_COPY = {
-  title: 'How it’s doing',
-  live: 'Live · checked every 10 seconds',
-  rangeGroup: 'Time range',
-  processor: 'Processor',
-  processorHint: (cores: number) =>
-    cores === 1
-      ? 'How busy the Whombat was, in percent of its processor'
-      : `How busy the Whombat was, in percent of all ${cores} cores`,
-  memory: 'Memory',
-  memoryOf: (total: string) => `of ${total}`,
-  /** What the agent's containers hold, in words a non-developer knows: the apps and sites it runs (OP-19). */
-  memoryContainers: (bytes: number) => `Apps and sites ${formatBytes(bytes)}`,
-  disk: 'Disk',
-  diskOf: (total: string) => `of ${total}`,
-  diskFree: (bytes: number) => `${formatBytes(bytes)} free`,
-  diskUsedOf: (used: number, total: number) => `${formatBytes(used)} used of ${formatBytes(total)}`,
-  systemDisk: (used: number, total: number) => `System ${formatBytes(used)} of ${formatBytes(total)}`,
-  backupDisk: (used: number, total: number) => `Backup disk ${formatBytes(used)} of ${formatBytes(total)}`,
-  free: 'Free',
-  other: 'Other',
-  today: 'Today',
-  todayIn: 'in',
-  todayOut: (bytes: number) => `${formatBytes(bytes)} out`,
-  networkSpeed: 'Network speed',
-  networkHint: 'Megabits per second',
-  download: 'Download',
-  upload: 'Upload',
-  /** Tooltip rows of the speed chart: `12 Mbit/s down`. */
-  speedDown: (bitsPerS: number) => `${formatMbits(bitsPerS)}${NBSP}Mbit/s down`,
-  speedUp: (bitsPerS: number) => `${formatMbits(bitsPerS)}${NBSP}Mbit/s up`,
-  busy: (pct: number) => `${formatUsagePct(pct)} busy`,
-  perDay: 'Data per day',
-  perDayHint: `Last ${HOST_CHART_DAYS} days`,
-  received: 'Received',
-  sent: 'Sent',
-  receivedValue: (bytes: number) => `${formatBytes(bytes)} received`,
-  sentValue: (bytes: number) => `${formatBytes(bytes)} sent`,
-  todaySoFar: 'Today so far',
-  tokens: 'Tokens',
-  /** `3.4M today · 94 % read from cache`; without the cache part when nothing was read from it. */
-  tokensToday: (tokens: number, cachePct: number | null) =>
-    cachePct === null || cachePct < 1
-      ? `${formatTokenCount(tokens)} today`
-      : `${formatTokenCount(tokens)} today · ${formatUsagePct(cachePct)} read from cache`,
-  tokensValue: (tokens: number) => `${formatTokenCount(tokens)} tokens`,
-  moreInAi: 'More in AI',
-  noAgentWorkToday: 'No agent work yet today.',
-  /** The tile's line under the processor's number: `Peak 86 % at 14:25`. */
-  peak: (pct: number, at: DateInput, timeZone: string) =>
-    `Peak ${formatUsagePct(pct)} at ${formatClock(at, timeZone)}`,
-  unavailable: 'The Whombat can’t read its measurements right now.',
-  /** While less than the range has been measured. */
-  measuringSince: (at: DateInput, timeZone: string) =>
-    `Measuring since ${formatClock(at, timeZone)}. The charts fill in as time goes on.`,
-  showTable: 'Show as a table',
-  showChart: 'Show as a chart',
-} as const;
+/** Settings → This Whombat → “How it’s doing” in a locale. */
+export function hostStatusCopy(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  const bytes = (n: number) => formatBytes(n, locale);
+  return {
+    title: tr.t('host.title'),
+    live: tr.t('host.live'),
+    rangeGroup: tr.t('host.rangeGroup'),
+    processor: tr.t('host.processor'),
+    processorHint: (cores: number) => tr.tp('host.processorHint', cores),
+    memory: tr.t('host.memory'),
+    memoryOf: (total: string) => tr.t('host.of', { total }),
+    /** What the agent's containers hold, in words a non-developer knows: the apps and sites it runs. */
+    memoryContainers: (n: number) => tr.t('host.memoryContainers', { size: bytes(n) }),
+    disk: tr.t('host.disk'),
+    diskOf: (total: string) => tr.t('host.of', { total }),
+    diskFree: (n: number) => tr.t('host.diskFree', { size: bytes(n) }),
+    diskUsedOf: (used: number, total: number) =>
+      tr.t('host.diskUsedOf', { used: bytes(used), total: bytes(total) }),
+    systemDisk: (used: number, total: number) =>
+      tr.t('host.systemDisk', { used: bytes(used), total: bytes(total) }),
+    backupDisk: (used: number, total: number) =>
+      tr.t('host.backupDisk', { used: bytes(used), total: bytes(total) }),
+    free: tr.t('host.free'),
+    other: tr.t('host.other'),
+    today: tr.t('host.today'),
+    todayIn: tr.t('host.todayIn'),
+    todayOut: (n: number) => tr.t('host.todayOut', { size: bytes(n) }),
+    networkSpeed: tr.t('host.networkSpeed'),
+    networkHint: tr.t('host.networkHint'),
+    download: tr.t('host.download'),
+    upload: tr.t('host.upload'),
+    /** Tooltip rows of the speed chart: `12 Mbit/s down`. */
+    speedDown: (bitsPerS: number) => tr.t('host.speedDown', { speed: formatMbits(bitsPerS, locale) }),
+    speedUp: (bitsPerS: number) => tr.t('host.speedUp', { speed: formatMbits(bitsPerS, locale) }),
+    busy: (pct: number) => tr.t('host.busy', { pct: formatUsagePct(pct) }),
+    perDay: tr.t('host.perDay'),
+    perDayHint: tr.t('host.perDayHint', { days: HOST_CHART_DAYS }),
+    received: tr.t('host.received'),
+    sent: tr.t('host.sent'),
+    receivedValue: (n: number) => tr.t('host.receivedValue', { size: bytes(n) }),
+    sentValue: (n: number) => tr.t('host.sentValue', { size: bytes(n) }),
+    todaySoFar: tr.t('host.todaySoFar'),
+    tokens: tr.t('host.tokens'),
+    /** `3.4M today · 94 % read from cache`; without the cache part when nothing was read from it. */
+    tokensToday: (tokens: number, cachePct: number | null) =>
+      cachePct === null || cachePct < 1
+        ? tr.t('host.tokensToday', { tokens: formatTokenCount(tokens) })
+        : tr.t('host.tokensTodayCache', { tokens: formatTokenCount(tokens), pct: formatUsagePct(cachePct) }),
+    tokensValue: (tokens: number) => tr.t('host.tokensValue', { tokens: formatTokenCount(tokens) }),
+    moreInAi: tr.t('host.moreInAi'),
+    noAgentWorkToday: tr.t('host.noAgentWorkToday'),
+    /** The tile's line under the processor's number: `Peak 86 % at 14:25`. */
+    peak: (pct: number, at: DateInput, timeZone: string) =>
+      tr.t('host.peak', { pct: formatUsagePct(pct), time: formatClock(at, timeZone) }),
+    unavailable: tr.t('host.unavailable'),
+    /** While less than the range has been measured. */
+    measuringSince: (at: DateInput, timeZone: string) =>
+      tr.t('host.measuringSince', { time: formatClock(at, timeZone) }),
+    showTable: tr.t('host.showTable'),
+    showChart: tr.t('host.showChart'),
+  };
+}
+
+export type HostStatusCopy = ReturnType<typeof hostStatusCopy>;
+
+export const HOST_STATUS_COPY: HostStatusCopy = hostStatusCopy('en');
 
 /* Disk alerts (BS-09) --------------------------------------------------------------------------------------------- */
 
@@ -176,13 +193,16 @@ export function hostDiskAlertText(input: {
   freeBytes: number;
   /** The largest part, when the parts are known. */
   biggest?: { key: HostDiskPart; bytes: number } | null | undefined;
+  locale?: string | null;
 }): string {
+  const tr = coreTranslator(input.locale);
   const most = input.biggest
-    ? ` Most space goes to ${HOST_DISK_PART_PHRASES[input.biggest.key]} (${formatBytes(input.biggest.bytes)}).`
+    ? tr.t('host.alertMost', {
+        part: tr.t(`host.phrase.${input.biggest.key}`),
+        size: formatBytes(input.biggest.bytes, input.locale),
+      })
     : '';
-  const free = formatBytes(input.freeBytes);
-  if (input.level === 95) {
-    return `The Whombat’s disk is almost full: ${free} left. When it runs out, the agent can’t work.${most}`;
-  }
-  return `The Whombat’s disk is ${formatUsagePct(input.usedPct)} full, with ${free} left.${most}`;
+  const free = formatBytes(input.freeBytes, input.locale);
+  if (input.level === 95) return tr.t('host.alertFull', { free, most });
+  return tr.t('host.alert', { pct: formatUsagePct(input.usedPct), free, most });
 }

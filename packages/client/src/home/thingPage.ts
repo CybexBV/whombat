@@ -24,9 +24,11 @@ import {
   type HostGuest,
   type HostServer,
 } from '@whombat/core/domain';
-import { daysAgo, formatClock, formatDate, toDate } from '@whombat/core/text';
+import { formatLocaleOf } from '@whombat/core/i18n';
+import { daysAgo, formatClock, formatDate, toDate, zonedParts } from '@whombat/core/text';
 import { guestKindText } from '../hosts/model';
-import { THING_STATUS_LABELS } from './things';
+import { clientTranslator } from '../i18n/catalog';
+import { THING_STATUS_LABELS, thingStatusLabels } from './things';
 
 /** A tab as the clients draw it: the server's, or one of their own. */
 export interface ThingTabView {
@@ -46,7 +48,11 @@ export const THING_ACTIVITY_TAB = 'activity';
 export const THING_SETTINGS_TAB = 'settings';
 
 /** The page's tabs: the server's in its order, then Activity, then Connection when the page has one. */
-export function thingTabs(page: Pick<ThingPage, 'tabs' | 'settings'>): ThingTabView[] {
+export function thingTabs(
+  page: Pick<ThingPage, 'tabs' | 'settings'>,
+  locale?: string | null,
+): ThingTabView[] {
+  const tr = clientTranslator(locale);
   const tabs: ThingTabView[] = page.tabs
     .filter((t) => t.key !== THING_ACTIVITY_TAB && t.key !== THING_SETTINGS_TAB)
     .map((t) => ({
@@ -56,10 +62,22 @@ export function thingTabs(page: Pick<ThingPage, 'tabs' | 'settings'>): ThingTabV
       own: null,
       server: t.server ?? null,
     }));
-  tabs.push({ key: THING_ACTIVITY_TAB, label: 'Activity', count: null, own: 'activity', server: null });
+  tabs.push({
+    key: THING_ACTIVITY_TAB,
+    label: tr.t('thing.tab.activity'),
+    count: null,
+    own: 'activity',
+    server: null,
+  });
   // The connection's own settings: “Connection”, beside a service's own settings tab (service-settings.md SST-06).
   if (page.settings)
-    tabs.push({ key: THING_SETTINGS_TAB, label: 'Connection', count: null, own: 'settings', server: null });
+    tabs.push({
+      key: THING_SETTINGS_TAB,
+      label: tr.t('thing.tab.connection'),
+      count: null,
+      own: 'settings',
+      server: null,
+    });
   return tabs;
 }
 
@@ -201,8 +219,8 @@ export function thingSeriesToken(color: ThingSeriesColor | null | undefined, ind
 }
 
 /** What a “Show more here” chip sends to Whombat. */
-export function keepHereQuestion(suggestion: string, name: string): string {
-  return `Keep “${suggestion}” on the ${name} page.`;
+export function keepHereQuestion(suggestion: string, name: string, locale?: string | null): string {
+  return clientTranslator(locale).t('thing.keepHere', { suggestion, name });
 }
 
 /** The badge's tone for a page's status: a problem or an unreachable thing is `bad`, not checked or learning muted. */
@@ -246,9 +264,11 @@ export interface ThingHeadPreview extends Pick<ThingPage, 'id' | 'kind' | 'name'
 export function thingHeadFromThings(
   things: readonly ThingSummary[],
   thingId: string,
+  locale?: string | null,
 ): ThingHeadPreview | null {
   const t = things.find((x) => x.id === thingId);
   if (!t) return null;
+  const labels = locale ? thingStatusLabels(locale) : THING_STATUS_LABELS;
   return {
     id: t.id,
     kind: t.kind,
@@ -256,7 +276,7 @@ export function thingHeadFromThings(
     icon: t.icon,
     ...(t.catalogId ? { catalogId: t.catalogId } : {}),
     status: t.status,
-    badge: THING_STATUS_LABELS[t.status],
+    badge: labels[t.status],
   };
 }
 
@@ -316,23 +336,39 @@ export function headFacts(facts: readonly ThingPage['facts'][number][]): {
   detail: ThingPage['facts'][number][];
 } {
   const text = (f: ThingPage['facts'][number]) => f.map((p) => p.text).join('');
-  const checked = facts.find((f) => /^Checked\b/.test(text(f))) ?? null;
+  const checked = facts.find((f) => /^(Checked|Gecontroleerd)\b/.test(text(f))) ?? null;
   return { checked, detail: facts.filter((f) => f !== checked) };
 }
 
 /** A list line's time on the right: `Today 07:31`, else the date (`17 Oct`). */
-export function itemWhen(at: string, now: Date | number, timeZone: string): string {
-  if (daysAgo(at, now, timeZone) <= 0) return `Today ${formatClock(at, timeZone)}`;
-  return formatDate(at, timeZone, { now: toDate(now) });
+export function itemWhen(at: string, now: Date | number, timeZone: string, locale?: string | null): string {
+  if (daysAgo(at, now, timeZone) <= 0)
+    return clientTranslator(locale).t('thing.todayClock', { clock: formatClock(at, timeZone) });
+  if (!locale) return formatDate(at, timeZone, { now: toDate(now) });
+  const d = toDate(at);
+  const sameYear = zonedParts(d, timeZone).year === zonedParts(now, timeZone).year;
+  return new Intl.DateTimeFormat(formatLocaleOf(locale), {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone,
+  })
+    .format(d)
+    .replace(/\.$/, '');
 }
 
 /** A tool group's tier in words, as Settings → Connections says them (`Allowed`, `Asks you`, `Off`). */
-export const THING_ACCESS_TIER_WORDS: Record<ThingPageAccessItem['tier'], string> = {
-  allowed: 'Allowed',
-  ask: 'Asks you',
-  off: 'Off',
-  mixed: 'Some ask',
-};
+export function thingAccessTierWords(locale?: string | null): Record<ThingPageAccessItem['tier'], string> {
+  const tr = clientTranslator(locale);
+  return {
+    allowed: tr.t('thing.access.allowed'),
+    ask: tr.t('thing.access.ask'),
+    off: tr.t('thing.access.off'),
+    mixed: tr.t('thing.access.mixed'),
+  };
+}
+
+export const THING_ACCESS_TIER_WORDS: Record<ThingPageAccessItem['tier'], string> = thingAccessTierWords();
 
 /* Charts ------------------------------------------------------------------------------------------- */
 

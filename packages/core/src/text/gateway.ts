@@ -10,6 +10,7 @@ import type {
   GatewayProvider,
   GatewayRefusalCode,
 } from '../domain/gateway.js';
+import { coreTranslator } from '../i18n/catalog.js';
 import { type DateInput, daysAgo, formatAgo, formatClock, formatDate, formatWeekday } from './time.js';
 
 /**
@@ -28,31 +29,41 @@ export const GATEWAY_ACCOUNT_PROVIDER_LABELS: Readonly<Record<GatewayProvider, s
   codex: 'ChatGPT',
 };
 
-const CONNECTIONS = 'Settings → Connections';
-const AI_SIGN_IN = 'Settings → AI sign-in';
-
 /** “Claude Code”, “Claude Code and ChatGPT” (Claude Code first). No tools reads as both. */
-export function gatewayToolsText(providers: readonly GatewayProvider[]): string {
+export function gatewayToolsText(providers: readonly GatewayProvider[], locale?: string | null): string {
   const tools = (['claude', 'codex'] as const).filter((p) => providers.length === 0 || providers.includes(p));
-  return tools.map((p) => GATEWAY_TOOL_LABELS[p]).join(' and ');
+  const labels = tools.map((p) => GATEWAY_TOOL_LABELS[p]);
+  if (labels.length === 2)
+    return coreTranslator(locale).t('gateway.and', { a: labels[0] ?? '', b: labels[1] ?? '' });
+  return labels.join('');
 }
 
 /**
  * When a used-up or busy account has room again (AIG-12, AIG-13), in the zone's clock: “today 18:40”, “tomorrow
  * 09:00”, the weekday within six days (“Monday 09:00”), else the date (“12 Oct 09:00”, the year when it isn't now's).
  */
-export function formatGatewayUntil(until: DateInput, now: DateInput, timeZone: string): string {
+export function formatGatewayUntil(
+  until: DateInput,
+  now: DateInput,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   const clock = formatClock(until, timeZone);
   const days = -daysAgo(until, now, timeZone);
-  if (days === 0) return `today ${clock}`;
-  if (days === 1) return `tomorrow ${clock}`;
-  if (days > 1 && days <= 6) return `${formatWeekday(until, timeZone)} ${clock}`;
-  return `${formatDate(until, timeZone, { now })} ${clock}`;
+  if (days === 0) return tr.t('gateway.today', { clock });
+  if (days === 1) return tr.t('gateway.tomorrow', { clock });
+  if (days > 1 && days <= 6)
+    return tr.t('gateway.dayClock', { day: formatWeekday(until, timeZone, locale), clock });
+  return tr.t('gateway.dayClock', { day: formatDate(until, timeZone, { now }, locale), clock });
 }
 
 /** What members see instead of an account's email (AIG-13): “Claude account 1”, “ChatGPT account 2”. */
-export function gatewayAccountLabel(provider: GatewayProvider, n: number): string {
-  return `${GATEWAY_ACCOUNT_PROVIDER_LABELS[provider]} account ${n}`;
+export function gatewayAccountLabel(provider: GatewayProvider, n: number, locale?: string | null): string {
+  return coreTranslator(locale).t('gateway.account', {
+    provider: GATEWAY_ACCOUNT_PROVIDER_LABELS[provider],
+    n,
+  });
 }
 
 /** Whether switching a tool on asks first (AIG-06): only for Fusebox, which pools people's subscriptions. */
@@ -60,51 +71,58 @@ export function gatewaySwitchConfirms(kind: GatewayKind): boolean {
   return kind === 'fusebox';
 }
 
+/** The switches, their confirmation, “Runs on”, the pool's lines and the connect and remove messages, in a locale. */
+export function aiGatewayCopy(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  const tool = (provider: GatewayProvider) => GATEWAY_TOOL_LABELS[provider];
+  return {
+    /** The switch on the gateway's connection page: “Send Claude Code through Fusebox”. */
+    switchLabel: (provider: GatewayProvider, name: string) =>
+      tr.t('gateway.switchLabel', { tool: tool(provider), name }),
+    /** Under the switch. */
+    switchHint: (provider: GatewayProvider, name: string) =>
+      tr.t('gateway.switchHint', { tool: tool(provider), name }),
+    /** Fusebox's confirmation before a switch goes on (`gatewaySwitchConfirms`): “Send Claude Code through Fusebox?” */
+    confirmTitle: (provider: GatewayProvider, name: string) =>
+      tr.t('gateway.confirmTitle', { tool: tool(provider), name }),
+    confirmBody: tr.t('gateway.confirmBody'),
+    /** “Send through Fusebox” */
+    confirm: (name: string) => tr.t('gateway.confirm', { name }),
+    cancel: tr.t('gateway.cancel'),
+    /** An agent of a tool whose switch is on: “Runs on Fusebox”, its note, and its own sign-in locked. */
+    runsOnTitle: (name: string) => tr.t('gateway.runsOnTitle', { name }),
+    runsOnNote: (provider: GatewayProvider, name: string) =>
+      tr.t('gateway.runsOnNote', { tool: tool(provider), name, connections: tr.t('gateway.connections') }),
+    /** Settings → AI → Usage: the section is titled with the gateway's name, above this one. */
+    yourSubscriptions: tr.t('gateway.yourSubscriptions'),
+    /** Each provider's group of accounts, Claude first. */
+    groups: GATEWAY_ACCOUNT_PROVIDER_LABELS,
+    /** Whether a tool's switch is on, in its group. */
+    toolOn: (provider: GatewayProvider, name: string) =>
+      tr.t('gateway.toolOn', { tool: tool(provider), name }),
+    toolOff: (provider: GatewayProvider, name: string) =>
+      tr.t('gateway.toolOff', { tool: tool(provider), name }),
+    signInExpired: tr.t('gateway.signInExpired'),
+    offIn: (name: string) => tr.t('gateway.offIn', { name }),
+    answering: (name: string) => tr.t('gateway.answering', { name }),
+    notAnswering: (name: string) => tr.t('gateway.notAnswering', { name }),
+    notReadYet: tr.t('gateway.notReadYet'),
+    /** Connecting a second gateway: the existing one's name. */
+    exists: (name: string) => tr.t('gateway.exists', { name }),
+    /** An API key in the pool whose prepaid credit ran out. */
+    outOfCredit: tr.t('gateway.outOfCredit'),
+    /** A Fusebox that refused `named-clients`. */
+    tooOld: tr.t('gateway.tooOld'),
+    /** Removing it while it didn't answer: “… remove the client “Whombat · Lumio BV” there yourself.” */
+    removeByHand: (name: string, clientLabel: string) =>
+      tr.t('gateway.removeByHand', { name, client: clientLabel }),
+  };
+}
+
+export type AiGatewayCopy = ReturnType<typeof aiGatewayCopy>;
+
 /** The switches, their confirmation, “Runs on”, the pool's lines and the connect and remove messages. */
-export const AI_GATEWAY_COPY = {
-  /** The switch on the gateway's connection page (AIG-05): “Send Claude Code through Fusebox”. */
-  switchLabel: (provider: GatewayProvider, name: string) =>
-    `Send ${GATEWAY_TOOL_LABELS[provider]} through ${name}`,
-  /** Under the switch (AIG-05). */
-  switchHint: (provider: GatewayProvider, name: string) =>
-    `Every ${GATEWAY_TOOL_LABELS[provider]} turn on this Whombat goes through ${name}, whoever asks. Off: turns use their usual sign-in again.`,
-  /** Fusebox's confirmation before a switch goes on (AIG-06, `gatewaySwitchConfirms`): “Send Claude Code through Fusebox?” */
-  confirmTitle: (provider: GatewayProvider, name: string) =>
-    `Send ${GATEWAY_TOOL_LABELS[provider]} through ${name}?`,
-  confirmBody:
-    'Fusebox can share Claude and ChatGPT subscriptions between people. Anthropic’s terms say “Each end user must authenticate with their own … credentials”, and OpenAI asks people not to share a ChatGPT sign-in. Either can limit or suspend those accounts.',
-  /** “Send through Fusebox” */
-  confirm: (name: string) => `Send through ${name}`,
-  cancel: 'Cancel',
-  /** An agent of a tool whose switch is on (AIG-17): “Runs on Fusebox”, its note, and its own sign-in locked. */
-  runsOnTitle: (name: string) => `Runs on ${name}`,
-  runsOnNote: (provider: GatewayProvider, name: string) =>
-    `Every ${GATEWAY_TOOL_LABELS[provider]} turn on this Whombat goes through ${name}. When it isn’t answering, your own Claude or ChatGPT sign-in is used. You can change this under ${CONNECTIONS} → ${name}.`,
-  /** Settings → AI → Usage (AIG-13): the section is titled with the gateway's name, above this one. */
-  yourSubscriptions: 'Your subscriptions',
-  /** Each provider's group of accounts, Claude first. */
-  groups: GATEWAY_ACCOUNT_PROVIDER_LABELS,
-  /** Whether a tool's switch is on, in its group. */
-  toolOn: (provider: GatewayProvider, name: string) =>
-    `${GATEWAY_TOOL_LABELS[provider]} turns go through ${name}`,
-  toolOff: (provider: GatewayProvider, name: string) =>
-    `${GATEWAY_TOOL_LABELS[provider]} turns don’t go through ${name}`,
-  signInExpired: 'Sign-in expired',
-  offIn: (name: string) => `Off in ${name}`,
-  answering: (name: string) => `${name} is answering`,
-  notAnswering: (name: string) => `${name} isn’t answering`,
-  notReadYet: 'Not read yet',
-  /** Connecting a second gateway (AIG-01): the existing one's name. */
-  exists: (name: string) =>
-    `This Whombat already sends its AI through ${name}. Remove that connection first.`,
-  /** An API key in the pool whose prepaid credit ran out (Fusebox 0.13). */
-  outOfCredit: 'Out of API credit',
-  /** A Fusebox that refused `named-clients` (AIG-02). */
-  tooOld: 'This Fusebox is too old to add a client key for Whombat. Update Fusebox and connect again.',
-  /** Removing it while it didn't answer (AIG-03): “… remove the client “Whombat · Lumio BV” there yourself.” */
-  removeByHand: (name: string, clientLabel: string) =>
-    `${name} didn’t answer, so remove the client “${clientLabel}” there yourself.`,
-} as const;
+export const AI_GATEWAY_COPY: AiGatewayCopy = aiGatewayCopy('en');
 
 /**
  * An account's status line in the pool (AIG-13), or null when it is fine: “Used up until Monday 09:00”, “Busy until
@@ -118,23 +136,29 @@ export function gatewayAccountStatusText(input: {
   name: string;
   now: DateInput;
   timeZone: string;
+  locale?: string | null;
 }): string | null {
-  const { status, until, name, now, timeZone } = input;
+  const { status, until, name, now, timeZone, locale } = input;
+  const tr = coreTranslator(locale);
   switch (status) {
     case 'ok':
       return null;
     case 'used_up':
-      if (input.outOfCredit) return AI_GATEWAY_COPY.outOfCredit;
-      return until === null ? 'Used up' : `Used up until ${formatGatewayUntil(until, now, timeZone)}`;
+      if (input.outOfCredit) return tr.t('gateway.outOfCredit');
+      return until === null
+        ? tr.t('gateway.usedUp')
+        : tr.t('gateway.usedUpUntil', { until: formatGatewayUntil(until, now, timeZone, locale) });
     case 'rate_limited': {
-      if (until === null) return 'Busy';
+      if (until === null) return tr.t('gateway.busy');
       const today = daysAgo(until, now, timeZone) === 0;
-      return `Busy until ${today ? formatClock(until, timeZone) : formatGatewayUntil(until, now, timeZone)}`;
+      return tr.t('gateway.busyUntil', {
+        until: today ? formatClock(until, timeZone) : formatGatewayUntil(until, now, timeZone, locale),
+      });
     }
     case 'signin_expired':
-      return AI_GATEWAY_COPY.signInExpired;
+      return tr.t('gateway.signInExpired');
     case 'off':
-      return AI_GATEWAY_COPY.offIn(name);
+      return tr.t('gateway.offIn', { name });
   }
 }
 
@@ -145,10 +169,14 @@ export function gatewayUpdatedText(input: {
   observedAt: DateInput | null;
   now: DateInput;
   timeZone: string;
+  locale?: string | null;
 }): string {
-  if (!input.reachable) return AI_GATEWAY_COPY.notAnswering(input.name);
-  if (input.observedAt === null) return AI_GATEWAY_COPY.notReadYet;
-  return `Updated ${formatAgo(input.observedAt, input.now, input.timeZone)}`;
+  const tr = coreTranslator(input.locale);
+  if (!input.reachable) return tr.t('gateway.notAnswering', { name: input.name });
+  if (input.observedAt === null) return tr.t('gateway.notReadYet');
+  return tr.t('gateway.updated', {
+    ago: formatAgo(input.observedAt, input.now, input.timeZone, input.locale),
+  });
 }
 
 /**
@@ -168,17 +196,24 @@ export function gatewayRefusalText(input: {
   until?: DateInput | null;
   now: DateInput;
   timeZone: string;
+  locale?: string | null;
 }): string {
-  const { code, name, provider, until, now, timeZone } = input;
+  const { code, name, provider, until, now, timeZone, locale } = input;
+  const tr = coreTranslator(locale);
   switch (code) {
     case 'gateway.missing':
-      return `${name} isn’t set up any more, so I couldn’t start. You can connect it again under ${CONNECTIONS}.`;
+      return tr.t('gateway.refusal.missing', { name, connections: tr.t('gateway.connections') });
     case 'gateway.unreachable':
-      return `${name} isn’t answering and I have no Claude or ChatGPT sign-in of yours to use instead, so I couldn’t start. You can add one under ${AI_SIGN_IN}.`;
+      return tr.t('gateway.refusal.unreachable', { name, signIn: tr.t('gateway.aiSignIn') });
     case 'gateway.used_up': {
-      const when =
-        until === undefined || until === null ? '' : ` until ${formatGatewayUntil(until, now, timeZone)}`;
-      return `${name} has no ${GATEWAY_TOOL_LABELS[provider]} room left${when}, so I couldn’t start.`;
+      const tool = GATEWAY_TOOL_LABELS[provider];
+      return until === undefined || until === null
+        ? tr.t('gateway.refusal.usedUp', { name, tool })
+        : tr.t('gateway.refusal.usedUpUntil', {
+            name,
+            tool,
+            until: formatGatewayUntil(until, now, timeZone, locale),
+          });
     }
   }
 }
@@ -214,28 +249,47 @@ export type GatewayAlert =
  * - “Whombat reaches Fusebox again.”
  */
 export function gatewayAlertText(
-  input: GatewayAlert & { name: string; now: DateInput; timeZone: string },
+  input: GatewayAlert & { name: string; now: DateInput; timeZone: string; locale?: string | null },
 ): string {
-  const { name } = input;
+  const { name, locale } = input;
+  const tr = coreTranslator(locale);
   switch (input.kind) {
     case 'used_up': {
       const tool = GATEWAY_TOOL_LABELS[input.provider];
       return input.until === null
-        ? `${name} has no ${tool} room left. ${tool} turns won’t start until it has room again.`
-        : `${name} has no ${tool} room left until ${formatGatewayUntil(input.until, input.now, input.timeZone)}. ${tool} turns won’t start until then.`;
+        ? tr.t('gateway.alert.usedUp', { name, tool })
+        : tr.t('gateway.alert.usedUpUntil', {
+            name,
+            tool,
+            until: formatGatewayUntil(input.until, input.now, input.timeZone, locale),
+          });
     }
     case 'back':
-      return `${name} has room for ${GATEWAY_TOOL_LABELS[input.provider]} again.`;
+      return tr.t('gateway.alert.back', { name, tool: GATEWAY_TOOL_LABELS[input.provider] });
     case 'signin_expired':
-      return `${name}’s ${GATEWAY_ACCOUNT_PROVIDER_LABELS[input.provider]} sign-in for ${input.account} has expired. Sign in again in ${name}.`;
+      return tr.t('gateway.alert.signinExpired', {
+        name,
+        provider: GATEWAY_ACCOUNT_PROVIDER_LABELS[input.provider],
+        account: input.account,
+      });
     case 'unreachable': {
       const own = (['claude', 'codex'] as const).filter((p) => input.fallback?.includes(p));
-      if (own.length)
-        return `${name} isn’t answering, so I’m using your own ${own.map((p) => GATEWAY_ACCOUNT_PROVIDER_LABELS[p]).join(' and ')} sign-in${own.length > 1 ? 's' : ''} until it does.`;
-      return `${name} isn’t answering, so ${gatewayToolsText(input.providers)} turns won’t start until it does. Sign in to Claude or ChatGPT under ${AI_SIGN_IN} and I’ll use that while it’s down.`;
+      if (own.length) {
+        const labels = own.map((p) => GATEWAY_ACCOUNT_PROVIDER_LABELS[p]);
+        const ownText =
+          labels.length === 2
+            ? tr.t('gateway.and', { a: labels[0] ?? '', b: labels[1] ?? '' })
+            : labels.join('');
+        return tr.tp('gateway.alert.fallback', own.length, { name, own: ownText });
+      }
+      return tr.t('gateway.alert.unreachable', {
+        name,
+        tools: gatewayToolsText(input.providers, locale),
+        signIn: tr.t('gateway.aiSignIn'),
+      });
     }
     case 'reachable':
-      return `Whombat reaches ${name} again.`;
+      return tr.t('gateway.alert.reachable', { name });
   }
 }
 

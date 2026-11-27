@@ -28,6 +28,7 @@ import {
 } from '../domain/automation.js';
 import { T3_HANDOFFS_HEADING } from '../domain/handoff.js';
 import { type TrackerItemKind, type TrackerRecipeWords, UNKNOWN_TRACKER_WORDS } from '../domain/tracker.js';
+import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
 import { mailRecipeName, mailTriggerProblems, mailWhenText } from './mail.js';
 import { describeSchedule } from './schedule.js';
 import { triggerSummary } from './validate.js';
@@ -810,6 +811,112 @@ export function recipeSentence(recipe: AutomationRecipe, names: RecipeNames): st
     }
     case 'mail':
       return `${mailWhenText(when, names.connection)}, ${does} in ${names.room}.`;
+  }
+}
+
+/** `RECIPE_JOBS` with their words in a locale (the form's choices and the sentence's verbs). */
+export function recipeJobs(locale?: string | null): readonly RecipeJobInfo[] {
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en') return RECIPE_JOBS;
+  return RECIPE_JOBS.map((job) => ({
+    ...job,
+    label: tr.t(`recipe.job.${job.id}.label`),
+    verb: tr.t(`recipe.job.${job.id}.does`, { agent: '' }).trim(),
+  }));
+}
+
+function listIn(tr: CoreTranslator, parts: readonly string[], last: 'or' | 'and'): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return tr.t(last === 'or' ? 'recipe.or' : 'recipe.and', {
+    items: parts.slice(0, -1).join(', '),
+    last: parts.at(-1) ?? '',
+  });
+}
+
+/**
+ * `recipeSentence` in a locale, drawn when it is read: the definition and its stored description stay in English, so an
+ * automation reads in the language of whoever looks at it. A fix reads as one plain clause outside English.
+ */
+export function recipeSentenceIn(
+  recipe: AutomationRecipe,
+  names: RecipeNames,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en') return recipeSentence(recipe, names);
+  const does = (form: 'does' | 'inverted') =>
+    tr.t(`recipe.job.${recipe.job}.${form}`, { agent: names.agent });
+  const fix = recipe.fix ? tr.t('recipe.fix') : '';
+  const when = recipe.when;
+  switch (when.kind) {
+    case 'github': {
+      const opened = [
+        ...(when.events.includes('issue_opened') ? [tr.t('recipe.github.issue')] : []),
+        ...(when.events.includes('pr_opened') ? [tr.t('recipe.github.pr')] : []),
+      ];
+      const parts: string[] = [];
+      if (opened.length) parts.push(tr.t('recipe.github.opened', { what: listIn(tr, opened, 'or') }));
+      if (when.events.includes('pr_updated')) parts.push(tr.t('recipe.github.updated'));
+      if (when.events.includes('checks_failed')) parts.push(tr.t('recipe.github.checksFailed'));
+      return tr.t('recipe.github', {
+        when: listIn(tr, parts, 'or'),
+        repo: when.repo,
+        does: does('inverted'),
+        room: names.room,
+        comments: recipe.replyOnGitHub ? tr.t('recipe.github.comments') : '',
+        fix,
+      });
+    }
+    case 'message': {
+      const words = when.contains.length
+        ? tr.t('recipe.message.words', {
+            words: `${listIn(
+              tr,
+              when.contains.slice(0, 3).map((w) => `“${w}”`),
+              'or',
+            )}${when.contains.length > 3 ? '…' : ''}`,
+          })
+        : '';
+      return tr.t('recipe.message', { words, room: names.room, does: does('inverted') });
+    }
+    case 'schedule':
+      return tr.t('recipe.schedule', {
+        schedule: describeSchedule(when.schedule, when.timeZone, locale),
+        does: does('does'),
+        room: names.room,
+      });
+    case 'manual':
+      return tr.t('recipe.manual', { does: does('inverted'), room: names.room });
+    case 'tracker': {
+      const also = [
+        ...(writesBack(recipe)
+          ? [tr.t('recipe.tracker.writesBack', { product: recipeWords(when).product })]
+          : []),
+        ...(repliesToCustomer(recipe) ? [tr.t('recipe.tracker.replies')] : []),
+        ...(decidesFeatures(recipe) ? [tr.t('recipe.tracker.features')] : []),
+      ];
+      const kinds = new Set(when.itemKinds ?? ['bug', 'feature']);
+      const item =
+        kinds.size !== 1
+          ? 'recipe.tracker.item.report'
+          : kinds.has('bug')
+            ? 'recipe.tracker.item.bug'
+            : 'recipe.tracker.item.feature';
+      return tr.t('recipe.tracker', {
+        item: tr.t(item),
+        connection: names.connection ?? tr.t('recipe.tracker.unknown'),
+        does: does('inverted'),
+        room: names.room,
+        also: also.length ? `, ${listIn(tr, also, 'and')}` : '',
+        fix,
+      });
+    }
+    case 'mail':
+      return tr.t('recipe.mail', {
+        mailbox: names.connection ?? tr.t('recipe.mail.yours'),
+        does: does('inverted'),
+        room: names.room,
+      });
   }
 }
 

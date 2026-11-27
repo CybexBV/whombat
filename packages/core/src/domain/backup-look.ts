@@ -1,19 +1,29 @@
+import { coreWords } from '../i18n/catalog.js';
+
 /**
  * Getting one thing back from a backup (Whombat backup-look.md): the words the box, its assistant and the apps share —
  * what each category is called and the line that says how a bring-back went (“3 things are back. 1 was already here.”).
  * Pure.
  */
 
+const BACKUP_LOOK_CATEGORY_NAMES_KEYS = [
+  'messages',
+  'files',
+  'automations',
+  'connections',
+  'vault',
+  'memories',
+  'skills',
+] as const;
+
 /** What each category of an opened backup is called (the backup file's ids; `messages` are chats). */
-export const BACKUP_LOOK_CATEGORY_NAMES = {
-  messages: 'Chats',
-  files: 'Files',
-  automations: 'Automations',
-  connections: 'Connections',
-  vault: 'Vault',
-  memories: 'Memories',
-  skills: 'Skills',
-} as const;
+export function backupLookCategoryNames(
+  locale?: string | null,
+): Readonly<Record<(typeof BACKUP_LOOK_CATEGORY_NAMES_KEYS)[number], string>> {
+  return coreWords(locale, 'backupLook.category', BACKUP_LOOK_CATEGORY_NAMES_KEYS);
+}
+
+export const BACKUP_LOOK_CATEGORY_NAMES = backupLookCategoryNames('en');
 
 export interface BackupLookTally {
   back: number;

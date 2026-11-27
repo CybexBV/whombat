@@ -6,56 +6,54 @@
  * `hosts.agent_updates`. Pure.
  */
 import type { HostAgentSettings, HostAgentUpdate } from '@whombat/core/domain';
+import { clientTranslator } from '../i18n/catalog';
 import { formatAgoIso } from './format';
 
 /* The words (AU-06, AU-08) ------------------------------------------------------------------------------------- */
 
 type Wait = NonNullable<HostAgentUpdate['waitingFor']>;
 
-export const AGENT_UPDATE_WORDS = {
-  title: 'Updates',
-  kept: 'Kept up to date',
-  upToDate: 'Up to date',
-  updating: 'Updating to the new version…',
-  /** A new version the round takes by itself within minutes (AU-03). */
-  soon: 'Updates to the new version soon',
-  waiting: {
-    packages: (server: string) => `Waits until ${server} has finished installing updates`,
-    console: (server: string) => `Waits until the console on ${server} is closed`,
-    task: (server: string) => `Waits until ${server} has finished its task`,
-  } as Record<Wait, (server: string) => string>,
-  failed: 'Couldn’t update: it went back to the version it had.',
-  /** Another server's update didn't come back, so automatic updates to that version stopped everywhere (AU-05). */
-  halted: 'Stopped: the new version didn’t work on another server.',
-  needsInstall: 'Needs one more install, then it updates itself.',
-  turnedOff: (server: string) => `Updates are turned off on ${server} itself.`,
-  autoOff: 'Automatic updates are off.',
-  retry: 'Try again',
-  install: 'Update it',
-  now: 'Update now',
-  /** The install command, made on demand (making it starts an enrollment). */
-  showCommand: 'Show the install command',
-  making: 'Making it…',
-  /** Under the install command (an agent Whombat can't install itself, AU-07). */
-  commandNote: 'Run it there once; after that Whombat’s helper updates itself.',
-  /** The note when a press went through. */
-  started: (state: 'updating' | 'installing', server: string) =>
-    state === 'installing'
-      ? `Installing Whombat’s helper on ${server} once more.`
-      : `Updating Whombat’s helper on ${server}.`,
-  /** “updated 2 h ago” at the row's end. */
-  updated: (ago: string) => `updated ${ago}`,
-  /** The switch (AU-06). */
-  switchTitle: 'Keep Whombat’s helper up to date',
-  switchOn: 'When a new version comes, Whombat updates its helper on each server, one at a time.',
-  switchOff: 'Nothing updates by itself. Update now still works on each server.',
-  switchHalted:
-    'Stopped for now: a new version didn’t work on one of your servers. Try again on that server, or wait for the next version.',
-  switched: (on: boolean) =>
-    on
-      ? 'Whombat’s helper is kept up to date on every server.'
-      : 'Whombat’s helper no longer updates by itself.',
-} as const;
+export function agentUpdateWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.t('hosts.agentUpdates.title'),
+    kept: tr.t('hosts.agentUpdates.kept'),
+    upToDate: tr.t('hosts.agentUpdates.upToDate'),
+    updating: tr.t('hosts.agentUpdates.updating'),
+    soon: tr.t('hosts.agentUpdates.soon'),
+    waiting: {
+      packages: (server: string) => tr.t('hosts.agentUpdates.waiting.packages', { server }),
+      console: (server: string) => tr.t('hosts.agentUpdates.waiting.console', { server }),
+      task: (server: string) => tr.t('hosts.agentUpdates.waiting.task', { server }),
+    } as Record<Wait, (server: string) => string>,
+    failed: tr.t('hosts.agentUpdates.failed'),
+    halted: tr.t('hosts.agentUpdates.halted'),
+    needsInstall: tr.t('hosts.agentUpdates.needsInstall'),
+    turnedOff: (server: string) => tr.t('hosts.agentUpdates.turnedOff', { server }),
+    autoOff: tr.t('hosts.agentUpdates.autoOff'),
+    retry: tr.t('hosts.agentUpdates.retry'),
+    install: tr.t('hosts.agentUpdates.install'),
+    now: tr.t('hosts.agentUpdates.now'),
+    showCommand: tr.t('hosts.agentUpdates.showCommand'),
+    making: tr.t('hosts.agentUpdates.making'),
+    commandNote: tr.t('hosts.agentUpdates.commandNote'),
+    started: (state: 'updating' | 'installing', server: string) =>
+      tr.t(
+        state === 'installing'
+          ? 'hosts.agentUpdates.startedInstalling'
+          : 'hosts.agentUpdates.startedUpdating',
+        { server },
+      ),
+    updated: (ago: string) => tr.t('hosts.agentUpdates.updated', { ago }),
+    switchTitle: tr.t('hosts.agentUpdates.switchTitle'),
+    switchOn: tr.t('hosts.agentUpdates.switchOn'),
+    switchOff: tr.t('hosts.agentUpdates.switchOff'),
+    switchHalted: tr.t('hosts.agentUpdates.switchHalted'),
+    switched: (on: boolean) => tr.t(on ? 'hosts.agentUpdates.switchedOn' : 'hosts.agentUpdates.switchedOff'),
+  };
+}
+
+export const AGENT_UPDATE_WORDS = agentUpdateWords();
 
 /* The Updates row (AU-08) ---------------------------------------------------------------------------------------- */
 
@@ -72,6 +70,7 @@ export interface AgentUpdatesInput {
   /** Its agent is connected (an offline one can't be updated). */
   connected: boolean;
   now: number;
+  locale?: string | null;
 }
 
 export type AgentUpdateTone = 'ok' | 'warn' | 'bad' | 'mut';
@@ -90,19 +89,23 @@ export interface AgentUpdatesView {
 }
 
 /**
- * The Updates row, or null when it doesn't show: before the server's settings are read, with no signed agent build on this Whombat (`no_build`: nothing to
- * say a person can act on) and while the agent isn't connected (the Connection line says so).
+ * The Updates row, or null when it doesn't show.
  */
 export function agentUpdatesView(input: AgentUpdatesInput): AgentUpdatesView | null {
   const u = input.update;
   if (!u) return null;
   if (u.reasonCode === 'no_build' || u.reasonCode === 'not_connected' || !input.connected) return null;
-  const { server } = input;
-  const W = AGENT_UPDATE_WORDS;
+  const { server, locale } = input;
+  const W = agentUpdateWords(locale);
+  const actionLabel: Record<AgentUpdateAction, string> = {
+    retry: W.retry,
+    install: W.install,
+    now: W.now,
+  };
   const at = u.updatedAt ? Date.parse(u.updatedAt) : Number.NaN;
   const updated =
     Number.isFinite(at) && input.now - at <= AGENT_UPDATED_SHOWN_MS
-      ? W.updated(formatAgoIso(u.updatedAt as string, input.now))
+      ? W.updated(formatAgoIso(u.updatedAt as string, input.now, locale))
       : null;
   const out = (
     text: string,
@@ -113,13 +116,12 @@ export function agentUpdatesView(input: AgentUpdatesInput): AgentUpdatesView | n
     text,
     tone,
     updated,
-    action: action ? { kind: action, label: ACTION_LABEL[action] } : null,
+    action: action ? { kind: action, label: actionLabel[action] } : null,
     command,
   });
   const needsInstall = u.reasonCode === 'no_key' || u.reasonCode === 'other_key';
 
   if (u.state === 'updating') return out(W.updating, 'mut');
-  // The server's own owner said no (AU-06): nothing Whombat can press changes that.
   if (u.reasonCode === 'turned_off') return out(W.turnedOff(server), 'mut');
   if (u.state === 'failed')
     return needsInstall && !u.canInstall ? out(W.failed, 'bad', null, true) : out(W.failed, 'bad', 'retry');
@@ -133,12 +135,6 @@ export function agentUpdatesView(input: AgentUpdatesInput): AgentUpdatesView | n
   }
   return out(input.autoUpdate === false ? W.upToDate : W.kept, 'ok');
 }
-
-const ACTION_LABEL: Record<AgentUpdateAction, string> = {
-  retry: AGENT_UPDATE_WORDS.retry,
-  install: AGENT_UPDATE_WORDS.install,
-  now: AGENT_UPDATE_WORDS.now,
-};
 
 /** Whether the row's server is being updated (read its settings again soon). */
 export function agentUpdating(u: HostAgentUpdate | null | undefined): boolean {
@@ -158,8 +154,8 @@ export interface AgentSettingsView {
   tone: 'ok' | 'warn' | 'mut';
 }
 
-export function agentSettingsView(s: HostAgentSettings): AgentSettingsView {
-  const W = AGENT_UPDATE_WORDS;
+export function agentSettingsView(s: HostAgentSettings, locale?: string | null): AgentSettingsView {
+  const W = agentUpdateWords(locale);
   const halted = s.autoUpdate && s.halted;
   return {
     title: W.switchTitle,

@@ -7,7 +7,9 @@
  * Latitude and longitude are kept to two decimals (about 1 km): enough for a forecast, and no closer to the house than
  * that.
  */
+
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { ZONE_LINKS, ZONE_PLACES } from './place-zones.js';
 
 /** Decimals kept of a latitude or longitude. */
@@ -139,21 +141,29 @@ export type PlaceFindResult = z.infer<typeof PlaceFindResult>;
 export const PlaceSetBody = z.strictObject({ place: PlaceInput.nullable() });
 export type PlaceSetBody = z.input<typeof PlaceSetBody>;
 
-/** The words Settings → This Whombat shows about the place (web and phone alike). */
-export const PLACE_SETTING_WORDS = {
-  title: 'Place',
-  about: 'Where this Whombat is, for the weather and local news.',
-  guessed: '{place} · guessed from the time zone',
-  none: 'Not set',
-  change: 'Change',
-  search: 'Town or city',
-  searchButton: 'Search',
-  useLocation: 'Use my location',
-  useGuess: 'Use the time zone’s guess',
+const PLACE_SETTING_WORDS_KEYS = [
+  'title',
+  'about',
+  'guessed',
+  'none',
+  'change',
+  'search',
+  'searchButton',
+  'useLocation',
+  'useGuess',
   /** OpenStreetMap's data is ODbL: its credit stays by the results. */
-  credit: '© OpenStreetMap',
-  noResults: 'Nothing found by that name. Try another spelling or a bigger town nearby.',
-  failed: 'Couldn’t look that up just now. Try again in a moment.',
-  noLocation: 'This device didn’t share its location.',
-  saved: 'Saved. The weather and news are for {place} now.',
-} as const;
+  'credit',
+  'noResults',
+  'failed',
+  'noLocation',
+  'saved',
+] as const;
+
+/** The words Settings → This Whombat shows about the place (web and phone alike). */
+export function placeSettingWords(
+  locale?: string | null,
+): Readonly<Record<(typeof PLACE_SETTING_WORDS_KEYS)[number], string>> {
+  return coreWords(locale, 'place', PLACE_SETTING_WORDS_KEYS);
+}
+
+export const PLACE_SETTING_WORDS = placeSettingWords('en');

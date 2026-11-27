@@ -5,16 +5,22 @@
  * sections from these; an old `?tab=` address names one of these keys and scrolls to its section. Also Overview's
  * words. Pure; shared by web and phone.
  */
+import { clientTranslator } from '../i18n/catalog';
 import type { HomeSection } from './sections';
 import { THING_TONES } from './sections';
 
 export type ConnectionsTab = 'servers' | 'services' | 'pinned';
 
-export const CONNECTIONS_TAB_WORDS: Record<ConnectionsTab, string> = {
-  servers: 'Servers',
-  services: 'Connections',
-  pinned: 'Pinned',
-};
+export function connectionsTabWords(locale?: string | null): Record<ConnectionsTab, string> {
+  const tr = clientTranslator(locale);
+  return {
+    servers: tr.t('overview.tab.servers'),
+    services: tr.t('overview.tab.services'),
+    pinned: tr.t('overview.tab.pinned'),
+  };
+}
+
+export const CONNECTIONS_TAB_WORDS: Record<ConnectionsTab, string> = connectionsTabWords();
 
 export interface ConnectionsTabView {
   key: ConnectionsTab;
@@ -35,18 +41,23 @@ function worst(tones: readonly string[]): Tone {
 }
 
 /** The jump links in order, from Overview's sections: Servers where the hosts service runs, Connections, Pinned when any. */
-export function connectionsTabs(sections: readonly HomeSection[]): ConnectionsTabView[] {
+export function connectionsTabs(
+  sections: readonly HomeSection[],
+  locale?: string | null,
+): ConnectionsTabView[] {
+  const tr = clientTranslator(locale);
+  const words = connectionsTabWords(locale);
   const tabs: ConnectionsTabView[] = [];
   const add = (key: ConnectionsTab, count: number, tone: Tone) =>
     tabs.push({
       key,
-      label: CONNECTIONS_TAB_WORDS[key],
+      label: words[key],
       count,
       tone,
       spoken: [
-        CONNECTIONS_TAB_WORDS[key],
+        words[key],
         String(count),
-        tone === 'bad' ? 'something isn’t working' : tone ? 'something needs a look' : null,
+        tone === 'bad' ? tr.t('overview.tab.spokenBad') : tone ? tr.t('overview.tab.spokenWarn') : null,
       ]
         .filter(Boolean)
         .join(', '),
@@ -65,50 +76,43 @@ export function connectionsTabs(sections: readonly HomeSection[]): ConnectionsTa
   return tabs;
 }
 
-/**
- * Overview's words, its server and connection pages' too (docs/decisions/overview-server-connection-final.md): the
- * broken thing's one button, the link to the rest of the Inbox, each reading's time, and what a page says while it
- * loads, when a refresh fails (the saved readings stay) and when the first read fails (nothing saved to show).
- */
-export const OVERVIEW_WORDS = {
-  lookIntoIt: 'Look into it',
-  /** “2 other things need you”, after the broken thing. */
-  others: (n: number) => `${n} other ${n === 1 ? 'thing needs' : 'things need'} you`,
-  readingHistory: 'See reading history',
-  /** Overview's own refresh failed: every server keeps its own reading time. */
-  couldntRefresh: (what: string) => `Couldn’t refresh ${what}.`,
-  savedEach: 'Showing saved readings. Each server keeps its own reading time.',
-  /** A page or widget whose refresh failed: the time of the readings it still shows. */
-  savedFrom: (when: string) => `Couldn’t refresh; showing readings from ${when}.`,
-  savedUnknown: 'Couldn’t refresh; the saved readings’ time is unknown.',
-  keepLast: 'The chart and figures below keep their last readings.',
-  keepPage: 'What you see below is the last saved page. Its controls may have changed since.',
-  couldntRead: (what: string) => `Couldn’t read ${what}.`,
-  noSaved: 'There’s no saved copy to show on this device yet.',
-  tryAgain: 'Try again',
-  moreDetail: 'More detail',
-  loading: (what: string) => `Loading ${what}…`,
-  noReadings: 'No readings yet',
-  noReadingsBody: 'Its readings appear here after its first report.',
-  /** The servers' column heads, also each figure's label on a narrow card (overview-one-page.md OVP-02). */
-  columns: {
-    server: 'Server',
-    cpu: 'Processor · 24 h',
-    memory: 'Memory',
-    storage: 'Storage',
-    temp: 'Temperature',
-    running: 'Running',
-  },
-  noSensor: 'No sensor',
-  /** A server without a sensor: an en dash where its temperature would be. */
-  noSensorValue: '–',
-  nothingRunning: 'Nothing running',
-  thisWhombat: 'This Whombat',
-  addServer: 'Add a server',
-  addConnection: 'Add a connection',
-  everythingRunning: 'Everything running',
-  /** The jump links' accessible name. */
-  onThisPage: 'On this page',
-  /** Pinned's summary line. */
-  fromYourChats: 'From your chats',
-} as const;
+export function overviewWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    lookIntoIt: tr.t('overview.lookIntoIt'),
+    others: (n: number) => tr.tp('home.otherNeedsYouCount', n),
+    readingHistory: tr.t('overview.readingHistory'),
+    couldntRefresh: (what: string) => tr.t('overview.couldntRefresh', { what }),
+    savedEach: tr.t('overview.savedEach'),
+    savedFrom: (when: string) => tr.t('overview.savedFrom', { when }),
+    savedUnknown: tr.t('overview.savedUnknown'),
+    keepLast: tr.t('overview.keepLast'),
+    keepPage: tr.t('overview.keepPage'),
+    couldntRead: (what: string) => tr.t('overview.couldntRead', { what }),
+    noSaved: tr.t('overview.noSaved'),
+    tryAgain: tr.t('overview.tryAgain'),
+    moreDetail: tr.t('overview.moreDetail'),
+    loading: (what: string) => tr.t('overview.loading', { what }),
+    noReadings: tr.t('overview.noReadings'),
+    noReadingsBody: tr.t('overview.noReadingsBody'),
+    columns: {
+      server: tr.t('overview.col.server'),
+      cpu: tr.t('overview.col.cpu'),
+      memory: tr.t('overview.col.memory'),
+      storage: tr.t('overview.col.storage'),
+      temp: tr.t('overview.col.temp'),
+      running: tr.t('overview.col.running'),
+    },
+    noSensor: tr.t('overview.noSensor'),
+    noSensorValue: '–',
+    nothingRunning: tr.t('overview.nothingRunning'),
+    thisWhombat: tr.t('overview.thisWhombat'),
+    addServer: tr.t('overview.addServer'),
+    addConnection: tr.t('overview.addConnection'),
+    everythingRunning: tr.t('overview.everythingRunning'),
+    onThisPage: tr.t('overview.onThisPage'),
+    fromYourChats: tr.t('overview.fromYourChats'),
+  };
+}
+
+export const OVERVIEW_WORDS = overviewWords();

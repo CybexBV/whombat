@@ -82,10 +82,10 @@ export function parseConfig(value: unknown): PublicConfig | null {
 }
 
 /** `3 MB`, `512 KB`: how the limits are written for visitors. */
-export function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number, locale = 'en-GB'): string {
   if (bytes >= 1024 * 1024) {
     const mb = Math.round((bytes / (1024 * 1024)) * 10) / 10;
-    return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
+    return `${mb.toLocaleString(locale, { useGrouping: false, maximumFractionDigits: 1 })} MB`;
   }
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }

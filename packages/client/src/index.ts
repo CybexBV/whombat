@@ -37,6 +37,7 @@ export * from './http/client';
 export * from './http/errors';
 export * from './http/problem';
 export type * from './http/types';
+export * from './i18n';
 export * from './imap';
 export * from './inbox';
 export * from './job';

@@ -5,6 +5,8 @@
  * zone (tests pass one) and otherwise read in the viewer's.
  */
 import type { HostSeriesRange } from '@whombat/core/domain';
+import { formatLocaleOf } from '@whombat/core/i18n';
+import { clientTranslator } from '../i18n/catalog';
 
 export const DASH = '—';
 const NBSP = ' ';
@@ -134,54 +136,59 @@ export function formatTempDense(c: number | null | undefined): string {
 }
 
 /** “8 s ago”, “14 min ago”, “5 h ago”, “2 d ago”. */
-export function formatAgo(seconds: number): string {
+export function formatAgo(seconds: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   const s = Math.max(0, Math.floor(seconds));
-  if (s < MIN) return `${s}${NBSP}s ago`;
-  if (s < HOUR) return `${Math.floor(s / MIN)}${NBSP}min ago`;
-  if (s < DAY) return `${Math.floor(s / HOUR)}${NBSP}h ago`;
-  return `${Math.floor(s / DAY)}${NBSP}d ago`;
+  if (s < MIN) return tr.t('hosts.ago.s', { n: s });
+  if (s < HOUR) return tr.t('hosts.ago.min', { n: Math.floor(s / MIN) });
+  if (s < DAY) return tr.t('hosts.ago.h', { n: Math.floor(s / HOUR) });
+  return tr.t('hosts.ago.d', { n: Math.floor(s / DAY) });
 }
 
 /** Relative time from an ISO time to `now` (ms). */
-export function formatAgoIso(iso: string, now: number): string {
-  return formatAgo((now - Date.parse(iso)) / 1000);
+export function formatAgoIso(iso: string, now: number, locale?: string | null): string {
+  return formatAgo((now - Date.parse(iso)) / 1000, locale);
 }
 
 /** “in 12 h”, “in 14 min”. */
-export function formatIn(seconds: number): string {
+export function formatIn(seconds: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   const s = Math.max(0, Math.round(seconds));
-  if (s < MIN) return `in ${s}${NBSP}s`;
-  if (s < HOUR) return `in ${Math.round(s / MIN)}${NBSP}min`;
-  if (s < DAY) return `in ${Math.round(s / HOUR)}${NBSP}h`;
-  return `in ${Math.round(s / DAY)}${NBSP}d`;
+  if (s < MIN) return tr.t('hosts.in.s', { n: s });
+  if (s < HOUR) return tr.t('hosts.in.min', { n: Math.round(s / MIN) });
+  if (s < DAY) return tr.t('hosts.in.h', { n: Math.round(s / HOUR) });
+  return tr.t('hosts.in.d', { n: Math.round(s / DAY) });
 }
 
 /** Two units: “11 h 47 min”, “41 d 7 h”, “14 min”, “45 s”. */
-export function formatDuration(seconds: number): string {
+export function formatDuration(seconds: number, locale?: string | null): string {
+  const tr = clientTranslator(locale);
   const s = Math.max(0, Math.floor(seconds));
-  if (s < MIN) return `${s}${NBSP}s`;
-  if (s < HOUR) return `${Math.floor(s / MIN)}${NBSP}min`;
-  if (s < DAY) return `${Math.floor(s / HOUR)}${NBSP}h ${Math.floor((s % HOUR) / MIN)}${NBSP}min`;
-  return `${Math.floor(s / DAY)}${NBSP}d ${Math.floor((s % DAY) / HOUR)}${NBSP}h`;
+  if (s < MIN) return tr.t('hosts.dur.s', { n: s });
+  if (s < HOUR) return tr.t('hosts.dur.min', { n: Math.floor(s / MIN) });
+  if (s < DAY) return tr.t('hosts.dur.hMin', { h: Math.floor(s / HOUR), m: Math.floor((s % HOUR) / MIN) });
+  return tr.t('hosts.dur.dH', { d: Math.floor(s / DAY), h: Math.floor((s % DAY) / HOUR) });
 }
 
 /** One unit, short: “41 d”, “7 h”, “12 min” (tables). */
-export function formatUptimeShort(seconds: number | null | undefined): string {
+export function formatUptimeShort(seconds: number | null | undefined, locale?: string | null): string {
   if (seconds == null || !Number.isFinite(seconds)) return DASH;
+  const tr = clientTranslator(locale);
   const s = Math.max(0, Math.floor(seconds));
-  if (s < MIN) return `${s}${NBSP}s`;
-  if (s < HOUR) return `${Math.floor(s / MIN)}${NBSP}min`;
-  if (s < DAY) return `${Math.floor(s / HOUR)}${NBSP}h`;
-  return `${Math.floor(s / DAY)}${NBSP}d`;
+  if (s < MIN) return tr.t('hosts.dur.s', { n: s });
+  if (s < HOUR) return tr.t('hosts.dur.min', { n: Math.floor(s / MIN) });
+  if (s < DAY) return tr.t('hosts.dur.h', { n: Math.floor(s / HOUR) });
+  return tr.t('hosts.dur.d', { n: Math.floor(s / DAY) });
 }
 
 /** One unit, in words: “23 days”, “5 hours”, “12 minutes” (the server's “Up 23 days”). */
-export function formatUptimeWords(seconds: number | null | undefined): string {
+export function formatUptimeWords(seconds: number | null | undefined, locale?: string | null): string {
   if (seconds == null || !Number.isFinite(seconds)) return DASH;
+  const tr = clientTranslator(locale);
   const s = Math.max(0, Math.floor(seconds));
-  if (s < HOUR) return plural(Math.max(1, Math.floor(s / MIN)), 'minute');
-  if (s < DAY) return plural(Math.floor(s / HOUR), 'hour');
-  return plural(Math.floor(s / DAY), 'day');
+  if (s < HOUR) return tr.tp('hosts.uptime.minute', Math.max(1, Math.floor(s / MIN)));
+  if (s < DAY) return tr.tp('hosts.uptime.hour', Math.floor(s / HOUR));
+  return tr.tp('hosts.uptime.day', Math.floor(s / DAY));
 }
 
 /* Dates in the viewer's time zone ------------------------------------------------------------------ */
@@ -197,11 +204,12 @@ interface Parts {
 
 const partsCache = new Map<string, Intl.DateTimeFormat>();
 
-function parts(date: Date | number, timeZone?: string): Parts {
-  const key = timeZone ?? '';
+function parts(date: Date | number, timeZone?: string, locale?: string | null): Parts {
+  const fmtLocale = formatLocaleOf(locale);
+  const key = `${fmtLocale}|${timeZone ?? ''}`;
   let f = partsCache.get(key);
   if (!f) {
-    f = new Intl.DateTimeFormat('en-GB', {
+    f = new Intl.DateTimeFormat(fmtLocale, {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
@@ -216,6 +224,8 @@ function parts(date: Date | number, timeZone?: string): Parts {
   const out: Parts = { weekday: '', month: '', day: '', hour: '', minute: '', year: '' };
   for (const p of f.formatToParts(date)) if (p.type in out) out[p.type as keyof Parts] = p.value;
   if (out.hour === '24') out.hour = '00';
+  out.weekday = out.weekday.replace(/\.$/, '');
+  out.month = out.month.replace(/\.$/, '');
   return out;
 }
 
@@ -226,20 +236,20 @@ export function formatTime(date: Date | number, timeZone?: string): string {
 }
 
 /** “6 Oct” (the day first, as people here write it). */
-export function formatDay(date: Date | number, timeZone?: string): string {
-  const p = parts(date, timeZone);
+export function formatDay(date: Date | number, timeZone?: string, locale?: string | null): string {
+  const p = parts(date, timeZone, locale);
   return `${p.day} ${p.month}`;
 }
 
 /** “Sat 20:11”. */
-export function formatWeekdayTime(date: Date | number, timeZone?: string): string {
-  const p = parts(date, timeZone);
+export function formatWeekdayTime(date: Date | number, timeZone?: string, locale?: string | null): string {
+  const p = parts(date, timeZone, locale);
   return `${p.weekday} ${p.hour}:${p.minute}`;
 }
 
 /** “6 Oct, 14:00”. */
-export function formatDayTime(date: Date | number, timeZone?: string): string {
-  const p = parts(date, timeZone);
+export function formatDayTime(date: Date | number, timeZone?: string, locale?: string | null): string {
+  const p = parts(date, timeZone, locale);
   return `${p.day} ${p.month}, ${p.hour}:${p.minute}`;
 }
 
@@ -250,14 +260,20 @@ function sameDay(a: Date | number, b: Date | number, timeZone?: string): boolean
 }
 
 /** “Today 02:00”, “Yesterday 02:00”, “Mon 02:00” within six days, else “4 Oct, 02:00”. */
-export function formatRelativeDay(date: Date | number, now: Date | number, timeZone?: string): string {
+export function formatRelativeDay(
+  date: Date | number,
+  now: Date | number,
+  timeZone?: string,
+  locale?: string | null,
+): string {
+  const tr = clientTranslator(locale);
   const t = typeof date === 'number' ? date : date.getTime();
   const n = typeof now === 'number' ? now : now.getTime();
   const time = formatTime(t, timeZone);
-  if (sameDay(t, n, timeZone)) return `Today ${time}`;
-  if (sameDay(t, n - DAY * 1000, timeZone)) return `Yesterday ${time}`;
-  if (Math.abs(t - n) < 6 * DAY * 1000) return formatWeekdayTime(t, timeZone);
-  return formatDayTime(t, timeZone);
+  if (sameDay(t, n, timeZone)) return tr.t('hosts.rel.today', { time });
+  if (sameDay(t, n - DAY * 1000, timeZone)) return tr.t('hosts.rel.yesterday', { time });
+  if (Math.abs(t - n) < 6 * DAY * 1000) return formatWeekdayTime(t, timeZone, locale);
+  return formatDayTime(t, timeZone, locale);
 }
 
 /** A chart's axis word per range: 1h/6h “13:15”, 24h “Fri 14:00”, longer “Oct 6”. */
@@ -265,9 +281,10 @@ export function formatTick(
   range: HostSeriesRange | 'custom',
   date: Date | number,
   timeZone?: string,
+  locale?: string | null,
 ): string {
-  if (range === '7d' || range === '30d' || range === '90d') return formatDay(date, timeZone);
-  if (range === '24h' || range === 'custom') return formatWeekdayTime(date, timeZone);
+  if (range === '7d' || range === '30d' || range === '90d') return formatDay(date, timeZone, locale);
+  if (range === '24h' || range === 'custom') return formatWeekdayTime(date, timeZone, locale);
   return formatTime(date, timeZone);
 }
 
@@ -276,18 +293,24 @@ export function formatTooltipTime(
   range: HostSeriesRange | 'custom',
   date: Date | number,
   timeZone?: string,
+  locale?: string | null,
 ): string {
-  if (range === '7d' || range === '30d' || range === '90d') return formatDayTime(date, timeZone);
-  if (range === '24h' || range === 'custom') return formatWeekdayTime(date, timeZone);
+  if (range === '7d' || range === '30d' || range === '90d') return formatDayTime(date, timeZone, locale);
+  if (range === '24h' || range === 'custom') return formatWeekdayTime(date, timeZone, locale);
   return formatTime(date, timeZone);
 }
 
 /** The ranges' words (the range picker). */
-export const HOST_RANGE_WORDS: Record<HostSeriesRange, string> = {
-  '1h': 'Last hour',
-  '6h': 'Last 6 hours',
-  '24h': 'Last 24 hours',
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  '90d': 'Last 90 days',
-};
+export function hostRangeWords(locale?: string | null): Record<HostSeriesRange, string> {
+  const tr = clientTranslator(locale);
+  return {
+    '1h': tr.t('hosts.range.1h'),
+    '6h': tr.t('hosts.range.6h'),
+    '24h': tr.t('hosts.range.24h'),
+    '7d': tr.t('hosts.range.7d'),
+    '30d': tr.t('hosts.range.30d'),
+    '90d': tr.t('hosts.range.90d'),
+  };
+}
+
+export const HOST_RANGE_WORDS: Record<HostSeriesRange, string> = hostRangeWords();

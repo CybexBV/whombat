@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { BurrowId, ConversationId, MessageId, PrincipalId, RepoId } from '../ids.js';
 import { ChatRuntime } from './chat-runtime.js';
 import { Count, Timestamp } from './common.js';
@@ -30,12 +31,16 @@ export function notifyLevelOf(c: { kind: ConversationKind; notify?: NotifyLevel 
   return c.notify ?? defaultNotifyLevel(c.kind);
 }
 
+const NOTIFY_LEVEL_LABELS_KEYS = ['all', 'mentions', 'none'] as const;
+
 /** `Bell` menu labels (All / Mentions / Nothing). */
-export const NOTIFY_LEVEL_LABELS: Record<NotifyLevel, string> = {
-  all: 'All',
-  mentions: 'Mentions',
-  none: 'Nothing',
-};
+export function notifyLevelLabels(
+  locale?: string | null,
+): Readonly<Record<(typeof NOTIFY_LEVEL_LABELS_KEYS)[number], string>> {
+  return coreWords(locale, 'notify.level', NOTIFY_LEVEL_LABELS_KEYS);
+}
+
+export const NOTIFY_LEVEL_LABELS: Record<NotifyLevel, string> = notifyLevelLabels('en');
 
 /* Task chats (Whombat one-whombat.md ONE-06, contracts 0.80.0, CT-337) ------------------------------- */
 
@@ -390,14 +395,16 @@ export function conversationLinkPreviewsOn(
   return conversation?.linkPreviews !== false && burrow?.linkPreviews !== false;
 }
 
+const LINK_PREVIEWS_COPY_KEYS = ['label', 'hint', 'on', 'off', 'burrowOff'] as const;
+
 /** The conversation setting's words (CT-330): the row in its details, and what its toast says. */
-export const LINK_PREVIEWS_COPY = {
-  label: 'Link previews',
-  hint: 'Show a card with the page’s title under links posted here.',
-  on: 'Link previews are on here.',
-  off: 'Link previews are off here.',
-  burrowOff: 'Link previews are off for the whole burrow.',
-} as const;
+export function linkPreviewsCopy(
+  locale?: string | null,
+): Readonly<Record<(typeof LINK_PREVIEWS_COPY_KEYS)[number], string>> {
+  return coreWords(locale, 'linkPreviews', LINK_PREVIEWS_COPY_KEYS);
+}
+
+export const LINK_PREVIEWS_COPY = linkPreviewsCopy('en');
 
 /** Sidebar / list row with the viewer's unread state. */
 export const ConversationSummary = z.object({

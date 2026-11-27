@@ -81,6 +81,7 @@ afterEach(() => {
   handle?.api.destroy();
   handle = null;
   delete (window as unknown as Record<string, unknown>)[GLOBAL_NAME];
+  document.documentElement.removeAttribute('lang');
   document.head.replaceChildren();
   document.body.replaceChildren();
   vi.useRealTimers();
@@ -95,6 +96,45 @@ describe('options', () => {
     expect(readOptions(s)).toMatch(/data-site/);
     s.removeAttribute('data-site');
     expect(readOptions(s)).toMatch(/data-site/);
+  });
+});
+
+describe('the visitor’s language', () => {
+  it.each([
+    { explicit: 'nl-BE', page: 'en-GB', languages: ['en-US'], browser: 'en-US', expected: 'nl-BE' },
+    { explicit: 'en', page: 'nl', languages: ['nl'], browser: 'nl', expected: 'en' },
+    { explicit: 'fr', page: 'nl-NL', languages: ['en'], browser: 'en', expected: 'nl-NL' },
+    { explicit: 'nl-?', page: 'fr', languages: ['fr', 'en-US', 'nl'], browser: 'nl', expected: 'en-US' },
+    { page: 'fr', languages: ['de', 'nl'], browser: 'en', expected: 'nl' },
+    { languages: ['de'], browser: 'nl-NL', expected: 'nl-NL' },
+    { languages: ['de'], browser: 'fr', expected: 'en', omit: true },
+    { page: 'en', languages: ['nl'], browser: 'nl', expected: 'en' },
+    { explicit: 'pseudo', page: 'nl', languages: ['en'], browser: 'en', expected: 'pseudo' },
+    { explicit: 'en-XA', languages: ['en'], browser: 'en', expected: 'pseudo' },
+  ])('resolves $explicit / $page / $languages to $expected', (example) => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(example.languages);
+    vi.spyOn(navigator, 'language', 'get').mockReturnValue(example.browser);
+    if (example.page) document.documentElement.lang = example.page;
+    const h = load(example.explicit ? { 'data-lang': example.explicit } : {});
+    expect(h.options?.lang).toBe(example.expected);
+    h.api.open();
+    expect(new URL(h.frame()?.src ?? '').searchParams.get('lang')).toBe(
+      example.omit ? null : example.expected,
+    );
+  });
+
+  it('shows a Dutch loading label, unavailable notice, close button and iframe title', () => {
+    const h = load({ 'data-lang': 'nl', 'data-label': 'Opmerkingen' });
+    h.api.open();
+    const shadow = h.shadow();
+    expect(h.host()?.lang).toBe('nl');
+    expect(shadow?.querySelector('.launcher')?.textContent).toBe('Opmerkingen');
+    expect(shadow?.querySelector('.status')?.textContent).toBe('Laden…');
+    expect(h.frame()?.title).toBe('Formulier voor Opmerkingen');
+    vi.advanceTimersByTime(READY_TIMEOUT_MS);
+    expect(shadow?.querySelector('.panel')?.getAttribute('data-state')).toBe('unavailable');
+    expect(shadow?.querySelector('#wb-notice-text')?.textContent).toMatch(/geen feedback/);
+    expect(shadow?.querySelector('.close')?.textContent).toBe('Sluiten');
   });
 });
 

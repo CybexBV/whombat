@@ -11,6 +11,7 @@
  * and the store are injected (unit-tested with fakes).
  */
 import type { LinkRef } from '@whombat/core/domain';
+import { clientTranslator } from '../i18n/catalog';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import type { ControlApi, PushRegistration } from './control';
@@ -143,16 +144,21 @@ export function pushKindOf(value: unknown): PushKind {
  * happened is fetched through the session after the tap. The same words as Android's `LiveNotifications.GENERIC_TEXT`
  * and the web's `sw.js` (both checked by tests).
  */
-export const PUSH_TEXT: Record<PushKind, string> = {
-  message: 'New message',
-  mention: 'You were mentioned',
-  approval: 'Something is waiting for your approval',
-  run: 'An agent has news about a run',
-  update: 'Your Whombat has an update',
-  backup: 'Your Whombat’s backups need a look',
-  security: 'A security change on your Whombat',
-  generic: 'Whombat needs you',
-};
+export function pushText(locale?: string | null): Record<PushKind, string> {
+  const tr = clientTranslator(locale);
+  return {
+    message: tr.t('push.message'),
+    mention: tr.t('push.mention'),
+    approval: tr.t('push.approval'),
+    run: tr.t('push.run'),
+    update: tr.t('push.update'),
+    backup: tr.t('push.backup'),
+    security: tr.t('push.security'),
+    generic: tr.t('push.generic'),
+  };
+}
+
+export const PUSH_TEXT: Record<PushKind, string> = pushText();
 
 /**
  * What a tapped push opens (CT-49): the appliance maps the push's opaque ref back to the item (`push.resolve`), if

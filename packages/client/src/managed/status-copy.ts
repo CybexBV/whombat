@@ -5,6 +5,8 @@
  * the mocks.
  */
 
+import { clientTranslator } from '../i18n/catalog';
+
 export const MANAGED_TEXT = {
   connection: 'CONNECTION',
   connected: 'Connected · end-to-end encrypted',
@@ -112,33 +114,38 @@ export const MANAGED_TEXT = {
   retry: 'Try again',
 } as const;
 
-export function ago(iso: string | null): string {
-  if (!iso) return 'never';
+export function ago(iso: string | null, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  if (!iso) return tr.t('managed.ago.never');
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 90) return 'just now';
-  if (s < 5400) return `${Math.round(s / 60)} minutes ago`;
-  if (s < 129_600) return `${Math.round(s / 3600)} hours ago`;
-  return `${Math.round(s / 86_400)} days ago`;
+  if (s < 90) return tr.t('managed.ago.justNow');
+  if (s < 5400) return tr.tp('managed.ago.minutes', Math.round(s / 60));
+  if (s < 129_600) return tr.tp('managed.ago.hours', Math.round(s / 3600));
+  return tr.tp('managed.ago.days', Math.round(s / 86_400));
 }
 
-export const SCOPE_LABELS: Record<string, string> = {
-  database: 'Conversations and settings',
-  memory: 'Agent memory',
-  attachments: 'Files',
-  // The backup class keeps its name; what it holds is skills (Whombat skill-store.md SST-17; AP-4112).
-  packs: 'Skills',
-  home: 'Whombat’s own files',
-  workspaces: 'Agents’ workspaces, including unpushed work',
-  configuration: 'Configuration',
-  'provider-sessions': 'AI provider sign-ins',
-  'recovery-references': 'What bringing it back needs',
-  identity: 'This Whombat’s identity',
-  'recovery-secrets': 'The key to the backups',
-  manager: 'Update records',
-  'postgres-datadir': 'Database files',
-  'backup-state': 'Backup records',
-  caches: 'Caches',
-};
+export function scopeLabels(locale?: string | null): Record<string, string> {
+  const tr = clientTranslator(locale);
+  return {
+    database: tr.t('managed.scope.database'),
+    memory: tr.t('managed.scope.memory'),
+    attachments: tr.t('managed.scope.attachments'),
+    packs: tr.t('managed.scope.packs'),
+    home: tr.t('managed.scope.home'),
+    workspaces: tr.t('managed.scope.workspaces'),
+    configuration: tr.t('managed.scope.configuration'),
+    'provider-sessions': tr.t('managed.scope.provider-sessions'),
+    'recovery-references': tr.t('managed.scope.recovery-references'),
+    identity: tr.t('managed.scope.identity'),
+    'recovery-secrets': tr.t('managed.scope.recovery-secrets'),
+    manager: tr.t('managed.scope.manager'),
+    'postgres-datadir': tr.t('managed.scope.postgres-datadir'),
+    'backup-state': tr.t('managed.scope.backup-state'),
+    caches: tr.t('managed.scope.caches'),
+  };
+}
+
+export const SCOPE_LABELS: Record<string, string> = scopeLabels();
 
 /**
  * What the backup service leaves out by design (the appliance's backup.md BK-02, BK-07): a restored Whombat gets an

@@ -8,7 +8,9 @@
  * - `whisper`: OpenAI Whisper large-v3-turbo (MIT), the most accurate, quick only on a graphics chip.
  * `auto` uses Whisper where the box has a graphics chip it can use and Parakeet everywhere else.
  */
+
 import { z } from 'zod';
+import { coreTranslator, coreTree } from '../i18n/catalog.js';
 
 /** The speech-to-text models a box can download (`VoiceTypingModel.id`). */
 export const VOICE_STT_MODELS = ['parakeet', 'whisper'] as const;
@@ -161,81 +163,120 @@ export const DICTATION_ERROR_CODES = [
 export const DictationErrorCode = z.enum(DICTATION_ERROR_CODES);
 export type DictationErrorCode = z.infer<typeof DictationErrorCode>;
 
-/** The words of voice typing, the same on the web and the phone (concise-replies.md: plain, short). */
-export const VOICE_WORDS = {
-  section: 'Voice typing',
+const VOICE_WORDS_SHAPE = {
+  section: 0,
   on: {
-    label: 'Voice typing',
-    meta: 'Speak instead of typing. This Whombat turns what you say into text, and the recording never leaves it.',
+    label: 0,
+    meta: 0,
   },
   model: {
-    label: 'Speech model',
-    choices: { auto: 'Automatic', parakeet: 'Fast', whisper: 'Most accurate' },
+    label: 0,
+    choices: {
+      auto: 0,
+      parakeet: 0,
+      whisper: 0,
+    },
     /** Under the choice: what a recording goes to now. */
-    uses: { parakeet: 'Uses Fast now', whisper: 'Uses Most accurate now' },
+    uses: {
+      parakeet: 0,
+      whisper: 0,
+    },
     /** Most accurate chosen on a box without a graphics chip. */
-    slow: 'Without a graphics chip this takes about as long as you spoke.',
+    slow: 0,
   },
-  language: { label: 'Language', choices: { auto: 'Automatic', en: 'English', nl: 'Nederlands' } },
+  language: {
+    label: 0,
+    choices: {
+      auto: 0,
+      en: 0,
+      nl: 0,
+    },
+  },
   models: {
-    label: 'Speech models',
-    parakeet: { name: 'Fast', about: 'Parakeet. Quick on the processor, English and Dutch.' },
-    whisper: { name: 'Most accurate', about: 'Whisper. Best with Dutch, quick with a graphics chip.' },
+    label: 0,
+    parakeet: {
+      name: 0,
+      about: 0,
+    },
+    whisper: {
+      name: 0,
+      about: 0,
+    },
   },
   dutchVoice: {
-    label: 'Dutch voice',
-    meta: 'Speak Dutch answers in a Dutch voice instead of an English one (Supertonic 3, {size}).',
-    removing: 'Still removing the Dutch voice.',
+    label: 0,
+    meta: 0,
+    removing: 0,
     dialog: {
-      title: 'Download the Dutch voice?',
-      intro:
-        'Whombat downloads Supertonic 3 ({size}) onto this Whombat. It uses the BigScience Open RAIL-M licence, which allows personal and business use with a few restrictions. By turning this on, you agree not to use it:',
-      restrictions: [
-        'to break the law, harm minors, harass or defame others, or spread harmful falsehoods or personal data;',
-        'to impersonate someone without their consent, or publish generated audio without saying it is AI-generated;',
-        'for discrimination, exploiting vulnerable groups, automated legal decisions, justice or immigration profiling, or medical advice.',
-      ],
-      licenceLink: 'Read the full Open RAIL-M licence',
-      agree: 'Agree and download',
-      cancel: 'Cancel',
+      title: 0,
+      intro: 0,
+      licenceLink: 0,
+      agree: 0,
+      cancel: 0,
     },
   },
   states: {
-    absent: 'Not downloaded',
-    downloading: 'Downloading · {percent}%',
-    waiting: 'Waiting to download',
-    ready: 'Ready',
-    failed: 'Couldn’t download',
-    removing: 'Removing…',
+    absent: 0,
+    downloading: 0,
+    waiting: 0,
+    ready: 0,
+    failed: 0,
+    removing: 0,
   },
   problems: {
-    no_network: 'No internet right now. It tries again by itself.',
-    no_room: 'Not enough room on this Whombat.',
-    bad_download: 'The download was damaged.',
-    failed: 'Something went wrong.',
+    no_network: 0,
+    no_room: 0,
+    bad_download: 0,
+    failed: 0,
   },
-  actions: { download: 'Download', remove: 'Remove', retry: 'Try again' },
+  actions: {
+    download: 0,
+    remove: 0,
+    retry: 0,
+  },
   gpu: {
-    found: 'Graphics chip: {name}',
-    none: 'No graphics chip found, so speech runs on the processor.',
+    found: 0,
+    none: 0,
   },
   composer: {
-    dictate: 'Dictate',
-    cancel: 'Cancel',
-    done: 'Done',
-    preparing: 'Starting…',
-    recording: 'Recording {time}',
-    transcribing: 'Turning speech into text…',
+    dictate: 0,
+    cancel: 0,
+    done: 0,
+    preparing: 0,
+    recording: 0,
+    transcribing: 0,
   },
   errors: {
-    dictation_off: 'Voice typing is off. You can turn it on in Settings.',
-    not_ready: 'Voice typing is still downloading its speech model.',
-    busy: 'This Whombat is busy with another recording. Try again in a moment.',
-    bad_audio: 'That recording didn’t work. Try again.',
-    too_long: 'That was longer than 5 minutes. Try a shorter one.',
-    failed: 'Couldn’t turn that into text. Try again.',
-    microphone: 'Allow the microphone to use voice typing.',
-    nothing: 'Nothing was heard.',
-    offline: 'Can’t reach your Whombat right now.',
+    dictation_off: 0,
+    not_ready: 0,
+    busy: 0,
+    bad_audio: 0,
+    too_long: 0,
+    failed: 0,
+    microphone: 0,
+    nothing: 0,
+    offline: 0,
   },
 } as const;
+
+/** The words of voice typing, the same on the web and the phone (concise-replies.md: plain, short). */
+export function voiceWords(locale?: string | null) {
+  const tr = coreTranslator(locale);
+  const words = coreTree(locale, 'voice', VOICE_WORDS_SHAPE);
+  return {
+    ...words,
+    dutchVoice: {
+      ...words.dutchVoice,
+      dialog: {
+        ...words.dutchVoice.dialog,
+        restrictions: [
+          tr.t('voice.dutchVoice.dialog.restriction.law'),
+          tr.t('voice.dutchVoice.dialog.restriction.impersonate'),
+          tr.t('voice.dutchVoice.dialog.restriction.discrimination'),
+        ],
+      },
+    },
+  };
+}
+
+export const VOICE_WORDS = voiceWords('en');
