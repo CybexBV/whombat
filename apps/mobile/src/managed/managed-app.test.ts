@@ -60,7 +60,7 @@ describe('managed push on the phone', () => {
       store,
       session,
       device: 'wb-1',
-      ask: true,
+      ask: 'ask',
     });
     expect(state).toEqual({ status: 'registered', handle: 'handle_0123456789abcdefghij' });
     expect(registered).toEqual([
@@ -78,13 +78,17 @@ describe('managed push on the phone', () => {
     const session = fakeSession(ops);
     const base = { control: control(registered), store: memoryPushStore(), session, device: 'wb-1' };
     expect(
-      await registerManagedPush({ ...base, native: native({ permission: async () => 'denied' }), ask: true }),
+      await registerManagedPush({
+        ...base,
+        native: native({ permission: async () => 'denied' }),
+        ask: 'ask',
+      }),
     ).toEqual({ status: 'denied' });
     expect(
       await registerManagedPush({
         ...base,
         native: native({ permission: async () => 'undetermined' }),
-        ask: false,
+        ask: 'look',
       }),
     ).toEqual({ status: 'off' });
     expect(
@@ -95,7 +99,7 @@ describe('managed push on the phone', () => {
             throw new Error('no Firebase');
           },
         }),
-        ask: true,
+        ask: 'ask',
       }),
     ).toEqual({ status: 'unavailable', reason: 'no Firebase' });
     expect(registered).toEqual([]);

@@ -53,6 +53,8 @@ export function NotificationsRow({
             />
           ) : v.action === 'enable' ? (
             <Button label={COPY.notifications.turnOn} variant="secondary" onPress={push.enable} />
+          ) : v.action === 'alerts' ? (
+            <Button label={COPY.notifications.turnOnAlerts} variant="secondary" onPress={push.enable} />
           ) : null
         }
       />

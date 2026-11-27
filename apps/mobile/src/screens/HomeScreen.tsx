@@ -56,7 +56,6 @@ import { useAgentWords } from '../data/useAgent';
 import { useStatusOrder } from '../data/useStatusOrder';
 import { useAppNavigation } from '../navigation/hooks';
 import type { TabParamList } from '../navigation/routes';
-import { PushRationaleCard } from '../push/PushRationaleCard';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Screen } from '../ui/headers';
@@ -342,7 +341,6 @@ export function HomeScreen() {
           </View>
         ) : null}
         {arranging ? <ArrangeBar failed={failed} /> : null}
-        <PushRationaleCard />
         {state === 'loading' ? (
           <CardSkeletons label={OVERVIEW_WORDS.loading(CONNECTIONS_COPY.title)} tiles={4} />
         ) : state === 'failed' || !data || !headline ? (

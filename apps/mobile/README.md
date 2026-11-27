@@ -49,7 +49,8 @@ src/
   navigation/            native stack + bottom tabs, deep links (whombat://approvals/12, …), tapped pushes, the
                          saved place restored after a killed process (persist.ts); the stack as one page or two
                          and the tabs down the side on a wide or folding screen (SplitStack.tsx, splitRouter.ts)
-  push/                  iOS taps (expo-notifications), the permission card (prompt.ts), read notifications
+  push/                  iOS taps (expo-notifications), notifications on by themselves (autoOn.ts) and the one
+                         question where the phone must ask (prompt.ts, PushAskSheet.tsx), read notifications
                          leaving the shade (shade.ts); the push handle itself is `managed/push.ts`'s
   live/                  in-app live activities from run.updated / approval.updated, reconciled on pushes; home-screen status widget sync (`StatusWidgetBridge`)
   screens/               Chat, Thread, Approval, Run, a branch room (Conversation), the assistant's page and the
@@ -161,8 +162,10 @@ whombat://approvals/12 com.whombat.mobile` (also `whombat://runs/1907`, `whombat
 
 ## Push and live activities
 
-On a Whombat, the app registers its push handle with control (content-free, MA-18) once notifications are allowed; until the system has asked, the inbox shows a card with the reason, “Turn on” and “Not
-now” (MN-05, docs/decisions/mobile-reach.md). The viewer's live activities — a run they asked for (or that an agent
+On a Whombat, the app registers its push handle with control (content-free, MA-18) once notifications are allowed, and
+turns them on by itself wherever the phone lets it (MN-16, docs/app/decisions/mobile-reach.md): allowed already, it
+registers without a word; an iPhone never asked gets quiet (provisional) notifications with no question; Android 13 and
+later, never asked, gets one sheet with the reason, “Turn on” and “Not now” at the first open after sign-in. The viewer's live activities — a run they asked for (or that an agent
 asked for in one of their conversations), an approval they can decide — show as ongoing notifications:
 
 - while the app runs, straight from `run.updated` / `approval.updated` on the socket (`src/live/`);

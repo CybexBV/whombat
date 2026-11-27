@@ -119,3 +119,17 @@ describe('the Notifications row on Android', () => {
     ).toMatchObject({ title: 'Not allowed', action: 'settings' });
   });
 });
+
+describe('the Notifications row on an iPhone allowed quietly', () => {
+  it('says they are on, quietly, and offers to turn alerts on', () => {
+    const v = notificationsView({ ...on, quiet: true }, now, null);
+    expect(v).toMatchObject({ dot: 'ok', title: 'On, quietly', action: 'alerts' });
+    expect(v.meta).toContain('Notification Center');
+    expect(v.meta).toContain('Last one 5 minutes ago');
+    // With alerts it is the usual row.
+    expect(notificationsView({ ...on, quiet: false }, now, null)).toMatchObject({
+      title: 'On',
+      action: null,
+    });
+  });
+});

@@ -183,6 +183,10 @@ export const COPY = {
     onThisPhone: 'ON THIS PHONE',
     on: 'On',
     onMeta: 'You get a short note when something needs you. What happened stays on your Whombat.',
+    /** An iPhone allowed quietly (provisional): on, without a sound or a banner. */
+    quietOn: 'On, quietly',
+    quietMeta: 'They wait in Notification Center, without a sound or a banner.',
+    turnOnAlerts: 'Turn on alerts',
     /** A self-hosted server's push (MN-05). */
     off: 'Off',
     offMeta: 'Turn them on to hear when something needs you.',
