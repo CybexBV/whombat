@@ -49,12 +49,36 @@ export async function pullRequestText(
   return { branch, title, body };
 }
 
+/** How often a pull request step asked GitHub again in this try: for its branch's commits, and to open it. */
+export interface GitHubRetries {
+  commits: number;
+  open: number;
+}
+
+/**
+ * An `open_pull_request` step's `output.githubRetries`. Counted apart from its attempt, which also grows with each try at
+ * the fix and with every retry of either kind; a try at the fix starts with none, as going again clears the output.
+ */
+export function githubRetriesOf(output: unknown): GitHubRetries {
+  const r = (output as { githubRetries?: Partial<Record<keyof GitHubRetries, unknown>> } | null)
+    ?.githubRetries;
+  const n = (v: unknown) => (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : 0);
+  return { commits: n(r?.commits), open: n(r?.open) };
+}
+
+/** The counts a step's next attempt carries over from the one before it (`githubRetriesOf`). */
+function carriedRetries(output: unknown): JsonObject {
+  const r = githubRetriesOf(output);
+  return r.commits || r.open ? { githubRetries: { ...r } } : {};
+}
+
 export async function executeOpenPullRequest(
   { ctx, run, steps, idx, attempt, scope, publisher, base, step }: StepExecution<'open_pull_request'>,
   announcePr: PrAnnouncer,
 ): Promise<void> {
   const tx = ctx.tx;
   const { branch, title, body } = await pullRequestText(ctx, run, step, scope);
+  const carried = carriedRetries(steps[idx]?.output);
   const [repo] = await tx
     .select()
     .from(repos)
@@ -85,7 +109,7 @@ export async function executeOpenPullRequest(
         ...base,
         state: 'running',
         inputSummary: `PR #${already.number} is open from ${branch}`,
-        output: { branch, title, command },
+        output: { branch, title, command, ...carried },
       },
       ctx.now,
     );
@@ -104,6 +128,7 @@ export async function executeOpenPullRequest(
         publisher,
         output: alreadyOpenOutput(already, { branch, title }),
         fields: base,
+        bodyOnIt: githubRetriesOf(steps[idx]?.output).open > 0,
       },
       announcePr,
     );
@@ -175,7 +200,7 @@ export async function executeOpenPullRequest(
       ...base,
       state: 'running',
       inputSummary: `Opening a pull request from ${branch}`,
-      output: { branch, title, command },
+      output: { branch, title, command, ...carried },
     },
     ctx.now,
   );
@@ -271,6 +296,8 @@ export async function mayCommentOnPr(
  * whoever opened it wrote them, so its own body — the review in it — goes on it as one comment (RN-S3d): when the
  * automation may post there, the step stays `running` with the comment to post (`output.comment`) and the engine posts it
  * in its own pass, outside any transaction; otherwise it succeeds now and says where the pull request is (RN-S4).
+ * `bodyOnIt`: it is likely the one this step opened itself, when GitHub opened it and still answered with an error, so
+ * its body is on it already.
  */
 export async function useOpenPr(
   ctx: ApplyContext,
@@ -284,6 +311,7 @@ export async function useOpenPr(
     publisher: Publisher | null;
     output: JsonObject;
     fields: Partial<typeof automationRunSteps.$inferInsert>;
+    bodyOnIt?: boolean;
   },
   announcePr: PrAnnouncer,
 ): Promise<'succeeded' | 'commenting'> {
@@ -291,6 +319,7 @@ export async function useOpenPr(
   const text = o.body.trim();
   const comment =
     text &&
+    !o.bodyOnIt &&
     !o.output.commented &&
     o.publisher &&
     (await mayCommentOnPr(tx, ctx.actor.id, o.publisher, run.burrowId, step.repo, o.branch))
