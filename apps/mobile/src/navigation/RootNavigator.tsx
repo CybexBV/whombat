@@ -42,6 +42,7 @@ import { noteRoute } from '../errors/nativeErrorNotes';
 import { useBurrowSwitch, useManaged } from '../managed/context';
 import { COPY } from '../managed/copy';
 import { knownPushRefs } from '../push/knownRefs';
+import { PushAskSheet } from '../push/PushAskSheet';
 import { NotificationShadeBridge } from '../push/ShadeBridge';
 import { initialNotificationUrl, onNotificationTap } from '../push/taps';
 import { ChatRoomScreen } from '../screens/ChatRoomScreen';
@@ -468,6 +469,8 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
       <ConnectReturnBridge />
       <ShareIntentBridge />
       <NotificationShadeBridge />
+      {/* The one question about notifications, where the phone must ask before Whombat notifies. */}
+      <PushAskSheet />
       <HostTasksBridge />
       {/* A thread settled or opened again on another device, by itself or by a new message (chat-settle.md AP-6158). */}
       <ChatSettledBridge />
@@ -876,6 +879,13 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
           getComponent={() =>
             (require('../settings/DeskScreenPage') as typeof import('../settings/DeskScreenPage'))
               .SettingsDeskScreen
+          }
+        />
+        {/* Settings → News and weather: the place and the news sources. */}
+        <Stack.Screen
+          name="SettingsNews"
+          getComponent={() =>
+            (require('../settings/NewsScreen') as typeof import('../settings/NewsScreen')).SettingsNewsScreen
           }
         />
         {/* Settings → Screens: a screen's page and its layout (desk-display-android.md AP-6004, AP-6010). */}

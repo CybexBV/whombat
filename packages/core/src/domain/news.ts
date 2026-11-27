@@ -478,6 +478,10 @@ export const NEWS_WORDS = {
   findAgain: 'Find it again',
   /** Find more for a country without suggestions. */
   browseNone: 'No suggestions here yet. Add your own instead.',
+  // phone
+  /** YOUR SOURCES' order on the phone: a mode with Move up and Move down on each row. */
+  order: 'Change order',
+  orderDone: 'Done',
 } as const;
 
 /** A topic's name (“Tech”). */

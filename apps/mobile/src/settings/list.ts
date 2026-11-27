@@ -1,16 +1,18 @@
 /**
  * The Settings tab's list: the web's groups (`groups.ts`). You is the profile card above the list and the theme a
- * switch in it; then a row per group — the assistant by its name, Connections, This Whombat, the box's screen where it
- * has one (Screens where the Whombat has screens of widgets), and Advanced — each with one line on how that part is
+ * switch in it; then a row per group — the assistant by its name, Connections, This Whombat, News and weather where the
+ * Whombat answers it, the box's screen where it has one (Screens where the Whombat has screens of widgets), and Advanced
+ * — each with one line on how that part is
  * doing, a tone when something there isn't fine, and the tab's dot. Pure: the screen and the bar read the facts.
  */
 import { SETTINGS_GROUP_TEXT } from '@whombat/client';
-import { type AgentProvider, DESK_WORDS, PROVIDER_LABELS } from '@whombat/core';
+import { UPDATE_STATE_WORDS } from '@whombat/client/managed';
+import { type AgentProvider, DESK_WORDS, NEWS_WORDS, PROVIDER_LABELS } from '@whombat/core';
 import type { AppMode } from '../data/config';
 import type { AiProviderCardView } from './ai';
 
-/** A row of the list: the assistant, Connections, This Whombat, the box's screen and Advanced. */
-export type SettingsRowKey = 'agent' | 'connections' | 'appliance' | 'screen' | 'advanced';
+/** A row of the list: the assistant, Connections, This Whombat, News and weather, the box's screen and Advanced. */
+export type SettingsRowKey = 'agent' | 'connections' | 'appliance' | 'news' | 'screen' | 'advanced';
 
 /** Something in a part isn't fine: the row's line in this colour, and a dot beside it. */
 export type SettingsTone = 'warn' | 'bad';
@@ -23,6 +25,8 @@ export interface SettingsRowView {
   tone: SettingsTone | null;
   /** What TalkBack reads for the row. */
   label: string;
+  /** Where the row goes when its line is about one page of the part (`ApplianceLine.opens`). */
+  opens?: 'about';
 }
 
 export const SETTINGS_TEXT = {
@@ -31,6 +35,7 @@ export const SETTINGS_TEXT = {
   rows: {
     connections: SETTINGS_GROUP_TEXT.groups('').connections,
     appliance: 'This Whombat',
+    news: NEWS_WORDS.page,
     screen: DESK_WORDS.settings.tab,
     advanced: 'Advanced',
   } satisfies Record<Exclude<SettingsRowKey, 'agent'>, string>,
@@ -42,10 +47,19 @@ export const SETTINGS_TEXT = {
   demo: 'Demo world on this phone',
   /** The row's name where the Whombat has screens of widgets (AP-6000). */
   screens: 'Screens',
+  /** News and weather's line. */
+  newsLine: NEWS_WORDS.homeLine,
 } as const;
 
-/** The rows' order: the groups, the box's screen beside This Whombat. */
-const ROW_ORDER: readonly SettingsRowKey[] = ['agent', 'connections', 'appliance', 'screen', 'advanced'];
+/** The rows' order: the groups as the web has them, News and weather after This Whombat. */
+const ROW_ORDER: readonly SettingsRowKey[] = [
+  'agent',
+  'connections',
+  'appliance',
+  'news',
+  'screen',
+  'advanced',
+];
 
 /** What the list read; a part's facts are undefined while they load and null where they can't be read. */
 export interface SettingsFacts {
@@ -63,12 +77,16 @@ export interface SettingsFacts {
    * *Screens*, shown with or without a screen on the box (a tablet elsewhere can be one).
    */
   screens?: boolean;
+  /** The Whombat answers the place and the news (`placeNewsShown`): News and weather has a row. */
+  news?: boolean;
 }
 
 /** A row's line (AP-2626): what needs the viewer first, else how it is. */
 export interface ApplianceLine {
   value: string;
   tone: SettingsTone | null;
+  /** The line is about This Whombat → About (an update waiting for the owner's yes): the row opens it there. */
+  opens?: 'about';
 }
 
 /**
@@ -105,6 +123,8 @@ export function settingsRows(f: SettingsFacts): SettingsRowView[] {
         return f.connections ?? null;
       case 'appliance':
         return f.appliance ?? null;
+      case 'news':
+        return { value: SETTINGS_TEXT.newsLine, tone: null };
       case 'screen':
         return f.screen ?? null;
       case 'advanced':
@@ -116,7 +136,8 @@ export function settingsRows(f: SettingsFacts): SettingsRowView[] {
     if (key === 'screen' && f.screens) return SETTINGS_TEXT.screens;
     return SETTINGS_TEXT.rows[key];
   };
-  return ROW_ORDER.filter((key) => key !== 'screen' || !!f.screen).map((key) => {
+  const shown = (key: SettingsRowKey) => (key === 'screen' ? !!f.screen : key === 'news' ? !!f.news : true);
+  return ROW_ORDER.filter(shown).map((key) => {
     const t = title(key);
     const l = line(key);
     return {
@@ -125,6 +146,7 @@ export function settingsRows(f: SettingsFacts): SettingsRowView[] {
       value: l?.value ?? null,
       tone: l?.tone ?? null,
       label: l ? `${t}, ${l.value}` : t,
+      ...(l?.opens && { opens: l.opens }),
     };
   });
 }
@@ -148,14 +170,21 @@ type OverviewDot = 'ok' | 'warn' | 'bad' | 'mut';
 
 /**
  * A managed Whombat's line from the shared Overview (AP-2626): the first thing that needs the viewer, else one that
- * isn't fine, else its update and backups (“Up to date · Backed up”).
+ * isn't fine, else its update and backups (“Up to date · Backed up”). An update that waits for the owner's yes
+ * (`ready`, the release `updateReady` names) says “Update ready” and opens About, where Update now is: only something
+ * broken comes before it, and the line says it once.
  */
-export function managedApplianceLine(overview: {
-  needsYou: readonly { dot: OverviewDot; title: string }[];
-  glance: readonly { key: string; dot: OverviewDot; title: string; state?: string }[];
-}): ApplianceLine {
+export function managedApplianceLine(
+  overview: {
+    needsYou: readonly { dot: OverviewDot; title: string }[];
+    glance: readonly { key: string; dot: OverviewDot; title: string; state?: string }[];
+  },
+  ready: string | null = null,
+): ApplianceLine {
   // The About row's title names the page; its `state` says how the updates stand.
   const said = (g: { title: string; state?: string }) => g.state ?? g.title;
+  const broken = [...overview.needsYou, ...overview.glance].some((item) => item.dot === 'bad');
+  if (ready && !broken) return { value: UPDATE_STATE_WORDS.ready, tone: 'warn', opens: 'about' };
   const off = overview.needsYou[0] ?? overview.glance.find((g) => g.dot === 'bad' || g.dot === 'warn');
   if (off) return { value: said(off), tone: off.dot === 'bad' ? 'bad' : 'warn' };
   const parts = ['update', 'backups'].flatMap((key) => {

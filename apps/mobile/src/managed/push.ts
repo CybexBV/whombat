@@ -13,12 +13,22 @@ import {
 } from '@whombat/client/managed';
 import { type ApplianceSession, OperationError, sessionOps } from '@whombat/client/session';
 
+/**
+ * How far registering may go to be allowed: only `look`; allow `quietly` where the system can without a question (an
+ * iPhone's provisional notifications); or `ask` (the system's question, which also turns an iPhone's quiet
+ * notifications into alerts).
+ */
+export type PushAsk = 'look' | 'quietly' | 'ask';
+
 export interface NativePush {
   platform: 'fcm' | 'apns';
   /** The app's id for control (`NativePushRegistration.appId`): FCM project / APNs topic. */
   appId: string;
-  /** Whether notifications are allowed; asks (the system dialog) only when `ask` and the person hasn't decided. */
-  permission(ask: boolean): Promise<'granted' | 'denied' | 'undetermined'>;
+  /**
+   * Whether notifications are allowed (quietly counts); asks the system only as `how` lets it and while the person
+   * hasn't decided.
+   */
+  permission(how: PushAsk): Promise<'granted' | 'denied' | 'undetermined'>;
   /** The device token; throws when this build or device has no push service. */
   token(): Promise<string>;
 }
@@ -29,7 +39,7 @@ export async function registerManagedPush(input: {
   store: PushStore;
   session: ApplianceSession;
   device: string;
-  ask: boolean;
+  ask: PushAsk;
 }): Promise<PushState> {
   const { native, control, store, session, device, ask } = input;
   const permission = await native.permission(ask).catch(() => 'denied' as const);
@@ -63,7 +73,7 @@ export async function registerManagedPush(input: {
 export async function registerBoxPush(input: {
   native: NativePush;
   session: ApplianceSession;
-  ask: boolean;
+  ask: PushAsk;
 }): Promise<PushState> {
   const { native, session, ask } = input;
   const permission = await native.permission(ask).catch(() => 'denied' as const);

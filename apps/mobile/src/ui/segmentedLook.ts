@@ -5,8 +5,14 @@
  * wide as each other and cut a label that doesn't fit with “…”; they can't wrap as ours do. Pure.
  */
 
+import type { LucideIcon } from './icons';
+
 export interface SegmentedProps<T extends string> {
-  options: readonly { value: T; label: string }[];
+  /**
+   * The choices. An icon goes before its word on Android's control (the theme's sun, moon and phone); iPhone's own
+   * segments keep the words alone.
+   */
+  options: readonly { value: T; label: string; icon?: LucideIcon }[];
   value: T;
   onChange: (value: T) => void;
   label: string;

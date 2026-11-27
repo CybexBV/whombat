@@ -10,8 +10,11 @@ export interface NotificationsView {
   dot: Dot;
   title: string;
   meta: string | null;
-  /** `delivery`: the settings page in `page` turns back on what Android holds back. */
-  action: 'settings' | 'enable' | 'delivery' | null;
+  /**
+   * `delivery`: the settings page in `page` turns back on what Android holds back. `alerts`: an iPhone allowed quietly
+   * asks for alerts.
+   */
+  action: 'settings' | 'enable' | 'delivery' | 'alerts' | null;
   page?: DeliveryPage;
 }
 
@@ -76,7 +79,7 @@ function calmLine(delivery: DeliveryStatus | null): { line: string; page?: Deliv
 }
 
 export function notificationsView(
-  push: Pick<ManagedPush, 'state' | 'lastReceivedAt'>,
+  push: Pick<ManagedPush, 'state' | 'lastReceivedAt' | 'quiet'>,
   now = Date.now(),
   delivery: DeliveryStatus | null = null,
 ): NotificationsView {
@@ -87,6 +90,14 @@ export function notificationsView(
       // When Android holds them back, when the last one reached the phone says nothing about the next.
       const held = heldBack(delivery);
       if (held) return held;
+      // Quiet on an iPhone: they arrive, in Notification Center only; alerts are one question away.
+      if (push.quiet)
+        return {
+          dot: 'ok',
+          title: t.quietOn,
+          meta: [t.quietMeta, last].filter(Boolean).join(' · '),
+          action: 'alerts',
+        };
       const calm = calmLine(delivery);
       return {
         dot: 'ok',

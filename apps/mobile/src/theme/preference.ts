@@ -1,13 +1,14 @@
+import { THEME_CHOICES, THEME_WORDS, type ThemeChoice } from '@whombat/client';
 import type { ThemeName } from '@whombat/tokens';
 import { type KeyValueStore, STORAGE_KEYS } from '../lib/kv';
 
-export type ThemePreference = 'system' | 'light' | 'dark';
+/** What is stored and saved to the account: `system` is Auto, which follows the phone. */
+export type ThemePreference = ThemeChoice;
 
-export const THEME_PREFERENCES: readonly { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
+/** The choices in the web's words and order: Light · Dark · Auto. */
+export const THEME_PREFERENCES: readonly { value: ThemePreference; label: string }[] = THEME_CHOICES.map(
+  (value) => ({ value, label: THEME_WORDS.choices[value] }),
+);
 
 export function toThemePreference(value: string | null | undefined): ThemePreference {
   return value === 'light' || value === 'dark' ? value : 'system';
@@ -22,7 +23,7 @@ export function resolveThemeName(
   return system === 'dark' ? 'dark' : 'light';
 }
 
-/** The stored choice; System when there is none or the keystore won't give it (AP-594). */
+/** The stored choice; Auto when there is none or the keystore won't give it (AP-594). */
 export function loadThemePreference(store: KeyValueStore): Promise<ThemePreference> {
   return store.get(STORAGE_KEYS.theme).then(toThemePreference, () => 'system' as const);
 }
