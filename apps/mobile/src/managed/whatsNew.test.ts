@@ -4,7 +4,7 @@ import { WHATS_NEW_TEXT, whatsNewSeenKey } from '@whombat/client/managed';
 import type { ApplianceStatus } from '@whombat/client/session';
 import { describe, expect, it } from 'vitest';
 import { type KeyValueStore, memoryStore } from '../lib/kv';
-import { WHATS_NEW_ROW, WHATS_NEW_URL, whatsNewSeen, whatsNewToShow } from './whatsNew';
+import { WHATS_NEW_ROW, WHATS_NEW_URL, whatsNewToShow } from './whatsNew';
 
 const WHOMBAT = 'wb-test-0001';
 const KEY = whatsNewSeenKey(WHOMBAT);
@@ -39,15 +39,11 @@ describe('About’s “What’s new” row', () => {
 });
 
 describe('the one-time “Whombat updated” notice', () => {
-  it('shows once the last update differs from the release this phone saw, until it is dismissed', async () => {
+  it('shows once the last update differs from the release this phone saw, and only once', async () => {
     const store = memoryStore({ [KEY]: 'pve-20260927.1' });
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
-    // Showing it isn't seeing it: the app closed in between shows it again.
-    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
-
-    await whatsNewSeen(store, WHOMBAT, 'pve-20260928.6');
+    // Kept as seen as soon as it shows: the app closed before Dismiss doesn't show it again.
     expect(store.data.get(KEY)).toBe('pve-20260928.6');
-    // Dismissed: hidden for that release, also on the next start (the same store, read afresh).
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
     // The next update shows it again.
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20261001.2'))).toBe('pve-20261001.2');
@@ -84,8 +80,10 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(written).toEqual([]);
   });
 
-  it('is drawn in the strip every screen shows', () => {
+  it('is drawn in the strip every screen shows, whether or not the passkey nudge is there', () => {
     const source = readFileSync(new URL('./ApplianceRoot.tsx', import.meta.url), 'utf8');
-    expect(source).toMatch(/<WhatsNewNoticeView notice=\{whatsNew\} \/>/);
+    const line = source.split('\n').find((l) => l.includes('<WhatsNewNoticeView notice={whatsNew} />'));
+    expect(line).toBeDefined();
+    expect(line).not.toMatch(/nudge/);
   });
 });

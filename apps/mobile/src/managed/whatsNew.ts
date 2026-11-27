@@ -18,8 +18,8 @@ export const WHATS_NEW_ROW = {
 } as const;
 
 /**
- * The release the notice tells about, or null for none. The first look only remembers the release (there is nothing
- * to compare it with), quietly.
+ * The release the notice tells about, or null for none. It is kept as seen at once, so the notice shows once even when
+ * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly.
  */
 export async function whatsNewToShow(
   store: KeyValueStore,
@@ -34,14 +34,7 @@ export async function whatsNewToShow(
     return null;
   }
   const { action, release } = whatsNewNotice(status, seen);
-  if (action === 'remember') {
-    await store.set(key, release).catch(() => {});
-    return null;
-  }
+  if (action === 'none') return null;
+  await store.set(key, release).catch(() => {});
   return action === 'show' ? release : null;
-}
-
-/** Dismiss or See what’s new: this phone saw the release, so the notice stays away until the next update. */
-export async function whatsNewSeen(store: KeyValueStore, whombat: string, release: string): Promise<void> {
-  await store.set(whatsNewSeenKey(whombat), release).catch(() => {});
 }

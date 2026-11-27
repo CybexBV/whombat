@@ -20,9 +20,26 @@ import { ToastProvider } from '../../components/Toast';
 
 const BOX = 'wb-test-0001';
 
+/** The box's session: open, and able to drop and come back (as when the box installs an update). */
+const session = vi.hoisted(() => {
+  let status = 'open';
+  const listeners = new Set<(s: { status: string }) => void>();
+  return {
+    state: () => ({ status }),
+    onState: (cb: (s: { status: string }) => void) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    move(next: string) {
+      status = next;
+      for (const cb of [...listeners]) cb({ status });
+    },
+  };
+});
+
 const services = vi.hoisted(() => ({
   value: {
-    session: {},
+    session: null as unknown,
     managed: {
       applianceId: 'wb-test-0001',
       applianceFingerprint: 'ab12',
@@ -30,7 +47,7 @@ const services = vi.hoisted(() => ({
     },
   },
 }));
-vi.mock('../../app/providers', () => ({ useAppServices: () => services.value }));
+vi.mock('../../app/providers', () => ({ useAppServices: () => ({ ...services.value, session }) }));
 
 const ops = vi.hoisted(() => ({ status: vi.fn() }));
 vi.mock('@whombat/client/session', async (original) => {
@@ -171,8 +188,8 @@ describe('the notice after an update', () => {
     const shown = await screen.findByTestId('whats-new-notice');
     expect(within(shown).getByText(WHATS_NEW_TEXT.notice)).toBeTruthy();
     expect(within(shown).getByRole('link', { name: WHATS_NEW_TEXT.see })).toBeTruthy();
-    // Shown, not yet seen: a page closed now shows it again.
-    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261126.5');
+    // Shown once: kept as seen as soon as it shows.
+    expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261127.2');
 
     await user.click(within(shown).getByRole('button', { name: WHATS_NEW_TEXT.dismiss }));
     expect(notice()).toBeNull();
@@ -183,6 +200,28 @@ describe('the notice after an update', () => {
     await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
     expect(ops.status).toHaveBeenCalledTimes(2);
     expect(notice()).toBeNull();
+  });
+
+  it('shows once: opened again before it was dismissed, the same release says nothing', async () => {
+    window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+    ops.status.mockResolvedValue(status('whombat-20261127.2'));
+    const first = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+    await screen.findByTestId('whats-new-notice');
+    first.unmount();
+    await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
+    expect(notice()).toBeNull();
+  });
+
+  it('an open page hears of an update once the box is back', async () => {
+    window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+    ops.status.mockResolvedValue(status('whombat-20261126.5'));
+    await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
+    expect(notice()).toBeNull();
+    // The box installs an update: its session drops and comes back, the page stays open.
+    ops.status.mockResolvedValue(status('whombat-20261127.2'));
+    act(() => session.move('connecting'));
+    act(() => session.move('open'));
+    expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
   });
 
   it('See what’s new opens the page and counts as seen', async () => {

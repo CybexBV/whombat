@@ -622,8 +622,8 @@ function Shell({
       <>
         {line ? <StripLine line={line} onRetry={() => setup.raw.reconnectNow()} /> : null}
         {open && nudge ? <PasskeyNudgeView nudge={nudge} /> : null}
-        {/* One card at a time: the passkey nudge first, the update notice after it. */}
-        {open && !nudge && whatsNew ? <WhatsNewNoticeView notice={whatsNew} /> : null}
+        {/* After an update, once: under the passkey nudge when that shows too, never waiting for it. */}
+        {open && whatsNew ? <WhatsNewNoticeView notice={whatsNew} /> : null}
       </>
     ),
     [line, nudge, whatsNew, open, setup],

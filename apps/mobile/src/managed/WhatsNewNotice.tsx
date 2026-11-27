@@ -1,8 +1,8 @@
 /**
- * The one-time “Whombat updated” notice in the strip under the status bar, beside the passkey nudge: once per update
- * of this Whombat, with See what’s new (the web app's page in the in-app browser) and Dismiss. Either one keeps the
- * release as seen; showing it doesn't, so a phone closed in between shows it again. It reads the status the Settings
- * list already asks for (same query), not a poll of its own.
+ * The one-time “Whombat updated” notice in the strip under the status bar, under the passkey nudge when that shows
+ * too: once per update of this Whombat, with See what’s new (the web app's page in the in-app browser) and Dismiss.
+ * The release is kept as seen as soon as it shows; the notice stays until one of the two is tapped. It reads the status
+ * the Settings list already asks for (same query), not a poll of its own.
  */
 import { useQuery } from '@tanstack/react-query';
 import { WHATS_NEW_TEXT } from '@whombat/client/managed';
@@ -15,7 +15,7 @@ import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { applianceStatusQuery } from './useApplianceStatus';
-import { WHATS_NEW_URL, whatsNewSeen, whatsNewToShow } from './whatsNew';
+import { WHATS_NEW_URL, whatsNewToShow } from './whatsNew';
 
 export interface WhatsNewNoticeState {
   see: () => void;
@@ -40,8 +40,9 @@ export function useWhatsNewNotice({
   useEffect(() => {
     if (!status) return;
     let live = true;
+    // A later read says nothing (the release is kept already): what shows stays until it is tapped.
     void whatsNewToShow(secureStore, whombat, status).then((release) => {
-      if (live) setShown(release ? { whombat, release } : null);
+      if (live && release) setShown({ whombat, release });
     });
     return () => {
       live = false;
@@ -50,18 +51,15 @@ export function useWhatsNewNotice({
   const release = shown?.whombat === whombat ? shown.release : null;
   return useMemo(() => {
     if (!release) return null;
-    const seen = () => {
-      setShown(null);
-      void whatsNewSeen(secureStore, whombat, release);
-    };
+    const close = () => setShown(null);
     return {
       see: () => {
-        seen();
+        close();
         void openSignInPage(WHATS_NEW_URL);
       },
-      dismiss: seen,
+      dismiss: close,
     };
-  }, [release, whombat]);
+  }, [release]);
 }
 
 /** Drawn as the passkey nudge is: a calm card with its sentence and the two buttons under it. */

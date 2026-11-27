@@ -314,9 +314,8 @@ export function lastUpdatedRelease(
 /**
  * The one-time “Whombat updated · See what’s new” notice, from the Whombat's status and what this device saw last
  * (`seen`, null when it never looked): `show` once the last update differs from what was seen; `remember` (quietly
- * keep `release` as seen) the first time a device looks, since it has nothing to compare with; else `none`. Showing
- * the notice doesn't count as seeing it: Dismiss or See what’s new keeps the release, so a page closed in between shows
- * it again.
+ * keep `release` as seen) the first time a device looks, since it has nothing to compare with; else `none`. Each app
+ * keeps the release as seen as soon as it shows the notice, so it shows once even when nobody taps it.
  */
 export function whatsNewNotice(
   status: Pick<ApplianceStatus, 'update'> | null | undefined,
