@@ -1,4 +1,0 @@
-{"data":[
- {"id":"101-0","guest":101,"jobnum":0,"target":"pve2","type":"local","schedule":"*/15","source":"pve1","last_sync":1791879000,"last_try":1791879900,"next_sync":1791880800,"duration":3.21,"fail_count":2,"error":"command 'zfs snapshot rpool/data/vm-101-disk-0@__replicate_101-0_1791879900__' failed: got timeout","vmtype":"qemu"},
- {"id":"100-0","guest":100,"jobnum":0,"target":"pve2","type":"local","schedule":"*/15","source":"pve1","last_sync":1791879900,"last_try":1791879900,"next_sync":1791880800,"duration":1.02,"fail_count":0,"vmtype":"qemu"}
-]}

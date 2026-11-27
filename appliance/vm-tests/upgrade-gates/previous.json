@@ -1,7 +1,0 @@
-{
-  "comment": "N−1 and N−2 for release/upgrade-gates when nothing else says what boxes run: its own default --previous (NX-110), and what release/ship validate falls back on when it can read neither control nor the update repository (it asks them first: the releases claimed boxes report, then the newest release Beta and Production list). Newest first, only releases from the migration baseline on (the bridge whombat-20261115.11, which moves a database across to the chain that replaced the old one; IN-415, IN-768): a box on an older release can't update to anything after the bridge (its runtime refuses an old-chain database as foreign). Nothing moves this file; edit it when it has fallen far behind. Empty: the gates that update from a previous release are not applicable; with one, gate 2 (N−2) is not.",
-  "previous": [
-    "whombat-20261120.19",
-    "whombat-20261120.5"
-  ]
-}

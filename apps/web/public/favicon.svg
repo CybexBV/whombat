@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-<title>Whombat</title>
-<style>path{fill:#2b221d}@media (prefers-color-scheme:dark){path{fill:#f5f2ed}}</style>
-<path transform="translate(0 9)" d="M11 22 A14 14 0 1 1 39 22 A14 14 0 1 1 11 22Z M81 22 A14 14 0 1 1 109 22 A14 14 0 1 1 81 22Z M60 14 C94 14 117 32 117 60 C117 86 94 98 60 98 C26 98 3 86 3 60 C3 32 26 14 60 14Z M25.5 44 A7.5 7.5 0 1 0 40.5 44 A7.5 7.5 0 1 0 25.5 44Z M79.5 44 A7.5 7.5 0 1 0 94.5 44 A7.5 7.5 0 1 0 79.5 44Z M60 51 C43 51 35 53.17 35 65.48 C35 79.24 45 87.21 60 87.21 C75 87.21 85 79.24 85 65.48 C85 53.17 77 51 60 51Z"/>
-</svg>

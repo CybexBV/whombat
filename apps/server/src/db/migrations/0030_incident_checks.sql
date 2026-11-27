@@ -1,1 +1,0 @@
-ALTER TABLE "incidents" ADD COLUMN "checks" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -1,6 +1,0 @@
-{"type":"sync","status":"Success","status_code":200,"metadata":[
- {"count":37,"entity_url":"","first_seen_at":"2026-09-09T05:21:35.302597817Z","last_message":"","last_seen_at":"2026-10-04T08:49:53.759299209+02:00","location":"none","project":"default","severity":"low","status":"new","type":"Skipping AppArmor for dnsmasq due to raw.dnsmasq being set","uuid":"0f4c8a77-0000-4000-8000-000000000010"},
- {"count":36,"entity_url":"","first_seen_at":"2026-09-19T11:50:38.895873591Z","last_message":"","last_seen_at":"2026-10-04T08:49:58.07862912+02:00","location":"none","project":"default","severity":"low","status":"new","type":"Skipping AppArmor for dnsmasq due to raw.dnsmasq being set","uuid":"0f4c8a77-0000-4000-8000-000000000011"},
- {"count":2,"entity_url":"/1.0/instances/web","first_seen_at":"2026-10-12T10:00:00Z","last_message":"Failed to create OVS bridge","last_seen_at":"2026-10-12T10:05:00Z","location":"none","project":"default","severity":"moderate","status":"acknowledged","type":"Couldn't restore network","uuid":"0f4c8a77-0000-4000-8000-000000000001"},
- {"count":5,"entity_url":"","first_seen_at":"2026-08-01T00:00:00Z","last_message":"","last_seen_at":"2026-08-02T00:00:00Z","location":"none","project":"default","severity":"low","status":"resolved","type":"Couldn't find the CGroup memory swap accounting","uuid":"0f4c8a77-0000-4000-8000-000000000002"}
-]}

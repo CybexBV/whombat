@@ -1,5 +1,0 @@
-{
- "development": true,
- "env": "dev",
- "keysDir": "../../dev-keys"
-}

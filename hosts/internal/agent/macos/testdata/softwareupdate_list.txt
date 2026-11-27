@@ -1,6 +1,0 @@
-Software Update Tool
-
-Finding available software
-Software Update found the following new or updated software:
-* Label: Command Line Tools for Xcode 27.2-27.2
-	Title: Command Line Tools for Xcode 27.2, Version: 27.2, Size: 521120KiB, Recommended: YES, 

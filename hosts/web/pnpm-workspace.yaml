@@ -1,7 +1,0 @@
-# The web UI is a pnpm project of its own. Without this file pnpm looks for a workspace in the folders above, and
-# where this repository sits inside another one (as hosts/ in the Whombat repository) it would take that one's
-# lockfile and settings.
-packages:
-  - .
-allowBuilds:
-  esbuild: true

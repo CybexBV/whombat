@@ -1,7 +1,0 @@
-{
-  "id": 1,
-  "renameMovies": true,
-  "replaceIllegalCharacters": true,
-  "colonReplacementFormat": "delete",
-  "standardMovieFormat": "{Movie Title} ({Release Year})"
-}

@@ -1,9 +1,0 @@
-.worktrees
-result
-result-*
-# `go build` in voice/ leaves its binary here; the image builds it from voice/cmd (nix/packages/go.nix).
-/voice/whombat-voice
-__pycache__/
-
-# Validation run reports (harness/validate writes them; the maintainers keep theirs in whombat-ops records/).
-/harness/reports/

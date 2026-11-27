@@ -1,2 +1,0 @@
-ALTER TABLE "appliance_state" ADD COLUMN "link_mail_offline" boolean DEFAULT true NOT NULL;--> statement-breakpoint
-ALTER TABLE "appliance_state" ADD COLUMN "link_mail_notifications" boolean DEFAULT false NOT NULL;

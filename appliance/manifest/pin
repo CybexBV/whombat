@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# manifest/pin — see docs/runbooks/local-dev.md. Implementation: harness/src/manifest/check.ts.
-set -euo pipefail
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"; mkdir -p "$TMPDIR"
-[ -d "$here/../harness/node_modules" ] || (cd "$here/../harness" && pnpm install --frozen-lockfile >&2)
-exec node "$here/../harness/src/manifest/check.ts" pin "$@"

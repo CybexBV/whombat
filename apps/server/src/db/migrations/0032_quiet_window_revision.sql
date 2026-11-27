@@ -1,1 +1,0 @@
-ALTER TABLE "quiet_windows" ADD COLUMN "revision" integer DEFAULT 0 NOT NULL;

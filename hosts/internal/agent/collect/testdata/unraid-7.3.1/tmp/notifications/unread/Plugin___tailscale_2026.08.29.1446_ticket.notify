@@ -1,5 +1,0 @@
-timestamp=1788135003
-event="Plugin - tailscale [2026.08.29.1446]"
-subject="Notice [BLACKBOX] - Version update 2026.08.29.1446"
-description="A new version of tailscale is available"
-importance="normal"

@@ -1,5 +1,0 @@
-{
-  "results": [{ "metrics": [37], "dimensions": [] }],
-  "meta": {},
-  "query": { "site_id": "example.com", "metrics": ["visitors"] }
-}

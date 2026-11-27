@@ -1,6 +1,0 @@
-node_modules
-reports/*
-!reports/latest*.json
-!reports/latest*.md
-!reports/latest-screenshots
-coverage/

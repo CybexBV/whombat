@@ -1,4 +1,0 @@
-# The DEV support CA (Whombat RH-05; control CL-129): the key DEV control signs support certificates with lives in
-# the dev stack's control environment (~/.whombat-stack-dev/env/control/.local/support-ca.key, made by dev-init on
-# 2026-10-21). DEV images trust it; prod images never do (support.nix assertion).
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL61pV43B6KmDZHqALbNo3CR+9Z2zJoTvBfKHzxJtINa whombat-support-ca-local-2026-10-21

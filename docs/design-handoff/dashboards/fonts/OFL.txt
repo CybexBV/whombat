@@ -1,5 +1,0 @@
-Bricolage Grotesque — Copyright 2022 The Bricolage Grotesque Project Authors (https://github.com/ateliertriay/bricolage)
-DM Mono — Copyright 2020 The DM Mono Project Authors (https://www.github.com/googlefonts/dm-mono)
-
-These Font Software are licensed under the SIL Open Font License, Version 1.1.
-The license text is available with a FAQ at: https://openfontlicense.org

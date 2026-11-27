@@ -1,5 +1,0 @@
-Page: com.whombat.mobile
-App: com.whombat.mobile
-Snapshot: 2 nodes
-@e1 [scroll-area] [scrollable]
-@e2 [button] "Back to Overview"

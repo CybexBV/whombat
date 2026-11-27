@@ -1,1 +1,0 @@
-ALTER TABLE "incidents" ADD COLUMN "down_since" timestamp with time zone;

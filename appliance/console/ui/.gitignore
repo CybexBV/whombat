@@ -1,4 +1,0 @@
-# Dependencies, the build and the screenshots of `pnpm shots` (CG-17)
-node_modules/
-dist/
-.visual/

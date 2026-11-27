@@ -1,5 +1,0 @@
-{"data":[
- {"vmid":100,"name":"vm-vnc","status":"running","qmpstatus":"running","cpus":1,"maxmem":1073741824},
- {"vmid":101,"name":"vm-spice","status":"running","qmpstatus":"paused","cpus":2,"maxmem":2147483648,"lock":"backup"},
- {"vmid":102,"name":"vm-stopped","status":"stopped","cpus":1,"maxmem":1073741824}
-]}

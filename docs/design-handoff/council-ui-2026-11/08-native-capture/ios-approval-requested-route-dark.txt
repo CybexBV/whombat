@@ -1,7 +1,0 @@
-Page: com.whombat.mobile
-App: com.whombat.mobile
-Snapshot: 4 nodes
-@e1 [application] "Whombat"
-@e2 [button] "Back to Overview"
-@e3 [text] "This request isn’t here any more."
-@e4 [toolbar] "Toolbar"

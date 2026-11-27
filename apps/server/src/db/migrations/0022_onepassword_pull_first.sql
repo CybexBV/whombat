@@ -1,1 +1,0 @@
-ALTER TABLE "vault_onepassword_state" ADD COLUMN "pull_first" boolean DEFAULT false NOT NULL;

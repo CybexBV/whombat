@@ -1,6 +1,0 @@
-timestamp=1792197901
-event="Docker high image disk utilization"
-subject="Warning [BLACKBOX] - Docker image disk utilization of 78%"
-description="Docker utilization of image file /mnt/user/system/docker/docker.img"
-importance="warning"
-link="/Docker"

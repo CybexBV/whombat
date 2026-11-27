@@ -1,7 +1,0 @@
-Page: com.whombat.mobile
-App: com.whombat.mobile
-Snapshot: 3 visible nodes (4 total)
-Collapsed 1 Android helper node from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
-@e1 [scroll-area] [scrollable]
-@e2 [button] "Back"
-@e3 [group] "Thread"

@@ -1,9 +1,0 @@
-{
-  "version": "0.26.0",
-  "artifacts": {
-    "any": {
-      "url": "https://registry.npmjs.org/agent-browser/-/agent-browser-0.26.0.tgz",
-      "sha256": "8a48cf4110d7dc2c12c1c4d6d25e0babdfa31604b537f05df0dc835fe2f854bf"
-    }
-  }
-}

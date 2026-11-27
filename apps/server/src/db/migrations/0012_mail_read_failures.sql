@@ -1,1 +1,0 @@
-ALTER TABLE "mail_cursors" ADD COLUMN "read_failures" jsonb;

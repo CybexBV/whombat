@@ -1,9 +1,0 @@
-{
-  "platforms": ["android", "apple"],
-  "android": {
-    "modules": ["com.whombat.voice.WhombatVoiceModule"]
-  },
-  "apple": {
-    "modules": ["WhombatVoiceModule"]
-  }
-}

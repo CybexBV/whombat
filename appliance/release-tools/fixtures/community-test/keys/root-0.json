@@ -1,7 +1,0 @@
-{
- "development": true,
- "warning": "DEVELOPMENT KEY - NEVER USE FOR PRODUCTION RELEASES OR ASSIGNMENTS",
- "role": "root",
- "keyid": "0f999c276c4535302bb88b5e0e9f0528792f8e2fac5ce7b836dacc50029b57a0",
- "ed25519Seed": "q2hU+gCE83AMSOtlTOipEn1rj9payzJwrZpExfsX69Y="
-}

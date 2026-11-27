@@ -1,8 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.whombat.com/contracts/SupportTicketRequest.json",
-  "title": "SupportTicketRequest",
-  "type": "object",
-  "properties": {},
-  "additionalProperties": false
-}

@@ -1,7 +1,0 @@
-{
- "development": true,
- "warning": "DEVELOPMENT KEY - NEVER USE FOR PRODUCTION RELEASES OR ASSIGNMENTS",
- "role": "targets",
- "keyid": "91fc28df3bf57b5b32d06a0c0b42bcbcc44d5f47ceadcc69b523b1e92f607eda",
- "ed25519Seed": "Pd2yG52SMOec5KB8QxRThTMXaBX9uIxZlgnH9E7hFy4="
-}

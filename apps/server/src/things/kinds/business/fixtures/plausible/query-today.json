@@ -1,9 +1,0 @@
-{
-  "results": [{ "metrics": [42, 38, 92], "dimensions": [] }],
-  "meta": {},
-  "query": {
-    "site_id": "example.com",
-    "metrics": ["visitors", "bounce_rate", "visit_duration"],
-    "date_range": "day"
-  }
-}
