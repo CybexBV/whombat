@@ -85,7 +85,7 @@ export function BurrowShell() {
   const { data: chats } = useChats({ params: { burrow }, query: {} }, { retry: false });
   // Chat (chat-channel.md AP-2401): Chat and Feedback lead the sidebar, with their unread counts.
   const rooms = useMemo(() => chatRoomsOf(chats?.chats), [chats?.chats]);
-  // SERVERS' heading and its `+` (sidebar-servers.md AP-1748): whether the hosts service runs here.
+  // Servers in the menu and its Add a server (servers-connections-places.md): whether the hosts service runs here.
   const { data: hostsStatus } = useHostsStatus({ params: { burrow } }, { retry: false });
   const hosts = useMemo(() => (hostsStatus ? { present: hostsStatus.present } : undefined), [hostsStatus]);
   // The model follows the parts of the bootstrap it reads, so the sidebar isn't drawn again on every bootstrap change

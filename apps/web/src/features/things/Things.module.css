@@ -24,7 +24,7 @@
   flex-direction: column;
   gap: 18px;
   min-width: 0;
-  padding: 30px 40px 40px;
+  padding: 30px var(--page-side, 40px) 40px;
 }
 
 .crumb {
@@ -130,8 +130,8 @@
 /* Tabs: the mock's row under the header, ruled across the whole column. */
 .tabs.tabs {
   gap: 4px;
-  margin: 0 -40px;
-  padding: 0 40px;
+  margin: 0 calc(-1 * var(--page-side, 40px));
+  padding: 0 var(--page-side, 40px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -613,7 +613,7 @@
 /* The badges' tints are the README's status colours at a low alpha (the mock's rgba values). */
 .badgeWarn {
   background: color-mix(in srgb, var(--warn) 14%, transparent);
-  color: var(--warn);
+  color: var(--warn-text);
 }
 
 .badgeBad {

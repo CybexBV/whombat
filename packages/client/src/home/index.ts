@@ -15,6 +15,7 @@ export * from './monitoring';
 export * from './needsYou';
 export * from './needsYouList';
 export * from './overview';
+export * from './placeLists';
 export * from './quiet';
 export * from './rename';
 export * from './sections';

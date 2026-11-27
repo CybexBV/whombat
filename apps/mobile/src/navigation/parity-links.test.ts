@@ -132,3 +132,19 @@ describe('the Connections page’s addresses (connections-page.md AP-2550)', () 
     });
   });
 });
+
+describe('Servers and Connections as places (servers-connections-places.md)', () => {
+  it('opens /servers and /connected on their list screens, in either form; /connections stays Overview', () => {
+    expect(appScreenUrlForPath('/servers')).toBe('whombat://servers');
+    expect(appScreenUrlForPath('/connected')).toBe('whombat://connected');
+    expect(appScreenUrlForPath('/connected/')).toBe('whombat://connected');
+    expect(appScreenUrlForPath('/burrow-hq/servers')).toBe('whombat://servers');
+    expect(appScreenUrlForPath('/connections')).toBe('whombat://connections');
+    expect(appScreenUrlForPath('/things/servers')).toBe('whombat://connections?tab=servers');
+    expect(LINKING_SCREENS).toMatchObject({ ServersPlace: 'servers', ConnectionsPlace: 'connected' });
+    expect(urlTarget('https://app.whombat.com/servers', ['https://app.whombat.com'])).toMatchObject({
+      kind: 'app',
+      url: 'whombat://servers',
+    });
+  });
+});

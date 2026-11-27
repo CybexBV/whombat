@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { createThingPageFixtures } from '../fixtures/thingPages';
 import {
   accessRows,
+  headPillWord,
   headSpoken,
   linkRun,
   listRows,
@@ -185,6 +186,23 @@ describe('the head', () => {
   it('is read aloud with its badge, and by name alone before its status is known (page-speed.md AP-2650)', () => {
     expect(headSpoken(ha())).toBe(`${ha().name}, ${ha().badge}`);
     expect(headSpoken({ name: 'Attic', badge: null })).toBe('Attic');
+  });
+
+  it('says only a problem’s level in the head’s pill: Worth a look tells what it is (servers-connections-places.md)', () => {
+    expect(headPillWord({ status: 'warn', badge: '1 access point offline' })).toBe('Needs a look');
+    expect(headPillWord({ status: 'bad', badge: 'Disk array failed' })).toBe('Not working');
+    expect(headPillWord({ status: 'offline', badge: 'Hasn’t answered since 09:00' })).toBe('Offline');
+    expect(headPillWord({ status: 'ok', badge: 'Running fine' })).toBe('Running fine');
+    expect(headPillWord({ status: 'learning', badge: 'Learning' })).toBe('Learning');
+    // Once the page answers: the level only when its Worth a look tells the problem, else the badge says it.
+    const told = [{ key: 'summary', panels: [{ kind: 'notices', items: [{}] }] }] as never;
+    const untold = [{ key: 'summary', panels: [] }] as never;
+    expect(headPillWord({ status: 'warn', badge: '1 access point offline', tabs: told })).toBe(
+      'Needs a look',
+    );
+    expect(headPillWord({ status: 'warn', badge: '1 access point offline', tabs: untold })).toBe(
+      '1 access point offline',
+    );
   });
 });
 

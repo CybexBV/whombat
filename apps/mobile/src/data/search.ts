@@ -179,6 +179,9 @@ export function searchEntries(input: {
     });
   for (const place of PLACES) {
     if (place === 'search') continue;
+    // Servers and Connections once they hold something, as the Places sheet shows them.
+    if (place === 'servers' && !servers.length) continue;
+    if (place === 'connections' && !connections.length) continue;
     out.push({
       key: `place:${place}`,
       group: 'places',

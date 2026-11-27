@@ -233,6 +233,8 @@ export const NL = {
   'place.inbox.line': 'Wat actie van je vraagt',
   'place.overview.label': 'Overzicht',
   'place.overview.line': 'Servers en koppelingen',
+  'place.servers.line': 'Je servers en hoe ze erbij staan',
+  'place.connections.line': 'Wat er gekoppeld is en hoe het ervoor staat',
   'place.automations.label': 'Automatiseringen',
   'place.automations.line': 'Plannen en schema’s',
   'place.files.label': 'Bestanden',

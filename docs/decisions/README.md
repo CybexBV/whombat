@@ -334,7 +334,9 @@ whombat-app's and whombat-contracts' own decision files, from before they moved 
   (*messaging, canvas-onboarding in part*).
 - `web-push-connect.md` — desktop push and the needs-you indicator (*in part*).
 - `sidebar.md`, `settings-sidebar.md`, `settings-simplify.md` — sidebar and Settings copy (*settings-simplify in part*).
-- `sidebar-tabs.md` — Servers and Connections as sidebar tabs, Overview, Settings → Connections.
+- `sidebar-tabs.md` — Overview, Settings → Connections (*in part*: the sidebar's tabs are superseded).
+- `servers-connections-places.md` — Servers and Connections as places, a list beside a page on web and phone; the
+  service page's one-line head.
 - `final-shell-web.md` — the web's nine places in one order, the phone bar and Places drawer, the grouped Search, Usage
   (*in part*).
 - `final-settings-vault-files-usage.md` — the final design's Settings home, Vault rows, Files home and Usage (the Spend report).

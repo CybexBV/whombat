@@ -237,7 +237,6 @@ a.whombatAction {
 }
 
 .navRow:hover,
-.thing:hover,
 .conv:hover,
 .menuOpen {
   background: var(--sel);
@@ -290,112 +289,9 @@ a.whombatAction {
   text-transform: uppercase;
 }
 
-/* SERVERS and CONNECTIONS as tabs (sidebar-tabs.md): the headings' mono face, the open one in ink over a 1.5px line,
-   the `+` at the row's end. Doubled classes: the shared Tabs stylesheet can load after this one. */
-.listTabs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 16px 0 4px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-.listTabList.listTabList {
-  flex: 1;
-  gap: 14px;
-  padding: 0;
-  border-bottom: 0;
-}
-
-.listTab.listTab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0 0 -1px;
-  padding: 6px 0 7px;
-  border-bottom-width: 1.5px;
-  font: 500 11px var(--font-mono);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.listTab.listTab:hover {
-  color: var(--ink2);
-}
-
-.listTab.listTab[aria-selected="true"] {
-  color: var(--ink);
-}
-
-.tabDot {
-  vertical-align: -1px;
-  transform: scale(0.85);
-}
-
-/* The other tab's rows that aren't fine, under a dashed line: a problem never hides behind a tab. */
-.carried {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--line2);
-}
-
-.labelAdd,
-.labelAdd:hover {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin: -2px -2px -2px 0;
-  border-radius: var(--radius-tag);
-  color: var(--mut);
-}
-
-.labelAdd:hover {
-  background: var(--sel);
-  color: var(--ink);
-}
-
-.thing,
-.thing:hover {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5.5px 10px;
-  border-radius: var(--radius-button-small);
-  color: var(--ink2);
-  font: 400 14.5px var(--font-sans);
-  text-decoration: none;
-}
-
-.thingIcon {
-  flex: none;
-  color: var(--mut);
-}
-
-.thingName {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* A row being renamed: the name is a box in its place; the line under it (a hint or why not) moves the icon up. */
-.renaming,
-.renaming:hover {
-  align-items: flex-start;
-  background: var(--sel);
-}
-
-.renaming > .thingIcon {
-  margin-top: 3px;
-}
-
-/* What tells two of a kind apart (“Hetzner Cloud dev”): quieter than the name. */
-.thingNote {
-  color: var(--mut);
+/* Servers' and Connections' mark at the row's end (servers-connections-places.md). */
+.navMark {
+  margin-left: auto;
 }
 
 .conv,
@@ -625,15 +521,12 @@ a.whombatAction {
 }
 
 .navRow:focus-visible,
-.thing:focus-visible,
 .conv:focus-visible,
 .ask:focus-visible,
 .user:focus-visible,
 .brandButton:focus-visible,
 .whombat:focus-visible,
-.whombatAction:focus-visible,
-.labelAdd:focus-visible,
-.listTab:focus-visible {
+.whombatAction:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
@@ -664,23 +557,10 @@ a.whombatAction {
     order: 3;
   }
 
-  .thing,
-  .thing:hover,
   .conv,
   .conv:hover {
     min-height: 44px;
     font-size: 15.5px;
-  }
-
-  .listTab.listTab {
-    min-height: 44px;
-  }
-
-  .labelAdd,
-  .labelAdd:hover {
-    width: 44px;
-    height: 44px;
-    margin: 0 -12px 0 0;
   }
 
   .menuItem,

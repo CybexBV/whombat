@@ -23,6 +23,7 @@ import {
   serverDashboardView,
   serverDashboardVolumeSeries,
   serverGuestHref,
+  serverHeadWords,
   serverTabHref,
 } from './dashboard';
 import { DASHBOARD_FIXTURE_IDS, type DashboardFixtureId, dashboardFixtures } from './dashboard-fixtures';
@@ -713,5 +714,31 @@ describe('ranges, series and links', () => {
     expect(serverDashboardTabs('unraid')).toContain('array');
     expect(serverDashboardTabs('unraid')).not.toContain('storage');
     expect(serverDashboardTabs('libvirt')).toContain('network');
+  });
+});
+
+describe('a server page head (servers-connections-places.md)', () => {
+  it('keeps its condition word, and its sentence only where the page doesn’t tell the problem', () => {
+    const bad = { tone: 'bad' as const, sentence: 'blackbox has a problem: the disk array has failed.' };
+    expect(serverHeadWords({ status: 'bad', badge: 'Disk array failed' }, bad, true)).toEqual({
+      badge: 'Disk array failed',
+      verdict: null,
+    });
+    // Only a folded heads-up: the sentence is the one place it is said.
+    expect(
+      serverHeadWords({ status: 'warn', badge: 'Running hot' }, { ...bad, tone: 'warn' }, false).verdict,
+    ).toBe(bad.sentence);
+    const fine = { tone: 'ok' as const, sentence: 'pve-01 is fine.' };
+    expect(serverHeadWords({ status: 'ok', badge: 'Running fine' }, fine, false).verdict).toBe(
+      'pve-01 is fine.',
+    );
+    // Offline: the sentence is the only one saying since when.
+    expect(
+      serverHeadWords(
+        { status: 'offline', badge: 'Offline' },
+        { ...bad, sentence: 'Not heard since 09:00.' },
+        true,
+      ).verdict,
+    ).toBe('Not heard since 09:00.');
   });
 });

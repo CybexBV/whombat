@@ -31,14 +31,14 @@ vi.mock('../chats/InboxRow', async (importOriginal) => {
   };
 });
 
-// Only the sidebar picks its open list: a call is a render of the sidebar.
-vi.mock('../../app/shell/useSidebarList', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../app/shell/useSidebarList')>();
+// Only the sidebar settles a room's finished threads from a menu: a call is a render of the sidebar.
+vi.mock('../chats/useSettle', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../chats/useSettle')>();
   return {
     ...actual,
-    useSidebarList: () => {
+    useSettleFinishedThreads: (...args: Parameters<typeof actual.useSettleFinishedThreads>) => {
       counts.sidebar += 1;
-      return actual.useSidebarList();
+      return actual.useSettleFinishedThreads(...args);
     },
   };
 });

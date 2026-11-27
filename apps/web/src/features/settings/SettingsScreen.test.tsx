@@ -106,7 +106,8 @@ describe('SettingsScreen', () => {
     // GitHub is a connection (SS-05): its row in Connections, a group on the home, opens its own page, whose
     // Connection tab is GitHub's settings.
     await user.click(screen.getByRole('link', { name: 'Back to Settings' }));
-    await user.click(await screen.findByRole('link', { name: /^Connections/ }));
+    // Settings' own Connections row (the sidebar has a Connections place too).
+    await user.click(await within(screen.getByRole('main')).findByRole('link', { name: /^Connections/ }));
     await waitFor(() => expect(app.location()).toBe(`/settings?tab=connections`));
     await user.click(await screen.findByRole('link', { name: /^GitHub\s*@acme/ }));
     await waitFor(() => expect(app.location()).toBe(GITHUB_PAGE));

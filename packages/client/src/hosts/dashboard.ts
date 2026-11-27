@@ -22,6 +22,7 @@ import {
   type HostUnraidDisk,
   type HostVolume,
   hostControlLevelWords,
+  noticeNature,
   type ThingLine,
   type ThingNoticeIcon,
   type ThingPageBar,
@@ -605,9 +606,31 @@ export function serverDashboardView(
 }
 
 /**
- * The verdict alone, for a page's head on any tab (no history needed): from the banner and Worth a look's lines, as
- * the Summary's.
+ * What a server's page head says (servers-connections-places.md): its short condition word beside the
+ * name (“Running hot”, “Disk array failed”: the hub's own, which Worth a look may not repeat), and its sentence only when
+ * the page doesn't already tell the problem in Right now or Worth a look, or when it is fine or can't be reached.
  */
+export function serverHeadWords(
+  head: Pick<ServerDashboardHead, 'status' | 'badge'>,
+  verdict: Verdict | null,
+  /** The page shows a problem in Right now or Worth a look (`serverPageTellsProblem`); a folded heads-up doesn't. */
+  told: boolean,
+): { badge: string; verdict: string | null } {
+  const problem = verdict?.tone === 'bad' || verdict?.tone === 'warn';
+  const reachable = head.status !== 'offline' && head.status !== 'pending';
+  return { badge: head.badge, verdict: told && problem && reachable ? null : (verdict?.sentence ?? null) };
+}
+
+/** Whether a server's page shows a problem in Right now or Worth a look, not only in its folded heads-ups. */
+export function serverPageTellsProblem(detail: HostServerDetail): boolean {
+  const c = context({ detail, range: SERVER_DASHBOARD_DEFAULT_RANGE });
+  const banner = bannerPanel(c);
+  const look = lookPanel(c, banner?.alertId ?? null);
+  return [...(banner?.panel.kind === 'notices' ? banner.panel.items : []), ...look.items].some(
+    (l) => !l.quiet && noticeNature(l) !== 'fyi',
+  );
+}
+
 export function serverPageVerdict(
   detail: HostServerDetail,
   opts: { name?: string; now?: number; locale?: string | null } = {},

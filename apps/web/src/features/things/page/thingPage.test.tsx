@@ -40,7 +40,11 @@ describe('Home Assistant’s page (ha.png)', () => {
       'http://10.100.0.5:8123/',
       '_blank',
     ]);
-    expect(screen.getByText('10.100.0.5:8123')).toBeTruthy();
+    // The address is in ⋯, not in the head.
+    expect(screen.queryByText('10.100.0.5:8123')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More for Home Assistant' }));
+    expect(screen.getByRole('menuitem', { name: /^Copy address 10\.100\.0\.5:8123/ })).toBeTruthy();
+    await user.keyboard('{Escape}');
     // “Runs in homeassistant on pve-02”: the guest's page and the server's.
     expect(screen.getByRole('link', { name: 'homeassistant' }).getAttribute('href')).toContain(
       '/things/server%3Apve-02?guest=pve%3A131',
@@ -141,7 +145,11 @@ describe('Home Assistant’s page (ha.png)', () => {
   it('lets a manager choose what it runs on, or say it isn’t on a server Whombat watches', async () => {
     const user = userEvent.setup();
     renderApp(HA, world());
-    await user.click(await screen.findByRole('button', { name: 'Change what Home Assistant runs on' }));
+    const changeRunsOn = async () => {
+      await user.click(await screen.findByRole('button', { name: 'More for Home Assistant' }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Change what it runs on' }));
+    };
+    await changeRunsOn();
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog)
@@ -154,7 +162,7 @@ describe('Home Assistant’s page (ha.png)', () => {
     expect(await screen.findByText('Home Assistant runs on unifi (pve-02).')).toBeTruthy();
     expect(await screen.findByRole('link', { name: 'CT 136' })).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Change what Home Assistant runs on' }));
+    await changeRunsOn();
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', {
         name: 'Not on a server Whombat watches',
@@ -163,7 +171,8 @@ describe('Home Assistant’s page (ha.png)', () => {
     expect(await screen.findByText('Home Assistant isn’t on a server Whombat watches.')).toBeTruthy();
     const main = screen.getByRole('main', { name: 'Home Assistant' });
     await waitFor(() => expect(within(main).queryByRole('link', { name: /pve-02|CT 13/ })).toBeNull());
-    expect(screen.getByRole('button', { name: 'What does it run on?' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'More for Home Assistant' }));
+    expect(screen.getByRole('menuitem', { name: 'What does it run on?' })).toBeTruthy();
   });
 
   it('has its Settings page as its Settings tab, without the head but with Rename', async () => {
@@ -177,6 +186,7 @@ describe('Home Assistant’s page (ha.png)', () => {
 
 describe('every connection and device has a page (CP-06, CP-10, CP-13)', () => {
   it('gives a connection without its own figures the generic page, in slots', async () => {
+    const user = userEvent.setup();
     renderApp('/things/connection%3Acon_fixture_tracker', world());
     expect(await screen.findByRole('heading', { name: 'Acme Desk dev', level: 1 })).toBeTruthy();
     expect(text(await card('With Whombat'))).toContain('182 ms');
@@ -184,7 +194,8 @@ describe('every connection and device has a page (CP-06, CP-10, CP-13)', () => {
     // No row of figures, and no Worth a look while nothing needs one.
     expect(screen.queryByRole('region', { name: 'At a glance' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Worth a look' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'What does it run on?' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'More for Acme Desk dev' }));
+    expect(screen.getByRole('menuitem', { name: 'What does it run on?' })).toBeTruthy();
   });
 
   it('shows a device being learned with the way to its chat, and no Settings tab', async () => {
@@ -215,9 +226,10 @@ describe('every connection and device has a page (CP-06, CP-10, CP-13)', () => {
     await user.click(await screen.findByRole('button', { name: 'Technical details' }));
     const also = await screen.findByRole('link', { name: 'Proxmox VE API' });
     expect(also.getAttribute('href')).toContain('/things/connection%3Acon_pve-02-api');
+    // The sidebar lists no things, only the places.
     const side = screen.getByRole('complementary', { name: 'Sidebar' });
     expect(within(side).queryByText('Proxmox VE API')).toBeNull();
-    expect(within(side).getByRole('link', { name: /Home Assistant/ })).toBeTruthy();
+    expect(within(side).queryByRole('link', { name: /^Home Assistant/ })).toBeNull();
   });
 
   it('opens a connection’s Settings address on its page’s Settings tab', async () => {
@@ -248,10 +260,11 @@ describe('a connection’s page in slots (docs/decisions/service-slots.md)', () 
     expect(screen.queryByRole('region', { name: 'At a glance' })).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'On the network' })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'Internet' })).toBeTruthy();
+    // Narrow: the crumb goes back to the Connections list.
     expect(
       within(screen.getByRole('main', { name: 'UniFi' }))
-        .getByRole('link', { name: 'Overview' })
+        .getByRole('link', { name: 'Connections' })
         .getAttribute('href'),
-    ).toBe('/connections');
+    ).toBe('/connected');
   });
 });

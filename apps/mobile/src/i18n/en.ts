@@ -382,6 +382,8 @@ export const EN = {
   'places.line.chat': 'You and {assistant}',
   'places.line.inbox': 'What needs you',
   'places.line.overview': 'Servers and connections',
+  'places.line.servers': 'Your servers and how they are',
+  'places.line.connections': 'What’s connected and how it is',
   'places.line.automations': 'Plans and schedules',
   'places.line.files': 'Files shared in your conversations',
   'places.line.vault': 'Sign-ins and secrets',
@@ -993,4 +995,6 @@ export const EN = {
   'chat.lastReply': 'Last reply {when}',
   'chat.lastReplyOn': 'Last reply on {date}',
   'demo.leave': 'Leave',
+  'places.pick.servers': 'Pick a server to see it here.',
+  'places.pick.connections': 'Pick a connection to see it here.',
 } as const;

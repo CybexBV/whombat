@@ -188,7 +188,7 @@
   "apps/web/src/features/things/manage/StorageContentDialog.tsx": 8,
   "apps/web/src/features/things/manage/useManage.ts": 1,
   "apps/web/src/features/things/page/RunsOnDialog.tsx": 3,
-  "apps/web/src/features/things/page/ThingPageScreen.tsx": 2,
+  "apps/web/src/features/things/page/ThingPageScreen.tsx": 1,
   "apps/web/src/features/things/page/ThingTabs.tsx": 2,
   "apps/web/src/features/things/parts.tsx": 1,
   "apps/web/src/features/things/tabs/BackupsTab.tsx": 1,

@@ -26,6 +26,8 @@ import {
   holdView,
   KEEP_QUIET_WORDS,
   LOOK_PLAN_WORDS,
+  pageHeadBadge,
+  pageHeadVerdict,
   parseThingTab,
   runsOnParts,
   serverTab,
@@ -75,7 +77,7 @@ import { ExternalLink } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
 import { ButtonLink } from '../../../components/Button';
-import { CopyButton } from '../../../components/CopyButton';
+import { copyText } from '../../../components/CopyButton';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Tabs } from '../../../components/Tabs';
@@ -429,8 +431,11 @@ function EarlyHead({ head }: { head: ThingHeadPreview }) {
     <PageHead
       {...headLook(head)}
       name={head.name}
-      badge={head.status && head.badge ? { tone: thingBadgeTone(head.status), text: head.badge } : null}
-      statusFirst
+      badge={(() => {
+        const text =
+          head.status && head.badge ? pageHeadBadge({ status: head.status, badge: head.badge }) : null;
+        return head.status && text ? { tone: thingBadgeTone(head.status), text } : null;
+      })()}
       actions={null}
     />
   );
@@ -470,14 +475,19 @@ function Head({
   const { checked, detail } = headFacts(page.facts);
   const factKey = (line: ThingPage['facts'][number]) => line.map((p) => p.text).join('');
   const address = page.address;
+  const toast = useToast();
+  // The head is one line beside a place's list (servers-connections-places.md): where it runs stays in words;
+  // Change, the address and More detail are in ⋯.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const badgeText = stateInHold ? null : pageHeadBadge(page);
   return (
     <PageHead
       {...headLook(page)}
       name={page.name}
-      badge={stateInHold ? null : { tone: thingBadgeTone(page.status), text: page.badge }}
-      statusFirst
-      verdict={page.verdict ?? null}
+      badge={badgeText ? { tone: thingBadgeTone(page.status), text: badgeText } : null}
+      verdict={pageHeadVerdict(page)}
       detail={detail.length ? detail.map((line) => <Fact key={factKey(line)} line={line} />) : null}
+      detailOpen={detailOpen}
       actions={
         <>
           {/* The assistant doesn't use the Vault's 1Password sync: nothing to ask it about here. */}
@@ -527,70 +537,75 @@ function Head({
                     } satisfies HeadMenuItem,
                   ]
                 : []),
+              ...(pick && page.runsOn
+                ? [{ key: 'runs-on', label: HEAD_MENU_WORDS.changeRunsOn, onSelect: onPickRunsOn }]
+                : ask
+                  ? [{ key: 'runs-on', label: HEAD_MENU_WORDS.askRunsOn, onSelect: onPickRunsOn }]
+                  : []),
+              ...(address
+                ? [
+                    {
+                      key: 'copy-address',
+                      label: HEAD_MENU_WORDS.copyAddress(address),
+                      onSelect: () =>
+                        void copyText(address).then((ok) => {
+                          if (ok) toast.show('Address copied.');
+                        }),
+                    },
+                  ]
+                : []),
+              ...(detail.length
+                ? [
+                    {
+                      key: 'detail',
+                      label: detailOpen ? HEAD_MENU_WORDS.lessDetail : HEAD_MENU_WORDS.moreDetail,
+                      onSelect: () => setDetailOpen((o) => !o),
+                    },
+                  ]
+                : []),
             ]}
           />
           <ActionDialog burrow={burrow} page={page} action={asking} onClose={() => setAsking(null)} />
         </>
       }
       facts={
-        <>
-          {page.runsOn && runsOn ? (
-            <span>
-              {runsOn.rest ? (
-                <>
-                  Runs in{' '}
-                  <AppLink href={page.runsOn.href} className={styles.runsOn}>
-                    {runsOn.rest}
-                  </AppLink>{' '}
-                  on{' '}
-                </>
-              ) : (
-                'Runs on '
-              )}
-              <AppLink href={thingHref('server', page.runsOn.serverId)} className={styles.runsOn}>
-                <span className={styles.mono}>{runsOn.server}</span>
-              </AppLink>
-              {pick ? (
-                <button
-                  type="button"
-                  className={styles.factBtn}
-                  onClick={onPickRunsOn}
-                  aria-label={`Change what ${page.name} runs on`}
-                >
-                  Change
-                </button>
-              ) : null}
-            </span>
-          ) : ask ? (
-            <span>
-              <button
-                type="button"
-                className={cx(styles.factBtn, styles.factBtnFirst)}
-                onClick={onPickRunsOn}
-              >
-                What does it run on?
-              </button>
-            </span>
-          ) : null}
-          {address ? (
-            // Its own span around the button: the fact line's middle dot goes before it, not inside it.
-            <span>
-              <CopyButton
-                text={address}
-                copied="Address copied."
-                className={styles.addr}
-                label={`Copy the address ${address}`}
-              >
-                {address}
-              </CopyButton>
-            </span>
-          ) : null}
-          {checked ? <Fact line={checked} /> : null}
-        </>
+        // Nothing to say (a cloud account with no check yet): no empty line under the head.
+        (page.runsOn && runsOn) || checked ? (
+          <>
+            {page.runsOn && runsOn ? (
+              <span>
+                {runsOn.rest ? (
+                  <>
+                    Runs in{' '}
+                    <AppLink href={page.runsOn.href} className={styles.runsOn}>
+                      {runsOn.rest}
+                    </AppLink>{' '}
+                    on{' '}
+                  </>
+                ) : (
+                  'Runs on '
+                )}
+                <AppLink href={thingHref('server', page.runsOn.serverId)} className={styles.runsOn}>
+                  <span className={styles.mono}>{runsOn.server}</span>
+                </AppLink>
+              </span>
+            ) : null}
+            {checked ? <Fact line={checked} /> : null}
+          </>
+        ) : null
       }
     />
   );
 }
+
+/** The ⋯ menu's words for what left the head's fact line. */
+const HEAD_MENU_WORDS = {
+  changeRunsOn: 'Change what it runs on',
+  askRunsOn: 'What does it run on?',
+  copyAddress: (address: string) => `Copy address ${address}`,
+  moreDetail: 'More detail',
+  lessDetail: 'Less detail',
+} as const;
 
 function Fact({ line }: { line: ThingPage['facts'][number] }) {
   return (

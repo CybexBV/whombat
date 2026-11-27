@@ -174,7 +174,7 @@ describe('UniFi Network', () => {
   it('notices and the Devices table, without anyone’s client list', () => {
     const s = unifiSnap();
     expect(unifiNotices(s).map((n) => [n.tone, n.nature, n.title, n.detail])).toEqual([
-      ['warn', 'problem', 'Garden AP is offline', 'Offline'],
+      ['warn', 'problem', 'Garden AP is offline', undefined],
       ['info', 'fyi', 'Kitchen AP has an update', undefined],
     ]);
     const rows = unifiDeviceRows(s);
@@ -208,9 +208,9 @@ describe('UniFi Network', () => {
     expect(now.items.map((i) => [i.id, i.title, i.figure?.value, i.detail])).toEqual([
       ['internet', 'Internet', '312 / 40 Mb/s', 'Down · up now · busiest today 480 Mb/s'],
       ['clients', 'Connected now', '174', 'Phones, laptops and more · most today 199'],
-      ['online', 'Devices online', '3 of 4', 'Garden AP is offline'],
+      ['online', 'Devices online', '3 of 4', 'Access points, switches and the gateway'],
     ]);
-    expect(now.items[2]).toMatchObject({ tone: 'warn', figure: { tone: 'warn' } });
+    expect(now.items[2]).toMatchObject({ tone: 'warn', figure: { tone: 'warn', note: '1 offline' } });
     // The gateway's own load only when the card is another machine's.
     const known = unifiView(unifiInput({ machineKnown: true })).panels[0];
     expect(known?.kind === 'list' && known.items.at(-1)).toMatchObject({
@@ -226,7 +226,7 @@ describe('UniFi Network', () => {
       ['Access points', '2', '1 offline'],
       ['Switches', '1', 'All online'],
       ['Gateway', '1', 'All online'],
-      ['Updates waiting', '1', 'Firmware to install'],
+      ['Updates waiting', '1', 'Firmware'],
     ]);
     expect(equipment.items[2]?.detail).toBe('UCG-Ultra');
     expect(equipment.items[3]?.detail).toBe('Kitchen AP · 7.0.66 now');

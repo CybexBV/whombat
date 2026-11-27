@@ -39,6 +39,7 @@ import {
   headFacts,
   holdView,
   overviewWords,
+  pageHeadVerdict,
   type ThingHeadPreview,
   thingButtonKey,
   thingMark,
@@ -78,6 +79,7 @@ import { pressNote } from '../data/servicePanels';
 import { putBackAction } from '../data/serviceSettings';
 import { phoneThingGlyph } from '../data/thingLook';
 import {
+  headPillWord,
   headSpoken,
   type LinkRun,
   phoneThingTabs,
@@ -228,7 +230,7 @@ export function ThingPageScreen({
     () => ({ buttons, guesses, guess, done }),
     [buttons, guesses, guess, done],
   );
-  // Until it answers the first time, the head as the Connections tab's row says it (AP-2650).
+  // Until it answers the first time, the head as the Connections tab's row says it.
   const early = useCachedThingHead(slug, thingId);
   const ranges = useMemo(() => rangeOptions(page?.ranges, rawLocale), [page?.ranges, rawLocale]);
   const shownRange = range ?? page?.range ?? DEFAULT_RANGE;
@@ -606,8 +608,9 @@ export function ThingPageScreen({
 /* The head -------------------------------------------------------------------------------------------------------- */
 
 /**
- * The head's top: the glyph or mark and the name, then the status dot and the badge's words. The page's, or before it
- * answers the row the app holds (AP-2650), drawn the same so nothing moves when the page comes; no status, no dot line.
+ * The head's top: the glyph or mark and the name, then the status dot and the badge's words (a problem's level only).
+ * The page's, or before it answers the row the app holds, drawn the same so nothing moves when the page comes;
+ * no status, no dot line.
  */
 function HeadTop({
   thing,
@@ -619,13 +622,16 @@ function HeadTop({
 }) {
   const theme = useTheme();
   // Before it answers, the row the app holds may have words without a status: TalkBack hears them, nothing is drawn.
-  const line = verdict ?? (thing.status ? thing.badge : null);
+  // A problem says only its level here: Worth a look tells what it is.
+  const word =
+    thing.status && thing.badge ? headPillWord({ status: thing.status, badge: thing.badge }) : thing.badge;
+  const line = verdict ?? (thing.status ? word : null);
   return (
     <View
       style={{ gap: 6 }}
       accessible
       accessibilityRole="header"
-      accessibilityLabel={headSpoken({ name: thing.name, badge: verdict ?? thing.badge })}
+      accessibilityLabel={headSpoken({ name: thing.name, badge: verdict ?? word })}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <ThingIcon
@@ -662,7 +668,7 @@ function HeadTop({
 
 /**
  * A connection's or device's head (docs/app/decisions/phone-refresh-status.md, as the web's): its mark and name; the
- * status pill and why on the first line; “Runs on {host}”, the address (a press copies it) and when it was last checked
+ * status pill (a problem's level only, servers-connections-places.md) and its verdict on the first line; “Runs on {host}”, the address (a press copies it) and when it was last checked
  * on the next; its other facts — version, Docker, database, uptime — behind “More detail”; what couldn't be read; then,
  * for a service, two buttons across, 46dp: Ask {assistant} and Open (named “Open Home Assistant”). On a wide page the
  * buttons stand beside the name instead, in the right half, as on the web.
@@ -695,12 +701,15 @@ function ServiceHead({
   const navigation = useAppNavigation();
   const [detailOpen, setDetailOpen] = useState(false);
   const open = withButtons ? page.open : undefined;
-  const verdict = page.verdict?.trim() || null;
+  const verdict = pageHeadVerdict(page);
   const runsOn = page.runsOn;
   // Down because of something else is grey, not fine: the hollow ring and grey words of a thing not known yet.
   const level = page.causedBy && page.causedBy.kind !== 'quiet' ? 'learning' : thingStatusLevel(page.status);
   // Kept quiet, the server's badge is the hold's own first words (“Quiet until 23:00”): the hold line says them.
   const kept = !!hold && !!page.keptQuiet && page.badge === page.keptQuiet.words.split(' · ')[0];
+  // A problem's pill says only its level (“Needs a look”): Worth a look tells what it is, once. Down because of
+  // something else keeps its own words.
+  const pillWord = level === 'learning' ? page.badge : headPillWord(page);
   // The week's line sits by when it was checked; the server also sends it among the facts for older apps.
   const { checked, detail } = headFacts(factsWithoutUptime(page.facts, page.uptime));
   const week = page.uptime?.text ?? null;
@@ -742,7 +751,7 @@ function ServiceHead({
       <View
         accessible
         accessibilityRole="header"
-        accessibilityLabel={headSpoken({ name: page.name, badge: page.badge })}
+        accessibilityLabel={headSpoken({ name: page.name, badge: pillWord })}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
       >
         <ThingIcon glyph={phoneThingGlyph(page)} mark={thingMark(page)} size={30} color={theme.colors.ink2} />
@@ -755,7 +764,7 @@ function ServiceHead({
         <View
           style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 6 }}
         >
-          {kept ? null : <LevelPill level={level} word={page.badge} />}
+          {kept ? null : <LevelPill level={level} word={pillWord} />}
           {cause ? <CauseLink label={cause.label} onPress={cause.onPress} /> : null}
           {verdict ? (
             <Text size={15} lh={1.4} color={theme.colors.ink2} style={{ flexShrink: 1, minWidth: 160 }}>

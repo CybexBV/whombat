@@ -38,7 +38,9 @@ import {
   SERVER_TABS,
   serverDashboardHead,
   serverDashboardKind,
+  serverHeadWords,
   serverMark,
+  serverPageTellsProblem,
   serverPageVerdict,
   serverReportAt,
   serverTabWords,
@@ -432,7 +434,7 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
 
 /**
  * The head (DS-01): the crumb, icon, name and badge, Ask {assistant} first and the rest (a shell, Restart, Shut down)
- * behind ⋯, then the verdict. Its versions, processor, address and helper are the Summary's Technical details.
+ * behind ⋯, then the verdict unless the page's Right now or Worth a look already tells the problem. Its versions, processor, address and helper are the Summary's Technical details.
  */
 function ServerHead({
   burrow,
@@ -457,6 +459,9 @@ function ServerHead({
   const { tag: locale } = useWebI18n();
   const head = serverDashboardHead(detail, undefined, locale);
   const verdict = useMemo(() => serverPageVerdict(detail, locale ? { locale } : {}), [detail, locale]);
+  // A problem Right now or Worth a look tells isn't said again in a sentence beside the name.
+  const told = useMemo(() => serverPageTellsProblem(detail), [detail]);
+  const said = serverHeadWords(head, verdict, told);
   const rc = detail.server.remoteControl;
   // The host's shell (and a Mac's screen beside it) goes with the host-shell switch only, as the hosts service asks.
   const shellOk = rc.hostShell !== false && detail.server.status !== 'offline';
@@ -479,8 +484,6 @@ function ServerHead({
         name={head.name}
         // A host name is set in the mono face; a name a person gave it isn't, its id is under it.
         mono={!head.idLine}
-        // Its condition and when its own report was read lead the fact line, as on its Overview card.
-        statusFirst
         facts={
           <>
             <ReadTime at={serverReportAt(detail)} now={now} timeZone={timeZone} />
@@ -504,8 +507,8 @@ function ServerHead({
             />
           ) : undefined
         }
-        badge={{ tone: head.tone, text: head.badge }}
-        verdict={verdict?.sentence ?? null}
+        badge={{ tone: head.tone, text: said.badge }}
+        verdict={said.verdict}
         actions={
           <>
             <AskButton burrow={burrow} />

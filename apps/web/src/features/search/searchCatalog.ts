@@ -10,10 +10,12 @@ import {
   advancedRowsHere,
   agentGroupParts,
   agentKeysText,
+  placeWords,
   type SettingsHere,
   settingsGroupText,
   settingsHomeText,
   type ThingGlyph,
+  type ThingPlace,
   thingRows,
   thingStatusLabels,
   USAGE_HREF,
@@ -27,17 +29,21 @@ import {
   parseThingId,
   type ThingSummary,
 } from '@whombat/core';
+import { PLACE_HREFS as THING_PLACE_HREFS } from '../../app/shell/assistantSidebarModel';
 import { INBOX_PATH } from '../../app/shell/location';
 import { DESK_SCREENS_TEXT, THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
-import { currentLocale } from '../../i18n/provider';
+import { currentLocale, webTranslator } from '../../i18n/provider';
 import { appPlaceWords, SEARCH_WORDS } from '../../i18n/shared';
 
 export type CatalogGroup = 'things' | 'settings' | 'places';
 
+/** The app's places and the sidebar's Servers and Connections, which Search lists right after Overview. */
+export type SearchPlace = AppPlace | ThingPlace;
+
 export type CatalogIcon =
   | { kind: 'mark'; mark: MarkLike }
   | { kind: 'glyph'; glyph: ThingGlyph }
-  | { kind: 'place'; place: AppPlace }
+  | { kind: 'place'; place: SearchPlace }
   | { kind: 'setting'; group: 'you' | 'agent' | 'connections' | 'appliance' | 'news' | 'advanced' };
 
 export interface CatalogEntry {
@@ -200,6 +206,32 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
         icon: { kind: 'place', place },
         terms: SEARCH_WORDS.groups.places,
       });
+  // Servers and Connections after Overview, as in the sidebar, each once it holds something (an empty one is
+  // Overview's to offer).
+  const overview = entries.findIndex((e) => e.key === 'place:overview');
+  const listed = thingRows(things ?? []);
+  const serverIds = new Set((things ?? []).filter((t) => t.kind === 'server').map((t) => t.id));
+  const held: Record<ThingPlace, boolean> = {
+    servers: listed.some((r) => serverIds.has(r.id)),
+    connections: listed.some((r) => !serverIds.has(r.id)),
+  };
+  entries.splice(
+    overview + 1,
+    0,
+    ...(['servers', 'connections'] as const)
+      .filter((place) => held[place])
+      .map(
+        (place): CatalogEntry => ({
+          key: `place:${place}`,
+          group: 'places',
+          title: placeWords(currentLocale())[place].title,
+          line: webTranslator(currentLocale()).t(`place.${place}.line`),
+          href: THING_PLACE_HREFS[place],
+          icon: { kind: 'place', place },
+          terms: SEARCH_WORDS.groups.places,
+        }),
+      ),
+  );
   return entries;
 }
 

@@ -615,6 +615,19 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
             ).ConversationFilesScreen
           }
         />
+        {/* Servers and Connections as places (servers-connections-places.md): one list screen for both. */}
+        <Stack.Screen
+          name="ServersPlace"
+          getComponent={() =>
+            (require('../screens/PlaceScreen') as typeof import('../screens/PlaceScreen')).PlaceScreen
+          }
+        />
+        <Stack.Screen
+          name="ConnectionsPlace"
+          getComponent={() =>
+            (require('../screens/PlaceScreen') as typeof import('../screens/PlaceScreen')).PlaceScreen
+          }
+        />
         {/* Search: chats, things, settings and places (phone-shell-final.md). */}
         <Stack.Screen
           name="Search"

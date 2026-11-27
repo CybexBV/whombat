@@ -1,8 +1,8 @@
 /**
  * A thing's page (`/things/:thing`, one Whombat ONE-04/ONE-05): `servers?view=guests` every guest of every server (the
  * servers list is part of Connections, CN-09: without the view the router takes it there, and so does this), `server:<id>` a server's
- * page (mock 2), and a connection or a device its own page (Whombat connection-pages.md CP-01; connection-pages-web.md
- * AP-1900…). A runtime without `things.pages` opens a connection's page in Settings → Connections as before (CP-18;
+ * page (mock 2), and a connection or a device its own page (Whombat connection-pages.md CP-01; connection-pages-web.md),
+ * each in its place with the place's list beside it (servers-connections-places.md). A runtime without `things.pages` opens a connection's page in Settings → Connections as before (CP-18;
  * AP-1300). Props as the route passes them: the open burrow and the thingId, URL-encoded or not.
  */
 
@@ -11,6 +11,7 @@ import { CONNECTIONS_HREF, parseThingId } from '@whombat/core';
 import { useEffect } from 'react';
 import { useNavigateHref } from '../../app/routing/navigation';
 import { ThingPageScreen } from './page/ThingPageScreen';
+import { ThingInPlace } from './places/ThingPlace';
 import { ServerPage } from './ServerPage';
 import { ServersPage } from './ServersPage';
 import styles from './Things.module.css';
@@ -25,8 +26,19 @@ export function ThingScreen({ burrow, thing }: ThingScreenProps) {
   const decoded = safeDecode(thing);
   if (decoded === 'servers') return <ServersAddress burrow={burrow} />;
   const parsed = parseThingId(decoded);
-  if (parsed?.kind === 'server') return <ServerPage key={parsed.id} burrow={burrow} serverId={parsed.id} />;
-  if (parsed) return <ThingPageScreen key={decoded} burrow={burrow} thing={decoded} />;
+  // A server's or connection's page sits in its place, the place's list beside it (servers-connections-places.md).
+  if (parsed?.kind === 'server')
+    return (
+      <ThingInPlace burrow={burrow} thing={decoded}>
+        <ServerPage key={parsed.id} burrow={burrow} serverId={parsed.id} />
+      </ThingInPlace>
+    );
+  if (parsed)
+    return (
+      <ThingInPlace burrow={burrow} thing={decoded}>
+        <ThingPageScreen key={decoded} burrow={burrow} thing={decoded} />
+      </ThingInPlace>
+    );
   return (
     <div className={styles.page}>
       <h1 className={styles.titleSans}>Not found</h1>
