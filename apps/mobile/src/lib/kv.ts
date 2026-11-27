@@ -12,7 +12,7 @@ export const STORAGE_KEYS = {
   theme: 'whombat.theme',
   /** The emoji this person reacted with lately, newest first (essentials AP-507). */
   recentEmoji: 'whombat.recentEmoji',
-  /** When the person said “Not now” to turning on notifications (MN-05); kept on this phone. */
+  /** When the person said “Not now” to turning on notifications; kept on this phone. */
   pushPrompt: 'whombat.pushPrompt',
   /** With two pages, the list's share of the window where the person last left the line between them. */
   pageSplit: 'whombat.pageSplit',

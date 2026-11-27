@@ -187,7 +187,7 @@ export const COPY = {
     quietOn: 'On, quietly',
     quietMeta: 'They wait in Notification Center, without a sound or a banner.',
     turnOnAlerts: 'Turn on alerts',
-    /** A self-hosted server's push (MN-05). */
+    /** Push on this phone, not turned on yet. */
     off: 'Off',
     offMeta: 'Turn them on to hear when something needs you.',
     turnOn: 'Turn on',
