@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 import { coreTranslator, coreWords } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { Count, Timestamp } from './common.js';
 
 /* Your memory ------------------------------------------------------------------------------------------------------ */
@@ -184,7 +185,7 @@ export function notesCopy(
 /** “1,240 of 2,200 characters” (a file's or the notes' usage line); “1.240 van 2.200 tekens” in Dutch. */
 export function memoryUsageText(used: number, limit: number, locale?: string | null): string {
   const tr = coreTranslator(locale);
-  const n = (x: number) => (tr.language === 'nl' ? x.toLocaleString('nl-NL') : thousands(x));
+  const n = (x: number) => formatLocaleNumber(x, tr.locale);
   return tr.t('memory.usage', { used: n(used), limit: n(limit) });
 }
 

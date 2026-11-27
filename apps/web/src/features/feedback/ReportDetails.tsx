@@ -20,7 +20,7 @@ import { ErrorNote, SkeletonRows } from '../../components/ListState';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
-import { currentLocale } from '../../i18n/provider';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import {
   ATTEMPT_STATE_LABELS,
   CONFIDENCE_LABELS,
@@ -148,6 +148,7 @@ function ReportBody({
   report: FeedbackReport;
   can: Can;
 }) {
+  const { t } = useWebI18n();
   const toast = useToast();
   const qc = useQueryClient();
   const ids = useId();
@@ -236,8 +237,9 @@ function ReportBody({
 
       {removed ? (
         <p className={styles.muted}>
-          Content removed {formatDate(r.contentRemovedAt ?? r.updatedAt, timeZone, { now }, currentLocale())}.
-          The reference, its states and the signed history stay.
+          {t('reports.contentRemoved', {
+            date: formatDate(r.contentRemovedAt ?? r.updatedAt, timeZone, { now }, currentLocale()),
+          })}
         </p>
       ) : (
         <>

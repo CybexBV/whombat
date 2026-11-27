@@ -323,7 +323,7 @@ private struct WhombatStatusWidgetView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(entry.accessibilityLabel)
-    .accessibilityHint("Opens Whombat")
+    .accessibilityHint(Text(LiveWidgetLocale.isDutch(LiveWidgetLocale.shared) ? "Opent Whombat" : "Opens Whombat"))
     .widgetSurface(Palette.bg)
   }
 }

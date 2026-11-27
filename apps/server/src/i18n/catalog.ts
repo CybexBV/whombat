@@ -15,6 +15,7 @@ import {
   resolveLanguage,
   type Translator,
 } from '@whombat/core/i18n';
+import { CHAT } from './messages/chat';
 import { DESK } from './messages/desk';
 import { GUIDES } from './messages/guides';
 import { HOME } from './messages/home';
@@ -22,6 +23,8 @@ import { HOSTS } from './messages/hosts';
 import { MAIL } from './messages/mail';
 import { MANAGED } from './messages/managed';
 import { PHRASES } from './messages/phrases';
+import { SEARCH } from './messages/search';
+import { SETTINGS } from './messages/settings';
 import { THINGS } from './messages/things';
 
 export const EN = {
@@ -33,6 +36,9 @@ export const EN = {
   ...DESK.en,
   ...THINGS.en,
   ...PHRASES.en,
+  ...SEARCH.en,
+  ...SETTINGS.en,
+  ...CHAT.en,
 };
 
 export type ServerMessageKey = keyof typeof EN & string;
@@ -46,6 +52,9 @@ export const NL: { [K in ServerMessageKey]: MessageValue } = {
   ...DESK.nl,
   ...THINGS.nl,
   ...PHRASES.nl,
+  ...SEARCH.nl,
+  ...SETTINGS.nl,
+  ...CHAT.nl,
 };
 
 export type ServerTranslator = Translator<typeof EN>;

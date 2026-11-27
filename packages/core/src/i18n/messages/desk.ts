@@ -56,7 +56,7 @@ export const DESK_MESSAGES = splitPairs({
     'Connect a server or your home, and I’ll keep an eye on it here.',
     'Koppel een server of je huis, dan houd ik het hier in de gaten.',
   ],
-  'desk.nothingNeedsYou': ['Nothing needs you.', 'Er is niets waarvoor je nodig bent.'],
+  'desk.nothingNeedsYou': ['Nothing needs you.', 'Er wacht niets op je.'],
   'desk.nothingNeedsYouHint': [
     'When I need a decision, it shows here.',
     'Als ik een beslissing nodig heb, zie je dat hier.',
@@ -266,7 +266,7 @@ export const DESK_MESSAGES = splitPairs({
   'desk.calm.servers.many': ['{n} servers', '{n} servers'],
   'desk.calm.services.one': ['1 service', '1 dienst'],
   'desk.calm.services.many': ['{n} services', '{n} diensten'],
-  'desk.calm.nothingNeedsYou': ['Nothing needs you.', 'Er is niets waarvoor je nodig bent.'],
+  'desk.calm.nothingNeedsYou': ['Nothing needs you.', 'Er wacht niets op je.'],
   'desk.calm.stepsDone': ['{n} of {m} done.', '{n} van {m} klaar.'],
   'desk.calm.since': ['Since {clock} · {ago}', 'Sinds {clock} · {ago}'],
   'desk.calm.fix': ['Ask {assistant} to fix it', 'Vraag {assistant} het op te lossen'],

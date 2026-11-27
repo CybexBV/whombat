@@ -18,7 +18,7 @@ import {
 } from '@whombat/core/audit';
 import type { ErrorCode } from '@whombat/core/contracts';
 import { Email, LinkRef, ProviderSignInState, Timestamp } from '@whombat/core/domain';
-import { LocaleTag } from '@whombat/core/i18n';
+import { LocaleTag } from '@whombat/core/i18n/schema';
 import { AccountId } from '@whombat/core/ids';
 import {
   ClientFloor,

@@ -4,7 +4,7 @@
  * apps run (`claims.start` → enrollment session → CPace → `enroll.claim` → the appliance's confirmation), and the
  * words for what can go wrong on the way.
  */
-import { normalizeLocaleTag } from '@whombat/core/i18n';
+import { normalizeLocaleTag } from '@whombat/core/i18n/locale';
 import {
   type ClaimConfirmTags,
   claimConfirmEqual,

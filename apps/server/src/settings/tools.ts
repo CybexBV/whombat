@@ -6,16 +6,15 @@
  * change first goes through the commit pipeline with the `settings.change` key (`changeSetting`), so the person's
  * choice decides whether it goes ahead, asks on a card or is refused, and a destructive change always asks.
  */
-import {
-  resolveLanguage,
-  type SettingsChangeInput,
-  type SettingsChangeOutput,
-  type SettingsFindInput,
-  type SettingsFindOutput,
-  type SettingsOpenInput,
-  type SettingsOpenOutput,
-  type SettingsReadInput,
-  type SettingsReadOutput,
+import type {
+  SettingsChangeInput,
+  SettingsChangeOutput,
+  SettingsFindInput,
+  SettingsFindOutput,
+  SettingsOpenInput,
+  SettingsOpenOutput,
+  SettingsReadInput,
+  SettingsReadOutput,
 } from '@whombat/core';
 import {
   type AssistantSetting,
@@ -36,6 +35,7 @@ import type { Db } from '../db/client';
 import { accounts, burrows } from '../db/schema/index';
 import { postAskCard } from '../guides/ask';
 import { makeCard } from '../guides/flows';
+import { tServer } from '../i18n/catalog';
 import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import type { ToolContext } from '../mcp/tools';
@@ -337,10 +337,9 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
 
 /** The card's button: “Open Backups” (the page's last part). */
 export function openLabel(where: string, locale?: string | null): string {
-  const nl = resolveLanguage(locale) === 'nl';
-  const last = where.split('→').pop()?.trim() || (nl ? 'Instellingen' : 'Settings');
-  const label = `Open ${last}`;
-  return label.length <= 40 ? label : nl ? 'Openen' : 'Open it';
+  const last = where.split('→').pop()?.trim() || tServer(locale, 'settings.open.settings');
+  const label = tServer(locale, 'settings.open.page', { page: last });
+  return label.length <= 40 ? label : tServer(locale, 'settings.open.it');
 }
 
 export async function settingsOpenTool(ctx: ToolContext, input: OpenIn): Promise<SettingsOpenOutput> {

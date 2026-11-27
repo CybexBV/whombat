@@ -25,6 +25,19 @@ describe('APNs payloads', () => {
     });
   });
 
+  it('says when previews are off, so the app shows its own generic words', () => {
+    const off = buildApnsPayload({
+      title: 'Whombat',
+      body: 'Someone mentioned you',
+      path: '/x',
+      preview: false,
+    });
+    expect(off).toMatchObject({ preview: false });
+    expect(buildApnsPayload({ title: 'Dusty', body: 'Hi', path: '/x', preview: true })).not.toHaveProperty(
+      'preview',
+    );
+  });
+
   it('starts an activity with its attributes and an alert, and ends it with a dismissal date', () => {
     const display = { key: 'run:run_1907', label: 'RUN · LIVE' };
     const start = buildApnsPayload({

@@ -19,6 +19,7 @@ import {
 import type { BurrowRow } from '../../commit/types';
 import { createDb } from '../../db/client';
 import { withDatabase } from '../../db/url';
+import { burrowLocale } from '../../i18n/locale';
 import { ApiError } from '../../lib/errors';
 import { iso } from '../../lib/time';
 import type { BackupPort } from '../../managed/backup-port';
@@ -28,7 +29,7 @@ import { backupCodeOf } from '../errors';
 import { stagedPath, stagingDir } from '../paths';
 import { bringBack } from './bring';
 import { allLookItems, findPicked, type LookScope, lookCategories, lookItems } from './items';
-import { closePeek, LOOK_TEXT, openPeek, PEEK_DATABASE, readPeek } from './peek';
+import { closePeek, LOOK_TEXT, lookProblemIn, openPeek, PEEK_DATABASE, readPeek } from './peek';
 import { itemIdOf, makePick, type PickedItem, parseItemId } from './pick';
 
 /**
@@ -73,13 +74,14 @@ export interface Looker {
   email: string;
 }
 
-const view = (l: Look): BackupLook => ({
+/** A look as its person reads it: a problem's words in their language, from its code. */
+const viewIn = (l: Look, locale: string): BackupLook => ({
   lookId: l.id,
   checkpointId: l.checkpointId,
   madeAt: l.madeAt ? iso(l.madeAt) : null,
   state: l.state,
   expiresAt: l.state === 'ready' || l.state === 'opening' ? l.expiresAt : null,
-  problem: l.problem,
+  problem: l.problem ? lookProblemIn(l.problem, locale) : null,
   bring: l.bring,
 });
 
@@ -103,6 +105,11 @@ export class BackupLooks {
   #stopIdle: (() => void) | null = null;
 
   constructor(private readonly services: Services) {}
+
+  /** The look in its person's language (a box has one person). */
+  async #view(look: Look): Promise<BackupLook> {
+    return viewIn(look, await burrowLocale(this.services));
+  }
 
   /** Where the open peek's id is kept, so a start after a stop closes it (beside, not in, the backup files' folder). */
   private get marker(): string {
@@ -181,11 +188,11 @@ export class BackupLooks {
         open.usedAt = Date.now();
         open.port = port;
         await this.refresh(open);
-        if (open.state === 'opening' || open.state === 'ready') return view(open);
+        if (open.state === 'opening' || open.state === 'ready') return await this.#view(open);
       }
     }
     if (open?.bringing)
-      return view({
+      return await this.#view({
         ...newLook(port, who, checkpointId, null),
         state: 'failed',
         problem: { code: 'busy', message: LOOK_TEXT.busy },
@@ -197,13 +204,13 @@ export class BackupLooks {
     if ('problem' in answer) {
       look.state = 'failed';
       look.problem = answer.problem;
-      return view(look);
+      return await this.#view(look);
     }
     look.peekId = answer.id;
     await mkdir(dirname(this.marker), { recursive: true }).catch(() => {});
     await writeFile(this.marker, JSON.stringify({ peekId: answer.id }), { mode: 0o600 }).catch(() => {});
     await this.refresh(look);
-    return view(look);
+    return await this.#view(look);
   }
 
   /** Follows an opening peek to ready (its pool connected), and notices one that closed. */
@@ -274,14 +281,20 @@ export class BackupLooks {
   ): Promise<BackupLookContentsOutput> {
     const look = this.mine(input.lookId, who.person);
     await this.refresh(look);
-    const empty = { look: view(look), categories: [], category: null, items: [], nextCursor: null };
+    const empty = {
+      look: await this.#view(look),
+      categories: [],
+      category: null,
+      items: [],
+      nextCursor: null,
+    };
     if (look.state !== 'ready' || !look.pool || !look.root) return empty;
     const s = await this.scope(look, who);
     try {
       look.categories ??= await lookCategories(s);
       const page = input.category ? await lookItems(s, input.category, input.query, input.cursor) : null;
       return {
-        look: view(look),
+        look: await this.#view(look),
         categories: look.categories,
         category: input.category ?? null,
         items: page?.items ?? [],
@@ -309,7 +322,7 @@ export class BackupLooks {
     await this.refresh(look);
     if (look.state !== 'ready' || !look.pool || !look.root)
       throw new ApiError('conflict', BRING_TEXT.notOpen, { details: { code: 'backup_look_closed' } });
-    if (look.bringing) return { look: view(look), say: bringSay(look.bring) };
+    if (look.bringing) return { look: await this.#view(look), say: bringSay(look.bring) };
     const picked: PickedItem[] = [];
     for (const id of input.items ?? []) {
       const item = parseItemId(id);
@@ -327,7 +340,7 @@ export class BackupLooks {
     const found = await findPicked(s, dedupe(picked));
     if (found.length === 0) {
       look.bring = result('done', { picked: picked.length, back: 0, already: 0, notBack: picked.length });
-      return { look: view(look), say: BRING_TEXT.nothing };
+      return { look: await this.#view(look), say: BRING_TEXT.nothing };
     }
     const pick = makePick(found, whole);
     look.bring = result('bringing', { picked: found.length });
@@ -371,13 +384,13 @@ export class BackupLooks {
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([job, new Promise((r) => (timer = setTimeout(r, waitMs)))]);
     clearTimeout(timer);
-    return { look: view(look), say: bringSay(look.bring) };
+    return { look: await this.#view(look), say: bringSay(look.bring) };
   }
 
   /** The look this person has open (the assistant's last find), or null. */
-  current(person: PrincipalRow): BackupLook | null {
+  async current(person: PrincipalRow): Promise<BackupLook | null> {
     const look = this.#look;
-    return look && look.ownerId === person.id ? view(look) : null;
+    return look && look.ownerId === person.id ? await this.#view(look) : null;
   }
 
   /** Picked items as the backup has them (their titles and where they were), for the card that asks first. */
@@ -407,7 +420,7 @@ export class BackupLooks {
       });
     await this.shut(look, 'closed');
     look.problem = null;
-    return view(look);
+    return await this.#view(look);
   }
 }
 

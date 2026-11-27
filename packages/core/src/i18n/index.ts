@@ -1,9 +1,6 @@
 /**
- * `@whombat/core/i18n` — catalog-free, zero-dependency localization runtime and formatters shared by
- * `@whombat/core`, `@whombat/client`, `apps/server`, `apps/web`, `apps/mobile` and `apps/widget`.
- *
- * Pure ES2023 (no DOM, no browser storage, no dynamic code execution, no React). Message catalogs live
- * beside the packages that own them so Nix builds, contract releases and bundle sizes stay isolated.
+ * Shared localization exports. Use `@whombat/core/i18n/locale` and `@whombat/core/i18n/engine`
+ * for the dependency-free runtime, or `@whombat/core/i18n/schema` for the contract schema.
  */
 
 export * from './catalog.js';

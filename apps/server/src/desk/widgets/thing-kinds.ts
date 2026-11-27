@@ -346,16 +346,16 @@ const media = {
 
 /** Home Assistant's entities that say who is home or where (people, their phones, zones counting them). */
 const HA_WHO = new Set(['person', 'device_tracker', 'zone']);
-/** A binary sensor's words for presence, occupancy, motion and a lock (`ha-controls.ts`; smoke's “Clear” too). */
-const HA_WATCH_WORDS = new Set(['Home', 'Away', 'Detected', 'Clear', 'Locked', 'Unlocked']);
 /** Entities whose readings say who is home, whether the house is locked or watched. */
 const HA_PRIVATE_ENTITY = /^(person|device_tracker|zone|lock|alarm_control_panel|camera|binary_sensor)\./;
 
-/** A Home Assistant control a locked screen leaves out: someone's whereabouts, a presence, motion or lock sensor. */
+/**
+ * A Home Assistant control a locked screen leaves out: someone's whereabouts, or what the page marked private by its
+ * entity's domain and device class (a presence, motion, door or lock sensor; `ha-controls.ts`). Never by its words.
+ */
 function haGuards(c: ThingControl): boolean {
   if (c.private) return true;
-  const domain = c.id.split('.')[0] ?? '';
-  return HA_WHO.has(domain) || (domain === 'binary_sensor' && HA_WATCH_WORDS.has(c.state ?? ''));
+  return HA_WHO.has(c.id.split('.')[0] ?? '');
 }
 
 /** A widget of Home that reads one of those entities (`entity_id` anywhere in the tool's arguments). */
@@ -431,7 +431,12 @@ const house = {
   unifi_access: {
     panels: [
       { panel: 'doors', private: true },
-      { panel: 'today', name: 'Who came in', private: true },
+      { panel: 'today', private: true },
+      // Who opened a door, which one and how; the counts of doors kept unlocked and of openings.
+      { panel: 'people', name: 'Who came in', private: true },
+      { panel: 'inventory', private: true },
+      { panel: 'week', private: true },
+      { panel: 'notices', private: true },
     ],
     // How many doors are unlocked now, how often they opened, and how many people may come in (In Access's lines).
     privateFigures: ['f-doors', 'f-openings-today', 'f-people'],

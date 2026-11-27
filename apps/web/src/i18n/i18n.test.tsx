@@ -211,6 +211,61 @@ describe('Settings → You → Language', () => {
   });
 });
 
+describe('Settings → You → Language while the box saves', () => {
+  it('changes the page only once the box has saved, and never springs back to the old language', async () => {
+    const user = userEvent.setup();
+    const services = fixtureServices();
+    const me = services.client.me;
+    const real = me.updatePreferences.bind(me);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let saved = false;
+    vi.spyOn(me, 'updatePreferences').mockImplementation(async (...args: Parameters<typeof real>) => {
+      await gate;
+      const result = await real(...args);
+      saved = true;
+      return result;
+    });
+    const asked: boolean[] = [];
+    const invalidate = services.queryClient.invalidateQueries.bind(services.queryClient);
+    vi.spyOn(services.queryClient, 'invalidateQueries').mockImplementation((...args) => {
+      asked.push(saved);
+      return invalidate(...args);
+    });
+
+    renderApp('/settings?part=profile', services);
+    const group = await screen.findByRole('radiogroup', { name: EN['settings.language.title'] });
+    const langs: string[] = [document.documentElement.lang];
+    const observer = new MutationObserver(() => {
+      const lang = document.documentElement.lang;
+      if (langs.at(-1) !== lang) langs.push(lang);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+
+    await user.click(within(group).getByRole('radio', { name: 'Nederlands' }));
+    // While the box saves, the picker shows the choice and the page keeps its language.
+    expect((within(group).getByRole('radio', { name: 'Nederlands' }) as HTMLInputElement).checked).toBe(true);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.documentElement.lang).toBe('en-GB');
+    expect(asked).toEqual([]);
+
+    await act(async () => release());
+    await screen.findByRole('radiogroup', { name: NL['settings.language.title'] });
+    await waitFor(() => expect(asked.length).toBeGreaterThan(0));
+    await waitFor(() => expect(services.queryClient.isFetching()).toBe(0));
+    observer.disconnect();
+
+    expect(langs).toEqual(['en-GB', 'nl-NL']);
+    expect(document.documentElement.lang).toBe('nl-NL');
+    // The box's words are asked for again only after it saved the new language.
+    expect(asked.every(Boolean)).toBe(true);
+  });
+});
+
 /** `public/sw.js` in a fake worker scope, loaded from `url`, with or without the Cache API. */
 function worker(url: string, withCache = false) {
   const listeners = new Map<string, (event: unknown) => void>();

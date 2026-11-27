@@ -1,4 +1,5 @@
-import { formatLocaleOf, resolveLanguage } from './locale.js';
+import { coreTranslator } from './catalog.js';
+import { formatLocaleOf, resolveDisplayLanguage, resolveLanguage } from './locale.js';
 
 /** Formats a number using the resolved BCP-47 locale (`en-GB` or `nl-NL`), falling back cleanly if Intl fails. */
 export function formatLocaleNumber(
@@ -14,19 +15,22 @@ export function formatLocaleNumber(
   }
 }
 
-/** Formats a percentage with a non-breaking space before `%` (`85 %`, `12,4 %`). */
+/** Formats percentage points in the locale's percent style (`85%`, `12,4%`). */
 export function formatLocalePercent(value: number, localeTag?: string | null, fractionDigits = 0): string {
-  const formatted = formatLocaleNumber(value, localeTag, {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  });
-  return `${formatted}\u00a0%`;
+  try {
+    return new Intl.NumberFormat(formatLocaleOf(localeTag), {
+      style: 'percent',
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(value / 100);
+  } catch {
+    return `${value}%`;
+  }
 }
 
 /** Formats byte counts using locale-appropriate decimal separators (`1.2 GB` / `1,2 GB`). */
 export function formatLocaleBytes(bytes: number, localeTag?: string | null): string {
-  const lang = resolveLanguage(localeTag);
-  if (!Number.isFinite(bytes) || bytes < 0) return `0 ${lang === 'nl' ? 'B' : 'B'}`;
+  if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
   if (bytes < 1024) return `${Math.round(bytes)} B`;
   const units = ['KB', 'MB', 'GB', 'TB', 'PB'] as const;
   let value = bytes / 1024;
@@ -71,26 +75,17 @@ export function formatLocaleList(
 ): string {
   if (items.length === 0) return '';
   if (items.length === 1) return items[0] ?? '';
-  const locale = formatLocaleOf(localeTag);
-  const lang = resolveLanguage(localeTag);
-  const word = type === 'disjunction' ? (lang === 'nl' ? 'of' : 'or') : lang === 'nl' ? 'en' : 'and';
-  if (items.length === 2) return `${items[0]} ${word} ${items[1]}`;
   try {
-    const ListFmt = (
-      Intl as unknown as {
-        ListFormat?: new (
-          l: string,
-          o: { style: string; type: string },
-        ) => { format(a: readonly string[]): string };
-      }
-    ).ListFormat;
-    if (typeof ListFmt === 'function') {
-      return new ListFmt(locale, { style: 'long', type }).format(items);
+    if (resolveDisplayLanguage(localeTag) !== 'pseudo' && typeof Intl.ListFormat === 'function') {
+      return new Intl.ListFormat(formatLocaleOf(localeTag), { style: 'long', type }).format(items);
     }
   } catch {
     // Fallback below.
   }
-  return `${items.slice(0, -1).join(', ')} ${word} ${items[items.length - 1]}`;
+  return coreTranslator(localeTag).t(`format.list.${type}`, {
+    head: items.slice(0, -1).join(', '),
+    last: items.at(-1) ?? '',
+  });
 }
 
 /** Formats an ISO 3166-1 country/region code (`NL`, `DE`, `US`) in the active locale with safe fallback. */
@@ -125,9 +120,10 @@ export function compareLocaleText(a: string, b: string, localeTag?: string | nul
 
 /**
  * Parses a decimal number typed in either dot or comma style (`"90.5"`, `"90,5"`, `"1.234,56"`, `"1,234.56"`).
+ * A single comma before three digits is thousands grouping unless the caller specifies Dutch.
  * Returns null if the input is empty or not a finite number.
  */
-export function parseLocaleNumber(raw: string): number | null {
+export function parseLocaleNumber(raw: string, locale?: string | null): number | null {
   const cleaned = raw
     .trim()
     .replace(/\u00a0|\s+/g, '')
@@ -141,10 +137,11 @@ export function parseLocaleNumber(raw: string): number | null {
     normalized =
       lastComma > lastDot ? cleaned.replace(/\./g, '').replace(',', '.') : cleaned.replace(/,/g, '');
   } else if (lastComma !== -1) {
-    // Single comma or multiple commas: if exactly one comma with !=3 digits after or <=2 digits, treat as decimal.
     const parts = cleaned.split(',');
     if (parts.length === 2) {
-      normalized = `${parts[0]}.${parts[1]}`;
+      const [whole, fraction] = parts;
+      const grouping = /^[0-9]{3}$/.test(fraction ?? '') && resolveLanguage(locale) !== 'nl';
+      normalized = `${whole}${grouping ? '' : '.'}${fraction}`;
     } else if (parts.every((p, i) => (i === 0 ? /^-?\d{1,3}$/.test(p) : /^\d{3}$/.test(p)))) {
       normalized = parts.join('');
     } else {

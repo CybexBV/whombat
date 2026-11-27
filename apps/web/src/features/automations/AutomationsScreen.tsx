@@ -23,7 +23,7 @@ import { Icon } from '../../components/Icon';
 import { SkeletonRows } from '../../components/ListState';
 import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
-import { currentLocale, useWebI18n } from '../../i18n/provider';
+import { currentLocale, useWebI18n, webTranslator } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';
 import { AskBox } from '../chats/AskBox';
 import { useBurrowViewer } from '../runs/useBurrowViewer';
@@ -60,7 +60,10 @@ function usePhoneWidth(): boolean {
 
 /** “11:22 on 23 Sep”: when the list on screen was read. */
 function savedWhen(at: number, now: Date, timeZone: string): string {
-  return `${formatClock(at, timeZone)} on ${formatDate(at, timeZone, { now }, currentLocale())}`;
+  return webTranslator(currentLocale()).t('automations.savedWhen', {
+    clock: formatClock(at, timeZone),
+    date: formatDate(at, timeZone, { now }, currentLocale()),
+  });
 }
 
 /**

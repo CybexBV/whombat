@@ -6,6 +6,7 @@
  */
 import { formatTokenCount } from '../domain/spend.js';
 import { coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { type DateInput, formatClock } from './time.js';
 import { formatUsagePct, NBSP } from './usage.js';
 
@@ -40,10 +41,8 @@ export const HOST_DISK_PART_LABELS: Readonly<Record<HostDiskPart, string>> = hos
 /** Days in the Data per day and Tokens columns. */
 export const HOST_CHART_DAYS = 14;
 
-const trim1 = (n: number, locale?: string | null) => {
-  const text = String(Number(n.toFixed(1)));
-  return coreTranslator(locale).language === 'nl' ? text.replace('.', ',') : text;
-};
+const trim1 = (n: number, locale?: string | null) =>
+  formatLocaleNumber(Number(n.toFixed(1)), locale, { maximumFractionDigits: 1, useGrouping: false });
 
 /**
  * Bytes as people read them: `0 B`, `850 KB`, `41 MB`, `2.2 GB`, `22.9 GB`, `87 GB`, `140 GB`, `1.2 TB`. One decimal below
@@ -63,7 +62,7 @@ export function formatBytes(bytes: number, locale?: string | null): string {
 export function formatMbits(bitsPerSecond: number, locale?: string | null): string {
   const m = Math.max(0, bitsPerSecond) / 1_000_000;
   if (m === 0) return '0';
-  if (m < 0.05) return coreTranslator(locale).language === 'nl' ? '<0,1' : '<0.1';
+  if (m < 0.05) return `<${trim1(0.1, locale)}`;
   return m < 10 ? trim1(m, locale) : String(Math.round(m));
 }
 

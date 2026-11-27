@@ -17,6 +17,7 @@ import {
   type Plan,
   type PrincipalLite,
 } from '@whombat/core';
+import { DEFAULT_LOCALE } from '@whombat/core/i18n';
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { commandsContextFor, commandsTurn } from '../agent-commands/context';
 import { grantedResultOf } from '../approvals/granted-result';
@@ -497,11 +498,13 @@ export async function buildDispatchContext(
   // asks, the organization access the tracker granted now (or why not). Both write, so they come after the reads.
   const token = await issueDispatchToken(services, row.id);
   const tracker = await trackerPart(services, row);
+  // An owner turn always names its language, English when none was chosen, so a resumed session that last
+  // spoke Dutch switches back when the person goes back to the default.
   const turnLocale = outside
     ? null
-    : person?.accountId
-      ? await configuredAccountLocale(services, person.accountId)
-      : await configuredBoxLocale(services);
+    : ((person?.accountId
+        ? await configuredAccountLocale(services, person.accountId)
+        : await configuredBoxLocale(services)) ?? DEFAULT_LOCALE);
   const context: DispatchContextType = {
     dispatch: toDispatch(runnerRow),
     ...(turnLocale ? { locale: turnLocale } : {}),

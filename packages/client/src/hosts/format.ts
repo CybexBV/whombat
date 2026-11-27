@@ -1,11 +1,11 @@
 /**
  * How servers' numbers read (one Whombat, app docs/decisions/one-whombat-things.md AP-1302), ported from Rackoon's
- * `web/src/lib/format.ts` in English only and in the mock's spelling: a space before `%` and `°C` (“10 %”, “75 °C”),
+ * `web/src/lib/format.ts` and in the mock's spelling: a space before `%` and `°C` (“10 %”, “75 °C”),
  * memory as “76 / 118 GB”, an em dash for no data. Pure and shared by the web and Android; dates take an optional time
  * zone (tests pass one) and otherwise read in the viewer's.
  */
 import type { HostSeriesRange } from '@whombat/core/domain';
-import { formatLocaleOf } from '@whombat/core/i18n';
+import { formatLocaleNumber, formatLocaleOf } from '@whombat/core/i18n';
 import { clientTranslator } from '../i18n/catalog';
 
 export const DASH = '—';
@@ -35,14 +35,10 @@ export function formatInt(v: number): string {
 export function formatNum(v: number | null | undefined, locale?: string | null): string {
   if (v == null || !Number.isFinite(v)) return DASH;
   if (v === 0) return '0';
-  if (clientTranslator(locale).language === 'nl') {
-    const small = Math.abs(v) < 10;
-    return new Intl.NumberFormat(formatLocaleOf(locale), { maximumFractionDigits: small ? 1 : 0 }).format(
-      small ? Number(v.toFixed(1)) : Math.round(v),
-    );
-  }
-  if (Math.abs(v) < 10) return trimZeros(v.toFixed(1));
-  return formatInt(Math.round(v));
+  const small = Math.abs(v) < 10;
+  return formatLocaleNumber(small ? Number(v.toFixed(1)) : Math.round(v), locale, {
+    maximumFractionDigits: small ? 1 : 0,
+  });
 }
 
 /** A whole percent: “10 %”. */

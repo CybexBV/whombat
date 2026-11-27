@@ -2,13 +2,16 @@
  * The server in Dutch: each area's words in `nl`, English exactly as before, and the checks that must never read words
  * (the lock, Ignore episodes, backup reasons) working the same in both.
  */
+import { ThingPage } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
+import type { CatalogConnectionRow } from '../connections/types';
 import { screenViews, trimView } from '../desk/widgets/resolve';
+import { NOW, pageOf, TZ } from '../desk/widgets/thing-testing';
 import type { Resolved } from '../desk/widgets/types';
 import { buildPushPreview, genericPushText, notificationPushTitle } from '../domain/push-preview';
 import { foundPhrase } from '../guides/welcome';
 import { backupProposal, lateBackupItem, restoreStoppedItem } from '../home/box-backup';
-import { englishOf, localizeHubJson, rememberEnglish, statusNoteWords } from '../hosts/localize';
+import { englishOf, hubWords, localizeHubJson, rememberEnglish, statusNoteWords } from '../hosts/localize';
 import { countOf, hintGuestNames } from '../hosts/quiet-lines';
 import { digestLine, renderDigest } from '../mail/digest';
 import { renderEmailHtml } from '../mail/template';
@@ -20,6 +23,32 @@ import {
   SECURITY_NOTICES,
 } from '../managed/security-push';
 import { updateReadyItem } from '../managed/update-inbox';
+import {
+  type AccessSnapshot,
+  accessData,
+  accessView,
+  parseDevices as parseAccessDevices,
+  parseDoors,
+  parseOpenings,
+} from '../things/kinds/home/access';
+import { dnsView, parsePihole } from '../things/kinds/home/dns';
+import {
+  ACCESS_devices,
+  ACCESS_doors,
+  ACCESS_logs,
+  ACCESS_rules,
+} from '../things/kinds/home/fixtures/access';
+import {
+  PIHOLE_blocking,
+  PIHOLE_history,
+  PIHOLE_lists,
+  PIHOLE_messages,
+  PIHOLE_summary,
+  PIHOLE_topBlocked,
+  PIHOLE_topClients,
+  PIHOLE_version,
+} from '../things/kinds/home/fixtures/pihole';
+import { quietOf } from '../things/quiet/wire';
 import { untilWords } from '../things/quiet/words';
 import { EN, NL, tServer } from './catalog';
 import { localizePhrase, localizeTree } from './phrases';
@@ -98,6 +127,33 @@ describe('servers', () => {
     expect(localizeHubJson(alert, 'en-GB')).toBe(alert);
     const unknown = { ...alert, code: 'something.new' };
     expect(localizeHubJson(unknown, 'nl-NL').title).toBe('/data 91% full');
+  });
+
+  it('says a pool, a failed collector, swap and refused requests as the hub does, in Dutch', () => {
+    const alert = (code: string, params: Record<string, unknown>) =>
+      hubWords({ rule: code, code, params }, 'nl-NL', 'alert');
+    const hint = (code: string, params: Record<string, unknown>) =>
+      hubWords({ code, params }, 'nl-NL', 'hint');
+    expect(alert('pool.degraded', { name: 'tank', health: 'DEGRADED', faulted: ['sdb'] })).toMatchObject({
+      title: 'Opslag “tank” mist een schijf',
+      detail: 'sdb is offline; de gegevens lopen risico tot het terug is',
+    });
+    expect(alert('pool.degraded', { name: 'tank', health: 'FAULTED', faulted: [] })).toMatchObject({
+      title: 'Opslag “tank” is faulted',
+      detail: 'ZFS meldt het als faulted',
+    });
+    const collector = hint('collector.error', { collector: 'smart', error: '' });
+    expect(collector?.title).toContain('schijfgezondheid');
+    expect(collector?.detail).toBe('Er is niet gezegd waarom.');
+    expect(hint('collector.error', { collector: 'ups', error: 'timeout' })?.detail).toBe('timeout');
+    expect(hint('swap.high', { usedGiB: 3.5, totalGiB: 4, ramPct: 92 })?.detail).toBe(
+      '3,5 GiB van 4 GiB gebruikt · RAM 92% gebruikt',
+    );
+    const denied = alert('security.denied_requests', { user: 'sam', count: 21 })?.detail ?? '';
+    expect(denied).toContain('sam');
+    expect(denied).toContain('21');
+    expect(denied).toContain('10 minuten');
+    expect(denied).toContain('console');
   });
 
   it('says status notes from their code', () => {
@@ -196,10 +252,19 @@ describe('notices and pushes', () => {
       kind: 'reply',
       actor: 'Dusty',
       where: 'Direct',
+      direct: true,
       text: 'Klaar',
       locale: 'nl',
     });
     expect(preview.title).toBe('Dusty reageerde in Privé');
+    // The place is a DM by the draft's flag, never by its words: a channel called “Direct” keeps its name.
+    expect(
+      buildPushPreview({ kind: 'reply', actor: 'Dusty', where: 'Direct', text: 'Klaar', locale: 'nl' }).title,
+    ).toBe('Dusty reageerde in Direct');
+    expect(
+      buildPushPreview({ kind: 'agent_update', actor: 'Dusty', where: 'Direct', direct: true, text: 'x' })
+        .title,
+    ).toBe('Dusty');
   });
 
   it('says why a restore failed from its code, and keeps an unknown code’s sentence', () => {
@@ -308,6 +373,24 @@ describe('things', () => {
     expect(localizePhrase('Zebra crossing', 'nl-NL')).toBe('Zebra crossing');
   });
 
+  it('says a snoozed or ignored server hint in the reader’s language', () => {
+    const now = new Date('2026-11-27T10:00:00Z');
+    const at = new Date('2026-11-27T09:00:00Z');
+    const snoozed = {
+      state: 'snoozed' as const,
+      words: null,
+      until: new Date('2026-11-28T08:00:00Z'),
+      byId: null,
+      at,
+    };
+    const ignored = { state: 'ignored' as const, words: null, until: null, byId: null, at };
+    const names = new Map<string, string>();
+    expect(quietOf(snoozed, names, now, 'Europe/Amsterdam', 'nl-NL').words).toBe('tot morgen 09:00');
+    expect(quietOf(ignored, names, now, 'Europe/Amsterdam', 'nl-NL').words).toBe('tot er iets verandert');
+    expect(quietOf(snoozed, names, now, 'Europe/Amsterdam').words).toBe('until tomorrow 09:00');
+    expect(quietOf(ignored, names, now, 'Europe/Amsterdam').words).toBe('until it changes');
+  });
+
   it('says when an Ignore or snooze ends in Dutch', () => {
     const now = new Date('2026-11-27T10:00:00Z');
     expect(untilWords(new Date('2026-11-28T08:00:00Z'), now, 'Europe/Amsterdam', 'nl-NL')).toBe(
@@ -316,5 +399,185 @@ describe('things', () => {
     expect(untilWords(new Date('2026-11-28T08:00:00Z'), now, 'Europe/Amsterdam')).toBe(
       'until tomorrow 09:00',
     );
+  });
+});
+
+describe('a whole service page in Dutch', () => {
+  const row = (catalogId: string) =>
+    ({
+      id: `con_${catalogId}`,
+      access: 'manage',
+      label: catalogId,
+      catalogId,
+      fields: {},
+    }) as unknown as CatalogConnectionRow;
+
+  function accessPage(): ThingPage {
+    const rules = new Map(Object.entries(ACCESS_rules).map(([id, r]) => [id, accessData(r)]));
+    const s: AccessSnapshot = {
+      readAt: NOW,
+      doors: parseDoors(accessData(ACCESS_doors), rules),
+      devices: parseAccessDevices(accessData(ACCESS_devices)),
+      openings: parseOpenings(accessData(ACCESS_logs)),
+      moreOpenings: false,
+      openingsTotal: 2,
+    };
+    const view = accessView(
+      s,
+      { now: NOW, timeZone: TZ, openSince: new Map() },
+      { row: row('unifi_access') },
+    );
+    return pageOf(
+      {
+        ...view,
+        kpis: [
+          { key: 'memory', label: 'Memory', value: '42 %', sub: '3 days' },
+          { key: 'disk', label: 'Storage', value: '1,200 devices', sub: '12.5 GB free' },
+        ],
+        notices: [
+          {
+            id: 'slow',
+            tone: 'warn',
+            icon: 'warn',
+            title: 'Needs a look',
+            detail: 'Worth a look',
+            nature: 'problem',
+            check: 'unifi_access.slow',
+          },
+        ],
+        tabs: [
+          {
+            key: 'history',
+            label: 'History',
+            panels: [
+              {
+                kind: 'list',
+                id: 'log',
+                title: 'Activity',
+                items: [{ id: 'a', title: '2 hours', right: '5 min' }],
+              },
+              {
+                kind: 'chart',
+                id: 'mem',
+                title: 'Memory',
+                timestamps: [NOW.toISOString()],
+                series: [{ key: 'mem', label: 'Used', values: [1], color: 'blue' }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        catalogId: 'unifi_access',
+        name: 'UniFi Access',
+        research: {
+          key: 'connection:con_unifi_access',
+          state: 'found',
+          title: 'Needs a look',
+          plan: ['Restart'],
+          at: NOW.toISOString(),
+        },
+      },
+    );
+  }
+
+  function piholePage(): ThingPage {
+    const read = parsePihole(
+      {
+        summary: PIHOLE_summary,
+        topBlocked: PIHOLE_topBlocked,
+        topClients: PIHOLE_topClients,
+        history: PIHOLE_history,
+        messages: PIHOLE_messages,
+        version: PIHOLE_version,
+        lists: PIHOLE_lists,
+        blocking: PIHOLE_blocking,
+      },
+      NOW,
+    );
+    const view = dnsView(read, {
+      now: NOW,
+      timeZone: TZ,
+      range: '24h',
+      buttons: { row: row('pihole') },
+      points: { queries: [], blocked: [] },
+    });
+    return pageOf(view, { catalogId: 'pihole', name: 'Pi-hole' });
+  }
+
+  /** Every machine field of a page, in order: what no language may change. */
+  function machineOf(page: ThingPage): unknown[] {
+    const out: unknown[] = [];
+    const walk = (v: unknown, field: string | null) => {
+      if (Array.isArray(v)) for (const x of v) walk(x, field);
+      else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, k);
+      else if (
+        field &&
+        ['id', 'key', 'tab', 'kind', 'private', 'person', 'tone', 'color', 'place', 'look', 'at'].includes(
+          field,
+        )
+      )
+        out.push(`${field}=${String(v)}`);
+    };
+    walk(page, null);
+    return out;
+  }
+
+  it('says its tabs, figures, notices, research and durations in Dutch and keeps every machine field', () => {
+    const page = accessPage();
+    expect(ThingPage.safeParse(page).success).toBe(true);
+    const nl = localizeTree(page, 'nl-NL');
+    expect(ThingPage.parse(nl)).toBeTruthy();
+    expect(machineOf(nl)).toEqual(machineOf(page));
+    expect(nl.tabs[0]?.key).toBe('overview');
+    expect(nl.tabs[0]?.label).toBe('Overzicht');
+    expect(nl.tabs[1]?.label).toBe('Geschiedenis');
+    const panels = nl.tabs[0]?.panels ?? [];
+    const notices = panels.find((p) => p.kind === 'notices');
+    expect(notices && 'title' in notices ? notices.title : null).toBe('Even naar kijken');
+    const kpis = panels.find((p) => p.kind === 'kpis');
+    expect(kpis?.kind === 'kpis' ? kpis.items.map((k) => [k.label, k.value, k.sub]) : null).toEqual([
+      ['Geheugen', '42 %', '3 dagen'],
+      ['Opslag', '1.200 apparaten', '12,5 GB vrij'],
+    ]);
+    const chart = nl.tabs[1]?.panels[1];
+    expect(
+      chart?.kind === 'chart' ? [chart.title, chart.series[0]?.label, chart.series[0]?.key] : null,
+    ).toEqual(['Geheugen', 'Gebruikt', 'mem']);
+    const log = nl.tabs[1]?.panels[0];
+    expect(log?.kind === 'list' ? [log.title, log.items[0]?.title, log.items[0]?.right] : null).toEqual([
+      'Activiteit',
+      '2 uur',
+      '5 min',
+    ]);
+    expect(nl.research?.title).toBe('Even naar kijken');
+    expect(nl.research?.plan).toEqual(['Herstarten']);
+    expect(nl.research?.key).toBe('connection:con_unifi_access');
+    // English stays exactly as it was.
+    expect(localizeTree(page, 'en-GB')).toBe(page);
+  });
+
+  it('says the common chrome of several real pages in Dutch, each still a valid page', () => {
+    for (const page of [accessPage(), piholePage()]) {
+      const nl = localizeTree(page, 'nl-NL');
+      expect(ThingPage.safeParse(nl).success, page.name).toBe(true);
+      expect(machineOf(nl), page.name).toEqual(machineOf(page));
+      expect(nl.tabs[0]?.label, page.name).toBe('Overzicht');
+      const said = JSON.stringify(nl.tabs);
+      expect(said, page.name).not.toMatch(/"(Summary|Worth a look|Nothing needs a look\.|Show more here)"/);
+      expect(said, page.name).toContain('Even naar kijken');
+    }
+  });
+
+  it('writes numbers the Dutch way and says durations and space', () => {
+    expect(localizePhrase('1,200 devices', 'nl-NL')).toBe('1.200 apparaten');
+    expect(localizePhrase('3 days', 'nl-NL')).toBe('3 dagen');
+    expect(localizePhrase('1 hour', 'nl-NL')).toBe('1 uur');
+    expect(localizePhrase('45 minutes', 'nl-NL')).toBe('45 minuten');
+    expect(localizePhrase('2 weeks', 'nl-NL')).toBe('2 weken');
+    expect(localizePhrase('12.5 GB free', 'nl-NL')).toBe('12,5 GB vrij');
+    expect(localizePhrase('1.2 TB of 4 TB', 'nl-NL')).toBe('1,2 TB van 4 TB');
+    // Words between “of” are not an amount: left as they were.
+    expect(localizePhrase('Top of the list', 'nl-NL')).toBe('Top of the list');
   });
 });

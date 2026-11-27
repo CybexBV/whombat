@@ -31,6 +31,7 @@ import {
   widgets,
 } from '../../db/schema/index';
 import { replaceAvatar } from '../../files/avatars';
+import { reloadAccountLocale } from '../../i18n/locale';
 import { localModelKeyOf, sealLocalModelKey } from '../../local-model/store';
 import { loadPrincipalRow, toPerson } from '../../read/principals';
 import { sealWebSearchKey, webSearchKeyOf } from '../../web-search/store';
@@ -302,8 +303,15 @@ async function accountProfile(run: RestoreRun, r: BackupAccountProfileRecord): P
   const photoDiffers = !!photo && account.avatar?.sha256 !== photo.sha256;
   if ((!prefsDiffer && !photoDiffers) || run.dry) return 'detail';
   const setPrefs = async () => {
-    if (wantedPrefs)
-      await run.tx.update(accounts).set({ preferences: wantedPrefs }).where(eq(accounts.id, account.id));
+    if (!wantedPrefs) return;
+    await run.tx.update(accounts).set({ preferences: wantedPrefs }).where(eq(accounts.id, account.id));
+    // Once the restore is in: what was kept of the old language goes, from what the database has then (a record
+    // rolled back leaves the language as it was).
+    const services = run.services;
+    const accountId = account.id;
+    run.ctx.after(async () => {
+      await reloadAccountLocale(services, accountId);
+    });
   };
   const setPhoto = async () => {
     const path = photo ? run.blobPath(photo.sha256) : null;

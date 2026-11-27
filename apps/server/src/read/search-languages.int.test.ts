@@ -64,6 +64,7 @@ describe('search across languages', () => {
 
   it('filters Dutch stopwords on Dutch accounts without stripping English words on English accounts', async () => {
     const wantMsg = await post(IDS.mara, IDS.general, 'We want faster nightly backups.');
+    const anderMsg = await post(IDS.mara, IDS.general, 'Ander werk eerst, de printer kan wachten.');
     // On an English account, “want” (a Dutch stopword) still finds the English message.
     expect(await find('want')).toContain(wantMsg);
     // Switch Mara to Dutch: “de” and “van” are filtered as Dutch stopwords so “de onbekendwoord” doesn't match Dutch “De facturen…”.
@@ -79,6 +80,13 @@ describe('search across languages', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json() as SearchResponse;
       expect(body.results.map((r) => r.id)).not.toContain(ids.dutch);
+      // “andere” is a Dutch stopword: it goes before the English stemmer would make it “ander” and find other words.
+      const andere = await t.api.inject({
+        method: 'GET',
+        url: `${api.search.query.base}${buildPath(api.search.query.path, { burrow: 'burrow-hq' })}?q=${encodeURIComponent('andere onbekendwoord')}`,
+        headers: { cookie },
+      });
+      expect((andere.json() as SearchResponse).results.map((r) => r.id)).not.toContain(anderMsg);
       // Dutch word still matches and `where` uses Dutch “vandaag”.
       const hitRes = await t.api.inject({
         method: 'GET',

@@ -340,7 +340,13 @@ describe('resolving', () => {
             title: 'In this project',
             items: [
               { id: 'servers', title: 'Servers', figure: { value: '3' } },
-              { id: 'cost', title: 'Cost a month', figure: { value: '€ 24.10' } },
+              // As Hetzner's page gives it: its own key, and private at the source.
+              {
+                id: 'cost',
+                title: 'Cost a month',
+                figure: { value: '€ 24.10', key: 'f-cost-a-month' },
+                private: true,
+              },
             ],
           },
         ],
@@ -381,7 +387,12 @@ describe('resolving', () => {
             title: 'Through Fusebox',
             items: [
               { id: 'subscriptions', title: 'Subscriptions', figure: { value: '4' } },
-              { id: 'worth', title: 'Worth this month', figure: { value: '$ 412' } },
+              {
+                id: 'worth',
+                title: 'Worth this month',
+                figure: { value: '$ 412', key: 'f-worth-this-month' },
+                private: true,
+              },
             ],
           },
           table('people'),

@@ -169,7 +169,7 @@ How the split was made: `docs.md`.
 - `plain-words.md` — everything a person reads in the word list (your Whombat, Whombat’s helper, machines, apps), three
   lines per check, plain errors with More detail, schedules in words, Done for Settle.
 - `i18n.md` — multi-language support (English and Dutch): catalog-free `@whombat/core/i18n` engine, co-located
-  declarative catalogs, `accounts.preferences.locale`, session protocol minor 20, server/client/desk/widget/console
+  declarative catalogs, `accounts.preferences.locale`, session protocol minor 21, server/client/desk/widget/console
   rendering, privacy/audit/automation invariants and the informal-“je” Dutch glossary.
 
 ## Automations and Feedback

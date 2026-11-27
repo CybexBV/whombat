@@ -85,7 +85,7 @@ describe('titles (NT-14)', () => {
     expect(notificationPushTitle('mention', 'Dusty', '#general')).toBe('Dusty mentioned you in #general');
     expect(notificationPushTitle('reply', 'Dusty', '#general')).toBe('Dusty replied in #general');
     expect(notificationPushTitle('direct', 'Mara', 'Direct')).toBe('Mara · Direct');
-    expect(notificationPushTitle('agent_update', 'Dusty', 'Direct')).toBe('Dusty');
+    expect(notificationPushTitle('agent_update', 'Dusty', 'Direct', undefined, true)).toBe('Dusty');
     expect(notificationPushTitle('agent_update', 'Dusty', '#general')).toBe('Dusty · #general');
     expect(notificationPushTitle('needs_you', 'Dusty', '#ops')).toBe('Needs you · #ops');
   });
@@ -102,7 +102,9 @@ describe('titles (NT-14)', () => {
     });
     expect(PushPreview.safeParse(long).success).toBe(true);
     expect(codePoints(long.title)).toBe(80);
-    expect(buildPushPreview({ kind: 'agent_update', actor: ' ', where: 'Direct', text: '' })).toEqual({
+    expect(
+      buildPushPreview({ kind: 'agent_update', actor: ' ', where: 'Direct', direct: true, text: '' }),
+    ).toEqual({
       title: 'Whombat',
       body: '',
     });

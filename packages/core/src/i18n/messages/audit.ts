@@ -44,7 +44,7 @@ export const AUDIT = splitPairs({
   'audit.verified': ['signature verified', 'handtekening geverifieerd'],
   'audit.notVerified': ['signature does not verify', 'handtekening klopt niet'],
   'audit.link.pr': ['Open PR #{n}', 'PR #{n} openen'],
-  'audit.link.run': ['Open run', 'Run openen'],
+  'audit.link.run': ['Open run', 'Uitvoering openen'],
   'audit.link.review': ['Review the request', 'Het verzoek bekijken'],
   'audit.link.request': ['Open the request', 'Het verzoek openen'],
   'audit.link.feedback': ['Open Feedback', 'Feedback openen'],
@@ -58,6 +58,6 @@ export const AUDIT = splitPairs({
   'audit.link.external': ['Open link', 'Link openen'],
   'audit.link.step': ['Open step', 'Stap openen'],
   'audit.link.plan': ['Open plan', 'Plan openen'],
-  'audit.link.automation_run': ['Open automation run', 'Automatiseringsrun openen'],
+  'audit.link.automation_run': ['Open automation run', 'Uitvoering openen'],
   'audit.link.work': ['Open Work', 'Werk openen'],
 });

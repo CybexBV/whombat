@@ -638,7 +638,7 @@ export class HostsService {
     for (const a of alerts)
       markAlertQuiet(a, a.serverId === id ? window : null, { now, names, untilWords: words, locale });
     const hints = marked.hints.map((m) =>
-      m.row ? { ...m.hint, quiet: quietOf(m.row, names, now, zone) } : m.hint,
+      m.row ? { ...m.hint, quiet: quietOf(m.row, names, now, zone, locale) } : m.hint,
     );
     const status = detail.server.status;
     const verdict = serverVerdict({
@@ -756,7 +756,7 @@ export class HostsService {
         untilWords: words,
         locale,
       });
-    for (const m of hintRows) if (m.row) m.hint.quiet = quietOf(m.row, names, now, zone);
+    for (const m of hintRows) if (m.row) m.hint.quiet = quietOf(m.row, names, now, zone, locale);
   }
 
   /** A server's row changed in Whombat (its “Asks you first”): realtime sends it again (`hosts.server`). */

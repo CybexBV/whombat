@@ -2333,7 +2333,7 @@ export const NL: Record<ClientMessageKey, MessageValue> = {
   'managed.status.kitSavedMeta': 'Bewaar het op een veilige plek offline.',
   'managed.status.kitMissing': 'Geen herstelpakket',
   'managed.status.kitMissingMeta':
-    'Niet nodig om in te loggen: het scherm van je Whombat laat een apparaat toe. Een pakket helpt als hij geen scherm heeft.',
+    'Niet nodig om in te loggen: het scherm van je Whombat laat een apparaat toe. Een herstelpakket helpt als hij geen scherm heeft.',
   'managed.status.kitMake': 'Maak een pakket',
   'managed.status.backups': 'BACK-UPS',
   'managed.status.backup.unprotected': 'Onbeschermd',

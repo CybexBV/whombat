@@ -353,6 +353,11 @@ export const searchAnswers = pgTable(
     citations: jsonb('citations').$type<{ n: number; resultId: string }[]>().notNull().default([]),
     durationMs: integer('duration_ms'),
     actions: jsonb('actions').$type<AnswerAction[]>().notNull().default([]),
+    /**
+     * The language the answer is written in (`en`, `nl`): asking again in another language gets a new answer, while
+     * the old one stays readable by its id. Null for answers from before languages, which are English.
+     */
+    language: text('language'),
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },

@@ -9,6 +9,8 @@ import { catalogConnections } from '../db/schema/index';
 import { postMessage } from '../domain/messages';
 import { thePerson } from '../domain/the-person';
 import { personalPlace } from '../guides/place';
+import { type ServerMessageKey, tServer } from '../i18n/catalog';
+import { burrowLocale } from '../i18n/locale';
 import { iso } from '../lib/time';
 import { toActor } from '../read/principals';
 import type { Services } from '../services';
@@ -20,17 +22,19 @@ import type { CatalogConnectionRow } from './types';
 /** At most one message per connection in this long. */
 export const REPAIR_SPACING_MS = 24 * 60 * 60_000;
 
-/** Why the service stopped letting the assistant in, as the assistant says it. */
-const REASON_TEXT: Record<CatalogReauthReason, string> = {
-  token_invalid: 'stopped accepting my sign-in',
-  revoked: 'took my access back',
-  app_removed: 'lost the app it signed in with on this Whombat',
-  expired: 'let my sign-in run out',
+/** Why the service stopped letting the assistant in, as the assistant says it, by the reason's code. */
+const REASON_KEY: Record<CatalogReauthReason, ServerMessageKey> = {
+  token_invalid: 'chat.repair.token_invalid',
+  revoked: 'chat.repair.revoked',
+  app_removed: 'chat.repair.app_removed',
+  expired: 'chat.repair.expired',
 };
 
-export function repairText(row: Pick<CatalogConnectionRow, 'label' | 'reauthReason'>): string {
-  const reason = REASON_TEXT[row.reauthReason ?? 'revoked'];
-  return `${row.label} ${reason}, so I can’t use it for now. You can sign in again in Settings → Connections.`;
+export function repairText(
+  row: Pick<CatalogConnectionRow, 'label' | 'reauthReason'>,
+  locale?: string | null,
+): string {
+  return tServer(locale, REASON_KEY[row.reauthReason ?? 'revoked'], { name: row.label });
 }
 
 /** Posts `text` in the person's DM with their Assistant in that burrow; false without one. */
@@ -94,7 +98,9 @@ export async function notifyNeedsReauth(services: Services, connectionId: string
     );
     if (!claimed) return 0;
     const person = await thePerson(services.db, claimed.burrowId);
-    return person && (await tellPerson(services, claimed.burrowId, person.id, repairText(claimed))) ? 1 : 0;
+    if (!person) return 0;
+    const locale = await burrowLocale(services, claimed.burrowId);
+    return (await tellPerson(services, claimed.burrowId, person.id, repairText(claimed, locale))) ? 1 : 0;
   } catch (err) {
     services.log.warn({ connectionId, err: String(err) }, 'connection repair message failed');
     return 0;

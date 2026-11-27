@@ -19,7 +19,6 @@ import {
   type PluralCategory,
   type PluralMessage,
   type SupportedLanguage,
-  serializeMessage,
   sourceHash,
 } from '../../packages/core/src/i18n/index';
 import { type CatalogEntry, loadCatalogs } from './registry';
@@ -121,10 +120,10 @@ export function validateCatalogs(
       const enVal = entry.en[key];
       if (enVal === undefined) continue;
       const hashKey = `${entry.name}:${key}`;
-      const currentHash = sourceHash(serializeMessage(enVal));
+      const currentHash = sourceHash(enVal);
       hashes[hashKey] = currentHash;
       if (storedHashes) {
-        if (!(hashKey in storedHashes)) {
+        if (!Object.hasOwn(storedHashes, hashKey)) {
           errors.push(
             `${hashKey}: missing from scripts/i18n/source-hashes.json; run pnpm exec tsx scripts/i18n/check.ts --update-hashes`,
           );
@@ -154,6 +153,14 @@ export function validateCatalogs(
         if (enVal === undefined || trVal === undefined) continue;
         checkMessageValue(`${entry.name}:${k}`, enVal, trVal, lang, errors);
       }
+    }
+  }
+
+  for (const key of Object.keys(storedHashes ?? {})) {
+    if (!Object.hasOwn(hashes, key)) {
+      errors.push(
+        `${key}: orphan key in scripts/i18n/source-hashes.json; run pnpm exec tsx scripts/i18n/check.ts --update-hashes`,
+      );
     }
   }
 

@@ -401,6 +401,48 @@ func TestAlertsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestMalformedAlertParamsKeepEnglishText(t *testing.T) {
+	s := openTest(t)
+	a := rules.Alert{
+		ID: "al_1", Server: "server-1", Key: "disk.wear_high:nvme1n1", Rule: rules.RuleWearHigh,
+		Entity: "nvme1n1", Severity: "warning", State: rules.AlertOpen, OpenedAt: time.Now(), StatusNote: "disk wear",
+		Text: rules.Text{
+			Title: "nvme1n1 wear at 78%", Detail: "936 of 1,200 TBW written",
+			Code: "disk.wear_high.tbw", Params: map[string]any{"pct": 78},
+		},
+	}
+	if err := s.InsertAlert(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	b := a
+	b.ID, b.Key, b.Entity = "al_2", "disk.wear_high:nvme2n1", "nvme2n1"
+	if err := s.InsertAlert(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	check := func(alerts []rules.Alert, err error) {
+		t.Helper()
+		if err != nil || len(alerts) != 2 {
+			t.Fatalf("alerts = %+v, err = %v", alerts, err)
+		}
+		for _, alert := range alerts {
+			if alert.ID == a.ID {
+				if alert.Params != nil || alert.Code != "" || alert.Title != a.Title || alert.Detail != a.Detail || alert.StatusNote != a.StatusNote {
+					t.Errorf("corrupted alert did not keep its English text: %+v", alert)
+				}
+			} else if !alert.Text.Equal(b.Text) {
+				t.Errorf("valid alert lost its text or params: %+v", alert)
+			}
+		}
+	}
+	for _, raw := range []string{`{"pct":`, `{"pct":78} trailing data`} {
+		if _, err := s.w.ExecContext(ctx, `UPDATE alerts SET params = ? WHERE id = ?`, raw, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		check(s.ListAlerts(ctx, rules.AlertOpen, 0))
+		check(s.QueryAlerts(ctx, AlertFilter{State: rules.AlertOpen}))
+	}
+}
+
 // The hourly retention once asked for records older than 365 days while
 // the trigger protects anything younger than 366 days: one record in that
 // day aborted the whole delete, forever. The store clamps the cut-off.

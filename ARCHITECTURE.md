@@ -2121,7 +2121,7 @@ declarative `EN` and `NL` catalog (`packages/core`, `packages/client`, `packages
 by `scripts/i18n/check.ts` and exportable to PO/JSON via `scripts/i18n/po.ts`.
 
 The box's active language lives in one preference, `accounts.preferences.locale`, synced to clients, the console/desk
-state (`ConsoleState.locale`, `DeskPaired.locale`), claim flows (session protocol minor 20, `LOCALE_MINOR`), and Control
+state (`ConsoleState.locale`, `DeskPaired.locale`), claim flows (session protocol minor 21, `LOCALE_MINOR`), and Control
 mail settings (`link.mail.set`, `mail.send`). Public and visitor surfaces (installer, pre-claim, `/s/shr_*` shared
 threads and `apps/widget`) resolve from explicit choice, `data-lang`/`<html lang>` and browser preferences instead of
 the box owner's locale. The server renders `ThingPage` dashboards, Home/Inbox lines, emails, pushes and desk views in

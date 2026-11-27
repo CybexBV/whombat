@@ -55,11 +55,11 @@ export const KEYS = splitPairs({
   ],
   'key.label.messages.search': [
     'Search messages, canvases and runs',
-    'Berichten, canvassen en runs doorzoeken',
+    'Berichten, canvassen en uitvoeringen doorzoeken',
   ],
   'key.description.messages.search': [
     'Search everything on this Whombat it may read: branch rooms, canvases and runs.',
-    'Alles op deze Whombat doorzoeken wat hij mag lezen: branchruimtes, canvassen en runs.',
+    'Alles op deze Whombat doorzoeken wat hij mag lezen: branchruimtes, canvassen en uitvoeringen.',
   ],
   'key.label.repos.read': ['Read connected repos', 'Gekoppelde repo’s lezen'],
   'key.description.repos.read': [

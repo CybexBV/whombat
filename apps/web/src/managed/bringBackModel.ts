@@ -4,7 +4,6 @@
  */
 import {
   ago,
-  BACKUP_OPTIONS_TEXT,
   backupLabel,
   backupToBringBack,
   bringBackName,
@@ -12,9 +11,7 @@ import {
 } from '@whombat/client/managed';
 import type { BackupCheckpoint, BackupRestoreState } from '@whombat/protocol/session';
 import { backupWhen } from '../features/settings/backupOptionsModel';
-import { currentLocale } from '../i18n/provider';
-
-const B = BACKUP_OPTIONS_TEXT.bringBack;
+import { currentLocale, webTranslator } from '../i18n/provider';
 
 export type BringBackStep =
   | 'question'
@@ -66,15 +63,16 @@ export interface ChooseRow {
  * made after it was replaced says so, and NEWEST marks the one picked first.
  */
 export function chooseRows(checkpoints: readonly BackupCheckpoint[], now = new Date()): ChooseRow[] {
+  const { t } = webTranslator(currentLocale());
   const late = madeAfterReplaced(checkpoints);
   const pick = backupToBringBack(checkpoints);
   return checkpoints.map((cp) => {
     const label = backupLabel(cp, false);
     const meta = [
       ago(cp.createdAt, currentLocale()),
-      late.has(cp.id) ? B.afterReplaced : null,
+      late.has(cp.id) ? t('backups.afterReplaced') : null,
       cp.reason === 'scheduled' ? null : label,
-      cp.check?.ok ? B.checkedLower : null,
+      cp.check?.ok ? t('backups.checkedLower') : null,
     ].filter(Boolean);
     return {
       id: cp.id,

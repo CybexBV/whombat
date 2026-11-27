@@ -20,12 +20,13 @@ import {
   formatPowerLeft,
 } from '@whombat/client/desk';
 import type { AgentFace } from '@whombat/core';
-import { formatClock, formatWeekday, MONTHS, zonedParts } from '@whombat/core/text';
+import { formatClock, formatWeekday, zonedParts } from '@whombat/core/text';
 import { BatteryMedium, Globe, Lock, type LucideIcon, RefreshCw, Server, Wifi } from 'lucide-react';
 import { type CSSProperties, useLayoutEffect, useRef, useState } from 'react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { StatusDot } from '../../components/StatusDot';
+import { longMonthName } from '../../i18n/dates';
 import { currentLocale } from '../../i18n/provider';
 import p from './DeskPreview.module.css';
 
@@ -136,7 +137,7 @@ function Chip({ icon, text, tone }: { icon: LucideIcon; text?: string; tone?: 'w
 /** “Tuesday 20 October”. */
 function longDate(now: number, timeZone: string): string {
   const d = zonedParts(now, timeZone);
-  return `${formatWeekday(now, timeZone, currentLocale())} ${d.day} ${MONTHS[d.month - 1]}`;
+  return `${formatWeekday(now, timeZone, currentLocale())} ${d.day} ${longMonthName(d.month - 1, currentLocale())}`;
 }
 
 function Clock({ calm, now, timeZone }: { calm: DeskCalm; now: number; timeZone: string }) {

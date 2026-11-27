@@ -2,7 +2,7 @@
  * The assistant tells its person something in their chat (the DM Chat lives in), as the disk alerts do
  * (`managed/host-disk-alerts.ts`): the power (DK-10) and five wrong PINs on the screen (DK-04).
  */
-import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { applyContext } from '../commit/pipeline';
 import { messages } from '../db/schema/index';
 import { postMessage } from '../domain/messages';
@@ -13,10 +13,12 @@ import { toActor } from '../read/principals';
 import type { Services } from '../services';
 
 export interface TellOptions {
-  /** Says nothing when the assistant said the same words (or same structured key) in this DM this recently. */
+  /**
+   * Says nothing when the assistant said exactly these words in this DM this recently. Only remote help's visit line
+   * asks for it, and its words are the same in every language today; a caller whose words follow the person's
+   * language must give each language's words the same key before it relies on this.
+   */
   unlessSaidWithinMs?: number | null;
-  /** Optional language-independent deduplication key stored via message provenance/check, paired with text match. */
-  alsoMatchTexts?: readonly string[];
 }
 
 /**
@@ -35,9 +37,6 @@ export async function tellPerson(
     if (!where) return false;
     const now = services.clock();
     if (options.unlessSaidWithinMs) {
-      const variants = [...new Set([text, ...(options.alsoMatchTexts ?? [])])];
-      const textMatch =
-        variants.length === 1 ? eq(messages.text, text) : or(...variants.map((v) => eq(messages.text, v)));
       const [said] = await session.tx
         .select({ id: messages.id })
         .from(messages)
@@ -45,7 +44,7 @@ export async function tellPerson(
           and(
             eq(messages.conversationId, where.dm.id),
             eq(messages.authorId, where.agent.id),
-            textMatch,
+            eq(messages.text, text),
             isNull(messages.deletedAt),
             gt(messages.createdAt, new Date(now.getTime() - options.unlessSaidWithinMs)),
             afterClear(where.dm.roomClearedAt),

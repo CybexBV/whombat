@@ -470,6 +470,10 @@ function changeWindowLines(ctx: DispatchContext): string[] {
   ];
 }
 
+/** What stays as the tools define it whatever the person's language: the parts a program reads, not a person. */
+const MACHINE_WORDS =
+  'Keep protocol markers (NO_REPLY, MORE:) and the machine values of tool arguments (ids, keys, action names, the choices a tool lists) exactly as the tool defines them.';
+
 /**
  * The active reply language, injected per turn so open/resumed Hermes sessions switch immediately when the person
  * changes language. Protocol tokens (`NO_REPLY`, `MORE:`, `VERDICT_*`) stay ASCII English; outsider turns match the
@@ -483,7 +487,8 @@ export function languageLines(
   const lang = resolveLanguage(ctx.locale);
   if (lang === 'nl') {
     return [
-      'Language: reply to the person in natural, plain informal Dutch (use je/jouw, never u). Keep familiar Dutch IT terms (server, back-up, container, VM, passkey, Tailscale, pull request, Wi-Fi, Bluetooth, DNS, SSH, GitHub) and use the Dutch UI names (Instellingen, Kluis, Overzicht, Koppelingen, Automatiseringen, Actie nodig, Meer details). Write report_done, look_report, ahead_report and post_answer summaries in Dutch too. Keep protocol markers (NO_REPLY, MORE:) and tool arguments in English.',
+      'Language: reply to the person in natural, plain informal Dutch (use je/jouw, never u). Keep familiar Dutch IT terms (server, back-up, container, VM, passkey, Tailscale, pull request, Wi-Fi, Bluetooth, DNS, SSH, GitHub) and use the Dutch UI names (Instellingen, Kluis, Overzicht, Koppelingen, Automatiseringen, Actie nodig, Meer details). Write report_done, look_report, ahead_report and post_answer summaries in Dutch too.',
+      `${MACHINE_WORDS} Words a tool shows the person (titles, summaries, messages, questions, card text) are in Dutch.`,
     ];
   }
   return ['Language: reply to the person in plain English.'];

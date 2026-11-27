@@ -8,7 +8,7 @@
  * language is filled with what it captured. A string nobody listed stays English, so a missed phrase is never wrong,
  * only untranslated. Matching never touches what a page marks as machine data (ids, keys, privacy flags, links).
  */
-import type { MessageValue } from '@whombat/core/i18n';
+import { formatLocaleNumber, type MessageValue } from '@whombat/core/i18n';
 import { EN, isEnglish, type ServerMessageKey, serverTranslator } from './catalog';
 
 interface Pattern {
@@ -34,6 +34,13 @@ const HAS_SLOT = /\{\w+\}/;
 
 let book: Book | null = null;
 
+/** Slots that hold a count: they capture only a number, and the reader's language writes it its own way. */
+const COUNT_SLOTS = new Set(['n', 'count']);
+/** Slots that hold an amount (“1.2 GB”, “40”): a number with an optional unit, never words. */
+const SIZE_SLOTS = new Set(['size', 'used', 'total']);
+const NUMBER = '(\\d[\\d.,]*)';
+const SIZE = '(\\d[\\d.,]*(?:\\s?(?:[KMGTPE]i?B|B|bytes?))?)';
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -58,7 +65,7 @@ function compile(key: ServerMessageKey, template: string, counted: boolean): Pat
     if (seen >= 0) source += `\\${seen + 1}`;
     else {
       names.push(name);
-      source += name === 'n' || name === 'count' ? '(\\d[\\d.,]*)' : '(.+?)';
+      source += COUNT_SLOTS.has(name) ? NUMBER : SIZE_SLOTS.has(name) ? SIZE : '(.+?)';
     }
     last = (m.index ?? 0) + m[0].length;
   }
@@ -97,6 +104,17 @@ function countOf(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** An English number (with its unit, when it has one) written the way the reader's language writes it. */
+function numberIn(raw: string, locale: string): string {
+  const m = /^(\d[\d.,]*)(.*)$/s.exec(raw);
+  if (!m) return raw;
+  const digits = m[1] ?? '';
+  const n = countOf(digits);
+  const decimals = /\.(\d{1,2})$/.exec(digits)?.[1]?.length ?? 0;
+  const said = formatLocaleNumber(n, locale, { maximumFractionDigits: decimals });
+  return `${said}${m[2] ?? ''}`;
+}
+
 /** One whole string, by an exact phrase or a template; null when the book has nothing for it. */
 function whole(text: string, locale: string): string | null {
   const tr = serverTranslator(locale);
@@ -110,9 +128,11 @@ function whole(text: string, locale: string): string | null {
     let count: number | undefined;
     p.names.forEach((name, i) => {
       const captured = m[i + 1] ?? '';
-      if ((name === 'n' || name === 'count') && /^\d/.test(captured)) {
+      if (COUNT_SLOTS.has(name) && /^\d/.test(captured)) {
         count = countOf(captured);
-        vars[name] = captured;
+        vars[name] = numberIn(captured, locale);
+      } else if (SIZE_SLOTS.has(name) && /^\d/.test(captured)) {
+        vars[name] = numberIn(captured, locale);
       } else {
         // What a slot holds may itself be a known word (“Look into it · {what}”).
         const known = exact.get(captured);
@@ -163,7 +183,9 @@ export function localizePhrase(text: string, locale: string | null | undefined):
 
 /**
  * Fields that carry machine data, never words: ids, links, keys, the figures' privacy flags and what kind of state
- * they are. A walk over a page leaves them (and what they hold) exactly as they were.
+ * they are. A walk over a page leaves them (and what they hold) exactly as they were. Containers of words (a page's
+ * tabs, a chart's series, the assistant's research, suggestion chips) are never listed: what they hold is walked, and
+ * only their own machine fields stay.
  */
 const MACHINE_FIELDS = new Set([
   'id',
@@ -201,7 +223,6 @@ const MACHINE_FIELDS = new Set([
   'ranges',
   'unit',
   'name',
-  'question',
   'entityId',
   'domain',
   'service',
@@ -212,7 +233,6 @@ const MACHINE_FIELDS = new Set([
   'command',
   'values',
   'points',
-  'series',
   'color',
   'colour',
   'format',
@@ -228,14 +248,27 @@ const MACHINE_FIELDS = new Set([
   'connectionId',
   'deviceId',
   'tab',
-  'tabs',
   'refreshS',
   'generatedAt',
-  'research',
   'charts',
-  'suggestions',
-  'widgets',
-  'options',
+  'timestamps',
+  'current',
+  'target',
+  'tier',
+  'dot',
+  'axis',
+  'look',
+  'width',
+  'shape',
+  'how',
+  'source',
+  'guestId',
+  'changeId',
+  'thingId',
+  'proposalId',
+  'conversationId',
+  'threadRootId',
+  'refreshSec',
 ]);
 
 /**
@@ -266,6 +299,13 @@ const FIELD_MAX: Readonly<Record<string, number>> = {
   words: 60,
   empty: 120,
   caption: 120,
+  question: 300,
+  questions: 200,
+  suggestions: 60,
+  labels: 12,
+  summary: 240,
+  plan: 120,
+  fix: 32,
 };
 
 function fits(
@@ -313,7 +353,8 @@ export function localizeTree<T>(
       // A button (it says whether it is allowed) or a choice sends its value back: never a word.
       const sends = machineValue || typeof obj.allowed === 'boolean' || 'target' in obj;
       const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(obj)) out[k] = walk(v, k, sends);
+      // A table's cells are keyed by column, not by field: a column called `status` still holds words.
+      for (const [k, v] of Object.entries(obj)) out[k] = walk(v, field === 'cells' ? null : k, sends);
       return out;
     }
     return value;

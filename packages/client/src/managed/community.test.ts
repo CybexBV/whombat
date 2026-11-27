@@ -4,6 +4,7 @@
  */
 import { DEVICE_LINK } from '@whombat/fixtures';
 import { claimConfirmEqual, localClaimPakeResponder } from '@whombat/protocol/claim';
+import { LOCALE_MINOR } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { OperationError } from '../session/managed-ops';
 import {
@@ -12,6 +13,7 @@ import {
   NotDeliveredError,
   type OperationResponse,
   OutcomeUnknownError,
+  type SessionInfo,
 } from '../session/types';
 import { ClaimMismatchError } from './claim';
 import {
@@ -80,12 +82,16 @@ const err = (status: number, code: string): OperationResponse => ({
 const ok = (body: unknown): OperationResponse => ({ status: 200, body, requestId: 'r' });
 
 /** An enrollment session to a box; `seenClient`: the PeerId the box's Noise session has (a man in the middle differs). */
-function box(b: Box, opts: { seenClient?: string } = {}): ApplianceSession {
+function box(
+  b: Box,
+  opts: { seenClient?: string; protocol?: SessionInfo['protocol'] } = {},
+): ApplianceSession {
   let started: string | null = null;
   let tags: { client: string; appliance: string } | null = null;
   let proved = false;
   return {
     close() {},
+    state: () => ({ status: 'open', info: { protocol: opts.protocol } }),
     async invoke(op: string, raw: unknown, options?: { tie?: unknown }) {
       const input = raw as Record<string, unknown>;
       b.calls.push({ op, input });
@@ -142,7 +148,7 @@ function box(b: Box, opts: { seenClient?: string } = {}): ApplianceSession {
 }
 
 const ACCOUNT = { name: 'Mara', email: 'mara@lumio.example.org' };
-const claim = (session: ApplianceSession, letters: string, account = ACCOUNT) =>
+const claim = (session: ApplianceSession, letters: string, account = ACCOUNT, locale?: string) =>
   runLocalClaim({
     session,
     letters,
@@ -151,6 +157,7 @@ const claim = (session: ApplianceSession, letters: string, account = ACCOUNT) =>
     account,
     endpoint: { label: 'Firefox on Mara’s laptop', platform: 'web' },
     randomBytes: rand,
+    locale,
   });
 
 /** Whether anything sent names the person or their device. */
@@ -187,6 +194,15 @@ describe('the claim on the box’s page', () => {
       account: ACCOUNT,
       endpoint: { label: 'Firefox on Mara’s laptop', platform: 'web' },
     });
+  });
+
+  it.each([20, LOCALE_MINOR])('gates the local claim locale on protocol 5.%i', async (minor) => {
+    const b = newBox();
+    await claim(box(b, { protocol: { major: 5, minor } }), 'KXQM', ACCOUNT, 'nl-be');
+    const sent = b.calls.find((call) => call.op === 'enroll.claim.local');
+    expect(sent).toBeDefined();
+    if (minor === 20) expect(sent?.input).not.toHaveProperty('locale');
+    else expect(sent?.input).toHaveProperty('locale', 'nl-BE');
   });
 
   it('tells something that only poses as the box nothing about the person', async () => {

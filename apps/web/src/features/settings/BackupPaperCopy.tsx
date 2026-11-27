@@ -4,7 +4,7 @@
  * asks for nothing old; once printed or saved the Whombat is told (`confirmPaperCopy`), and it counts as a way back. The
  * print is the kit's print sheet with the paper copy's words, which only paper shows.
  */
-import { confirmPaperCopy, longDate, paperCopyText } from '@whombat/client/managed';
+import { confirmPaperCopy, paperCopyText } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
@@ -12,6 +12,7 @@ import { flushSync } from 'react-dom';
 import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
+import { dayLongMonth } from '../../i18n/dates';
 import { useWebI18n } from '../../i18n/provider';
 import { saveBlob } from '../../lib/saveBlob';
 import { KitPrintSheet } from '../../managed/KitScreen';
@@ -23,7 +24,7 @@ export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onS
   const [sheet, setSheet] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useWebI18n();
+  const { t, tag } = useWebI18n();
   if (!managed) return null;
   const name = managed.applianceName ?? managed.applianceId;
   const make = async (way: 'print' | 'file') => {
@@ -57,7 +58,7 @@ export function PaperCopyRow({ paperAt, onSaved }: { paperAt: string | null; onS
       <div className={styles.needsMain}>
         <span className={styles.needsTitle}>{t('paper.title')}</span>
         <span className={styles.needsMeta}>
-          {paperAt ? t('paper.saved', { date: longDate(paperAt) }) : t('paper.meta')}
+          {paperAt ? t('paper.saved', { date: dayLongMonth(paperAt, tag) }) : t('paper.meta')}
         </span>
         {error ? (
           <span className={styles.needsError} role="alert">

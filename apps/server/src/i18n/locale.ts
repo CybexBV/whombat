@@ -118,6 +118,17 @@ export async function boxLanguage(services: LocaleReader): Promise<Language> {
   return resolveLanguage(await boxLocale(services));
 }
 
+/**
+ * After something other than the person changed an account's preferences (a restore): forgets what was kept, reads the
+ * locale the database has now and tells every listener, so the desk, the widgets, the console and Link's emails follow.
+ */
+export async function reloadAccountLocale(services: Services, accountId: string): Promise<string | null> {
+  clearLocaleCache(services);
+  const locale = await configuredAccountLocale(services, accountId);
+  notifyLocaleChanged(services, accountId, locale);
+  return locale;
+}
+
 /** Clears cached locales for a `Services` instance (used in tests or restores). */
 export function clearLocaleCache(services: LocaleReader): void {
   cache.delete(keyOf(services));

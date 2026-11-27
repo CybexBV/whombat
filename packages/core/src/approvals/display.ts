@@ -19,6 +19,7 @@ import type { Approval, ApprovalAction, ApprovalActionType, ApprovalCondition } 
 import type { Tone } from '../domain/common.js';
 import { TEAM_REPORT_DRAFT_ACTION, teamReportDraftWords } from '../domain/team-reports.js';
 import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { alwaysAllowRow } from '../keys/actions.js';
 import { joinWithAnd, keyLabel } from '../keys/catalog.js';
 import { alwaysAllowLabel, type KeyTierRow, keyRiskRow } from '../keys/grants.js';
@@ -748,7 +749,7 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
   const hasUnmetChecks = unmetOtherConditions(approval).some((c) => c.kind === 'checks_pass');
   const hasUnmetReview = unmetOtherConditions(approval).some((c) => c.kind === 'review_approved');
   const allOthersMet = otherConditionsMet(approval);
-  const upper = (text: string) => text.toLocaleUpperCase(tr.language === 'nl' ? 'nl-NL' : 'en-US');
+  const upper = (text: string) => text.toLocaleUpperCase(tr.locale);
 
   // Label and tone
   const waitingFor = tr.t(
@@ -979,7 +980,7 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
         ? (approval.action.params.attachments ?? []).map((a) =>
             tr.t('approval.attach', {
               name: a.name,
-              size: a.size.toLocaleString(tr.language === 'nl' ? 'nl-NL' : 'en-US'),
+              size: formatLocaleNumber(a.size, tr.locale),
             }),
           )
         : []),

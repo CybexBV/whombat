@@ -175,5 +175,5 @@ export const STATUS = splitPairs({
   'turn.retriedAt': ['{label} · {time}', '{label} · {time}'],
   'turn.stop': ['Stop', 'Stoppen'],
   'turn.stoppedBy': ['Stopped by {name}', 'Gestopt door {name}'],
-  'turn.stopRunRefusal': ['Pause the run instead.', 'Pauzeer de run in plaats daarvan.'],
+  'turn.stopRunRefusal': ['Pause the run instead.', 'Pauzeer de uitvoering in plaats daarvan.'],
 });

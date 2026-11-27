@@ -71,7 +71,7 @@ export const MANAGED = splitPairs({
     'Something is waiting for your approval',
     'Er wacht iets op je goedkeuring',
   ],
-  'managed.push.generic.run': ['A run has news', 'Een run heeft nieuws'],
+  'managed.push.generic.run': ['A run has news', 'Een uitvoering heeft nieuws'],
   'managed.push.generic.update': ['Your Whombat has an update', 'Er is een update voor je Whombat'],
   'managed.push.generic.backup': [
     'Your Whombat’s backups need a look',

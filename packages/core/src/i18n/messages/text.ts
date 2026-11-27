@@ -12,6 +12,8 @@ export const TEXT = splitPairs({
   ],
   'format.of': ['{passed} of {total}', '{passed} van {total}'],
   'format.passing': ['{of} passing', '{of} geslaagd'],
+  'format.list.conjunction': ['{head} and {last}', '{head} en {last}'],
+  'format.list.disjunction': ['{head} or {last}', '{head} of {last}'],
 
   'copy.planLabel': [
     { one: 'PLAN · {count} STEP', other: 'PLAN · {count} STEPS' },
@@ -37,7 +39,7 @@ export const TEXT = splitPairs({
   'copy.runNow': ['Now: {activity}', 'Nu: {activity}'],
   'copy.runPaused': ['Paused: {activity}', 'Gepauzeerd: {activity}'],
   'copy.runTakenOver': ['Taken over: {activity}', 'Overgenomen: {activity}'],
-  'copy.runKeysTitle': ['{agent}’s keys for this run', 'Sleutels van {agent} voor deze run'],
+  'copy.runKeysTitle': ['{agent}’s keys for this run', 'Sleutels van {agent} voor deze uitvoering'],
   'copy.runKeysScope': ['scoped to {branch}', 'beperkt tot {branch}'],
   'copy.typing': ['{name} is thinking', '{name} denkt na'],
   'copy.dmEmpty': ['This is the start of your chat with {agent}', 'Dit is het begin van je chat met {agent}'],

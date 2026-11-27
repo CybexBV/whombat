@@ -45,7 +45,7 @@ export const HOME = splitPairs({
   'home.connection.noAnswer': ['The last check got no answer.', 'De laatste controle kreeg geen antwoord.'],
 
   'home.run.didntFinish': ['“{name}” didn’t finish', '“{name}” is niet afgerond'],
-  'home.run.stopped': ['Its run stopped before the end.', 'De run stopte voor het einde.'],
+  'home.run.stopped': ['Its run stopped before the end.', 'De uitvoering stopte voor het einde.'],
 
   'home.chat.new': ['New chat', 'Nieuwe chat'],
 

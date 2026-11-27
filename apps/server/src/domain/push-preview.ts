@@ -118,9 +118,10 @@ export function notificationPushTitle(
   actor: string,
   where: string,
   locale?: string | null,
+  direct = false,
 ): string {
-  // A notification's place is stored in English (“Direct” for a DM); the reader's language says it.
-  const place = where === 'Direct' ? tServer(locale, 'managed.push.direct') : where;
+  // An agent's DM has no place name of its own: the reader's language names it (“Direct”).
+  const place = direct ? tServer(locale, 'managed.push.direct') : where;
   switch (kind) {
     case 'needs_you':
       return tServer(locale, 'managed.push.needsYou', { where: place });
@@ -131,7 +132,7 @@ export function notificationPushTitle(
     case 'direct':
       return `${actor} · ${place}`;
     case 'agent_update':
-      return where === 'Direct' ? actor : `${actor} · ${place}`;
+      return direct ? actor : `${actor} · ${place}`;
   }
 }
 
@@ -140,12 +141,20 @@ export function buildPushPreview(input: {
   kind: NotificationPushKind;
   actor: string;
   where: string;
+  /** The agent's own DM with the person (the draft says so; never read from the stored words). */
+  direct?: boolean;
   text: string;
   locale?: string | null;
 }): PushPreview {
   return {
     title: previewTitle(
-      notificationPushTitle(input.kind, input.actor.trim() || GENERIC_PUSH_TITLE, input.where, input.locale),
+      notificationPushTitle(
+        input.kind,
+        input.actor.trim() || GENERIC_PUSH_TITLE,
+        input.where,
+        input.locale,
+        input.direct === true,
+      ),
     ),
     body: previewBody(input.text),
   };

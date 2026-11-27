@@ -9,7 +9,7 @@ export const APPROVALS = splitPairs({
   'action.deploy': ['deploy {ref} to {env}', '{ref} uitrollen naar {env}'],
   'action.refund': ['refund {amount} on account {account}', '{amount} terugbetalen op account {account}'],
   'action.push': ['push {sha} to {branch}', '{sha} pushen naar {branch}'],
-  'action.merge': ['merge PR #{n} into {base}', 'PR #{n} samenvoegen in {base}'],
+  'action.merge': ['merge PR #{n} into {base}', 'PR #{n} naar {base} samenvoegen'],
   'action.message': ['message {to}', '{to} een bericht sturen'],
   'action.mail': ['send an email to {to}', 'een e-mail sturen naar {to}'],
   'action.people': [
@@ -105,7 +105,7 @@ export const APPROVALS = splitPairs({
   'approval.copy.runs.push': ['Push {sha} to {branch} in {repo}', '{sha} pushen naar {branch} in {repo}'],
   'approval.copy.runs.merge': [
     'Merge PR #{n}{inRepo} into {base}{how}',
-    'PR #{n}{inRepo} samenvoegen in {base}{how}',
+    'PR #{n}{inRepo} naar {base} samenvoegen{how}',
   ],
   'approval.copy.runs.merge.merge': [' with a merge commit', ' met een merge-commit'],
   'approval.copy.runs.merge.rebase': [', rebased', ', gerebased'],

@@ -77,6 +77,8 @@ export interface NotificationDraft {
    * screen (desk-display-talk.md DK-T13). The inbox row and its realtime frame stay.
    */
   pushHeld?: boolean;
+  /** An agent's own words in its DM with the person: its push names no place but the DM's (“Direct”). */
+  direct?: boolean;
 }
 
 /** Whether a recipient's push waits now (Do not disturb or quiet hours, in their zone, else the burrow's). */
@@ -283,10 +285,11 @@ async function preparePush(services: Services, drafts: readonly NotificationDraf
           kind: row.kind,
           actor: names.get(row.actorId) ?? GENERIC_PUSH_TITLE,
           where: row.where,
+          direct: draft.direct === true,
           text: draft.previewText ?? row.text,
           locale,
         });
-    const payload: PushPayload & { preview?: false } = {
+    const payload: PushPayload = {
       burrow: burrowSlug,
       notificationId: row.id,
       kind: row.kind,
@@ -295,7 +298,7 @@ async function preparePush(services: Services, drafts: readonly NotificationDraf
       body: preview?.body ?? genericPushText(row.kind, locale),
       path: linkPath(burrowSlug, row.link),
       // Says “no preview” outright, so a client never has to recognise the generic words in some language.
-      ...(preview ? {} : { preview: false as const }),
+      ...(preview ? {} : { preview: false }),
     };
     return {
       principalId: row.principalId,

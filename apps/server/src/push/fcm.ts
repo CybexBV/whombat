@@ -46,6 +46,8 @@ export function buildFcmMessage(payload: PushPayload, token: string) {
         body: payload.body,
         path: payload.path,
         notificationId: payload.notificationId ?? '',
+        // FCM data is strings only; present only when previews are off.
+        ...(payload.preview === false ? { preview: 'false' } : {}),
         payload: JSON.stringify(payload),
       },
       android: {

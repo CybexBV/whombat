@@ -90,6 +90,7 @@ import {
   deskQuietNow,
   deskText,
   deskWidgetSpecProblem,
+  deskWords,
   fillDeskWords,
   resolveLanguage,
   safeLocaleOrNull,
@@ -121,7 +122,7 @@ import { startOfLocalDay } from '../home/time';
 import { homeWidgetsNow, type WidgetNow } from '../home/widgets';
 import { serversPrincipal } from '../hosts/principal';
 import { HostsError, hostsFor } from '../hosts/service';
-import { onLocaleChange } from '../i18n/locale';
+import { burrowLocale, onLocaleChange } from '../i18n/locale';
 import { ApiError, forbidden } from '../lib/errors';
 import { fixLook } from '../looks/research';
 import { type ControlPush, opaqueRef, PUSH_TTL_S, registerPushResolver } from '../managed/push';
@@ -1090,8 +1091,13 @@ export class DeskService {
 
   /** The person hears about the fifth wrong PIN in Chat, once (DK-04). */
   #tellWrongPins(row: DeskRow): void {
-    this.services.background.run('desk: wrong PINs', () =>
-      tellPerson(this.services, row.burrowId, row.personId, DESK_WORDS.settings.wrongPins),
+    this.services.background.run('desk: wrong PINs', async () =>
+      tellPerson(
+        this.services,
+        row.burrowId,
+        row.personId,
+        deskWords(await burrowLocale(this.services, row.burrowId)).settings.wrongPins,
+      ),
     );
   }
 
@@ -1867,7 +1873,10 @@ export class DeskService {
       voiceSettings !== null &&
       wantsDutchVoice(voiceSettings) &&
       Boolean((await voiceHealth(this.services).catch(() => null))?.languages?.includes('nl'));
-    const nlSample = `Hoi, ik ben ${assistant}. Vraag maar raak.`;
+    const nlSample = deskText(
+      fillDeskWords(deskWords(place?.locale).settings.sample, { assistant }),
+      VOICE_TTS_TEXT_MAX,
+    );
     const enSample = deskText(fillDeskWords(DESK_WORDS.settings.sample, { assistant }), VOICE_TTS_TEXT_MAX);
     let wav: Buffer;
     try {
@@ -1946,8 +1955,13 @@ export class DeskService {
       if (res.status !== 'ok' || !(res.result as { paired: boolean }).paired) return false;
       this.#reset();
       await this.#changed();
-      this.services.background.run('desk: paired itself', () =>
-        tellPerson(this.services, target.burrowId, target.id, DESK_WORDS.settings.selfPaired),
+      this.services.background.run('desk: paired itself', async () =>
+        tellPerson(
+          this.services,
+          target.burrowId,
+          target.id,
+          deskWords(await burrowLocale(this.services, target.burrowId)).settings.selfPaired,
+        ),
       );
       // The moment the person has an assistant (desk-found.md DF-02): Found on your network looks now.
       foundScansFor(this.services).kick();

@@ -11,7 +11,6 @@ import {
   formatRelativeDay,
   libvirtBackupOf,
   libvirtBackupTime,
-  plural,
 } from '@whombat/client/hosts';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume, HostGuest, HostServerDetail } from '@whombat/core/domain';
@@ -19,7 +18,7 @@ import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
-import { currentLocale } from '../../../i18n/provider';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
 import { Card, Empty, ErrorLine } from '../parts';
 import { useThingSearch } from '../search';
 import styles from '../Things.module.css';
@@ -51,6 +50,7 @@ export function LvBackupTable({
   canChange: boolean;
   timeZone?: string;
 }) {
+  const { t: tr } = useWebI18n();
   const [, set] = useThingSearch();
   const [dialog, setDialog] = useState<Dialog>(null);
   const serverId = detail.server.id;
@@ -61,13 +61,13 @@ export function LvBackupTable({
       <table className={styles.table}>
         <thead>
           <tr>
-            {showGuest ? <th scope="col">VM</th> : null}
-            <th scope="col">Made</th>
-            <th scope="col">Size</th>
-            <th scope="col">Format</th>
-            <th scope="col">Folder</th>
+            {showGuest ? <th scope="col">{tr('libvirt.backups.vm')}</th> : null}
+            <th scope="col">{tr('libvirt.backups.made')}</th>
+            <th scope="col">{tr('libvirt.backups.size')}</th>
+            <th scope="col">{tr('libvirt.backups.format')}</th>
+            <th scope="col">{tr('libvirt.backups.folder')}</th>
             <th scope="col">
-              <span className={styles.srOnly}>Actions</span>
+              <span className={styles.srOnly}>{tr('libvirt.backups.actions')}</span>
             </th>
           </tr>
         </thead>
@@ -91,7 +91,7 @@ export function LvBackupTable({
                     ) : (
                       <span className={styles.mono}>{(b.guest ?? DASH).replace(/^libvirt:/, '')}</span>
                     )}{' '}
-                    {g ? null : <span className={styles.kind}>removed</span>}
+                    {g ? null : <span className={styles.kind}>{tr('libvirt.backups.removed')}</span>}
                   </td>
                 ) : null}
                 <td className={styles.num}>
@@ -112,13 +112,14 @@ export function LvBackupTable({
                         className={styles.cardLink}
                         onClick={() => setDialog({ kind: 'restore', backup: b })}
                       >
-                        Restore…<span className={styles.srOnly}> the backup of {when}</span>
+                        {tr('libvirt.backups.restore')}
+                        <span className={styles.srOnly}> {tr('libvirt.backups.restoreOf', { when })}</span>
                       </button>
                       <button
                         type="button"
                         className={styles.iconBtn}
-                        aria-label={`Delete the backup of ${when}`}
-                        title="Delete"
+                        aria-label={tr('libvirt.backups.deleteOf', { when })}
+                        title={tr('libvirt.backups.delete')}
                         onClick={() => setDialog({ kind: 'delete', backup: b })}
                       >
                         <Icon icon={Trash2} size={14} />
@@ -169,6 +170,7 @@ export function LvGuestBackups({
   canChange: boolean;
   timeZone?: string;
 }) {
+  const { t: tr, tp, tx } = useWebI18n();
   const serverId = detail.server.id;
   const list = useHostManageRead({
     params: { burrow, serverId },
@@ -182,16 +184,18 @@ export function LvGuestBackups({
   return (
     <>
       <Card
-        title="Backups"
+        title={tr('libvirt.backups.title')}
         meta={
           t != null
-            ? `${plural(items.length, 'backup')}, newest ${formatRelativeDay(t, Date.parse(detail.asOf), timeZone, currentLocale())}`
+            ? tp('libvirt.backups.newest', items.length, {
+                when: formatRelativeDay(t, Date.parse(detail.asOf), timeZone, currentLocale()),
+              })
             : undefined
         }
         link={
           canChange ? (
             <Button size="sm" style={{ marginLeft: 'auto' }} onClick={() => setNow(true)}>
-              Back up now
+              {tr('libvirt.backups.backUpNow')}
             </Button>
           ) : undefined
         }
@@ -207,12 +211,18 @@ export function LvGuestBackups({
             timeZone={timeZone}
           />
         ) : (
-          <Empty>{list.isLoading ? 'Looking…' : `No backups of ${guest.name} yet.`}</Empty>
+          <Empty>
+            {list.isLoading
+              ? tr('libvirt.backups.looking')
+              : tr('libvirt.backups.noneOf', { name: guest.name })}
+          </Empty>
         )}
         {dir ? (
           <div className={styles.cardNote}>
-            Backups go to <span className={styles.mono}>{`${dir}/${guest.name}`}</span> on {serverId}, each
-            with the VM’s settings. A restore always makes a new VM.
+            {tx('libvirt.backups.guestNote', {
+              dir: <span className={styles.mono}>{`${dir}/${guest.name}`}</span>,
+              server: serverId,
+            })}
           </div>
         ) : null}
       </Card>
@@ -241,6 +251,7 @@ export function LvServerBackups({
   canChange: boolean;
   timeZone?: string;
 }) {
+  const { t, tp, tx } = useWebI18n();
   const serverId = detail.server.id;
   const manage = detail.server.remoteControl.manage === true;
   const list = useHostManageRead(
@@ -254,7 +265,7 @@ export function LvServerBackups({
   return (
     <>
       {manage && list.data && bare.length ? (
-        <Card title="Not backed up yet" meta={plural(bare.length, 'VM')}>
+        <Card title={t('libvirt.backups.notYet')} meta={tp('libvirt.backups.vms', bare.length)}>
           <div className={styles.rows}>
             {bare.map((g) => (
               <div key={g.id} className={styles.row}>
@@ -263,12 +274,13 @@ export function LvServerBackups({
                     {g.name}
                   </b>
                   <small>
-                    {g.state === 'stopped' ? 'Switched off' : 'Running'} · no backup in the backups folder
+                    {g.state === 'stopped' ? t('libvirt.backups.switchedOff') : t('libvirt.backups.running')}{' '}
+                    · {t('libvirt.backups.noBackup')}
                   </small>
                 </div>
                 {canChange ? (
                   <Button size="sm" onClick={() => setBackup(g)}>
-                    Back up now
+                    {t('libvirt.backups.backUpNow')}
                   </Button>
                 ) : null}
               </div>
@@ -277,11 +289,11 @@ export function LvServerBackups({
         </Card>
       ) : null}
       <Card
-        title="Backups"
-        meta={items.length ? `${plural(items.length, 'backup')} in the backups folder` : undefined}
+        title={t('libvirt.backups.title')}
+        meta={items.length ? tp('libvirt.backups.inFolder', items.length) : undefined}
       >
         {!manage ? (
-          <Empty>Changing guests is switched off for this server, so its backups aren’t listed.</Empty>
+          <Empty>{t('libvirt.backups.manageOff')}</Empty>
         ) : list.error ? (
           <ErrorLine error={list.error} onRetry={() => void list.refetch()} />
         ) : items.length ? (
@@ -294,11 +306,11 @@ export function LvServerBackups({
             timeZone={timeZone}
           />
         ) : (
-          <Empty>{list.isLoading ? 'Looking…' : 'No VM backups on this server yet.'}</Empty>
+          <Empty>{list.isLoading ? t('libvirt.backups.looking') : t('libvirt.backups.noneHere')}</Empty>
         )}
         {dir ? (
           <div className={styles.cardNote}>
-            Backups go to <span className={styles.mono}>{dir}</span>, one folder per VM with its settings.
+            {tx('libvirt.backups.serverNote', { dir: <span className={styles.mono}>{dir}</span> })}
           </div>
         ) : null}
       </Card>

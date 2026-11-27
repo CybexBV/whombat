@@ -20,7 +20,6 @@
  * `createThingWidgets(services)` is the runtime's; tests pass their own reads (`ThingWidgetsDeps`).
  */
 import {
-  DESK_SCREEN_WORDS,
   DESK_WIDGET_RANGES,
   DESK_WIDGET_REF_RE,
   type DeskCatalogGroup,
@@ -28,6 +27,7 @@ import {
   type DeskWidgetSpec,
   DeskWidgetView,
   type DeskWidgetViewKind,
+  deskScreenWords,
   deskWidgetLimits,
   type ThingPage,
   thingId,
@@ -37,6 +37,7 @@ import { catalogConnections } from '../../db/schema/index';
 import { deviceThings } from '../../devices/home';
 import { DEVICE_CATALOG_ID } from '../../devices/store';
 import { homeShowsConnection } from '../../home/overview';
+import { type ServerMessageKey, tServer } from '../../i18n/catalog';
 import { onLocaleChange } from '../../i18n/locale';
 import { ApiError } from '../../lib/errors';
 import type { Services } from '../../services';
@@ -53,7 +54,6 @@ import {
   emptyView,
   figuresPrivate,
   figuresView,
-  guardsHouse,
   HEAD_FIGURES,
   headFigures,
   isCameraGallery,
@@ -61,6 +61,7 @@ import {
   type Panel,
   pagePanels,
   panelHint,
+  panelPrivate,
   panelView,
   screenPanels,
   screenViewOf,
@@ -317,6 +318,7 @@ export function createThingWidgets(
     }
     // Not read in time, or not readable now: its figures, and the rest when the page answers.
     const mark = calmMark(t.catalogId);
+    const figureWords = deskScreenWords(ctx.locale).figures;
     return {
       key: words(t.ref, 120),
       label: words(t.name, 80) || words(t.ref, 80),
@@ -327,8 +329,8 @@ export function createThingWidgets(
           type: 'figures',
           ref: t.ref,
           opts: {},
-          name: DESK_SCREEN_WORDS.figures.name,
-          line: DESK_SCREEN_WORDS.figures.line,
+          name: figureWords.name,
+          line: figureWords.line,
           ...(mark ? { mark } : {}),
           view: 'figures',
         },
@@ -375,7 +377,7 @@ export function createThingWidgets(
     await Promise.all(
       [...byPage.values()].map(async ({ thing, range, specs: group }) => {
         const answered = await pageFor(ctx, thing, range);
-        const down = answered.page ? await downProblem(answered.page, downServer) : null;
+        const down = answered.page ? await downProblem(answered.page, downServer, ctx.locale) : null;
         for (const spec of group)
           out.set(spec.id, checked(ctx, spec, answer(ctx, spec, thing, answered, down)));
       }),
@@ -403,12 +405,13 @@ export function createThingWidgets(
   async function downProblem(
     page: ThingPage,
     downServer: (id: string) => Promise<boolean | null>,
+    locale?: string,
   ): Promise<{ text: string; detail?: string } | null> {
     if (page.status !== 'offline') return null;
-    const text = `${page.name} isn’t answering`;
+    const text = tServer(locale, 'desk.widget.notAnswering', { name: page.name });
     const server = page.runsOn ? (page.runsOn.name.split(' · ')[0] ?? page.runsOn.name) : null;
     if (page.runsOn && server && (await downServer(page.runsOn.serverId)))
-      return { text, detail: `It runs on ${server}, which is down.` };
+      return { text, detail: tServer(locale, 'desk.widget.runsOnDown', { server }) };
     return { text };
   }
 
@@ -429,9 +432,10 @@ export function createThingWidgets(
     const mark = calmMark(page?.catalogId);
     // A kind's name for a panel is the widget's title too, so the screen says what *Add a widget* said.
     const title = spec.type === 'figures' ? name : (hint?.name ?? panelTitle(page, panelId) ?? name);
+    const say = (key: ServerMessageKey, vars?: Record<string, string>) => tServer(ctx.locale, key, vars);
     const b: ViewBase = {
       id: spec.id,
-      title: title || name || 'Figures',
+      title: title || name || say('desk.widget.figures'),
       ...(name && spec.type === 'panel' ? { name } : {}),
       ...(mark ? { mark } : {}),
       ...(page?.readAt ? { at: page.readAt } : {}),
@@ -441,15 +445,15 @@ export function createThingWidgets(
       private: false,
       refreshS: PROBLEM_REFRESH_S,
     });
-    if (answered.gone) return problem('It isn’t connected any more');
+    if (answered.gone) return problem(say('desk.widget.gone'));
     if (!page)
-      return problem(name ? `Whombat couldn’t read ${name} just now.` : 'Whombat couldn’t read it just now.');
+      return problem(name ? say('desk.widget.couldntReadName', { name }) : say('desk.widget.couldntRead'));
     if (down) return problem(down.text, down.detail, 'bad');
     const isPrivate = (p: Panel | null, view: DeskWidgetView) =>
       !!hints.private ||
       !!hint?.private ||
       view.kind === 'camera' ||
-      (p !== null && guardsHouse(p, spec.opts?.item, hints.guards));
+      (p !== null && panelPrivate(p, spec.opts?.item, hints.guards, !!hint?.poster));
 
     if (spec.type === 'figures') {
       const head = headFigures(page, hints);
@@ -460,7 +464,7 @@ export function createThingWidgets(
         return page.problem
           ? problem(page.problem)
           : {
-              view: textView(b, 'No figures to show right now.'),
+              view: textView(b, say('desk.widget.noFigures')),
               private: false,
               refreshS: FIGURES_REFRESH_S,
             };
@@ -488,7 +492,9 @@ export function createThingWidgets(
           private: !!hints.private || !!hint?.private,
           refreshS: pace,
         };
-      return problem(`${name || 'Its page'} doesn’t show this any more`);
+      return problem(
+        name ? say('desk.widget.noLongerShownName', { name }) : say('desk.widget.noLongerShown'),
+      );
     }
     const drawn = panelView({
       b,
@@ -506,10 +512,14 @@ export function createThingWidgets(
       if (spec.opts?.item !== undefined)
         return problem(
           isCameraGallery(panel) || panel.kind === 'controls'
-            ? `This isn’t in ${name || 'its page'} any more`
-            : `${name || 'Its page'} doesn’t show this any more`,
+            ? name
+              ? say('desk.widget.noLongerInName', { name })
+              : say('desk.widget.noLongerIn')
+            : name
+              ? say('desk.widget.noLongerShownName', { name })
+              : say('desk.widget.noLongerShown'),
         );
-      return { view: textView(b, 'Nothing to show right now.'), private: false, refreshS: pace };
+      return { view: textView(b, say('desk.widget.nothing')), private: false, refreshS: pace };
     }
     return {
       view,
@@ -527,9 +537,14 @@ export function createThingWidgets(
       panel: spec.opts?.panel,
       burrowId: ctx.viewer.burrowId,
     });
-    const text = 'Couldn’t show this just now';
+    const text = tServer(ctx.locale, 'desk.widget.couldntShow');
     return {
-      view: textView({ id: spec.id, title: words(r.view.title, 60) || 'Widget' }, text, { text }, 'warn'),
+      view: textView(
+        { id: spec.id, title: words(r.view.title, 60) || tServer(ctx.locale, 'desk.widget.widget') },
+        text,
+        { text },
+        'warn',
+      ),
       private: r.private,
       refreshS: PROBLEM_REFRESH_S,
     };

@@ -58,7 +58,7 @@ export const HOSTS = splitPairs({
   'hosts.wayOut.updateInUnraid': ['Update it in Unraid.', 'Werk het bij in Unraid.'],
   'hosts.wayOut.beforeFull': ['Check it before it fills up.', 'Controleer het voordat het volloopt.'],
 
-  'hosts.quiet.untilChanges': ['until it changes', 'tot het verandert'],
+  'hosts.quiet.untilChanges': ['until it changes', 'tot er iets verandert'],
   'hosts.quiet.maintenance': ['while it’s in maintenance', 'zolang hij in onderhoud is'],
   'hosts.quiet.parentOffline': ['while {name} is offline', 'zolang {name} offline is'],
   'hosts.lineQuestion': [
@@ -285,7 +285,11 @@ export const HOSTS = splitPairs({
     'Storage “{name}” is missing a disk',
     'Opslag “{name}” mist een schijf',
   ],
-  'hosts.code.pool.degraded.detail': ['Not working: {disks}', 'Werkt niet: {disks}'],
+  'hosts.code.pool.degraded.offline': [
+    '{disks} is offline; the data is at risk until it’s back',
+    '{disks} is offline; de gegevens lopen risico tot het terug is',
+  ],
+  'hosts.code.pool.degraded.reported': ['ZFS reports it as {health}', 'ZFS meldt het als {health}'],
   'hosts.code.pool.errors.title': ['Storage “{name}” has errors', 'Opslag “{name}” heeft fouten'],
   'hosts.code.pool.errors.detail': [
     '{io} read or write errors · {scrub} found by the last check',
@@ -370,8 +374,14 @@ export const HOSTS = splitPairs({
     'Verzoeken van {user} zijn geweigerd',
   ],
   'hosts.code.security.denied_requests.detail': [
-    { one: '{n} refused request', other: '{n} refused requests' },
-    { one: '{n} geweigerd verzoek', other: '{n} geweigerde verzoeken' },
+    {
+      one: '{user} tried {n} time in 10 minutes to use a console or power button they aren’t allowed to',
+      other: '{user} tried {n} times in 10 minutes to use a console or power button they aren’t allowed to',
+    },
+    {
+      one: '{user} probeerde in 10 minuten {n} keer een console of aan-uitknop te gebruiken die niet mag',
+      other: '{user} probeerde in 10 minuten {n} keer een console of aan-uitknop te gebruiken die niet mag',
+    },
   ],
   'hosts.code.check.down.title': ['{name} is down', '{name} werkt niet'],
   'hosts.code.check.down.heartbeat_never': ['No ping yet', 'Nog geen ping'],
@@ -395,14 +405,26 @@ export const HOSTS = splitPairs({
   'hosts.hint.sensor.near_limit.detail': ['Close to its limit of {limit}', 'Dicht bij de limiet van {limit}'],
   'hosts.hint.swap.high.title': ['Swap almost full', 'Swap bijna vol'],
   'hosts.hint.swap.high.detail': ['{used} of {total} used', '{used} van {total} gebruikt'],
+  'hosts.hint.swap.high.ram': ['RAM {pct} used', 'RAM {pct} gebruikt'],
   'hosts.hint.memory.low.title': ['Memory almost full', 'Geheugen bijna vol'],
   'hosts.hint.memory.low.detail': ['{available} of {total} free', '{available} van {total} vrij'],
   'hosts.hint.disk.space.title': ['{volume} {pct} full', '{volume} voor {pct} vol'],
   'hosts.hint.disk.wear.title': ['Disk {device} is {pct} worn', 'Schijf {device} is voor {pct} versleten'],
   'hosts.hint.collector.error.title': [
-    'Whombat can’t read part of this server',
-    'Whombat kan een deel van deze server niet lezen',
+    'Whombat can’t read this server’s {what}',
+    'Whombat kan {what} van deze server niet lezen',
   ],
+  'hosts.hint.collector.error.noReason': ['It didn’t say why.', 'Er is niet gezegd waarom.'],
+  'hosts.collector.smart': ['disk health', 'de schijfgezondheid'],
+  'hosts.collector.sensors': ['temperatures', 'de temperaturen'],
+  'hosts.collector.ups': ['battery backup', 'de noodstroom'],
+  'hosts.collector.unraid': ['Unraid details', 'de Unraid-gegevens'],
+  'hosts.collector.disks': ['disks', 'de schijven'],
+  'hosts.collector.network': ['network', 'het netwerk'],
+  'hosts.collector.system': ['system details', 'de systeemgegevens'],
+  'hosts.collector.docker': ['apps', 'de apps'],
+  'hosts.collector.machines': ['machines', 'de machines'],
+  'hosts.collector.other': ['{name} details', 'de {name}-gegevens'],
   'hosts.hint.guests.unhealthy.title': [
     { one: '{n} app isn’t working properly', other: '{n} apps aren’t working properly' },
     { one: '{n} app werkt niet goed', other: '{n} apps werken niet goed' },

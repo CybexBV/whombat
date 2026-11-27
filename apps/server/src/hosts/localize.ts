@@ -218,11 +218,18 @@ function alertWords(code: string, p: J, f: Fill): Words | null {
       };
     }
     case 'pool.degraded': {
+      // As the hub says it: a degraded pool is missing a disk; a faulted or unavailable one isn't working properly.
       const faulted = list(p.faulted);
-      const title = f.t('hosts.code.pool.degraded.missing', { name: str(p.name) });
+      const health = str(p.health).toUpperCase();
+      const missing = health === '' || health === 'DEGRADED';
+      const title = missing
+        ? f.t('hosts.code.pool.degraded.missing', { name: str(p.name) })
+        : f.t('hosts.code.pool.degraded.title', { name: str(p.name), health: health.toLowerCase() });
       const detail = faulted.length
-        ? f.t('hosts.code.pool.degraded.detail', { disks: f.names(faulted, 4) })
-        : '';
+        ? f.t('hosts.code.pool.degraded.offline', { disks: f.names(faulted, 4) })
+        : health
+          ? f.t('hosts.code.pool.degraded.reported', { health: health.toLowerCase() })
+          : '';
       return { title, detail, bannerTitle: title, bannerDetail: sentence(detail) };
     }
     case 'pool.errors': {
@@ -338,7 +345,9 @@ function alertWords(code: string, p: J, f: Fill): Words | null {
     }
     case 'security.denied_requests': {
       const title = f.t('hosts.code.security.denied_requests.title', { user: str(p.user) });
-      const detail = f.tp('hosts.code.security.denied_requests.detail', num(p.count) ?? 0);
+      const detail = f.tp('hosts.code.security.denied_requests.detail', num(p.count) ?? 0, {
+        user: str(p.user),
+      });
       return { title, detail, bannerTitle: title, bannerDetail: sentence(detail) };
     }
     case 'check.down': {
@@ -365,6 +374,36 @@ function alertWords(code: string, p: J, f: Fill): Words | null {
   }
 }
 
+/** What a collector reads, as the hub names it in “Whombat can’t read this server’s …”. */
+function collectorWords(name: string, f: Fill): string {
+  switch (name) {
+    case 'smart':
+      return f.t('hosts.collector.smart');
+    case 'sensors':
+    case 'temps':
+      return f.t('hosts.collector.sensors');
+    case 'ups':
+      return f.t('hosts.collector.ups');
+    case 'unraid':
+      return f.t('hosts.collector.unraid');
+    case 'disks':
+      return f.t('hosts.collector.disks');
+    case 'net':
+    case 'network':
+      return f.t('hosts.collector.network');
+    case 'system':
+      return f.t('hosts.collector.system');
+    case 'docker':
+      return f.t('hosts.collector.docker');
+    case 'incus':
+    case 'pve':
+    case 'libvirt':
+      return f.t('hosts.collector.machines');
+    default:
+      return f.t('hosts.collector.other', { name });
+  }
+}
+
 /** A hint's words by its code; null for a code this doesn't know. */
 function hintWords(code: string, p: J, f: Fill): Words | null {
   const [base = '', variant = ''] = splitCode(code, HINT_BASES);
@@ -376,11 +415,12 @@ function hintWords(code: string, p: J, f: Fill): Words | null {
         title: f.t('hosts.hint.sensor.near_limit.title', { label: f.label(p), temp: f.temp(p.tempC) }),
         detail: f.t('hosts.hint.sensor.near_limit.detail', { limit: f.temp(p.limitC) }),
       };
-    case 'swap.high':
-      return {
-        title: f.t('hosts.hint.swap.high.title'),
-        detail: f.t('hosts.hint.swap.high.detail', { used: f.gib(p.usedGiB), total: f.gib(p.totalGiB) }),
-      };
+    case 'swap.high': {
+      const swap = f.t('hosts.hint.swap.high.detail', { used: f.gib(p.usedGiB), total: f.gib(p.totalGiB) });
+      // How full the memory is says why swap matters, as the hub's own line does.
+      const ram = num(p.ramPct) === null ? null : f.t('hosts.hint.swap.high.ram', { pct: f.pct(p.ramPct) });
+      return { title: f.t('hosts.hint.swap.high.title'), detail: ram ? `${swap} · ${ram}` : swap };
+    }
     case 'memory.low':
       return {
         title: f.t('hosts.hint.memory.low.title'),
@@ -405,7 +445,10 @@ function hintWords(code: string, p: J, f: Fill): Words | null {
               : '',
       };
     case 'collector.error':
-      return { title: f.t('hosts.hint.collector.error.title'), detail: str(p.error) };
+      return {
+        title: f.t('hosts.hint.collector.error.title', { what: collectorWords(str(p.collector), f) }),
+        detail: str(p.error).trim() || f.t('hosts.hint.collector.error.noReason'),
+      };
     case 'guests.unhealthy':
     case 'system.failed_units':
     case 'docker.image_updates':

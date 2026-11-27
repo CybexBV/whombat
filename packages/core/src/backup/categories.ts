@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { Count } from '../domain/common.js';
 import { coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { DOT } from '../text/format.js';
 
 /** Category ids, in the order panels, files and summaries list them. Stable: files and defaults store them. */
@@ -179,23 +180,14 @@ export function backupCategoryMeta(facts: BackupCategoryFacts, locale?: string |
 }
 
 const NBSP = ' ';
-const trim1 = (v: number) => {
-  const s = (Math.round(v * 10) / 10).toFixed(1);
-  return s.endsWith('.0') ? s.slice(0, -2) : s;
-};
-
 /**
  * A size in the backup panels (decimal units, as the mock): “4 KB”, “640 KB”, “1.1 MB”, “120 MB”, “1.4 GB”. Kilobytes
  * are whole (at least 1 for anything above 0), megabytes and gigabytes get one decimal below 10. A no-break space
  * joins number and unit (as `formatBytes`).
  */
 export function formatBackupSize(bytes: number, locale?: string | null): string {
-  const size = formatBackupSizeEn(bytes);
-  // Dutch writes the decimal with a comma: “1,1 MB”.
-  return coreTranslator(locale).language === 'nl' ? size.replace('.', ',') : size;
-}
-
-function formatBackupSizeEn(bytes: number): string {
+  const trim1 = (v: number) =>
+    formatLocaleNumber(Math.round(v * 10) / 10, locale, { maximumFractionDigits: 1, useGrouping: false });
   const b = Math.max(0, Math.round(bytes));
   if (b === 0) return `0${NBSP}KB`;
   if (b < 999_500) return `${Math.max(1, Math.round(b / 1_000))}${NBSP}KB`;

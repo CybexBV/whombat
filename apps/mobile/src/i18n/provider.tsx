@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { I18nProvider, useI18n } from '@whombat/client/i18n/react';
-import { parseKey } from '@whombat/client/query';
 import { usePreferences, useWhombat } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { DEFAULT_LOCALE, formatLocaleOf } from '@whombat/core/i18n';
@@ -9,6 +8,7 @@ import { WhombatLive } from '../../modules/whombat-live';
 import type { QueryPersister } from '../data/queryPersist';
 import { secureStore } from '../lib/storage';
 import { boxLocale, deviceLocale, saveBoxLocale } from './locale';
+import { refreshLanguageQueries } from './refreshLanguageQueries';
 
 export function MobileI18nProvider({ locale, children }: { locale?: string; children: ReactNode }) {
   const [system] = useState(deviceLocale);
@@ -48,13 +48,7 @@ export function BoxI18nProvider({
     setConfirmed(tag);
     if (prior !== tag) {
       persister.setLocale(tag);
-      // Search's cursors and the box's rendered text belong to the language that produced them.
-      void qc.resetQueries({
-        predicate: (query) => {
-          const id = parseKey(query.queryKey)?.endpointId;
-          return !!id && /^(home|things|search|notifications)\./.test(id);
-        },
-      });
+      void refreshLanguageQueries(qc);
     }
     void saveBoxLocale(secureStore, scope, tag);
   }, [tag, scope, persister, qc, initialLocale]);

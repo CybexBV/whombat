@@ -6,7 +6,6 @@ import { queryKeys } from '@whombat/client/query';
 import { useBootstrap, useTheAgent } from '@whombat/client/react';
 import {
   ClockTime,
-  DND_PRESET_LABELS,
   type DndPreset,
   dndUntilFor,
   type NotificationPreferences,
@@ -23,7 +22,7 @@ import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
-import { currentLocale } from '../../i18n/provider';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';
 import { BOX_PAGE_TEXT } from '../../managed/pageText';
 import { useWebPush } from '../../push/useWebPush';
@@ -34,7 +33,7 @@ import { useNotificationPreferences, useSaveNotificationPreferences } from './no
 import {
   customDndUntil,
   dndStateText,
-  EMAIL_OPTIONS,
+  emailOptions,
   localInputValue,
   type NotificationsWords,
   notificationsWords,
@@ -42,8 +41,12 @@ import {
 import styles from './SettingsScreen.module.css';
 
 const PRESETS: DndPreset[] = ['30m', '1h', 'tomorrow'];
+const PRESET_KEYS = {
+  '30m': 'settings.notifications.preset30m',
+  '1h': 'settings.notifications.preset1h',
+  tomorrow: 'settings.notifications.presetTomorrow',
+} as const satisfies Record<DndPreset, string>;
 const RouterButtonLink = createLink(ButtonLink);
-const SAVE_FAILED = 'That didn’t save. Try again in a moment.';
 
 /**
  * Settings → Notifications (Whombat essentials item 12; contracts CT-175; AP-490…): your own Do not disturb (quick
@@ -58,6 +61,9 @@ const SAVE_FAILED = 'That didn’t save. Try again in a moment.';
  * “Replies in your threads” changes nothing (the setting stays as it is).
  */
 export function NotificationsTab({ burrow }: { burrow: string }) {
+  const i18n = useWebI18n();
+  const { t } = i18n;
+  const saveFailed = t('settings.notifications.saveFailed');
   const { data: bootstrap } = useBootstrap({ params: { burrow } });
   const prefs = useNotificationPreferences(burrow);
   const save = useSaveNotificationPreferences(burrow);
@@ -65,7 +71,11 @@ export function NotificationsTab({ burrow }: { burrow: string }) {
   const timeZone = bootstrap?.preferences.timeZone ?? bootstrap?.burrow.timeZone ?? 'Europe/Amsterdam';
   const capabilities = bootstrap?.capabilities;
   const { words: agent } = useTheAgent(burrow);
-  const words = notificationsWords(bootstrap?.burrow.name ?? 'this Whombat', agent.name);
+  const words = notificationsWords(
+    bootstrap?.burrow.name ?? t('settings.notifications.thisWhombat'),
+    agent.name,
+    i18n,
+  );
   const { session } = useAppServices();
   const { reach, setMail } = useReach(session);
   const qc = useQueryClient();
@@ -79,11 +89,11 @@ export function NotificationsTab({ burrow }: { burrow: string }) {
           return true;
         },
         () => {
-          toast.show(SAVE_FAILED);
+          toast.show(saveFailed);
           return false;
         },
       ),
-    [save, toast],
+    [save, toast, saveFailed],
   );
 
   return (
@@ -103,7 +113,7 @@ export function NotificationsTab({ burrow }: { burrow: string }) {
           mail={link.mail}
           save={async (change) => {
             const ok = await setMail(change);
-            if (!ok) toast.show(SAVE_FAILED);
+            if (!ok) toast.show(saveFailed);
             // Whether this Whombat emails notifications now (the EMAIL section above) follows the second choice.
             else
               void qc.invalidateQueries({
@@ -135,6 +145,7 @@ function DndSection({
   apply: Apply;
   meta: { on: string; off: string };
 }) {
+  const { t } = useWebI18n();
   const ids = useId();
   const now = useNow(15_000);
   const [custom, setCustom] = useState<string | null>(null);
@@ -158,14 +169,14 @@ function DndSection({
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        DO NOT DISTURB
+        {t('settings.notifications.dndLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={styles.row}>
           <StatusDot tone={state ? 'warn' : 'mut'} size={8} label={null} />
           <span className={styles.rowMain}>
             <span className={styles.rowTitle} role="status">
-              {state ?? 'Off'}
+              {state ?? t('settings.notifications.off')}
             </span>
             <span className={styles.rowMeta}>{state ? meta.on : meta.off}</span>
           </span>
@@ -173,15 +184,17 @@ function DndSection({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => void apply((p) => ({ ...p, dndUntil: null }), 'Do not disturb is off.')}
+              onClick={() =>
+                void apply((p) => ({ ...p, dndUntil: null }), t('settings.notifications.dndOff'))
+              }
             >
-              Turn off
+              {t('settings.notifications.turnOff')}
             </Button>
           )}
         </div>
         <div className={cx(styles.row, own.wrapRow)}>
           <span className={own.rowLabel} id={`${ids}-for`}>
-            {state ? 'Change to' : 'Pause for'}
+            {state ? t('settings.notifications.changeTo') : t('settings.notifications.pauseFor')}
           </span>
           {/* biome-ignore lint/a11y/useSemanticElements: a group of buttons, not form fields (no fieldset) */}
           <div className={own.choices} role="group" aria-labelledby={`${ids}-for`}>
@@ -195,7 +208,7 @@ function DndSection({
                   void setUntil(dndUntilFor(preset, Date.now(), timeZone));
                 }}
               >
-                {DND_PRESET_LABELS[preset]}
+                {t(PRESET_KEYS[preset])}
               </Button>
             ))}
             <Button
@@ -213,14 +226,14 @@ function DndSection({
                 );
               }}
             >
-              Custom…
+              {t('settings.notifications.custom')}
             </Button>
           </div>
         </div>
         {custom !== null && (
           <form id={`${ids}-custom`} className={cx(styles.row, own.wrapRow)} onSubmit={onCustom} noValidate>
             <label className={own.rowLabel} htmlFor={`${ids}-until`}>
-              Until
+              {t('settings.notifications.until')}
             </label>
             <Input
               id={`${ids}-until`}
@@ -236,13 +249,13 @@ function DndSection({
               }}
             />
             <Button type="submit" variant="primary" size="sm">
-              Pause
+              {t('settings.notifications.pause')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setCustom(null)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <span id={`${ids}-zone`} className={own.fullHint}>
-              In your time zone, {timeZone}.
+              {t('settings.notifications.inYourZone', { zone: timeZone })}
             </span>
             {error && (
               <span id={`${ids}-error`} className={styles.fieldError} role="alert">
@@ -267,6 +280,7 @@ function QuietHoursSection({
   apply: Apply;
 }) {
   const WEEKDAY_LABELS = useLocaleWords(weekdayLabels);
+  const { t } = useWebI18n();
   const ids = useId();
   const schedule = prefs.schedule;
   const [start, setStart] = useState(schedule.start);
@@ -287,13 +301,13 @@ function QuietHoursSection({
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        QUIET HOURS
+        {t('settings.notifications.quietLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={styles.row}>
           <span className={styles.rowMain}>
             <label className={styles.rowTitle} htmlFor={`${ids}-on`}>
-              Quiet hours
+              {t('settings.notifications.quietTitle')}
             </label>
             <span className={styles.rowMeta} id={`${ids}-summary`}>
               {quietHoursText(schedule, currentLocale())}
@@ -320,7 +334,7 @@ function QuietHoursSection({
           <>
             <div className={cx(styles.row, own.wrapRow)}>
               <label className={own.rowLabel} htmlFor={`${ids}-start`}>
-                From
+                {t('settings.notifications.from')}
               </label>
               <Input
                 id={`${ids}-start`}
@@ -331,7 +345,7 @@ function QuietHoursSection({
                 onChange={(e) => setStart(e.target.value)}
               />
               <label className={own.rowLabel} htmlFor={`${ids}-end`}>
-                to
+                {t('settings.notifications.to')}
               </label>
               <Input
                 id={`${ids}-end`}
@@ -342,13 +356,12 @@ function QuietHoursSection({
                 onChange={(e) => setEnd(e.target.value)}
               />
               <span className={own.fullHint}>
-                In your time zone, {timeZone}. A night that starts on Friday ends on Saturday morning; the
-                same time twice is the whole day.
+                {t('settings.notifications.quietHint', { zone: timeZone })}
               </span>
             </div>
             <div className={cx(styles.row, own.wrapRow)}>
               <span className={own.rowLabel} id={`${ids}-days`}>
-                On
+                {t('settings.notifications.on')}
               </span>
               {/* biome-ignore lint/a11y/useSemanticElements: a group of toggle buttons, not form fields */}
               <div className={own.days} role="group" aria-labelledby={`${ids}-days`}>
@@ -391,21 +404,23 @@ function EmailSection({
   apply: Apply;
   hints: NotificationsWords['email'];
 }) {
+  const i18n = useWebI18n();
+  const { t } = i18n;
   const ids = useId();
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        EMAIL
+        {t('settings.notifications.emailLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={cx(styles.row, own.wrapRow)}>
           <span className={styles.rowMain}>
-            <span className={styles.rowTitle}>Email about what’s unread</span>
+            <span className={styles.rowTitle}>{t('settings.notifications.emailTitle')}</span>
             <span className={styles.rowMeta}>{hints[prefs.email]}</span>
           </span>
           <SegmentedControl
-            label="Email about what’s unread"
-            options={EMAIL_OPTIONS}
+            label={t('settings.notifications.emailTitle')}
+            options={emailOptions(i18n)}
             value={prefs.email}
             onChange={(email) => void apply((p) => ({ ...p, email }))}
           />
@@ -429,21 +444,22 @@ function LinkEmailSection({
   mail: NonNullable<LinkSummary['mail']>;
   save: (change: { offline?: boolean; notifications?: boolean }) => Promise<void>;
 }) {
+  const { t } = useWebI18n();
   const ids = useId();
-  const to = link.email ?? 'you';
+  const to = link.email ?? t('settings.notifications.you');
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        WHOMBAT LINK
+        {t('settings.notifications.linkLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={styles.row}>
           <span className={styles.rowMain}>
             <label className={styles.rowTitle} htmlFor={`${ids}-offline`}>
-              {LINK_EMAIL_TEXT.offlineTitle}
+              {t('settings.notifications.linkOfflineTitle')}
             </label>
             <span className={styles.rowMeta} id={`${ids}-offline-meta`}>
-              {LINK_EMAIL_TEXT.offlineMeta(to)}
+              {t('settings.notifications.linkOfflineMeta', { to })}
             </span>
           </span>
           <Toggle
@@ -456,10 +472,10 @@ function LinkEmailSection({
         <div className={cx(styles.row, own.wrapRow)}>
           <span className={styles.rowMain}>
             <label className={styles.rowTitle} htmlFor={`${ids}-mail`}>
-              {LINK_EMAIL_TEXT.mailTitle}
+              {t('settings.notifications.linkMailTitle')}
             </label>
             <span className={styles.rowMeta} id={`${ids}-mail-meta`}>
-              {LINK_EMAIL_TEXT.mailMeta}
+              {t('settings.notifications.linkMailMeta')}
             </span>
           </span>
           <Toggle
@@ -469,12 +485,12 @@ function LinkEmailSection({
             onCheckedChange={(notifications) => void save({ notifications })}
           />
           <details className={own.example}>
-            <summary>{LINK_EMAIL_TEXT.exampleLabel}</summary>
+            <summary>{t('settings.notifications.linkExampleLabel')}</summary>
             <div className={own.exampleMail}>
-              <p className={own.exampleSubject}>{LINK_EMAIL_TEXT.exampleSubject}</p>
-              <p>{LINK_EMAIL_TEXT.exampleBody}</p>
-              <p className={own.exampleButton}>Open Whombat</p>
-              <p className={own.exampleFoot}>{LINK_EMAIL_TEXT.exampleFoot}</p>
+              <p className={own.exampleSubject}>{t('settings.notifications.linkExampleSubject')}</p>
+              <p>{t('settings.notifications.linkExampleBody')}</p>
+              <p className={own.exampleButton}>{t('settings.notifications.linkExampleButton')}</p>
+              <p className={own.exampleFoot}>{t('settings.notifications.linkExampleFoot')}</p>
             </div>
           </details>
         </div>
@@ -483,38 +499,22 @@ function LinkEmailSection({
   );
 }
 
-/** The section's words (link-email.md). */
-export const LINK_EMAIL_TEXT = {
-  offlineTitle: 'Tell me when it goes offline',
-  offlineMeta: (to: string) =>
-    `Whombat Link emails ${to} when it hasn’t heard from this Whombat for 2 hours.`,
-  mailTitle: 'Send my emails through Whombat Link',
-  mailMeta:
-    'Your notification emails and notices about this Whombat. They pass through Whombat’s servers and say how many things are waiting, never what they are.',
-  exampleLabel: 'See an example',
-  exampleSubject: '3 things are waiting for you in Whombat',
-  exampleBody: '3 things are waiting for you in your Whombat.',
-  exampleFoot: 'Sent through Whombat Link. It says how many things wait, never what they are.',
-} as const;
-
 /** THREADS: replies in your threads notify you even where you only get mentions. */
 function ThreadsSection({ prefs, apply }: { prefs: NotificationPreferences; apply: Apply }) {
+  const { t } = useWebI18n();
   const ids = useId();
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        THREADS
+        {t('settings.notifications.threadsLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={styles.row}>
           <span className={styles.rowMain}>
             <label className={styles.rowTitle} htmlFor={`${ids}-replies`}>
-              Replies in your threads
+              {t('settings.notifications.threadsTitle')}
             </label>
-            <span className={styles.rowMeta}>
-              Threads you started, replied to or were mentioned in notify you of new replies, also where you
-              only get mentions.
-            </span>
+            <span className={styles.rowMeta}>{t('settings.notifications.threadsMeta')}</span>
           </span>
           <Toggle
             id={`${ids}-replies`}
@@ -532,20 +532,21 @@ function ThreadsSection({ prefs, apply }: { prefs: NotificationPreferences; appl
  * what kind of notification it is.
  */
 function PreviewsSection({ prefs, apply }: { prefs: NotificationPreferences; apply: Apply }) {
+  const { t } = useWebI18n();
   const ids = useId();
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        PREVIEWS
+        {t('settings.notifications.previewsLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={styles.row}>
           <span className={styles.rowMain}>
             <label className={styles.rowTitle} htmlFor={`${ids}-previews`}>
-              Show message text in notifications
+              {t('settings.notifications.previewsTitle')}
             </label>
             <span className={styles.rowMeta} id={`${ids}-meta`}>
-              {PREVIEWS_HINT}
+              {t('settings.notifications.previewsMeta')}
             </span>
           </span>
           <Toggle
@@ -560,19 +561,12 @@ function PreviewsSection({ prefs, apply }: { prefs: NotificationPreferences; app
   );
 }
 
-const PREVIEWS_HINT =
-  'Notifications show who wrote and the start of the message. Off: they only say what kind of notification it is.';
-
-/** THIS BROWSER's switch and what its line says in each state; `off` and `unsupported` in the shell's words. */
-const BROWSER_PUSH_TEXT = {
-  title: 'Notifications in this browser',
-  meta: {
-    on: 'They show here even when Whombat isn’t open.',
-    denied:
-      'Blocked in this browser’s site settings. Allow notifications for this site there, then come back here.',
-    busy: 'One moment…',
-    unknown: 'Checking this browser…',
-  },
+/** THIS BROWSER's line in each state; `off` and `unsupported` in the shell's words. */
+const BROWSER_PUSH_META = {
+  on: 'settings.notifications.browserOn',
+  denied: 'settings.notifications.browserDenied',
+  busy: 'settings.notifications.browserBusy',
+  unknown: 'settings.notifications.browserUnknown',
 } as const;
 
 /**
@@ -581,6 +575,7 @@ const BROWSER_PUSH_TEXT = {
  * and the line says where to allow them; where this browser can't show any, the phone app is the way.
  */
 function BrowserSection({ words }: { words: NotificationsWords }) {
+  const { t } = useWebI18n();
   const ids = useId();
   const push = useWebPush();
   const managed = useManaged();
@@ -589,25 +584,24 @@ function BrowserSection({ words }: { words: NotificationsWords }) {
   // or a commercial box, whose notifications come through control (AP-5325, AP-5428). A secure box page has the box's
   // own Web Push (`managed.push`).
   const boxPage = managed?.page !== undefined && !managed.push;
-  const t = BROWSER_PUSH_TEXT;
   const text = boxPage
     ? community
       ? { title: COMMUNITY_TEXT.push.insecureTitle, meta: COMMUNITY_TEXT.push.insecureMeta }
       : { title: BOX_PAGE_TEXT.notificationsTitle, meta: BOX_PAGE_TEXT.notifications }
     : {
-        title: t.title,
+        title: t('settings.notifications.browserTitle'),
         meta:
           push.status === 'off'
             ? words.pushOff
             : push.status === 'unsupported'
               ? words.pushUnsupported
-              : t.meta[push.status],
+              : t(BROWSER_PUSH_META[push.status]),
       };
   const toggles = !boxPage && push.status !== 'unsupported';
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`}>
       <SectionLabel as="h2" id={`${ids}-label`}>
-        THIS BROWSER
+        {t('settings.notifications.browserLabel')}
       </SectionLabel>
       <div className={styles.card}>
         <div className={styles.row} data-browser-push={boxPage ? 'box-page' : push.status}>

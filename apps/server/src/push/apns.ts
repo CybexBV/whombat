@@ -53,6 +53,8 @@ export function buildApnsPayload(payload: {
   /** Alerts: the burrow slug and inbox row, so the app opens the screen and marks the row read. */
   burrow?: string;
   notificationId?: string | null;
+  /** False when the recipient turned previews off: the app shows its own generic words in its own language. */
+  preview?: boolean;
   event?: 'start' | 'update' | 'end';
   contentState?: unknown;
   attributesType?: string;
@@ -83,6 +85,7 @@ export function buildApnsPayload(payload: {
     path: payload.path,
     ...(payload.burrow ? { burrow: payload.burrow } : {}),
     ...(payload.notificationId ? { notificationId: payload.notificationId } : {}),
+    ...(payload.preview === false ? { preview: false } : {}),
   };
 }
 

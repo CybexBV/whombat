@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -29,7 +31,9 @@ func scanAlert(row interface{ Scan(...any) error }) (rules.Alert, error) {
 	if params != "" {
 		a.Params, err = decodeAlertParams(params)
 		if err != nil {
-			return a, fmt.Errorf("decode params for alert %s: %w", a.ID, err)
+			slog.Warn("could not decode alert params", "alert_id", a.ID, "error", err)
+			// Without the parameters, readers need the alert's stored wording.
+			a.Code = ""
 		}
 	}
 	a.OpenedAt = fromMS(oa)
@@ -53,6 +57,10 @@ func decodeAlertParams(raw string) (map[string]any, error) {
 	decoder.UseNumber() // Preserve integer counts that cannot round-trip through float64.
 	if err := decoder.Decode(&params); err != nil {
 		return nil, err
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("unexpected data after alert params")
 	}
 	for key, value := range params {
 		switch v := value.(type) {

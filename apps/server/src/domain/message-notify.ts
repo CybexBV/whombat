@@ -154,6 +154,7 @@ export async function notifyForMessage(services: Services, input: NotifyForMessa
     // An agent's message in its DM reads “Direct” (as before); everything else names the conversation.
     where:
       conversation.kind === 'dm' && p.kind === 'agent_update' ? 'Direct' : conversationLabel(conversation),
+    ...(conversation.kind === 'dm' && p.kind === 'agent_update' ? { direct: true } : {}),
     text,
     previewText,
     group,

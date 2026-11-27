@@ -132,6 +132,36 @@ async function showManaged(payload) {
   });
 }
 
+/** The line a box's own push (one with a `path`) shows when it carries no preview, by its kind. */
+const ROUTED_KIND = {
+  needs_you: 'generic',
+  mention: 'mention',
+  reply: 'message',
+  direct: 'message',
+  agent_update: 'run',
+  run_progress: 'run',
+  approval_updated: 'approval',
+};
+
+/** A box's own push: its title and body, unless it says it carries no preview, then “Whombat” and the kind's line. */
+async function showRouted(payload) {
+  let title = payload.title || 'Whombat';
+  let body = payload.body || '';
+  if (payload.preview === false || payload.generic === true) {
+    const lines = TEXT_BY_LANGUAGE[await currentLanguage()] || GENERIC_TEXT;
+    const kind = Object.hasOwn(ROUTED_KIND, payload.kind) ? ROUTED_KIND[payload.kind] : 'generic';
+    title = 'Whombat';
+    body = lines[kind];
+  }
+  await self.registration.showNotification(title, {
+    body,
+    tag: payload.notificationId || payload.path || undefined,
+    data: { path: payload.path || '/' },
+    icon: '/icon-192.png',
+    badge: '/badge-96.png',
+  });
+}
+
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   let payload;
@@ -144,16 +174,7 @@ self.addEventListener('push', (event) => {
     event.waitUntil(showManaged(payload));
     return;
   }
-  const title = payload.title || 'Whombat';
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body: payload.body || '',
-      tag: payload.notificationId || payload.path || undefined,
-      data: { path: payload.path || '/' },
-      icon: '/icon-192.png',
-      badge: '/badge-96.png',
-    }),
-  );
+  event.waitUntil(showRouted(payload));
 });
 
 self.addEventListener('message', (event) => {

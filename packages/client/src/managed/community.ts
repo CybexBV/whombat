@@ -11,7 +11,7 @@
  *   of the direct connection to the PeerId the link names.
  * - The words of the setup and the links (`COMMUNITY_TEXT`, `LINK_TEXT`).
  */
-import { normalizeLocaleTag } from '@whombat/core/i18n';
+import { normalizeLocaleTag } from '@whombat/core/i18n/locale';
 import {
   type ClaimConfirmTags,
   claimConfirmEqual,

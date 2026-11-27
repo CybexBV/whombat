@@ -46,6 +46,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { type DotTone, StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
+import { useWebI18n, type WebMessageKey } from '../../i18n/provider';
 import { AccountKeys } from '../connectors/AccountKeys';
 import {
   availableState,
@@ -653,9 +654,9 @@ function ProviderHeader({ provider }: { provider: ConnectionPage }) {
 
 /* GOOGLE -------------------------------------------------------------------------------------------- */
 
-const AUDIENCE_LABEL: Record<GoogleUserType, string> = {
-  external: 'Personal Gmail (External)',
-  internal: 'Workspace domain (Internal)',
+const AUDIENCE_LABEL: Record<GoogleUserType, WebMessageKey> = {
+  external: 'settings.google.audienceExternal',
+  internal: 'settings.google.audienceInternal',
 };
 
 /** Google works: its app is set up and tested, every Google account is connected, and no sign-in just failed. */
@@ -672,6 +673,7 @@ export function googleWorks(status: ConnectorsStatus, outcome?: ConnectOutcome):
 }
 
 function GoogleAppSection({ status, folded = false }: { status: ConnectorsStatus; folded?: boolean }) {
+  const { t } = useWebI18n();
   const { app } = status.google;
   const off = status.mode === 'off';
   const guided = app.source !== 'config' && !off;
@@ -683,17 +685,17 @@ function GoogleAppSection({ status, folded = false }: { status: ConnectorsStatus
     return (
       <section className={styles.section} id="google-app" aria-labelledby={`${stepsId}-label`}>
         <SectionLabel as="h2" id={`${stepsId}-label`}>
-          GOOGLE APP
+          {t('settings.google.label')}
         </SectionLabel>
         <div className={styles.card}>
           <div className={styles.row}>
-            <StatusDot tone="ok" size={8} label="Set up" />
+            <StatusDot tone="ok" size={8} label={t('settings.google.setUp')} />
             <span className={styles.rowMain}>
-              <span className={styles.rowTitle}>Set up for this Whombat</span>
+              <span className={styles.rowTitle}>{t('settings.google.setUpHere')}</span>
               {details ? (
                 <span className={styles.rowMeta}>
-                  Client ID {app.clientIdHint ?? ''}
-                  {app.userType ? ` · ${AUDIENCE_LABEL[app.userType]}` : ''}
+                  {t('settings.google.clientId', { id: app.clientIdHint ?? '' })}
+                  {app.userType ? ` · ${t(AUDIENCE_LABEL[app.userType])}` : ''}
                 </span>
               ) : null}
             </span>
@@ -705,7 +707,7 @@ function GoogleAppSection({ status, folded = false }: { status: ConnectorsStatus
               aria-controls={stepsId}
               onClick={() => setDetails((v) => !v)}
             >
-              {details ? 'Hide technical details' : 'Technical details'}
+              {details ? t('settings.google.hideDetails') : t('settings.google.details')}
             </Button>
           </div>
           {details && guided ? (
@@ -717,26 +719,27 @@ function GoogleAppSection({ status, folded = false }: { status: ConnectorsStatus
       </section>
     );
 
+  const clientId = t('settings.google.clientId', { id: app.clientIdHint ?? '' });
   const summary = off
-    ? 'Google is turned off on this Whombat.'
+    ? t('settings.google.off')
     : app.source === 'config'
-      ? `Set in this Whombat’s config · Client ID ${app.clientIdHint ?? ''}`
+      ? `${t('settings.google.inConfig')} · ${clientId}`
       : app.configured
-        ? `Set up · Client ID ${app.clientIdHint ?? ''}${app.userType ? ` · ${AUDIENCE_LABEL[app.userType]}` : ''}`
-        : 'Set up Google once, then you can connect your account. Six steps, about ten minutes.';
+        ? `${t('settings.google.setUp')} · ${clientId}${app.userType ? ` · ${t(AUDIENCE_LABEL[app.userType])}` : ''}`
+        : t('settings.google.intro');
 
   return (
     <section className={styles.section}>
-      <SectionLabel as="h2">GOOGLE APP</SectionLabel>
+      <SectionLabel as="h2">{t('settings.google.label')}</SectionLabel>
       <div className={styles.card}>
         <div className={styles.row}>
           <StatusDot
             tone={app.configured && !off ? 'ok' : 'mut'}
             size={8}
-            label={app.configured && !off ? 'Set up' : 'Not set up'}
+            label={app.configured && !off ? t('settings.google.setUp') : t('settings.google.notSetUp')}
           />
           <span className={styles.rowMain}>
-            <span className={styles.rowTitle}>For this Whombat</span>
+            <span className={styles.rowTitle}>{t('settings.google.forThisWhombat')}</span>
             <span className={styles.rowMeta}>{summary}</span>
           </span>
           {guided && done && (
@@ -748,26 +751,18 @@ function GoogleAppSection({ status, folded = false }: { status: ConnectorsStatus
               aria-controls={stepsId}
               onClick={() => setShowSteps((v) => !v)}
             >
-              {showSteps ? 'Hide setup steps' : 'Show setup steps'}
+              {showSteps ? t('settings.google.hideSteps') : t('settings.google.showSteps')}
             </Button>
           )}
         </div>
         {status.mode === 'fake' && (
           <div className={styles.noticeRow}>
-            <GitHubNotice
-              tone="neutral"
-              text="This Whombat uses a pretend Google: connecting signs in you@example.com without leaving Whombat. Set WHOMBAT_GOOGLE=real in config for the real one."
-              command="WHOMBAT_GOOGLE=real"
-            />
+            <GitHubNotice tone="neutral" text={t('settings.google.fake')} command="WHOMBAT_GOOGLE=real" />
           </div>
         )}
         {off && (
           <div className={styles.noticeRow}>
-            <GitHubNotice
-              tone="neutral"
-              text="Your agent can’t use Google here: this Whombat runs with WHOMBAT_GOOGLE=off."
-              command="WHOMBAT_GOOGLE=off"
-            />
+            <GitHubNotice tone="neutral" text={t('settings.google.turnedOff')} command="WHOMBAT_GOOGLE=off" />
           </div>
         )}
         {guided && (showSteps || !done) && (
@@ -781,22 +776,25 @@ function GoogleAppSection({ status, folded = false }: { status: ConnectorsStatus
 }
 
 function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  const { t } = useWebI18n();
   return (
     <a className={c.externalLink} href={href} target="_blank" rel="noopener noreferrer">
       {children}
       <Icon name="external" size={13} />
-      <span className={c.srOnly}> (opens Google Cloud in a new tab)</span>
+      <span className={c.srOnly}> {t('settings.google.newTab')}</span>
     </a>
   );
 }
 
 function CopyRow({ label, value }: { label: string; value: string }) {
+  const { t } = useWebI18n();
   return (
     <>
       <dt>{label}</dt>
       <dd>{value}</dd>
-      <CopyButton text={value} copied={`${label} copied.`} className={c.copyButton}>
-        Copy<span className={c.srOnly}> {label.toLowerCase()}</span>
+      <CopyButton text={value} copied={t('settings.google.copied', { label })} className={c.copyButton}>
+        {t('common.copy')}
+        <span className={c.srOnly}> {label.toLowerCase()}</span>
       </CopyButton>
     </>
   );
@@ -816,6 +814,7 @@ function Step({
   pending?: boolean;
   children: ReactNode;
 }) {
+  const { t } = useWebI18n();
   const tone: DotTone = done ? 'ok' : pending ? 'warn' : 'mut';
   return (
     <li className={c.step}>
@@ -826,9 +825,19 @@ function Step({
       </span>
       <div className={c.stepMain}>
         <h3 className={c.stepTitle}>
-          <span className={c.srOnly}>Step {n}: </span>
+          <span className={c.srOnly}>{t('settings.google.step', { n })} </span>
           {title}
-          <StatusDot tone={tone} size={7} label={done ? 'Done' : pending ? 'Not yet' : 'To do'} />
+          <StatusDot
+            tone={tone}
+            size={7}
+            label={
+              done
+                ? t('settings.google.stepDone')
+                : pending
+                  ? t('settings.google.stepNotYet')
+                  : t('settings.google.stepToDo')
+            }
+          />
         </h3>
         {children}
       </div>
@@ -838,6 +847,7 @@ function Step({
 
 /** The six steps of CN-03. */
 function GoogleSetupSteps({ status }: { status: ConnectorsStatus }) {
+  const { t, tx } = useWebI18n();
   const toast = useToast();
   const { app, setup, tested } = status.google;
   const [audience, setAudience] = useState<GoogleUserType>(app.userType ?? 'external');
@@ -847,61 +857,58 @@ function GoogleSetupSteps({ status }: { status: ConnectorsStatus }) {
 
   async function saveAudience() {
     const result = await setApp.mutateAsync({ body: { userType: audience } });
-    if (result.status === 'ok') toast.show('Audience saved.');
+    if (result.status === 'ok') toast.show(t('settings.google.audienceSaved'));
   }
 
   return (
-    <ol className={c.steps} aria-label="Set up Google">
-      <Step n={1} title="Create a project" done={configured}>
-        <p className={c.stepText}>
-          Create a Google Cloud project for this Whombat, or pick one you already use. It holds the app people
-          see when they connect.
-        </p>
-        <ExternalLink href={setup.links.createProject}>Create a project</ExternalLink>
+    <ol className={c.steps} aria-label={t('settings.google.stepsLabel')}>
+      <Step n={1} title={t('settings.google.step1')} done={configured}>
+        <p className={c.stepText}>{t('settings.google.step1Text')}</p>
+        <ExternalLink href={setup.links.createProject}>{t('settings.google.step1')}</ExternalLink>
       </Step>
 
-      <Step n={2} title="Turn on the APIs" done={configured}>
-        <p className={c.stepText}>
-          One link turns on the Gmail, Calendar, Drive, Docs, Sheets and People APIs in that project.
-        </p>
-        <ExternalLink href={setup.enableApisUrl}>Turn on the APIs</ExternalLink>
+      <Step n={2} title={t('settings.google.step2')} done={configured}>
+        <p className={c.stepText}>{t('settings.google.step2Text')}</p>
+        <ExternalLink href={setup.enableApisUrl}>{t('settings.google.step2')}</ExternalLink>
       </Step>
 
-      <Step n={3} title="Configure the consent screen" done={configured}>
-        <p className={c.stepText}>Who will connect their accounts?</p>
+      <Step n={3} title={t('settings.google.step3')} done={configured}>
+        <p className={c.stepText}>{t('settings.google.step3Ask')}</p>
         <SegmentedControl<GoogleUserType>
-          label="Who will connect"
+          label={t('settings.google.whoConnects')}
           value={audience}
           onChange={setAudience}
           options={[
-            { value: 'external', label: 'A personal Gmail account' },
-            { value: 'internal', label: 'A Google Workspace domain' },
+            { value: 'external', label: t('settings.google.personal') },
+            { value: 'internal', label: t('settings.google.workspace') },
           ]}
         />
         {audience === 'external' ? (
           <p className={c.stepText}>
-            Fill in the app information with the values below and choose Audience <strong>External</strong>.
-            Then open Audience and choose <strong>Publish app</strong>, so it says “In production”: in
-            Testing, Google signs you out after 7 days. When you connect, Google shows “Google hasn’t verified
-            this app”. That’s expected for your own app: choose Advanced, then Go to Whombat.
+            {tx('settings.google.externalText', {
+              external: <strong>External</strong>,
+              publish: <strong>Publish app</strong>,
+            })}
           </p>
         ) : (
           <p className={c.stepText}>
-            Fill in the app information with the values below and choose Audience <strong>Internal</strong>.
-            Only people in your Workspace domain can connect: there’s no warning screen and nothing to
-            publish.
+            {tx('settings.google.internalText', { internal: <strong>Internal</strong> })}
           </p>
         )}
         <dl className={c.copyList}>
-          <CopyRow label="App name" value={setup.appName} />
-          {setup.supportEmail && <CopyRow label="Support email" value={setup.supportEmail} />}
+          <CopyRow label={t('settings.google.appName')} value={setup.appName} />
+          {setup.supportEmail && (
+            <CopyRow label={t('settings.google.supportEmail')} value={setup.supportEmail} />
+          )}
           {setup.authorizedDomain.includes('.') && (
-            <CopyRow label="Authorized domain" value={setup.authorizedDomain} />
+            <CopyRow label={t('settings.google.authorizedDomain')} value={setup.authorizedDomain} />
           )}
         </dl>
         <div className={c.actions}>
-          <ExternalLink href={setup.links.consentScreen}>Open the consent screen</ExternalLink>
-          {audience === 'external' && <ExternalLink href={setup.links.audience}>Open Audience</ExternalLink>}
+          <ExternalLink href={setup.links.consentScreen}>{t('settings.google.openConsent')}</ExternalLink>
+          {audience === 'external' && (
+            <ExternalLink href={setup.links.audience}>{t('settings.google.openAudience')}</ExternalLink>
+          )}
         </div>
         {audienceChanged && (
           <div className={c.formActions}>
@@ -911,43 +918,40 @@ function GoogleSetupSteps({ status }: { status: ConnectorsStatus }) {
               onClick={() => void saveAudience()}
               disabled={setApp.isPending}
             >
-              Save this choice
+              {t('settings.google.saveChoice')}
             </Button>
             <span className={c.hint}>
-              The saved app says {AUDIENCE_LABEL[app.userType as GoogleUserType]}.
+              {t('settings.google.savedSays', {
+                audience: t(AUDIENCE_LABEL[app.userType as GoogleUserType]),
+              })}
             </span>
           </div>
         )}
       </Step>
 
-      <Step n={4} title="Create the OAuth client" done={configured}>
+      <Step n={4} title={t('settings.google.step4')} done={configured}>
         <p className={c.stepText}>
-          Create a client of type <strong>Web application</strong>. Under Authorized redirect URIs, add this
-          URI exactly:
+          {tx('settings.google.step4Text', { type: <strong>Web application</strong> })}
         </p>
         <dl className={c.copyList}>
-          <CopyRow label="Redirect URI" value={setup.redirectUri} />
+          <CopyRow label={t('settings.google.redirectUri')} value={setup.redirectUri} />
         </dl>
-        <ExternalLink href={setup.links.createClient}>Create the client</ExternalLink>
+        <ExternalLink href={setup.links.createClient}>{t('settings.google.createClient')}</ExternalLink>
       </Step>
 
-      <Step n={5} title="Paste the Client ID and secret" done={configured}>
+      <Step n={5} title={t('settings.google.step5')} done={configured}>
         <AppForm status={status} audience={audience} />
       </Step>
 
-      <Step n={6} title="Test it" done={tested} pending={configured && !tested}>
-        <p className={c.stepText}>
-          {tested
-            ? 'A Google account is connected and working.'
-            : 'Connect your own Google account under YOUR ACCOUNTS. This step turns green once a connection works.'}
-        </p>
+      <Step n={6} title={t('settings.google.step6')} done={tested} pending={configured && !tested}>
+        <p className={c.stepText}>{tested ? t('settings.google.tested') : t('settings.google.testIt')}</p>
         {!tested && configured && (
           <div>
             <Button
               variant="link"
               onClick={() => document.getElementById('your-accounts')?.scrollIntoView({ behavior: 'smooth' })}
             >
-              Go to your accounts
+              {t('settings.google.goToAccounts')}
             </Button>
           </div>
         )}
@@ -964,6 +968,7 @@ function errorOf(err: unknown): { message: string; fields: Record<string, string
 
 /** Step 5: paste the Client ID and secret, or drop the downloaded JSON (read in the browser only). */
 function AppForm({ status, audience }: { status: ConnectorsStatus; audience: GoogleUserType }) {
+  const { t, tx } = useWebI18n();
   const toast = useToast();
   const ids = useId();
   const { app, setup } = status.google;
@@ -1007,11 +1012,11 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
     const id = clientId.trim();
     const key = secret.trim();
     if (!id) {
-      setError('Paste the Client ID from Google.');
+      setError(t('settings.google.pasteId'));
       return;
     }
     if (!key && !app.configured) {
-      setError('Paste the client secret too.');
+      setError(t('settings.google.pasteSecret'));
       return;
     }
     // The saved secret is the old client's (the server checks the whole id; the hint catches most).
@@ -1029,7 +1034,7 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
         setSecret('');
         setWarning(null);
         setEditing(false);
-        toast.show('Google app saved. Connect your own account to test it.');
+        toast.show(t('settings.google.saved'));
       }
     } catch (err) {
       const problem = errorOf(err);
@@ -1041,41 +1046,38 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
   async function onRemove() {
     const result = await removeApp.mutateAsync({});
     setConfirmRemove(false);
-    if (result.status === 'ok')
-      toast.show('Google app removed. Your Google connections need you to sign in again.');
+    if (result.status === 'ok') toast.show(t('settings.google.removed'));
   }
 
   if (!editing) {
     return (
       <>
         <p className={c.stepText}>
-          Saved · Client ID <span className={c.code}>{app.clientIdHint}</span>
+          {tx('settings.google.savedId', { id: <span className={c.code}>{app.clientIdHint}</span> })}
           {app.updatedAt ? ` · ${formatAgo(app.updatedAt, new Date(), LOCAL_TZ)}` : ''}
         </p>
         {confirmRemove ? (
           <div className={c.formActions}>
-            <span className={c.hint}>
-              Remove the Google app? Everyone’s Google connections stop working until it’s set up again.
-            </span>
+            <span className={c.hint}>{t('settings.google.removeAsk')}</span>
             <Button
               variant="secondary"
               size="sm"
               onClick={() => void onRemove()}
               disabled={removeApp.isPending}
             >
-              Remove the app
+              {t('settings.google.removeApp')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         ) : (
           <div className={c.formActions}>
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-              Replace
+              {t('settings.google.replace')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)}>
-              Remove
+              {t('settings.google.remove')}
             </Button>
           </div>
         )}
@@ -1086,13 +1088,11 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
   return (
     <form className={c.appForm} onSubmit={onSave} noValidate>
       <p className={c.stepText}>
-        Paste them from the client’s page in Google Cloud, or drop the{' '}
-        <span className={c.code}>client_secret_….json</span> you downloaded. The file is read here in your
-        browser.
+        {tx('settings.google.pasteText', { file: <span className={c.code}>client_secret_….json</span> })}
       </p>
       <div className={c.fields}>
         <label className={c.field} htmlFor={`${ids}-id`}>
-          <span className={c.fieldLabel}>CLIENT ID</span>
+          <span className={c.fieldLabel}>{t('settings.google.clientIdLabel')}</span>
           <Input
             id={`${ids}-id`}
             size="lg"
@@ -1108,14 +1108,14 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
           />
         </label>
         <label className={c.field} htmlFor={`${ids}-secret`}>
-          <span className={c.fieldLabel}>CLIENT SECRET</span>
+          <span className={c.fieldLabel}>{t('settings.google.secretLabel')}</span>
           <Input
             id={`${ids}-secret`}
             size="lg"
             type="password"
             spellCheck={false}
             autoComplete="off"
-            placeholder={app.configured ? 'Leave empty to keep the saved secret' : 'GOCSPX-…'}
+            placeholder={app.configured ? t('settings.google.keepSecret') : 'GOCSPX-…'}
             value={secret}
             onChange={(e) => {
               setSecret(e.target.value);
@@ -1137,9 +1137,9 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
         onDrop={onDrop}
       >
         <button type="button" className={c.fileButton} onClick={() => fileInput.current?.click()}>
-          Choose the JSON file
+          {t('settings.google.chooseFile')}
         </button>
-        <span>or drop it here</span>
+        <span>{t('settings.google.dropHere')}</span>
         <input
           ref={fileInput}
           type="file"
@@ -1161,7 +1161,7 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
       {warning && <GitHubNotice text={warning} command="redirect_uri_mismatch" />}
       <div className={c.formActions}>
         <Button type="submit" variant="primary" size="md" disabled={setApp.isPending}>
-          Save
+          {t('common.save')}
         </Button>
         {app.configured && (
           <Button
@@ -1173,7 +1173,7 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
               setWarning(null);
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
         )}
       </div>
@@ -1183,41 +1183,33 @@ function AppForm({ status, audience }: { status: ConnectorsStatus; audience: Goo
 
 /** Google's messages and their fixes (CN-03). */
 function Troubleshooting({ status }: { status: ConnectorsStatus }) {
+  const { t, tx } = useWebI18n();
   const uri = status.google.setup.redirectUri;
   return (
     <section className={styles.section}>
-      <SectionLabel as="h2">TROUBLESHOOTING</SectionLabel>
+      <SectionLabel as="h2">{t('settings.google.troubleLabel')}</SectionLabel>
       <div className={styles.card}>
         <div className={c.trouble}>
           <span className={c.troubleWhat}>redirect_uri_mismatch</span>
           <p className={c.troubleFix}>
-            Google shows this on its own page when the client doesn’t list this Whombat’s redirect URI. In the
-            OAuth client, add exactly <span className={c.code}>{uri}</span>
+            {tx('settings.google.troubleRedirect', { uri: <span className={c.code}>{uri}</span> })}
           </p>
         </div>
         <div className={c.trouble}>
           <span className={c.troubleWhat}>
             access_denied · “has not completed the Google verification process”
           </span>
-          <p className={c.troubleFix}>
-            The app is still in Testing. Publish it under Audience, or add yourself as a test user there.
-          </p>
+          <p className={c.troubleFix}>{t('settings.google.troubleTesting')}</p>
         </div>
         <div className={c.trouble}>
           <span className={c.troubleWhat}>“API has not been used in project … or it is disabled”</span>
-          <p className={c.troubleFix}>
-            An API is turned off in your project. The check under YOUR ACCOUNTS links to the exact page, or
-            turn them all on with the link in step 2.
-          </p>
+          <p className={c.troubleFix}>{t('settings.google.troubleApi')}</p>
         </div>
         <div className={c.trouble}>
           <span className={c.troubleWhat} data-plain="">
-            Signed out after 7 days
+            {t('settings.google.troubleSignedOut')}
           </span>
-          <p className={c.troubleFix}>
-            The app is still in Testing, so Google ends every sign-in after a week. Publish it under Audience
-            so connections last.
-          </p>
+          <p className={c.troubleFix}>{t('settings.google.troubleSignedOutFix')}</p>
         </div>
       </div>
     </section>
@@ -1239,6 +1231,7 @@ function YourAccountsSection({
   onOutcomeSeen?: () => void;
   navigate?: (url: string) => void;
 }) {
+  const { t } = useWebI18n();
   const toast = useToast();
   const google = status.connections.find((conn) => conn.provider === 'google') ?? null;
   const [notice, setNotice] = useState<string | null>(null);
@@ -1249,17 +1242,20 @@ function YourAccountsSection({
     if (seen.current || (!outcome?.connected && !outcome?.connectError)) return;
     seen.current = true;
     if (outcome.connectError) setNotice(connectErrorText(outcome.connectError));
-    else toast.show(google ? `Google connected: ${google.email}.` : 'Google connected.');
+    else
+      toast.show(
+        google ? t('settings.google.connectedAs', { email: google.email }) : t('settings.google.connected'),
+      );
     onOutcomeSeen?.();
-  }, [outcome, google, toast, onOutcomeSeen]);
+  }, [outcome, google, toast, onOutcomeSeen, t]);
 
   return (
     <section className={styles.section} id="your-accounts">
-      <SectionLabel as="h2">YOUR ACCOUNTS</SectionLabel>
+      <SectionLabel as="h2">{t('settings.google.accountsLabel')}</SectionLabel>
       {notice && <GitHubNotice text={notice} />}
       <div className={styles.card}>
         {status.mode === 'off' ? (
-          <p className={styles.empty}>Connecting accounts is turned off on this Whombat.</p>
+          <p className={styles.empty}>{t('settings.google.accountsOff')}</p>
         ) : (
           <GoogleAccount burrow={burrow} status={status} connection={google} navigate={navigate} />
         )}
@@ -1286,6 +1282,7 @@ function GoogleAccount({
   connection: Connection | null;
   navigate?: (url: string) => void;
 }) {
+  const { t } = useWebI18n();
   const toast = useToast();
   const { connect, busy, problem } = useConnectGoogle(burrow, navigate);
   const check = useCheckConnection();
@@ -1299,12 +1296,10 @@ function GoogleAccount({
     return (
       <div className={c.block}>
         <div className={c.head}>
-          <StatusDot tone="mut" size={8} label="Not connected" />
+          <StatusDot tone="mut" size={8} label={t('settings.google.notConnected')} />
           <span className={c.main}>
             <span className={c.name}>Google</span>
-            <span className={c.meta}>
-              Your assistant works with the services you tick, as you. You can add more later.
-            </span>
+            <span className={c.meta}>{t('settings.google.pickServices')}</span>
           </span>
         </div>
         <ServicePicker value={services} onChange={setServices} disabled={!connectable || busy} />
@@ -1315,10 +1310,12 @@ function GoogleAccount({
             disabled={!connectable || busy || services.length === 0}
             onClick={() => void connect(services)}
           >
-            Connect Google
+            {t('settings.google.connect')}
           </Button>
-          {!connectable && <span className={c.hint}>Set up Google above first.</span>}
-          {connectable && services.length === 0 && <span className={c.hint}>Tick at least one service.</span>}
+          {!connectable && <span className={c.hint}>{t('settings.google.setUpFirst')}</span>}
+          {connectable && services.length === 0 && (
+            <span className={c.hint}>{t('settings.google.tickOne')}</span>
+          )}
         </div>
         {problem && (
           <p className={c.error} role="alert">
@@ -1337,7 +1334,7 @@ function GoogleAccount({
     if (!connection) return;
     const result = await remove.mutateAsync({ params: { connectionId: connection.id } });
     setConfirmDisconnect(false);
-    if (result.status === 'ok') toast.show('Google disconnected.');
+    if (result.status === 'ok') toast.show(t('settings.google.disconnected'));
   }
 
   return (
@@ -1347,7 +1344,7 @@ function GoogleAccount({
           <StatusDot
             tone={active ? 'ok' : 'warn'}
             size={8}
-            label={active ? 'Connected' : 'Needs you to sign in again'}
+            label={active ? t('settings.google.connectedDot') : t('settings.google.signInAgain')}
           />
           <span className={c.main}>
             <span className={c.name}>

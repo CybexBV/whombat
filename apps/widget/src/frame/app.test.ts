@@ -95,7 +95,7 @@ describe('visitor copy', () => {
       lang: 'pseudo',
       title: /^\[Ƒéé/,
       heading: /^\[Ŝéñ/,
-      close: '[Çļöŝé~]',
+      close: '[Çļöŝé~~]',
       error: /^\[Çĥéçķ/,
       receipt: /^\[Ţĥàñķŝ/,
     },

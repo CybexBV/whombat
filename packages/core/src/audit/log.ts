@@ -251,7 +251,7 @@ export function auditPill(
   if (!d) return null;
   if (d.state === 'pending') return { text: tr.t('audit.pill.waiting'), tone: 'warn' };
   const who = (d.byId ? ctx.principal(d.byId) : undefined) ?? unknownIn(ctx.locale);
-  const name = who.shortName.toLocaleUpperCase(tr.language === 'nl' ? 'nl-NL' : 'en-US');
+  const name = who.shortName.toLocaleUpperCase(tr.locale);
   return d.state === 'approved'
     ? { text: tr.t('audit.pill.approved', { name }), tone: 'ok' }
     : { text: tr.t('audit.pill.declined', { name }), tone: 'bad' };

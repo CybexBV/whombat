@@ -13,14 +13,7 @@ import {
   type Preferences,
 } from '@whombat/core';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import {
-  accounts,
-  devices,
-  liveActivities,
-  notifications,
-  principals,
-  searchAnswers,
-} from '../db/schema/index';
+import { accounts, devices, liveActivities, notifications } from '../db/schema/index';
 import { publishNotificationsRead, unreadNotifications } from '../domain/notification-read';
 import { clearReadThreads } from '../domain/notify';
 import { notifyLocaleChanged } from '../i18n/locale';
@@ -37,7 +30,6 @@ export async function updatePreferences(
     const [row] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
     if (!row) throw notFound('Account');
     const next: Preferences = { ...DEFAULT_PREFERENCES, ...row.preferences };
-    const prevLocale = next.locale ?? null;
     const localeUpdated = patch.locale !== undefined;
     if (patch.theme !== undefined) next.theme = patch.theme;
     if (patch.timeZone !== undefined) next.timeZone = patch.timeZone;
@@ -59,17 +51,6 @@ export async function updatePreferences(
     // Replaced whole too: when threads settle by themselves (docs/decisions/chat-settle.md).
     if (patch.chat !== undefined) next.chat = ChatPreferences.parse(patch.chat);
     await tx.update(accounts).set({ preferences: next }).where(eq(accounts.id, accountId));
-    if (localeUpdated && (next.locale ?? null) !== prevLocale) {
-      // Drop cached AI search answers from the previous language so re-asking answers in the new language.
-      const owned = await tx
-        .select({ id: principals.id })
-        .from(principals)
-        .where(eq(principals.accountId, accountId));
-      const ids = owned.map((p) => p.id);
-      if (ids.length > 0) {
-        await tx.delete(searchAnswers).where(inArray(searchAnswers.askedById, ids));
-      }
-    }
     if (localeUpdated) {
       session.after(async () => {
         notifyLocaleChanged(services, accountId, next.locale ?? null);

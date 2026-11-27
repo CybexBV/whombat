@@ -43,6 +43,7 @@ import {
 import { decideDeviceSkill, proposeDeviceSkill } from '../devices/skills';
 import { ensureServersConnection, SERVERS_CATALOG_ID } from '../hosts/provision';
 import { FakeHostsService } from '../hosts/testing/fake';
+import { burrowLocale, onLocaleChange } from '../i18n/locale';
 import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { downloadBackup, uploadBackup } from '../test/backups';
 import { upload } from '../test/files';
@@ -404,7 +405,7 @@ beforeAll(async () => {
   });
   await s.db
     .update(accounts)
-    .set({ preferences: { theme: 'dark', timeZone: 'Europe/Amsterdam' } })
+    .set({ preferences: { theme: 'dark', timeZone: 'Europe/Amsterdam', locale: 'nl-NL' } })
     .where(eq(accounts.id, mara?.accountId as string));
   await s.db.insert(connections).values({
     id: newId('connection'),
@@ -481,9 +482,18 @@ describe('the preview on a fresh Whombat', () => {
 
 describe('restoring it, keeping what is here', () => {
   let view: BackupRestoreView;
+  const heard: (string | null)[] = [];
 
   beforeAll(async () => {
+    // The fresh Whombat already read its language (English) and keeps it: the restore must make it read again.
+    expect(await burrowLocale(b.services)).toBe('en-GB');
+    onLocaleChange(b.services, (_account, locale) => heard.push(locale));
     view = await restore('keep');
+  });
+
+  it('speaks the restored language at once, and tells what keeps the old one', async () => {
+    expect(await burrowLocale(b.services)).toBe('nl-NL');
+    expect(heard).toContain('nl-NL');
   });
 
   it('never adds a Servers connection nor asks to sign in to one', async () => {
@@ -587,7 +597,11 @@ describe('restoring it, keeping what is here', () => {
       .select({ preferences: accounts.preferences })
       .from(accounts)
       .where(eq(accounts.email, 'mara@burrowhq.example'));
-    expect(account?.preferences).toMatchObject({ theme: 'dark', timeZone: 'Europe/Amsterdam' });
+    expect(account?.preferences).toMatchObject({
+      theme: 'dark',
+      timeZone: 'Europe/Amsterdam',
+      locale: 'nl-NL',
+    });
     const [google] = await b.services.db
       .select({ status: connections.status })
       .from(connections)

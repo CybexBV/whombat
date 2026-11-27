@@ -69,8 +69,10 @@ enum LiveWidgetLocale {
   static let key = "com.whombat.live.locale"
 
   static var shared: String? {
-    let group = Bundle.main.object(forInfoDictionaryKey: "WhombatStatusWidgetAppGroup") as? String
-    return group.flatMap { UserDefaults(suiteName: $0)?.string(forKey: key) }
+    let group = (Bundle.main.object(forInfoDictionaryKey: "WhombatStatusWidgetAppGroup") as? String)
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .flatMap { $0.isEmpty ? nil : $0 } ?? "group.com.whombat.mobile"
+    return UserDefaults(suiteName: group)?.string(forKey: key)
       ?? Locale.preferredLanguages.first
   }
 

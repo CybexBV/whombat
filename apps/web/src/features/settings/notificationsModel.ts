@@ -13,7 +13,10 @@ import {
   zonedInstant,
   zonedParts,
 } from '@whombat/core';
-import { currentLocale } from '../../i18n/provider';
+import { currentLocale, type WebTranslator, webTranslator } from '../../i18n/provider';
+
+/** The page's words, for the parts that aren't components. */
+const words = (): WebTranslator => webTranslator(currentLocale());
 
 /** “Do not disturb is on until 14:52.”, or null while it's off. */
 export function dndStateText(
@@ -22,7 +25,9 @@ export function dndStateText(
   timeZone: string,
 ): string | null {
   if (!isDndActive(prefs, now) || !prefs.dndUntil) return null;
-  return `Do not disturb is on until ${endsText(prefs.dndUntil, now, timeZone, currentLocale())}.`;
+  return words().t('settings.notifications.dndOnUntil', {
+    when: endsText(prefs.dndUntil, now, timeZone, currentLocale()),
+  });
 }
 
 /** `2026-09-23T18:30` (a `datetime-local` value) for `at` in `timeZone`. */
@@ -42,23 +47,28 @@ export function customDndUntil(
   timeZone: string,
 ): { ok: true; until: string } | { ok: false; error: string } {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value.trim());
-  if (!m) return { ok: false, error: 'Pick a day and a time.' };
+  if (!m) return { ok: false, error: words().t('settings.notifications.pickDayTime') };
   const at = zonedInstant(
     { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) },
     `${m[4]}:${m[5]}`,
     timeZone,
   );
-  if (Number.isNaN(at.getTime())) return { ok: false, error: 'Pick a day and a time.' };
-  if (at.getTime() <= toDate(now).getTime()) return { ok: false, error: 'Pick a time that’s still to come.' };
+  if (Number.isNaN(at.getTime()))
+    return { ok: false, error: words().t('settings.notifications.pickDayTime') };
+  if (at.getTime() <= toDate(now).getTime()) {
+    return { ok: false, error: words().t('settings.notifications.pickLater') };
+  }
   return { ok: true, until: at.toISOString() };
 }
 
-/** Email about what stayed unread (CT-175): the choices and what each means. */
-export const EMAIL_OPTIONS = [
-  { value: 'off', label: 'Off' },
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'daily', label: 'Daily' },
-] as const;
+/** Email about what stayed unread: the choices, in the page's language. */
+export function emailOptions({ t }: WebTranslator = words()) {
+  return [
+    { value: 'off', label: t('settings.notifications.emailOff') },
+    { value: 'hourly', label: t('settings.notifications.emailHourly') },
+    { value: 'daily', label: t('settings.notifications.emailDaily') },
+  ] as const;
+}
 
 /**
  * The words that differ in the assistant shell (docs/decisions/less-is-more.md AP-1790, AP-1791): its chats are with one
@@ -79,22 +89,25 @@ export interface NotificationsWords {
   threads: boolean;
 }
 
-export function notificationsWords(burrow: string, agent: string): NotificationsWords {
+export function notificationsWords(
+  burrow: string,
+  agent: string,
+  { t }: WebTranslator = words(),
+): NotificationsWords {
   return {
-    intro: `These are yours alone, for every chat in ${burrow}.`,
+    intro: t('settings.notifications.intro', { burrow }),
     dndMeta: {
-      on: 'Holds back push and email notifications until then, and ends by itself.',
-      off: 'Pause push and email notifications for a while. They come back on by themselves.',
+      on: t('settings.notifications.dndMetaOn'),
+      off: t('settings.notifications.dndMetaOff'),
     },
     email: {
-      off: 'No email. This browser’s notifications still tell you.',
-      hourly: `At most one email an hour about messages from ${agent} and things that need you, once they stayed unread for 30 minutes.`,
-      daily: `One email at 08:00 about messages from ${agent} and things that need you that stayed unread.`,
+      off: t('settings.notifications.emailOffMeta'),
+      hourly: t('settings.notifications.emailHourlyMeta', { agent }),
+      daily: t('settings.notifications.emailDailyMeta', { agent }),
     },
-    pushOff: `Turn them on to hear from ${agent} and about things that need you.`,
-    pushUnsupported:
-      'This browser can’t show notifications. Get the phone app to be told when something needs you.',
-    getApp: 'Get the app',
+    pushOff: t('settings.notifications.pushOff', { agent }),
+    pushUnsupported: t('settings.notifications.pushUnsupported'),
+    getApp: t('settings.notifications.getApp'),
     threads: false,
   };
 }

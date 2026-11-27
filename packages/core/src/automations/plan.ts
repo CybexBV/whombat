@@ -412,11 +412,7 @@ function limitsLines(definition: AutomationDefinition, tr: CoreTranslator): Auto
   const fix = recipeOf(definition)?.fix;
   if (fix) lines.push(line(tr.tp('plan.limit.fixes', fix.maxPerDay)));
   if (l.maxTokensPerDay) {
-    // English keeps its thousands commas whatever the viewer's region.
-    const tokens =
-      tr.language === 'nl'
-        ? formatLocaleNumber(l.maxTokensPerDay, tagOf(tr))
-        : l.maxTokensPerDay.toLocaleString('en-US');
+    const tokens = formatLocaleNumber(l.maxTokensPerDay, tr.locale);
     lines.push(line(tr.t('plan.limit.tokens', { tokens })));
   }
   return lines;

@@ -34,6 +34,13 @@ describe('buildFcmMessage', () => {
     expect(message.message.android.priority).toBe('high');
   });
 
+  it('says when previews are off, in the data and in the payload', () => {
+    const message = buildFcmMessage({ ...payload, preview: false }, 'device-token');
+    expect(message.message.data).toMatchObject({ preview: 'false' });
+    expect(JSON.parse(message.message.data.payload).preview).toBe(false);
+    expect(buildFcmMessage(payload, 'device-token').message.data).not.toHaveProperty('preview');
+  });
+
   it('sets a collapse key per live activity so rapid updates of one run coalesce', () => {
     const activity = {
       kind: 'run' as const,

@@ -29,4 +29,7 @@ dependencies {
   implementation 'androidx.core:core:1.17.0'
   // Same version as expo-notifications, which fetches the FCM token; this module receives the messages.
   implementation 'com.google.firebase:firebase-messaging:25.0.1'
+  testImplementation 'junit:junit:4.13.2'
+  // Local JVM tests need a working JSONObject in place of the Android SDK stub.
+  testImplementation 'org.json:json:20180813'
 }

@@ -21,14 +21,6 @@ import type {
 } from '../../packages/core/src/i18n/index';
 import { type CatalogEntry, loadCatalogs } from './registry';
 
-function escapePo(s: string): string {
-  return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
-}
-
-function unescapePo(s: string): string {
-  return s.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-}
-
 export function serializePo(entry: CatalogEntry, lang: Exclude<SupportedLanguage, 'en'>): string {
   const target = entry.locales[lang] ?? {};
   const lines: string[] = [
@@ -50,53 +42,58 @@ export function serializePo(entry: CatalogEntry, lang: Exclude<SupportedLanguage
     const ctx = entry.context?.[key];
     if (ctx) lines.push(`#. ${ctx.replace(/\s+/g, ' ').trim()}`);
     lines.push(`#: ${entry.name}:${key}`);
-    lines.push(`msgctxt "${escapePo(key)}"`);
+    lines.push(`msgctxt ${JSON.stringify(key)}`);
     if (typeof src === 'string') {
-      lines.push(`msgid "${escapePo(src)}"`);
-      lines.push(`msgstr "${escapePo(typeof dst === 'string' ? dst : '')}"`);
+      lines.push(`msgid ${JSON.stringify(src)}`);
+      lines.push(`msgstr ${JSON.stringify(typeof dst === 'string' ? dst : '')}`);
     } else {
       const pSrc = src as PluralMessage;
       const pDst = typeof dst === 'object' && dst !== null ? (dst as PluralMessage) : undefined;
-      lines.push(`msgid "${escapePo(pSrc.one ?? pSrc.other)}"`);
-      lines.push(`msgid_plural "${escapePo(pSrc.other)}"`);
-      lines.push(`msgstr[0] "${escapePo(pDst?.one ?? '')}"`);
-      lines.push(`msgstr[1] "${escapePo(pDst?.other ?? '')}"`);
+      lines.push(`msgid ${JSON.stringify(pSrc.one ?? pSrc.other)}`);
+      lines.push(`msgid_plural ${JSON.stringify(pSrc.other)}`);
+      lines.push(`msgstr[0] ${JSON.stringify(pDst?.one ?? '')}`);
+      lines.push(`msgstr[1] ${JSON.stringify(pDst?.other ?? '')}`);
     }
     lines.push('');
   }
   return lines.join('\n');
 }
 
-/** Parses a `.po` file produced by `serializePo` back into a declarative Catalog map. */
+/** Parses a gettext PO file into a catalog keyed by message context or, when absent, by message ID. */
 export function parsePo(text: string): Catalog {
-  const out: Record<string, MessageValue> = {};
-  const blocks = text.split(/\n{2,}/);
-  for (const block of blocks) {
-    let key: string | null = null;
-    let singular: string | null = null;
-    let plural0: string | null = null;
-    let plural1: string | null = null;
-    let hasPlural = false;
-    for (const raw of block.split('\n')) {
-      const line = raw.trim();
-      const mCtx = /^msgctxt "(.*)"$/.exec(line);
-      if (mCtx?.[1] !== undefined) key = unescapePo(mCtx[1]);
-      if (line.startsWith('msgid_plural ')) hasPlural = true;
-      const mStr = /^msgstr "(.*)"$/.exec(line);
-      if (mStr?.[1] !== undefined) singular = unescapePo(mStr[1]);
-      const m0 = /^msgstr\[0\] "(.*)"$/.exec(line);
-      if (m0?.[1] !== undefined) plural0 = unescapePo(m0[1]);
-      const m1 = /^msgstr\[1\] "(.*)"$/.exec(line);
-      if (m1?.[1] !== undefined) plural1 = unescapePo(m1[1]);
+  const out = new Map<string, MessageValue>();
+  const fields = new Map<string, string>();
+  let active: string | undefined;
+  const finish = () => {
+    const key = fields.get('msgctxt') ?? fields.get('msgid');
+    const singular = fields.get('msgstr');
+    const one = fields.get('msgstr[0]');
+    const other = fields.get('msgstr[1]');
+    if (key && fields.has('msgid_plural') && other !== undefined) {
+      out.set(key, { ...(one !== undefined ? { one } : {}), other });
+    } else if (key && singular !== undefined) {
+      out.set(key, singular);
     }
-    if (!key) continue;
-    if (hasPlural && plural1 !== null) {
-      out[key] = { ...(plural0 !== null ? { one: plural0 } : {}), other: plural1 };
-    } else if (singular !== null) {
-      out[key] = singular;
+    fields.clear();
+    active = undefined;
+  };
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) {
+      finish();
+      continue;
+    }
+    const [, field, value] = /^(msgctxt|msgid|msgid_plural|msgstr(?:\[[0-9]+\])?)\s+(".*")$/.exec(line) ?? [];
+    if (field && value !== undefined) {
+      if ((field === 'msgctxt' || field === 'msgid') && fields.has('msgid')) finish();
+      active = field;
+      fields.set(field, JSON.parse(value) as string);
+    } else if (active && /^".*"$/.test(line)) {
+      fields.set(active, (fields.get(active) ?? '') + (JSON.parse(line) as string));
     }
   }
-  return out;
+  finish();
+  return Object.fromEntries(out);
 }
 
 export function serializeFlatJson(entry: CatalogEntry, lang: Exclude<SupportedLanguage, 'en'>): string {

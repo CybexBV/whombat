@@ -21,6 +21,7 @@ const pluralRulesCache = new Map<string, Intl.PluralRules | null>();
 
 function getPluralRules(locale: string): Intl.PluralRules | null {
   if (pluralRulesCache.has(locale)) return pluralRulesCache.get(locale) ?? null;
+  if (pluralRulesCache.size >= 64) pluralRulesCache.clear();
   try {
     if (typeof Intl === 'undefined' || typeof Intl.PluralRules !== 'function') {
       pluralRulesCache.set(locale, null);
@@ -49,7 +50,7 @@ export function pluralCategory(locale: string, count: number): PluralCategory {
 export function interpolate(template: string, vars?: MessageVars): string {
   if (!vars) return template;
   return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, key: string) =>
-    key in vars ? String(vars[key]) : match,
+    Object.hasOwn(vars, key) ? String(vars[key]) : match,
   );
 }
 
@@ -132,8 +133,8 @@ export function pseudoize(text: string): string {
     visibleChars += 1;
     i += 1;
   }
-  const pad = Math.max(1, Math.ceil(visibleChars * 0.2));
-  return `[${out}${'~'.repeat(Math.min(pad, 12))}]`;
+  const pad = Math.min(64, Math.max(2, Math.ceil(visibleChars * 0.25)));
+  return `[${out}${'~'.repeat(pad)}]`;
 }
 
 /** Extracts sorted unique `{placeholder}` names from a message value (for parity tests and tooling). */

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import type { NeedsYouItem } from '@whombat/core';
+import { LOCALE_MINOR } from '@whombat/protocol/session';
 import { describe, expect, it, vi } from 'vitest';
 import { agentFaceLabelIn, agentFaceStyleIn } from '../agentFace';
 import { agentWords } from '../agentName';
@@ -290,7 +291,7 @@ describe('@whombat/client i18n', () => {
     expect(screen.getByTestId('rich').textContent).toBe('Bevestig Dusty via Settings.');
   });
 
-  it('gates claim locale on session protocol minor >= 20 so older boxes never see an unknown field', async () => {
+  it('only sends the preferred locale to boxes that accept it', async () => {
     const sentPayloads: unknown[] = [];
     const runWithMinor = async (minor: number) => {
       sentPayloads.length = 0;
@@ -313,9 +314,6 @@ describe('@whombat/client i18n', () => {
         }),
         invoke: vi.fn(async (op: string, input: unknown) => {
           if (op === 'enroll.claim.begin') {
-            // Return valid ristretto255 basepoint (32 bytes) isn't needed if we catch ClaimMismatchError;
-            // instead mock claimBegin failure? Wait: we want to reach enroll.claim.
-            // Use real claimPakeResponder to produce a valid share!
             const { claimPakeResponder } = await import('@whombat/protocol/claim');
             const req = input as { claimId: string; method: 'code'; share: string };
             const resp = claimPakeResponder(
@@ -362,8 +360,9 @@ describe('@whombat/client i18n', () => {
 
     const oldPayload = await runWithMinor(19);
     expect(oldPayload).not.toHaveProperty('locale');
+    expect(await runWithMinor(20)).not.toHaveProperty('locale');
 
-    const newPayload = await runWithMinor(20);
+    const newPayload = await runWithMinor(LOCALE_MINOR);
     expect(newPayload.locale).toBe('nl-NL');
   });
 });

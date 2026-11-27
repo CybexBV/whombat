@@ -25,13 +25,27 @@ import {
   searchFilterOf,
   zonedInstant,
 } from '@whombat/core';
-import { type AnyColumn, and, desc, eq, gte, inArray, lt, notExists, or, type SQL, sql } from 'drizzle-orm';
+import {
+  type AnyColumn,
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import { z } from 'zod';
 import type { BurrowRow } from '../commit/types';
 import type { Db } from '../db/client';
 import { approvals, messages, principals, searchAnswers, searchDocuments } from '../db/schema/index';
 import { UNSEARCHABLE_PROVENANCE } from '../domain/search-index';
 import { hiddenConversationIds } from '../github/visibility';
+import { tServer } from '../i18n/catalog';
 import { ApiError } from '../lib/errors';
 import { iso } from '../lib/time';
 import type { Logger } from '../services';
@@ -48,21 +62,49 @@ import { approvalVisible } from './work-views';
  * `or` keep web-search syntax in each half, either half matching. Null when nothing is left to search for.
  */
 async function tsQuery(db: Db, q: string, lang: SupportedLanguage = 'en'): Promise<string | null> {
-  const [row] =
-    lang === 'nl'
-      ? await db.execute<{ e: string; s: string; stop: string[] | null }>(
-          sql`select websearch_to_tsquery('english', ${q})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
-            (select array_agg(distinct lower(d.token)) from (
-              select token from ts_debug('english', ${q}) where lexemes = '{}'
-              union
-              select token from ts_debug('dutch', ${q}) where lexemes = '{}'
-            ) d) as stop`,
-        )
-      : await db.execute<{ e: string; s: string; stop: string[] | null }>(
-          sql`select websearch_to_tsquery('english', ${q})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
-            (select array_agg(distinct lower(d.token)) from ts_debug('english', ${q}) d where d.lexemes = '{}') as stop`,
-        );
+  if (lang === 'nl') {
+    // Dutch stopwords go before the English stemmer sees the words: stemmed, “andere” is no longer the stopword.
+    const [dutch] = await db.execute<{ stop: string[] | null }>(
+      sql`select array_agg(distinct lower(d.token)) as stop from ts_debug('dutch', ${q}) d where d.lexemes = '{}'`,
+    );
+    const dutchStop = dutch?.stop ?? [];
+    const english = withoutStopwords(q, dutchStop);
+    const [row] = await db.execute<{ e: string; s: string; stop: string[] | null }>(
+      sql`select websearch_to_tsquery('english', ${english})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
+        (select array_agg(distinct lower(d.token)) from ts_debug('english', ${q}) d where d.lexemes = '{}') as stop`,
+    );
+    return combinedTsQuery(q, row?.e ?? '', row?.s ?? '', [...(row?.stop ?? []), ...dutchStop]);
+  }
+  const [row] = await db.execute<{ e: string; s: string; stop: string[] | null }>(
+    sql`select websearch_to_tsquery('english', ${q})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
+      (select array_agg(distinct lower(d.token)) from ts_debug('english', ${q}) d where d.lexemes = '{}') as stop`,
+  );
   return combinedTsQuery(q, row?.e ?? '', row?.s ?? '', row?.stop ?? []);
+}
+
+/**
+ * A query without its stopwords (pure, unit-tested): quoted phrases stay whole, `or` and a `-` before a word keep their
+ * meaning, and an `or` left with nothing on one side goes too.
+ */
+export function withoutStopwords(q: string, stopwords: readonly string[]): string {
+  const stop = new Set(stopwords.map((w) => w.toLowerCase()));
+  const parts = q.match(/-?"[^"]*"?|\S+/g) ?? [];
+  const kept = parts.filter((p) => {
+    if (p.includes('"') || /^or$/i.test(p)) return true;
+    const word = p
+      .replace(/^-/, '')
+      .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+      .toLowerCase();
+    return !word || !stop.has(word);
+  });
+  const out: string[] = [];
+  for (const p of kept) {
+    const isOr = /^or$/i.test(p);
+    if (isOr && (!out.length || /^or$/i.test(out[out.length - 1] ?? ''))) continue;
+    out.push(p);
+  }
+  while (out.length && /^or$/i.test(out[out.length - 1] ?? '')) out.pop();
+  return out.join(' ');
 }
 
 /** `tsQuery` without the database (pure, unit-tested): the English and the words-as-written halves combined. */
@@ -101,14 +143,13 @@ function whereOf(
 ): string {
   if (doc.type !== 'THREAD' && doc.type !== 'MESSAGE') return doc.where;
   const days = daysAgo(doc.createdAt, now, timeZone);
-  const todayWord = lang === 'nl' ? 'vandaag' : 'today';
-  const yesterdayWord = lang === 'nl' ? 'gisteren' : 'yesterday';
+  const time = formatClock(doc.createdAt, timeZone);
   const when =
     days === 0
-      ? `${todayWord} ${formatClock(doc.createdAt, timeZone)}`
+      ? tServer(lang, 'search.todayAt', { time })
       : days === 1
-        ? `${yesterdayWord} ${formatClock(doc.createdAt, timeZone)}`
-        : formatDate(doc.createdAt, timeZone, { year: 'always' });
+        ? tServer(lang, 'search.yesterdayAt', { time })
+        : formatDate(doc.createdAt, timeZone, { year: 'always' }, lang);
   return doc.where ? `${doc.where} · ${when}` : when;
 }
 
@@ -137,6 +178,16 @@ export const SEARCH_ANSWER_REUSE_MS = 24 * 3_600_000;
  */
 export function sameSearchWords(column: AnyColumn, q: string): SQL {
   return sql`lower(regexp_replace(btrim(${column}), '[[:space:]]+', ' ', 'g')) = lower(regexp_replace(btrim(${q}), '[[:space:]]+', ' ', 'g'))`;
+}
+
+/**
+ * Answers written in `lang`. An answer from before languages has none and is English. Reuse and the search page keep to
+ * the reader's language, so a switch asks again in the new one; an answer stays readable by its id either way.
+ */
+export function inSearchLanguage(lang: SupportedLanguage): SQL {
+  return lang === 'en'
+    ? (or(eq(searchAnswers.language, 'en'), isNull(searchAnswers.language)) as SQL)
+    : eq(searchAnswers.language, lang);
 }
 
 export function toSearchAnswer(row: typeof searchAnswers.$inferSelect): SearchAnswer {
@@ -682,6 +733,7 @@ export async function search(
   const filtered = !!(input.from || input.in || input.after || input.before || input.authorId);
   if (!q && !filtered) return { query: q, results: [], counts: { ...ZERO_COUNTS }, answer: null, next: null };
 
+  const lang = resolveLanguage(input.locale);
   const [answerRow] = q
     ? await db
         .select()
@@ -691,6 +743,7 @@ export async function search(
             eq(searchAnswers.burrowId, burrow.id),
             eq(searchAnswers.askedById, viewer.id),
             sameSearchWords(searchAnswers.query, q),
+            inSearchLanguage(lang),
           ),
         )
         .orderBy(desc(searchAnswers.createdAt))
@@ -698,7 +751,6 @@ export async function search(
     : [];
   const answer = answerRow ? toSearchAnswer(answerRow) : null;
 
-  const lang = resolveLanguage(input.locale);
   const tsq = q ? await tsQuery(db, q, lang) : null;
   if (q && !tsq) return { query: q, results: [], counts: { ...ZERO_COUNTS }, answer, next: null };
   const zone = input.timeZone ?? burrow.timeZone;

@@ -147,8 +147,9 @@ export const BACKUP_FILES = splitPairs({
       other: '{count} sign-ins couldn’t go in the file, so they need you to sign in again.',
     },
     {
-      one: '1 inlog kon niet in het bestand, dus daar moet je opnieuw inloggen.',
-      other: '{count} inlogs konden niet in het bestand, dus daar moet je opnieuw inloggen.',
+      one: 'Inloggegevens voor één dienst konden niet in het bestand, dus daar moet je opnieuw inloggen.',
+      other:
+        'Inloggegevens voor {count} diensten konden niet in het bestand, dus daar moet je opnieuw inloggen.',
     },
   ],
   'backupNote.files_left_out': [

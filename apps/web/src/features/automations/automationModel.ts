@@ -15,7 +15,7 @@ import {
   scheduleActions,
 } from '@whombat/core';
 import type { DotTone } from '../../components/StatusDot';
-import { currentLocale } from '../../i18n/provider';
+import { currentLocale, webTranslator } from '../../i18n/provider';
 
 /**
  * A run's status and its colour. Red says something doesn't work now, so a failed run, or one that needs a look, is
@@ -54,11 +54,16 @@ export function runActive(status: AutomationRunStatus): boolean {
 
 /** “Next run 09:00” today, “Next run Mon 09:00” this week, “Next run 3 Nov” later (AP-1084). */
 export function nextRunWords(nextRunAt: string, now: Date, timeZone: string): string {
+  const { t } = webTranslator(currentLocale());
   const days = -daysAgo(nextRunAt, now, timeZone);
   const clock = formatClock(nextRunAt, timeZone);
-  if (days <= 0) return `Next run ${clock}`;
-  if (days < 7) return `Next run ${formatShortWeekday(nextRunAt, timeZone, currentLocale())} ${clock}`;
-  return `Next run ${formatDate(nextRunAt, timeZone, { now }, currentLocale())}`;
+  if (days <= 0) return t('automations.nextRun', { when: clock });
+  if (days < 7) {
+    return t('automations.nextRun', {
+      when: `${formatShortWeekday(nextRunAt, timeZone, currentLocale())} ${clock}`,
+    });
+  }
+  return t('automations.nextRun', { when: formatDate(nextRunAt, timeZone, { now }, currentLocale()) });
 }
 
 /* The overview (docs/app/decisions/automation-chat.md) --------------------------------------------------------------- */

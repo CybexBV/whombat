@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { coreWords } from '../i18n/catalog.js';
+import { coreWords, tCore } from '../i18n/catalog.js';
 import { ConnectionId } from '../ids.js';
 import type { AutomationAssessment } from './automation.js';
 import { Timestamp } from './common.js';
@@ -744,8 +744,7 @@ function trackerFixNoticeIn(input: {
       evidence: null,
     };
   const day = `${input.at.getUTCDate()} ${MONTHS[language][input.at.getUTCMonth()]} ${input.at.getUTCFullYear()}`;
-  const evidence =
-    language === 'nl' ? `Live op ${input.host} sinds ${day}.` : `Live on ${input.host} since ${day}.`;
+  const evidence = tCore(language, 'tracker.releaseEvidence', { host: input.host, day });
   if (input.separate) {
     // A feature built in part is a change; a bug fix says “fixed” only with the fix's own word, as above.
     const ready =

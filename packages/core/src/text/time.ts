@@ -13,6 +13,7 @@
  * (`zonedParts`) stays pinned to English weekday names so it reads the same on every runtime.
  */
 import { type CoreMessageKey, coreTranslator } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { formatLocaleOf } from '../i18n/locale.js';
 
 export type DateInput = Date | string | number;
@@ -280,8 +281,11 @@ export function formatDuration(ms: number, locale?: string | null): string {
 /** `1.8s` — answer latency (`1,8s` in Dutch). */
 export function formatSeconds(ms: number, locale?: string | null): string {
   const tr = coreTranslator(locale);
-  const fixed = (Math.max(0, ms) / 1000).toFixed(1);
-  const s = tr.language === 'nl' ? fixed.replace('.', ',') : fixed;
+  const s = formatLocaleNumber(Number((Math.max(0, ms) / 1000).toFixed(1)), tr.locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    useGrouping: false,
+  });
   return tr.t('time.seconds', { s });
 }
 
