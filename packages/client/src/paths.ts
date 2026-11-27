@@ -68,6 +68,8 @@ export const BURROW_ROUTES = [
   '/reports',
   '/reports/new',
   '/reports/$reportId',
+  // What's new: the plain-language changelog, from This Whombat → About and the notice after an update.
+  '/whats-new',
 ] as const;
 
 /** The first segments of the burrow screens: a burrow named like one of these is read as the screen (AP-362). */

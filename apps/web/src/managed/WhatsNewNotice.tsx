@@ -38,11 +38,12 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   const status = useQuery({
     queryKey: APPLIANCE_STATUS_KEY,
     queryFn: () => sessionOps.applianceStatus(session),
-    enabled: Boolean(managed),
+    enabled: Boolean(managed?.applianceId),
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const key = managed ? whatsNewSeenKey(managed.applianceId) : null;
+  // Kept per Whombat: without its id there is nowhere to keep it, so no notice.
+  const key = managed?.applianceId ? whatsNewSeenKey(managed.applianceId) : null;
   // What this page kept (or found kept), so the notice follows a click at once.
   const [kept, setKept] = useState<string | null>(null);
   const seen = key ? readSeen(key) : undefined;

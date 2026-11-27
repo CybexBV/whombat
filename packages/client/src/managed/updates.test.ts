@@ -434,7 +434,7 @@ describe('the one-time “Whombat updated” notice', () => {
 
   it('says nothing without update facts or after an update that went wrong', () => {
     expect(whatsNewNotice(null, null).action).toBe('none');
-    expect(whatsNewNotice({}, 'pve-20260927.1').action).toBe('none');
+    expect(whatsNewNotice({ update: null }, 'pve-20260927.1').action).toBe('none');
     expect(whatsNewNotice({ update: base }, 'pve-20260927.1').action).toBe('none');
     expect(whatsNewNotice(updated('pve-20260928.6', 'ForwardRepairRequired'), 'pve-20260927.1').action).toBe(
       'none',
