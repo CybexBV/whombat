@@ -498,6 +498,23 @@ describe('the notice after an update', () => {
     }
   });
 
+  it('a browser that can’t keep the update says nothing, so the notice doesn’t come back at every start', async () => {
+    window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    try {
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
+      await act(async () => {});
+      expect(setItem).toHaveBeenCalled();
+      expect(notice()).toBeNull();
+      expect(seenRelease()).toBe('whombat-20261126.5');
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
   it('the first update after the first look gets the notice', async () => {
     ops.status.mockResolvedValue(status(null));
     const first = renderAt(<WhatsNewNotice onWhatsNew={false} />);

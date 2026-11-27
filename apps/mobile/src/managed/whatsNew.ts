@@ -40,8 +40,9 @@ function inTurn<T>(store: KeyValueStore, key: string, run: () => Promise<T>): Pr
 
 /**
  * The release the notice tells about, or null for none. It is kept as seen at once, so the notice shows once even when
- * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly. Checks of
- * one Whombat run one after another, so a slow write can't land after a newer one and bring an update back.
+ * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly; a release
+ * that can't be kept says nothing. Checks of one Whombat run one after another, so a slow write can't land after a newer
+ * one and bring an update back.
  */
 export function whatsNewToShow(
   store: KeyValueStore,
@@ -59,9 +60,37 @@ export function whatsNewToShow(
     // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
     const { action, release, value } = whatsNewNotice(status, seen);
     if (action === 'none') return null;
-    await store.set(key, value).catch(() => {});
+    // Not kept, it would tell again at every start: it says nothing, as when the store can't be read.
+    try {
+      await store.set(key, value);
+    } catch {
+      return null;
+    }
     return action === 'show' ? release : null;
   });
+}
+
+/**
+ * Checks each status answer of one Whombat and calls `show` for the update to tell about, until stopped. A later
+ * answer never cancels an earlier one's notice: the earlier one already kept the release, so only it can tell.
+ */
+export function whatsNewWatcher(
+  store: KeyValueStore,
+  whombat: string,
+  show: (release: string) => void,
+): { see: (status: Pick<ApplianceStatus, 'update'> | null | undefined) => void; stop: () => void } {
+  let live = true;
+  return {
+    see: (status) => {
+      if (!status) return;
+      void whatsNewToShow(store, whombat, status).then((release) => {
+        if (live && release) show(release);
+      });
+    },
+    stop: () => {
+      live = false;
+    },
+  };
 }
 
 /**

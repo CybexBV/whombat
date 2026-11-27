@@ -37,11 +37,13 @@ function readSeen(key: string): string | null | undefined {
   }
 }
 
-function keepSeen(key: string, release: string) {
+/** Keeps what this browser saw; false when it can't (storage full or refused). */
+function keepSeen(key: string, value: string): boolean {
   try {
-    window.localStorage.setItem(key, release);
+    window.localStorage.setItem(key, value);
+    return true;
   } catch {
-    // Nowhere to keep it: the notice simply goes away for this page.
+    return false;
   }
 }
 
@@ -63,7 +65,8 @@ async function claimRelease(
     if (seen === undefined) return false;
     const notice = whatsNewNotice(status, seen);
     if (notice.action === 'none') return false;
-    keepSeen(key, notice.value);
+    // Not kept, it would tell again at every start: it says nothing, as when storage can't be read.
+    if (!keepSeen(key, notice.value)) return false;
     return tell && notice.action === 'show';
   };
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;

@@ -5,7 +5,14 @@ import { WHATS_NEW_TEXT, whatsNewRefetchInterval, whatsNewSeenKey } from '@whomb
 import type { ApplianceStatus } from '@whombat/client/session';
 import { describe, expect, it, vi } from 'vitest';
 import { type KeyValueStore, memoryStore } from '../lib/kv';
-import { stripNotices, WHATS_NEW_ROW, WHATS_NEW_URL, watchStatusOnReopen, whatsNewToShow } from './whatsNew';
+import {
+  stripNotices,
+  WHATS_NEW_ROW,
+  WHATS_NEW_URL,
+  watchStatusOnReopen,
+  whatsNewToShow,
+  whatsNewWatcher,
+} from './whatsNew';
 
 const WHOMBAT = 'wb-test-0001';
 const KEY = whatsNewSeenKey(WHOMBAT);
@@ -179,6 +186,59 @@ describe('the one-time “Whombat updated” notice', () => {
     expect([first, second].filter(Boolean)).toEqual(expect.arrayContaining(['pve-20260928.6']));
     expect(seenIn(inner)).toBe('pve-20260929.1');
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260929.1'))).toBeNull();
+  });
+
+  it('a store that can’t keep the release says nothing, so the notice doesn’t come back at every start', async () => {
+    const inner = memoryStore({
+      [KEY]: JSON.stringify({ release: 'pve-20260927.1', at: installedAt('pve-20260927.1') }),
+    });
+    const store: KeyValueStore = {
+      get: (key) => inner.get(key),
+      set: async () => {
+        throw new Error('full');
+      },
+      remove: (key) => inner.remove(key),
+    };
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
+    expect(seenIn(inner)).toBe('pve-20260927.1');
+  });
+
+  it('a second answer for the same update while the first is still being kept still tells, once', async () => {
+    const inner = memoryStore({
+      [KEY]: JSON.stringify({ release: 'pve-20260927.1', at: installedAt('pve-20260927.1') }),
+    });
+    let release: (() => void) | null = null;
+    const store: KeyValueStore = {
+      get: (key) => inner.get(key),
+      set: async (key, value) => {
+        if (!release) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        await inner.set(key, value);
+      },
+      remove: (key) => inner.remove(key),
+    };
+    const shown: string[] = [];
+    const watcher = whatsNewWatcher(store, WHOMBAT, (r) => shown.push(r));
+    watcher.see(status('pve-20260928.6'));
+    await vi.waitFor(() => expect(release).not.toBeNull());
+    // The status is asked again (a refresh) while the first answer is still being kept.
+    watcher.see(status('pve-20260928.6'));
+    (release as unknown as () => void)();
+    await vi.waitFor(() => expect(shown).toEqual(['pve-20260928.6']));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(shown).toEqual(['pve-20260928.6']);
+    // Stopped (the app moved to another Whombat): a late answer shows nothing.
+    const later: string[] = [];
+    const gone = whatsNewWatcher(memoryStore({ [KEY]: inner.data.get(KEY) ?? '' }), WHOMBAT, (r) =>
+      later.push(r),
+    );
+    gone.see(status('pve-20260929.1'));
+    gone.stop();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(later).toEqual([]);
   });
 
   it('is drawn in the strip with the passkey nudge, never waiting for it', () => {

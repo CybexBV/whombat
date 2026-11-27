@@ -16,7 +16,7 @@ import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { applianceStatusQuery } from './useApplianceStatus';
-import { WHATS_NEW_URL, watchStatusOnReopen, whatsNewToShow } from './whatsNew';
+import { WHATS_NEW_URL, watchStatusOnReopen, whatsNewWatcher } from './whatsNew';
 
 export interface WhatsNewNoticeState {
   see: () => void;
@@ -56,17 +56,20 @@ export function useWhatsNewNotice({
     return watch.stop;
   }, [session, queryClient, cacheScope]);
   const [shown, setShown] = useState<{ whombat: string; release: string } | null>(null);
+  // One watcher per Whombat: a refreshed answer doesn't cancel the notice an earlier one is about to show.
+  const watcher = useRef<ReturnType<typeof whatsNewWatcher> | null>(null);
   useEffect(() => {
-    if (!status) return;
-    let live = true;
-    // A later read says nothing (the release is kept already): what shows stays until it is tapped.
-    void whatsNewToShow(secureStore, whombat, status).then((release) => {
-      if (live && release) setShown({ whombat, release });
-    });
+    const watch = whatsNewWatcher(secureStore, whombat, (release) => setShown({ whombat, release }));
+    watcher.current = watch;
     return () => {
-      live = false;
+      watch.stop();
+      if (watcher.current === watch) watcher.current = null;
     };
-  }, [status, whombat]);
+  }, [whombat]);
+  // A later read says nothing (the release is kept already): what shows stays until it is tapped.
+  useEffect(() => {
+    watcher.current?.see(status);
+  }, [status]);
   const release = shown?.whombat === whombat ? shown.release : null;
   return useMemo(() => {
     if (!release) return null;
