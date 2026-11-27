@@ -1,4 +1,8 @@
-import { FIX_TRIES_MAX } from '../again';
+/**
+ * How many tries a run makes at its fix: the first and nine more (`again.ts`). Kept here, in a file that imports
+ * nothing, so the options stay loadable without the step code.
+ */
+export const FIX_TRIES_MAX = 10;
 
 /** The automations engine's cadences, lease and limits (bp-automations BP-C05, server-efficiency SV-03). */
 export interface EngineOptions {
