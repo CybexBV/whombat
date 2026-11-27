@@ -385,9 +385,16 @@ export function ThreadView({
     if (from < 0) return null;
     return messages.slice(from).find((m) => !folded.hidden.has(m.id))?.id ?? null;
   }, [newFrom, messages, folded]);
-  // While an agent thinks here, the face beside its newest message thinks too (a 32px live face changes pose only).
+  // While an agent thinks here, the face beside its newest message thinks too (a 32px live face changes pose only),
+  // unless its thinking line shows the agent's own face.
   const thinkingFace = useMemo(() => {
-    const thinkers = new Set(typing.map((line) => typingLine(line).principalId).filter(Boolean));
+    const thinkers = new Set(
+      typing
+        .map(typingLine)
+        .filter((line) => !line.face)
+        .map((line) => line.principalId)
+        .filter(Boolean),
+    );
     if (!thinkers.size) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
@@ -747,7 +754,10 @@ export function ThreadView({
               label={line.label}
               spoken={line.spoken}
               at={line.at}
-              className={styles.typing}
+              face={line.face}
+              state={line.state}
+              look="thread"
+              className={line.face ? undefined : styles.typing}
             >
               {typingAction?.(line)}
             </TypingIndicator>
