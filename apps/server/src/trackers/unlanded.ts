@@ -8,6 +8,7 @@ import type { AutomationStep, JsonObject, UnlandedFixContext } from '@whombat/co
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { outsidersRun } from '../automations/runs';
 import { type AutomationRunRow, type AutomationStepRow, loadStepRows } from '../automations/store';
+import { againMarkOf } from '../automations/tries';
 import { loadBurrowRow } from '../commit/pipeline';
 import type { ApplyContext } from '../commit/types';
 import type { Db } from '../db/client';
@@ -277,8 +278,10 @@ function unlandedText(
   const found = unlandedReason(run.definition.steps, rows, status);
   if (!found) return null;
   const told = (rows.find((r) => r.stepId === 'reply')?.output as JsonObject | undefined)?.sent === true;
+  // A fix that went round again by itself says how many tries it had.
+  const tries = againMarkOf(rows.find((r) => r.stepId === 'fix')?.output)?.tries ?? 1;
   const what = found.fix
-    ? `The fix for ${report.connection} #${report.number} didn’t land: ${found.reason}`
+    ? `The fix for ${report.connection} #${report.number} didn’t land${tries > 1 ? ` after ${tries} tries` : ''}: ${found.reason}`
     : `${report.connection} #${report.number} wasn’t finished: ${found.reason}`;
   return `${what}${told ? ' The customer was told it’s being looked into, so it needs you.' : ' It needs you.'}`;
 }

@@ -430,7 +430,7 @@ describe('code work in T3 Code (TA-37)', () => {
     ).toMatch(/needs T3 Code/);
   });
 
-  it('supports t3Review.maxRounds (1–3) while keeping maxRounds 1 identical to default and fixing-and-pushing on the final round', () => {
+  it('supports t3Review.maxRounds (1–10) while keeping maxRounds 1 identical to default and fixing-and-pushing on the final round', () => {
     const base = def(recipe);
     const one = def({
       ...recipe,
@@ -472,9 +472,59 @@ describe('code work in T3 Code (TA-37)', () => {
     expect(
       recipeProblem({
         ...recipe,
-        t3Review: { model: 'gpt-6.1-sol', maxRounds: 4 },
+        t3Review: { model: 'gpt-6.1-sol', maxRounds: 11 },
       }),
     ).not.toBeNull();
+  });
+
+  it('keeps the steps of up to three review rounds as they were, so automations made before stay current', () => {
+    for (const maxRounds of [undefined, 1, 2, 3]) {
+      const d = def({ ...recipe, decideFeatures: true, t3Review: { model: 'gpt-6.1-sol', maxRounds } });
+      const fix = d.steps.find((s) => s.id === 'fix');
+      const review = d.steps.find((s) => s.id === 'review');
+      if (fix?.kind !== 'dispatch_agent' || review?.kind !== 'dispatch_agent') throw new Error('steps');
+      expect([fix.timeoutMinutes, review.timeoutMinutes], `${maxRounds}`).toEqual([360, 180]);
+      expect(recipeIsCurrent(d)).toBe(true);
+      if (!maxRounds || maxRounds === 1) {
+        expect(fix.prompt).toContain('this one review is all');
+        expect(review.prompt).toContain(', once, ');
+      } else {
+        for (const fact of [`up to ${maxRounds} review rounds`, `before round ${maxRounds} re-review`])
+          expect(fix.prompt).toContain(fact);
+        expect(review.prompt).toContain(`up to ${maxRounds} rounds`);
+      }
+    }
+  });
+
+  it('gives more than three review rounds two hours each, and the longest fix prompt still fits a step', () => {
+    for (const maxRounds of [4, 10]) {
+      // The longest words: a feature decided by the person, and the customer told once the fix is live.
+      const d = def({
+        ...recipe,
+        decideFeatures: true,
+        replyToCustomer: true,
+        t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds },
+      });
+      expect(validateDefinition(d).problems).toEqual([]);
+      expect(AutomationDefinition.safeParse(d).success).toBe(true);
+      expect(recipeOf(d)).toEqual(d.recipe);
+      expect(recipeIsCurrent(d)).toBe(true);
+      expect(d.recipe?.t3Review?.maxRounds).toBe(maxRounds);
+      const fix = d.steps.find((s) => s.id === 'fix');
+      const review = d.steps.find((s) => s.id === 'review');
+      if (fix?.kind !== 'dispatch_agent' || review?.kind !== 'dispatch_agent') throw new Error('steps');
+      expect(fix.timeoutMinutes).toBe(120 * maxRounds);
+      expect(review.timeoutMinutes).toBe(180);
+      expect(fix.prompt.length).toBeLessThanOrEqual(4000);
+      expect(review.prompt.length).toBeLessThanOrEqual(4000);
+      for (const fact of [
+        `up to ${maxRounds} review rounds`,
+        `round ${maxRounds}`,
+        'push feat/{{trigger.ref}}',
+      ])
+        expect(fix.prompt).toContain(fact);
+      expect(review.prompt).toContain(`up to ${maxRounds} rounds`);
+    }
   });
 
   it('keeps an automation made before as its recipe and offers to update its wording', () => {

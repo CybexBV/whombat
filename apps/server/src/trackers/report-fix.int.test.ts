@@ -12,8 +12,9 @@ import {
   recipeInstructions,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { BurrowAccess } from '../auth/request';
+import { FIX_TRIES_MAX } from '../automations/again';
 import { cleanUpMergedBranches } from '../automations/cleanup';
 import {
   createAutomation,
@@ -77,6 +78,12 @@ beforeAll(async () => {
 afterAll(async () => {
   await tracker.stop();
 });
+
+/** The most tries the engine makes at a fix that doesn't get through. */
+const tries = (n: number) => {
+  w.services.automations.options.fixTriesMax = n;
+};
+afterEach(() => tries(FIX_TRIES_MAX));
 
 function file(over: Partial<FakeTrackerItem> = {}): FakeTrackerItem {
   const at = w.now().toISOString();
@@ -351,6 +358,8 @@ describe('the fix for a report (RN-S4, RN-S5)', () => {
   });
 
   it('continues an unlanded report run from review in the person’s follow-up turn and opens the pull request', async () => {
+    // Two tries by itself, then it waits for the person.
+    tries(2);
     const id = await recipe({ repo: REPO, fix: { mode: 'ask' } });
     await poll();
     const report = file({ title: 'Exports drop the final row' });
@@ -369,15 +378,38 @@ describe('the fix for a report (RN-S4, RN-S5)', () => {
     await w.fakeAgentReply(step(now, 'fix').dispatchId as string, 'Exports keep the final row now.');
     await w.settle();
     now = await w.run(run.id);
-    // Review asks for changes: the run finishes unlanded before opening the PR.
+    // Review asks for changes: the fix goes round again by itself, its checkout on the same branch.
     await w.fakeAgentReply(
       step(now, 'review').dispatchId as string,
       'Changes needed: add a test for empty exports.',
     );
     await w.settle();
     now = await w.run(run.id);
+    expect(now.status).toBe('waiting');
+    expect(step(now, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    const told = String(step(now, 'fix').output.instructions);
+    expect(told).toContain('try 2 of 2');
+    expect(told).toContain('add a test for empty exports');
+    expect(await thread(run.id)).toContain(
+      'The review asked for changes, so the fix is being worked on again (try 2 of 2).',
+    );
+    w.advance(60_000);
+    await w.fakePush(REPO, branch, 'Test empty exports');
+    await w.fakeAgentReply(step(now, 'fix').dispatchId as string, 'Exports keep the final row, with a test.');
+    await w.settle();
+    now = await w.run(run.id);
+    // The second review asks for changes too: out of tries, the run finishes unlanded before opening the PR and the
+    // person hears how many tries it had.
+    await w.fakeAgentReply(
+      step(now, 'review').dispatchId as string,
+      'Changes needed: the empty export still drops its header.',
+    );
+    await w.settle();
+    now = await w.run(run.id);
     expect(now.status).toBe('succeeded');
     expect(step(now, 'pr').state).toBe('skipped');
+    expect(step(now, 'review').attempt).toBe(1);
+    expect((await thread(run.id)).filter((t) => t.includes('didn’t land after 2 tries'))).toHaveLength(1);
     const threadRootId = now.threadRootId as string;
 
     // unlandedFixOf reports the unlanded run with `review` as the next step.
@@ -478,6 +510,8 @@ describe('the fix for a report (RN-S4, RN-S5)', () => {
     expect(String((step(now, 'fix').output as { reply?: unknown }).reply)).toContain(
       'Added the empty-exports test',
     );
+    // After the person looked, the count of tries starts over.
+    expect(step(now, 'fix').output.again).toEqual({ tries: 1, reviewAttempt: 2 });
     // The fresh review approves -> Whombat opens the pull request and finishes the run!
     await w.fakeAgentReply(step(now, 'review').dispatchId as string, 'Approve: empty export test passes.');
     await w.settle();

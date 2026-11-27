@@ -26,6 +26,7 @@ import { GitHubError } from '../github/adapter';
 import type { FakeGitHub } from '../github/fake';
 import { callTool } from '../mcp/server';
 import { IDS, useAutomationWorld } from '../test/automations';
+import { FIX_TRIES_MAX } from './again';
 import { cleanUpMergedBranches } from './cleanup';
 import {
   createAutomation,
@@ -202,6 +203,15 @@ async function done(automationId: string) {
   await w.ok(IDS.mara, deleteAutomation, { automationId });
 }
 
+/**
+ * The most tries the engine makes at a fix. Tests of how a merge leaves its pull request for a person make one, so the
+ * run ends there; a fix that goes round again by itself has its own tests below.
+ */
+const tries = (n: number) => {
+  w.services.automations.options.fixTriesMax = n;
+};
+afterEach(() => tries(FIX_TRIES_MAX));
+
 describe('a recipe that merges its fix (AR-44)', () => {
   it('is made with “Merge into main”, its merge step last and its sentence saying so', async () => {
     const id = await recipe();
@@ -363,23 +373,32 @@ describe('merging once the checks pass (AR-45…AR-47)', () => {
 });
 
 describe('leaving it for a person (AR-46)', () => {
-  /** The run failed at its merge step with `line`, nothing merged, and the thread said so. */
+  /** The run failed at its merge step with `line` and why (`cause`), nothing merged, and the thread said so. */
   async function leftForYou(
     automationId: string,
     runId: string,
     number: number,
     line: string,
     summary: string,
+    cause: string,
   ) {
     const run = await w.run(runId);
     expect(run.status).toBe('failed');
     // What it found replaces “Waiting for checks on PR #n”.
-    expect(step(run, 'merge')).toMatchObject({ state: 'failed', error: line, inputSummary: summary });
+    expect(step(run, 'merge')).toMatchObject({
+      state: 'failed',
+      error: line,
+      inputSummary: summary,
+      output: { cause },
+    });
+    // It ended at its first try.
+    expect(step(run, 'fix').attempt).toBe(0);
     expect(merged(number)).toEqual([]);
     expect((await threadLines(runId, automationId)).at(-1)).toContain(line);
   }
 
   it('fails when the checks fail', async () => {
+    tries(1);
     const id = await recipe();
     const { runId, pr } = await fixed(id, 'Red CI');
     await checks(pr.headSha, { conclusion: 'failure' });
@@ -389,11 +408,13 @@ describe('leaving it for a person (AR-46)', () => {
       pr.number,
       `Checks failed on PR #${pr.number}, so I left it for you.`,
       `Checks failed on PR #${pr.number}`,
+      'checks_failed',
     );
     await done(id);
   });
 
   it('fails when the pull request changed after the review', async () => {
+    tries(1);
     const id = await recipe();
     const { n, runId, pr } = await fixed(id, 'Pushed to after the review');
     await w.fakePush(REPO, `feat/issue-${n}`, 'One more thing');
@@ -404,11 +425,13 @@ describe('leaving it for a person (AR-46)', () => {
       pr.number,
       `PR #${pr.number} changed after the review, so I left it for you.`,
       `PR #${pr.number} changed after the review`,
+      'changed',
     );
     await done(id);
   });
 
   it('fails when someone asks for changes', async () => {
+    // With tries to spare: whoever can review on GitHub never steers the fix round again.
     const id = await recipe();
     const { runId, pr } = await fixed(id, 'Changes requested on GitHub');
     await fake().simulateReview({ repo: REPO, number: pr.number, login: 'jdoe', state: 'changes_requested' });
@@ -419,6 +442,7 @@ describe('leaving it for a person (AR-46)', () => {
       pr.number,
       `Someone asked for changes on PR #${pr.number}, so I left it for you.`,
       `Changes requested on PR #${pr.number}`,
+      'changes_requested',
     );
     await done(id);
   });
@@ -434,6 +458,7 @@ describe('leaving it for a person (AR-46)', () => {
       pr.number,
       `PR #${pr.number} was closed, so there was nothing to merge.`,
       `PR #${pr.number} was closed`,
+      'closed',
     );
     await done(id);
   });
@@ -453,6 +478,7 @@ describe('leaving it for a person (AR-46)', () => {
       pr.number,
       `Checks on PR #${pr.number} didn’t finish in time, so I left it for you.`,
       `Checks on PR #${pr.number} didn’t finish in time`,
+      'timed_out',
     );
     await done(id);
   });
@@ -480,6 +506,7 @@ describe('leaving it for a person (AR-46)', () => {
       first.pr.number,
       `PR #${first.pr.number} needs an approving review first, so I left it for you.`,
       `No approving review on PR #${first.pr.number}`,
+      'needs_review',
     );
     // Someone's approving review on GitHub is one.
     const second = await fixed(id, 'Approved on GitHub');
@@ -492,6 +519,7 @@ describe('leaving it for a person (AR-46)', () => {
   });
 
   it('fails with GitHub’s reason when GitHub refuses, and asks a person to check when it doesn’t answer', async () => {
+    // With tries to spare: a refusal that isn't a clash with the base branch is for a person.
     const id = await recipe();
     const refused = await fixed(id, 'Protected main');
     fake().failNextMerge = new GitHubError(
@@ -505,6 +533,7 @@ describe('leaving it for a person (AR-46)', () => {
       refused.pr.number,
       `GitHub wouldn’t merge PR #${refused.pr.number}: At least 1 approving review is required by reviewers with write access.`,
       `Checks passed on PR #${refused.pr.number}`,
+      'refused',
     );
     const lost = await fixed(id, 'GitHub went quiet');
     fake().failNextMerge = new Error('socket hang up');
@@ -535,14 +564,151 @@ describe('leaving it for a person (AR-46)', () => {
   });
 });
 
+describe('a fix whose merge didn’t get through goes round again by itself', () => {
+  it('failed checks: the fix is worked on again, the open pull request is used again and merged once checks pass', async () => {
+    const id = await recipe();
+    const { n, runId, pr } = await fixed(id, 'Red CI, then green');
+    const branch = `feat/issue-${n}`;
+    await checks(pr.headSha, { conclusion: 'failure' });
+    let run = await w.run(runId);
+    // Not ended: from the fix again, each step a new attempt; the fix turn hears which try and why.
+    expect(run.status).toBe('waiting');
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1, output: { again: { tries: 2 } } });
+    for (const later of ['review', 'pr', 'merge'])
+      expect(step(run, later)).toMatchObject({ state: 'pending', attempt: 1 });
+    const told = String(step(run, 'fix').output.instructions);
+    expect(told).toContain('try 2 of 10');
+    expect(told).toContain('checks failed');
+    // An own checkout: it commits on the branch it has, no T3 Code thread.
+    expect(told).not.toContain('t3_thread_send');
+    // The engine's count isn't something the step's templates read.
+    expect(told).not.toContain('"tries"');
+    const line = 'The pull request’s checks failed, so the fix is being worked on again (try 2 of 10).';
+    expect((await threadLines(runId, id)).filter((t) => t === line)).toHaveLength(1);
+    // This run's own: other tests in this file go round again too.
+    const [again] = (
+      await w.services.db
+        .select()
+        .from(events)
+        .where(and(eq(events.type, 'automation.run.again')))
+        .orderBy(asc(events.seq))
+    ).filter((e) => (e.payload as { runId?: unknown }).runId === runId);
+    expect(again?.payload).toMatchObject({ runId, fromStepId: 'fix', cause: 'checks_failed', tries: 2 });
+
+    // The fix pushes a new commit; the review approves it; the pull request already open is the one.
+    w.advance(60_000);
+    run = await agentStep(runId, 'fix', 'Fixed what the checks found.', branch);
+    await poll();
+    run = await agentStep(runId, 'review', 'Approve: the checks pass now.');
+    expect(step(run, 'pr')).toMatchObject({
+      state: 'succeeded',
+      output: { prNumber: pr.number, alreadyOpen: true },
+    });
+    const [now] = await w.services.db.select().from(pullRequests).where(eq(pullRequests.id, pr.id));
+    expect(now?.headSha).toBe(step(run, 'fix').output.head);
+    expect(now?.headSha).not.toBe(pr.headSha);
+    await checks(now?.headSha as string, { conclusion: 'success' });
+    run = await w.run(runId);
+    expect(run.status).toBe('succeeded');
+    expect(step(run, 'merge')).toMatchObject({ state: 'succeeded', attempt: 1 });
+    expect(merged(pr.number)).toHaveLength(1);
+    // Only one pull request for the branch.
+    expect(
+      await w.services.db.select().from(pullRequests).where(eq(pullRequests.branch, branch)),
+    ).toHaveLength(1);
+    // What was said and sent once isn't repeated: the issue heard of the fix once, the thread where the pull request
+    // is once; the open pull request got the new try's words.
+    expect(step(run, 'linked')).toMatchObject({ state: 'succeeded', attempt: 0 });
+    const toIssue = fake().comments.filter((c) => c.repo === REPO && c.number === n);
+    expect(toIssue.filter((c) => c.body.startsWith('A fix is ready for review'))).toHaveLength(1);
+    const lines = await threadLines(runId, id);
+    expect(lines.filter((t) => /already open/.test(t))).toEqual([]);
+    expect(lines.filter((t) => t.startsWith('Opened ') && t.includes(`PR #${pr.number}`))).toHaveLength(1);
+    expect(
+      fake().comments.some((c) => c.number === pr.number && c.body.includes('Fixed what the checks found.')),
+    ).toBe(true);
+    await done(id);
+  });
+
+  it('waits a while for a later try’s new head to reach the mirror before calling it changed', async () => {
+    const id = await recipe();
+    const { n, runId, pr } = await fixed(id, 'Red CI, then a slow mirror');
+    await checks(pr.headSha, { conclusion: 'failure' });
+    w.advance(60_000);
+    await agentStep(runId, 'fix', 'Fixed what the checks found.', `feat/issue-${n}`);
+    // No poll: the mirror still has the earlier head when the review approves the new one.
+    let run = await agentStep(runId, 'review', 'Approve: the checks pass now.');
+    const head = step(run, 'fix').output.head as string;
+    const [stale] = await w.services.db.select().from(pullRequests).where(eq(pullRequests.id, pr.id));
+    expect(stale?.headSha).toBe(pr.headSha);
+    expect(step(run, 'merge').state).toBe('waiting');
+    expect(step(run, 'fix').attempt).toBe(1);
+    // The mirror catches up, the checks pass: merged on this try.
+    await poll();
+    await checks(head, { conclusion: 'success' });
+    run = await w.run(runId);
+    expect(run.status).toBe('succeeded');
+    expect(step(run, 'fix').attempt).toBe(1);
+    expect(merged(pr.number)).toHaveLength(1);
+    await done(id);
+  });
+
+  it('a pull request that clashes with its base branch: the fix merges the base branch in, and it merges', async () => {
+    const id = await recipe();
+    const { n, runId, pr } = await fixed(id, 'Main moved on');
+    fake().simulateConflict(REPO, pr.number);
+    await checks(pr.headSha, { conclusion: 'success' });
+    let run = await w.run(runId);
+    expect(step(run, 'fix')).toMatchObject({ state: 'waiting', attempt: 1 });
+    expect(step(run, 'fix').output.again).toMatchObject({ tries: 2, cause: 'conflict' });
+    const told = String(step(run, 'fix').output.instructions);
+    expect(told).toContain('merge the base branch');
+    expect(told).toContain('never rebase');
+    expect(await threadLines(runId, id)).toContain(
+      'The pull request clashes with newer changes on its base branch, so the fix is being worked on again (try 2 of 10).',
+    );
+    expect(merged(pr.number)).toEqual([]);
+
+    // The fix merges main in and pushes; reviewed again, it merges.
+    fake().simulateConflict(REPO, pr.number, false);
+    w.advance(60_000);
+    await agentStep(runId, 'fix', 'Merged main in; the totals test still passes.', `feat/issue-${n}`);
+    await poll();
+    run = await agentStep(runId, 'review', 'Approve: main merged in cleanly.');
+    await checks(step(run, 'fix').output.head as string, { conclusion: 'success' });
+    run = await w.run(runId);
+    expect(run.status).toBe('succeeded');
+    expect(merged(pr.number)).toHaveLength(1);
+    await done(id);
+  });
+
+  it('a merge that failed for what another try can’t change ends as before', async () => {
+    const id = await recipe();
+    const { runId, pr } = await fixed(id, 'Closed by hand, once');
+    await fake().simulateClose({ repo: REPO, number: pr.number, login: 'jdoe', merged: false });
+    await poll();
+    const run = await w.run(runId);
+    expect(run.status).toBe('failed');
+    expect(step(run, 'merge')).toMatchObject({ state: 'failed', output: { cause: 'closed' } });
+    expect(step(run, 'fix').attempt).toBe(0);
+    await done(id);
+  });
+});
+
 describe('failed checks run once more (AR-57)', () => {
   /** Each test's own workflow run, and the re-runs GitHub was asked for since the test began (one FakeGitHub). */
   let workflowRun = 70;
   let rerunsBefore = 0;
   const reruns = () => fake().reruns.slice(rerunsBefore);
-  beforeEach(() => {
+  beforeEach(async () => {
     workflowRun++;
     rerunsBefore = fake().reruns.length;
+    // How the merge step's one re-run ends: the fix doesn't go round again here.
+    tries(1);
+    // The checks a repository runs on every merge are learnt from its last merges, which here are other tests' (the
+    // ones above and each other): each test starts from a repository whose merges ran none, so a pull request waits
+    // only for its own jobs.
+    await w.services.db.delete(prChecks);
   });
 
   /** A GitHub Actions job of the test's workflow run reports on `sha` (or a check at `url`): its page names the run. */

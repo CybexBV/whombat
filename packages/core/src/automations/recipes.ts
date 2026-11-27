@@ -373,7 +373,7 @@ function normalized(recipe: AutomationRecipe): AutomationRecipe {
     const { trustActions: _trustActions, ...fix } = rest.fix;
     rest.fix = fix;
   }
-  // One review round is the default: keep `maxRounds` only when set to 2 or 3 so default recipes stay unchanged.
+  // One review round is the default: keep `maxRounds` only when set to 2 or more so default recipes stay unchanged.
   if (rest.t3Review?.maxRounds === 1) {
     const { maxRounds: _maxRounds, ...t3Review } = rest.t3Review;
     rest.t3Review = t3Review;
@@ -936,6 +936,15 @@ export function t3Of(recipe: AutomationRecipe): string | null {
 const T3_STEP_MINUTES = { look: 120, fix: 360, review: 180 } as const;
 
 /**
+ * How long a T3 Code fix may take with `maxRounds` reviews. Each round is a review of up to an hour plus the fixes it
+ * asks for, so more than three rounds get two hours each; up to three keep the fix's six hours, so the steps of
+ * automations made before stay as they are.
+ */
+function t3FixMinutes(maxRounds: number): number {
+  return maxRounds > 3 ? 120 * maxRounds : T3_STEP_MINUTES.fix;
+}
+
+/**
  * How a review step of T3 Code's work is asked to name the commit it approved (TA-57); the server requires that commit
  * of a step whose prompt asks for it (`observe.ts`).
  */
@@ -1192,7 +1201,7 @@ function fixSteps(
   // The title the fix thread gives its review in T3 Code, how the review step and the server find it; the colon keeps
   // #15 from matching #150.
   const reviewTitle = tracker ? T3_REVIEW_TITLE : `Review ${item}:`;
-  // A T3 Code fix gets one review by default (`maxRounds` absent or 1), or up to 2–3 rounds when `t3Review.maxRounds`
+  // A T3 Code fix gets one review by default (`maxRounds` absent or 1), or up to 2–10 rounds when `t3Review.maxRounds`
   // is set: on the final round, valid findings are fixed, checks re-run, and the branch pushed so fixes do not stall
   // unpushed. The earlier words (up to three reviews pushing only on approval of the last commit) stay as `review-rounds`.
   const oneReview = words === 'today' || words === 'before-same-fault';
@@ -1300,7 +1309,7 @@ function fixSteps(
           conversation: 'run',
           thread: 'run',
           retries: 0,
-          timeoutMinutes: T3_STEP_MINUTES.fix,
+          timeoutMinutes: t3FixMinutes(maxRounds),
           // The review happens inside the fix's thread, so what it finds is fixed there before anything is pushed.
           // Screenshots go on a branch of their own: the pull request shows them (`pr-shots/`, TA-52), the chat doesn't.
           prompt:

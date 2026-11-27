@@ -20,6 +20,7 @@ import { loadMessageRow } from '../../read/messages';
 import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
 import { outsidersTurn } from '../../runtime/person';
+import { againInstructions, againMarkOf, earlierTokensOf, fixPlaceOf } from '../again';
 import { automationAgent } from '../authority';
 import { turnThreadsOf } from '../mail-text';
 import { proposableConnections } from '../proposed-actions';
@@ -34,7 +35,9 @@ import { outsidersRun, runPersonOf } from '../runs';
 import {
   type AutomationRunRow,
   type AutomationStepRow,
+  EARLIER_TOKENS_SUM,
   HANDED_TOKENS_SUM,
+  HAS_EARLIER_TOKENS,
   HAS_HANDED_TOKENS,
   runTokens,
 } from '../store';
@@ -141,7 +144,16 @@ export async function executeDispatchAgent({
     if (!resolved.ok) return block(ctx, run, idx, resolved.reason);
     workspace = resolved.workspace;
   }
-  const basePrompt = stepInstructions(run.definition, idx, scope);
+  // A later try at a fix (`again.ts`) hears which try it is and how the earlier one ended, before its own instructions.
+  const again = step.id === 'fix' ? againMarkOf(previous) : null;
+  const againWords = againInstructions(again, {
+    place: fixPlaceOf(run.definition),
+    pr: run.definition.steps.some((s, i) => i > idx && s.kind === 'open_pull_request'),
+  });
+  // What this step's earlier attempts used stays with it: the run's and the day's limits count it.
+  const earlier = earlierTokensOf(previous);
+  const stepWords = stepInstructions(run.definition, idx, scope);
+  const basePrompt = againWords ? `${againWords}\n\n${stepWords}` : stepWords;
   const offers = step.proposeActions ? await proposableConnections(tx, run.burrowId) : null;
   const prompt = offers?.note ? `${basePrompt}\n\n${offers.note}` : basePrompt;
   // A test run about a report or issue an earlier run just assessed the same way uses that assessment (RN-S2).
@@ -190,6 +202,8 @@ export async function executeDispatchAgent({
             agentId: agent.id,
             workspace: { ...workspace },
             ...(turnThreadsOf(previous).length ? { turnThreads: turnThreadsOf(previous) } : {}),
+            ...(again ? { again: { ...again } } : {}),
+            ...(earlier ? { earlierTokens: earlier } : {}),
           },
         },
         ctx.now,
@@ -300,6 +314,9 @@ export async function executeDispatchAgent({
         turnThreads: [...new Set([...turnThreadsOf(previous), threadRootId])],
         ...(workspace ? { workspace: { ...workspace } } : {}),
         ...(branchApprovalId ? { branchApprovalId } : {}),
+        // The count of tries stays with the fix through each attempt.
+        ...(again ? { again: { ...again } } : {}),
+        ...(earlier ? { earlierTokens: earlier } : {}),
       },
     },
     ctx.now,
@@ -483,19 +500,20 @@ async function tokensToday(tx: Tx, automationId: string, now: Date): Promise<num
         sql`${dispatches.usage} is not null`,
       ),
     );
-  // A step's turns that handed their wait over, on the steps at work in the last day.
+  // A step's turns that handed their wait over, and its earlier attempts before the run went again, on the steps at work
+  // in the last day.
   const [handed] = await tx
-    .select({ tokens: HANDED_TOKENS_SUM })
+    .select({ tokens: HANDED_TOKENS_SUM, earlier: EARLIER_TOKENS_SUM })
     .from(automationRunSteps)
     .innerJoin(automationRuns, eq(automationRuns.id, automationRunSteps.runId))
     .where(
       and(
         eq(automationRuns.automationId, automationId),
-        HAS_HANDED_TOKENS,
+        sql`(${HAS_HANDED_TOKENS} or ${HAS_EARLIER_TOKENS})`,
         sql`${automationRunSteps.updatedAt} > ${new Date(now.getTime() - 86_400_000).toISOString()}::timestamptz`,
       ),
     );
-  return Number(row?.tokens ?? 0) + Number(handed?.tokens ?? 0);
+  return Number(row?.tokens ?? 0) + Number(handed?.tokens ?? 0) + Number(handed?.earlier ?? 0);
 }
 
 /**

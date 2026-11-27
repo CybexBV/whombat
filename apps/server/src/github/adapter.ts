@@ -85,6 +85,11 @@ export interface GhPullRequest {
   requestedReviewers: string[];
   createdAt: string | null;
   updatedAt: string | null;
+  /**
+   * Only on a single PR read: GitHub's `mergeable_state` (`dirty`: it clashes with its base branch; `unknown` while
+   * GitHub works it out). Absent or null when it didn't say.
+   */
+  mergeableState?: string | null;
   /** Only on a single PR read (not in lists). */
   additions: number | null;
   deletions: number | null;

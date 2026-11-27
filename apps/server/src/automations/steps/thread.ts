@@ -42,6 +42,8 @@ export async function postInRunThread(
   ctx: ApplyContext,
   run: AutomationRunRow,
   text: string,
+  /** `notify: false`: nobody hears of it beyond the thread itself (no Inbox row, no push). */
+  o: { notify?: boolean } = {},
 ): Promise<string | null> {
   const place = await placeFor(ctx, run, { conversation: 'run', thread: 'run' });
   const conversation = await loadConversationRow(ctx.tx, place.conversationId);
@@ -53,6 +55,7 @@ export async function postInRunThread(
     mentions: [],
     dispatch: false,
     outsidersRun: outsidersRun(run.trigger),
+    ...(o.notify === false ? { notify: false } : {}),
   });
   if (place.startsThread)
     await ctx.tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));

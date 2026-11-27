@@ -10,6 +10,7 @@ import {
   AutomationStep,
   AutomationTrigger,
   AutomationTriggerInfo,
+  type RealtimeEvent,
   RecipeWhen,
   recipeDefinition,
 } from '@whombat/core';
@@ -21,6 +22,7 @@ import {
   eventFor,
   FIND_MY_AUTOMATIONS_MINOR,
   MAIL_AUTOMATIONS_MINOR,
+  T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR,
   T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR,
 } from './older-apps';
 
@@ -348,4 +350,111 @@ it('hides definitions with t3Review.maxRounds from sessions below minor 18', () 
       automation: autoWithRounds,
     });
   }
+});
+
+describe('review rounds an app reads', () => {
+  const withRounds = (maxRounds: number) =>
+    AutomationDefinition.parse(
+      recipeDefinition({
+        when: { kind: 'tracker', connectionId: 'con_prod', itemKinds: ['bug'] },
+        job: 'assess',
+        instructions: 'Assess this report.',
+        conversationId: 'cnv_chat',
+        repo: 'acme/product',
+        t3: 't3',
+        t3Review: { model: 'gpt-6.1-sol', effort: 'xhigh', maxRounds },
+        fix: { mode: 'auto', minImportance: 'high', merge: 'checks' },
+      }),
+    );
+  const auto = (definition: AutomationDefinition, draft = definition): Automation => ({
+    ...automation,
+    definition,
+    draft,
+    glance: automation.glance ? { ...automation.glance, source: 'tracker' } : null,
+  });
+  const [three, four, ten] = [withRounds(3), withRounds(4), withRounds(10)];
+  // What an app at minor 18 or 19 decodes with: its `t3Review` takes at most three rounds and nothing else.
+  const t3Review = AutomationRecipe.shape.t3Review.unwrap();
+  const ThreeRoundsDefinition = AutomationDefinition.extend({
+    recipe: AutomationRecipe.extend({
+      t3Review: t3Review
+        .extend({ maxRounds: z.number().int().min(1).max(3).optional() })
+        .strict()
+        .optional(),
+    }).optional(),
+  });
+  const ThreeRoundsAutomation = AutomationSchema.extend({
+    draft: ThreeRoundsDefinition.nullable(),
+    definition: ThreeRoundsDefinition.nullable(),
+  });
+  const get = (a: Automation, minor: number | undefined) =>
+    (answerFor('automations.get', { automation: a }, minor) as { automation: Automation }).automation;
+  const updated = (a: Automation, minor: number | undefined) =>
+    eventFor({ type: 'automation.updated', automation: a }, minor);
+
+  it('hides any rounds from an app below minor 18', () => {
+    const older = T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR - 1;
+    for (const d of [three, four, ten]) {
+      expect(get(auto(d), older)).toMatchObject({
+        definition: null,
+        draft: null,
+        glance: { source: 'tracker' },
+      });
+      expect(updated(auto(d), older)).toMatchObject({ automation: { definition: null, draft: null } });
+      expect(() => answerFor('automations.export', { definition: d }, older)).toThrow(/Update the app/);
+    }
+  });
+
+  it('shows an app at minor 18 or 19 up to three rounds and hides more', () => {
+    for (const minor of [T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR, T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR - 1]) {
+      expect(get(auto(three), minor)).toEqual(auto(three));
+      expect(updated(auto(three), minor)).toEqual({ type: 'automation.updated', automation: auto(three) });
+      expect(answerFor('automations.export', { definition: three }, minor)).toEqual({ definition: three });
+      for (const more of [four, ten]) {
+        expect(get(auto(more), minor)).toMatchObject({
+          definition: null,
+          draft: null,
+          glance: { source: 'tracker' },
+        });
+        expect(updated(auto(more), minor)).toMatchObject({ automation: { definition: null, draft: null } });
+        expect(() => answerFor('automations.export', { definition: more }, minor)).toThrow(/Update the app/);
+      }
+      // A draft with more rounds is hidden on its own; the published definition stays.
+      expect(get(auto(three, ten), minor)).toMatchObject({ definition: three, draft: null });
+      expect(get(auto(ten, three), minor)).toMatchObject({ definition: null, draft: three });
+      const list = answerFor('automations.list', { automations: [auto(three), auto(ten)] }, minor) as {
+        automations: Automation[];
+      };
+      expect(list.automations.map((a) => [a.definition, a.draft])).toEqual([
+        [three, three],
+        [null, null],
+      ]);
+      // What it is sent, it decodes.
+      for (const a of [auto(three), auto(four), auto(ten), auto(three, ten)])
+        expect(ThreeRoundsAutomation.safeParse(get(a, minor)).success).toBe(true);
+      expect(ThreeRoundsAutomation.safeParse(auto(ten)).success).toBe(false);
+      // Everything else it got before stays as it was: runs, and messages with their cards.
+      const message = { text: 'I’ll tell you if pve-02 goes down.', card: { kind: 'thing_watch' } };
+      expect(answerFor('messages.thread', { root: message, replies: [message] }, minor)).toEqual({
+        root: message,
+        replies: [message],
+      });
+      const event = { type: 'message.created', message } as unknown as RealtimeEvent;
+      expect(eventFor(event, minor)).toEqual(event);
+      expect(answerFor('automations.run', { run }, minor)).toEqual({ run });
+      expect(eventFor({ type: 'automation.run.updated', run }, minor)).toEqual({
+        type: 'automation.run.updated',
+        run,
+      });
+    }
+  });
+
+  it('shows every round to an app at minor 20 and outside a session', () => {
+    for (const minor of [T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR, undefined])
+      for (const d of [three, four, ten]) {
+        expect(get(auto(d), minor)).toEqual(auto(d));
+        expect(updated(auto(d), minor)).toEqual({ type: 'automation.updated', automation: auto(d) });
+        expect(answerFor('automations.export', { definition: d }, minor)).toEqual({ definition: d });
+      }
+  });
 });

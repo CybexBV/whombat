@@ -9,6 +9,7 @@ import { and, asc, eq, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { automationRuns, automations } from '../../db/schema/index';
 import type { Services } from '../../services';
+import { againAllowed, againMarkOf, fixAgainOf, fixBranchHead } from '../again';
 import { readCardNames } from '../card-names';
 import { type GateFacts, gateFacts, readsGateFacts } from '../github-items';
 import { runDeadline } from '../runs';
@@ -51,7 +52,7 @@ export class RunAdvancer {
     /** The engine's id: the owner of the leases it takes. */
     private readonly owner: string,
     /** The engine's own options, read as they are at each claim. */
-    private readonly options: Pick<EngineOptions, 'leaseMs'>,
+    private readonly options: Pick<EngineOptions, 'leaseMs' | 'fixTriesMax'>,
   ) {}
 
   /** At boot, as the lock holder: the leases of earlier engines belong to processes that are gone. */
@@ -97,6 +98,10 @@ export class RunAdvancer {
       const steps = await loadStepRows(this.services.db, run.id);
       const idx = steps.findIndex((s) => s.state !== 'succeeded' && s.state !== 'skipped');
       if (idx < 0) {
+        // A fix the review asked changes for goes round again instead of ending here.
+        const again = await this.again(run, fence, steps);
+        if (again === 'again') continue;
+        if (again === 'stopped') return;
         await this.commit(run, fence, { op: 'finish', status: 'succeeded', error: null });
         return;
       }
@@ -231,6 +236,10 @@ export class RunAdvancer {
       case 'running':
         return runExternal(this.lease(run, fence), row, step, this.marked.delete(markOf(run, row)));
       case 'failed': {
+        // A fix, its review or its merge that failed for something another try can change goes round again.
+        const again = await this.again(run, fence, await loadStepRows(this.services.db, run.id));
+        if (again === 'again') return true;
+        if (again === 'stopped') return false;
         await this.commit(run, fence, {
           op: 'finish',
           status: 'failed',
@@ -254,6 +263,30 @@ export class RunAdvancer {
       default:
         return false;
     }
+  }
+
+  /**
+   * Where a run would end without its fix landing (`fixAgainOf`): reads the fix branch's head from GitHub outside the
+   * transaction, then the run goes again when the command, under the run's lock, finds it still may. `again` when it
+   * did; `stopped` when a person stopped or paused the run meanwhile, so the engine leaves it as it is; `ends` when it
+   * ends as before.
+   */
+  private async again(
+    run: AutomationRunRow,
+    fence: number,
+    rows: AutomationStepRow[],
+  ): Promise<'again' | 'stopped' | 'ends'> {
+    const again = fixAgainOf(run.definition.steps, rows);
+    if (!again) return 'ends';
+    const max = this.options.fixTriesMax;
+    const mark = againMarkOf(rows.find((r) => r.stepId === 'fix')?.output);
+    // A broken review done again doesn't need the branch; out of tries, there's no need to ask GitHub.
+    if (again.from === 'fix' && (mark?.tries ?? 1) >= max) return 'ends';
+    const head = again.from === 'fix' ? await fixBranchHead(this.services, run, rows) : null;
+    if (!againAllowed(again.from, mark, head, max)) return 'ends';
+    const res = await this.commit(run, fence, { op: 'again', head, max });
+    if (res.status !== 'ok') return 'ends';
+    return res.result.status === 'again' ? 'again' : res.result.status === 'stopped' ? 'stopped' : 'ends';
   }
 
   /**

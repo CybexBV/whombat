@@ -16,6 +16,10 @@ them once they have been tried on Beta.
   Chat thread: it can still read that thread and its review.
 - Restarting such a run never skips a review that asked for changes, and the fix is told to keep the commits its
   review read.
+- A fix that doesn’t get through is worked on again by itself: when its review asks for changes, a step fails or
+  the pull request’s checks fail, Whombat sends it back, up to ten tries, and asks for you only when that no longer
+  helps.
+- A report automation can ask for up to ten review rounds instead of three.
 
 ## 22 November 2026
 
