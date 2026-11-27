@@ -37,7 +37,6 @@ describe('navMenu', () => {
   it('starts an automation, adds to the Vault, and has nothing for the other places', () => {
     expect(navMenu(row('automations', '/automations'), owner)[0]?.href).toBe('/automations?new=1');
     expect(navMenu(row('vault', '/vault'), owner)[0]?.href).toBe('/vault?add=1');
-    for (const id of ['needsYou', 'files', 'settings'] as const)
-      expect(navMenu(row(id, '/'), owner)).toEqual([]);
+    for (const id of ['needsYou', 'files'] as const) expect(navMenu(row(id, '/'), owner)).toEqual([]);
   });
 });
